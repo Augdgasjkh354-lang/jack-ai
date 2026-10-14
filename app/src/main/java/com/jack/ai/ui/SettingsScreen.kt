@@ -52,6 +52,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jack.ai.ChatViewModel
 import com.jack.ai.data.DEFAULT_BASE_URL
+import com.jack.ai.data.DEFAULT_DEV_PROMPT
 import com.jack.ai.data.MODEL_FLASH
 import com.jack.ai.data.MODEL_PRO
 import com.jack.ai.data.ThinkLevel
@@ -72,6 +73,7 @@ fun SettingsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit) {
     var balance by remember { mutableStateOf<String?>(null) }
     var editing by remember { mutableStateOf<Preset?>(null) }
     var confirmClear by remember { mutableStateOf(false) }
+    var editingDev by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -206,13 +208,16 @@ fun SettingsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit) {
                 }
             }
 
-            // ---- 开发者提示词 ----
-            Section("开发者提示词（最高优先级）") {
-                SettingField("", settings.developerPrompt, "写在这里的规则对所有对话生效，优先级高于人设、项目说明和你发的消息。", minLines = 4) { v ->
-                    vm.updateSettings { it.copy(developerPrompt = v) }
-                }
+            // ---- 长对话 ----
+            Section("长对话自动压缩（${settings.compressTokens / 1000}k）") {
+                Slider(
+                    value = settings.compressTokens / 1000f,
+                    onValueChange = { v -> vm.updateSettings { it.copy(compressTokens = ((v / 50).toInt().coerceAtLeast(1)) * 50_000) } },
+                    valueRange = 50f..800f,
+                    steps = 14,
+                )
                 Text(
-                    "适合放「必须遵守」的硬规则，比如：永远用中文回答；不确定的事要明说；回答末尾给出下一步建议。",
+                    "对话用掉的上下文超过这个数时，较早的内容会自动写成提要，最近的部分保留原文，AI 需要时还能翻阅旧记录。默认 200k（约 30 万字）。也可以在输入框左边的 + 里手动压缩。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -291,6 +296,9 @@ fun SettingsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 OutlinedButton(onClick = { confirmClear = true }) { Text("清空全部聊天记录") }
+                TextButton(onClick = { editingDev = true }) {
+                    Text("底层提示词", color = MaterialTheme.colorScheme.outline)
+                }
             }
 
             Spacer(Modifier.height(24.dp))
@@ -304,6 +312,38 @@ fun SettingsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit) {
         }
         editing = null
     } }
+
+    if (editingDev) {
+        var text by remember { mutableStateOf(settings.developerPrompt) }
+        AlertDialog(
+            onDismissRequest = { editingDev = false },
+            title = { Text("底层提示词") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "优先级最高，对所有对话生效。默认内容专门针对 DeepSeek V4.1 Flash 的常见毛病，一般不需要改。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedTextField(
+                        value = text,
+                        onValueChange = { text = it },
+                        minLines = 8,
+                        maxLines = 14,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    TextButton(onClick = { text = DEFAULT_DEV_PROMPT }) { Text("恢复默认") }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.updateSettings { it.copy(developerPrompt = text.trim()) }
+                    editingDev = false
+                }) { Text("保存") }
+            },
+            dismissButton = { TextButton(onClick = { editingDev = false }) { Text("取消") } },
+        )
+    }
 
     if (confirmClear) {
         AlertDialog(

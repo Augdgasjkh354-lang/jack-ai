@@ -17,6 +17,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.jack.ai.data.Project
 import com.jack.ai.ui.ChatScreen
 import com.jack.ai.ui.JackTheme
+import com.jack.ai.ui.MemoryScreen
 import com.jack.ai.ui.ProjectScreen
 import com.jack.ai.ui.RenameDialog
 import com.jack.ai.ui.SettingsScreen
@@ -24,11 +25,18 @@ import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 
 sealed interface Screen {
     data object Settings : Screen
+    data object Memory : Screen
     data class ProjectPage(val id: String) : Screen
 }
 
 class MainActivity : ComponentActivity() {
     private val vm: ChatViewModel by viewModels()
+
+    override fun onResume() {
+        super.onResume()
+        // 后台做梦可能更新了记忆
+        vm.reloadMemory()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -59,7 +67,9 @@ class MainActivity : ComponentActivity() {
                         onOpenSettings = { stack.add(Screen.Settings) },
                         onOpenProject = { stack.add(Screen.ProjectPage(it)) },
                         onNewProject = { creatingProject = true },
+                        onOpenMemory = { stack.add(Screen.Memory) },
                     )
+                    Screen.Memory -> MemoryScreen(vm = vm, state = state, onBack = { stack.removeAt(stack.lastIndex) })
                     Screen.Settings -> SettingsScreen(
                         vm = vm,
                         settings = state.settings,

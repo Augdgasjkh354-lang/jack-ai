@@ -30,6 +30,11 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
@@ -79,6 +84,7 @@ fun ChatScreen(
     onOpenSettings: () -> Unit,
     onOpenProject: (String) -> Unit,
     onNewProject: () -> Unit,
+    onOpenMemory: () -> Unit,
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -97,6 +103,7 @@ fun ChatScreen(
                 onRename = vm::rename,
                 onOpenProject = { scope.launch { drawerState.close() }; onOpenProject(it) },
                 onNewProject = { scope.launch { drawerState.close() }; onNewProject() },
+                onOpenMemory = { scope.launch { drawerState.close() }; onOpenMemory() },
                 onSettings = { scope.launch { drawerState.close() }; onOpenSettings() },
             )
         },
@@ -149,7 +156,7 @@ fun ChatScreen(
         ) { padding ->
             Box(Modifier.padding(padding).fillMaxSize()) {
                 if (conv == null || conv.messages.isEmpty()) {
-                    EmptyState(vm, state, conv)
+                    EmptyState(vm, state, conv, onOpenMemory)
                 } else {
                     MessageList(vm, conv, state.streaming)
                 }
@@ -189,7 +196,7 @@ private fun ModelPicker(model: String, onPick: (String) -> Unit) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun EmptyState(vm: ChatViewModel, state: UiState, conv: Conversation?) {
+private fun EmptyState(vm: ChatViewModel, state: UiState, conv: Conversation?, onOpenMemory: () -> Unit) {
     val project = state.project(state.currentProjectId)
     Column(
         Modifier.fillMaxSize().padding(24.dp),
@@ -206,6 +213,10 @@ private fun EmptyState(vm: ChatViewModel, state: UiState, conv: Conversation?) {
         if (project != null) {
             Spacer(Modifier.height(6.dp))
             Text("在项目「${project.name}」中", color = MaterialTheme.colorScheme.primary)
+        }
+        state.dreams.firstOrNull { !it.seen }?.let { d ->
+            Spacer(Modifier.height(16.dp))
+            DreamCard(d, initiallyOpen = false, onClick = onOpenMemory)
         }
         Spacer(Modifier.height(24.dp))
         Text("选一个人设（可选）", style = MaterialTheme.typography.labelLarge,
@@ -237,7 +248,11 @@ private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolea
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        items(reversed, key = { it.id }) { msg ->
+        reversed.forEach { msg ->
+            if (msg.id == conv.summaryUntilId) {
+                item(key = "summary-divider") { SummaryDivider(conv.summary) }
+            }
+            item(key = msg.id) {
             if (msg.role == "user") {
                 UserBubble(msg, onDelete = { vm.deleteFrom(msg.id) })
             } else {
@@ -250,7 +265,38 @@ private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolea
                     onDelete = { vm.deleteFrom(msg.id) },
                 )
             }
+            }
         }
+    }
+}
+
+@Composable
+private fun SummaryDivider(summary: String) {
+    var open by remember { mutableStateOf(false) }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().clickable { open = true }.padding(vertical = 4.dp),
+    ) {
+        HorizontalDivider(Modifier.weight(1f))
+        Text(
+            "  以上较早的内容已压缩 · 点击查看提要  ",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        HorizontalDivider(Modifier.weight(1f))
+    }
+    if (open) {
+        AlertDialog(
+            onDismissRequest = { open = false },
+            title = { Text("前情提要") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    MarkdownText(summary, MaterialTheme.colorScheme.onSurface, MaterialTheme.colorScheme.surfaceVariant,
+                        textSizeSp = 14f)
+                }
+            },
+            confirmButton = { TextButton(onClick = { open = false }) { Text("关闭") } },
+        )
     }
 }
 
@@ -324,6 +370,15 @@ private fun InputBar(vm: ChatViewModel, state: UiState, onNeedTavily: () -> Unit
                 )
             }
 
+            if (state.compressingId != null && state.compressingId == state.currentId) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                    CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.size(8.dp))
+                    Text("正在压缩较早的对话…", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+
             if (state.pending.isNotEmpty() || state.importing) {
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -340,7 +395,7 @@ private fun InputBar(vm: ChatViewModel, state: UiState, onNeedTavily: () -> Unit
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
                 Box {
                     IconButton(onClick = { attachMenu = true }, modifier = Modifier.padding(bottom = 4.dp)) {
-                        Icon(AppIcons.Attach, contentDescription = "添加图片或文件")
+                        Icon(Icons.Default.Add, contentDescription = "更多")
                     }
                     DropdownMenu(expanded = attachMenu, onDismissRequest = { attachMenu = false }) {
                         DropdownMenuItem(
@@ -359,6 +414,28 @@ private fun InputBar(vm: ChatViewModel, state: UiState, onNeedTavily: () -> Unit
                                 pickFiles.launch(arrayOf("*/*"))
                             },
                         )
+                        val conv = state.current
+                        if (conv != null && conv.messages.size >= 4) {
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text("压缩上下文")
+                                        Text(
+                                            "已用约 ${conv.lastPromptTokens / 1000}k / ${settings.compressTokens / 1000}k，到了会自动压缩",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                },
+                                leadingIcon = { Icon(AppIcons.Compress, null) },
+                                enabled = !state.streaming && state.compressingId == null,
+                                onClick = {
+                                    attachMenu = false
+                                    vm.compress()
+                                },
+                            )
+                        }
                     }
                 }
                 OutlinedTextField(

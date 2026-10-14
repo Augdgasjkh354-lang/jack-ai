@@ -42,6 +42,7 @@ fun HistoryDrawer(
     onRename: (String, String) -> Unit,
     onOpenProject: (String) -> Unit,
     onNewProject: () -> Unit,
+    onOpenMemory: () -> Unit,
     onSettings: () -> Unit,
 ) {
     var renaming by remember { mutableStateOf<Conversation?>(null) }
@@ -100,6 +101,14 @@ fun HistoryDrawer(
                 }
             }
             HorizontalDivider()
+            NavigationDrawerItem(
+                icon = { Icon(AppIcons.Moon, null) },
+                label = { Text("记忆与梦") },
+                badge = { if (state.dreams.any { !it.seen }) Text("新梦", color = MaterialTheme.colorScheme.primary) },
+                selected = false,
+                onClick = onOpenMemory,
+                modifier = Modifier.padding(horizontal = 12.dp).padding(top = 8.dp),
+            )
             NavigationDrawerItem(
                 icon = { Icon(Icons.Default.Settings, null) },
                 label = { Text("设置") },

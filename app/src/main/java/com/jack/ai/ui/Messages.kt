@@ -304,8 +304,9 @@ private fun SearchBox(searches: List<SearchRecord>) {
                 }
                 Spacer(Modifier.size(6.dp))
                 Text(
-                    if (searching) "正在${searches.last { it.pending }.query.let { if (it.startsWith("读取")) it else "搜索：$it" }}"
-                    else "联网 ${searches.size} 次，参考 ${sources.size} 个网页",
+                    if (searching) "正在${searches.last { it.pending }.query.let { if (isOther(it)) it else "搜索：$it" }}"
+                    else if (sources.isEmpty() || searches.all { isOther(it.query) }) "用了 ${searches.size} 次工具"
+                    else "用了 ${searches.size} 次工具，参考 ${sources.size} 个网页",
                     style = MaterialTheme.typography.labelLarge,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -321,14 +322,19 @@ private fun SearchBox(searches: List<SearchRecord>) {
                     var n = 0
                     searches.forEach { rec ->
                         Text(
-                            (if (rec.query.startsWith("读取")) "📄 " else "🔍 ") + rec.query +
+                            (when {
+                                rec.query.startsWith("读取") -> "📄 "
+                                rec.query.startsWith("翻阅") -> "📜 "
+                                rec.query.startsWith("记住") -> "📌 "
+                                else -> "🔍 "
+                            }) + rec.query +
                                 (rec.error?.let { "（$it）" } ?: ""),
                             style = MaterialTheme.typography.bodySmall,
                             color = if (rec.error != null) colors.error else colors.onSurfaceVariant,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        if (!rec.query.startsWith("读取")) {
+                        if (!isOther(rec.query)) {
                             rec.sources.forEach { src ->
                                 n++
                                 val idx = n
@@ -351,3 +357,5 @@ private fun SearchBox(searches: List<SearchRecord>) {
         }
     }
 }
+
+private fun isOther(label: String) = label.startsWith("读取") || label.startsWith("翻阅") || label.startsWith("记住")

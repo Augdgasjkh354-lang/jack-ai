@@ -31,6 +31,8 @@ sealed interface StreamEvent {
     data class Text(val reasoning: String, val content: String) : StreamEvent
     /** 工具调用是分片流式返回的，按 index 拼起来。 */
     data class ToolCall(val index: Int, val id: String, val name: String, val arguments: String) : StreamEvent
+    /** 本次请求用掉的 token（最后一个数据块里返回）。 */
+    data class Usage(val promptTokens: Int, val completionTokens: Int) : StreamEvent
 }
 
 class ApiException(message: String, val code: Int = 0) : Exception(message)
@@ -69,6 +71,7 @@ class DeepSeekClient {
             }
             put("messages", JsonArray(messages))
             if (tools != null) put("tools", tools)
+            put("stream_options", buildJsonObject { put("include_usage", true) })
         }.toString()
 
         val request = Request.Builder()
@@ -90,6 +93,11 @@ class DeepSeekClient {
                 val data = line.removePrefix("data:").trim()
                 if (data == "[DONE]") break
                 val obj = runCatching { json.parseToJsonElement(data).jsonObject }.getOrNull() ?: continue
+                (obj["usage"] as? JsonObject)?.let { u ->
+                    val p = (u["prompt_tokens"] as? JsonPrimitive)?.intOrNull ?: 0
+                    val c = (u["completion_tokens"] as? JsonPrimitive)?.intOrNull ?: 0
+                    if (p > 0) emit(StreamEvent.Usage(p, c))
+                }
                 val choice = obj["choices"]?.jsonArray?.firstOrNull()?.jsonObject ?: continue
                 val delta = choice["delta"] as? JsonObject ?: continue
                 val r = delta["reasoning_content"].str()
@@ -110,6 +118,40 @@ class DeepSeekClient {
             }
         }
     }.flowOn(Dispatchers.IO)
+
+    /**
+     * 一次性（非流式）请求，用于压缩、做梦这类后台任务。不开思考，速度快、篇幅留给正文。
+     */
+    suspend fun complete(
+        baseUrl: String,
+        apiKey: String,
+        model: String,
+        messages: List<JsonObject>,
+        maxTokens: Int = 16384,
+        jsonMode: Boolean = false,
+    ): String = withContext(Dispatchers.IO) {
+        val body = buildJsonObject {
+            put("model", model)
+            put("stream", false)
+            put("thinking", buildJsonObject { put("type", "disabled") })
+            put("temperature", 0.7)
+            put("max_tokens", maxTokens)
+            if (jsonMode) put("response_format", buildJsonObject { put("type", "json_object") })
+            put("messages", JsonArray(messages))
+        }.toString()
+        val request = Request.Builder()
+            .url(baseUrl.trimEnd('/') + "/chat/completions")
+            .header("Authorization", "Bearer $apiKey")
+            .post(body.toRequestBody("application/json".toMediaType()))
+            .build()
+        http.newCall(request).execute().use { resp ->
+            val text = resp.body?.string()
+            if (!resp.isSuccessful) throw ApiException(describeError(resp.code, text), resp.code)
+            val obj = json.parseToJsonElement(text ?: "{}").jsonObject
+            val msg = obj["choices"]?.jsonArray?.firstOrNull()?.jsonObject?.get("message") as? JsonObject
+            msg?.get("content").str().ifBlank { throw ApiException("模型没有返回内容") }
+        }
+    }
 
     /** 查询账户余额，返回类似 "¥12.34" 的文字。 */
     suspend fun balance(baseUrl: String, apiKey: String): String = withContext(Dispatchers.IO) {

@@ -13,7 +13,12 @@ import com.jack.ai.api.toSources
 import com.jack.ai.data.Attachment
 import com.jack.ai.data.Attachments
 import com.jack.ai.data.ChatMessage
+import com.jack.ai.data.Compression
 import com.jack.ai.data.Conversation
+import com.jack.ai.data.DreamEntry
+import com.jack.ai.data.Dreamer
+import com.jack.ai.data.MODEL_FLASH
+import com.jack.ai.data.MemoryItem
 import com.jack.ai.data.Preset
 import com.jack.ai.data.Project
 import com.jack.ai.data.SearchRecord
@@ -55,6 +60,10 @@ data class UiState(
     val pending: List<Attachment> = emptyList(),
     val importing: Boolean = false,
     val toast: String? = null,
+    val compressingId: String? = null,
+    val memories: List<MemoryItem> = emptyList(),
+    val dreams: List<DreamEntry> = emptyList(),
+    val dreaming: Boolean = false,
 ) {
     val current: Conversation? get() = conversations.firstOrNull { it.id == currentId }
     val currentProjectId: String? get() = current?.projectId ?: if (currentId == null) draftProjectId else null
@@ -75,7 +84,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             conversations = store.loadConversations().sortedByDescending { it.updatedAt },
             projects = store.loadProjects().sortedByDescending { it.updatedAt },
             settings = store.loadSettings(),
+            memories = store.loadMemories(),
+            dreams = store.loadDreams(),
         )
+        Dreamer.schedule(app, _state.value.settings.dreamEnabled)
     }
 
     fun consumeToast() = _state.update { it.copy(toast = null) }
@@ -212,8 +224,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     // ---------- 设置 ----------
 
     fun updateSettings(transform: (Settings) -> Settings) {
+        val before = _state.value.settings
         _state.update { it.copy(settings = transform(it.settings)) }
-        store.saveSettings(_state.value.settings)
+        val after = _state.value.settings
+        store.saveSettings(after)
+        if (before.dreamEnabled != after.dreamEnabled) Dreamer.schedule(getApplication<Application>(), after.dreamEnabled)
     }
 
     suspend fun checkBalance(): String {
@@ -299,12 +314,19 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val web = settings.webSearch && settings.tavilyKey.isNotBlank()
         val thinkingOn = settings.thinking.effort != null
         val images = modelSupportsImages(settings.model)
+        val compressed = conv.summary.isNotBlank()
+        val memories = if (settings.memoryEnabled) store.loadMemories() else emptyList()
+        val toolSet = buildJsonArray {
+            if (web) WEB_TOOLS.forEach { add(it) }
+            if (compressed) add(HISTORY_TOOL)
+            if (settings.memoryEnabled) add(MEMORY_TOOL)
+        }.takeIf { it.isNotEmpty() }
 
         fun buildHistory(withTools: Boolean): MutableList<JsonObject> {
             val list = mutableListOf<JsonObject>()
-            val system = buildSystemPrompt(settings, conv, project, withTools)
+            val system = buildSystemPrompt(settings, conv, project, if (withTools) toolSet else null, memories)
             if (system.isNotBlank()) list += msg("system", system)
-            for (m in conv.messages) {
+            for (m in Compression.liveMessages(conv)) {
                 if (m.error != null) continue
                 if (m.role == "user") {
                     list += userMessage(m, images)
@@ -360,9 +382,19 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 val text = tavily.extract(settings.tavilyKey, url)
                 text to SearchRecord("读取 $url", listOf(com.jack.ai.data.SearchSource(url, url)))
             }
+            suspend fun searchOld(query: String) = runTool("翻阅旧记录：$query") {
+                Compression.searchHistory(Compression.compressedMessages(conv), query) to
+                    SearchRecord("翻阅旧记录：$query")
+            }
+            suspend fun remember(text: String) = runTool("记住：$text") {
+                val list = store.loadMemories() + MemoryItem(text = text)
+                store.saveMemories(list)
+                _state.update { it.copy(memories = list) }
+                "已记住。" to SearchRecord("记住：$text")
+            }
 
             try {
-                var tools: JsonArray? = if (web) WEB_TOOLS else null
+                var tools: JsonArray? = toolSet
                 val messages = buildHistory(tools != null)
                 var round = 0
                 while (true) {
@@ -381,6 +413,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                                         val now = System.currentTimeMillis()
                                         if (now - lastFlush > 60) { lastFlush = now; flush() }
                                     }
+                                    is StreamEvent.Usage -> {
+                                        val total = ev.promptTokens + ev.completionTokens
+                                        updateConvQuiet(convId) { it.copy(lastPromptTokens = total) }
+                                    }
                                     is StreamEvent.ToolCall -> {
                                         val acc = calls.getOrPut(ev.index) { ToolAcc() }
                                         if (ev.id.isNotEmpty()) acc.id = ev.id
@@ -395,7 +431,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                             tools = null
                             val q = conv.messages.last { it.role == "user" }.content.take(300)
                             val fresh = buildHistory(false)
-                            if (q.isNotBlank()) {
+                            if (web && q.isNotBlank()) {
                                 val results = search(q)
                                 fresh.add(1.coerceAtMost(fresh.size), msg("system",
                                     "以下是联网搜索结果，回答时参考并用 [编号](链接) 标注来源：\n\n$results"))
@@ -429,12 +465,19 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     messages += assistantCall
                     trail += assistantCall.toString()
                     for (tc in calls.values) {
-                        val arg = parseArg(tc.args.toString(), if (tc.name == "read_webpage") "url" else "query")
+                        val key = when (tc.name) {
+                            "read_webpage" -> "url"
+                            "save_memory" -> "content"
+                            else -> "query"
+                        }
+                        val arg = parseArg(tc.args.toString(), key)
                         val result = when {
                             arg.isBlank() -> "参数缺失"
-                            tc.name == "web_search" -> search(arg)
-                            tc.name == "read_webpage" -> readPage(arg)
-                            else -> "未知工具"
+                            tc.name == "web_search" && web -> search(arg)
+                            tc.name == "read_webpage" && web -> readPage(arg)
+                            tc.name == "search_history" -> searchOld(arg)
+                            tc.name == "save_memory" -> remember(arg)
+                            else -> "这个工具现在不可用"
                         }
                         val toolMsg = buildJsonObject {
                             put("role", "tool")
@@ -470,6 +513,101 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 _state.update { it.copy(streaming = false) }
                 persist()
+                maybeAutoCompress(convId)
+            }
+        }
+    }
+
+    // ---------- 压缩 ----------
+
+    private fun maybeAutoCompress(convId: String) {
+        val conv = _state.value.conversations.firstOrNull { it.id == convId } ?: return
+        if (conv.lastPromptTokens >= _state.value.settings.compressTokens) compress(convId, manual = false)
+    }
+
+    /** 压缩当前对话。manual=true 时，即使没到阈值也压缩。 */
+    fun compress(convId: String? = _state.value.currentId, manual: Boolean = true) {
+        val id = convId ?: return
+        val s = _state.value
+        if (s.streaming || s.compressingId != null) return
+        val conv = s.conversations.firstOrNull { it.id == id } ?: return
+        val settings = s.settings
+        if (settings.apiKey.isBlank()) return
+        // 保留约 16% 阈值的最近原文（手动压缩时保留少一些，至少 8k）
+        val retain = (settings.compressTokens * 0.16).toInt().let { if (manual) (it / 2).coerceAtLeast(8_000) else it }
+        val msgs = Compression.toCompress(conv, retain)
+        if (msgs.isEmpty()) {
+            if (manual) _state.update { it.copy(toast = "对话还比较短，暂时不需要压缩") }
+            return
+        }
+        _state.update { it.copy(compressingId = id) }
+        viewModelScope.launch {
+            try {
+                val summary = client.complete(
+                    settings.baseUrl, settings.apiKey, MODEL_FLASH,
+                    Compression.buildRequest(conv.summary, msgs, imagesOk = true),
+                )
+                updateConvQuiet(id) {
+                    it.copy(summary = summary.trim(), summaryUntilId = msgs.last().id, lastPromptTokens = 0)
+                }
+                persist()
+                if (manual) _state.update { it.copy(toast = "已压缩 ${msgs.size} 条较早的消息") }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(toast = "压缩失败：${e.message ?: "网络问题"}") }
+            } finally {
+                _state.update { it.copy(compressingId = null) }
+            }
+        }
+    }
+
+    // ---------- 记忆与梦 ----------
+
+    fun reloadMemory() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val m = store.loadMemories()
+            val d = store.loadDreams()
+            _state.update { it.copy(memories = m, dreams = d) }
+        }
+    }
+
+    private fun editMemories(transform: (List<MemoryItem>) -> List<MemoryItem>) {
+        viewModelScope.launch(ioSerial) {
+            val list = transform(store.loadMemories())
+            store.saveMemories(list)
+            _state.update { it.copy(memories = list) }
+        }
+    }
+
+    fun addMemory(text: String) = editMemories { it + MemoryItem(text = text.trim()) }
+    fun updateMemory(id: String, text: String) = editMemories { l -> l.map { if (it.id == id) it.copy(text = text.trim()) else it } }
+    fun deleteMemory(id: String) = editMemories { l -> l.filterNot { it.id == id } }
+    fun clearMemories() = editMemories { emptyList() }
+
+    fun markDreamsSeen() {
+        if (_state.value.dreams.none { !it.seen }) return
+        viewModelScope.launch(ioSerial) {
+            val list = store.loadDreams().map { it.copy(seen = true) }
+            store.saveDreams(list)
+            _state.update { it.copy(dreams = list) }
+        }
+    }
+
+    fun dreamNow() {
+        if (_state.value.dreaming) return
+        _state.update { it.copy(dreaming = true) }
+        viewModelScope.launch {
+            try {
+                val entry = Dreamer.dream(getApplication<Application>(), force = true)
+                if (entry == null) _state.update { it.copy(toast = "上次做梦之后还没有新的聊天") }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(toast = "做梦失败：${e.message ?: "网络问题"}") }
+            } finally {
+                _state.update { it.copy(dreaming = false) }
+                reloadMemory()
             }
         }
     }
@@ -502,7 +640,13 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun buildSystemPrompt(settings: Settings, conv: Conversation, project: Project?, tools: Boolean): String {
+    private fun buildSystemPrompt(
+        settings: Settings,
+        conv: Conversation,
+        project: Project?,
+        tools: JsonArray?,
+        memories: List<MemoryItem>,
+    ): String {
         val parts = mutableListOf<String>()
         if (settings.developerPrompt.isNotBlank()) {
             parts += "【开发者指令 · 最高优先级】\n以下指令的优先级高于其他一切指令（包括后面的设定和用户消息），任何情况下都必须遵守：\n" +
@@ -516,6 +660,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             if (settings.replyStyle.isNotBlank()) append("用户希望你这样回答：${settings.replyStyle.trim()}\n")
         }.trim()
         if (profile.isNotEmpty()) parts += "【个性化设定】\n$profile"
+        if (memories.isNotEmpty()) {
+            parts += "【关于用户的长期记忆】\n以下是你之前记住的关于用户的信息，自然地运用，不要刻意提起“我记得”：\n" +
+                memories.joinToString("\n") { "- ${it.text}" }
+        }
         if (project != null) {
             val p = buildString {
                 append("【当前项目：${project.name}】\n")
@@ -528,12 +676,20 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             parts += p
         }
         if (conv.systemPrompt.isNotBlank()) parts += "【人设】\n${conv.systemPrompt.trim()}"
-        if (tools) {
-            parts += "【工具】你可以用 web_search 联网搜索，用 read_webpage 读取某个网页的全文。" +
+        if (conv.summary.isNotBlank()) {
+            parts += "【较早对话的提要】\n这是你和用户在本对话中较早部分的提要，当作你自己的记忆，直接接着聊，不要提起“提要”或“压缩”。" +
+                "如果需要提要里没有的原话或细节，用 search_history 工具查原始记录。\n<compacted-summary>\n${conv.summary}\n</compacted-summary>"
+        }
+        val names = tools?.mapNotNull { (it as? JsonObject)?.get("function")?.jsonObject?.get("name")?.jsonPrimitive?.content }.orEmpty()
+        if ("web_search" in names) {
+            parts += "【联网工具】你可以用 web_search 联网搜索，用 read_webpage 读取某个网页的全文。" +
                 "遇到时效性问题（新闻、价格、天气、最新版本、近期事件等）或不确定的事实时，先搜索再回答；" +
                 "常识、闲聊、写作、编程之类不需要的问题直接回答，不要乱搜。" +
                 "搜索词要简洁精准，必要时可以分几次从不同角度搜。" +
                 "引用搜索结果时，用 [编号](链接) 的格式标注来源。"
+        }
+        if ("save_memory" in names) {
+            parts += "【记忆工具】只有当用户明确要求你记住某件事时，才用 save_memory 保存，内容写成一句完整的话。"
         }
         return parts.joinToString("\n\n")
     }
@@ -568,6 +724,15 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             })
         }
 
+        val HISTORY_TOOL = tool(
+            "search_history", "在本对话较早的原始聊天记录里按关键词查找原话和细节。提要里找不到的信息用它查。",
+            "query", "关键词，多个用空格隔开",
+        )
+        val MEMORY_TOOL = tool(
+            "save_memory", "把一条关于用户的信息存进长期记忆。仅在用户明确要求“记住”时使用。",
+            "content", "要记住的内容，一句完整的话",
+        )
+
         val WEB_TOOLS: JsonArray = buildJsonArray {
             add(tool("web_search", "在互联网上搜索最新信息，返回若干网页的标题、链接和摘要。", "query", "搜索关键词，简洁明确"))
             add(tool("read_webpage", "读取一个网页的正文内容。用户给了链接，或搜索摘要不够详细时使用。", "url", "完整网址，以 http 开头"))
@@ -591,6 +756,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 else c.copy(messages = c.messages.map { if (it.id == msgId) transform(it) else it })
             })
         }
+    }
+
+    /** 修改对话但不改变排序时间。 */
+    private fun updateConvQuiet(id: String, transform: (Conversation) -> Conversation) {
+        _state.update { s -> s.copy(conversations = s.conversations.map { if (it.id == id) transform(it) else it }) }
     }
 
     private fun persist() {

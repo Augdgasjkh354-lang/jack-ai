@@ -75,4 +75,5 @@ dependencies {
     implementation("io.noties.markwon:linkify:4.6.2")
 
     implementation("com.tom-roush:pdfbox-android:2.0.27.0")
+    implementation("androidx.work:work-runtime-ktx:2.10.0")
 }

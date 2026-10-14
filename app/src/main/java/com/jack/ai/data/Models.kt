@@ -49,6 +49,11 @@ data class Conversation(
     val presetName: String = "",
     val projectId: String? = null,
     val messages: List<ChatMessage> = emptyList(),
+    /** 压缩后的前情提要，以及它覆盖到哪条消息（含）为止。 */
+    val summary: String = "",
+    val summaryUntilId: String? = null,
+    /** 最近一次请求实际用掉的上下文 token 数（接口返回）。 */
+    val lastPromptTokens: Int = 0,
     val updatedAt: Long = System.currentTimeMillis(),
 )
 
@@ -60,6 +65,23 @@ data class Project(
     val instructions: String = "",
     val files: List<Attachment> = emptyList(),
     val updatedAt: Long = System.currentTimeMillis(),
+)
+
+@Serializable
+data class MemoryItem(
+    val id: String = newId(),
+    val text: String,
+    val createdAt: Long = System.currentTimeMillis(),
+)
+
+@Serializable
+data class DreamEntry(
+    val id: String = newId(),
+    val createdAt: Long = System.currentTimeMillis(),
+    val dream: String,
+    val summary: String = "",
+    val changes: String = "",
+    val seen: Boolean = false,
 )
 
 @Serializable
@@ -89,7 +111,10 @@ data class Settings(
     val temperature: Float = 1.0f,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val presets: List<Preset> = DEFAULT_PRESETS,
-    val developerPrompt: String = "",
+    val developerPrompt: String = DEFAULT_DEV_PROMPT,
+    val compressTokens: Int = 200_000,
+    val memoryEnabled: Boolean = true,
+    val dreamEnabled: Boolean = true,
     val userName: String = "",
     val aboutMe: String = "",
     val replyStyle: String = "",
@@ -114,3 +139,17 @@ val DEFAULT_PRESETS = listOf(
     Preset(name = "编程助手", prompt = "你是资深程序员。回答简洁准确，给出可直接运行的代码，并用一两句话解释关键点。"),
     Preset(name = "朋友聊天", prompt = "你是用户的老朋友，说话自然、轻松、真诚，像微信聊天一样，不要长篇大论。"),
 )
+
+/** 内置的最高优先级提示词：专门针对 DeepSeek V4.1 Flash 的已知毛病。 */
+const val DEFAULT_DEV_PROMPT = """你正在一个私人聊天 App 里和用户对话。以下规则针对你已知的习惯，在任何对话中都始终有效：
+
+1. 说人话：用自然、口语化的简体中文，像一个懂行的朋友当面解释。专有名词没有通行译法时，保留英文原文并用一句话解释，不要自己造词或生硬直译。中文回答里不要夹带 "Let me" 之类的英文过渡语。
+2. 直接回答：第一句就给答案或结论，再补充必要的理由。答完就停，不重复已经说过的内容，不在结尾总结复述，不追加一串“如果你需要…我还可以…”。
+3. 长度跟着问题走：简单问题一两句话就够；只有复杂问题才分点、加标题。不为了显得全面而凑内容。
+4. 诚实：不确定的事明确说“我不确定”，并说清哪部分是推测；不编造人名、数据、引文、链接和书名。能用搜索工具核实的事实，先核实再回答。
+5. 不附和：用户说错了，礼貌但明确地指出；有不同看法就直说理由，不为了讨好改变正确的判断。
+6. 前后一致：长对话中牢记之前确定的事实、数字、名字、设定和用户的要求，回答前核对有没有和前文矛盾；涉及数字和计算时自己验算一遍。
+7. 分清角色：你是助手，用户是用户。扮演角色时只说你的角色该说的话，不替用户说话或做决定，不把只有某个角色知道的信息透露给其他角色。
+8. 不兜圈子：一个思路走不通，就换个方法，或直接说明卡在哪里，不反复尝试同一件事。
+9. 写作时：用具体的细节、动作和对话来表现，少用空泛的形容和套话式排比；同一个情节不来回写好几遍。
+10. 要求长期有效：用户在对话中提出的格式、语气、字数等要求，之后每一轮都继续遵守，直到用户改口。"""
