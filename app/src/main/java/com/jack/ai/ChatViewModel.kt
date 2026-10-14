@@ -40,6 +40,7 @@ import com.jack.ai.data.Dreamer
 import com.jack.ai.data.GeneratedFile
 import com.jack.ai.data.OfficeWriter
 import com.jack.ai.data.PdfWriter
+import com.jack.ai.data.PyRunner
 import com.jack.ai.data.Skill
 import com.jack.ai.data.SkillIds
 import com.jack.ai.data.SkillTools
@@ -460,6 +461,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             if (SkillIds.CALC in skillIds) { add(SkillTools.RUN_JS); add(SkillTools.CREATE_CHART); add(SkillTools.CREATE_DIAGRAM) }
             if (SkillIds.LIBRARY in skillIds) { add(SkillTools.SEARCH_LIBRARY); add(SkillTools.LIST_LIBRARY) }
             if (SkillIds.LEARN in skillIds) add(SkillTools.SAVE_FLASHCARDS)
+            if (SkillIds.PYTHON in skillIds) add(SkillTools.RUN_PYTHON)
             if (SkillIds.ROUTINE in skillIds) {
                 add(SkillTools.CREATE_REMINDER); add(SkillTools.CREATE_TASK)
                 add(SkillTools.LIST_ROUTINES); add(SkillTools.DELETE_ROUTINE)
@@ -701,6 +703,12 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     "已修改「${file.name}」，替换了 $n 处，其他内容没动。" to SearchRecord("修改 ${file.name}")
                 }
             }
+            suspend fun runPython(code: String) = runTool("运行 Python") {
+                val r = PyRunner.run(app, code, wsDir)
+                r.changed.forEach { attach(it) }
+                val files = if (r.changed.isEmpty()) "" else "\n\n新建或改动的文件（已显示在聊天里）：" + r.changed.joinToString("、") { it.name }
+                (r.output.ifBlank { "（运行完成，没有输出）" } + files) to SearchRecord("运行 Python")
+            }
             suspend fun setAlarm(args: JsonObject): String {
                 val time = args["time"].text()
                 return runTool("设闹钟 $time") {
@@ -866,7 +874,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                             "read_webpage" -> "url"
                             "save_memory" -> "content"
                             "use_skill" -> "name"
-                            "run_js" -> "code"
+                            "run_js", "run_python" -> "code"
                             "delete_routine" -> "id"
                             else -> "query"
                         }
@@ -890,6 +898,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                             arg.isBlank() -> "参数缺失"
                             tc.name == "use_skill" -> useSkill(arg)
                             tc.name == "run_js" && SkillIds.CALC in skillIds -> runJs(arg)
+                            tc.name == "run_python" && SkillIds.PYTHON in skillIds -> runPython(arg)
                             tc.name == "search_library" && SkillIds.LIBRARY in skillIds -> searchLibrary(arg)
                             tc.name == "delete_routine" && SkillIds.ROUTINE in skillIds -> removeRoutine(arg)
                             tc.name == "web_search" && web -> search(arg)

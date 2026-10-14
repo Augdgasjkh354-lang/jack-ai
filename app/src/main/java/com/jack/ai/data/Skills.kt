@@ -40,6 +40,7 @@ object SkillIds {
     const val CALC = "builtin-calc"
     const val LIBRARY = "builtin-library"
     const val LEARN = "builtin-learn"
+    const val PYTHON = "builtin-python"
 }
 
 private fun schema(s: String): JsonObject = Json.parseToJsonElement(s).jsonObject
@@ -170,6 +171,18 @@ val BUILTIN_SKILLS = listOf(
 7. 图会保存在对话文件夹里。用户要改图时，用 edit_file 改它的底稿，不要重新画一张。""",
     ),
     Skill(
+        id = SkillIds.PYTHON, builtin = true, name = "Python",
+        description = "在手机上真正运行 Python 代码，处理对话文件夹里的文件：分析 Excel/CSV 数据、批量处理和转换文件、用 matplotlib 画专业图表、复杂计算。",
+        instructions = """Python 的做法：
+1. 用 run_python 运行代码。工作目录就是对话文件夹，用户发来的文件直接按文件名打开，比如 pd.read_excel("销售.xlsx")。
+2. 可用的库：Python 3.10 标准库、numpy、pandas、matplotlib、openpyxl。没有别的第三方库，也不能 pip 安装。
+3. 用 print() 输出结果；最后一行是表达式时会自动打印它的值。数据量大时只打印摘要（head()、describe()、统计结果），不要把整张表打印出来。
+4. 要给用户的结果存成文件放在当前目录：图表用 plt.savefig("名字.png", bbox_inches="tight")，表格用 df.to_excel("名字.xlsx", index=False) 或 to_csv。新建或改动的文件会自动显示在聊天里。图里可以直接写中文。
+5. 单次运行最多 90 秒。出错就看报错改代码再试，最多 3 次。
+6. 回答时说结论和生成了什么文件，不要把代码贴给用户（除非用户想看）。
+7. 简单的算数用计算工具就行；只是画个简单的柱状图、折线图、饼图，用 create_chart 更快。""",
+    ),
+    Skill(
         id = SkillIds.LIBRARY, builtin = true, name = "资料库",
         description = "在用户的个人资料库（他导入的书、笔记、合同、课件等）里查找内容。用户问到他自己的资料、某本书或某份文件里的内容时使用。",
         instructions = """查资料库的做法：
@@ -214,6 +227,8 @@ object SkillTools {
     val CREATE_CHART = schema("""{"type":"function","function":{"name":"create_chart","description":"把数据画成图表图片，显示在聊天里。","parameters":{"type":"object","properties":{"type":{"type":"string","enum":["bar","line","pie"]},"title":{"type":"string"},"unit":{"type":"string","description":"数值单位，可以为空"},"labels":{"type":"array","items":{"type":"string"},"description":"横轴类别或时间"},"series":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"values":{"type":"array","items":{"type":"number"}}},"required":["name","values"]}}},"required":["type","title","labels","series"]}}}""")
 
     val CREATE_DIAGRAM = schema("""{"type":"function","function":{"name":"create_diagram","description":"画思维导图（树状图）或流程图，生成图片显示在聊天里。","parameters":{"type":"object","properties":{"type":{"type":"string","enum":["mindmap","flowchart"]},"title":{"type":"string","description":"图的标题，可以为空"},"outline":{"type":"string","description":"mindmap 用：缩进的 Markdown 列表，第一行是中心主题"},"nodes":{"type":"array","description":"flowchart 用","items":{"type":"object","properties":{"id":{"type":"string"},"label":{"type":"string"},"shape":{"type":"string","enum":["box","round","diamond"]}},"required":["id","label"]}},"edges":{"type":"array","description":"flowchart 用","items":{"type":"object","properties":{"from":{"type":"string"},"to":{"type":"string"},"label":{"type":"string"}},"required":["from","to"]}},"direction":{"type":"string","enum":["TB","LR"]}},"required":["type"]}}}""")
+
+    val RUN_PYTHON = schema("""{"type":"function","function":{"name":"run_python","description":"在对话文件夹里运行一段 Python 代码，返回 print 的输出和报错。可用 numpy、pandas、matplotlib、openpyxl。","parameters":{"type":"object","properties":{"code":{"type":"string","description":"Python 代码"}},"required":["code"]}}}""")
 
     val SET_ALARM = schema("""{"type":"function","function":{"name":"set_alarm","description":"在手机自带的时钟 App 里设一个闹钟。","parameters":{"type":"object","properties":{"time":{"type":"string","description":"HH:mm，24 小时制"},"label":{"type":"string","description":"闹钟标签，可以为空"},"days":{"type":"array","items":{"type":"integer"},"description":"每周重复的日子，1=周一 … 7=周日；一次性闹钟不填"}},"required":["time"]}}}""")
 

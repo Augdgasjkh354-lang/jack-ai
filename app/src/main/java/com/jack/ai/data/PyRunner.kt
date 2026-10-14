@@ -1,0 +1,31 @@
+package com.jack.ai.data
+
+import android.content.Context
+import com.chaquo.python.Python
+import com.chaquo.python.android.AndroidPlatform
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import java.io.File
+
+/** 在 App 里跑 Python。同一时间只跑一段，因为工作目录和输出是全局的。 */
+object PyRunner {
+    private val lock = Mutex()
+
+    data class Result(val output: String, val changed: List<File>)
+
+    suspend fun run(ctx: Context, code: String, dir: File, timeoutSec: Int = 90): Result = lock.withLock {
+        withContext(Dispatchers.IO) {
+            if (!Python.isStarted()) Python.start(AndroidPlatform(ctx.applicationContext))
+            dir.mkdirs()
+            val before = snapshot(dir)
+            val out = Python.getInstance().getModule("jack_runner")
+                .callAttr("run", code, dir.absolutePath, timeoutSec).toString()
+            val changed = Workspace.files(dir).filter { f -> before[f.name] != f.lastModified() to f.length() }
+            Result(out, changed)
+        }
+    }
+
+    private fun snapshot(dir: File) = Workspace.files(dir).associate { it.name to (it.lastModified() to it.length()) }
+}
