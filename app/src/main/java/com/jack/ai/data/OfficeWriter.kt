@@ -327,7 +327,7 @@ object OfficeWriter {
 
     private val NUMBER = Regex("""-?\d+(\.\d+)?([eE][-+]?\d+)?""")
 
-    private fun displayWidth(s: String): Int = s.sumOf { if (it.code > 0x2E80) 2 else 1 }
+    private fun displayWidth(s: String): Int = s.fold(0) { acc, c -> acc + if (c.code > 0x2E80) 2 else 1 }
 
     fun writeXlsx(sheets: List<Sheet>, out: OutputStream) {
         val list = sheets.ifEmpty { listOf(Sheet("Sheet1", emptyList())) }
