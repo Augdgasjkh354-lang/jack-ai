@@ -26,6 +26,12 @@ object Backup {
             DIRS.forEach { d ->
                 File(dir, d).listFiles()?.filter { it.isFile }?.forEach { f -> put("$d/${f.name}", f.readBytes()) }
             }
+            // 对话文件夹：每个对话一个子目录，底稿在 .src 里；图片缓存不备份
+            File(dir, "workspaces").listFiles()?.filter { it.isDirectory }?.forEach { ws ->
+                ws.walkTopDown().filter { it.isFile && !it.name.startsWith(".tmp-") && "/.cache/" !in it.path }.forEach { f ->
+                    put("workspaces/" + f.relativeTo(File(dir, "workspaces")).invariantSeparatorsPath, f.readBytes())
+                }
+            }
         }
     }
 
@@ -40,7 +46,8 @@ object Backup {
                 val name = e.name
                 val ok = !e.isDirectory && !name.contains("..") && (
                     name == "prefs.json" || name in JSONS ||
-                        DIRS.any { d -> name.startsWith("$d/") && name.count { it == '/' } == 1 }
+                        DIRS.any { d -> name.startsWith("$d/") && name.count { it == '/' } == 1 } ||
+                        (name.startsWith("workspaces/") && name.count { it == '/' } in 2..3)
                     )
                 if (ok) {
                     val bytes = zip.readBytes()

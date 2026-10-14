@@ -18,6 +18,7 @@ import java.util.zip.ZipInputStream
 
 /** 单个文件最多保留的文字数，避免一次塞爆上下文。 */
 private const val MAX_FILE_CHARS = 200_000
+private const val MAX_ORIGINAL_BYTES = 30L * 1024 * 1024
 
 object Attachments {
 
@@ -68,21 +69,43 @@ object Attachments {
         else Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, Matrix().apply { postRotate(degrees) }, true)
     }.getOrDefault(bmp)
 
-    /** 读取文件里的文字：支持 PDF、Word(docx)、以及各种纯文本/代码文件。 */
-    suspend fun importFile(ctx: Context, uri: Uri): Attachment = withContext(Dispatchers.IO) {
+    /**
+     * 读取文件里的文字：支持 PDF、Word(docx)、以及各种纯文本/代码文件。
+     * keepOriginal=true 时把原文件也存一份（发送后放进对话文件夹），读不出文字的文件也能收。
+     */
+    suspend fun importFile(ctx: Context, uri: Uri, keepOriginal: Boolean = false): Attachment = withContext(Dispatchers.IO) {
         val name = displayName(ctx, uri)
         val lower = name.lowercase()
         val mime = ctx.contentResolver.getType(uri).orEmpty()
-        val text = when {
-            lower.endsWith(".pdf") || mime == "application/pdf" -> readPdf(ctx, uri)
-            lower.endsWith(".docx") -> readDocx(ctx, uri)
-            lower.endsWith(".doc") || lower.endsWith(".xls") || lower.endsWith(".ppt") ->
-                throw IllegalArgumentException("暂不支持老版 Office 格式，请另存为 docx 或 PDF")
-            else -> readText(ctx, uri)
-        }.trim()
-        if (text.isEmpty()) throw IllegalArgumentException("没能从「$name」里读出文字（可能是扫描件，可以截图后当图片发）")
+        val read = runCatching {
+            when {
+                lower.endsWith(".pdf") || mime == "application/pdf" -> readPdf(ctx, uri)
+                lower.endsWith(".docx") -> readDocx(ctx, uri)
+                lower.endsWith(".doc") || lower.endsWith(".xls") || lower.endsWith(".ppt") ->
+                    throw IllegalArgumentException("暂不支持老版 Office 格式，请另存为 docx 或 PDF")
+                else -> readText(ctx, uri)
+            }.trim()
+        }
+        val text = read.getOrNull().orEmpty()
+        if (!keepOriginal) {
+            read.exceptionOrNull()?.let { throw it }
+            if (text.isEmpty()) throw IllegalArgumentException("没能从「$name」里读出文字（可能是扫描件，可以截图后当图片发）")
+        }
+        val att = Attachment(kind = "file", name = name)
+        val path = if (keepOriginal) {
+            val size = ctx.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L
+            if (size > MAX_ORIGINAL_BYTES) {
+                if (text.isEmpty()) throw IllegalArgumentException("「$name」太大了（超过 30 MB）")
+                ""
+            } else {
+                val dir = File(ctx.filesDir, "staging/${att.id}").apply { mkdirs() }
+                val f = File(dir, Workspace.safeName(name))
+                ctx.contentResolver.openInputStream(uri)?.use { input -> f.outputStream().use { input.copyTo(it) } }
+                f.absolutePath
+            }
+        } else ""
         val clipped = if (text.length > MAX_FILE_CHARS) text.take(MAX_FILE_CHARS) + "\n…（文件太长，后面省略）" else text
-        Attachment(kind = "file", name = name, text = clipped)
+        att.copy(text = clipped, path = path)
     }
 
     private fun readPdf(ctx: Context, uri: Uri): String =

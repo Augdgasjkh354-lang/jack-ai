@@ -1,6 +1,9 @@
 package com.jack.ai
 
 import android.app.Application
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.provider.AlarmClock
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -14,6 +17,10 @@ import com.jack.ai.data.Attachment
 import com.jack.ai.data.Attachments
 import com.jack.ai.data.Backup
 import com.jack.ai.data.ChartWriter
+import com.jack.ai.data.Diagram
+import com.jack.ai.data.DiagramWriter
+import com.jack.ai.data.TextEdit
+import com.jack.ai.data.Workspace
 import com.jack.ai.data.JsRunner
 import com.jack.ai.data.Flashcard
 import com.jack.ai.data.LibraryDoc
@@ -147,7 +154,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 currentId = if (s.currentId == id) null else s.currentId,
             )
         }
-        conv?.let { cleanup(it.messages) }
+        conv?.let { cleanup(it.messages); if (it.projectId == null) deleteWorkspace(it.id) }
         persist()
     }
 
@@ -161,6 +168,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val all = _state.value.conversations.flatMap { it.messages }
         _state.update { it.copy(conversations = emptyList(), currentId = null) }
         cleanup(all)
+        viewModelScope.launch(Dispatchers.IO) {
+            Workspace.root(getApplication<Application>()).listFiles()?.filterNot { it.name.startsWith("p_") }?.forEach { it.deleteRecursively() }
+        }
         persist()
     }
 
@@ -203,6 +213,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             )
         }
         cleanup(removedConvs.flatMap { it.messages })
+        deleteWorkspace("p_$id")
         persist()
         persistProjects()
     }
@@ -225,7 +236,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     // ---------- 附件 ----------
 
     fun addImages(uris: List<Uri>) = importAll(uris) { Attachments.importImage(getApplication<Application>(), it) }
-    fun addFiles(uris: List<Uri>) = importAll(uris) { Attachments.importFile(getApplication<Application>(), it) }
+    fun addFiles(uris: List<Uri>) = importAll(uris) { Attachments.importFile(getApplication<Application>(), it, keepOriginal = true) }
 
     private fun importAll(uris: List<Uri>, import: suspend (Uri) -> Attachment) {
         if (uris.isEmpty()) return
@@ -246,14 +257,77 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun removePending(id: String) {
         val att = _state.value.pending.firstOrNull { it.id == id }
         _state.update { it.copy(pending = it.pending.filterNot { a -> a.id == id }) }
-        att?.let { deleteImages(listOf(it)) }
+        att?.let { deleteImages(listOf(it)); deleteStaged(listOf(it)) }
+    }
+
+    private fun deleteStaged(list: List<Attachment>) {
+        val dirs = list.filter { it.kind == "file" && it.path.contains("/staging/") }.mapNotNull { File(it.path).parentFile }
+        if (dirs.isNotEmpty()) viewModelScope.launch(Dispatchers.IO) { dirs.forEach { runCatching { it.deleteRecursively() } } }
+    }
+
+    /** 发送时把附件放进对话文件夹：文件挪过去，图片复制一份。 */
+    private fun moveToWorkspace(conv: Conversation, atts: List<Attachment>): List<Attachment> {
+        val app = getApplication<Application>()
+        val dir = Workspace.dir(app, Workspace.key(conv))
+        return atts.map { a ->
+            runCatching {
+                when {
+                    a.kind == "file" && a.path.contains("/staging/") -> {
+                        val src = File(a.path)
+                        val dst = Workspace.uniqueFile(dir, a.name)
+                        if (!src.renameTo(dst)) { src.copyTo(dst); src.delete() }
+                        src.parentFile?.delete()
+                        a.copy(path = dst.absolutePath)
+                    }
+                    a.kind == "image" && a.path.isNotEmpty() -> {
+                        val name = a.name.substringBeforeLast('.').ifBlank { "图片" } + ".jpg"
+                        File(a.path).copyTo(Workspace.uniqueFile(dir, name))
+                        a
+                    }
+                    else -> a
+                }
+            }.getOrDefault(a)
+        }
     }
 
     /** 删除消息时，顺带删掉它们的图片和生成的文件。 */
     private fun cleanup(msgs: List<ChatMessage>) {
         deleteImages(msgs.flatMap { it.attachments })
-        val paths = msgs.flatMap { m -> m.files.map { it.path } }
+        val app = getApplication<Application>()
+        // 对话文件夹里的文件跟着对话走，不随单条消息删除
+        val paths = msgs.flatMap { m -> m.files.map { it.path } }.filterNot { Workspace.isInside(app, it) }
         if (paths.isNotEmpty()) viewModelScope.launch(Dispatchers.IO) { paths.forEach { runCatching { File(it).delete() } } }
+    }
+
+    private fun deleteWorkspace(key: String) {
+        val dir = Workspace.dir(getApplication<Application>(), key)
+        viewModelScope.launch(Dispatchers.IO) { runCatching { dir.deleteRecursively() } }
+    }
+
+    // ---------- 对话文件夹（给界面用） ----------
+
+    fun workspaceFiles(conv: Conversation): List<File> = Workspace.files(Workspace.dir(getApplication<Application>(), Workspace.key(conv)))
+
+    fun addWorkspaceFiles(conv: Conversation, uris: List<Uri>, onDone: () -> Unit) {
+        val app = getApplication<Application>()
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                val dir = Workspace.dir(app, Workspace.key(conv))
+                uris.forEach { uri ->
+                    runCatching {
+                        val name = app.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
+                            ?.use { c -> if (c.moveToFirst()) c.getString(0) else null } ?: "文件"
+                        val f = Workspace.uniqueFile(dir, name)
+                        app.contentResolver.openInputStream(uri)?.use { input -> f.outputStream().use { input.copyTo(it) } }
+                    }.onFailure { e -> _state.update { it.copy(toast = "添加失败：${e.message}") } }
+                }
+            }
+            onDone()
+        }
+    }
+
+    fun deleteWorkspaceFile(file: File, onDone: () -> Unit) {
+        viewModelScope.launch { withContext(Dispatchers.IO) { Workspace.delete(file) }; onDone() }
     }
 
     private fun deleteImages(list: List<Attachment>) {
@@ -303,10 +377,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
         val id = conv.id
         val title = trimmed.ifEmpty { atts.first().name }.take(20).replace('\n', ' ')
+        val moved = moveToWorkspace(conv, atts)
         updateConv(id) { c ->
             c.copy(
                 title = if (c.messages.isEmpty()) title else c.title,
-                messages = c.messages + ChatMessage(role = "user", content = trimmed, attachments = atts),
+                messages = c.messages + ChatMessage(role = "user", content = trimmed, attachments = moved),
             )
         }
         _state.update { it.copy(pending = emptyList()) }
@@ -370,7 +445,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val images = modelSupportsImages(model)
         val compressed = conv.summary.isNotBlank()
         val memories = if (settings.memoryEnabled) store.loadMemories() else emptyList()
+        val app = getApplication<Application>()
+        val wsDir = Workspace.dir(app, Workspace.key(conv))
+        val wsCache = File(wsDir, ".cache")
         val toolSet = buildJsonArray {
+            add(SkillTools.LIST_FILES); add(SkillTools.READ_FILE); add(SkillTools.WRITE_FILE); add(SkillTools.EDIT_FILE)
             if (skills.isNotEmpty()) add(SkillTools.USE_SKILL)
             if (web) { add(SkillTools.WEB_SEARCH); add(SkillTools.READ_WEBPAGE) }
             if (SkillIds.WORD in skillIds) add(SkillTools.CREATE_WORD)
@@ -378,12 +457,13 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             if (SkillIds.EXCEL in skillIds) add(SkillTools.CREATE_EXCEL)
             if (SkillIds.PDF in skillIds) add(SkillTools.CREATE_PDF)
             if (SkillIds.CHATS in skillIds) add(SkillTools.SEARCH_CHATS)
-            if (SkillIds.CALC in skillIds) { add(SkillTools.RUN_JS); add(SkillTools.CREATE_CHART) }
+            if (SkillIds.CALC in skillIds) { add(SkillTools.RUN_JS); add(SkillTools.CREATE_CHART); add(SkillTools.CREATE_DIAGRAM) }
             if (SkillIds.LIBRARY in skillIds) { add(SkillTools.SEARCH_LIBRARY); add(SkillTools.LIST_LIBRARY) }
             if (SkillIds.LEARN in skillIds) add(SkillTools.SAVE_FLASHCARDS)
             if (SkillIds.ROUTINE in skillIds) {
                 add(SkillTools.CREATE_REMINDER); add(SkillTools.CREATE_TASK)
                 add(SkillTools.LIST_ROUTINES); add(SkillTools.DELETE_ROUTINE)
+                add(SkillTools.SET_ALARM); add(SkillTools.CANCEL_ALARM)
             }
             if (compressed) add(SkillTools.SEARCH_HISTORY)
             if (settings.memoryEnabled) add(SkillTools.SAVE_MEMORY)
@@ -512,28 +592,155 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             suspend fun runJs(code: String) = runTool("运行代码计算") {
                 withContext(Dispatchers.Default) { JsRunner.run(code) } to SearchRecord("运行代码计算")
             }
-            suspend fun makeChart(args: JsonObject): String {
-                val title = args["title"].text().ifBlank { "图表" }
-                return runTool("生成图表：$title") {
-                    val labels = (args["labels"] as? JsonArray).orEmpty().map { it.text() }
-                    val series = (args["series"] as? JsonArray).orEmpty().mapNotNull { el ->
-                        val o = el as? JsonObject ?: return@mapNotNull null
-                        val values = (o["values"] as? JsonArray).orEmpty().map { it.text().toDoubleOrNull() ?: 0.0 }
-                        ChartWriter.Series(o["name"].text(), values)
+            /** 把生成或修改过的文件挂到这条回答上，显示成卡片。 */
+            fun attach(file: File) {
+                val gen = GeneratedFile(file.name, file.absolutePath, mimeOf(file.name), file.length())
+                patchMessage(convId, reply.id) { m -> m.copy(files = m.files.filterNot { it.path == gen.path } + gen) }
+            }
+            suspend fun create(tool: String, args: JsonObject, base: String, ext: String, label: String): String =
+                runTool("生成 $label：$base.$ext") {
+                    val file = withContext(Dispatchers.IO) { Workspace.uniqueFile(wsDir, "$base.$ext") }
+                    try {
+                        renderFile(tool, args, file, wsCache)
+                    } catch (e: Exception) {
+                        file.delete(); throw e
                     }
-                    val file = withContext(Dispatchers.IO) {
-                        val dir = File(getApplication<Application>().filesDir, "outputs").apply { mkdirs() }
-                        val f = File(dir, safeFileName(title).ifBlank { "图表" } + "-" + System.currentTimeMillis() % 100000 + ".png")
-                        try {
-                            f.outputStream().buffered().use { ChartWriter.render(args["type"].text(), title, args["unit"].text(), labels, series, it) }
-                        } catch (e: Exception) {
-                            f.delete(); throw e
+                    withContext(Dispatchers.IO) { Workspace.saveSource(file, tool, args) }
+                    attach(file)
+                    val shown = if (ext == "png") "图已生成并显示在聊天里" else "已生成文件「${file.name}」，用户可以在聊天里打开或分享"
+                    "$shown。文件保存在对话文件夹里，以后要修改就用 edit_file 改它的底稿，不要重新生成。" to
+                        SearchRecord("生成 $label：${file.name}")
+                }
+            suspend fun makeChart(args: JsonObject) =
+                create("create_chart", args, safeFileName(args["title"].text()).ifBlank { "图表" }, "png", "图表")
+            suspend fun makeDiagram(args: JsonObject): String {
+                val kind = if (args["type"].text() == "flowchart") "流程图" else "思维导图"
+                return create("create_diagram", args, safeFileName(args["title"].text()).ifBlank { kind }, "png", kind)
+            }
+            suspend fun makeFile(kind: String, args: JsonObject): String {
+                val base = safeFileName(args["filename"].text()).ifBlank { "未命名" }
+                val (ext, label) = when (kind) {
+                    "create_word" -> "docx" to "Word"
+                    "create_ppt" -> "pptx" to "PPT"
+                    "create_pdf" -> "pdf" to "PDF"
+                    else -> "xlsx" to "Excel"
+                }
+                return create(kind, args, base, ext, label)
+            }
+            fun wsFile(name: String): File = Workspace.find(wsDir, name) ?: throw TextEdit.EditException(
+                "对话文件夹里没有「$name」。" + Workspace.files(wsDir).let { l ->
+                    if (l.isEmpty()) "文件夹是空的。" else "现有文件：" + l.joinToString("、") { it.name }
+                })
+            suspend fun listFiles() = runTool("查看文件夹") {
+                val list = withContext(Dispatchers.IO) { Workspace.files(wsDir).map { "${it.name}｜${sizeText(it.length())}｜${Workspace.editKind(it)}" } }
+                (if (list.isEmpty()) "对话文件夹是空的。" else list.joinToString("\n")) to SearchRecord("查看文件夹")
+            }
+            suspend fun readFile(args: JsonObject): String {
+                val name = args["name"].text()
+                return runTool("查看 $name") {
+                    val file = wsFile(name)
+                    val text = withContext(Dispatchers.IO) { Workspace.readText(file) }
+                    val lines = text.lines()
+                    val start = (args["start_line"].text().toIntOrNull() ?: 1).coerceIn(1, lines.size.coerceAtLeast(1))
+                    val max = (args["max_lines"].text().toIntOrNull() ?: 400).coerceIn(1, 2000)
+                    val part = lines.drop(start - 1).take(max)
+                    var body = part.joinToString("\n")
+                    if (body.length > 40_000) body = body.take(40_000) + "\n…（太长，后面截断了，用 start_line 接着读）"
+                    val end = start + part.size - 1
+                    val head = "「${file.name}」共 ${lines.size} 行" +
+                        (if (Workspace.hasSource(file)) "，下面是你生成它时的底稿，edit_file 改的就是这份底稿" else "") +
+                        (if (start > 1 || end < lines.size) "，这里是第 $start–$end 行" else "") + "：\n"
+                    head + body to SearchRecord("查看 ${file.name}")
+                }
+            }
+            suspend fun writeFile(args: JsonObject): String {
+                val name = Workspace.safeName(args["name"].text())
+                return runTool("写入 $name") {
+                    val ext = name.substringAfterLast('.', "").lowercase()
+                    if (ext in setOf("docx", "pptx", "xlsx", "pdf", "png", "jpg", "jpeg")) {
+                        throw TextEdit.EditException("write_file 只能写文字文件。Word/PPT/Excel/PDF 用对应的生成工具，已有的用 edit_file 改")
+                    }
+                    val file = File(wsDir, name)
+                    withContext(Dispatchers.IO) {
+                        wsDir.mkdirs()
+                        file.writeText(args["content"].text())
+                    }
+                    attach(file)
+                    "已写入「${file.name}」（${file.length()} 字节）。" to SearchRecord("写入 ${file.name}")
+                }
+            }
+            suspend fun editFile(args: JsonObject): String {
+                val name = args["name"].text()
+                return runTool("修改 $name") {
+                    val file = wsFile(name)
+                    val old = args["old_text"].text()
+                    val new = args["new_text"].text()
+                    val all = args["replace_all"].text() == "true"
+                    val src = withContext(Dispatchers.IO) { Workspace.source(file) }
+                    val n = if (src != null) {
+                        val (tool, a) = src
+                        val (edited, count) = TextEdit.replace(Workspace.sourceText(tool, a), old, new, all)
+                        val newArgs = Workspace.argsFromText(tool, a, edited)
+                        renderFile(tool, newArgs, file, wsCache)
+                        withContext(Dispatchers.IO) { Workspace.saveSource(file, tool, newArgs) }
+                        count
+                    } else withContext(Dispatchers.IO) {
+                        when {
+                            Workspace.ext(file) == "docx" -> {
+                                val (bytes, count) = TextEdit.replaceInDocx(file.readBytes(), old, new, all)
+                                file.writeBytes(bytes); count
+                            }
+                            Workspace.isText(file) -> {
+                                val (text, count) = TextEdit.replace(file.readText(), old, new, all)
+                                file.writeText(text); count
+                            }
+                            else -> throw TextEdit.EditException("「${file.name}」这种文件没法直接修改")
                         }
-                        f
                     }
-                    val gen = GeneratedFile(file.name, file.absolutePath, "image/png", file.length())
-                    patchMessage(convId, reply.id) { it.copy(files = it.files + gen) }
-                    "图表已生成并显示在聊天里。" to SearchRecord("生成图表：$title")
+                    attach(file)
+                    "已修改「${file.name}」，替换了 $n 处，其他内容没动。" to SearchRecord("修改 ${file.name}")
+                }
+            }
+            suspend fun setAlarm(args: JsonObject): String {
+                val time = args["time"].text()
+                return runTool("设闹钟 $time") {
+                    val m = TIME.find(time) ?: throw IllegalArgumentException("时间要写成 HH:mm")
+                    val h = m.groupValues[1].toInt()
+                    val min = m.groupValues[2].toInt()
+                    if (h !in 0..23 || min !in 0..59) throw IllegalArgumentException("时间不对")
+                    val days = (args["days"] as? JsonArray).orEmpty().mapNotNull { it.text().toIntOrNull() }.filter { it in 1..7 }.distinct()
+                    val label = args["label"].text()
+                    val intent = Intent(AlarmClock.ACTION_SET_ALARM)
+                        .putExtra(AlarmClock.EXTRA_HOUR, h)
+                        .putExtra(AlarmClock.EXTRA_MINUTES, min)
+                        .putExtra(AlarmClock.EXTRA_SKIP_UI, true)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    if (label.isNotBlank()) intent.putExtra(AlarmClock.EXTRA_MESSAGE, label)
+                    // 1=周一 … 7=周日 → Calendar 的 2…7、1
+                    if (days.isNotEmpty()) intent.putExtra(AlarmClock.EXTRA_DAYS, ArrayList(days.map { it % 7 + 1 }))
+                    startClock(intent)
+                    val hm = String.format(Locale.US, "%02d:%02d", h, min)
+                    val repeat = if (days.isEmpty()) "一次性" else "每周" + days.sorted().joinToString("、") { "一二三四五六日"[it - 1].toString() } + "重复"
+                    "已在手机时钟里设好 $hm 的闹钟（$repeat${if (label.isNotBlank()) "，标签「$label」" else ""}）。" to
+                        SearchRecord("设闹钟 $hm")
+                }
+            }
+            suspend fun cancelAlarm(args: JsonObject): String {
+                val time = args["time"].text()
+                val label = args["label"].text()
+                return runTool("关闹钟 ${time.ifBlank { label }}") {
+                    val intent = Intent(AlarmClock.ACTION_DISMISS_ALARM).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    val m = TIME.find(time)
+                    when {
+                        m != null -> intent.putExtra(AlarmClock.EXTRA_ALARM_SEARCH_MODE, AlarmClock.ALARM_SEARCH_MODE_TIME)
+                            .putExtra(AlarmClock.EXTRA_HOUR, m.groupValues[1].toInt())
+                            .putExtra(AlarmClock.EXTRA_MINUTES, m.groupValues[2].toInt())
+                        label.isNotBlank() -> intent.putExtra(AlarmClock.EXTRA_ALARM_SEARCH_MODE, AlarmClock.ALARM_SEARCH_MODE_LABEL)
+                            .putExtra(AlarmClock.EXTRA_MESSAGE, label)
+                        else -> throw IllegalArgumentException("要给出闹钟的时间或标签")
+                    }
+                    startClock(intent)
+                    "已让时钟 App 关掉这个闹钟。有的手机会弹出确认页面，需要用户点一下。" to SearchRecord("关闹钟 ${time.ifBlank { label }}")
                 }
             }
             suspend fun makeRoutine(kind: String, args: JsonObject): String {
@@ -572,42 +779,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 val text = skill?.let { "【${it.name}】\n${it.instructions}" }
                     ?: ("没有这个技能。可用的技能：" + skills.joinToString("、") { it.name })
                 text to SearchRecord("使用技能：${skill?.name ?: name}")
-            }
-            suspend fun makeFile(kind: String, args: JsonObject): String {
-                val base = safeFileName(args["filename"].text()).ifBlank { "未命名" }
-                val (ext, mime, label) = when (kind) {
-                    "create_word" -> Triple("docx", MIME_DOCX, "Word")
-                    "create_ppt" -> Triple("pptx", MIME_PPTX, "PPT")
-                    "create_pdf" -> Triple("pdf", "application/pdf", "PDF")
-                    else -> Triple("xlsx", MIME_XLSX, "Excel")
-                }
-                return runTool("生成 $label：$base.$ext") {
-                    // PPT 先把配图下载好
-                    val slides = if (kind == "create_ppt") withImages(parseSlides(args), args) else null
-                    val file = withContext(Dispatchers.IO) {
-                        val dir = File(getApplication<Application>().filesDir, "outputs").apply { mkdirs() }
-                        var f = File(dir, "$base.$ext")
-                        var n = 2
-                        while (f.exists()) f = File(dir, "$base($n).$ext").also { n++ }
-                        try {
-                            f.outputStream().buffered().use { out ->
-                                when (kind) {
-                                    "create_word" -> OfficeWriter.writeDocx(args["markdown"].text(), out)
-                                    "create_ppt" -> OfficeWriter.writePptx(slides!!, args["theme"].text().ifBlank { "blue" }, out)
-                                    "create_pdf" -> PdfWriter.write(args["markdown"].text(), out)
-                                    else -> OfficeWriter.writeXlsx(parseSheets(args), out)
-                                }
-                            }
-                        } catch (e: Exception) {
-                            f.delete()
-                            throw e
-                        }
-                        f
-                    }
-                    val gen = GeneratedFile(file.name, file.absolutePath, mime, file.length())
-                    patchMessage(convId, reply.id) { it.copy(files = it.files + gen) }
-                    "已生成文件「${file.name}」，用户可以在聊天里直接打开或分享。" to SearchRecord("生成 $label：${file.name}")
-                }
             }
 
             try {
@@ -704,6 +875,13 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                             args == null -> "参数不是有效的 JSON，可能内容太长被截断了，请精简后重试"
                             tc.name in FILE_TOOLS && FILE_TOOLS[tc.name] in skillIds -> makeFile(tc.name, args)
                             tc.name == "create_chart" && SkillIds.CALC in skillIds -> makeChart(args)
+                            tc.name == "create_diagram" && SkillIds.CALC in skillIds -> makeDiagram(args)
+                            tc.name == "list_files" -> listFiles()
+                            tc.name == "read_file" -> readFile(args)
+                            tc.name == "write_file" -> writeFile(args)
+                            tc.name == "edit_file" -> editFile(args)
+                            tc.name == "set_alarm" && SkillIds.ROUTINE in skillIds -> setAlarm(args)
+                            tc.name == "cancel_alarm" && SkillIds.ROUTINE in skillIds -> cancelAlarm(args)
                             tc.name == "list_routines" && SkillIds.ROUTINE in skillIds -> listRoutines()
                             tc.name == "list_library" && SkillIds.LIBRARY in skillIds -> listLibrary()
                             tc.name == "save_flashcards" && SkillIds.LEARN in skillIds -> saveCards(args)
@@ -1027,7 +1205,12 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val files = m.attachments.filter { it.kind == "file" }
         val imgs = m.attachments.filter { it.kind == "image" }
         val text = buildString {
-            files.forEach { f -> append("【文件：${f.name}】\n${f.text}\n【文件结束】\n\n") }
+            files.forEach { f ->
+                // 放进文件夹后可能改了名（重名时加了编号），以文件夹里的名字为准
+                val name = if (f.path.isNotEmpty() && !f.path.contains("/staging/")) File(f.path).name else f.name
+                if (f.text.isBlank()) append("【文件：$name】（已放进对话文件夹，内容没法直接显示，需要时用 read_file 读）\n\n")
+                else append("【文件：$name】\n${f.text}\n【文件结束】\n\n")
+            }
             if (!imagesOk && imgs.isNotEmpty()) append("（用户发了 ${imgs.size} 张图片，但当前模型看不了图片）\n\n")
             append(m.content)
         }.trim()
@@ -1100,6 +1283,12 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         if ("web_search" in names) {
             parts += "【联网】遇到时效性问题（新闻、价格、天气、最新版本、近期事件）或不确定的事实时，用联网搜索技能核实；常识、闲聊、写作不用搜。"
         }
+        if ("edit_file" in names) {
+            // 文件列表不放进系统提示：列表一变，整段对话的缓存就失效了
+            parts += "【对话文件夹】本对话有一个文件夹，用户发来的文件和你生成的文件都存在里面，不确定有哪些时用 list_files 看。" +
+                "用户要改已有的文件时，用 edit_file 只替换要改的那一段，不要整份重新生成；不确定原文时先用 read_file 看。" +
+                "用户发来的文件内容已经在消息里的，不用再读。"
+        }
         if ("save_memory" in names) {
             parts += "【记忆工具】只有当用户明确要求你记住某件事时，才用 save_memory 保存，内容写成一句完整的话。"
         }
@@ -1136,6 +1325,97 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         return Triple(SimpleDateFormat("yyyy-MM-dd", Locale.US).format(cal.time), h, min)
     }
 
+    /** 按工具名和参数生成文件。先写到临时文件，成功了再替换，失败不会弄坏原文件。 */
+    private suspend fun renderFile(tool: String, args: JsonObject, file: File, cache: File) {
+        val slides = if (tool == "create_ppt") withImages(parseSlides(args), args, cache) else null
+        withContext(Dispatchers.IO) {
+            file.parentFile?.mkdirs()
+            val tmp = File(file.parentFile, ".tmp-" + file.name)
+            try {
+                tmp.outputStream().buffered().use { out ->
+                    when (tool) {
+                        "create_word" -> OfficeWriter.writeDocx(args["markdown"].text(), out)
+                        "create_ppt" -> OfficeWriter.writePptx(slides!!, args["theme"].text().ifBlank { "blue" }, out)
+                        "create_pdf" -> PdfWriter.write(args["markdown"].text(), out)
+                        "create_excel" -> OfficeWriter.writeXlsx(parseSheets(args), out)
+                        "create_chart" -> renderChart(args, out)
+                        "create_diagram" -> renderDiagram(args, out)
+                        else -> throw IllegalArgumentException("不认识的文件类型")
+                    }
+                }
+                if (!tmp.renameTo(file)) {
+                    file.delete()
+                    if (!tmp.renameTo(file)) throw IOException("保存文件失败")
+                }
+            } finally {
+                tmp.delete()
+            }
+        }
+    }
+
+    private fun renderChart(args: JsonObject, out: java.io.OutputStream) {
+        val labels = (args["labels"] as? JsonArray).orEmpty().map { it.text() }
+        val series = (args["series"] as? JsonArray).orEmpty().mapNotNull { el ->
+            val o = el as? JsonObject ?: return@mapNotNull null
+            val values = (o["values"] as? JsonArray).orEmpty().map { it.text().toDoubleOrNull() ?: 0.0 }
+            ChartWriter.Series(o["name"].text(), values)
+        }
+        ChartWriter.render(args["type"].text(), args["title"].text().ifBlank { "图表" }, args["unit"].text(), labels, series, out)
+    }
+
+    private fun renderDiagram(args: JsonObject, out: java.io.OutputStream) {
+        val title = args["title"].text().trim()
+        if (args["type"].text() == "flowchart") {
+            val nodes = (args["nodes"] as? JsonArray).orEmpty().mapNotNull { el ->
+                val o = el as? JsonObject ?: return@mapNotNull null
+                val id = o["id"].text().trim()
+                if (id.isEmpty()) null else Diagram.FNode(id, o["label"].text().ifBlank { id }, o["shape"].text().ifBlank { "box" })
+            }
+            val edges = (args["edges"] as? JsonArray).orEmpty().mapNotNull { el ->
+                val o = el as? JsonObject ?: return@mapNotNull null
+                val from = o["from"].text().trim()
+                val to = o["to"].text().trim()
+                if (from.isEmpty() || to.isEmpty()) null else Diagram.FEdge(from, to, o["label"].text())
+            }
+            if (nodes.isEmpty() && edges.isEmpty()) throw IllegalArgumentException("流程图没有节点")
+            val layout = Diagram.flow(nodes, edges, args["direction"].text() == "LR", DiagramWriter.measure)
+            DiagramWriter.render(layout, title, mindmap = false, out = out)
+        } else {
+            val outline = args["outline"].text()
+            if (outline.isBlank()) throw IllegalArgumentException("思维导图需要 outline")
+            val root = Diagram.parseOutline(outline, title)
+            val layout = Diagram.tree(root, DiagramWriter.measure)
+            DiagramWriter.render(layout, if (root.label == title) "" else title, mindmap = true, out = out)
+        }
+    }
+
+    private suspend fun startClock(intent: Intent) = withContext(Dispatchers.Main) {
+        try {
+            getApplication<Application>().startActivity(intent)
+        } catch (e: ActivityNotFoundException) {
+            throw IllegalStateException("手机上没找到能设闹钟的时钟 App")
+        } catch (e: SecurityException) {
+            throw IllegalStateException("没有设闹钟的权限")
+        }
+    }
+
+    /** PPT 配图存一份，修改 PPT 重新生成时不用再搜一遍。 */
+    private fun imageCacheFile(cache: File, query: String) =
+        File(cache, "img-" + query.trim().lowercase().hashCode().toUInt() + ".jpg")
+
+    private suspend fun cachedImage(cache: File, query: String): Triple<ByteArray, Int, Int>? = withContext(Dispatchers.IO) {
+        val f = imageCacheFile(cache, query)
+        if (!f.exists()) return@withContext null
+        val bytes = f.readBytes()
+        val o = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, o)
+        if (o.outWidth <= 0) null else Triple(bytes, o.outWidth, o.outHeight)
+    }
+
+    private suspend fun saveImage(cache: File, query: String, img: Triple<ByteArray, Int, Int>) = withContext(Dispatchers.IO) {
+        runCatching { cache.mkdirs(); imageCacheFile(cache, query).writeBytes(img.first) }
+    }
+
     private fun findSkill(skills: List<Skill>, name: String): Skill? {
         val n = name.trim()
         return skills.firstOrNull { it.name == n }
@@ -1158,7 +1438,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }.ifEmpty { throw IllegalArgumentException("没有幻灯片内容") }
 
     /** 给写了 image_query 的正文页搜一张图，下载失败就不配图。最多 6 张。 */
-    private suspend fun withImages(slides: List<OfficeWriter.Slide>, args: JsonObject): List<OfficeWriter.Slide> {
+    private suspend fun withImages(slides: List<OfficeWriter.Slide>, args: JsonObject, cache: File): List<OfficeWriter.Slide> {
         val key = _state.value.settings.tavilyKey
         if (key.isBlank()) return slides
         val queries = (args["slides"] as? JsonArray).orEmpty().map { (it as? JsonObject)?.get("image_query").text() }
@@ -1166,7 +1446,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         return slides.mapIndexed { i, s ->
             val q = queries.getOrNull(i).orEmpty()
             if (q.isBlank() || s.layout != "content" || count >= 6) return@mapIndexed s
-            val img = runCatching { fetchImage(key, q) }.getOrNull() ?: return@mapIndexed s
+            val img = runCatching { cachedImage(cache, q) ?: fetchImage(key, q)?.also { saveImage(cache, q, it) } }.getOrNull()
+                ?: return@mapIndexed s
             count++
             s.copy(image = img.first, imageExt = "jpeg", imageW = img.second, imageH = img.third)
         }
@@ -1190,7 +1471,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             OfficeWriter.Sheet(o["name"].text().ifBlank { "Sheet${i + 1}" }, rows)
         }.ifEmpty { throw IllegalArgumentException("没有表格内容") }
 
-    private companion object {
+    companion object {
         const val REVIEW_PROMPT = "请换一个更严格的视角，复核你上面那条回答：检查事实错误、计算错误、逻辑漏洞、" +
             "遗漏的重要信息和表达不清的地方，需要时可以联网核实。然后直接给出改进后的完整回答，" +
             "开头用一句话说明修正或补充了什么。如果原回答没有问题，就说“复核没有发现问题”，" +
@@ -1203,6 +1484,30 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         const val MIME_DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         const val MIME_PPTX = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
         const val MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+        val TIME = Regex("""(\d{1,2})[:：](\d{2})""")
+
+        fun mimeOf(name: String): String = when (name.substringAfterLast('.', "").lowercase()) {
+            "docx" -> MIME_DOCX
+            "pptx" -> MIME_PPTX
+            "xlsx" -> MIME_XLSX
+            "pdf" -> "application/pdf"
+            "png" -> "image/png"
+            "jpg", "jpeg" -> "image/jpeg"
+            "webp" -> "image/webp"
+            "gif" -> "image/gif"
+            "html", "htm" -> "text/html"
+            "csv" -> "text/csv"
+            "json" -> "application/json"
+            "md", "markdown" -> "text/markdown"
+            else -> "text/plain"
+        }
+
+        fun sizeText(bytes: Long): String = when {
+            bytes >= 1024 * 1024 -> String.format(Locale.US, "%.1f MB", bytes / 1024.0 / 1024.0)
+            bytes >= 1024 -> "${bytes / 1024} KB"
+            else -> "$bytes B"
+        }
     }
 
     // ---------- 工具函数 ----------

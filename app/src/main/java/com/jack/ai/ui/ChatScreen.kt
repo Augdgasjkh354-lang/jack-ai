@@ -107,6 +107,7 @@ fun ChatScreen(
     val project = state.project(state.currentProjectId)
     val ctx = LocalContext.current
     var text by rememberSaveable { mutableStateOf("") }
+    var showFiles by remember { mutableStateOf(false) }
     val bg = MaterialTheme.colorScheme.background
     // 分享进来或语音识别的文字，接到输入框后面
     LaunchedEffect(state.incomingText) {
@@ -159,6 +160,11 @@ fun ChatScreen(
                         }
                     },
                     actions = {
+                        if (conv != null && conv.messages.isNotEmpty()) {
+                            IconButton(onClick = { showFiles = true }) {
+                                Icon(AppIcons.Folder, contentDescription = "文件夹", Modifier.size(22.dp))
+                            }
+                        }
                         IconButton(onClick = { vm.newChat(state.currentProjectId) }) {
                             Icon(AppIcons.NewChat, contentDescription = "新对话", Modifier.size(22.dp))
                         }
@@ -186,6 +192,9 @@ fun ChatScreen(
                 }
             }
         }
+    }
+    if (showFiles && conv != null) {
+        FilesSheet(vm, conv, inProject = conv.projectId != null, onDismiss = { showFiles = false })
     }
 }
 

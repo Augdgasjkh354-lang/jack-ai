@@ -285,7 +285,7 @@ private fun ChartImage(f: GeneratedFile) {
 }
 
 @Composable
-private fun GeneratedFileCard(f: GeneratedFile) {
+internal fun GeneratedFileCard(f: GeneratedFile) {
     val ctx = LocalContext.current
     val colors = MaterialTheme.colorScheme
     val (tag, tagColor) = when (f.name.substringAfterLast('.').lowercase()) {
@@ -293,6 +293,9 @@ private fun GeneratedFileCard(f: GeneratedFile) {
         "pptx" -> "P" to Color(0xFFD24726)
         "xlsx" -> "X" to Color(0xFF217346)
         "pdf" -> "PDF" to Color(0xFFB3261E)
+        "png", "jpg", "jpeg", "webp", "gif" -> "图" to Color(0xFF4BA3A8)
+        "txt", "md", "csv", "json" -> "TXT" to Color(0xFF8A8178)
+        "html", "htm", "js", "py", "kt", "java", "css", "ts" -> "</>" to Color(0xFF7B5BA6)
         else -> "F" to colors.primary
     }
     Surface(
@@ -327,7 +330,7 @@ private fun GeneratedFileCard(f: GeneratedFile) {
     }
 }
 
-private fun formatSize(bytes: Long): String = when {
+internal fun formatSize(bytes: Long): String = when {
     bytes >= 1024 * 1024 -> String.format(java.util.Locale.US, "%.1f MB", bytes / 1024.0 / 1024.0)
     bytes >= 1024 -> "${bytes / 1024} KB"
     else -> "$bytes B"
@@ -336,7 +339,7 @@ private fun formatSize(bytes: Long): String = when {
 private fun fileUri(ctx: Context, f: GeneratedFile) =
     FileProvider.getUriForFile(ctx, ctx.packageName + ".files", File(f.path))
 
-private fun openFile(ctx: Context, f: GeneratedFile) {
+internal fun openFile(ctx: Context, f: GeneratedFile) {
     if (!File(f.path).exists()) {
         Toast.makeText(ctx, "文件已被删除", Toast.LENGTH_SHORT).show()
         return
@@ -351,7 +354,7 @@ private fun openFile(ctx: Context, f: GeneratedFile) {
     }
 }
 
-private fun shareFile(ctx: Context, f: GeneratedFile) {
+internal fun shareFile(ctx: Context, f: GeneratedFile) {
     if (!File(f.path).exists()) {
         Toast.makeText(ctx, "文件已被删除", Toast.LENGTH_SHORT).show()
         return
@@ -458,6 +461,9 @@ private fun SearchBox(searches: List<SearchRecord>) {
                                 rec.query.startsWith("使用技能") -> "🧩 "
                                 rec.query.startsWith("生成") -> "📎 "
                                 rec.query.startsWith("运行") -> "🧮 "
+                                rec.query.startsWith("修改") || rec.query.startsWith("写入") -> "✏️ "
+                                rec.query.startsWith("查看文件夹") || (rec.query.startsWith("查看") && rec.query.contains('.')) -> "📁 "
+                                rec.query.startsWith("设闹钟") || rec.query.startsWith("关闹钟") -> "⏰ "
                                 rec.query.startsWith("设置") || rec.query.startsWith("查看") || rec.query.startsWith("删除") -> "⏰ "
                                 else -> "🔍 "
                             }) + rec.query +
@@ -491,4 +497,4 @@ private fun SearchBox(searches: List<SearchRecord>) {
     }
 }
 
-private fun isOther(label: String) = listOf("读取", "翻阅", "记住", "使用技能", "生成", "运行", "设置", "查看", "删除").any { label.startsWith(it) }
+private fun isOther(label: String) = listOf("读取", "翻阅", "记住", "使用技能", "生成", "运行", "设置", "查看", "删除", "写入", "修改", "设闹钟", "关闹钟").any { label.startsWith(it) }

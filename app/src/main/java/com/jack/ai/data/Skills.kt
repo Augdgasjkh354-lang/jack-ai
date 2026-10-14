@@ -132,7 +132,7 @@ val BUILTIN_SKILLS = listOf(
     ),
     Skill(
         id = SkillIds.ROUTINE, builtin = true, name = "提醒和定时任务",
-        description = "设置到点弹通知的提醒（“明天 9 点提醒我交报告”），或让你定时在后台自动干活（“每天早上 8 点给我整理 AI 新闻”）。",
+        description = "设置闹钟（“明早 7 点叫我起床”）、到点弹通知的提醒（“明天 9 点提醒我交报告”），或让你定时在后台自动干活（“每天早上 8 点给我整理 AI 新闻”）。",
         instructions = """提醒和定时任务的做法：
 1. 只是到点通知用户一件事，用 create_reminder；需要你到点去搜索、整理、写东西的，用 create_task。
 2. 时间写成 “yyyy-MM-dd HH:mm”，根据系统提示里的当前日期换算“明天”“下周一”“今晚”等说法。用户没说具体几点时，按常理挑一个（早上 9:00、晚上 20:00 等），并在回复里说明。
@@ -140,11 +140,14 @@ val BUILTIN_SKILLS = listOf(
 4. 提醒的 text 写成到时候通知里显示的一句话，比如“该交周报了”。
 5. 定时任务的 prompt 要写成完整、独立的指令，因为到时候你是在后台、看不到现在这段对话的。比如“搜索过去 24 小时 AI 领域的重要新闻，整理成 5 条简报，每条一句话加来源链接”。
 6. 设置好后用一句话确认：什么时候、做什么。
-7. 用户想看或删除已有的提醒和任务时，先用 list_routines 查，再用 delete_routine 删。""",
+7. 用户想看或删除已有的提醒和任务时，先用 list_routines 查，再用 delete_routine 删。
+8. 用户说“闹钟”“叫我起床”“X 点叫醒我”时，用 set_alarm 在手机自带的时钟里设真正的闹钟（会一直响到用户按掉）；只是“提醒我做某事”就用 create_reminder。
+   - set_alarm 只需要时和分（24 小时制），days 不填是一次性闹钟，填了就是每周这几天重复（1=周一 … 7=周日）。
+   - 要关掉或改闹钟：用 cancel_alarm 按时间或标签关掉旧的，需要时再 set_alarm 设新的。手机不允许读取已有闹钟列表，你看不到用户有哪些闹钟，不知道时就问用户。""",
     ),
     Skill(
         id = SkillIds.CALC, builtin = true, name = "计算与图表",
-        description = "真正运行代码来算数、统计、处理数据，或把数据画成柱状图、折线图、饼图。涉及精确计算（贷款、利息、汇率换算、统计）时使用。",
+        description = "真正运行代码来算数、统计、处理数据；把数据画成柱状图、折线图、饼图；画思维导图（树状图）和流程图。涉及精确计算（贷款、利息、汇率换算、统计）或用户想要图时使用。",
         instructions = """计算与图表的做法：
 1. 需要精确计算时，不要心算，用 run_js 运行 JavaScript：
    - 用 console.log() 输出结果，或者让最后一行是要返回的值。
@@ -156,7 +159,15 @@ val BUILTIN_SKILLS = listOf(
    - 比较几个类别用 bar（柱状图），看随时间的变化用 line（折线图），看占比用 pie（饼图，只用第一组数据）。
    - labels 是横轴的类别或时间；series 是一组或多组数据，每组有 name 和 values，values 的个数和 labels 一样。
    - 标题简短，unit 写单位（比如“万元”“%”）。
-4. 图生成后会直接显示在聊天里，你用一两句话点出图里最值得注意的地方。""",
+4. 图生成后会直接显示在聊天里，你用一两句话点出图里最值得注意的地方。
+5. 思维导图、知识结构、分类层级用 create_diagram，type=mindmap：
+   - outline 写成缩进的 Markdown 列表，每层多缩进 2 个空格，第一行是中心主题。
+   - 每个节点简短（一般不超过 15 个字），层级不要超过 4 层，一级分支 3 到 7 个最好看。
+6. 步骤、流程、决策过程用 create_diagram，type=flowchart：
+   - nodes 每个有 id、label、shape：开始和结束用 round，判断用 diamond，普通步骤用 box。
+   - edges 写 from、to，判断的分支在 label 写“是”“否”之类。
+   - direction 默认 TB（从上到下），步骤少且想横着看时用 LR。
+7. 图会保存在对话文件夹里。用户要改图时，用 edit_file 改它的底稿，不要重新画一张。""",
     ),
     Skill(
         id = SkillIds.LIBRARY, builtin = true, name = "资料库",
@@ -201,6 +212,20 @@ object SkillTools {
     val RUN_JS = schema("""{"type":"function","function":{"name":"run_js","description":"运行一段 JavaScript 代码做精确计算，返回 console.log 的输出和最后一个表达式的值。","parameters":{"type":"object","properties":{"code":{"type":"string","description":"JavaScript 代码"}},"required":["code"]}}}""")
 
     val CREATE_CHART = schema("""{"type":"function","function":{"name":"create_chart","description":"把数据画成图表图片，显示在聊天里。","parameters":{"type":"object","properties":{"type":{"type":"string","enum":["bar","line","pie"]},"title":{"type":"string"},"unit":{"type":"string","description":"数值单位，可以为空"},"labels":{"type":"array","items":{"type":"string"},"description":"横轴类别或时间"},"series":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"values":{"type":"array","items":{"type":"number"}}},"required":["name","values"]}}},"required":["type","title","labels","series"]}}}""")
+
+    val CREATE_DIAGRAM = schema("""{"type":"function","function":{"name":"create_diagram","description":"画思维导图（树状图）或流程图，生成图片显示在聊天里。","parameters":{"type":"object","properties":{"type":{"type":"string","enum":["mindmap","flowchart"]},"title":{"type":"string","description":"图的标题，可以为空"},"outline":{"type":"string","description":"mindmap 用：缩进的 Markdown 列表，第一行是中心主题"},"nodes":{"type":"array","description":"flowchart 用","items":{"type":"object","properties":{"id":{"type":"string"},"label":{"type":"string"},"shape":{"type":"string","enum":["box","round","diamond"]}},"required":["id","label"]}},"edges":{"type":"array","description":"flowchart 用","items":{"type":"object","properties":{"from":{"type":"string"},"to":{"type":"string"},"label":{"type":"string"}},"required":["from","to"]}},"direction":{"type":"string","enum":["TB","LR"]}},"required":["type"]}}}""")
+
+    val SET_ALARM = schema("""{"type":"function","function":{"name":"set_alarm","description":"在手机自带的时钟 App 里设一个闹钟。","parameters":{"type":"object","properties":{"time":{"type":"string","description":"HH:mm，24 小时制"},"label":{"type":"string","description":"闹钟标签，可以为空"},"days":{"type":"array","items":{"type":"integer"},"description":"每周重复的日子，1=周一 … 7=周日；一次性闹钟不填"}},"required":["time"]}}}""")
+
+    val CANCEL_ALARM = schema("""{"type":"function","function":{"name":"cancel_alarm","description":"关掉时钟 App 里的一个闹钟，按时间或标签找。","parameters":{"type":"object","properties":{"time":{"type":"string","description":"HH:mm"},"label":{"type":"string"}}}}}""")
+
+    val LIST_FILES = schema("""{"type":"function","function":{"name":"list_files","description":"列出本对话文件夹里的文件。","parameters":{"type":"object","properties":{}}}}""")
+
+    val READ_FILE = schema("""{"type":"function","function":{"name":"read_file","description":"读取对话文件夹里一个文件的文字内容。你生成的 Word/PPT/Excel/PDF/图会返回它的底稿。可以只读一部分行。","parameters":{"type":"object","properties":{"name":{"type":"string","description":"文件名"},"start_line":{"type":"integer","description":"从第几行开始，默认 1"},"max_lines":{"type":"integer","description":"最多读多少行，默认 400"}},"required":["name"]}}}""")
+
+    val WRITE_FILE = schema("""{"type":"function","function":{"name":"write_file","description":"在对话文件夹里新建或整个覆盖一个文字文件（代码、md、txt、csv、json、html 等）。只改一小部分时用 edit_file。","parameters":{"type":"object","properties":{"name":{"type":"string","description":"文件名，带扩展名"},"content":{"type":"string"}},"required":["name","content"]}}}""")
+
+    val EDIT_FILE = schema("""{"type":"function","function":{"name":"edit_file","description":"局部修改对话文件夹里的文件：把 old_text 这一段原文换成 new_text，其他内容不动。适用于文字/代码文件、Word 文件，以及你生成的 Word/PPT/Excel/PDF/图（改的是底稿，改完自动重新生成）。","parameters":{"type":"object","properties":{"name":{"type":"string","description":"文件名"},"old_text":{"type":"string","description":"要替换的原文，必须和文件里的一字不差，并且在文件里唯一"},"new_text":{"type":"string","description":"替换成的新内容，删除就写空字符串"},"replace_all":{"type":"boolean","description":"原文出现多次时全部替换"}},"required":["name","old_text","new_text"]}}}""")
 
     val CREATE_REMINDER = schema("""{"type":"function","function":{"name":"create_reminder","description":"设置一个到点弹通知的提醒。","parameters":{"type":"object","properties":{"text":{"type":"string","description":"通知里显示的话"},"datetime":{"type":"string","description":"第一次提醒的时间，格式 yyyy-MM-dd HH:mm"},"repeat":{"type":"string","enum":["none","daily","weekdays","weekly"]}},"required":["text","datetime"]}}}""")
 
