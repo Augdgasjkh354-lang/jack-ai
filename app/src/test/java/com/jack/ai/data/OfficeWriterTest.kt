@@ -6,10 +6,27 @@ import java.io.File
 /** 生成样例文件，CI 里用 python-docx / python-pptx / openpyxl 再检查一遍能不能打开。 */
 class OfficeWriterTest {
     private fun samplePng(): ByteArray {
-        val img = java.awt.image.BufferedImage(160, 90, java.awt.image.BufferedImage.TYPE_INT_RGB)
-        val g = img.createGraphics()
-        g.color = java.awt.Color(0xC4, 0x67, 0x3F); g.fillRect(0, 0, 160, 90); g.dispose()
-        return java.io.ByteArrayOutputStream().also { javax.imageio.ImageIO.write(img, "png", it) }.toByteArray()
+        val w = 160; val h = 90
+        fun chunk(out: java.io.DataOutputStream, type: String, data: ByteArray) {
+            out.writeInt(data.size)
+            val td = type.toByteArray() + data
+            out.write(td)
+            out.writeInt(java.util.zip.CRC32().apply { update(td) }.value.toInt())
+        }
+        val raw = java.io.ByteArrayOutputStream()
+        repeat(h) { raw.write(0); repeat(w) { raw.write(0xC4); raw.write(0x67); raw.write(0x3F) } }
+        val bos = java.io.ByteArrayOutputStream()
+        val out = java.io.DataOutputStream(bos)
+        out.write(byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A))
+        val ihdr = java.io.ByteArrayOutputStream().also { b ->
+            java.io.DataOutputStream(b).apply { writeInt(w); writeInt(h); write(byteArrayOf(8, 2, 0, 0, 0)) }
+        }.toByteArray()
+        chunk(out, "IHDR", ihdr)
+        val z = java.io.ByteArrayOutputStream()
+        java.util.zip.DeflaterOutputStream(z).use { it.write(raw.toByteArray()) }
+        chunk(out, "IDAT", z.toByteArray())
+        chunk(out, "IEND", ByteArray(0))
+        return bos.toByteArray()
     }
 
     @Test
