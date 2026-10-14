@@ -4,7 +4,25 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.jack.ai.api.ApiException
-import com.jack.ai.api.ApiMessage
+import com.jack.ai.api.StreamEvent
+import com.jack.ai.api.TavilyClient
+import com.jack.ai.api.formatResultsForModel
+import com.jack.ai.api.toSources
+import com.jack.ai.data.MODEL_REASONER
+import com.jack.ai.data.SearchRecord
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import com.jack.ai.api.DeepSeekClient
 import com.jack.ai.data.ChatMessage
 import com.jack.ai.data.Conversation
@@ -33,6 +51,7 @@ data class UiState(
 class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val store = Store(app)
     private val client = DeepSeekClient()
+    private val tavily = TavilyClient()
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state.asStateFlow()
     private var job: Job? = null
@@ -164,13 +183,21 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             persist()
             return
         }
+        val web = settings.webSearch && settings.tavilyKey.isNotBlank()
+        val reasoner = settings.model == MODEL_REASONER
 
-        val history = buildList {
-            if (conv.systemPrompt.isNotBlank()) add(ApiMessage("system", conv.systemPrompt))
-            conv.messages
-                .filter { it.error == null && it.content.isNotBlank() }
-                .forEach { add(ApiMessage(it.role, it.content)) }
+        val messages = mutableListOf<JsonObject>()
+        val system = buildString {
+            append(conv.systemPrompt)
+            if (web) {
+                if (isNotEmpty()) append("\n\n")
+                append(webSystemPrompt())
+            }
         }
+        if (system.isNotBlank()) messages += msg("system", system)
+        conv.messages
+            .filter { it.error == null && it.content.isNotBlank() }
+            .forEach { messages += msg(it.role, it.content) }
 
         _state.update { it.copy(streaming = true) }
         job = viewModelScope.launch {
@@ -182,19 +209,98 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 val c = content.toString()
                 patchMessage(convId, reply.id) { it.copy(reasoning = r, content = c) }
             }
+            var sourceCount = 0
+            suspend fun runSearch(query: String): String {
+                patchMessage(convId, reply.id) { it.copy(searches = it.searches + SearchRecord(query, pending = true)) }
+                fun finish(rec: SearchRecord) = patchMessage(convId, reply.id) { m ->
+                    m.copy(searches = m.searches.map { if (it.query == query && it.pending) rec else it })
+                }
+                return try {
+                    val results = tavily.search(settings.tavilyKey, query)
+                    finish(SearchRecord(query, results.toSources()))
+                    val text = formatResultsForModel(results, sourceCount + 1)
+                    sourceCount += results.size
+                    text
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    val err = (e as? ApiException)?.message ?: "网络连接失败"
+                    finish(SearchRecord(query, error = err))
+                    "搜索失败：$err"
+                }
+            }
+
             try {
-                client.stream(settings.baseUrl, settings.apiKey, settings.model, history, settings.temperature)
-                    .collect { d ->
-                        reasoning.append(d.reasoning)
-                        content.append(d.content)
-                        val now = System.currentTimeMillis()
-                        if (now - lastFlush > 60) {
-                            lastFlush = now
-                            flush()
+                var round = 0
+                var tools: JsonArray? = if (web) WEB_TOOLS else null
+                while (true) {
+                    val calls = sortedMapOf<Int, ToolAcc>()
+                    val roundReasoning = StringBuilder()
+                    val roundContent = StringBuilder()
+                    if (content.isNotEmpty() && !content.endsWith("\n")) content.append("\n\n")
+                    val flow = client.stream(settings.baseUrl, settings.apiKey, settings.model, messages, settings.temperature, tools)
+                    try {
+                        flow.collect { ev ->
+                            when (ev) {
+                                is StreamEvent.Text -> {
+                                    reasoning.append(ev.reasoning); roundReasoning.append(ev.reasoning)
+                                    content.append(ev.content); roundContent.append(ev.content)
+                                    val now = System.currentTimeMillis()
+                                    if (now - lastFlush > 60) { lastFlush = now; flush() }
+                                }
+                                is StreamEvent.ToolCall -> {
+                                    val acc = calls.getOrPut(ev.index) { ToolAcc() }
+                                    if (ev.id.isNotEmpty()) acc.id = ev.id
+                                    if (ev.name.isNotEmpty()) acc.name = ev.name
+                                    acc.args.append(ev.arguments)
+                                }
+                            }
+                        }
+                    } catch (e: ApiException) {
+                        // 深度思考模型如果不支持工具调用，退回到“先搜再答”
+                        if (tools != null && round == 0 && e.code == 400 && roundContent.isEmpty()) {
+                            tools = null
+                            val q = conv.messages.last { it.role == "user" }.content.take(300)
+                            val results = runSearch(q)
+                            messages.add(0, msg("system", "以下是联网搜索结果，回答时参考并用 [编号](链接) 标注来源：\n\n$results"))
+                            continue
+                        }
+                        throw e
+                    }
+                    flush()
+                    if (calls.isEmpty()) break
+
+                    round++
+                    messages += buildJsonObject {
+                        put("role", "assistant")
+                        if (roundContent.isEmpty()) put("content", JsonNull) else put("content", roundContent.toString())
+                        if (reasoner) put("reasoning_content", roundReasoning.toString())
+                        put("tool_calls", buildJsonArray {
+                            calls.values.forEach { tc ->
+                                add(buildJsonObject {
+                                    put("id", tc.id)
+                                    put("type", "function")
+                                    put("function", buildJsonObject {
+                                        put("name", tc.name)
+                                        put("arguments", tc.args.toString())
+                                    })
+                                })
+                            }
+                        })
+                    }
+                    for (tc in calls.values) {
+                        val query = parseQuery(tc.args.toString())
+                        val result = if (tc.name == "web_search" && query.isNotBlank()) runSearch(query) else "未知工具"
+                        messages += buildJsonObject {
+                            put("role", "tool")
+                            put("tool_call_id", tc.id)
+                            put("content", result)
                         }
                     }
-                flush()
-                if (content.isEmpty() && reasoning.isEmpty()) {
+                    // 最多搜 3 轮，之后必须直接回答
+                    if (round >= 3) tools = null
+                }
+                if (content.isBlank() && reasoning.isEmpty()) {
                     patchMessage(convId, reply.id) { it.copy(error = "没有收到回复，请重试") }
                 }
             } catch (e: CancellationException) {
@@ -210,9 +316,55 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 flush()
                 patchMessage(convId, reply.id) { it.copy(error = "出错了：${e.message}") }
             } finally {
+                // 停止或出错时，把还在“搜索中”的标记清掉
+                patchMessage(convId, reply.id) { m ->
+                    m.copy(content = m.content.trimEnd(), searches = m.searches.map { if (it.pending) it.copy(pending = false) else it })
+                }
                 _state.update { it.copy(streaming = false) }
                 persist()
             }
+        }
+    }
+
+    private class ToolAcc(var id: String = "", var name: String = "", val args: StringBuilder = StringBuilder())
+
+    private fun msg(role: String, content: String) = buildJsonObject {
+        put("role", role)
+        put("content", content)
+    }
+
+    private fun parseQuery(args: String): String = runCatching {
+        Json.parseToJsonElement(args).jsonObject["query"]?.jsonPrimitive?.content
+    }.getOrNull().orEmpty()
+
+    private fun webSystemPrompt(): String {
+        val today = SimpleDateFormat("yyyy年M月d日 EEEE", Locale.CHINA).format(Date())
+        return "今天是$today。你可以使用 web_search 工具联网搜索。" +
+            "遇到时效性问题（新闻、价格、天气、最新版本、近期事件等）或你不确定的事实时，先搜索再回答；" +
+            "常识、闲聊、写作、编程之类不需要搜索的问题直接回答。" +
+            "搜索词要简洁精准，必要时可以分几次搜不同角度。" +
+            "回答时引用搜索结果，用 [编号](链接) 的格式标注来源。"
+    }
+
+    private companion object {
+        val WEB_TOOLS: JsonArray = buildJsonArray {
+            add(buildJsonObject {
+                put("type", "function")
+                put("function", buildJsonObject {
+                    put("name", "web_search")
+                    put("description", "在互联网上搜索最新信息，返回若干网页的标题、链接和摘要。")
+                    put("parameters", buildJsonObject {
+                        put("type", "object")
+                        put("properties", buildJsonObject {
+                            put("query", buildJsonObject {
+                                put("type", "string")
+                                put("description", "搜索关键词，简洁明确")
+                            })
+                        })
+                        put("required", buildJsonArray { add(JsonPrimitive("query")) })
+                    })
+                })
+            })
         }
     }
 

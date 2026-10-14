@@ -13,7 +13,19 @@ data class ChatMessage(
     val reasoning: String = "",
     val model: String = "",
     val error: String? = null,
+    val searches: List<SearchRecord> = emptyList(),
     val createdAt: Long = System.currentTimeMillis(),
+)
+
+@Serializable
+data class SearchSource(val title: String, val url: String)
+
+@Serializable
+data class SearchRecord(
+    val query: String,
+    val sources: List<SearchSource> = emptyList(),
+    val pending: Boolean = false,
+    val error: String? = null,
 )
 
 @Serializable
@@ -37,6 +49,8 @@ enum class ThemeMode(val label: String) { SYSTEM("跟随系统"), LIGHT("浅色"
 
 data class Settings(
     val apiKey: String = "",
+    val tavilyKey: String = "",
+    val webSearch: Boolean = false,
     val baseUrl: String = DEFAULT_BASE_URL,
     val model: String = MODEL_CHAT,
     val temperature: Float = 1.0f,

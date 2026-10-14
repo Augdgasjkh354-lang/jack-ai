@@ -123,6 +123,32 @@ fun SettingsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit) {
                 balance?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
             }
 
+            // ---- Tavily ----
+            Section("Tavily API Key（联网搜索用）") {
+                var tavilyInput by remember { mutableStateOf(settings.tavilyKey) }
+                var showTavily by remember { mutableStateOf(false) }
+                OutlinedTextField(
+                    value = tavilyInput,
+                    onValueChange = {
+                        tavilyInput = it.trim()
+                        vm.updateSettings { s -> s.copy(tavilyKey = tavilyInput, webSearch = s.webSearch && tavilyInput.isNotBlank()) }
+                    },
+                    placeholder = { Text("tvly-...") },
+                    singleLine = true,
+                    visualTransformation = if (showTavily) VisualTransformation.None else PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    trailingIcon = {
+                        TextButton(onClick = { showTavily = !showTavily }) { Text(if (showTavily) "隐藏" else "显示") }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    "填好后，在聊天页打开「联网搜索」，AI 会在需要最新信息时自己去搜，并标出来源。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
             // ---- 模型 ----
             Section("默认模型") {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -138,7 +164,7 @@ fun SettingsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit) {
                     )
                 }
                 Text(
-                    "普通对话：快、便宜，适合日常聊天。深度思考：先想再答，适合数学、编程、复杂问题。聊天页右上角也能随时切换。",
+                    "普通对话：快、便宜，适合日常聊天。深度思考：先想再答，适合数学、编程、复杂问题。聊天页输入框上方也能随时切换。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

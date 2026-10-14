@@ -28,6 +28,8 @@ class Store(context: Context) {
         } ?: DEFAULT_PRESETS
         return Settings(
             apiKey = prefs.getString("apiKey", "") ?: "",
+            tavilyKey = prefs.getString("tavilyKey", "") ?: "",
+            webSearch = prefs.getBoolean("webSearch", false),
             baseUrl = prefs.getString("baseUrl", DEFAULT_BASE_URL) ?: DEFAULT_BASE_URL,
             model = prefs.getString("model", MODEL_CHAT) ?: MODEL_CHAT,
             temperature = prefs.getFloat("temperature", 1.0f),
@@ -40,6 +42,8 @@ class Store(context: Context) {
     fun saveSettings(s: Settings) {
         prefs.edit()
             .putString("apiKey", s.apiKey)
+            .putString("tavilyKey", s.tavilyKey)
+            .putBoolean("webSearch", s.webSearch)
             .putString("baseUrl", s.baseUrl)
             .putString("model", s.model)
             .putFloat("temperature", s.temperature)

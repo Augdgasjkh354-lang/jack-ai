@@ -3,6 +3,7 @@ package com.jack.ai.ui
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -65,6 +66,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -76,6 +78,7 @@ import com.jack.ai.data.ChatMessage
 import com.jack.ai.data.Conversation
 import com.jack.ai.data.MODEL_CHAT
 import com.jack.ai.data.MODEL_REASONER
+import com.jack.ai.data.SearchRecord
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -84,6 +87,7 @@ fun ChatScreen(vm: ChatViewModel, state: UiState, onOpenSettings: () -> Unit) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val conv = state.current
+    val ctx = LocalContext.current
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -116,17 +120,6 @@ fun ChatScreen(vm: ChatViewModel, state: UiState, onOpenSettings: () -> Unit) {
                         }
                     },
                     actions = {
-                        val reasoning = state.settings.model == MODEL_REASONER
-                        FilterChip(
-                            selected = reasoning,
-                            onClick = {
-                                vm.updateSettings {
-                                    it.copy(model = if (reasoning) MODEL_CHAT else MODEL_REASONER)
-                                }
-                            },
-                            label = { Text("深度思考") },
-                            leadingIcon = { Icon(AppIcons.Brain, null, Modifier.size(18.dp)) },
-                        )
                         IconButton(onClick = vm::newChat) {
                             Icon(Icons.Default.Add, contentDescription = "新对话")
                         }
@@ -136,6 +129,19 @@ fun ChatScreen(vm: ChatViewModel, state: UiState, onOpenSettings: () -> Unit) {
             bottomBar = {
                 InputBar(
                     streaming = state.streaming,
+                    reasoning = state.settings.model == MODEL_REASONER,
+                    webSearch = state.settings.webSearch,
+                    onToggleReasoning = {
+                        vm.updateSettings { it.copy(model = if (it.model == MODEL_REASONER) MODEL_CHAT else MODEL_REASONER) }
+                    },
+                    onToggleWeb = {
+                        if (state.settings.tavilyKey.isBlank()) {
+                            Toast.makeText(ctx, "请先在设置里填写 Tavily API Key", Toast.LENGTH_LONG).show()
+                            onOpenSettings()
+                        } else {
+                            vm.updateSettings { it.copy(webSearch = !it.webSearch) }
+                        }
+                    },
                     onSend = vm::send,
                     onStop = vm::stop,
                 )
@@ -263,6 +269,10 @@ private fun AssistantMessage(
     val ctx = LocalContext.current
     val colors = MaterialTheme.colorScheme
     Column(Modifier.fillMaxWidth()) {
+        if (msg.searches.isNotEmpty()) {
+            SearchBox(msg.searches)
+            Spacer(Modifier.height(8.dp))
+        }
         if (msg.reasoning.isNotEmpty()) {
             ThinkingBox(msg.reasoning, thinking = streaming && msg.content.isEmpty())
             Spacer(Modifier.height(8.dp))
@@ -274,7 +284,7 @@ private fun AssistantMessage(
                 codeBackground = colors.surfaceVariant,
                 modifier = Modifier.fillMaxWidth(),
             )
-        } else if (streaming && msg.reasoning.isEmpty()) {
+        } else if (streaming && msg.reasoning.isEmpty() && msg.searches.none { it.pending }) {
             CircularProgressIndicator(Modifier.size(20.dp).padding(2.dp), strokeWidth = 2.dp)
         }
         msg.error?.let { err ->
@@ -360,15 +370,107 @@ private fun ThinkingBox(reasoning: String, thinking: Boolean) {
 }
 
 @Composable
-private fun InputBar(streaming: Boolean, onSend: (String) -> Unit, onStop: () -> Unit) {
+private fun SearchBox(searches: List<SearchRecord>) {
+    var expanded by remember { mutableStateOf(false) }
+    val colors = MaterialTheme.colorScheme
+    val uriHandler = LocalUriHandler.current
+    val searching = searches.any { it.pending }
+    val sources = searches.flatMap { it.sources }
+    Surface(
+        color = colors.surfaceVariant.copy(alpha = 0.5f),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded },
+            ) {
+                if (searching) {
+                    CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                } else {
+                    Icon(AppIcons.Globe, null, Modifier.size(16.dp), tint = colors.primary)
+                }
+                Spacer(Modifier.size(6.dp))
+                Text(
+                    if (searching) "正在搜索：${searches.last { it.pending }.query}"
+                    else "已搜索 ${searches.size} 次，找到 ${sources.size} 个网页",
+                    style = MaterialTheme.typography.labelLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(
+                    if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = if (expanded) "收起" else "展开",
+                )
+            }
+            AnimatedVisibility(expanded) {
+                Column(Modifier.padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    var n = 0
+                    searches.forEach { rec ->
+                        Text(
+                            "🔍 " + rec.query + (rec.error?.let { "（$it）" } ?: ""),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (rec.error != null) colors.error else colors.onSurfaceVariant,
+                        )
+                        rec.sources.forEach { src ->
+                            n++
+                            val idx = n
+                            Text(
+                                "[$idx] ${src.title}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = colors.primary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { runCatching { uriHandler.openUri(src.url) } }
+                                    .padding(start = 12.dp, top = 2.dp, bottom = 2.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InputBar(
+    streaming: Boolean,
+    reasoning: Boolean,
+    webSearch: Boolean,
+    onToggleReasoning: () -> Unit,
+    onToggleWeb: () -> Unit,
+    onSend: (String) -> Unit,
+    onStop: () -> Unit,
+) {
     var text by rememberSaveable { mutableStateOf("") }
     Surface(tonalElevation = 2.dp) {
+      Column(
+          Modifier
+              .fillMaxWidth()
+              .navigationBarsPadding()
+              .imePadding()
+              .padding(horizontal = 12.dp, vertical = 6.dp),
+      ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+                selected = reasoning,
+                onClick = onToggleReasoning,
+                label = { Text("深度思考") },
+                leadingIcon = { Icon(AppIcons.Brain, null, Modifier.size(18.dp)) },
+            )
+            FilterChip(
+                selected = webSearch,
+                onClick = onToggleWeb,
+                label = { Text("联网搜索") },
+                leadingIcon = { Icon(AppIcons.Globe, null, Modifier.size(18.dp)) },
+            )
+        }
         Row(
-            Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .imePadding()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+            Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.Bottom,
         ) {
             OutlinedTextField(
@@ -394,6 +496,7 @@ private fun InputBar(streaming: Boolean, onSend: (String) -> Unit, onStop: () ->
                 }
             }
         }
+      }
     }
 }
 
