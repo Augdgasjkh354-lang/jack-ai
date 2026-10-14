@@ -1,0 +1,44 @@
+name: 打包 APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --stacktrace
+          cp app/build/outputs/apk/release/app-release.apk JackAI-v1.0.${{ github.run_number }}.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: JackAI-apk
+          path: JackAI-*.apk
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Jack AI v1.0.${{ github.run_number }}
+          make_latest: true
+          body: |
+            在手机上点下面的 JackAI-v1.0.${{ github.run_number }}.apk 下载并安装。
+            以后有新版本直接覆盖安装，聊天记录不会丢。
+          files: JackAI-*.apk
