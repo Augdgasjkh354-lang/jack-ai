@@ -30,6 +30,7 @@ import com.jack.ai.ui.LockScreen
 import com.jack.ai.ui.MemoryScreen
 import com.jack.ai.ui.ProjectScreen
 import com.jack.ai.ui.RenameDialog
+import com.jack.ai.ui.RoutinesScreen
 import com.jack.ai.ui.SettingsScreen
 import com.jack.ai.ui.SkillsScreen
 import com.jack.ai.ui.UsageScreen
@@ -40,6 +41,7 @@ sealed interface Screen {
     data object Memory : Screen
     data object Skills : Screen
     data object Usage : Screen
+    data object Routines : Screen
     data class ProjectPage(val id: String) : Screen
 }
 
@@ -67,6 +69,8 @@ class MainActivity : FragmentActivity() {
         super.onResume()
         // 后台做梦可能更新了记忆
         vm.reloadMemory()
+        vm.reloadRoutines()
+        vm.mergeInbox()
         if (locked) unlock()
     }
 
@@ -78,6 +82,7 @@ class MainActivity : FragmentActivity() {
     private fun handleIntent(intent: Intent?) {
         when (intent?.action) {
             ACTION_NEW_CHAT -> { stack.clear(); vm.newChat() }
+            ACTION_OPEN_CHAT -> { stack.clear(); vm.mergeInbox(intent.getStringExtra("convId")) }
             ACTION_VOICE -> { stack.clear(); vm.newChat(); vm.requestVoice() }
             Intent.ACTION_SEND -> {
                 stack.clear()
@@ -167,7 +172,9 @@ class MainActivity : FragmentActivity() {
                         onNewProject = { creatingProject = true },
                         onOpenMemory = { stack.add(Screen.Memory) },
                         onOpenSkills = { stack.add(Screen.Skills) },
+                        onOpenRoutines = { stack.add(Screen.Routines) },
                     )
+                    Screen.Routines -> RoutinesScreen(vm = vm, state = state, onBack = back)
                     Screen.Memory -> MemoryScreen(vm = vm, state = state, onBack = back)
                     Screen.Skills -> SkillsScreen(vm = vm, settings = state.settings, onBack = back)
                     Screen.Usage -> UsageScreen(vm = vm, state = state, onBack = back)
@@ -206,5 +213,6 @@ class MainActivity : FragmentActivity() {
 
         const val ACTION_NEW_CHAT = "com.jack.ai.NEW_CHAT"
         const val ACTION_VOICE = "com.jack.ai.VOICE"
+        const val ACTION_OPEN_CHAT = "com.jack.ai.OPEN_CHAT"
     }
 }

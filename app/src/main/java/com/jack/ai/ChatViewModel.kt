@@ -13,6 +13,13 @@ import com.jack.ai.api.toSources
 import com.jack.ai.data.Attachment
 import com.jack.ai.data.Attachments
 import com.jack.ai.data.Backup
+import com.jack.ai.data.ChartWriter
+import com.jack.ai.data.JsRunner
+import com.jack.ai.data.REPEAT_LABELS
+import com.jack.ai.data.Routine
+import com.jack.ai.data.Routines
+import com.jack.ai.data.describe
+import com.jack.ai.data.nextAt
 import com.jack.ai.data.UsageDay
 import com.jack.ai.data.ChatMessage
 import com.jack.ai.data.Compression
@@ -81,6 +88,7 @@ data class UiState(
     val incomingText: String? = null,
     /** 桌面小组件点了话筒，等输入框打开语音识别。 */
     val voiceRequest: Boolean = false,
+    val routines: List<Routine> = emptyList(),
 ) {
     val current: Conversation? get() = conversations.firstOrNull { it.id == currentId }
     val currentProjectId: String? get() = current?.projectId ?: if (currentId == null) draftProjectId else null
@@ -105,6 +113,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             dreams = store.loadDreams(),
         )
         Dreamer.schedule(app, _state.value.settings.dreamEnabled)
+        _state.update { it.copy(routines = store.loadRoutines()) }
+        Routines.scheduleAll(app)
+        mergeInbox()
     }
 
     fun consumeToast() = _state.update { it.copy(toast = null) }
@@ -361,6 +372,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             if (SkillIds.EXCEL in skillIds) add(SkillTools.CREATE_EXCEL)
             if (SkillIds.PDF in skillIds) add(SkillTools.CREATE_PDF)
             if (SkillIds.CHATS in skillIds) add(SkillTools.SEARCH_CHATS)
+            if (SkillIds.CALC in skillIds) { add(SkillTools.RUN_JS); add(SkillTools.CREATE_CHART) }
+            if (SkillIds.ROUTINE in skillIds) {
+                add(SkillTools.CREATE_REMINDER); add(SkillTools.CREATE_TASK)
+                add(SkillTools.LIST_ROUTINES); add(SkillTools.DELETE_ROUTINE)
+            }
             if (compressed) add(SkillTools.SEARCH_HISTORY)
             if (settings.memoryEnabled) add(SkillTools.SAVE_MEMORY)
         }.takeIf { it.isNotEmpty() }
@@ -415,6 +431,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 patchMessage(convId, reply.id) { it.copy(reasoning = r, content = c, trail = t) }
             }
             var sourceCount = 0
+            var maxRounds = 5
             suspend fun runTool(label: String, action: suspend () -> Pair<String, SearchRecord>): String {
                 patchMessage(convId, reply.id) { it.copy(searches = it.searches + SearchRecord(label, pending = true)) }
                 fun finish(rec: SearchRecord) = patchMessage(convId, reply.id) { m ->
@@ -461,8 +478,66 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 withContext(Dispatchers.Default) { Compression.searchAllChats(all, query, convId) } to
                     SearchRecord("翻阅聊天记录：$query")
             }
+            suspend fun runJs(code: String) = runTool("运行代码计算") {
+                withContext(Dispatchers.Default) { JsRunner.run(code) } to SearchRecord("运行代码计算")
+            }
+            suspend fun makeChart(args: JsonObject): String {
+                val title = args["title"].text().ifBlank { "图表" }
+                return runTool("生成图表：$title") {
+                    val labels = (args["labels"] as? JsonArray).orEmpty().map { it.text() }
+                    val series = (args["series"] as? JsonArray).orEmpty().mapNotNull { el ->
+                        val o = el as? JsonObject ?: return@mapNotNull null
+                        val values = (o["values"] as? JsonArray).orEmpty().map { it.text().toDoubleOrNull() ?: 0.0 }
+                        ChartWriter.Series(o["name"].text(), values)
+                    }
+                    val file = withContext(Dispatchers.IO) {
+                        val dir = File(getApplication<Application>().filesDir, "outputs").apply { mkdirs() }
+                        val f = File(dir, safeFileName(title).ifBlank { "图表" } + "-" + System.currentTimeMillis() % 100000 + ".png")
+                        try {
+                            f.outputStream().buffered().use { ChartWriter.render(args["type"].text(), title, args["unit"].text(), labels, series, it) }
+                        } catch (e: Exception) {
+                            f.delete(); throw e
+                        }
+                        f
+                    }
+                    val gen = GeneratedFile(file.name, file.absolutePath, "image/png", file.length())
+                    patchMessage(convId, reply.id) { it.copy(files = it.files + gen) }
+                    "图表已生成并显示在聊天里。" to SearchRecord("生成图表：$title")
+                }
+            }
+            suspend fun makeRoutine(kind: String, args: JsonObject): String {
+                val label = if (kind == "reminder") "设置提醒" else "设置定时任务"
+                return runTool("$label：" + (if (kind == "reminder") args["text"] else args["title"]).text()) {
+                    val (date, h, m) = parseDateTime(args["datetime"].text())
+                        ?: throw IllegalArgumentException("时间格式不对，要写成 yyyy-MM-dd HH:mm")
+                    val repeat = args["repeat"].text().takeIf { it in REPEAT_LABELS } ?: "none"
+                    val r = if (kind == "reminder") Routine(kind = "reminder", title = args["text"].text(), hour = h, minute = m, repeat = repeat, date = date)
+                    else Routine(kind = "task", title = args["title"].text(), prompt = args["prompt"].text(), hour = h, minute = m, repeat = repeat, date = date)
+                    if (r.nextAt() == null) throw IllegalArgumentException("这个时间已经过去了")
+                    withContext(Dispatchers.Main) { saveRoutine(r) }
+                    val warn = if (!Routines.canNotify(getApplication<Application>())) "（注意：App 还没有通知权限，用户需要打开左侧菜单「提醒和任务」页面授权）" else ""
+                    "已设置：${r.describe()}，${if (kind == "reminder") "提醒" else "任务"}「${r.title}」。编号 ${r.id.take(8)}。$warn" to
+                        SearchRecord("$label：${r.title}")
+                }
+            }
+            suspend fun listRoutines() = runTool("查看提醒和任务") {
+                val list = store.loadRoutines()
+                (if (list.isEmpty()) "用户还没有任何提醒和定时任务。" else list.joinToString("\n") { r ->
+                    "编号 ${r.id.take(8)}｜${if (r.kind == "reminder") "提醒" else "任务"}｜${r.describe()}｜${r.title}" +
+                        (if (r.enabled) "" else "｜已结束或已关闭")
+                }) to SearchRecord("查看提醒和任务")
+            }
+            suspend fun removeRoutine(id: String) = runTool("删除提醒或任务") {
+                val r = store.loadRoutines().firstOrNull { it.id.startsWith(id.trim()) }
+                if (r == null) "没有找到这个编号。" to SearchRecord("删除提醒或任务", error = "没找到")
+                else {
+                    withContext(Dispatchers.Main) { deleteRoutine(r.id) }
+                    "已删除「${r.title}」。" to SearchRecord("删除：${r.title}")
+                }
+            }
             suspend fun useSkill(name: String) = runTool("使用技能：$name") {
                 val skill = findSkill(skills, name)
+                if (skill?.id == SkillIds.RESEARCH) maxRounds = 25
                 val text = skill?.let { "【${it.name}】\n${it.instructions}" }
                     ?: ("没有这个技能。可用的技能：" + skills.joinToString("、") { it.name })
                 text to SearchRecord("使用技能：${skill?.name ?: name}")
@@ -587,14 +662,22 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                             "read_webpage" -> "url"
                             "save_memory" -> "content"
                             "use_skill" -> "name"
+                            "run_js" -> "code"
+                            "delete_routine" -> "id"
                             else -> "query"
                         }
                         val arg = args?.get(key).text()
                         val result = when {
                             args == null -> "参数不是有效的 JSON，可能内容太长被截断了，请精简后重试"
                             tc.name in FILE_TOOLS && FILE_TOOLS[tc.name] in skillIds -> makeFile(tc.name, args)
+                            tc.name == "create_chart" && SkillIds.CALC in skillIds -> makeChart(args)
+                            tc.name == "list_routines" && SkillIds.ROUTINE in skillIds -> listRoutines()
+                            tc.name == "create_reminder" && SkillIds.ROUTINE in skillIds -> makeRoutine("reminder", args)
+                            tc.name == "create_task" && SkillIds.ROUTINE in skillIds -> makeRoutine("task", args)
                             arg.isBlank() -> "参数缺失"
                             tc.name == "use_skill" -> useSkill(arg)
+                            tc.name == "run_js" && SkillIds.CALC in skillIds -> runJs(arg)
+                            tc.name == "delete_routine" && SkillIds.ROUTINE in skillIds -> removeRoutine(arg)
                             tc.name == "web_search" && web -> search(arg)
                             tc.name == "read_webpage" && web -> readPage(arg)
                             tc.name == "search_history" -> searchOld(arg)
@@ -612,7 +695,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     }
                     flush()
                     // 最多用 5 轮工具，之后必须直接回答
-                    if (round >= 5) tools = null
+                    if (round >= maxRounds) tools = null
                 }
                 if (content.isBlank() && reasoning.isEmpty()) {
                     patchMessage(convId, reply.id) { it.copy(error = "没有收到回复，请重试") }
@@ -738,12 +821,60 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     settings = s,
                     memories = store.loadMemories(),
                     dreams = store.loadDreams(),
+                    routines = store.loadRoutines(),
                 )
+                Routines.scheduleAll(getApplication<Application>())
                 "已恢复备份"
             } catch (e: Exception) {
                 "恢复失败：${e.message}"
             }
             _state.update { it.copy(toast = msg) }
+        }
+    }
+
+    // ---------- 提醒和定时任务 ----------
+
+    fun saveRoutine(r: Routine) {
+        val list = store.loadRoutines().let { l -> if (l.any { it.id == r.id }) l.map { if (it.id == r.id) r else it } else l + r }
+        store.saveRoutines(list)
+        Routines.schedule(getApplication<Application>(), r)
+        _state.update { it.copy(routines = list) }
+    }
+
+    fun deleteRoutine(id: String) {
+        Routines.cancel(getApplication<Application>(), id)
+        val list = store.loadRoutines().filterNot { it.id == id }
+        store.saveRoutines(list)
+        _state.update { it.copy(routines = list) }
+    }
+
+    fun reloadRoutines() = _state.update { it.copy(routines = store.loadRoutines()) }
+
+    /** 把后台任务的结果并进对话。openId 不为空时，合并后打开那个对话。 */
+    fun mergeInbox(openId: String? = null) {
+        viewModelScope.launch(ioSerial) {
+            val items = store.takeInbox()
+            if (items.isNotEmpty()) {
+                _state.update { s ->
+                    var convs = s.conversations
+                    items.forEach { item ->
+                        val msgs = listOf(
+                            ChatMessage(role = "user", content = "⏰ " + item.prompt.ifBlank { item.title }, createdAt = item.at),
+                            ChatMessage(role = "assistant", content = item.result, model = MODEL_FLASH, createdAt = item.at + 1),
+                        )
+                        convs = if (convs.any { it.id == item.convId }) {
+                            convs.map { c -> if (c.id == item.convId) c.copy(messages = c.messages + msgs, updatedAt = item.at) else c }
+                        } else {
+                            listOf(Conversation(id = item.convId, title = "⏰ " + item.title, messages = msgs, updatedAt = item.at)) + convs
+                        }
+                    }
+                    s.copy(conversations = convs.sortedByDescending { it.updatedAt })
+                }
+                persist()
+            }
+            if (openId != null && _state.value.conversations.any { it.id == openId }) {
+                _state.update { it.copy(currentId = openId, pending = emptyList()) }
+            }
         }
     }
 
@@ -892,6 +1023,23 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         null, JsonNull -> ""
         is JsonPrimitive -> content
         else -> toString()
+    }
+
+    /** "2026-10-15 09:00" → (日期, 时, 分)；只给 "09:00" 时取最近的那个时间点。 */
+    private fun parseDateTime(s: String): Triple<String, Int, Int>? {
+        val m = Regex("""(?:(\d{4})-(\d{1,2})-(\d{1,2})[ T]+)?(\d{1,2})[:：](\d{2})""").find(s.trim()) ?: return null
+        val h = m.groupValues[4].toInt()
+        val min = m.groupValues[5].toInt()
+        if (h !in 0..23 || min !in 0..59) return null
+        val cal = java.util.Calendar.getInstance()
+        if (m.groupValues[1].isNotEmpty()) {
+            cal.set(m.groupValues[1].toInt(), m.groupValues[2].toInt() - 1, m.groupValues[3].toInt())
+        } else {
+            val now = cal.clone() as java.util.Calendar
+            cal.set(java.util.Calendar.HOUR_OF_DAY, h); cal.set(java.util.Calendar.MINUTE, min)
+            if (!cal.after(now)) cal.add(java.util.Calendar.DAY_OF_YEAR, 1)
+        }
+        return Triple(SimpleDateFormat("yyyy-MM-dd", Locale.US).format(cal.time), h, min)
     }
 
     private fun findSkill(skills: List<Skill>, name: String): Skill? {

@@ -9,6 +9,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -214,7 +215,7 @@ fun AssistantMessage(
         }
         msg.files.forEach { f ->
             Spacer(Modifier.height(8.dp))
-            GeneratedFileCard(f)
+            if (f.mime.startsWith("image/")) ChartImage(f) else GeneratedFileCard(f)
         }
         msg.error?.let { err ->
             Spacer(Modifier.height(4.dp))
@@ -255,6 +256,32 @@ fun AssistantMessage(
             }
         }
     }
+}
+
+@Composable
+private fun ChartImage(f: GeneratedFile) {
+    val ctx = LocalContext.current
+    var viewing by remember { mutableStateOf(false) }
+    val bmp by produceState<Bitmap?>(null, f.path) {
+        value = withContext(Dispatchers.IO) { Attachments.thumbnail(f.path, 1400) }
+    }
+    Column(Modifier.widthIn(max = 420.dp)) {
+        bmp?.let {
+            Image(
+                it.asImageBitmap(), f.name,
+                Modifier.fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp))
+                    .clickable { viewing = true },
+                contentScale = ContentScale.FillWidth,
+            )
+        } ?: Text("图表文件已被删除", color = MaterialTheme.colorScheme.outline)
+        Row {
+            TextButton(onClick = { viewing = true }) { Text("查看大图") }
+            TextButton(onClick = { shareFile(ctx, f) }) { Text("分享") }
+        }
+    }
+    if (viewing) ImageViewer(f.path) { viewing = false }
 }
 
 @Composable
@@ -430,6 +457,8 @@ private fun SearchBox(searches: List<SearchRecord>) {
                                 rec.query.startsWith("记住") -> "📌 "
                                 rec.query.startsWith("使用技能") -> "🧩 "
                                 rec.query.startsWith("生成") -> "📎 "
+                                rec.query.startsWith("运行") -> "🧮 "
+                                rec.query.startsWith("设置") || rec.query.startsWith("查看") || rec.query.startsWith("删除") -> "⏰ "
                                 else -> "🔍 "
                             }) + rec.query +
                                 (rec.error?.let { "（$it）" } ?: ""),
@@ -462,4 +491,4 @@ private fun SearchBox(searches: List<SearchRecord>) {
     }
 }
 
-private fun isOther(label: String) = listOf("读取", "翻阅", "记住", "使用技能", "生成").any { label.startsWith(it) }
+private fun isOther(label: String) = listOf("读取", "翻阅", "记住", "使用技能", "生成", "运行", "设置", "查看", "删除").any { label.startsWith(it) }

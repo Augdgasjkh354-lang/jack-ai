@@ -35,6 +35,9 @@ object SkillIds {
     const val EXCEL = "builtin-excel"
     const val PDF = "builtin-pdf"
     const val CHATS = "builtin-chats"
+    const val RESEARCH = "builtin-research"
+    const val ROUTINE = "builtin-routine"
+    const val CALC = "builtin-calc"
 }
 
 private fun schema(s: String): JsonObject = Json.parseToJsonElement(s).jsonObject
@@ -105,6 +108,53 @@ val BUILTIN_SKILLS = listOf(
 3. 结果会带日期和对话标题。回答时说明是哪天、在哪个对话里聊的，例如“10 月 3 日在「周末去哪玩」里你提到过…”。
 4. 只根据搜到的内容回答，找不到就直说没找到，不要编。""",
     ),
+    Skill(
+        id = SkillIds.RESEARCH, builtin = true, name = "深度研究",
+        description = "对一个问题做彻底的调研：多角度连续搜索、读原文、交叉核对，最后写成带出处的研究报告。用户说“帮我研究/调研/深入了解…”时使用。需要联网搜索技能开着。",
+        instructions = """深度研究的做法（这次你最多可以用 25 轮工具）：
+1. 先拆题：把问题拆成 4 到 8 个子问题（是什么、现状和数据、不同观点、利弊、案例、最新进展、对用户的建议等），心里列好计划。
+2. 广泛搜索：每个子问题至少搜一次，中文和英文都搜；换角度、换关键词，总共搜 8 到 20 次。
+3. 读原文：挑 3 到 6 个最权威、最相关的来源（官方、论文、权威媒体、行业报告），用 read_webpage 读全文，不要只看摘要。
+4. 交叉核对：关键数字和结论至少两个来源互相印证；来源有矛盾时，说明分歧和各自依据；注意信息的发布日期。
+5. 写报告，结构如下：
+   # 标题
+   ## 结论摘要（3 到 5 条最重要的发现）
+   ## 背景
+   ## 分章节的详细发现（每段都用 [编号](链接) 标出处）
+   ## 不同观点与不确定的地方
+   ## 给用户的建议
+   ## 参考来源（编号列表：标题 + 链接）
+6. 报告较长时，问用户要不要存成 Word 或 PDF；用户一开始就要文件的，直接用 create_word 或 create_pdf 生成，聊天里只写摘要。
+7. 不确定的就说不确定，不要为了完整而编造。""",
+    ),
+    Skill(
+        id = SkillIds.ROUTINE, builtin = true, name = "提醒和定时任务",
+        description = "设置到点弹通知的提醒（“明天 9 点提醒我交报告”），或让你定时在后台自动干活（“每天早上 8 点给我整理 AI 新闻”）。",
+        instructions = """提醒和定时任务的做法：
+1. 只是到点通知用户一件事，用 create_reminder；需要你到点去搜索、整理、写东西的，用 create_task。
+2. 时间写成 “yyyy-MM-dd HH:mm”，根据系统提示里的当前日期换算“明天”“下周一”“今晚”等说法。用户没说具体几点时，按常理挑一个（早上 9:00、晚上 20:00 等），并在回复里说明。
+3. repeat 填 none（一次）、daily（每天）、weekdays（工作日）、weekly（每周同一天）。
+4. 提醒的 text 写成到时候通知里显示的一句话，比如“该交周报了”。
+5. 定时任务的 prompt 要写成完整、独立的指令，因为到时候你是在后台、看不到现在这段对话的。比如“搜索过去 24 小时 AI 领域的重要新闻，整理成 5 条简报，每条一句话加来源链接”。
+6. 设置好后用一句话确认：什么时候、做什么。
+7. 用户想看或删除已有的提醒和任务时，先用 list_routines 查，再用 delete_routine 删。""",
+    ),
+    Skill(
+        id = SkillIds.CALC, builtin = true, name = "计算与图表",
+        description = "真正运行代码来算数、统计、处理数据，或把数据画成柱状图、折线图、饼图。涉及精确计算（贷款、利息、汇率换算、统计）时使用。",
+        instructions = """计算与图表的做法：
+1. 需要精确计算时，不要心算，用 run_js 运行 JavaScript：
+   - 用 console.log() 输出结果，或者让最后一行是要返回的值。
+   - 只能做纯计算，不能联网、不能读文件。日期用 Date，数学用 Math。
+   - 金额结果用 toFixed(2) 保留两位小数。
+   - 运行出错就看错误信息改代码再试，最多 3 次。
+2. 回答时给出最终数字和简要的计算思路，不要把代码贴给用户（除非用户想看）。
+3. 画图用 create_chart：
+   - 比较几个类别用 bar（柱状图），看随时间的变化用 line（折线图），看占比用 pie（饼图，只用第一组数据）。
+   - labels 是横轴的类别或时间；series 是一组或多组数据，每组有 name 和 values，values 的个数和 labels 一样。
+   - 标题简短，unit 写单位（比如“万元”“%”）。
+4. 图生成后会直接显示在聊天里，你用一两句话点出图里最值得注意的地方。""",
+    ),
 )
 
 /** 每个内置 skill 对应的工具定义（OpenAI 兼容格式）。 */
@@ -124,6 +174,18 @@ object SkillTools {
     val CREATE_PDF = schema("""{"type":"function","function":{"name":"create_pdf","description":"生成一个 PDF 文档。","parameters":{"type":"object","properties":{"filename":{"type":"string","description":"文件名，不带扩展名"},"markdown":{"type":"string","description":"文档全文，Markdown 格式"}},"required":["filename","markdown"]}}}""")
 
     val SEARCH_CHATS = schema("""{"type":"function","function":{"name":"search_chats","description":"在用户的全部聊天记录里按关键词搜索，返回相关的原话、日期和对话标题。","parameters":{"type":"object","properties":{"query":{"type":"string","description":"关键词，多个用空格隔开"}},"required":["query"]}}}""")
+
+    val RUN_JS = schema("""{"type":"function","function":{"name":"run_js","description":"运行一段 JavaScript 代码做精确计算，返回 console.log 的输出和最后一个表达式的值。","parameters":{"type":"object","properties":{"code":{"type":"string","description":"JavaScript 代码"}},"required":["code"]}}}""")
+
+    val CREATE_CHART = schema("""{"type":"function","function":{"name":"create_chart","description":"把数据画成图表图片，显示在聊天里。","parameters":{"type":"object","properties":{"type":{"type":"string","enum":["bar","line","pie"]},"title":{"type":"string"},"unit":{"type":"string","description":"数值单位，可以为空"},"labels":{"type":"array","items":{"type":"string"},"description":"横轴类别或时间"},"series":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"values":{"type":"array","items":{"type":"number"}}},"required":["name","values"]}}},"required":["type","title","labels","series"]}}}""")
+
+    val CREATE_REMINDER = schema("""{"type":"function","function":{"name":"create_reminder","description":"设置一个到点弹通知的提醒。","parameters":{"type":"object","properties":{"text":{"type":"string","description":"通知里显示的话"},"datetime":{"type":"string","description":"第一次提醒的时间，格式 yyyy-MM-dd HH:mm"},"repeat":{"type":"string","enum":["none","daily","weekdays","weekly"]}},"required":["text","datetime"]}}}""")
+
+    val CREATE_TASK = schema("""{"type":"function","function":{"name":"create_task","description":"设置一个定时任务：到点后你在后台自动执行 prompt，结果发给用户。","parameters":{"type":"object","properties":{"title":{"type":"string","description":"任务名，简短"},"prompt":{"type":"string","description":"到时候要执行的完整指令"},"datetime":{"type":"string","description":"第一次执行的时间，格式 yyyy-MM-dd HH:mm"},"repeat":{"type":"string","enum":["none","daily","weekdays","weekly"]}},"required":["title","prompt","datetime"]}}}""")
+
+    val LIST_ROUTINES = schema("""{"type":"function","function":{"name":"list_routines","description":"列出用户现有的提醒和定时任务。","parameters":{"type":"object","properties":{}}}}""")
+
+    val DELETE_ROUTINE = schema("""{"type":"function","function":{"name":"delete_routine","description":"删除一个提醒或定时任务。","parameters":{"type":"object","properties":{"id":{"type":"string","description":"list_routines 返回的编号"}},"required":["id"]}}}""")
 
     val SEARCH_HISTORY = schema("""{"type":"function","function":{"name":"search_history","description":"在本对话较早的原始聊天记录里按关键词查找原话和细节。提要里找不到的信息用它查。","parameters":{"type":"object","properties":{"query":{"type":"string","description":"关键词，多个用空格隔开"}},"required":["query"]}}}""")
 

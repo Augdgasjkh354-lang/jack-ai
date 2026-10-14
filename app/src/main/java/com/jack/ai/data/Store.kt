@@ -38,6 +38,24 @@ class Store(context: Context) {
     fun loadDreams() = load("dreams.json", DreamEntry.serializer())
     fun saveDreams(list: List<DreamEntry>) = save("dreams.json", DreamEntry.serializer(), list)
 
+    fun loadRoutines() = load("routines.json", Routine.serializer())
+    fun saveRoutines(list: List<Routine>) = save("routines.json", Routine.serializer(), list)
+
+    fun addInbox(item: InboxItem) = synchronized(LOCK) {
+        val list = loadUnlocked("inbox.json", InboxItem.serializer()) + item
+        val tmp = File(dir, "inbox.json.tmp")
+        tmp.writeText(json.encodeToString(ListSerializer(InboxItem.serializer()), list))
+        tmp.renameTo(File(dir, "inbox.json"))
+        Unit
+    }
+
+    /** 取出并清空收件箱。 */
+    fun takeInbox(): List<InboxItem> = synchronized(LOCK) {
+        val list = loadUnlocked("inbox.json", InboxItem.serializer())
+        if (list.isNotEmpty()) File(dir, "inbox.json").delete()
+        list
+    }
+
     fun loadUsage() = load("usage.json", UsageDay.serializer())
 
     /** 记一笔用量（按天、按模型累加）。 */

@@ -10,7 +10,7 @@ import java.util.zip.ZipOutputStream
 
 /** 把聊天、项目、记忆、梦、用量、设置、图片和生成的文件打包成一个 zip，换手机时再导入。 */
 object Backup {
-    private val JSONS = listOf("conversations.json", "projects.json", "memories.json", "dreams.json", "usage.json")
+    private val JSONS = listOf("conversations.json", "projects.json", "memories.json", "dreams.json", "usage.json", "routines.json")
     private val DIRS = listOf("images", "outputs")
 
     fun export(ctx: Context, out: OutputStream) {

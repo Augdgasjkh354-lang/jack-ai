@@ -35,7 +35,7 @@ jobs:
       - name: Check Office files
         run: |
           set -o pipefail
-          ./gradlew testReleaseUnitTest --tests "com.jack.ai.data.OfficeWriterTest" 2>&1 | tee test.log || {
+          ./gradlew testReleaseUnitTest --tests "com.jack.ai.data.*" 2>&1 | tee test.log || {
             grep -E "^e: |What went wrong|Exception|FAILED" -A3 test.log | head -40 | while IFS= read -r l; do echo "::error::$l"; done
             exit 1
           }

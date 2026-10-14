@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
@@ -62,6 +63,7 @@ fun HistoryDrawer(
     onNewProject: () -> Unit,
     onOpenMemory: () -> Unit,
     onOpenSkills: () -> Unit,
+    onOpenRoutines: () -> Unit,
     onSettings: () -> Unit,
 ) {
     var renaming by remember { mutableStateOf<Conversation?>(null) }
@@ -130,6 +132,8 @@ fun HistoryDrawer(
                     onClick = onOpenMemory,
                 )
                 DrawerRow(icon = Icons.Default.Build, label = "技能", onClick = onOpenSkills)
+                DrawerRow(icon = Icons.Default.Notifications, label = "提醒和任务",
+                    trailing = state.routines.count { it.enabled }.takeIf { it > 0 }?.toString(), onClick = onOpenRoutines)
                 DrawerRow(icon = Icons.Default.Settings, label = "设置", onClick = onSettings)
             }
         }
