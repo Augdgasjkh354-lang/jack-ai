@@ -38,6 +38,18 @@ class Store(context: Context) {
     fun loadDreams() = load("dreams.json", DreamEntry.serializer())
     fun saveDreams(list: List<DreamEntry>) = save("dreams.json", DreamEntry.serializer(), list)
 
+    fun loadLibrary() = load("library.json", LibraryDoc.serializer())
+    fun saveLibrary(list: List<LibraryDoc>) = save("library.json", LibraryDoc.serializer(), list)
+    fun libraryText(id: String): String = runCatching { File(File(dir, "library"), "$id.txt").readText() }.getOrDefault("")
+    fun saveLibraryText(id: String, text: String) {
+        File(dir, "library").mkdirs()
+        File(File(dir, "library"), "$id.txt").writeText(text)
+    }
+    fun deleteLibraryText(id: String) { File(File(dir, "library"), "$id.txt").delete() }
+
+    fun loadCards() = load("flashcards.json", Flashcard.serializer())
+    fun saveCards(list: List<Flashcard>) = save("flashcards.json", Flashcard.serializer(), list)
+
     fun loadRoutines() = load("routines.json", Routine.serializer())
     fun saveRoutines(list: List<Routine>) = save("routines.json", Routine.serializer(), list)
 

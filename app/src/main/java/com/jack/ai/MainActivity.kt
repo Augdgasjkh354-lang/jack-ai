@@ -26,10 +26,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.jack.ai.data.Project
 import com.jack.ai.ui.ChatScreen
 import com.jack.ai.ui.JackTheme
+import com.jack.ai.ui.LibraryScreen
 import com.jack.ai.ui.LockScreen
 import com.jack.ai.ui.MemoryScreen
 import com.jack.ai.ui.ProjectScreen
 import com.jack.ai.ui.RenameDialog
+import com.jack.ai.ui.ReviewScreen
 import com.jack.ai.ui.RoutinesScreen
 import com.jack.ai.ui.SettingsScreen
 import com.jack.ai.ui.SkillsScreen
@@ -42,6 +44,8 @@ sealed interface Screen {
     data object Skills : Screen
     data object Usage : Screen
     data object Routines : Screen
+    data object Library : Screen
+    data object Review : Screen
     data class ProjectPage(val id: String) : Screen
 }
 
@@ -173,8 +177,12 @@ class MainActivity : FragmentActivity() {
                         onOpenMemory = { stack.add(Screen.Memory) },
                         onOpenSkills = { stack.add(Screen.Skills) },
                         onOpenRoutines = { stack.add(Screen.Routines) },
+                        onOpenLibrary = { stack.add(Screen.Library) },
+                        onOpenReview = { stack.add(Screen.Review) },
                     )
                     Screen.Routines -> RoutinesScreen(vm = vm, state = state, onBack = back)
+                    Screen.Library -> LibraryScreen(vm = vm, state = state, onBack = back)
+                    Screen.Review -> ReviewScreen(vm = vm, state = state, onBack = back)
                     Screen.Memory -> MemoryScreen(vm = vm, state = state, onBack = back)
                     Screen.Skills -> SkillsScreen(vm = vm, settings = state.settings, onBack = back)
                     Screen.Usage -> UsageScreen(vm = vm, state = state, onBack = back)

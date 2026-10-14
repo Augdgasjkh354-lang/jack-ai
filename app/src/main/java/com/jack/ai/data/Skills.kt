@@ -38,6 +38,8 @@ object SkillIds {
     const val RESEARCH = "builtin-research"
     const val ROUTINE = "builtin-routine"
     const val CALC = "builtin-calc"
+    const val LIBRARY = "builtin-library"
+    const val LEARN = "builtin-learn"
 }
 
 private fun schema(s: String): JsonObject = Json.parseToJsonElement(s).jsonObject
@@ -78,7 +80,8 @@ val BUILTIN_SKILLS = listOf(
    - 需要层级时，在条目前加两个空格表示二级要点。
 3. 标题短而有力，最好是结论式的（“销售额同比增长 32%”优于“销售情况”）。
 4. theme 从 blue、green、orange、purple、dark 里选一个最贴合主题的：商务用 blue，环保健康用 green，活泼创意用 orange，文艺用 purple，科技用 dark。
-5. 生成后用一两句话说明一共几页、讲了什么。""",
+5. 配图：挑 2 到 4 页最适合配图的正文页，给它们写 image_query（配图搜索词，用英文、具体的名词效果最好，比如 "electric car charging station"）。抽象的、全是数字的页不配图。配图会放在正文页右侧。
+6. 生成后用一两句话说明一共几页、讲了什么。""",
     ),
     Skill(
         id = SkillIds.EXCEL, builtin = true, name = "Excel 表格",
@@ -155,6 +158,26 @@ val BUILTIN_SKILLS = listOf(
    - 标题简短，unit 写单位（比如“万元”“%”）。
 4. 图生成后会直接显示在聊天里，你用一两句话点出图里最值得注意的地方。""",
     ),
+    Skill(
+        id = SkillIds.LIBRARY, builtin = true, name = "资料库",
+        description = "在用户的个人资料库（他导入的书、笔记、合同、课件等）里查找内容。用户问到他自己的资料、某本书或某份文件里的内容时使用。",
+        instructions = """查资料库的做法：
+1. 不确定资料库里有什么时，先用 list_library 看有哪些文档。
+2. 用 search_library 检索，搜索词用原文里可能出现的关键词，2 到 5 个词，用空格隔开。中文资料用中文搜，英文资料用英文搜。
+3. 一次没找到就换同义词、换角度再搜，最多 4 次。
+4. 回答时注明出处，比如“据《活着》第 12 段……”。只根据搜到的原文回答；资料里没有的，明确说资料里没找到，再看要不要用你自己的知识补充（要说明是补充）。""",
+    ),
+    Skill(
+        id = SkillIds.LEARN, builtin = true, name = "学习模式",
+        description = "像一位耐心的老师，用提问和引导帮用户真正学会一个知识点，并把重点做成复习卡片。用户说“教我…”“我想学…”“帮我理解…”时使用。",
+        instructions = """学习模式的做法：
+1. 先摸底：问一两个问题了解用户已经知道多少、想学到什么程度。
+2. 引导而不是灌输：把知识拆成小步，每次只讲一小块，讲完就提一个问题让用户自己想、自己说。用户答对了给肯定并往下走；答错了不要直接给答案，给提示，引导他自己发现。
+3. 多用生活中的类比和具体例子，少用术语；必须用术语时先解释。
+4. 每讲完一部分，用一句话帮用户总结，再问他能不能用自己的话复述。
+5. 学完一个主题后，主动用 save_flashcards 把 5 到 15 个关键知识点做成复习卡片：正面是一个具体的问题，背面是简洁准确的答案（不超过 80 字）。deck 写主题名。然后告诉用户可以在左侧菜单「复习卡片」里按时复习。
+6. 保持鼓励、有耐心，但不要空洞夸奖。""",
+    ),
 )
 
 /** 每个内置 skill 对应的工具定义（OpenAI 兼容格式）。 */
@@ -167,7 +190,7 @@ object SkillTools {
 
     val CREATE_WORD = schema("""{"type":"function","function":{"name":"create_word","description":"生成一个 Word (.docx) 文档。","parameters":{"type":"object","properties":{"filename":{"type":"string","description":"文件名，不带扩展名"},"markdown":{"type":"string","description":"文档全文，Markdown 格式"}},"required":["filename","markdown"]}}}""")
 
-    val CREATE_PPT = schema("""{"type":"function","function":{"name":"create_ppt","description":"生成一个 PPT (.pptx) 演示文稿。","parameters":{"type":"object","properties":{"filename":{"type":"string","description":"文件名，不带扩展名"},"theme":{"type":"string","enum":["blue","green","orange","purple","dark"],"description":"配色主题"},"slides":{"type":"array","description":"每页幻灯片","items":{"type":"object","properties":{"layout":{"type":"string","enum":["title","section","content"]},"title":{"type":"string"},"bullets":{"type":"array","items":{"type":"string"}}},"required":["layout","title"]}}},"required":["filename","slides"]}}}""")
+    val CREATE_PPT = schema("""{"type":"function","function":{"name":"create_ppt","description":"生成一个 PPT (.pptx) 演示文稿。","parameters":{"type":"object","properties":{"filename":{"type":"string","description":"文件名，不带扩展名"},"theme":{"type":"string","enum":["blue","green","orange","purple","dark"],"description":"配色主题"},"slides":{"type":"array","description":"每页幻灯片","items":{"type":"object","properties":{"layout":{"type":"string","enum":["title","section","content"]},"title":{"type":"string"},"bullets":{"type":"array","items":{"type":"string"}},"image_query":{"type":"string","description":"配图搜索词（英文更好），只用于正文页，不需要配图就不写"}},"required":["layout","title"]}}},"required":["filename","slides"]}}}""")
 
     val CREATE_EXCEL = schema("""{"type":"function","function":{"name":"create_excel","description":"生成一个 Excel (.xlsx) 表格。","parameters":{"type":"object","properties":{"filename":{"type":"string","description":"文件名，不带扩展名"},"sheets":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"rows":{"type":"array","description":"二维数组，第一行是表头","items":{"type":"array","items":{"type":"string","description":"单元格内容；数字也写成字符串，公式以 = 开头"}}}},"required":["name","rows"]}}},"required":["filename","sheets"]}}}""")
 
@@ -186,6 +209,12 @@ object SkillTools {
     val LIST_ROUTINES = schema("""{"type":"function","function":{"name":"list_routines","description":"列出用户现有的提醒和定时任务。","parameters":{"type":"object","properties":{}}}}""")
 
     val DELETE_ROUTINE = schema("""{"type":"function","function":{"name":"delete_routine","description":"删除一个提醒或定时任务。","parameters":{"type":"object","properties":{"id":{"type":"string","description":"list_routines 返回的编号"}},"required":["id"]}}}""")
+
+    val SEARCH_LIBRARY = schema("""{"type":"function","function":{"name":"search_library","description":"在用户的资料库里按关键词检索，返回最相关的原文段落和出处。","parameters":{"type":"object","properties":{"query":{"type":"string","description":"关键词，多个用空格隔开"}},"required":["query"]}}}""")
+
+    val LIST_LIBRARY = schema("""{"type":"function","function":{"name":"list_library","description":"列出资料库里的全部文档。","parameters":{"type":"object","properties":{}}}}""")
+
+    val SAVE_FLASHCARDS = schema("""{"type":"function","function":{"name":"save_flashcards","description":"把知识点保存成复习卡片，用户之后会按间隔重复复习。","parameters":{"type":"object","properties":{"deck":{"type":"string","description":"卡组名，一般是主题"},"cards":{"type":"array","items":{"type":"object","properties":{"front":{"type":"string","description":"问题"},"back":{"type":"string","description":"答案"}},"required":["front","back"]}}},"required":["deck","cards"]}}}""")
 
     val SEARCH_HISTORY = schema("""{"type":"function","function":{"name":"search_history","description":"在本对话较早的原始聊天记录里按关键词查找原话和细节。提要里找不到的信息用它查。","parameters":{"type":"object","properties":{"query":{"type":"string","description":"关键词，多个用空格隔开"}},"required":["query"]}}}""")
 

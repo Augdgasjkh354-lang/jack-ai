@@ -125,6 +125,22 @@ object Attachments {
     }.getOrNull()
 
     /** 生成缩略图用于界面显示。 */
+    /** 把下载的图片统一转成 JPEG（最长边不超过 maxSide），返回 (字节, 宽, 高)。 */
+    fun toJpeg(bytes: ByteArray, maxSide: Int): Triple<ByteArray, Int, Int>? = runCatching {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        if (bounds.outWidth <= 0) return null
+        var sample = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxSide) sample *= 2
+        val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
+            ?: return null
+        val out = java.io.ByteArrayOutputStream()
+        bmp.compress(Bitmap.CompressFormat.JPEG, 85, out)
+        val r = Triple(out.toByteArray(), bmp.width, bmp.height)
+        bmp.recycle()
+        r
+    }.getOrNull()
+
     fun thumbnail(path: String, maxSide: Int): Bitmap? = runCatching {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(path, bounds)

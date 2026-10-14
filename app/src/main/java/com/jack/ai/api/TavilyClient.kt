@@ -51,6 +51,41 @@ class TavilyClient {
             }
         }
 
+    /** 搜图片，返回图片链接。 */
+    suspend fun searchImages(apiKey: String, query: String): List<String> = withContext(Dispatchers.IO) {
+        val body = buildJsonObject {
+            put("query", query)
+            put("max_results", 3)
+            put("include_images", true)
+        }.toString()
+        val request = Request.Builder()
+            .url("https://api.tavily.com/search")
+            .header("Authorization", "Bearer $apiKey")
+            .post(body.toRequestBody("application/json".toMediaType()))
+            .build()
+        sharedHttp.newCall(request).execute().use { resp ->
+            if (!resp.isSuccessful) return@use emptyList()
+            val arr = json.parseToJsonElement(resp.body?.string().orEmpty()).jsonObject["images"] as? JsonArray
+            arr.orEmpty().mapNotNull { el ->
+                (el as? JsonPrimitive)?.content ?: (el as? JsonObject)?.get("url").str().ifBlank { null }
+            }
+        }
+    }
+
+    /** 下载一张图片的原始字节，太大或不是图片就返回 null。 */
+    suspend fun download(url: String, maxBytes: Int = 6_000_000): ByteArray? = withContext(Dispatchers.IO) {
+        runCatching {
+            val request = Request.Builder().url(url).header("User-Agent", "Mozilla/5.0 JackAI").get().build()
+            sharedHttp.newCall(request).execute().use { resp ->
+                val type = resp.header("Content-Type").orEmpty()
+                if (!resp.isSuccessful || (type.isNotEmpty() && !type.startsWith("image/"))) return@use null
+                val len = resp.body?.contentLength() ?: -1
+                if (len > maxBytes) return@use null
+                resp.body?.bytes()?.takeIf { it.size in 1..maxBytes }
+            }
+        }.getOrNull()
+    }
+
     /** 读取网页正文。 */
     suspend fun extract(apiKey: String, url: String): String = withContext(Dispatchers.IO) {
         val body = buildJsonObject {

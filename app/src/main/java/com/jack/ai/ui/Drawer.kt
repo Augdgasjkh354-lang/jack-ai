@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -64,6 +65,8 @@ fun HistoryDrawer(
     onOpenMemory: () -> Unit,
     onOpenSkills: () -> Unit,
     onOpenRoutines: () -> Unit,
+    onOpenLibrary: () -> Unit,
+    onOpenReview: () -> Unit,
     onSettings: () -> Unit,
 ) {
     var renaming by remember { mutableStateOf<Conversation?>(null) }
@@ -131,6 +134,11 @@ fun HistoryDrawer(
                     trailing = if (state.dreams.any { !it.seen }) "新梦" else null,
                     onClick = onOpenMemory,
                 )
+                DrawerRow(icon = AppIcons.File, label = "资料库",
+                    trailing = state.library.size.takeIf { it > 0 }?.toString(), onClick = onOpenLibrary)
+                DrawerRow(icon = Icons.Default.Star, label = "复习卡片",
+                    trailing = state.cards.count { it.due <= System.currentTimeMillis() }.takeIf { it > 0 }?.let { "$it 待复习" },
+                    onClick = onOpenReview)
                 DrawerRow(icon = Icons.Default.Build, label = "技能", onClick = onOpenSkills)
                 DrawerRow(icon = Icons.Default.Notifications, label = "提醒和任务",
                     trailing = state.routines.count { it.enabled }.takeIf { it > 0 }?.toString(), onClick = onOpenRoutines)

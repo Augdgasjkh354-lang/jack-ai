@@ -22,11 +22,16 @@ object OfficeWriter {
         }
     }
 
-    private fun zip(out: OutputStream, files: List<Pair<String, String>>) {
+    private fun zip(out: OutputStream, files: List<Pair<String, String>>, binaries: List<Pair<String, ByteArray>> = emptyList()) {
         ZipOutputStream(out).use { z ->
             for ((name, content) in files) {
                 z.putNextEntry(ZipEntry(name))
                 z.write(content.toByteArray(Charsets.UTF_8))
+                z.closeEntry()
+            }
+            for ((name, bytes) in binaries) {
+                z.putNextEntry(ZipEntry(name))
+                z.write(bytes)
                 z.closeEntry()
             }
         }
@@ -176,7 +181,28 @@ object OfficeWriter {
 
     // ======================= PPT =======================
 
-    data class Slide(val layout: String, val title: String, val bullets: List<String>)
+    /** image 是配图（jpeg 或 png），imageW / imageH 是它的像素尺寸，用来保持比例。 */
+    data class Slide(
+        val layout: String,
+        val title: String,
+        val bullets: List<String>,
+        val image: ByteArray? = null,
+        val imageExt: String = "jpeg",
+        val imageW: Int = 0,
+        val imageH: Int = 0,
+    )
+
+    private fun picture(id: Int, rId: String, x: Long, y: Long, cx: Long, cy: Long) =
+        """<p:pic><p:nvPicPr><p:cNvPr id="$id" name="Picture $id"/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="$rId"/><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr><a:xfrm><a:off x="$x" y="$y"/><a:ext cx="$cx" cy="$cy"/></a:xfrm><a:prstGeom prst="roundRect"><a:avLst><a:gd name="adj" fmla="val 4000"/></a:avLst></a:prstGeom></p:spPr></p:pic>"""
+
+    /** 把图片放进框里，保持比例、居中。 */
+    private fun fit(s: Slide, bx: Long, by: Long, bw: Long, bh: Long): LongArray {
+        val ratio = if (s.imageW > 0 && s.imageH > 0) s.imageW.toDouble() / s.imageH else 4.0 / 3
+        var w = bw
+        var h = (bw / ratio).toLong()
+        if (h > bh) { h = bh; w = (bh * ratio).toLong() }
+        return longArrayOf(bx + (bw - w) / 2, by + (bh - h) / 2, w, h)
+    }
 
     private data class Theme(val primary: String, val accent: String, val bg: String, val title: String, val text: String, val soft: String)
 
@@ -245,12 +271,18 @@ object OfficeWriter {
                 shapes.append(textBox(3, 600000, 350000, W - 1200000, 900000, listOf(s.title), 3000, t.title, true, "l", "ctr"))
                 shapes.append(rect(4, 690000, 1250000, 900000, 50000, t.accent))
                 val items = s.bullets.ifEmpty { listOf(" ") }
+                val withImage = s.image != null
                 val size = when {
-                    items.size <= 4 -> 2200
-                    items.size <= 6 -> 2000
-                    else -> 1700
+                    items.size <= 4 -> if (withImage) 2000 else 2200
+                    items.size <= 6 -> if (withImage) 1800 else 2000
+                    else -> 1600
                 }
-                shapes.append(textBox(5, 600000, 1500000, W - 1200000, H - 2200000, items, size, t.text, false, bullets = true, bulletColor = t.accent))
+                val textW = if (withImage) (W * 0.5).toLong() else W - 1200000
+                shapes.append(textBox(5, 600000, 1500000, textW, H - 2200000, items, size, t.text, false, bullets = true, bulletColor = t.accent))
+                if (withImage) {
+                    val (x, y, w, h) = fit(s, (W * 0.56).toLong(), 1500000, (W * 0.39).toLong(), H - 2300000).toList()
+                    shapes.append(picture(7, "rId2", x, y, w, h))
+                }
                 shapes.append(textBox(6, W - 1500000, H - 550000, 1000000, 400000, listOf("$index / $total"), 1100, t.text, false, "r"))
             }
         }
@@ -268,7 +300,7 @@ object OfficeWriter {
         val files = mutableListOf<Pair<String, String>>()
 
         files += "[Content_Types].xml" to buildString {
-            append("""$XML<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>""")
+            append("""$XML<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="jpeg" ContentType="image/jpeg"/><Default Extension="png" ContentType="image/png"/>""")
             append("""<Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>""")
             append("""<Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>""")
             append("""<Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>""")
@@ -303,11 +335,19 @@ object OfficeWriter {
         files += "ppt/slideMasters/_rels/slideMaster1.xml.rels" to """$XML<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="$rel/slideLayout" Target="../slideLayouts/slideLayout1.xml"/><Relationship Id="rId2" Type="$rel/theme" Target="../theme/theme1.xml"/></Relationships>"""
         files += "ppt/slideLayouts/slideLayout1.xml" to """$XML<p:sldLayout $NS type="blank" preserve="1"><p:cSld name="Blank">$EMPTY_TREE</p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>"""
         files += "ppt/slideLayouts/_rels/slideLayout1.xml.rels" to """$XML<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="$rel/slideMaster" Target="../slideMasters/slideMaster1.xml"/></Relationships>"""
-        list.forEachIndexed { i, s ->
+        val media = mutableListOf<Pair<String, ByteArray>>()
+        list.forEachIndexed { i, raw ->
+            // 只有正文页放配图
+            val s = if (raw.layout == "content" || raw.layout !in setOf("title", "section")) raw else raw.copy(image = null)
             files += "ppt/slides/slide${i + 1}.xml" to slideXml(s, t, i + 1, list.size)
-            files += "ppt/slides/_rels/slide${i + 1}.xml.rels" to """$XML<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="$rel/slideLayout" Target="../slideLayouts/slideLayout1.xml"/></Relationships>"""
+            val imageRel = s.image?.let { bytes ->
+                val name = "image${i + 1}.${s.imageExt}"
+                media += "ppt/media/$name" to bytes
+                """<Relationship Id="rId2" Type="$rel/image" Target="../media/$name"/>"""
+            }.orEmpty()
+            files += "ppt/slides/_rels/slide${i + 1}.xml.rels" to """$XML<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="$rel/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>$imageRel</Relationships>"""
         }
-        zip(out, files)
+        zip(out, files, media)
     }
 
     // ======================= Excel =======================

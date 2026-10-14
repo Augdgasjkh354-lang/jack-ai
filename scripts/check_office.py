@@ -12,7 +12,8 @@ assert doc.paragraphs[0].text.startswith("2026") and len(doc.tables) == 1
 prs = Presentation(f"{d}/t.pptx")
 for i, s in enumerate(prs.slides):
     print("slide", i + 1, [sh.text_frame.text for sh in s.shapes if sh.has_text_frame])
-assert len(prs.slides) == 3
+assert len(prs.slides) == 4
+assert any(sh.shape_type == 13 for sh in prs.slides[3].shapes), "slide 4 should have a picture"
 
 wb = load_workbook(f"{d}/t.xlsx")
 for ws in wb.worksheets:

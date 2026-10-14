@@ -15,6 +15,10 @@ import com.jack.ai.data.Attachments
 import com.jack.ai.data.Backup
 import com.jack.ai.data.ChartWriter
 import com.jack.ai.data.JsRunner
+import com.jack.ai.data.Flashcard
+import com.jack.ai.data.LibraryDoc
+import com.jack.ai.data.LibraryIndex
+import com.jack.ai.data.Recall
 import com.jack.ai.data.REPEAT_LABELS
 import com.jack.ai.data.Routine
 import com.jack.ai.data.Routines
@@ -89,6 +93,8 @@ data class UiState(
     /** 桌面小组件点了话筒，等输入框打开语音识别。 */
     val voiceRequest: Boolean = false,
     val routines: List<Routine> = emptyList(),
+    val library: List<LibraryDoc> = emptyList(),
+    val cards: List<Flashcard> = emptyList(),
 ) {
     val current: Conversation? get() = conversations.firstOrNull { it.id == currentId }
     val currentProjectId: String? get() = current?.projectId ?: if (currentId == null) draftProjectId else null
@@ -113,7 +119,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             dreams = store.loadDreams(),
         )
         Dreamer.schedule(app, _state.value.settings.dreamEnabled)
-        _state.update { it.copy(routines = store.loadRoutines()) }
+        _state.update { it.copy(routines = store.loadRoutines(), library = store.loadLibrary(), cards = store.loadCards()) }
         Routines.scheduleAll(app)
         mergeInbox()
     }
@@ -373,6 +379,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             if (SkillIds.PDF in skillIds) add(SkillTools.CREATE_PDF)
             if (SkillIds.CHATS in skillIds) add(SkillTools.SEARCH_CHATS)
             if (SkillIds.CALC in skillIds) { add(SkillTools.RUN_JS); add(SkillTools.CREATE_CHART) }
+            if (SkillIds.LIBRARY in skillIds) { add(SkillTools.SEARCH_LIBRARY); add(SkillTools.LIST_LIBRARY) }
+            if (SkillIds.LEARN in skillIds) add(SkillTools.SAVE_FLASHCARDS)
             if (SkillIds.ROUTINE in skillIds) {
                 add(SkillTools.CREATE_REMINDER); add(SkillTools.CREATE_TASK)
                 add(SkillTools.LIST_ROUTINES); add(SkillTools.DELETE_ROUTINE)
@@ -478,6 +486,29 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 withContext(Dispatchers.Default) { Compression.searchAllChats(all, query, convId) } to
                     SearchRecord("翻阅聊天记录：$query")
             }
+            suspend fun searchLibrary(query: String) = runTool("翻阅资料库：$query") {
+                val hits = withContext(Dispatchers.IO) { index().search(query) }
+                (if (hits.isEmpty()) "资料库里没有找到和“$query”相关的内容。" else hits.joinToString("\n\n") {
+                    "【《${it.doc}》第 ${it.part} 段】\n${it.text}"
+                }) to SearchRecord("翻阅资料库：$query")
+            }
+            suspend fun listLibrary() = runTool("查看资料库") {
+                val docs = store.loadLibrary()
+                (if (docs.isEmpty()) "资料库是空的。用户可以在左侧菜单「资料库」里导入文档。"
+                else docs.joinToString("\n") { "《${it.name}》${it.chars} 字" }) to SearchRecord("查看资料库")
+            }
+            suspend fun saveCards(args: JsonObject) = runTool("生成复习卡片") {
+                val deck = args["deck"].text().ifBlank { "未分类" }
+                val cards = (args["cards"] as? JsonArray).orEmpty().mapNotNull { el ->
+                    val o = el as? JsonObject ?: return@mapNotNull null
+                    val f = o["front"].text().trim()
+                    val b = o["back"].text().trim()
+                    if (f.isEmpty() || b.isEmpty()) null else Flashcard(deck = deck, front = f, back = b)
+                }
+                if (cards.isEmpty()) throw IllegalArgumentException("没有卡片内容")
+                editCards { it + cards }
+                "已保存 ${cards.size} 张卡片到卡组「$deck」。" to SearchRecord("生成复习卡片：$deck（${cards.size} 张）")
+            }
             suspend fun runJs(code: String) = runTool("运行代码计算") {
                 withContext(Dispatchers.Default) { JsRunner.run(code) } to SearchRecord("运行代码计算")
             }
@@ -551,6 +582,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     else -> Triple("xlsx", MIME_XLSX, "Excel")
                 }
                 return runTool("生成 $label：$base.$ext") {
+                    // PPT 先把配图下载好
+                    val slides = if (kind == "create_ppt") withImages(parseSlides(args), args) else null
                     val file = withContext(Dispatchers.IO) {
                         val dir = File(getApplication<Application>().filesDir, "outputs").apply { mkdirs() }
                         var f = File(dir, "$base.$ext")
@@ -560,7 +593,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                             f.outputStream().buffered().use { out ->
                                 when (kind) {
                                     "create_word" -> OfficeWriter.writeDocx(args["markdown"].text(), out)
-                                    "create_ppt" -> OfficeWriter.writePptx(parseSlides(args), args["theme"].text().ifBlank { "blue" }, out)
+                                    "create_ppt" -> OfficeWriter.writePptx(slides!!, args["theme"].text().ifBlank { "blue" }, out)
                                     "create_pdf" -> PdfWriter.write(args["markdown"].text(), out)
                                     else -> OfficeWriter.writeXlsx(parseSheets(args), out)
                                 }
@@ -672,11 +705,14 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                             tc.name in FILE_TOOLS && FILE_TOOLS[tc.name] in skillIds -> makeFile(tc.name, args)
                             tc.name == "create_chart" && SkillIds.CALC in skillIds -> makeChart(args)
                             tc.name == "list_routines" && SkillIds.ROUTINE in skillIds -> listRoutines()
+                            tc.name == "list_library" && SkillIds.LIBRARY in skillIds -> listLibrary()
+                            tc.name == "save_flashcards" && SkillIds.LEARN in skillIds -> saveCards(args)
                             tc.name == "create_reminder" && SkillIds.ROUTINE in skillIds -> makeRoutine("reminder", args)
                             tc.name == "create_task" && SkillIds.ROUTINE in skillIds -> makeRoutine("task", args)
                             arg.isBlank() -> "参数缺失"
                             tc.name == "use_skill" -> useSkill(arg)
                             tc.name == "run_js" && SkillIds.CALC in skillIds -> runJs(arg)
+                            tc.name == "search_library" && SkillIds.LIBRARY in skillIds -> searchLibrary(arg)
                             tc.name == "delete_routine" && SkillIds.ROUTINE in skillIds -> removeRoutine(arg)
                             tc.name == "web_search" && web -> search(arg)
                             tc.name == "read_webpage" && web -> readPage(arg)
@@ -822,7 +858,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     memories = store.loadMemories(),
                     dreams = store.loadDreams(),
                     routines = store.loadRoutines(),
+                    library = store.loadLibrary(),
+                    cards = store.loadCards(),
                 )
+                libraryIndex = null
                 Routines.scheduleAll(getApplication<Application>())
                 "已恢复备份"
             } catch (e: Exception) {
@@ -831,6 +870,61 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             _state.update { it.copy(toast = msg) }
         }
     }
+
+    // ---------- 资料库 ----------
+
+    @Volatile private var libraryIndex: LibraryIndex? = null
+
+    private fun index(): LibraryIndex = libraryIndex ?: LibraryIndex(
+        store.loadLibrary().map { it.name to store.libraryText(it.id) },
+    ).also { libraryIndex = it }
+
+    fun addLibraryFiles(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        _state.update { it.copy(importing = true) }
+        viewModelScope.launch {
+            var added = 0
+            for (uri in uris) {
+                try {
+                    val att = Attachments.importFile(getApplication<Application>(), uri)
+                    val doc = LibraryDoc(name = att.name, chars = att.text.length)
+                    withContext(ioSerial) {
+                        store.saveLibraryText(doc.id, att.text)
+                        store.saveLibrary(store.loadLibrary() + doc)
+                    }
+                    added++
+                } catch (e: Exception) {
+                    _state.update { it.copy(toast = e.message ?: "导入失败") }
+                }
+            }
+            libraryIndex = null
+            _state.update { it.copy(importing = false, library = store.loadLibrary(), toast = if (added > 0) "已加入资料库：$added 份" else it.toast) }
+        }
+    }
+
+    fun deleteLibraryDoc(id: String) {
+        viewModelScope.launch(ioSerial) {
+            store.deleteLibraryText(id)
+            val list = store.loadLibrary().filterNot { it.id == id }
+            store.saveLibrary(list)
+            libraryIndex = null
+            _state.update { it.copy(library = list) }
+        }
+    }
+
+    // ---------- 复习卡片 ----------
+
+    private fun editCards(transform: (List<Flashcard>) -> List<Flashcard>) {
+        viewModelScope.launch(ioSerial) {
+            val list = transform(store.loadCards())
+            store.saveCards(list)
+            _state.update { it.copy(cards = list) }
+        }
+    }
+
+    fun reviewCard(id: String, grade: Int) = editCards { l -> l.map { if (it.id == id) Recall.review(it, grade) else it } }
+    fun deleteCard(id: String) = editCards { l -> l.filterNot { it.id == id } }
+    fun deleteDeck(deck: String) = editCards { l -> l.filterNot { it.deck == deck } }
 
     // ---------- 提醒和定时任务 ----------
 
@@ -1062,6 +1156,30 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             }
             OfficeWriter.Slide(o["layout"].text().ifBlank { "content" }, o["title"].text(), bullets)
         }.ifEmpty { throw IllegalArgumentException("没有幻灯片内容") }
+
+    /** 给写了 image_query 的正文页搜一张图，下载失败就不配图。最多 6 张。 */
+    private suspend fun withImages(slides: List<OfficeWriter.Slide>, args: JsonObject): List<OfficeWriter.Slide> {
+        val key = _state.value.settings.tavilyKey
+        if (key.isBlank()) return slides
+        val queries = (args["slides"] as? JsonArray).orEmpty().map { (it as? JsonObject)?.get("image_query").text() }
+        var count = 0
+        return slides.mapIndexed { i, s ->
+            val q = queries.getOrNull(i).orEmpty()
+            if (q.isBlank() || s.layout != "content" || count >= 6) return@mapIndexed s
+            val img = runCatching { fetchImage(key, q) }.getOrNull() ?: return@mapIndexed s
+            count++
+            s.copy(image = img.first, imageExt = "jpeg", imageW = img.second, imageH = img.third)
+        }
+    }
+
+    private suspend fun fetchImage(key: String, query: String): Triple<ByteArray, Int, Int>? {
+        for (url in tavily.searchImages(key, query).take(4)) {
+            val bytes = tavily.download(url) ?: continue
+            val img = withContext(Dispatchers.Default) { Attachments.toJpeg(bytes, 1600) } ?: continue
+            if (img.second >= 300 && img.third >= 200) return img
+        }
+        return null
+    }
 
     private fun parseSheets(args: JsonObject): List<OfficeWriter.Sheet> =
         (args["sheets"] as? JsonArray).orEmpty().mapIndexedNotNull { i, el ->
