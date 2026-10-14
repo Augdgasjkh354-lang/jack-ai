@@ -1,5 +1,23 @@
 package com.jack.ai.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,7 +37,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
-import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -51,49 +68,52 @@ fun HistoryDrawer(
     var deleting by remember { mutableStateOf<Conversation?>(null) }
     // 项目里的对话放在项目页面里，这里只列普通对话
     val chats = state.conversations.filter { it.messages.isNotEmpty() && it.projectId == null }
-    ModalDrawerSheet {
+    val colors = MaterialTheme.colorScheme
+    ModalDrawerSheet(drawerContainerColor = colors.surfaceContainerLow) {
         Column(Modifier.fillMaxSize()) {
-            Text(
-                "Jack AI",
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.padding(start = 24.dp, top = 24.dp, bottom = 12.dp),
-            )
-            NavigationDrawerItem(
-                icon = { Icon(Icons.Default.Add, null) },
-                label = { Text("新对话") },
-                selected = false,
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(start = 20.dp, top = 20.dp, bottom = 16.dp),
+            ) {
+                LogoMark(32.dp)
+                Spacer(Modifier.size(10.dp))
+                Text("Jack AI", style = MaterialTheme.typography.titleLarge, fontFamily = FontFamily.Serif)
+            }
+            Surface(
                 onClick = onNew,
-                modifier = Modifier.padding(horizontal = 12.dp),
-            )
-            LazyColumn(Modifier.weight(1f)) {
+                shape = RoundedCornerShape(16.dp),
+                color = colors.primary,
+                contentColor = colors.onPrimary,
+                modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
+            ) {
+                Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(AppIcons.NewChat, null, Modifier.size(20.dp))
+                    Spacer(Modifier.size(10.dp))
+                    Text("新对话", style = MaterialTheme.typography.titleSmall)
+                }
+            }
+            LazyColumn(Modifier.weight(1f).padding(top = 8.dp)) {
                 item { SectionLabel("项目") }
                 items(state.projects, key = { "p" + it.id }) { p ->
                     val count = state.conversations.count { it.projectId == p.id && it.messages.isNotEmpty() }
-                    NavigationDrawerItem(
-                        icon = { Icon(AppIcons.Folder, null) },
-                        label = { Text(p.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                        badge = { if (count > 0) Text("$count") },
+                    DrawerRow(
+                        icon = AppIcons.Folder,
+                        label = p.name,
                         selected = state.currentProjectId == p.id,
+                        trailing = if (count > 0) "$count" else null,
                         onClick = { onOpenProject(p.id) },
-                        modifier = Modifier.padding(horizontal = 12.dp),
                     )
                 }
                 item {
-                    NavigationDrawerItem(
-                        icon = { Icon(Icons.Default.Add, null) },
-                        label = { Text("新建项目", color = MaterialTheme.colorScheme.primary) },
-                        selected = false,
-                        onClick = onNewProject,
-                        modifier = Modifier.padding(horizontal = 12.dp),
-                    )
+                    DrawerRow(icon = Icons.Default.Add, label = "新建项目", tint = colors.primary, onClick = onNewProject)
                 }
                 item {
-                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                    SectionLabel("聊天记录")
+                    SectionLabel("最近")
                     if (chats.isEmpty()) {
                         Text(
                             "还没有聊天记录",
-                            color = MaterialTheme.colorScheme.outline,
+                            color = colors.outline,
+                            style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp),
                         )
                     }
@@ -102,29 +122,16 @@ fun HistoryDrawer(
                     ChatItem(c, c.id == state.currentId, { onSelect(c.id) }, { renaming = c }, { deleting = c })
                 }
             }
-            HorizontalDivider()
-            NavigationDrawerItem(
-                icon = { Icon(AppIcons.Moon, null) },
-                label = { Text("记忆与梦") },
-                badge = { if (state.dreams.any { !it.seen }) Text("新梦", color = MaterialTheme.colorScheme.primary) },
-                selected = false,
-                onClick = onOpenMemory,
-                modifier = Modifier.padding(horizontal = 12.dp).padding(top = 8.dp),
-            )
-            NavigationDrawerItem(
-                icon = { Icon(Icons.Default.Build, null) },
-                label = { Text("技能") },
-                selected = false,
-                onClick = onOpenSkills,
-                modifier = Modifier.padding(horizontal = 12.dp).padding(top = 4.dp),
-            )
-            NavigationDrawerItem(
-                icon = { Icon(Icons.Default.Settings, null) },
-                label = { Text("设置") },
-                selected = false,
-                onClick = onSettings,
-                modifier = Modifier.padding(12.dp),
-            )
+            HorizontalDivider(color = colors.outlineVariant)
+            Column(Modifier.padding(vertical = 8.dp)) {
+                DrawerRow(
+                    icon = AppIcons.Moon, label = "记忆与梦",
+                    trailing = if (state.dreams.any { !it.seen }) "新梦" else null,
+                    onClick = onOpenMemory,
+                )
+                DrawerRow(icon = Icons.Default.Build, label = "技能", onClick = onOpenSkills)
+                DrawerRow(icon = Icons.Default.Settings, label = "设置", onClick = onSettings)
+            }
         }
     }
 
@@ -143,29 +150,89 @@ private fun SectionLabel(text: String) {
     Text(
         text,
         style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 28.dp, top = 8.dp, bottom = 4.dp),
+        color = MaterialTheme.colorScheme.outline,
+        modifier = Modifier.padding(start = 28.dp, top = 16.dp, bottom = 6.dp),
     )
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ChatItem(c: Conversation, selected: Boolean, onClick: () -> Unit, onRename: () -> Unit, onDelete: () -> Unit) {
-    NavigationDrawerItem(
-        label = { Text(c.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-        selected = selected,
-        onClick = onClick,
-        badge = {
-            Row {
-                IconButton(onClick = onRename, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.Default.Edit, "重命名", Modifier.size(18.dp))
-                }
-                IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.Default.Delete, "删除", Modifier.size(18.dp))
-                }
+    var menu by remember { mutableStateOf(false) }
+    val colors = MaterialTheme.colorScheme
+    Box(Modifier.padding(horizontal = 12.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(if (selected) colors.secondaryContainer else Color.Transparent)
+                .combinedClickable(onClick = onClick, onLongClick = { menu = true })
+                .padding(start = 16.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+        ) {
+            Text(
+                c.title, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (selected) colors.onSecondaryContainer else colors.onSurface,
+            )
+            IconButton(onClick = { menu = true }, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Default.MoreVert, "更多", Modifier.size(18.dp), tint = colors.outline)
             }
-        },
-        modifier = Modifier.padding(horizontal = 12.dp),
-    )
+        }
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            DropdownMenuItem(
+                text = { Text("重命名") },
+                leadingIcon = { Icon(Icons.Default.Edit, null) },
+                onClick = { menu = false; onRename() },
+            )
+            DropdownMenuItem(
+                text = { Text("删除", color = colors.error) },
+                leadingIcon = { Icon(Icons.Default.Delete, null, tint = colors.error) },
+                onClick = { menu = false; onDelete() },
+            )
+        }
+    }
+}
+
+@Composable
+private fun DrawerRow(
+    icon: ImageVector,
+    label: String,
+    selected: Boolean = false,
+    trailing: String? = null,
+    tint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    onClick: () -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .padding(horizontal = 12.dp)
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (selected) colors.secondaryContainer else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 11.dp),
+    ) {
+        Icon(icon, null, Modifier.size(20.dp), tint = tint)
+        Spacer(Modifier.size(14.dp))
+        Text(label, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+            style = MaterialTheme.typography.bodyMedium, color = if (tint == colors.primary) tint else colors.onSurface)
+        trailing?.let {
+            Text(it, style = MaterialTheme.typography.labelMedium, color = colors.primary)
+        }
+    }
+}
+
+/** App 的小标志：陶土色圆角方块里一个对话气泡。 */
+@Composable
+fun LogoMark(size: Dp) {
+    Box(
+        Modifier.size(size).clip(RoundedCornerShape(size * 0.3f)).background(MaterialTheme.colorScheme.primary),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(AppIcons.Chat, null, Modifier.size(size * 0.58f), tint = MaterialTheme.colorScheme.onPrimary)
+    }
 }
 
 @Composable

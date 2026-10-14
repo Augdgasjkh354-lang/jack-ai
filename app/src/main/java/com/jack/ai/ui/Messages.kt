@@ -128,7 +128,7 @@ fun UserBubble(msg: ChatMessage, onDelete: () -> Unit) {
         files.forEach { f ->
             Surface(
                 shape = RoundedCornerShape(10.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 modifier = Modifier.widthIn(max = 280.dp).padding(bottom = 6.dp),
             ) {
                 Row(Modifier.padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -145,15 +145,15 @@ fun UserBubble(msg: ChatMessage, onDelete: () -> Unit) {
         if (msg.content.isNotEmpty()) {
             Surface(
                 color = MaterialTheme.colorScheme.secondaryContainer,
-                shape = RoundedCornerShape(18.dp, 4.dp, 18.dp, 18.dp),
+                shape = RoundedCornerShape(20.dp, 6.dp, 20.dp, 20.dp),
                 modifier = Modifier
                     .widthIn(max = 320.dp)
-                    .clip(RoundedCornerShape(18.dp, 4.dp, 18.dp, 18.dp))
+                    .clip(RoundedCornerShape(20.dp, 6.dp, 20.dp, 20.dp))
                     .combinedClickable(onClick = {}, onLongClick = { menu = true }),
             ) {
                 Text(
                     msg.content,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 11.dp),
                     style = MaterialTheme.typography.bodyLarge,
                 )
             }
@@ -256,7 +256,8 @@ private fun GeneratedFileCard(f: GeneratedFile) {
     }
     Surface(
         shape = RoundedCornerShape(14.dp),
-        color = colors.surfaceVariant.copy(alpha = 0.6f),
+        color = colors.surfaceContainerLowest,
+        border = androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant),
         modifier = Modifier.widthIn(max = 340.dp).fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
             .clickable { openFile(ctx, f) },
@@ -333,8 +334,8 @@ private fun ThinkingBox(reasoning: String, thinking: Boolean) {
     var expanded by rememberSaveable { mutableStateOf(thinking) }
     val colors = MaterialTheme.colorScheme
     Surface(
-        color = colors.surfaceVariant.copy(alpha = 0.5f),
-        shape = RoundedCornerShape(12.dp),
+        color = colors.surfaceContainer,
+        shape = RoundedCornerShape(14.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
@@ -375,8 +376,8 @@ private fun SearchBox(searches: List<SearchRecord>) {
     val searching = searches.any { it.pending }
     val sources = searches.flatMap { it.sources }
     Surface(
-        color = colors.surfaceVariant.copy(alpha = 0.5f),
-        shape = RoundedCornerShape(12.dp),
+        color = colors.surfaceContainer,
+        shape = RoundedCornerShape(14.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
