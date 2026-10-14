@@ -24,12 +24,21 @@ jobs:
       - name: Build
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease --stacktrace
+          set -o pipefail
+          # 出错时把关键报错写成注释，方便在网页上直接看到
+          ./gradlew assembleRelease 2>&1 | tee build.log || {
+            grep -E "^e: |What went wrong|error:" -A3 build.log | head -40 | while IFS= read -r l; do echo "::error::$l"; done
+            exit 1
+          }
           cp app/build/outputs/apk/release/app-release.apk JackAI-v1.0.${{ github.run_number }}.apk
 
       - name: Check Office files
         run: |
-          ./gradlew testReleaseUnitTest --tests "com.jack.ai.data.OfficeWriterTest"
+          set -o pipefail
+          ./gradlew testReleaseUnitTest --tests "com.jack.ai.data.OfficeWriterTest" 2>&1 | tee test.log || {
+            grep -E "^e: |What went wrong|Exception|FAILED" -A3 test.log | head -40 | while IFS= read -r l; do echo "::error::$l"; done
+            exit 1
+          }
           pip install -q python-docx python-pptx openpyxl
           python scripts/check_office.py app/build/office-samples
 
