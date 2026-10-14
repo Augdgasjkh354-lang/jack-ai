@@ -123,7 +123,7 @@ fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                 item { Text("还没有提醒和任务。", color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(top = 12.dp)) }
             }
             items(state.routines.sortedBy { it.nextAt() ?: Long.MAX_VALUE }, key = { it.id }) { r ->
-                Card(Modifier.fillMaxWidth(), onClick = { editing = r }) {
+                Card(onClick = { editing = r }, modifier = Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text((if (r.kind == "reminder") "⏰ " else "🤖 ") + r.title, style = MaterialTheme.typography.titleSmall)
