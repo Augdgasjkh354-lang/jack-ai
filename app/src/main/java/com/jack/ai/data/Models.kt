@@ -27,6 +27,8 @@ data class ChatMessage(
     val attachments: List<Attachment> = emptyList(),
     /** 这条回答过程中调用工具产生的中间消息（JSON），开着工具时要原样发回给接口。 */
     val trail: List<String> = emptyList(),
+    /** AI 用 skill 生成的文件。 */
+    val files: List<GeneratedFile> = emptyList(),
     val createdAt: Long = System.currentTimeMillis(),
 )
 
@@ -118,6 +120,9 @@ data class Settings(
     val userName: String = "",
     val aboutMe: String = "",
     val replyStyle: String = "",
+    /** 关掉的内置 skill（联网搜索的开关仍然是 webSearch）。 */
+    val disabledSkills: Set<String> = emptySet(),
+    val customSkills: List<Skill> = emptyList(),
 )
 
 const val DEFAULT_BASE_URL = "https://api.deepseek.com"

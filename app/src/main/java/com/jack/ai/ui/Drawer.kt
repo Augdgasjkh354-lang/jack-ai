@@ -11,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
@@ -43,6 +44,7 @@ fun HistoryDrawer(
     onOpenProject: (String) -> Unit,
     onNewProject: () -> Unit,
     onOpenMemory: () -> Unit,
+    onOpenSkills: () -> Unit,
     onSettings: () -> Unit,
 ) {
     var renaming by remember { mutableStateOf<Conversation?>(null) }
@@ -108,6 +110,13 @@ fun HistoryDrawer(
                 selected = false,
                 onClick = onOpenMemory,
                 modifier = Modifier.padding(horizontal = 12.dp).padding(top = 8.dp),
+            )
+            NavigationDrawerItem(
+                icon = { Icon(Icons.Default.Build, null) },
+                label = { Text("技能") },
+                selected = false,
+                onClick = onOpenSkills,
+                modifier = Modifier.padding(horizontal = 12.dp).padding(top = 4.dp),
             )
             NavigationDrawerItem(
                 icon = { Icon(Icons.Default.Settings, null) },

@@ -85,6 +85,7 @@ fun ChatScreen(
     onOpenProject: (String) -> Unit,
     onNewProject: () -> Unit,
     onOpenMemory: () -> Unit,
+    onOpenSkills: () -> Unit,
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -104,6 +105,7 @@ fun ChatScreen(
                 onOpenProject = { scope.launch { drawerState.close() }; onOpenProject(it) },
                 onNewProject = { scope.launch { drawerState.close() }; onNewProject() },
                 onOpenMemory = { scope.launch { drawerState.close() }; onOpenMemory() },
+                onOpenSkills = { scope.launch { drawerState.close() }; onOpenSkills() },
                 onSettings = { scope.launch { drawerState.close() }; onOpenSettings() },
             )
         },

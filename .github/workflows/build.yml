@@ -27,6 +27,17 @@ jobs:
           ./gradlew assembleRelease --stacktrace
           cp app/build/outputs/apk/release/app-release.apk JackAI-v1.0.${{ github.run_number }}.apk
 
+      - name: Check Office files
+        run: |
+          ./gradlew testReleaseUnitTest --tests "com.jack.ai.data.OfficeWriterTest"
+          pip install -q python-docx python-pptx openpyxl
+          python scripts/check_office.py app/build/office-samples
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: office-samples
+          path: app/build/office-samples
+
       - uses: actions/upload-artifact@v4
         with:
           name: JackAI-apk

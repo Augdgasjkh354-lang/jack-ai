@@ -73,6 +73,10 @@ class Store(context: Context) {
             userName = prefs.getString("userName", "") ?: "",
             aboutMe = prefs.getString("aboutMe", "") ?: "",
             replyStyle = prefs.getString("replyStyle", "") ?: "",
+            disabledSkills = prefs.getStringSet("disabledSkills", emptySet())?.toSet() ?: emptySet(),
+            customSkills = prefs.getString("customSkills", null)?.let {
+                runCatching { json.decodeFromString(ListSerializer(Skill.serializer()), it) }.getOrNull()
+            } ?: emptyList(),
         )
     }
 
@@ -94,6 +98,8 @@ class Store(context: Context) {
             .putString("userName", s.userName)
             .putString("aboutMe", s.aboutMe)
             .putString("replyStyle", s.replyStyle)
+            .putStringSet("disabledSkills", s.disabledSkills)
+            .putString("customSkills", json.encodeToString(ListSerializer(Skill.serializer()), s.customSkills))
             .apply()
     }
 }

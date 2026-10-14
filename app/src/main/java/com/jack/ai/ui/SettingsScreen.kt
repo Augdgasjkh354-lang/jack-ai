@@ -65,7 +65,7 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun SettingsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit) {
+fun SettingsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit, onOpenSkills: () -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var keyInput by remember { mutableStateOf(settings.apiKey) }
@@ -161,6 +161,15 @@ fun SettingsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+
+            Section("技能") {
+                Text(
+                    "联网搜索、Word、PPT、Excel，以及你自己写的技能，都在这里开关。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedButton(onClick = onOpenSkills) { Text("管理技能") }
             }
 
             // ---- 模型 ----

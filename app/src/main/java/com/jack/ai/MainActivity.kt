@@ -21,11 +21,13 @@ import com.jack.ai.ui.MemoryScreen
 import com.jack.ai.ui.ProjectScreen
 import com.jack.ai.ui.RenameDialog
 import com.jack.ai.ui.SettingsScreen
+import com.jack.ai.ui.SkillsScreen
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 
 sealed interface Screen {
     data object Settings : Screen
     data object Memory : Screen
+    data object Skills : Screen
     data class ProjectPage(val id: String) : Screen
 }
 
@@ -68,12 +70,15 @@ class MainActivity : ComponentActivity() {
                         onOpenProject = { stack.add(Screen.ProjectPage(it)) },
                         onNewProject = { creatingProject = true },
                         onOpenMemory = { stack.add(Screen.Memory) },
+                        onOpenSkills = { stack.add(Screen.Skills) },
                     )
+                    Screen.Skills -> SkillsScreen(vm = vm, settings = state.settings, onBack = { stack.removeAt(stack.lastIndex) })
                     Screen.Memory -> MemoryScreen(vm = vm, state = state, onBack = { stack.removeAt(stack.lastIndex) })
                     Screen.Settings -> SettingsScreen(
                         vm = vm,
                         settings = state.settings,
                         onBack = { stack.removeAt(stack.lastIndex) },
+                        onOpenSkills = { stack.add(Screen.Skills) },
                     )
                     is Screen.ProjectPage -> ProjectScreen(
                         vm = vm,

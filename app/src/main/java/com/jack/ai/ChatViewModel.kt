@@ -17,6 +17,12 @@ import com.jack.ai.data.Compression
 import com.jack.ai.data.Conversation
 import com.jack.ai.data.DreamEntry
 import com.jack.ai.data.Dreamer
+import com.jack.ai.data.GeneratedFile
+import com.jack.ai.data.OfficeWriter
+import com.jack.ai.data.Skill
+import com.jack.ai.data.SkillIds
+import com.jack.ai.data.SkillTools
+import com.jack.ai.data.activeSkills
 import com.jack.ai.data.MODEL_FLASH
 import com.jack.ai.data.MemoryItem
 import com.jack.ai.data.Preset
@@ -33,8 +39,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -113,7 +121,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 currentId = if (s.currentId == id) null else s.currentId,
             )
         }
-        conv?.let { deleteImages(it.messages.flatMap { m -> m.attachments }) }
+        conv?.let { cleanup(it.messages) }
         persist()
     }
 
@@ -124,9 +132,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     fun clearAll() {
         stop()
-        val all = _state.value.conversations.flatMap { c -> c.messages.flatMap { it.attachments } }
+        val all = _state.value.conversations.flatMap { it.messages }
         _state.update { it.copy(conversations = emptyList(), currentId = null) }
-        deleteImages(all)
+        cleanup(all)
         persist()
     }
 
@@ -168,7 +176,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 draftProjectId = if (s.draftProjectId == id) null else s.draftProjectId,
             )
         }
-        deleteImages(removedConvs.flatMap { c -> c.messages.flatMap { it.attachments } })
+        cleanup(removedConvs.flatMap { it.messages })
         persist()
         persistProjects()
     }
@@ -213,6 +221,13 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val att = _state.value.pending.firstOrNull { it.id == id }
         _state.update { it.copy(pending = it.pending.filterNot { a -> a.id == id }) }
         att?.let { deleteImages(listOf(it)) }
+    }
+
+    /** 删除消息时，顺带删掉它们的图片和生成的文件。 */
+    private fun cleanup(msgs: List<ChatMessage>) {
+        deleteImages(msgs.flatMap { it.attachments })
+        val paths = msgs.flatMap { m -> m.files.map { it.path } }
+        if (paths.isNotEmpty()) viewModelScope.launch(Dispatchers.IO) { paths.forEach { runCatching { File(it).delete() } } }
     }
 
     private fun deleteImages(list: List<Attachment>) {
@@ -279,6 +294,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         if (_state.value.streaming) return
         val msgs = conv.messages.dropLastWhile { it.role == "assistant" }
         if (msgs.isEmpty()) return
+        cleanup(conv.messages.drop(msgs.size))
         updateConv(conv.id) { it.copy(messages = msgs) }
         startReply(conv.id)
     }
@@ -289,7 +305,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         stop()
         val idx = conv.messages.indexOfFirst { it.id == messageId }
         if (idx < 0) return
-        deleteImages(conv.messages.drop(idx).flatMap { it.attachments })
+        cleanup(conv.messages.drop(idx))
         updateConv(conv.id) { it.copy(messages = it.messages.take(idx)) }
         persist()
     }
@@ -311,20 +327,26 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             persist()
             return
         }
-        val web = settings.webSearch && settings.tavilyKey.isNotBlank()
+        val skills = settings.activeSkills()
+        val skillIds = skills.map { it.id }.toSet()
+        val web = SkillIds.WEB in skillIds
         val thinkingOn = settings.thinking.effort != null
         val images = modelSupportsImages(settings.model)
         val compressed = conv.summary.isNotBlank()
         val memories = if (settings.memoryEnabled) store.loadMemories() else emptyList()
         val toolSet = buildJsonArray {
-            if (web) WEB_TOOLS.forEach { add(it) }
-            if (compressed) add(HISTORY_TOOL)
-            if (settings.memoryEnabled) add(MEMORY_TOOL)
+            if (skills.isNotEmpty()) add(SkillTools.USE_SKILL)
+            if (web) { add(SkillTools.WEB_SEARCH); add(SkillTools.READ_WEBPAGE) }
+            if (SkillIds.WORD in skillIds) add(SkillTools.CREATE_WORD)
+            if (SkillIds.PPT in skillIds) add(SkillTools.CREATE_PPT)
+            if (SkillIds.EXCEL in skillIds) add(SkillTools.CREATE_EXCEL)
+            if (compressed) add(SkillTools.SEARCH_HISTORY)
+            if (settings.memoryEnabled) add(SkillTools.SAVE_MEMORY)
         }.takeIf { it.isNotEmpty() }
 
         fun buildHistory(withTools: Boolean): MutableList<JsonObject> {
             val list = mutableListOf<JsonObject>()
-            val system = buildSystemPrompt(settings, conv, project, if (withTools) toolSet else null, memories)
+            val system = buildSystemPrompt(settings, conv, project, if (withTools) toolSet else null, memories, skills)
             if (system.isNotBlank()) list += msg("system", system)
             for (m in Compression.liveMessages(conv)) {
                 if (m.error != null) continue
@@ -367,7 +389,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    val err = (e as? ApiException)?.message ?: "网络连接失败"
+                    val err = when (e) {
+                        is ApiException -> e.message ?: "接口出错"
+                        is IOException -> "网络连接失败"
+                        else -> e.message ?: "出错了"
+                    }
                     finish(SearchRecord(label, error = err))
                     "工具调用失败：$err"
                 }
@@ -391,6 +417,44 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 store.saveMemories(list)
                 _state.update { it.copy(memories = list) }
                 "已记住。" to SearchRecord("记住：$text")
+            }
+            suspend fun useSkill(name: String) = runTool("使用技能：$name") {
+                val skill = findSkill(skills, name)
+                val text = skill?.let { "【${it.name}】\n${it.instructions}" }
+                    ?: ("没有这个技能。可用的技能：" + skills.joinToString("、") { it.name })
+                text to SearchRecord("使用技能：${skill?.name ?: name}")
+            }
+            suspend fun makeFile(kind: String, args: JsonObject): String {
+                val base = safeFileName(args["filename"].text()).ifBlank { "未命名" }
+                val (ext, mime, label) = when (kind) {
+                    "create_word" -> Triple("docx", MIME_DOCX, "Word")
+                    "create_ppt" -> Triple("pptx", MIME_PPTX, "PPT")
+                    else -> Triple("xlsx", MIME_XLSX, "Excel")
+                }
+                return runTool("生成 $label：$base.$ext") {
+                    val file = withContext(Dispatchers.IO) {
+                        val dir = File(getApplication<Application>().filesDir, "outputs").apply { mkdirs() }
+                        var f = File(dir, "$base.$ext")
+                        var n = 2
+                        while (f.exists()) f = File(dir, "$base($n).$ext").also { n++ }
+                        try {
+                            f.outputStream().buffered().use { out ->
+                                when (kind) {
+                                    "create_word" -> OfficeWriter.writeDocx(args["markdown"].text(), out)
+                                    "create_ppt" -> OfficeWriter.writePptx(parseSlides(args), args["theme"].text().ifBlank { "blue" }, out)
+                                    else -> OfficeWriter.writeXlsx(parseSheets(args), out)
+                                }
+                            }
+                        } catch (e: Exception) {
+                            f.delete()
+                            throw e
+                        }
+                        f
+                    }
+                    val gen = GeneratedFile(file.name, file.absolutePath, mime, file.length())
+                    patchMessage(convId, reply.id) { it.copy(files = it.files + gen) }
+                    "已生成文件「${file.name}」，用户可以在聊天里直接打开或分享。" to SearchRecord("生成 $label：${file.name}")
+                }
             }
 
             try {
@@ -465,14 +529,19 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     messages += assistantCall
                     trail += assistantCall.toString()
                     for (tc in calls.values) {
+                        val args = runCatching { Json.parseToJsonElement(tc.args.toString()).jsonObject }.getOrNull()
                         val key = when (tc.name) {
                             "read_webpage" -> "url"
                             "save_memory" -> "content"
+                            "use_skill" -> "name"
                             else -> "query"
                         }
-                        val arg = parseArg(tc.args.toString(), key)
+                        val arg = args?.get(key).text()
                         val result = when {
+                            args == null -> "参数不是有效的 JSON，可能内容太长被截断了，请精简后重试"
+                            tc.name in FILE_TOOLS && FILE_TOOLS[tc.name] in skillIds -> makeFile(tc.name, args)
                             arg.isBlank() -> "参数缺失"
+                            tc.name == "use_skill" -> useSkill(arg)
                             tc.name == "web_search" && web -> search(arg)
                             tc.name == "read_webpage" && web -> readPage(arg)
                             tc.name == "search_history" -> searchOld(arg)
@@ -646,6 +715,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         project: Project?,
         tools: JsonArray?,
         memories: List<MemoryItem>,
+        skills: List<Skill>,
     ): String {
         val parts = mutableListOf<String>()
         if (settings.developerPrompt.isNotBlank()) {
@@ -681,12 +751,13 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 "如果需要提要里没有的原话或细节，用 search_history 工具查原始记录。\n<compacted-summary>\n${conv.summary}\n</compacted-summary>"
         }
         val names = tools?.mapNotNull { (it as? JsonObject)?.get("function")?.jsonObject?.get("name")?.jsonPrimitive?.content }.orEmpty()
+        if ("use_skill" in names && skills.isNotEmpty()) {
+            parts += "【技能】\n你掌握以下技能：\n" + skills.joinToString("\n") { "- ${it.name}：${it.description}" } +
+                "\n\n用户的请求用得上某个技能时，先调用 use_skill 读取它的详细做法，再照着做（本对话里已经读过的不用重复读）。" +
+                "用不上就直接回答。只有用户想要文件时才生成文件，不要主动生成。"
+        }
         if ("web_search" in names) {
-            parts += "【联网工具】你可以用 web_search 联网搜索，用 read_webpage 读取某个网页的全文。" +
-                "遇到时效性问题（新闻、价格、天气、最新版本、近期事件等）或不确定的事实时，先搜索再回答；" +
-                "常识、闲聊、写作、编程之类不需要的问题直接回答，不要乱搜。" +
-                "搜索词要简洁精准，必要时可以分几次从不同角度搜。" +
-                "引用搜索结果时，用 [编号](链接) 的格式标注来源。"
+            parts += "【联网】遇到时效性问题（新闻、价格、天气、最新版本、近期事件）或不确定的事实时，用联网搜索技能核实；常识、闲聊、写作不用搜。"
         }
         if ("save_memory" in names) {
             parts += "【记忆工具】只有当用户明确要求你记住某件事时，才用 save_memory 保存，内容写成一句完整的话。"
@@ -701,42 +772,47 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         put("content", content)
     }
 
-    private fun parseArg(args: String, key: String): String = runCatching {
-        Json.parseToJsonElement(args).jsonObject[key]?.jsonPrimitive?.content
-    }.getOrNull().orEmpty()
+    private fun JsonElement?.text(): String = when (this) {
+        null, JsonNull -> ""
+        is JsonPrimitive -> content
+        else -> toString()
+    }
+
+    private fun findSkill(skills: List<Skill>, name: String): Skill? {
+        val n = name.trim()
+        return skills.firstOrNull { it.name == n }
+            ?: skills.firstOrNull { it.name.contains(n, true) || n.contains(it.name, true) }
+    }
+
+    private fun safeFileName(name: String): String =
+        name.trim().replace(Regex("""[\\/:*?"<>|\n\r\t]"""), "_")
+            .removeSuffix(".docx").removeSuffix(".pptx").removeSuffix(".xlsx").take(60).trim()
+
+    private fun parseSlides(args: JsonObject): List<OfficeWriter.Slide> =
+        (args["slides"] as? JsonArray).orEmpty().mapNotNull { el ->
+            val o = el as? JsonObject ?: return@mapNotNull null
+            val bullets = when (val b = o["bullets"]) {
+                is JsonArray -> b.map { it.text() }.filter { it.isNotBlank() }
+                null, JsonNull -> emptyList()
+                else -> b.text().lines().filter { it.isNotBlank() }
+            }
+            OfficeWriter.Slide(o["layout"].text().ifBlank { "content" }, o["title"].text(), bullets)
+        }.ifEmpty { throw IllegalArgumentException("没有幻灯片内容") }
+
+    private fun parseSheets(args: JsonObject): List<OfficeWriter.Sheet> =
+        (args["sheets"] as? JsonArray).orEmpty().mapIndexedNotNull { i, el ->
+            val o = el as? JsonObject ?: return@mapIndexedNotNull null
+            val rows = (o["rows"] as? JsonArray).orEmpty().map { r ->
+                (r as? JsonArray)?.map { it.text() } ?: listOf(r.text())
+            }
+            OfficeWriter.Sheet(o["name"].text().ifBlank { "Sheet${i + 1}" }, rows)
+        }.ifEmpty { throw IllegalArgumentException("没有表格内容") }
 
     private companion object {
-        private fun tool(name: String, description: String, param: String, paramDesc: String) = buildJsonObject {
-            put("type", "function")
-            put("function", buildJsonObject {
-                put("name", name)
-                put("description", description)
-                put("parameters", buildJsonObject {
-                    put("type", "object")
-                    put("properties", buildJsonObject {
-                        put(param, buildJsonObject {
-                            put("type", "string")
-                            put("description", paramDesc)
-                        })
-                    })
-                    put("required", buildJsonArray { add(JsonPrimitive(param)) })
-                })
-            })
-        }
-
-        val HISTORY_TOOL = tool(
-            "search_history", "在本对话较早的原始聊天记录里按关键词查找原话和细节。提要里找不到的信息用它查。",
-            "query", "关键词，多个用空格隔开",
-        )
-        val MEMORY_TOOL = tool(
-            "save_memory", "把一条关于用户的信息存进长期记忆。仅在用户明确要求“记住”时使用。",
-            "content", "要记住的内容，一句完整的话",
-        )
-
-        val WEB_TOOLS: JsonArray = buildJsonArray {
-            add(tool("web_search", "在互联网上搜索最新信息，返回若干网页的标题、链接和摘要。", "query", "搜索关键词，简洁明确"))
-            add(tool("read_webpage", "读取一个网页的正文内容。用户给了链接，或搜索摘要不够详细时使用。", "url", "完整网址，以 http 开头"))
-        }
+        val FILE_TOOLS = mapOf("create_word" to SkillIds.WORD, "create_ppt" to SkillIds.PPT, "create_excel" to SkillIds.EXCEL)
+        const val MIME_DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        const val MIME_PPTX = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        const val MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     }
 
     // ---------- 工具函数 ----------

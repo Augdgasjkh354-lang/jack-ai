@@ -1,5 +1,8 @@
 package com.jack.ai.ui
 
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
@@ -62,6 +65,9 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.jack.ai.data.Attachments
 import com.jack.ai.data.ChatMessage
+import com.jack.ai.data.GeneratedFile
+import androidx.core.content.FileProvider
+import java.io.File
 import com.jack.ai.data.SearchRecord
 import com.jack.ai.data.modelLabel
 import kotlinx.coroutines.Dispatchers
@@ -205,6 +211,10 @@ fun AssistantMessage(
         } else if (streaming && msg.reasoning.isEmpty() && msg.searches.none { it.pending }) {
             CircularProgressIndicator(Modifier.size(20.dp).padding(2.dp), strokeWidth = 2.dp)
         }
+        msg.files.forEach { f ->
+            Spacer(Modifier.height(8.dp))
+            GeneratedFileCard(f)
+        }
         msg.error?.let { err ->
             Spacer(Modifier.height(4.dp))
             Surface(color = colors.errorContainer, shape = RoundedCornerShape(10.dp)) {
@@ -232,6 +242,83 @@ fun AssistantMessage(
             }
         }
     }
+}
+
+@Composable
+private fun GeneratedFileCard(f: GeneratedFile) {
+    val ctx = LocalContext.current
+    val colors = MaterialTheme.colorScheme
+    val (tag, tagColor) = when (f.name.substringAfterLast('.').lowercase()) {
+        "docx" -> "W" to Color(0xFF2B579A)
+        "pptx" -> "P" to Color(0xFFD24726)
+        "xlsx" -> "X" to Color(0xFF217346)
+        else -> "F" to colors.primary
+    }
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = colors.surfaceVariant.copy(alpha = 0.6f),
+        modifier = Modifier.widthIn(max = 340.dp).fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .clickable { openFile(ctx, f) },
+    ) {
+        Row(Modifier.padding(start = 12.dp, top = 10.dp, bottom = 10.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)).background(tagColor),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(tag, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            }
+            Spacer(Modifier.size(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(f.name, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium)
+                Text(
+                    if (File(f.path).exists()) formatSize(f.size) else "文件已被删除",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.onSurfaceVariant,
+                )
+            }
+            TextButton(onClick = { openFile(ctx, f) }) { Text("打开") }
+            TextButton(onClick = { shareFile(ctx, f) }) { Text("分享") }
+        }
+    }
+}
+
+private fun formatSize(bytes: Long): String = when {
+    bytes >= 1024 * 1024 -> String.format(java.util.Locale.US, "%.1f MB", bytes / 1024.0 / 1024.0)
+    bytes >= 1024 -> "${bytes / 1024} KB"
+    else -> "$bytes B"
+}
+
+private fun fileUri(ctx: Context, f: GeneratedFile) =
+    FileProvider.getUriForFile(ctx, ctx.packageName + ".files", File(f.path))
+
+private fun openFile(ctx: Context, f: GeneratedFile) {
+    if (!File(f.path).exists()) {
+        Toast.makeText(ctx, "文件已被删除", Toast.LENGTH_SHORT).show()
+        return
+    }
+    val intent = Intent(Intent.ACTION_VIEW)
+        .setDataAndType(fileUri(ctx, f), f.mime)
+        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    try {
+        ctx.startActivity(Intent.createChooser(intent, "用什么打开").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+    } catch (e: ActivityNotFoundException) {
+        Toast.makeText(ctx, "手机上没有能打开这种文件的应用，可以装个 WPS 或微软 Office", Toast.LENGTH_LONG).show()
+    }
+}
+
+private fun shareFile(ctx: Context, f: GeneratedFile) {
+    if (!File(f.path).exists()) {
+        Toast.makeText(ctx, "文件已被删除", Toast.LENGTH_SHORT).show()
+        return
+    }
+    val intent = Intent(Intent.ACTION_SEND)
+        .setType(f.mime)
+        .putExtra(Intent.EXTRA_STREAM, fileUri(ctx, f))
+        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    ctx.startActivity(Intent.createChooser(intent, "分享到"))
 }
 
 @Composable
@@ -326,6 +413,8 @@ private fun SearchBox(searches: List<SearchRecord>) {
                                 rec.query.startsWith("读取") -> "📄 "
                                 rec.query.startsWith("翻阅") -> "📜 "
                                 rec.query.startsWith("记住") -> "📌 "
+                                rec.query.startsWith("使用技能") -> "🧩 "
+                                rec.query.startsWith("生成") -> "📎 "
                                 else -> "🔍 "
                             }) + rec.query +
                                 (rec.error?.let { "（$it）" } ?: ""),
@@ -358,4 +447,4 @@ private fun SearchBox(searches: List<SearchRecord>) {
     }
 }
 
-private fun isOther(label: String) = label.startsWith("读取") || label.startsWith("翻阅") || label.startsWith("记住")
+private fun isOther(label: String) = listOf("读取", "翻阅", "记住", "使用技能", "生成").any { label.startsWith(it) }
