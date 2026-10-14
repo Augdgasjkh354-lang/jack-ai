@@ -182,6 +182,17 @@ fun DreamCard(d: DreamEntry, initiallyOpen: Boolean, onClick: (() -> Unit)? = nu
                 maxLines = if (open) Int.MAX_VALUE else 3,
                 overflow = TextOverflow.Ellipsis,
             )
+            if (d.note.isNotBlank()) {
+                Row {
+                    Text("“", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
+                    Text(
+                        d.note,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.padding(top = 4.dp, start = 2.dp),
+                    )
+                }
+            }
             AnimatedVisibility(open && onClick == null) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (d.summary.isNotBlank()) {

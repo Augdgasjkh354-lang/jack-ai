@@ -81,10 +81,12 @@ object Dreamer {
    - 每条记忆是一句完整、独立能看懂的话，用“用户……”开头描述用户，总数尽量不超过 80 条。
 三、写“dream”：以第一人称写一段 150 到 300 字的梦，把这段时间聊过的内容化成梦里的意象和场景，有一点梦的朦胧和诗意，但能让用户认出是哪些事。温柔、真诚，不要说教。
 
-最后写“changes”：一两句话说明这次新记住了什么、改了什么、忘掉了什么。
+然后写“changes”：一两句话说明这次新记住了什么、改了什么、忘掉了什么。
+
+最后写“note”：醒来后想对用户说的一句话（30 到 80 字）。像一个了解他的老朋友，结合这段时间他在忙的、在意的、烦恼的事，真诚地说一句关心、鼓励或提醒。不要客套，不要说教，不要用“亲爱的”。
 
 只输出一个 JSON 对象，格式：
-{"summary": "…", "memories": ["…", "…"], "dream": "…", "changes": "…"}"""
+{"summary": "…", "memories": ["…", "…"], "dream": "…", "changes": "…", "note": "…"}"""
 
     /**
      * 真正做梦的逻辑。没有新聊天、没填 Key 时返回 null。
@@ -139,7 +141,7 @@ object Dreamer {
         // 尽量保留旧记忆的 id 和时间，方便界面稳定显示
         val old = memories.associateBy { it.text }
         store.saveMemories(newMemories.map { old[it] ?: MemoryItem(text = it) })
-        val entry = DreamEntry(dream = str("dream"), summary = str("summary"), changes = str("changes"))
+        val entry = DreamEntry(dream = str("dream"), summary = str("summary"), changes = str("changes"), note = str("note"))
         store.saveDreams(listOf(entry) + store.loadDreams().take(59))
         store.lastDreamAt = System.currentTimeMillis()
         return entry

@@ -33,6 +33,8 @@ object SkillIds {
     const val WORD = "builtin-word"
     const val PPT = "builtin-ppt"
     const val EXCEL = "builtin-excel"
+    const val PDF = "builtin-pdf"
+    const val CHATS = "builtin-chats"
 }
 
 private fun schema(s: String): JsonObject = Json.parseToJsonElement(s).jsonObject
@@ -85,6 +87,24 @@ val BUILTIN_SKILLS = listOf(
 4. 数据较多时按逻辑分成几个工作表，比如“明细”和“汇总”。
 5. 生成后用一两句话说明表格结构，不要把整张表再贴出来。""",
     ),
+    Skill(
+        id = SkillIds.PDF, builtin = true, name = "PDF 文档",
+        description = "生成 .pdf 文件：适合直接发给别人看、打印的文档，比如简历、通知、说明、行程单。",
+        instructions = """生成 PDF 的做法：
+1. 用 create_pdf 工具，内容用 Markdown 写，规则和 Word 一样：第一行 “# 标题”，章节用 ##，小节用 ###，列表、表格、**加粗**、> 引用都可以用。
+2. PDF 不能再编辑，适合定稿的内容；用户想自己改的，建议用 Word。
+3. 版面要清爽：段落不要太长，多用小标题和列表；表格列数不超过 5 列。
+4. 文件名简短明确。生成后用一两句话说明内容，不要把全文再贴一遍。""",
+    ),
+    Skill(
+        id = SkillIds.CHATS, builtin = true, name = "聊天记录搜索",
+        description = "翻找用户和你以前所有对话的记录。用户问“我们之前聊过的…”“上次说的那个…”时使用。",
+        instructions = """搜索聊天记录的做法：
+1. 用 search_chats 工具，搜索词用对方可能说过的关键词，2 到 4 个词，用空格隔开。比如“餐厅 推荐”“周报 模板”。
+2. 搜不到就换同义词再搜，最多 3 次。
+3. 结果会带日期和对话标题。回答时说明是哪天、在哪个对话里聊的，例如“10 月 3 日在「周末去哪玩」里你提到过…”。
+4. 只根据搜到的内容回答，找不到就直说没找到，不要编。""",
+    ),
 )
 
 /** 每个内置 skill 对应的工具定义（OpenAI 兼容格式）。 */
@@ -100,6 +120,10 @@ object SkillTools {
     val CREATE_PPT = schema("""{"type":"function","function":{"name":"create_ppt","description":"生成一个 PPT (.pptx) 演示文稿。","parameters":{"type":"object","properties":{"filename":{"type":"string","description":"文件名，不带扩展名"},"theme":{"type":"string","enum":["blue","green","orange","purple","dark"],"description":"配色主题"},"slides":{"type":"array","description":"每页幻灯片","items":{"type":"object","properties":{"layout":{"type":"string","enum":["title","section","content"]},"title":{"type":"string"},"bullets":{"type":"array","items":{"type":"string"}}},"required":["layout","title"]}}},"required":["filename","slides"]}}}""")
 
     val CREATE_EXCEL = schema("""{"type":"function","function":{"name":"create_excel","description":"生成一个 Excel (.xlsx) 表格。","parameters":{"type":"object","properties":{"filename":{"type":"string","description":"文件名，不带扩展名"},"sheets":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"rows":{"type":"array","description":"二维数组，第一行是表头","items":{"type":"array","items":{"type":"string","description":"单元格内容；数字也写成字符串，公式以 = 开头"}}}},"required":["name","rows"]}}},"required":["filename","sheets"]}}}""")
+
+    val CREATE_PDF = schema("""{"type":"function","function":{"name":"create_pdf","description":"生成一个 PDF 文档。","parameters":{"type":"object","properties":{"filename":{"type":"string","description":"文件名，不带扩展名"},"markdown":{"type":"string","description":"文档全文，Markdown 格式"}},"required":["filename","markdown"]}}}""")
+
+    val SEARCH_CHATS = schema("""{"type":"function","function":{"name":"search_chats","description":"在用户的全部聊天记录里按关键词搜索，返回相关的原话、日期和对话标题。","parameters":{"type":"object","properties":{"query":{"type":"string","description":"关键词，多个用空格隔开"}},"required":["query"]}}}""")
 
     val SEARCH_HISTORY = schema("""{"type":"function","function":{"name":"search_history","description":"在本对话较早的原始聊天记录里按关键词查找原话和细节。提要里找不到的信息用它查。","parameters":{"type":"object","properties":{"query":{"type":"string","description":"关键词，多个用空格隔开"}},"required":["query"]}}}""")
 

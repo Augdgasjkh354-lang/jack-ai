@@ -19,6 +19,7 @@ import com.jack.ai.data.DreamEntry
 import com.jack.ai.data.Dreamer
 import com.jack.ai.data.GeneratedFile
 import com.jack.ai.data.OfficeWriter
+import com.jack.ai.data.PdfWriter
 import com.jack.ai.data.Skill
 import com.jack.ai.data.SkillIds
 import com.jack.ai.data.SkillTools
@@ -30,6 +31,8 @@ import com.jack.ai.data.Project
 import com.jack.ai.data.SearchRecord
 import com.jack.ai.data.Settings
 import com.jack.ai.data.Store
+import com.jack.ai.data.ThinkLevel
+import com.jack.ai.data.MODEL_PRO
 import com.jack.ai.data.modelSupportsImages
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -315,11 +318,21 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         job = null
     }
 
-    private fun startReply(convId: String) {
+    /** 让 V4 Pro 复核最后一条回答，并给出改进版。 */
+    fun reviewLast() {
+        val conv = _state.value.current ?: return
+        if (_state.value.streaming) return
+        if (conv.messages.lastOrNull()?.let { it.role == "assistant" && it.content.isNotBlank() } != true) return
+        startReply(conv.id, modelOverride = MODEL_PRO, extraUser = REVIEW_PROMPT)
+    }
+
+    private fun startReply(convId: String, modelOverride: String? = null, extraUser: String? = null) {
         val settings = _state.value.settings
         val conv = _state.value.conversations.first { it.id == convId }
         val project = _state.value.project(conv.projectId)
-        val reply = ChatMessage(role = "assistant", model = settings.model)
+        val model = modelOverride ?: settings.model
+        val thinking = if (modelOverride != null && settings.thinking == ThinkLevel.OFF) ThinkLevel.HIGH else settings.thinking
+        val reply = ChatMessage(role = "assistant", model = model)
         updateConv(convId) { it.copy(messages = it.messages + reply) }
 
         if (settings.apiKey.isBlank()) {
@@ -330,8 +343,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val skills = settings.activeSkills()
         val skillIds = skills.map { it.id }.toSet()
         val web = SkillIds.WEB in skillIds
-        val thinkingOn = settings.thinking.effort != null
-        val images = modelSupportsImages(settings.model)
+        val thinkingOn = thinking.effort != null
+        val images = modelSupportsImages(model)
         val compressed = conv.summary.isNotBlank()
         val memories = if (settings.memoryEnabled) store.loadMemories() else emptyList()
         val toolSet = buildJsonArray {
@@ -340,11 +353,18 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             if (SkillIds.WORD in skillIds) add(SkillTools.CREATE_WORD)
             if (SkillIds.PPT in skillIds) add(SkillTools.CREATE_PPT)
             if (SkillIds.EXCEL in skillIds) add(SkillTools.CREATE_EXCEL)
+            if (SkillIds.PDF in skillIds) add(SkillTools.CREATE_PDF)
+            if (SkillIds.CHATS in skillIds) add(SkillTools.SEARCH_CHATS)
             if (compressed) add(SkillTools.SEARCH_HISTORY)
             if (settings.memoryEnabled) add(SkillTools.SAVE_MEMORY)
         }.takeIf { it.isNotEmpty() }
 
-        fun buildHistory(withTools: Boolean): MutableList<JsonObject> {
+        /**
+         * flat=true 时不发回以前的工具调用过程，只保留最终回答。
+         * 开着思考时，接口要求带工具调用的旧回合必须附上思考内容；缺了就会报 400，
+         * 所以缺思考内容的旧回合也按 flat 处理。
+         */
+        fun buildHistory(withTools: Boolean, flat: Boolean = false): MutableList<JsonObject> {
             val list = mutableListOf<JsonObject>()
             val system = buildSystemPrompt(settings, conv, project, if (withTools) toolSet else null, memories, skills)
             if (system.isNotBlank()) list += msg("system", system)
@@ -353,14 +373,26 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 if (m.role == "user") {
                     list += userMessage(m, images)
                 } else if (m.content.isNotBlank()) {
-                    if (withTools) m.trail.forEach { t -> runCatching { list += Json.parseToJsonElement(t).jsonObject } }
+                    val trail = if (withTools && !flat) m.trail.mapNotNull { t ->
+                        runCatching { Json.parseToJsonElement(t).jsonObject }.getOrNull()
+                    } else emptyList()
+                    val usable = trail.isNotEmpty() && (!thinkingOn || trail.all { t ->
+                        t["role"].text() != "assistant" || t["reasoning_content"].text().isNotEmpty()
+                    })
+                    if (usable) {
+                        trail.forEach { t ->
+                            list += if (thinkingOn || "reasoning_content" !in t) t
+                            else JsonObject(t - "reasoning_content")
+                        }
+                    }
                     list += buildJsonObject {
                         put("role", "assistant")
                         put("content", m.content)
-                        if (withTools && m.reasoning.isNotEmpty()) put("reasoning_content", m.reasoning)
+                        if (usable && thinkingOn && m.reasoning.isNotEmpty()) put("reasoning_content", m.reasoning)
                     }
                 }
             }
+            if (extraUser != null) list += msg("user", extraUser)
             return list
         }
 
@@ -418,6 +450,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 _state.update { it.copy(memories = list) }
                 "已记住。" to SearchRecord("记住：$text")
             }
+            suspend fun searchChats(query: String) = runTool("翻阅聊天记录：$query") {
+                val all = _state.value.conversations
+                withContext(Dispatchers.Default) { Compression.searchAllChats(all, query, convId) } to
+                    SearchRecord("翻阅聊天记录：$query")
+            }
             suspend fun useSkill(name: String) = runTool("使用技能：$name") {
                 val skill = findSkill(skills, name)
                 val text = skill?.let { "【${it.name}】\n${it.instructions}" }
@@ -429,6 +466,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 val (ext, mime, label) = when (kind) {
                     "create_word" -> Triple("docx", MIME_DOCX, "Word")
                     "create_ppt" -> Triple("pptx", MIME_PPTX, "PPT")
+                    "create_pdf" -> Triple("pdf", "application/pdf", "PDF")
                     else -> Triple("xlsx", MIME_XLSX, "Excel")
                 }
                 return runTool("生成 $label：$base.$ext") {
@@ -442,6 +480,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                                 when (kind) {
                                     "create_word" -> OfficeWriter.writeDocx(args["markdown"].text(), out)
                                     "create_ppt" -> OfficeWriter.writePptx(parseSlides(args), args["theme"].text().ifBlank { "blue" }, out)
+                                    "create_pdf" -> PdfWriter.write(args["markdown"].text(), out)
                                     else -> OfficeWriter.writeXlsx(parseSheets(args), out)
                                 }
                             }
@@ -461,14 +500,15 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 var tools: JsonArray? = toolSet
                 val messages = buildHistory(tools != null)
                 var round = 0
+                var flatTried = false
                 while (true) {
                     val calls = sortedMapOf<Int, ToolAcc>()
                     val roundReasoning = StringBuilder()
                     val roundContent = StringBuilder()
                     if (content.isNotEmpty() && !content.endsWith("\n")) content.append("\n\n")
                     try {
-                        client.stream(settings.baseUrl, settings.apiKey, settings.model, messages,
-                            settings.thinking, settings.temperature, tools)
+                        client.stream(settings.baseUrl, settings.apiKey, model, messages,
+                            thinking, settings.temperature, tools)
                             .collect { ev ->
                                 when (ev) {
                                     is StreamEvent.Text -> {
@@ -491,6 +531,12 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                             }
                     } catch (e: ApiException) {
                         // 带工具的请求被拒（比如旧记录缺少思考内容），退回到“先搜再答”
+                        if (tools != null && round == 0 && e.code == 400 && roundContent.isEmpty() && !flatTried) {
+                            // 先试试去掉旧的工具调用过程，工具照样能用
+                            flatTried = true
+                            messages.clear(); messages.addAll(buildHistory(true, flat = true))
+                            continue
+                        }
                         if (tools != null && round == 0 && e.code == 400 && roundContent.isEmpty()) {
                             tools = null
                             val q = conv.messages.last { it.role == "user" }.content.take(300)
@@ -545,6 +591,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                             tc.name == "web_search" && web -> search(arg)
                             tc.name == "read_webpage" && web -> readPage(arg)
                             tc.name == "search_history" -> searchOld(arg)
+                            tc.name == "search_chats" && SkillIds.CHATS in skillIds -> searchChats(arg)
                             tc.name == "save_memory" -> remember(arg)
                             else -> "这个工具现在不可用"
                         }
@@ -786,7 +833,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun safeFileName(name: String): String =
         name.trim().replace(Regex("""[\\/:*?"<>|\n\r\t]"""), "_")
-            .removeSuffix(".docx").removeSuffix(".pptx").removeSuffix(".xlsx").take(60).trim()
+            .removeSuffix(".docx").removeSuffix(".pptx").removeSuffix(".xlsx").removeSuffix(".pdf").take(60).trim()
 
     private fun parseSlides(args: JsonObject): List<OfficeWriter.Slide> =
         (args["slides"] as? JsonArray).orEmpty().mapNotNull { el ->
@@ -809,7 +856,15 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }.ifEmpty { throw IllegalArgumentException("没有表格内容") }
 
     private companion object {
-        val FILE_TOOLS = mapOf("create_word" to SkillIds.WORD, "create_ppt" to SkillIds.PPT, "create_excel" to SkillIds.EXCEL)
+        const val REVIEW_PROMPT = "请换一个更严格的视角，复核你上面那条回答：检查事实错误、计算错误、逻辑漏洞、" +
+            "遗漏的重要信息和表达不清的地方，需要时可以联网核实。然后直接给出改进后的完整回答，" +
+            "开头用一句话说明修正或补充了什么。如果原回答没有问题，就说“复核没有发现问题”，" +
+            "并简要说明理由，不要重复全文。"
+
+        val FILE_TOOLS = mapOf(
+            "create_word" to SkillIds.WORD, "create_ppt" to SkillIds.PPT,
+            "create_excel" to SkillIds.EXCEL, "create_pdf" to SkillIds.PDF,
+        )
         const val MIME_DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         const val MIME_PPTX = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
         const val MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"

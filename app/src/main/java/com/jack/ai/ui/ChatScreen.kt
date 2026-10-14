@@ -356,6 +356,7 @@ private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolea
                             isLast = isLast,
                             onRegenerate = vm::regenerate,
                             onDelete = { vm.deleteFrom(msg.id) },
+                            onReview = vm::reviewLast,
                         )
                     }
                 }

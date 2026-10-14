@@ -188,6 +188,7 @@ fun AssistantMessage(
     isLast: Boolean,
     onRegenerate: () -> Unit,
     onDelete: () -> Unit,
+    onReview: (() -> Unit)? = null,
 ) {
     val clipboard = LocalClipboardManager.current
     val ctx = LocalContext.current
@@ -235,6 +236,12 @@ fun AssistantMessage(
                     }
                 }
                 if (isLast) SmallAction(Icons.Default.Refresh, "重新回答", onRegenerate)
+                if (isLast && onReview != null && msg.content.isNotEmpty()) {
+                    TextButton(onClick = onReview, modifier = Modifier.height(32.dp),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp)) {
+                        Text("Pro 复核", style = MaterialTheme.typography.labelMedium, color = colors.primary)
+                    }
+                }
                 SmallAction(Icons.Default.Delete, "删除", onDelete)
                 if (msg.model.isNotEmpty()) {
                     Text(modelLabel(msg.model), style = MaterialTheme.typography.labelSmall, color = colors.outline)
@@ -252,6 +259,7 @@ private fun GeneratedFileCard(f: GeneratedFile) {
         "docx" -> "W" to Color(0xFF2B579A)
         "pptx" -> "P" to Color(0xFFD24726)
         "xlsx" -> "X" to Color(0xFF217346)
+        "pdf" -> "PDF" to Color(0xFFB3261E)
         else -> "F" to colors.primary
     }
     Surface(
@@ -268,7 +276,7 @@ private fun GeneratedFileCard(f: GeneratedFile) {
                 Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)).background(tagColor),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(tag, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Text(tag, color = Color.White, fontWeight = FontWeight.Bold, fontSize = if (tag.length > 1) 12.sp else 18.sp)
             }
             Spacer(Modifier.size(10.dp))
             Column(Modifier.weight(1f)) {

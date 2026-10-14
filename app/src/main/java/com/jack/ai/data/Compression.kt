@@ -161,4 +161,34 @@ object Compression {
             "#${i + 1} $who：${m.content.take(1500)}"
         }
     }
+
+    /** 在全部聊天记录里搜索（聊天搜索技能用）。 */
+    fun searchAllChats(convs: List<Conversation>, query: String, excludeId: String?): String {
+        val terms = query.split(Regex("[\\s,，、;；。.!！?？]+")).map { it.trim() }.filter { it.isNotEmpty() }
+            .ifEmpty { listOf(query.trim()) }
+        fun score(text: String): Int {
+            var s = 0
+            for (t in terms) {
+                if (text.contains(t, ignoreCase = true)) s += 3
+                else if (t.length >= 4) s += t.windowed(2).count { text.contains(it, ignoreCase = true) }.coerceAtMost(2)
+            }
+            return s
+        }
+        val fmt = java.text.SimpleDateFormat("yyyy年M月d日", java.util.Locale.CHINA)
+        data class Hit(val conv: Conversation, val idx: Int, val score: Int)
+        val hits = convs.filter { it.id != excludeId }.flatMap { c ->
+            c.messages.mapIndexedNotNull { i, m ->
+                val sc = score(m.content) + if (i == 0) score(c.title) else 0
+                if (sc > 0) Hit(c, i, sc) else null
+            }
+        }.sortedWith(compareByDescending<Hit> { it.score }.thenByDescending { it.conv.messages[it.idx].createdAt }).take(8)
+        if (hits.isEmpty()) return "全部聊天记录里没有找到和“$query”相关的内容。"
+        return hits.joinToString("\n\n") { h ->
+            val m = h.conv.messages[h.idx]
+            val who = if (m.role == "user") "用户" else "AI"
+            val around = h.conv.messages.getOrNull(if (m.role == "user") h.idx + 1 else h.idx - 1)
+            val ctx = around?.let { a -> "\n  （" + (if (a.role == "user") "用户" else "AI") + "：" + a.content.take(300) + "）" }.orEmpty()
+            "【${fmt.format(java.util.Date(m.createdAt))} · 对话「${h.conv.title}」】$who：${m.content.take(800)}$ctx"
+        }
+    }
 }

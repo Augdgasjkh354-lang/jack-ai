@@ -83,6 +83,8 @@ data class DreamEntry(
     val dream: String,
     val summary: String = "",
     val changes: String = "",
+    /** 醒来后想对用户说的一句话。 */
+    val note: String = "",
     val seen: Boolean = false,
 )
 
