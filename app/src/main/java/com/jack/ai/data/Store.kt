@@ -1,41 +1,62 @@
 package com.jack.ai.data
 
 import android.content.Context
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import java.io.File
 
-/** 聊天记录存成手机里的一个 JSON 文件，设置存在 SharedPreferences。 */
+/** 聊天记录和项目存成手机里的 JSON 文件，设置存在 SharedPreferences。 */
 class Store(context: Context) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
-    private val file = File(context.filesDir, "conversations.json")
+    private val dir = context.filesDir
     private val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
 
-    fun loadConversations(): List<Conversation> = runCatching {
-        if (!file.exists()) return emptyList()
-        json.decodeFromString(ListSerializer(Conversation.serializer()), file.readText())
+    private fun <T> load(name: String, ser: KSerializer<T>): List<T> = runCatching {
+        val f = File(dir, name)
+        if (!f.exists()) return emptyList()
+        json.decodeFromString(ListSerializer(ser), f.readText())
     }.getOrDefault(emptyList())
 
-    fun saveConversations(list: List<Conversation>) {
-        val tmp = File(file.parentFile, "conversations.json.tmp")
-        tmp.writeText(json.encodeToString(ListSerializer(Conversation.serializer()), list))
-        tmp.renameTo(file)
+    private fun <T> save(name: String, ser: KSerializer<T>, list: List<T>) {
+        val tmp = File(dir, "$name.tmp")
+        tmp.writeText(json.encodeToString(ListSerializer(ser), list))
+        tmp.renameTo(File(dir, name))
     }
+
+    fun loadConversations() = load("conversations.json", Conversation.serializer())
+    fun saveConversations(list: List<Conversation>) = save("conversations.json", Conversation.serializer(), list)
+    fun loadProjects() = load("projects.json", Project.serializer())
+    fun saveProjects(list: List<Project>) = save("projects.json", Project.serializer(), list)
 
     fun loadSettings(): Settings {
         val presets = prefs.getString("presets", null)?.let {
             runCatching { json.decodeFromString(ListSerializer(Preset.serializer()), it) }.getOrNull()
         } ?: DEFAULT_PRESETS
+        // 旧版用的 deepseek-chat / deepseek-reasoner 已经下线，自动换成新模型
+        val oldModel = prefs.getString("model", MODEL_FLASH) ?: MODEL_FLASH
+        val model = when (oldModel) {
+            "deepseek-chat", "deepseek-reasoner", "deepseek-v4-flash" -> MODEL_FLASH
+            else -> oldModel
+        }
+        val thinking = prefs.getString("thinking", null)
+            ?.let { runCatching { ThinkLevel.valueOf(it) }.getOrNull() }
+            ?: if (oldModel == "deepseek-chat") ThinkLevel.OFF else ThinkLevel.HIGH
         return Settings(
             apiKey = prefs.getString("apiKey", "") ?: "",
             tavilyKey = prefs.getString("tavilyKey", "") ?: "",
-            webSearch = prefs.getBoolean("webSearch", false),
+            webSearch = prefs.getBoolean("webSearch2", true),
             baseUrl = prefs.getString("baseUrl", DEFAULT_BASE_URL) ?: DEFAULT_BASE_URL,
-            model = prefs.getString("model", MODEL_CHAT) ?: MODEL_CHAT,
+            model = model,
+            thinking = thinking,
             temperature = prefs.getFloat("temperature", 1.0f),
             themeMode = runCatching { ThemeMode.valueOf(prefs.getString("themeMode", "SYSTEM")!!) }
                 .getOrDefault(ThemeMode.SYSTEM),
             presets = presets,
+            developerPrompt = prefs.getString("developerPrompt", "") ?: "",
+            userName = prefs.getString("userName", "") ?: "",
+            aboutMe = prefs.getString("aboutMe", "") ?: "",
+            replyStyle = prefs.getString("replyStyle", "") ?: "",
         )
     }
 
@@ -43,12 +64,17 @@ class Store(context: Context) {
         prefs.edit()
             .putString("apiKey", s.apiKey)
             .putString("tavilyKey", s.tavilyKey)
-            .putBoolean("webSearch", s.webSearch)
+            .putBoolean("webSearch2", s.webSearch)
             .putString("baseUrl", s.baseUrl)
             .putString("model", s.model)
+            .putString("thinking", s.thinking.name)
             .putFloat("temperature", s.temperature)
             .putString("themeMode", s.themeMode.name)
             .putString("presets", json.encodeToString(ListSerializer(Preset.serializer()), s.presets))
+            .putString("developerPrompt", s.developerPrompt)
+            .putString("userName", s.userName)
+            .putString("aboutMe", s.aboutMe)
+            .putString("replyStyle", s.replyStyle)
             .apply()
     }
 }

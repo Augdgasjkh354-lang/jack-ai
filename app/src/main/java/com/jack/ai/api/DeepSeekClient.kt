@@ -25,6 +25,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
+import com.jack.ai.data.ThinkLevel
 
 sealed interface StreamEvent {
     data class Text(val reasoning: String, val content: String) : StreamEvent
@@ -52,14 +53,20 @@ class DeepSeekClient {
         apiKey: String,
         model: String,
         messages: List<JsonObject>,
+        thinking: ThinkLevel,
         temperature: Float,
         tools: JsonArray? = null,
     ): Flow<StreamEvent> = flow {
         val body = buildJsonObject {
             put("model", model)
             put("stream", true)
-            // 深度思考模型不支持 temperature，传了也会被忽略
-            if (model != "deepseek-reasoner") put("temperature", temperature.toDouble())
+            put("thinking", buildJsonObject { put("type", if (thinking.effort == null) "disabled" else "enabled") })
+            if (thinking.effort != null) {
+                put("reasoning_effort", thinking.effort)
+            } else {
+                // 思考模式下 temperature 不起作用，只在不思考时传
+                put("temperature", temperature.toDouble())
+            }
             put("messages", JsonArray(messages))
             if (tools != null) put("tools", tools)
         }.toString()

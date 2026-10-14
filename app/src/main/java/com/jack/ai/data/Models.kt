@@ -5,6 +5,16 @@ import java.util.UUID
 
 fun newId(): String = UUID.randomUUID().toString()
 
+/** 图片或文件附件。图片存成手机里的 jpg，文件只保存提取出的文字。 */
+@Serializable
+data class Attachment(
+    val id: String = newId(),
+    val kind: String, // "image" 或 "file"
+    val name: String,
+    val path: String = "",
+    val text: String = "",
+)
+
 @Serializable
 data class ChatMessage(
     val id: String = newId(),
@@ -14,6 +24,9 @@ data class ChatMessage(
     val model: String = "",
     val error: String? = null,
     val searches: List<SearchRecord> = emptyList(),
+    val attachments: List<Attachment> = emptyList(),
+    /** 这条回答过程中调用工具产生的中间消息（JSON），开着工具时要原样发回给接口。 */
+    val trail: List<String> = emptyList(),
     val createdAt: Long = System.currentTimeMillis(),
 )
 
@@ -34,7 +47,18 @@ data class Conversation(
     val title: String = "新对话",
     val systemPrompt: String = "",
     val presetName: String = "",
+    val projectId: String? = null,
     val messages: List<ChatMessage> = emptyList(),
+    val updatedAt: Long = System.currentTimeMillis(),
+)
+
+/** 项目：一组对话共享同一份说明和资料。 */
+@Serializable
+data class Project(
+    val id: String = newId(),
+    val name: String,
+    val instructions: String = "",
+    val files: List<Attachment> = emptyList(),
     val updatedAt: Long = System.currentTimeMillis(),
 )
 
@@ -47,20 +71,41 @@ data class Preset(
 
 enum class ThemeMode(val label: String) { SYSTEM("跟随系统"), LIGHT("浅色"), DARK("深色") }
 
+/** DeepSeek 的思考等级：关闭，或 low / high / max。 */
+enum class ThinkLevel(val label: String, val effort: String?) {
+    OFF("不思考", null),
+    LOW("思考·低", "low"),
+    HIGH("思考·高", "high"),
+    MAX("思考·最高", "max"),
+}
+
 data class Settings(
     val apiKey: String = "",
     val tavilyKey: String = "",
-    val webSearch: Boolean = false,
+    val webSearch: Boolean = true,
     val baseUrl: String = DEFAULT_BASE_URL,
-    val model: String = MODEL_CHAT,
+    val model: String = MODEL_FLASH,
+    val thinking: ThinkLevel = ThinkLevel.HIGH,
     val temperature: Float = 1.0f,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val presets: List<Preset> = DEFAULT_PRESETS,
+    val developerPrompt: String = "",
+    val userName: String = "",
+    val aboutMe: String = "",
+    val replyStyle: String = "",
 )
 
 const val DEFAULT_BASE_URL = "https://api.deepseek.com"
-const val MODEL_CHAT = "deepseek-chat"
-const val MODEL_REASONER = "deepseek-reasoner"
+const val MODEL_FLASH = "deepseek-flash"
+const val MODEL_PRO = "deepseek-v4-pro"
+
+fun modelLabel(model: String): String = when (model) {
+    MODEL_FLASH -> "V4.1 Flash"
+    MODEL_PRO -> "V4 Pro"
+    else -> model
+}
+
+fun modelSupportsImages(model: String) = model != MODEL_PRO
 
 val DEFAULT_PRESETS = listOf(
     Preset(name = "通用助手", prompt = ""),

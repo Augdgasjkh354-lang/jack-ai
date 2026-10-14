@@ -6,6 +6,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
@@ -49,6 +50,25 @@ class TavilyClient {
                 }
             }
         }
+
+    /** 读取网页正文。 */
+    suspend fun extract(apiKey: String, url: String): String = withContext(Dispatchers.IO) {
+        val body = buildJsonObject {
+            put("urls", JsonArray(listOf(JsonPrimitive(url))))
+        }.toString()
+        val request = Request.Builder()
+            .url("https://api.tavily.com/extract")
+            .header("Authorization", "Bearer $apiKey")
+            .post(body.toRequestBody("application/json".toMediaType()))
+            .build()
+        sharedHttp.newCall(request).execute().use { resp ->
+            val text = resp.body?.string().orEmpty()
+            if (!resp.isSuccessful) throw ApiException("读取网页失败（${resp.code}）", resp.code)
+            val results = json.parseToJsonElement(text).jsonObject["results"] as? JsonArray
+            val first = results?.firstOrNull() as? JsonObject
+            first?.get("raw_content").str().ifBlank { "没能读取这个网页的内容。" }.take(30_000)
+        }
+    }
 }
 
 /** 把搜索结果整理成给模型看的文字，编号从 startIndex 开始，方便引用。 */

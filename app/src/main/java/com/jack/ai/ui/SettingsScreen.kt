@@ -4,6 +4,8 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,6 +32,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -49,15 +52,17 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jack.ai.ChatViewModel
 import com.jack.ai.data.DEFAULT_BASE_URL
-import com.jack.ai.data.MODEL_CHAT
-import com.jack.ai.data.MODEL_REASONER
+import com.jack.ai.data.MODEL_FLASH
+import com.jack.ai.data.MODEL_PRO
+import com.jack.ai.data.ThinkLevel
+import com.jack.ai.data.modelLabel
 import com.jack.ai.data.Preset
 import com.jack.ai.data.Settings
 import com.jack.ai.data.ThemeMode
 import kotlinx.coroutines.launch
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit) {
     val ctx = LocalContext.current
@@ -142,29 +147,72 @@ fun SettingsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit) {
                     },
                     modifier = Modifier.fillMaxWidth(),
                 )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("联网搜索工具", Modifier.weight(1f))
+                    Switch(
+                        checked = settings.webSearch,
+                        onCheckedChange = { on -> vm.updateSettings { it.copy(webSearch = on) } },
+                    )
+                }
                 Text(
-                    "填好后，在聊天页打开「联网搜索」，AI 会在需要最新信息时自己去搜，并标出来源。",
+                    "开着时，AI 会在需要最新信息时自己联网搜索、读网页，并标出来源；闲聊不会乱搜。Key 在 app.tavily.com 获取。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 
             // ---- 模型 ----
-            Section("默认模型") {
+            Section("模型和思考") {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = settings.model == MODEL_CHAT,
-                        onClick = { vm.updateSettings { it.copy(model = MODEL_CHAT) } },
-                        label = { Text("普通对话") },
-                    )
-                    FilterChip(
-                        selected = settings.model == MODEL_REASONER,
-                        onClick = { vm.updateSettings { it.copy(model = MODEL_REASONER) } },
-                        label = { Text("深度思考") },
-                    )
+                    listOf(MODEL_FLASH, MODEL_PRO).forEach { m ->
+                        FilterChip(
+                            selected = settings.model == m,
+                            onClick = { vm.updateSettings { it.copy(model = m) } },
+                            label = { Text(modelLabel(m)) },
+                        )
+                    }
                 }
                 Text(
-                    "普通对话：快、便宜，适合日常聊天。深度思考：先想再答，适合数学、编程、复杂问题。聊天页输入框上方也能随时切换。",
+                    "V4.1 Flash：快、便宜，能看图片。V4 Pro：更聪明，适合难题，但不能看图、价格约 4 倍。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ThinkLevel.entries.forEach { lv ->
+                        FilterChip(
+                            selected = settings.thinking == lv,
+                            onClick = { vm.updateSettings { it.copy(thinking = lv) } },
+                            label = { Text(lv.label) },
+                        )
+                    }
+                }
+                Text(
+                    "思考越深，回答越慢、越贵，但难题答得更好。聊天页输入框上方也能随时切换。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            // ---- 个性化 ----
+            Section("个性化") {
+                SettingField("怎么称呼你", settings.userName, "例如：Jack") { v ->
+                    vm.updateSettings { it.copy(userName = v) }
+                }
+                SettingField("关于你", settings.aboutMe, "职业、兴趣、所在城市、正在做的事…AI 会参考这些来回答", minLines = 3) { v ->
+                    vm.updateSettings { it.copy(aboutMe = v) }
+                }
+                SettingField("希望 AI 怎么回答", settings.replyStyle, "例如：简洁直接、先给结论、用中文、像朋友一样说话", minLines = 3) { v ->
+                    vm.updateSettings { it.copy(replyStyle = v) }
+                }
+            }
+
+            // ---- 开发者提示词 ----
+            Section("开发者提示词（最高优先级）") {
+                SettingField("", settings.developerPrompt, "写在这里的规则对所有对话生效，优先级高于人设、项目说明和你发的消息。", minLines = 4) { v ->
+                    vm.updateSettings { it.copy(developerPrompt = v) }
+                }
+                Text(
+                    "适合放「必须遵守」的硬规则，比如：永远用中文回答；不确定的事要明说；回答末尾给出下一步建议。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -178,7 +226,7 @@ fun SettingsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit) {
                     valueRange = 0f..1.5f,
                 )
                 Text(
-                    "越低越严谨稳定（适合代码、数学），越高越有创意（适合写作、聊天）。默认 1.0。深度思考模式不受影响。",
+                    "越低越严谨稳定，越高越有创意。默认 1.0。只在「不思考」时起作用。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -266,6 +314,27 @@ fun SettingsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit) {
             dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("取消") } },
         )
     }
+}
+
+@Composable
+private fun SettingField(
+    label: String,
+    value: String,
+    placeholder: String,
+    minLines: Int = 1,
+    onChange: (String) -> Unit,
+) {
+    var text by remember { mutableStateOf(value) }
+    OutlinedTextField(
+        value = text,
+        onValueChange = { text = it; onChange(it) },
+        label = if (label.isNotEmpty()) ({ Text(label) }) else null,
+        placeholder = { Text(placeholder) },
+        singleLine = minLines == 1,
+        minLines = minLines,
+        maxLines = if (minLines == 1) 1 else 10,
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 @Composable

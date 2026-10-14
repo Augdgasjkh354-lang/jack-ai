@@ -73,4 +73,6 @@ dependencies {
     implementation("io.noties.markwon:ext-latex:4.6.2")
     implementation("io.noties.markwon:inline-parser:4.6.2")
     implementation("io.noties.markwon:linkify:4.6.2")
+
+    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
 }
