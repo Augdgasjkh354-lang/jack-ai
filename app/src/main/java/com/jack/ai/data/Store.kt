@@ -38,6 +38,66 @@ class Store(context: Context) {
     fun loadDreams() = load("dreams.json", DreamEntry.serializer())
     fun saveDreams(list: List<DreamEntry>) = save("dreams.json", DreamEntry.serializer(), list)
 
+    fun loadUsage() = load("usage.json", UsageDay.serializer())
+
+    /** 记一笔用量（按天、按模型累加）。 */
+    fun addUsage(model: String, prompt: Int, cacheHit: Int, completion: Int) = synchronized(LOCK) {
+        val date = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
+        val list = loadUnlocked("usage.json", UsageDay.serializer()).toMutableList()
+        val i = list.indexOfFirst { it.date == date && it.model == model }
+        val old = if (i >= 0) list[i] else UsageDay(date, model)
+        val new = old.copy(
+            prompt = old.prompt + prompt, cacheHit = old.cacheHit + cacheHit,
+            completion = old.completion + completion, requests = old.requests + 1,
+        )
+        if (i >= 0) list[i] = new else list += new
+        val tmp = File(dir, "usage.json.tmp")
+        tmp.writeText(json.encodeToString(ListSerializer(UsageDay.serializer()), list.takeLast(800)))
+        tmp.renameTo(File(dir, "usage.json"))
+        Unit
+    }
+
+    /** 备份用：导出全部设置（不含两个 Key）。 */
+    fun exportPrefs(): String {
+        val obj = kotlinx.serialization.json.buildJsonObject {
+            prefs.all.forEach { (k, v) ->
+                if (k == "apiKey" || k == "tavilyKey") return@forEach
+                val e = when (v) {
+                    is Boolean -> kotlinx.serialization.json.JsonPrimitive(v)
+                    is Number -> kotlinx.serialization.json.JsonPrimitive(v)
+                    is String -> kotlinx.serialization.json.JsonPrimitive(v)
+                    is Set<*> -> kotlinx.serialization.json.JsonArray(v.map { kotlinx.serialization.json.JsonPrimitive(it.toString()) })
+                    else -> return@forEach
+                }
+                val t = when (v) { is Boolean -> "b"; is Int -> "i"; is Long -> "l"; is Float -> "f"; is String -> "s"; else -> "set" }
+                put(k, kotlinx.serialization.json.buildJsonObject { put("t", kotlinx.serialization.json.JsonPrimitive(t)); put("v", e) })
+            }
+        }
+        return obj.toString()
+    }
+
+    fun importPrefs(text: String) {
+        val obj = Json.parseToJsonElement(text) as? kotlinx.serialization.json.JsonObject ?: return
+        val ed = prefs.edit()
+        obj.forEach { (k, el) ->
+            val o = el as? kotlinx.serialization.json.JsonObject ?: return@forEach
+            val t = (o["t"] as? kotlinx.serialization.json.JsonPrimitive)?.content
+            val v = o["v"] ?: return@forEach
+            val p = v as? kotlinx.serialization.json.JsonPrimitive
+            when (t) {
+                "b" -> p?.content?.toBooleanStrictOrNull()?.let { ed.putBoolean(k, it) }
+                "i" -> p?.content?.toIntOrNull()?.let { ed.putInt(k, it) }
+                "l" -> p?.content?.toLongOrNull()?.let { ed.putLong(k, it) }
+                "f" -> p?.content?.toFloatOrNull()?.let { ed.putFloat(k, it) }
+                "s" -> p?.content?.let { ed.putString(k, it) }
+                "set" -> (v as? kotlinx.serialization.json.JsonArray)?.let { a ->
+                    ed.putStringSet(k, a.mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }.toSet())
+                }
+            }
+        }
+        ed.apply()
+    }
+
     var lastDreamAt: Long
         get() = prefs.getLong("lastDreamAt", 0L)
         set(v) { prefs.edit().putLong("lastDreamAt", v).apply() }
@@ -77,6 +137,9 @@ class Store(context: Context) {
             customSkills = prefs.getString("customSkills", null)?.let {
                 runCatching { json.decodeFromString(ListSerializer(Skill.serializer()), it) }.getOrNull()
             } ?: emptyList(),
+            fontScale = prefs.getFloat("fontScale", 1f),
+            accent = prefs.getString("accent", "clay") ?: "clay",
+            appLock = prefs.getBoolean("appLock", false),
         )
     }
 
@@ -100,6 +163,9 @@ class Store(context: Context) {
             .putString("replyStyle", s.replyStyle)
             .putStringSet("disabledSkills", s.disabledSkills)
             .putString("customSkills", json.encodeToString(ListSerializer(Skill.serializer()), s.customSkills))
+            .putFloat("fontScale", s.fontScale)
+            .putString("accent", s.accent)
+            .putBoolean("appLock", s.appLock)
             .apply()
     }
 }

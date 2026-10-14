@@ -122,7 +122,7 @@ object Dreamer {
             append("\n【上次整理以来的聊天】")
             append(transcript.take(400_000))
         }
-        val client = DeepSeekClient()
+        val client = DeepSeekClient(store::addUsage)
         val raw = client.complete(
             settings.baseUrl, settings.apiKey, MODEL_FLASH,
             listOf(

@@ -235,6 +235,12 @@ fun AssistantMessage(
                         Toast.makeText(ctx, "已复制", Toast.LENGTH_SHORT).show()
                     }
                 }
+                if (msg.content.isNotEmpty()) {
+                    val speaking = Speaker.speakingId == msg.id
+                    SmallAction(if (speaking) AppIcons.Stop else AppIcons.Speaker, if (speaking) "停止朗读" else "朗读") {
+                        Speaker.toggle(ctx, msg.id, msg.content)
+                    }
+                }
                 if (isLast) SmallAction(Icons.Default.Refresh, "重新回答", onRegenerate)
                 if (isLast && onReview != null && msg.content.isNotEmpty()) {
                     TextButton(onClick = onReview, modifier = Modifier.height(32.dp),

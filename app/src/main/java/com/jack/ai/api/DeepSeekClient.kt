@@ -32,7 +32,7 @@ sealed interface StreamEvent {
     /** 工具调用是分片流式返回的，按 index 拼起来。 */
     data class ToolCall(val index: Int, val id: String, val name: String, val arguments: String) : StreamEvent
     /** 本次请求用掉的 token（最后一个数据块里返回）。 */
-    data class Usage(val promptTokens: Int, val completionTokens: Int) : StreamEvent
+    data class Usage(val promptTokens: Int, val completionTokens: Int, val cacheHit: Int = 0) : StreamEvent
 }
 
 class ApiException(message: String, val code: Int = 0) : Exception(message)
@@ -46,7 +46,10 @@ internal val sharedHttp: OkHttpClient = OkHttpClient.Builder()
     .writeTimeout(30, TimeUnit.SECONDS)
     .build()
 
-class DeepSeekClient {
+class DeepSeekClient(
+    /** 非流式请求的用量回调：模型、输入、缓存命中、输出。 */
+    private val onUsage: ((String, Int, Int, Int) -> Unit)? = null,
+) {
     private val http = sharedHttp
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -96,7 +99,8 @@ class DeepSeekClient {
                 (obj["usage"] as? JsonObject)?.let { u ->
                     val p = (u["prompt_tokens"] as? JsonPrimitive)?.intOrNull ?: 0
                     val c = (u["completion_tokens"] as? JsonPrimitive)?.intOrNull ?: 0
-                    if (p > 0) emit(StreamEvent.Usage(p, c))
+                    val h = (u["prompt_cache_hit_tokens"] as? JsonPrimitive)?.intOrNull ?: 0
+                    if (p > 0) emit(StreamEvent.Usage(p, c, h))
                 }
                 val choice = obj["choices"]?.jsonArray?.firstOrNull()?.jsonObject ?: continue
                 val delta = choice["delta"] as? JsonObject ?: continue
@@ -148,6 +152,10 @@ class DeepSeekClient {
             val text = resp.body?.string()
             if (!resp.isSuccessful) throw ApiException(describeError(resp.code, text), resp.code)
             val obj = json.parseToJsonElement(text ?: "{}").jsonObject
+            (obj["usage"] as? JsonObject)?.let { u ->
+                fun n(k: String) = (u[k] as? JsonPrimitive)?.intOrNull ?: 0
+                onUsage?.invoke(model, n("prompt_tokens"), n("prompt_cache_hit_tokens"), n("completion_tokens"))
+            }
             val msg = obj["choices"]?.jsonArray?.firstOrNull()?.jsonObject?.get("message") as? JsonObject
             msg?.get("content").str().ifBlank { throw ApiException("模型没有返回内容") }
         }

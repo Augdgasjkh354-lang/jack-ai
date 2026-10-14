@@ -56,6 +56,8 @@ data class Conversation(
     val summaryUntilId: String? = null,
     /** 最近一次请求实际用掉的上下文 token 数（接口返回）。 */
     val lastPromptTokens: Int = 0,
+    /** 这个对话累计用掉的 token。 */
+    val spentTokens: Long = 0,
     val updatedAt: Long = System.currentTimeMillis(),
 )
 
@@ -125,7 +127,33 @@ data class Settings(
     /** 关掉的内置 skill（联网搜索的开关仍然是 webSearch）。 */
     val disabledSkills: Set<String> = emptySet(),
     val customSkills: List<Skill> = emptyList(),
+    /** 字体缩放、主题色、应用锁。 */
+    val fontScale: Float = 1f,
+    val accent: String = "clay",
+    val appLock: Boolean = false,
 )
+
+/** 每天每个模型用了多少 token。 */
+@Serializable
+data class UsageDay(
+    val date: String,
+    val model: String,
+    val prompt: Long = 0,
+    val cacheHit: Long = 0,
+    val completion: Long = 0,
+    val requests: Int = 0,
+)
+
+/** 参考价（美元 / 百万 token）：缓存命中输入、未命中输入、输出。 */
+fun modelPrice(model: String): Triple<Double, Double, Double> = when (model) {
+    MODEL_PRO -> Triple(0.145, 1.74, 3.48)
+    else -> Triple(0.0028, 0.14, 0.28)
+}
+
+fun UsageDay.cost(): Double {
+    val (hit, miss, out) = modelPrice(model)
+    return (cacheHit * hit + (prompt - cacheHit).coerceAtLeast(0) * miss + completion * out) / 1_000_000.0
+}
 
 const val DEFAULT_BASE_URL = "https://api.deepseek.com"
 const val MODEL_FLASH = "deepseek-flash"

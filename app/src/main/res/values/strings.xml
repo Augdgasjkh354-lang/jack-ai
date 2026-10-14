@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Jack AI</string>
+    <string name="widget_desc">桌面上直接问 Jack AI</string>
 </resources>

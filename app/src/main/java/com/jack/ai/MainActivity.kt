@@ -1,55 +1,147 @@
 package com.jack.ai
 
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.widget.Toast
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_WEAK
+import androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
+import androidx.biometric.BiometricPrompt
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.jack.ai.data.Project
 import com.jack.ai.ui.ChatScreen
 import com.jack.ai.ui.JackTheme
+import com.jack.ai.ui.LockScreen
 import com.jack.ai.ui.MemoryScreen
 import com.jack.ai.ui.ProjectScreen
 import com.jack.ai.ui.RenameDialog
 import com.jack.ai.ui.SettingsScreen
 import com.jack.ai.ui.SkillsScreen
+import com.jack.ai.ui.UsageScreen
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 
 sealed interface Screen {
     data object Settings : Screen
     data object Memory : Screen
     data object Skills : Screen
+    data object Usage : Screen
     data class ProjectPage(val id: String) : Screen
 }
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
     private val vm: ChatViewModel by viewModels()
+
+    /** 开了应用锁时，是否需要解锁。 */
+    private var locked by mutableStateOf(false)
+    private val stack = mutableStateListOf<Screen>()
+
+    override fun onStart() {
+        super.onStart()
+        // 离开超过 30 秒再回来，重新上锁
+        if (vm.state.value.settings.appLock && (lastActive == 0L || SystemClock.elapsedRealtime() - lastActive > 30_000)) {
+            locked = true
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (!locked) lastActive = SystemClock.elapsedRealtime()
+    }
 
     override fun onResume() {
         super.onResume()
         // 后台做梦可能更新了记忆
         vm.reloadMemory()
+        if (locked) unlock()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent?) {
+        when (intent?.action) {
+            ACTION_NEW_CHAT -> { stack.clear(); vm.newChat() }
+            ACTION_VOICE -> { stack.clear(); vm.newChat(); vm.requestVoice() }
+            Intent.ACTION_SEND -> {
+                stack.clear()
+                val uri = streamExtra(intent)
+                vm.handleShare(
+                    listOfNotNull(intent.getStringExtra(Intent.EXTRA_SUBJECT), intent.getStringExtra(Intent.EXTRA_TEXT))
+                        .joinToString("\n").takeIf { it.isNotBlank() },
+                    listOfNotNull(uri),
+                    intent.type,
+                )
+            }
+            Intent.ACTION_SEND_MULTIPLE -> {
+                stack.clear()
+                vm.handleShare(null, streamListExtra(intent), intent.type)
+            }
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun streamExtra(intent: Intent): Uri? =
+        if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        else intent.getParcelableExtra(Intent.EXTRA_STREAM)
+
+    @Suppress("DEPRECATION")
+    private fun streamListExtra(intent: Intent): List<Uri> =
+        (if (Build.VERSION.SDK_INT >= 33) intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        else intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM)).orEmpty()
+
+    fun canLock(): Boolean =
+        BiometricManager.from(this).canAuthenticate(BIOMETRIC_WEAK or DEVICE_CREDENTIAL) == BiometricManager.BIOMETRIC_SUCCESS
+
+    private var prompting = false
+
+    fun unlock() {
+        if (prompting) return
+        if (!canLock()) { locked = false; return }
+        prompting = true
+        val prompt = BiometricPrompt(this, ContextCompat.getMainExecutor(this), object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                prompting = false
+                locked = false
+                lastActive = SystemClock.elapsedRealtime()
+            }
+
+            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                prompting = false
+            }
+        })
+        prompt.authenticate(
+            BiometricPrompt.PromptInfo.Builder()
+                .setTitle("解锁 Jack AI")
+                .setAllowedAuthenticators(BIOMETRIC_WEAK or DEVICE_CREDENTIAL)
+                .build(),
+        )
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         PDFBoxResourceLoader.init(applicationContext)
         enableEdgeToEdge()
+        if (vm.state.value.settings.apiKey.isBlank() && savedInstanceState == null) stack.add(Screen.Settings)
+        if (savedInstanceState == null) handleIntent(intent)
         setContent {
             val state by vm.state.collectAsStateWithLifecycle()
-            // 聊天页是底，其他页面叠在上面
-            val stack = remember {
-                mutableStateListOf<Screen>().apply { if (state.settings.apiKey.isBlank()) add(Screen.Settings) }
-            }
             var creatingProject by remember { mutableStateOf(false) }
 
             LaunchedEffect(state.toast) {
@@ -59,9 +151,13 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            JackTheme(state.settings.themeMode) {
+            JackTheme(state.settings.themeMode, state.settings.accent, state.settings.fontScale) {
+                if (locked && state.settings.appLock) {
+                    LockScreen(onUnlock = ::unlock)
+                } else {
                 val top = stack.lastOrNull()
-                if (top != null) BackHandler { stack.removeAt(stack.lastIndex) }
+                val back: () -> Unit = { if (stack.isNotEmpty()) stack.removeAt(stack.lastIndex) }
+                if (top != null) BackHandler(onBack = back)
                 when (top) {
                     null -> ChatScreen(
                         vm = vm,
@@ -72,19 +168,22 @@ class MainActivity : ComponentActivity() {
                         onOpenMemory = { stack.add(Screen.Memory) },
                         onOpenSkills = { stack.add(Screen.Skills) },
                     )
-                    Screen.Skills -> SkillsScreen(vm = vm, settings = state.settings, onBack = { stack.removeAt(stack.lastIndex) })
-                    Screen.Memory -> MemoryScreen(vm = vm, state = state, onBack = { stack.removeAt(stack.lastIndex) })
+                    Screen.Memory -> MemoryScreen(vm = vm, state = state, onBack = back)
+                    Screen.Skills -> SkillsScreen(vm = vm, settings = state.settings, onBack = back)
+                    Screen.Usage -> UsageScreen(vm = vm, state = state, onBack = back)
                     Screen.Settings -> SettingsScreen(
                         vm = vm,
                         settings = state.settings,
-                        onBack = { stack.removeAt(stack.lastIndex) },
+                        onBack = back,
                         onOpenSkills = { stack.add(Screen.Skills) },
+                        onOpenUsage = { stack.add(Screen.Usage) },
+                        canLock = ::canLock,
                     )
                     is Screen.ProjectPage -> ProjectScreen(
                         vm = vm,
                         state = state,
                         projectId = top.id,
-                        onBack = { if (stack.isNotEmpty()) stack.removeAt(stack.lastIndex) },
+                        onBack = back,
                         onOpenChat = { stack.clear() },
                     )
                 }
@@ -96,7 +195,16 @@ class MainActivity : ComponentActivity() {
                         stack.add(Screen.ProjectPage(p.id))
                     }
                 }
+                }
             }
         }
+    }
+
+    companion object {
+        /** 最后一次在前台（已解锁）的时间，跨页面重建保留。 */
+        private var lastActive = 0L
+
+        const val ACTION_NEW_CHAT = "com.jack.ai.NEW_CHAT"
+        const val ACTION_VOICE = "com.jack.ai.VOICE"
     }
 }

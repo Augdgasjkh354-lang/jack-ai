@@ -1,5 +1,14 @@
 package com.jack.ai.ui
 
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.draw.clip
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
@@ -65,7 +74,14 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun SettingsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit, onOpenSkills: () -> Unit) {
+fun SettingsScreen(
+    vm: ChatViewModel,
+    settings: Settings,
+    onBack: () -> Unit,
+    onOpenSkills: () -> Unit,
+    onOpenUsage: () -> Unit,
+    canLock: () -> Boolean,
+) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var keyInput by remember { mutableStateOf(settings.apiKey) }
@@ -74,6 +90,13 @@ fun SettingsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit, on
     var editing by remember { mutableStateOf<Preset?>(null) }
     var confirmClear by remember { mutableStateOf(false) }
     var editingDev by remember { mutableStateOf(false) }
+    var confirmRestore by remember { mutableStateOf<android.net.Uri?>(null) }
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+        uri?.let { vm.exportBackup(it) }
+    }
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        confirmRestore = uri
+    }
 
     Scaffold(
         topBar = {
@@ -257,6 +280,74 @@ fun SettingsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit, on
                         )
                     }
                 }
+                Text("主题色", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ACCENTS.forEach { a ->
+                        val sel = settings.accent == a.id
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.clickable { vm.updateSettings { it.copy(accent = a.id) } },
+                        ) {
+                            Box(
+                                Modifier
+                                    .size(36.dp)
+                                    .clip(androidx.compose.foundation.shape.CircleShape)
+                                    .background(androidx.compose.ui.graphics.Color(a.light.first))
+                                    .then(
+                                        if (sel) Modifier.border(3.dp, MaterialTheme.colorScheme.onSurface,
+                                            androidx.compose.foundation.shape.CircleShape) else Modifier,
+                                    ),
+                            )
+                            Text(a.label, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 4.dp))
+                        }
+                    }
+                }
+                Text("字体大小（${(settings.fontScale * 100).toInt()}%）", style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                var scale by remember { mutableStateOf(settings.fontScale) }
+                Slider(
+                    value = scale,
+                    onValueChange = { scale = it },
+                    onValueChangeFinished = { vm.updateSettings { s -> s.copy(fontScale = scale) } },
+                    valueRange = 0.85f..1.3f,
+                    steps = 8,
+                )
+            }
+
+            // ---- 隐私和数据 ----
+            Section("隐私和数据") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("应用锁")
+                        Text("打开 App 时要用指纹、面容或锁屏密码解锁", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(
+                        checked = settings.appLock,
+                        onCheckedChange = { on ->
+                            if (on && !canLock()) {
+                                Toast.makeText(ctx, "请先在手机设置里设置锁屏密码或指纹", Toast.LENGTH_LONG).show()
+                            } else {
+                                vm.updateSettings { it.copy(appLock = on) }
+                            }
+                        },
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = onOpenUsage) { Text("用量统计") }
+                    OutlinedButton(onClick = {
+                        val date = java.text.SimpleDateFormat("yyyyMMdd", Locale.US).format(java.util.Date())
+                        exportLauncher.launch("JackAI备份-$date.zip")
+                    }) { Text("备份") }
+                    OutlinedButton(onClick = { importLauncher.launch(arrayOf("application/zip", "application/octet-stream")) }) {
+                        Text("恢复")
+                    }
+                }
+                Text(
+                    "备份包含聊天记录、项目、记忆、梦、技能和设置，不包含两个 API Key。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
 
             // ---- 人设 ----
@@ -354,6 +445,17 @@ fun SettingsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit, on
         )
     }
 
+    confirmRestore?.let { uri ->
+        AlertDialog(
+            onDismissRequest = { confirmRestore = null },
+            title = { Text("从备份恢复？") },
+            text = { Text("现在手机上的聊天记录、项目、记忆和设置会被备份里的内容替换。") },
+            confirmButton = {
+                TextButton(onClick = { vm.importBackup(uri); confirmRestore = null }) { Text("恢复") }
+            },
+            dismissButton = { TextButton(onClick = { confirmRestore = null }) { Text("取消") } },
+        )
+    }
     if (confirmClear) {
         AlertDialog(
             onDismissRequest = { confirmClear = false },

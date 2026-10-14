@@ -1,5 +1,8 @@
 package com.jack.ai.ui
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.speech.RecognizerIntent
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -56,6 +59,7 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -101,6 +105,13 @@ fun ChatScreen(
     val ctx = LocalContext.current
     var text by rememberSaveable { mutableStateOf("") }
     val bg = MaterialTheme.colorScheme.background
+    // 分享进来或语音识别的文字，接到输入框后面
+    LaunchedEffect(state.incomingText) {
+        state.incomingText?.let { t ->
+            text = if (text.isBlank()) t else text.trimEnd() + " " + t
+            vm.consumeIncomingText()
+        }
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -395,6 +406,18 @@ private fun SummaryDivider(summary: String) {
     }
 }
 
+private fun startVoiceIntent(ctx: android.content.Context, launcher: androidx.activity.result.ActivityResultLauncher<Intent>) {
+    val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+        .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+        .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
+        .putExtra(RecognizerIntent.EXTRA_PROMPT, "请说话")
+    try {
+        launcher.launch(intent)
+    } catch (e: ActivityNotFoundException) {
+        Toast.makeText(ctx, "手机没有语音识别服务，可以用输入法自带的语音输入", Toast.LENGTH_LONG).show()
+    }
+}
+
 @Composable
 private fun InputBar(
     vm: ChatViewModel,
@@ -415,7 +438,17 @@ private fun InputBar(
     val pickFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) {
         vm.addFiles(it)
     }
-
+    val ctx = LocalContext.current
+    val speech = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
+        r.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.let { vm.receiveText(it) }
+    }
+    LaunchedEffect(state.voiceRequest) {
+        if (state.voiceRequest) {
+            vm.consumeVoiceRequest()
+            startVoiceIntent(ctx, speech)
+        }
+    }
+    fun startVoice() = startVoiceIntent(ctx, speech)
     Column(
         Modifier
             .fillMaxWidth()
@@ -570,6 +603,12 @@ private fun InputBar(
                         Surface(onClick = vm::stop, shape = CircleShape, color = colors.onSurface, modifier = Modifier.size(38.dp)) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(AppIcons.Stop, "停止", Modifier.size(16.dp), tint = colors.surface)
+                            }
+                        }
+                    } else if (text.isBlank() && state.pending.isEmpty()) {
+                        Surface(onClick = { startVoice() }, shape = CircleShape, color = colors.primaryContainer, modifier = Modifier.size(38.dp)) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(AppIcons.Mic, "语音输入", Modifier.size(20.dp), tint = colors.onPrimaryContainer)
                             }
                         }
                     } else {

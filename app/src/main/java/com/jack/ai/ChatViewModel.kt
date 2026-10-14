@@ -12,6 +12,8 @@ import com.jack.ai.api.formatResultsForModel
 import com.jack.ai.api.toSources
 import com.jack.ai.data.Attachment
 import com.jack.ai.data.Attachments
+import com.jack.ai.data.Backup
+import com.jack.ai.data.UsageDay
 import com.jack.ai.data.ChatMessage
 import com.jack.ai.data.Compression
 import com.jack.ai.data.Conversation
@@ -75,6 +77,10 @@ data class UiState(
     val memories: List<MemoryItem> = emptyList(),
     val dreams: List<DreamEntry> = emptyList(),
     val dreaming: Boolean = false,
+    /** 从别的 App 分享进来、或语音识别出来的文字，等输入框取走。 */
+    val incomingText: String? = null,
+    /** 桌面小组件点了话筒，等输入框打开语音识别。 */
+    val voiceRequest: Boolean = false,
 ) {
     val current: Conversation? get() = conversations.firstOrNull { it.id == currentId }
     val currentProjectId: String? get() = current?.projectId ?: if (currentId == null) draftProjectId else null
@@ -83,7 +89,7 @@ data class UiState(
 
 class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val store = Store(app)
-    private val client = DeepSeekClient()
+    private val client = DeepSeekClient(store::addUsage)
     private val tavily = TavilyClient()
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state.asStateFlow()
@@ -519,7 +525,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                                     }
                                     is StreamEvent.Usage -> {
                                         val total = ev.promptTokens + ev.completionTokens
-                                        updateConvQuiet(convId) { it.copy(lastPromptTokens = total) }
+                                        updateConvQuiet(convId) { it.copy(lastPromptTokens = total, spentTokens = it.spentTokens + total) }
+                                        launch(Dispatchers.IO) { store.addUsage(model, ev.promptTokens, ev.cacheHit, ev.completionTokens) }
                                     }
                                     is StreamEvent.ToolCall -> {
                                         val acc = calls.getOrPut(ev.index) { ToolAcc() }
@@ -679,6 +686,68 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // ---------- 记忆与梦 ----------
+
+    // ---------- 分享进来、备份、用量 ----------
+
+    fun receiveText(text: String) = _state.update { it.copy(incomingText = text) }
+    fun consumeIncomingText() = _state.update { it.copy(incomingText = null) }
+    fun requestVoice() = _state.update { it.copy(voiceRequest = true) }
+    fun consumeVoiceRequest() = _state.update { it.copy(voiceRequest = false) }
+
+    /** 别的 App 分享过来的内容：开一个新对话，文字放进输入框，图片和文件作为附件。 */
+    fun handleShare(text: String?, uris: List<Uri>, mime: String?) {
+        if (_state.value.streaming) stop()
+        newChat()
+        if (!text.isNullOrBlank()) receiveText(text)
+        if (uris.isNotEmpty()) {
+            if (mime?.startsWith("image/") == true) addImages(uris) else addFiles(uris)
+        }
+    }
+
+    fun exportBackup(uri: Uri) {
+        viewModelScope.launch {
+            val msg = try {
+                withContext(Dispatchers.IO) {
+                    getApplication<Application>().contentResolver.openOutputStream(uri)?.use {
+                        Backup.export(getApplication<Application>(), it)
+                    } ?: throw IOException("没法写入这个位置")
+                }
+                "备份好了"
+            } catch (e: Exception) {
+                "备份失败：${e.message}"
+            }
+            _state.update { it.copy(toast = msg) }
+        }
+    }
+
+    fun importBackup(uri: Uri) {
+        stop()
+        viewModelScope.launch {
+            val msg = try {
+                withContext(ioSerial) {
+                    getApplication<Application>().contentResolver.openInputStream(uri)?.use {
+                        Backup.import(getApplication<Application>(), it)
+                    } ?: throw IOException("打不开这个文件")
+                }
+                val keys = _state.value.settings.let { it.apiKey to it.tavilyKey }
+                val s = store.loadSettings().copy(apiKey = keys.first, tavilyKey = keys.second)
+                store.saveSettings(s)
+                _state.value = UiState(
+                    conversations = store.loadConversations().sortedByDescending { it.updatedAt },
+                    projects = store.loadProjects().sortedByDescending { it.updatedAt },
+                    settings = s,
+                    memories = store.loadMemories(),
+                    dreams = store.loadDreams(),
+                )
+                "已恢复备份"
+            } catch (e: Exception) {
+                "恢复失败：${e.message}"
+            }
+            _state.update { it.copy(toast = msg) }
+        }
+    }
+
+    suspend fun loadUsage(): List<UsageDay> = withContext(Dispatchers.IO) { store.loadUsage() }
 
     fun reloadMemory() {
         viewModelScope.launch(Dispatchers.IO) {

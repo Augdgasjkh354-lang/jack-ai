@@ -8,6 +8,9 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -97,12 +100,37 @@ fun isDark(mode: ThemeMode): Boolean = when (mode) {
     ThemeMode.DARK -> true
 }
 
+/** 可选主题色：名字、浅色模式 (主色, 浅底, 深字)、深色模式 (主色, 深底, 浅字)。 */
+data class Accent(val id: String, val label: String, val light: Triple<Long, Long, Long>, val dark: Triple<Long, Long, Long>)
+
+val ACCENTS = listOf(
+    Accent("clay", "陶土", Triple(0xFFC4673F, 0xFFF6E2D7, 0xFF5A2610), Triple(0xFFE59069, 0xFF55301F, 0xFFFADBCB)),
+    Accent("ocean", "海蓝", Triple(0xFF2F6FB0, 0xFFDCE8F5, 0xFF0F3157), Triple(0xFF8DB8E8, 0xFF1F3B5C, 0xFFD6E6F7)),
+    Accent("pine", "松绿", Triple(0xFF3E7D5E, 0xFFDCEDE3, 0xFF143826), Triple(0xFF8CC4A5, 0xFF1F4231, 0xFFD3EDDF)),
+    Accent("plum", "紫藤", Triple(0xFF7B5BA6, 0xFFEAE1F4, 0xFF331F4D), Triple(0xFFC0A6E3, 0xFF3D2E55, 0xFFEDE3F8)),
+    Accent("rose", "玫瑰", Triple(0xFFB5506A, 0xFFF6DEE4, 0xFF4F1424), Triple(0xFFE893A8, 0xFF5A2734, 0xFFF9DCE3)),
+    Accent("ink", "墨黑", Triple(0xFF3A3632, 0xFFE8E3DC, 0xFF1C1A17), Triple(0xFFD9D2C8, 0xFF3A3632, 0xFFF2EEE8)),
+)
+
 @Composable
-fun JackTheme(mode: ThemeMode, content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = if (isDark(mode)) DarkColors else LightColors,
-        shapes = AppShapes,
-        typography = AppTypography,
-        content = content,
+fun JackTheme(mode: ThemeMode, accent: String = "clay", fontScale: Float = 1f, content: @Composable () -> Unit) {
+    val dark = isDark(mode)
+    val a = ACCENTS.firstOrNull { it.id == accent } ?: ACCENTS.first()
+    val (p, c, on) = if (dark) a.dark else a.light
+    val base = if (dark) DarkColors else LightColors
+    val colors = base.copy(
+        primary = Color(p),
+        onPrimary = if (dark) Color(0xFF1C1B19) else Color.White,
+        primaryContainer = Color(c),
+        onPrimaryContainer = Color(on),
     )
+    val density = LocalDensity.current
+    CompositionLocalProvider(LocalDensity provides Density(density.density, density.fontScale * fontScale)) {
+        MaterialTheme(
+            colorScheme = colors,
+            shapes = AppShapes,
+            typography = AppTypography,
+            content = content,
+        )
+    }
 }

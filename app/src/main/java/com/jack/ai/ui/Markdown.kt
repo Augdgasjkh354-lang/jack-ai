@@ -10,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import io.noties.markwon.AbstractMarkwonPlugin
 import io.noties.markwon.Markwon
@@ -89,7 +90,7 @@ fun MarkdownText(
     val ctx = LocalContext.current
     val argb = color.toArgb()
     val bg = codeBackground.toArgb()
-    val px = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, textSizeSp, ctx.resources.displayMetrics)
+    val px = with(androidx.compose.ui.platform.LocalDensity.current) { textSizeSp.sp.toPx() }
     val markwon = remember(argb, bg, px) { buildMarkwon(ctx, argb, bg, px) }
     AndroidView(
         modifier = modifier,
@@ -97,13 +98,13 @@ fun MarkdownText(
             TextView(c).apply {
                 setTextIsSelectable(true)
                 movementMethod = LinkMovementMethod.getInstance()
-                setLineSpacing(0f, 1.15f)
+                setLineSpacing(0f, 1.3f)
             }
         },
         update = { tv ->
             tv.setTextColor(argb)
             tv.setLinkTextColor(argb)
-            tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, textSizeSp)
+            tv.setTextSize(TypedValue.COMPLEX_UNIT_PX, px)
             markwon.setMarkdown(tv, normalizeLatex(markdown))
         },
     )
