@@ -73,8 +73,7 @@ fun LibraryScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
         ) {
             item {
                 Text(
-                    "把书、笔记、合同、课件放进来（PDF、Word、文本、Markdown），AI 就能随时查阅。" +
-                        "直接问它“我那本书里关于…是怎么说的”就行。资料只存在你手机里，提问时只把相关的几段发给 AI。",
+                    "把书、笔记、课件放进来（PDF、Word、文本、Markdown），直接问“那本书里关于…怎么说”。资料只存在手机里，提问时只发送相关段落。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -160,7 +159,7 @@ fun ReviewScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
             val totalDue = state.cards.count { it.due <= now }
             item {
                 Text(
-                    "在学习模式下和 AI 学完一个主题，它会把重点做成卡片。按时复习，记得越牢，下次间隔越长。",
+                    "学完一个主题，AI 会把重点做成卡片。记得越牢，复习间隔越长。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

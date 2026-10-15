@@ -84,13 +84,13 @@ fun MemoryScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                             Text("记忆", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
                             Switch(settings.memoryEnabled, { on -> vm.updateSettings { it.copy(memoryEnabled = on) } })
                         }
-                        Text("开着时，AI 每次聊天都会参考下面这些关于你的记忆。你说“记住…”时它也会存进来。",
+                        Text("AI 聊天时会参考这些记忆。说“记住…”也会存进来。",
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("Dream（每天 5:30 做梦）", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
                             Switch(settings.dreamEnabled, { on -> vm.updateSettings { it.copy(dreamEnabled = on) } })
                         }
-                        Text("每天凌晨整理前一天的聊天，补充和精简记忆，并写一篇梦。手机关机或没网时会顺延，下次打开 App 时补做。",
+                        Text("每天凌晨整理前一天的聊天，更新记忆，写一篇梦。错过了会在下次打开时补做。",
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                             OutlinedButton(onClick = vm::dreamNow, enabled = !state.dreaming) { Text("现在就做梦") }

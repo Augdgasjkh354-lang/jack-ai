@@ -137,7 +137,7 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Text(
-                    "没有 Key？到 platform.deepseek.com 注册、充值后，在「API keys」里创建一个，复制粘贴到这里。Key 只保存在这台手机上。",
+                    "在 platform.deepseek.com 注册充值后创建。Key 只保存在这台手机上。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -180,18 +180,13 @@ fun SettingsScreen(
                     )
                 }
                 Text(
-                    "开着时，AI 会在需要最新信息时自己联网搜索、读网页，并标出来源；闲聊不会乱搜。Key 在 app.tavily.com 获取。",
+                    "需要最新信息时自动联网，并标出来源。Key 在 app.tavily.com 获取。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 
             Section("技能") {
-                Text(
-                    "联网搜索、Word、PPT、Excel，以及你自己写的技能，都在这里开关。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
                 OutlinedButton(onClick = onOpenSkills) { Text("管理技能") }
             }
 
@@ -207,7 +202,7 @@ fun SettingsScreen(
                     }
                 }
                 Text(
-                    "V4.1 Flash：快、便宜，能看图片。V4 Pro：更聪明，适合难题，但不能看图、价格约 4 倍。",
+                    "Flash 快、便宜、能看图；Pro 更聪明，不能看图，价格约 4 倍。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -221,7 +216,7 @@ fun SettingsScreen(
                     }
                 }
                 Text(
-                    "思考越深，回答越慢、越贵，但难题答得更好。聊天页输入框上方也能随时切换。",
+                    "越深越慢越贵，难题答得更好。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -249,7 +244,7 @@ fun SettingsScreen(
                     steps = 14,
                 )
                 Text(
-                    "对话用掉的上下文超过这个数时，较早的内容会自动写成提要，最近的部分保留原文，AI 需要时还能翻阅旧记录。默认 200k（约 30 万字）。也可以在输入框左边的 + 里手动压缩。",
+                    "超过这个数时，较早的内容自动写成提要，最近的保留原文。默认 200k（约 30 万字）。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -263,7 +258,7 @@ fun SettingsScreen(
                     valueRange = 0f..1.5f,
                 )
                 Text(
-                    "越低越严谨稳定，越高越有创意。默认 1.0。只在「不思考」时起作用。",
+                    "越低越严谨，越高越有创意。只在「不思考」时起作用。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -421,7 +416,7 @@ fun SettingsScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        "优先级最高，对所有对话生效。默认内容专门针对 DeepSeek V4.1 Flash 的常见毛病，一般不需要改。",
+                        "优先级最高，对所有对话生效。一般不用改。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

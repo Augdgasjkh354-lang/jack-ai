@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -96,7 +95,7 @@ fun FilesSheet(vm: ChatViewModel, conv: Conversation, inProject: Boolean, onDism
         AlertDialog(
             onDismissRequest = { deleting = null },
             title = { Text("删除「${f.name}」？") },
-            text = { Text("删除后 AI 也找不到它了，聊天里的文件卡片会显示“已删除”。") },
+            text = { Text("删除后 AI 也读不到了。") },
             confirmButton = {
                 TextButton(onClick = { vm.deleteWorkspaceFile(f) { version++ }; deleting = null }) { Text("删除") }
             },

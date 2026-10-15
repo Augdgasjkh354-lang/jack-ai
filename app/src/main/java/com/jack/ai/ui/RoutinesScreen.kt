@@ -105,8 +105,7 @@ fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
             }
             item {
                 Text(
-                    "跟 AI 说“明天 9 点提醒我交报告”“每天早上 8 点给我整理 AI 新闻”，它就会自动设好。也可以点右上角手动添加。" +
-                        "定时任务的结果会发到对应的「⏰」对话里，并弹通知。",
+                    "跟 AI 说“明天 9 点提醒我交报告”就会自动设好。定时任务的结果发到「⏰」对话里，并弹通知。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

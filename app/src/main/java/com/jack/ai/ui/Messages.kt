@@ -167,7 +167,6 @@ fun UserBubble(msg: ChatMessage, onDelete: () -> Unit) {
         AlertDialog(
             onDismissRequest = { menu = false },
             title = { Text("这条消息") },
-            text = { Text("复制内容，或删除这条及之后的所有消息。") },
             confirmButton = {
                 TextButton(onClick = {
                     clipboard.setText(AnnotatedString(msg.content))

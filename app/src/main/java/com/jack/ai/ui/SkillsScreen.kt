@@ -76,8 +76,7 @@ fun SkillsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit) {
         ) {
             item {
                 Text(
-                    "技能是一套做事的方法。AI 平时只知道每个技能的简介，需要时才读取详细做法，所以多开几个也不会让它变慢。" +
-                        "让它“做个 PPT”“整理成 Excel”，它就会用对应的技能生成文件。",
+                    "AI 只在需要时读取技能的详细做法，多开几个也不会变慢。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -107,7 +106,7 @@ fun SkillsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit) {
                     Text("写一个自己的技能")
                 }
                 Text(
-                    "自定义技能是一段说明：告诉 AI 遇到某类事情时该怎么做。比如“写周报”“回复客户邮件”“小红书文案”。",
+                    "告诉 AI 遇到某类事情该怎么做，比如“写周报”“小红书文案”。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 6.dp),
