@@ -5,6 +5,7 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.channels.trySendBlocking
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -143,7 +144,7 @@ class DeepSeekClient(
         })
         // Collector 被取消时立即断开 HTTP 连接，而不是等同步读取自行返回。
         awaitClose { call.cancel() }
-    }
+    }.flowOn(kotlinx.coroutines.Dispatchers.IO) // 拼请求体（可能带大图）不占主线程
 
     /**
      * 一次性（非流式）请求，用于压缩、做梦这类后台任务。不开思考，速度快、篇幅留给正文。

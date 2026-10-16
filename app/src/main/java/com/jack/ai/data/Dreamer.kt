@@ -143,7 +143,10 @@ object Dreamer {
 
         // 尽量保留旧记忆的 id 和时间，方便界面稳定显示
         val old = memories.associateBy { it.text }
-        store.saveMemories(newMemories.map { old[it] ?: MemoryItem(text = it) })
+        // 做梦要等好一会，期间用户或 AI 可能又记了几条：开始时不在的、现在有的，原样补回去
+        val before = memories.map { it.id }.toSet()
+        val addedMeanwhile = store.loadMemories().filter { it.id !in before && it.text !in newMemories }
+        store.saveMemories(newMemories.map { old[it] ?: MemoryItem(text = it) } + addedMeanwhile)
         val entry = DreamEntry(dream = str("dream"), summary = str("summary"), changes = str("changes"), note = str("note"))
         store.saveDreams(listOf(entry) + store.loadDreams().take(59))
         store.lastDreamAt = System.currentTimeMillis()

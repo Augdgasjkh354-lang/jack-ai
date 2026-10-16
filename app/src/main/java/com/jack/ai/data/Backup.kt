@@ -21,15 +21,21 @@ object Backup {
                 zip.write(bytes)
                 zip.closeEntry()
             }
+            // 文件边读边写，大文件不整个进内存
+            fun put(name: String, f: File) {
+                zip.putNextEntry(ZipEntry(name))
+                f.inputStream().use { it.copyTo(zip) }
+                zip.closeEntry()
+            }
             put("prefs.json", Store(ctx).exportPrefs().toByteArray())
-            JSONS.forEach { n -> File(dir, n).takeIf { it.exists() }?.let { put(n, it.readBytes()) } }
+            JSONS.forEach { n -> File(dir, n).takeIf { it.exists() }?.let { put(n, it) } }
             DIRS.forEach { d ->
-                File(dir, d).listFiles()?.filter { it.isFile }?.forEach { f -> put("$d/${f.name}", f.readBytes()) }
+                File(dir, d).listFiles()?.filter { it.isFile }?.forEach { f -> put("$d/${f.name}", f) }
             }
             // 对话文件夹：每个对话一个子目录，底稿在 .src 里；图片缓存不备份
             File(dir, "workspaces").listFiles()?.filter { it.isDirectory }?.forEach { ws ->
                 ws.walkTopDown().filter { it.isFile && !it.name.startsWith(".tmp-") && "/.cache/" !in it.path }.forEach { f ->
-                    put("workspaces/" + f.relativeTo(File(dir, "workspaces")).invariantSeparatorsPath, f.readBytes())
+                    put("workspaces/" + f.relativeTo(File(dir, "workspaces")).invariantSeparatorsPath, f)
                 }
             }
         }

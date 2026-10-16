@@ -100,7 +100,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val store = Store(app)
     private val client = DeepSeekClient(store::addUsage)
     private val tavily = TavilyClient()
-    private val core = AppCore(app, store, viewModelScope).also { it.stop = { stop() } }
+    private val core = AppCore(app, store, viewModelScope).also {
+        it.stop = { stop() }
+        it.stopAndWait = { val j = job; stop(); j?.join() }
+    }
     private val _state = core.state
     val state: StateFlow<UiState> = _state.asStateFlow()
     private var job: Job? = null
@@ -210,7 +213,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun send(text: String): Boolean {
         val trimmed = text.trim()
         val atts = _state.value.pending
-        if ((trimmed.isEmpty() && atts.isEmpty()) || _state.value.streaming || _state.value.importing) return false
+        if ((trimmed.isEmpty() && atts.isEmpty()) || busy() || _state.value.importing) return false
         if (atts.any { it.kind == "image" } && _state.value.settings.endpoint()?.vision == false) {
             _state.update { it.copy(toast = "当前模型看不了图片，请点顶部的模型名换一个能看图的") }
             return false
@@ -238,7 +241,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     /** 重新生成最后一条回答。 */
     fun regenerate() {
         val conv = _state.value.current ?: return
-        if (_state.value.streaming) return
+        if (busy()) return
         val msgs = conv.messages.dropLastWhile { it.role == "assistant" }
         if (msgs.isEmpty()) return
         files.cleanup(conv.messages.drop(msgs.size))
@@ -302,15 +305,21 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * 停下正在进行的回答。job 留着不清空：下一次回答会先等它收尾完（它会把 streaming 置回 false、保存），
+     * 这样点了停止马上再发也不会乱。
+     */
     fun stop() {
         job?.cancel()
-        job = null
     }
+
+    /** 有回答正在进行（停止后立刻就不算了，不用等收尾）。 */
+    private fun busy() = job?.isActive == true
 
     /** 让 V4 Pro 复核最后一条回答，并给出改进版。 */
     fun reviewLast() {
         val conv = _state.value.current ?: return
-        if (_state.value.streaming) return
+        if (busy()) return
         if (conv.messages.lastOrNull()?.let { it.role == "assistant" && it.content.isNotBlank() } != true) return
         // 有 DeepSeek Key 时用 V4 Pro 复核，否则用当前模型
         val model = if (_state.value.settings.apiKey.isNotBlank()) MODEL_PRO else _state.value.settings.model
@@ -319,7 +328,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun startReply(convId: String, modelOverride: String? = null, extraUser: String? = null) {
         val settings = _state.value.settings
-        val conv = _state.value.conversations.first { it.id == convId }
+        val conv = _state.value.conversations.firstOrNull { it.id == convId } ?: return
         val project = _state.value.project(conv.projectId)
         val model = modelOverride ?: settings.model
         val thinking = if (modelOverride != null && settings.thinking == ThinkLevel.OFF) ThinkLevel.HIGH else settings.thinking
@@ -348,8 +357,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         fun buildHistory(withTools: Boolean, flat: Boolean = false): MutableList<JsonObject> =
             PromptBuilder.history(promptInput, if (withTools) toolSet else null, flat)
 
-        _state.update { it.copy(streaming = true) }
+        val previous = job
         job = viewModelScope.launch {
+            // 上一次回答（被停止的）先收尾，免得它的收尾把这次的状态改乱
+            previous?.join()
+            _state.update { it.copy(streaming = true) }
             val session = ToolSession(toolHost, settings, conv, project, skills, object : ToolUi {
                 override fun started(label: String) =
                     patchMessage(convId, reply.id) { it.copy(searches = it.searches + SearchRecord(label, pending = true)) }
@@ -377,8 +389,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 patchMessage(convId, reply.id) { it.copy(reasoning = r, content = c, trail = t) }
             }
             try {
+                // 拼历史要读图、转码，放到后台线程，免得界面卡
+                val history = withContext(Dispatchers.Default) { buildHistory(toolSet != null) }
                 agent.run(
-                    messages = buildHistory(toolSet != null),
+                    messages = history,
                     tools = toolSet,
                     maxRounds = { session.maxRounds },
                     execute = session::execute,
@@ -397,10 +411,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     recovery = Agent.Recovery { attempt ->
                         when {
                             toolSet == null -> null
-                            attempt == 1 -> buildHistory(true, flat = true) to toolSet
+                            attempt == 1 -> withContext(Dispatchers.Default) { buildHistory(true, flat = true) } to toolSet
                             attempt == 2 -> {
-                                val q = conv.messages.last { it.role == "user" }.content.take(300)
-                                val fresh = buildHistory(false)
+                                val q = conv.messages.lastOrNull { it.role == "user" }?.content.orEmpty().take(300)
+                                val fresh = withContext(Dispatchers.Default) { buildHistory(false) }
                                 if (session.web && q.isNotBlank()) {
                                     val results = session.search(q)
                                     fresh.add(1.coerceAtMost(fresh.size), msg("system",
@@ -448,7 +462,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 别的 App 分享过来的内容：开一个新对话，文字放进输入框，图片和文件作为附件。 */
     fun handleShare(text: String?, uris: List<Uri>, mime: String?) {
-        if (_state.value.streaming) stop()
+        if (busy()) stop()
         newChat()
         if (!text.isNullOrBlank()) receiveText(text)
         if (uris.isNotEmpty()) {

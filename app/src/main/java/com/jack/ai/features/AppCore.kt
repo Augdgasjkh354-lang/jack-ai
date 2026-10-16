@@ -23,6 +23,8 @@ class AppCore(val app: Application, val store: Store, val scope: CoroutineScope)
     val ioSerial = Dispatchers.IO.limitedParallelism(1)
     /** 停下正在进行的回答（由 ChatViewModel 设置）。 */
     var stop: () -> Unit = {}
+    /** 停下并等它收尾完（恢复备份前用，免得旧回答收尾时的保存盖掉刚恢复的数据）。 */
+    var stopAndWait: suspend () -> Unit = {}
 
     fun toast(msg: String) = state.update { it.copy(toast = msg) }
 
@@ -70,10 +72,20 @@ class AppCore(val app: Application, val store: Store, val scope: CoroutineScope)
         state.update { s -> s.copy(conversations = s.conversations.map { if (it.id == id) transform(it) else it }) }
     }
 
+    private val saveQueued = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /**
+     * 保存全部对话。一次回答里会叫好几次，这里合并成一次：300 毫秒内的多次调用只写一遍，
+     * 写的是那一刻最新的状态。
+     */
     fun persist() {
-        // 空对话不保存
-        val snapshot = state.value.conversations.filter { it.messages.isNotEmpty() }
-        scope.launch(ioSerial) { store.saveConversations(snapshot) }
+        if (!saveQueued.compareAndSet(false, true)) return
+        scope.launch(ioSerial) {
+            kotlinx.coroutines.delay(300)
+            saveQueued.set(false)
+            // 空对话不保存
+            store.saveConversations(state.value.conversations.filter { it.messages.isNotEmpty() })
+        }
     }
 
     fun persistProjects() {

@@ -59,8 +59,9 @@ class BackupFeature(core: AppCore, private val knowledge: KnowledgeFeature) : Fe
     }
 
     fun importBackup(uri: Uri) {
-        core.stop()
         scope.launch {
+            // 先等正在进行的回答停下、收尾保存完，再覆盖数据
+            core.stopAndWait()
             val msg = try {
                 withContext(ioSerial) {
                     app.contentResolver.openInputStream(uri)?.use {

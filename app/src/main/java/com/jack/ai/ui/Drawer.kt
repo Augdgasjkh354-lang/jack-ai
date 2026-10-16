@@ -87,7 +87,13 @@ fun HistoryDrawer(
     // 置顶的对话（包括项目里的）放最上面；其余项目里的对话放在项目页面里，这里只列普通对话
     val pinned = state.conversations.filter { it.messages.isNotEmpty() && it.pinned }
     val chats = state.conversations.filter { it.messages.isNotEmpty() && it.projectId == null && !it.pinned }
-    val results = remember(query, state.conversations) { if (query.isBlank()) emptyList() else searchConversations(state.conversations, query) }
+    // 停手 250 毫秒再搜，放到后台线程，聊天多了打字也不卡
+    val convs = state.conversations
+    val results by androidx.compose.runtime.produceState(emptyList<Pair<Conversation, String>>(), query, convs) {
+        if (query.isBlank()) { value = emptyList(); return@produceState }
+        kotlinx.coroutines.delay(250)
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { searchConversations(convs, query) }
+    }
     val colors = MaterialTheme.colorScheme
     fun chatRow(c: Conversation): @Composable () -> Unit = {
         ChatItem(c, c.id == state.currentId, { onSelect(c.id) }, { renaming = c }, { deleting = c }, onPin = { onPin(c.id) },
