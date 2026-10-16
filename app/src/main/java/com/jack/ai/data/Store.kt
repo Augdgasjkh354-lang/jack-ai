@@ -1,6 +1,7 @@
 package com.jack.ai.data
 
 import android.content.Context
+import android.util.AtomicFile
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
@@ -17,16 +18,40 @@ class Store(context: Context) {
 
     private fun <T> load(name: String, ser: KSerializer<T>): List<T> = synchronized(LOCK) { loadUnlocked(name, ser) }
 
-    private fun <T> loadUnlocked(name: String, ser: KSerializer<T>): List<T> = runCatching {
+    private fun <T> loadUnlocked(name: String, ser: KSerializer<T>): List<T> {
         val f = File(dir, name)
         if (!f.exists()) return emptyList()
-        json.decodeFromString(ListSerializer(ser), f.readText())
-    }.getOrDefault(emptyList())
+        val decoder = ListSerializer(ser)
+        return try {
+            json.decodeFromString(decoder, f.readText())
+        } catch (primary: Exception) {
+            // Never silently turn corrupted data into an empty list.
+            val backup = File(dir, "$name.bak")
+            val restored = runCatching { json.decodeFromString(decoder, backup.readText()) }.getOrNull()
+            restored ?: throw IllegalStateException("无法读取 $name；原始文件已保留，请从备份恢复", primary)
+        }
+    }
+
+    private fun atomicWrite(name: String, content: String) {
+        val target = File(dir, name)
+        if (target.exists()) {
+            // Save a copy of the most recent valid state before replacement.
+            val valid = runCatching { Json.parseToJsonElement(target.readText()) }.isSuccess
+            if (valid) target.copyTo(File(dir, "$name.bak"), overwrite = true)
+        }
+        val af = AtomicFile(target)
+        val stream = af.startWrite()
+        try {
+            stream.write(content.toByteArray(Charsets.UTF_8))
+            af.finishWrite(stream)
+        } catch (e: Exception) {
+            af.failWrite(stream)
+            throw e
+        }
+    }
 
     private fun <T> save(name: String, ser: KSerializer<T>, list: List<T>) = synchronized(LOCK) {
-        val tmp = File(dir, "$name.tmp")
-        tmp.writeText(json.encodeToString(ListSerializer(ser), list))
-        tmp.renameTo(File(dir, name))
+        atomicWrite(name, json.encodeToString(ListSerializer(ser), list))
     }
 
     fun loadConversations() = load("conversations.json", Conversation.serializer())
@@ -56,9 +81,7 @@ class Store(context: Context) {
 
     fun addInbox(item: InboxItem) = synchronized(LOCK) {
         val list = loadUnlocked("inbox.json", InboxItem.serializer()) + item
-        val tmp = File(dir, "inbox.json.tmp")
-        tmp.writeText(json.encodeToString(ListSerializer(InboxItem.serializer()), list))
-        tmp.renameTo(File(dir, "inbox.json"))
+        atomicWrite("inbox.json", json.encodeToString(ListSerializer(InboxItem.serializer()), list))
         Unit
     }
 
@@ -94,9 +117,7 @@ class Store(context: Context) {
             hitKnown = base.hitKnown || cacheHit != null,
         )
         if (i >= 0) list[i] = new else list += new
-        val tmp = File(dir, "usage.json.tmp")
-        tmp.writeText(json.encodeToString(ListSerializer(UsageDay.serializer()), list.takeLast(800)))
-        tmp.renameTo(File(dir, "usage.json"))
+        atomicWrite("usage.json", json.encodeToString(ListSerializer(UsageDay.serializer()), list.takeLast(800)))
         checkBudget(list, date.take(7))
         cost
     }
