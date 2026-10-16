@@ -127,10 +127,6 @@ object Routines {
         val am = ctx.getSystemService(AlarmManager::class.java)
         val pi = alarmIntent(ctx, r.id)
         am.cancel(pi)
-        if (!r.enabled) {
-            WorkManager.getInstance(ctx).cancelAllWorkByTag("routine:${r.id}")
-            return
-        }
         val t = r.nextAt() ?: return
         if (Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms()) {
             am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, t, pi)
