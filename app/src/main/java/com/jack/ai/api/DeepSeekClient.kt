@@ -1,11 +1,10 @@
 package com.jack.ai.api
 
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.channels.trySendBlocking
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -20,10 +19,14 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.Response
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 import com.jack.ai.data.Endpoint
 import com.jack.ai.data.Price
@@ -63,7 +66,7 @@ class DeepSeekClient(
         thinking: ThinkLevel,
         temperature: Float,
         tools: JsonArray? = null,
-    ): Flow<StreamEvent> = flow {
+    ): Flow<StreamEvent> = callbackFlow {
         val body = buildJsonObject {
             put("model", ep.model)
             put("stream", true)
@@ -94,43 +97,53 @@ class DeepSeekClient(
             .build()
 
         val call = http.newCall(request)
-        currentCoroutineContext()[Job]?.invokeOnCompletion { call.cancel() }
+        call.enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                close(e)
+            }
 
-        call.execute().use { resp ->
-            if (!resp.isSuccessful) throw ApiException(describeError(resp.code, resp.body?.string()), resp.code)
-            val source = resp.body?.source() ?: throw ApiException("服务器没有返回内容")
-            while (true) {
-                val line = source.readUtf8Line() ?: break
-                if (!line.startsWith("data:")) continue
-                val data = line.removePrefix("data:").trim()
-                if (data == "[DONE]") break
-                val obj = runCatching { json.parseToJsonElement(data).jsonObject }.getOrNull() ?: continue
-                (obj["usage"] as? JsonObject)?.let { u ->
-                    val p = (u["prompt_tokens"] as? JsonPrimitive)?.intOrNull ?: 0
-                    val c = (u["completion_tokens"] as? JsonPrimitive)?.intOrNull ?: 0
-                    if (p > 0) emit(StreamEvent.Usage(p, c, cacheHitOf(u)))
-                }
-                val choice = obj["choices"]?.jsonArray?.firstOrNull()?.jsonObject ?: continue
-                val delta = choice["delta"] as? JsonObject ?: continue
-                // DeepSeek、通义、Kimi 用 reasoning_content，OpenRouter 用 reasoning
-                val r = delta["reasoning_content"].str().ifEmpty { delta["reasoning"].str() }
-                val c = delta["content"].str()
-                if (r.isNotEmpty() || c.isNotEmpty()) emit(StreamEvent.Text(r, c))
-                (delta["tool_calls"] as? JsonArray)?.forEach { el ->
-                    val tc = el.jsonObject
-                    val fn = tc["function"] as? JsonObject
-                    emit(
-                        StreamEvent.ToolCall(
-                            index = (tc["index"] as? JsonPrimitive)?.intOrNull ?: 0,
-                            id = tc["id"].str(),
-                            name = fn?.get("name").str(),
-                            arguments = fn?.get("arguments").str(),
-                        )
-                    )
+            override fun onResponse(call: Call, response: Response) {
+                try {
+                    response.use { resp ->
+                        if (!resp.isSuccessful) throw ApiException(describeError(resp.code, resp.body?.string()), resp.code)
+                        val source = resp.body?.source() ?: throw ApiException("服务器没有返回内容")
+                        while (true) {
+                            val line = source.readUtf8Line() ?: break
+                            if (!line.startsWith("data:")) continue
+                            val data = line.removePrefix("data:").trim()
+                            if (data == "[DONE]") break
+                            val obj = runCatching { json.parseToJsonElement(data).jsonObject }.getOrNull() ?: continue
+                            (obj["usage"] as? JsonObject)?.let { u ->
+                                val p = (u["prompt_tokens"] as? JsonPrimitive)?.intOrNull ?: 0
+                                val c = (u["completion_tokens"] as? JsonPrimitive)?.intOrNull ?: 0
+                                if (p > 0 && trySendBlocking(StreamEvent.Usage(p, c, cacheHitOf(u))).isFailure) return
+                            }
+                            val choice = obj["choices"]?.jsonArray?.firstOrNull()?.jsonObject ?: continue
+                            val delta = choice["delta"] as? JsonObject ?: continue
+                            val r = delta["reasoning_content"].str().ifEmpty { delta["reasoning"].str() }
+                            val c = delta["content"].str()
+                            if ((r.isNotEmpty() || c.isNotEmpty()) && trySendBlocking(StreamEvent.Text(r, c)).isFailure) return
+                            (delta["tool_calls"] as? JsonArray)?.forEach { el ->
+                                val tc = el.jsonObject
+                                val fn = tc["function"] as? JsonObject
+                                if (trySendBlocking(StreamEvent.ToolCall(
+                                    index = (tc["index"] as? JsonPrimitive)?.intOrNull ?: 0,
+                                    id = tc["id"].str(),
+                                    name = fn?.get("name").str(),
+                                    arguments = fn?.get("arguments").str(),
+                                )).isFailure) return
+                            }
+                        }
+                    }
+                    close()
+                } catch (e: Exception) {
+                    close(e)
                 }
             }
-        }
-    }.flowOn(Dispatchers.IO)
+        })
+        // Collector 被取消时立即断开 HTTP 连接，而不是等同步读取自行返回。
+        awaitClose { call.cancel() }
+    }
 
     /**
      * 一次性（非流式）请求，用于压缩、做梦这类后台任务。不开思考，速度快、篇幅留给正文。

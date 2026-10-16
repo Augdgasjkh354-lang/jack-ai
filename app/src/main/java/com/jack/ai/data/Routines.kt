@@ -137,6 +137,7 @@ object Routines {
 
     fun cancel(ctx: Context, id: String) {
         ctx.getSystemService(AlarmManager::class.java).cancel(alarmIntent(ctx, id))
+        WorkManager.getInstance(ctx).cancelAllWorkByTag("routine:$id")
     }
 
     private fun alarmIntent(ctx: Context, id: String) = PendingIntent.getBroadcast(
@@ -187,6 +188,7 @@ object Routines {
             val now = System.currentTimeMillis()
             val wait = if (r.offPeak) Pricing.nextOffPeak(now) - now else 0L
             val req = OneTimeWorkRequestBuilder<RoutineWorker>()
+                .addTag("routine:${r.id}")
                 .setInputData(workDataOf("id" to r.id))
                 .setInitialDelay(wait, java.util.concurrent.TimeUnit.MILLISECONDS)
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
@@ -265,6 +267,8 @@ class RoutineWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
         val id = inputData.getString("id") ?: return Result.failure()
         val store = Store(applicationContext)
         val r = store.loadRoutines().firstOrNull { it.id == id } ?: return Result.failure()
+        // 单次任务在 fire() 后会自动标记为完成，仍要允许这次执行。
+        if (!r.enabled && r.repeat != "none") return Result.success()
         return try {
             val result = Routines.runTask(applicationContext, r)
             store.addInbox(InboxItem(r.id, r.convId, r.title, r.prompt, result))

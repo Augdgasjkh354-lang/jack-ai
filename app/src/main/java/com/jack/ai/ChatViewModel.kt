@@ -121,6 +121,12 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         Routines.scheduleAll(app)
         mergeInbox()
         core.refreshWidget()
+        // 数据文件坏了被自动恢复过，告诉用户一声
+        val fixed = generateSequence { Store.recovered.poll() }.toList()
+        if (fixed.isNotEmpty()) {
+            val lost = fixed.any { it.endsWith(":empty") }
+            core.toast(if (lost) "有数据文件损坏且没有副本，已清空并保留坏文件；可以从备份恢复" else "有数据文件损坏，已自动换用最近的副本")
+        }
     }
 
     fun consumeToast() = _state.update { it.copy(toast = null) }
@@ -228,7 +234,14 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val msgs = conv.messages.dropLastWhile { it.role == "assistant" }
         if (msgs.isEmpty()) return
         files.cleanup(conv.messages.drop(msgs.size))
-        updateConv(conv.id) { it.copy(messages = msgs) }
+        val boundary = conv.summaryUntilId?.let { id -> conv.messages.indexOfFirst { it.id == id } } ?: -1
+        updateConv(conv.id) {
+            it.copy(
+                messages = msgs,
+                summary = if (boundary >= msgs.size) "" else it.summary,
+                summaryUntilId = if (boundary >= msgs.size) null else it.summaryUntilId,
+            )
+        }
         startReply(conv.id)
     }
 
@@ -239,7 +252,14 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val idx = conv.messages.indexOfFirst { it.id == messageId }
         if (idx < 0) return
         files.cleanup(conv.messages.drop(idx))
-        updateConv(conv.id) { it.copy(messages = it.messages.take(idx)) }
+        val boundary = conv.summaryUntilId?.let { id -> conv.messages.indexOfFirst { it.id == id } } ?: -1
+        updateConv(conv.id) {
+            it.copy(
+                messages = it.messages.take(idx),
+                summary = if (boundary >= idx) "" else it.summary,
+                summaryUntilId = if (boundary >= idx) null else it.summaryUntilId,
+            )
+        }
         persist()
     }
 
@@ -261,10 +281,13 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             if (i < 0) return@launch
             // 这条消息自己的附件留着，只清理后面的
             files.cleanup(cur.messages.drop(i + 1))
+            val boundary = cur.summaryUntilId?.let { id -> cur.messages.indexOfFirst { it.id == id } } ?: -1
             updateConv(conv.id) { c ->
                 c.copy(
                     title = if (i == 0) trimmed.ifEmpty { c.title }.take(20).replace('\n', ' ') else c.title,
                     messages = c.messages.take(i) + old.copy(content = trimmed, createdAt = System.currentTimeMillis()),
+                    summary = if (boundary >= i) "" else c.summary,
+                    summaryUntilId = if (boundary >= i) null else c.summaryUntilId,
                 )
             }
             startReply(conv.id)
