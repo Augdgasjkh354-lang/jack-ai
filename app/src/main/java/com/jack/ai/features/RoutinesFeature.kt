@@ -22,6 +22,9 @@ class RoutinesFeature(core: AppCore) : Feature(core) {
     fun saveRoutine(r: Routine) {
         val list = store.loadRoutines().let { l -> if (l.any { it.id == r.id }) l.map { if (it.id == r.id) r else it } else l + r }
         store.saveRoutines(list)
+        if (!r.enabled) {
+            androidx.work.WorkManager.getInstance(app).cancelAllWorkByTag("routine:${r.id}")
+        }
         Routines.schedule(app, r)
         state.update { it.copy(routines = list) }
         refreshWidget()
