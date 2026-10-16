@@ -84,14 +84,10 @@ fun MemoryScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                             Text("记忆", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
                             Switch(settings.memoryEnabled, { on -> vm.updateSettings { it.copy(memoryEnabled = on) } })
                         }
-                        Text("AI 聊天时会参考这些记忆。说“记住…”也会存进来。",
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Dream（每天 5:30 做梦）", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                            Text("做梦（每天 5:30）", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
                             Switch(settings.dreamEnabled, { on -> vm.updateSettings { it.copy(dreamEnabled = on) } })
                         }
-                        Text("每天凌晨整理前一天的聊天，更新记忆，写一篇梦。错过了会在下次打开时补做。",
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                             OutlinedButton(onClick = vm::dreamNow, enabled = !state.dreaming) { Text("现在就做梦") }
                             if (state.dreaming) {
@@ -110,7 +106,7 @@ fun MemoryScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                     if (state.memories.isNotEmpty()) TextButton(onClick = { confirmClear = true }) { Text("清空") }
                 }
                 if (state.memories.isEmpty()) {
-                    Text("还没有记忆。多聊聊，或者等它做一次梦。", color = MaterialTheme.colorScheme.outline)
+                    Text("还没有记忆。", color = MaterialTheme.colorScheme.outline)
                 }
             }
             items(state.memories, key = { it.id }) { m ->

@@ -136,11 +136,6 @@ fun SettingsScreen(
                     },
                     modifier = Modifier.fillMaxWidth(),
                 )
-                Text(
-                    "在 platform.deepseek.com 注册充值后创建。Key 只保存在这台手机上。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     OutlinedButton(onClick = {
                         ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://platform.deepseek.com/api_keys")))
@@ -158,7 +153,7 @@ fun SettingsScreen(
             }
 
             // ---- Tavily ----
-            Section("Tavily API Key（联网搜索用）") {
+            Section("Tavily API Key") {
                 var tavilyInput by remember { mutableStateOf(settings.tavilyKey) }
                 var showTavily by remember { mutableStateOf(false) }
                 OutlinedTextField(
@@ -183,11 +178,6 @@ fun SettingsScreen(
                         onCheckedChange = { on -> vm.updateSettings { it.copy(webSearch = on) } },
                     )
                 }
-                Text(
-                    "需要最新信息时自动联网，并标出来源。Key 在 app.tavily.com 获取。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
 
             Section("技能") {
@@ -205,11 +195,6 @@ fun SettingsScreen(
                         )
                     }
                 }
-                Text(
-                    "Flash 快、便宜、能看图；Pro 更聪明，不能看图，价格约 4 倍。压缩、做梦、定时任务有 DeepSeek Key 时用 Flash，否则用这里选的模型。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ThinkLevel.entries.forEach { lv ->
                         FilterChip(
@@ -219,11 +204,6 @@ fun SettingsScreen(
                         )
                     }
                 }
-                Text(
-                    "越深越慢越贵，难题答得更好。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
 
             // ---- 统计 ----
@@ -236,8 +216,6 @@ fun SettingsScreen(
                     Column(Modifier.weight(1f)) {
                         Text("本月已花 " + (monthSpent?.let { yuan(it) } ?: "…") +
                             if (settings.monthlyBudget > 0) " / 预算 ${yuan(settings.monthlyBudget)}" else "")
-                        Text("每天、每个模型的花费，缓存命中率，上下文构成",
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     OutlinedButton(onClick = onOpenUsage) { Text("查看") }
                 }
@@ -264,11 +242,6 @@ fun SettingsScreen(
                     valueRange = 50f..800f,
                     steps = 14,
                 )
-                Text(
-                    "超过这个数时，较早的内容自动写成提要，最近的保留原文。默认 200k（约 30 万字）。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
 
             // ---- 创造力 ----
@@ -277,11 +250,6 @@ fun SettingsScreen(
                     value = settings.temperature,
                     onValueChange = { v -> vm.updateSettings { it.copy(temperature = (v * 10).toInt() / 10f) } },
                     valueRange = 0f..1.5f,
-                )
-                Text(
-                    "越低越严谨，越高越有创意。只在「不思考」时起作用。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 
@@ -335,8 +303,6 @@ fun SettingsScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("应用锁")
-                        Text("打开 App 时要用指纹、面容或锁屏密码解锁", style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(
                         checked = settings.appLock,
@@ -358,15 +324,10 @@ fun SettingsScreen(
                         Text("恢复")
                     }
                 }
-                Text(
-                    "备份包含聊天记录、项目、记忆、梦、技能和设置，不包含两个 API Key。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
 
             // ---- 人设 ----
-            Section("人设（新对话开始时可选）") {
+            Section("人设") {
                 settings.presets.forEach { p ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
@@ -435,11 +396,6 @@ fun SettingsScreen(
             title = { Text("底层提示词") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        "优先级最高，对所有对话生效。一般不用改。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                     OutlinedTextField(
                         value = text,
                         onValueChange = { text = it },
@@ -526,7 +482,7 @@ private fun PresetDialog(preset: Preset, onDismiss: () -> Unit, onSave: (Preset)
                 OutlinedTextField(
                     value = prompt,
                     onValueChange = { prompt = it },
-                    label = { Text("设定（告诉 AI 它是谁、怎么回答）") },
+                    label = { Text("设定") },
                     minLines = 4,
                     maxLines = 8,
                 )

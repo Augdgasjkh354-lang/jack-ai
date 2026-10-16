@@ -191,8 +191,6 @@ fun UserBubble(msg: ChatMessage, onDelete: () -> Unit, onEdit: ((String) -> Unit
             title = { Text("编辑消息") },
             text = {
                 Column {
-                    Text("发送后，这条消息之后的对话会被替换成新的回答。",
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(value = text, onValueChange = { text = it }, minLines = 3, maxLines = 10,
                         modifier = Modifier.fillMaxWidth())

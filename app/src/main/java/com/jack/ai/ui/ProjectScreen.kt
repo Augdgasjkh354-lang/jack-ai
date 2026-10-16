@@ -125,8 +125,6 @@ fun ProjectScreen(
                             if (state.importing) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                         }
                         if (project.files.isEmpty()) {
-                            Text("上传 PDF、Word、文本等资料，项目里的每个对话都能参考。",
-                                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline)
                         }
                         project.files.forEach { f ->
                             Row(verticalAlignment = Alignment.CenterVertically) {

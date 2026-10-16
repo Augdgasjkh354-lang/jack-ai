@@ -127,11 +127,9 @@ fun UsageScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                             color = if (spent >= budget) colors.error else colors.primary,
                             modifier = Modifier.fillMaxWidth(),
                         )
-                        Text("本月已花 ${yuan(spent)} / ${yuan(budget)}，用到 80% 和 100% 时各提醒一次。",
+                        Text("本月已花 ${yuan(spent)} / ${yuan(budget)}",
                             style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                     } else {
-                        Text("设一个金额，本月花到 80% 和 100% 时会弹通知。",
-                            style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                     }
                 }
             }
@@ -142,8 +140,6 @@ fun UsageScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(if (peak) "现在是 DeepSeek 高峰时段" else "现在是 DeepSeek 空闲时段（5 折）",
                         style = MaterialTheme.typography.titleSmall, color = if (peak) colors.error else colors.primary)
-                    Text("高峰：北京时间工作日 9:00–12:00、14:00–18:00，其余时间（含周末和法定节假日）价格减半。",
-                        style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                 }
             }
 
@@ -220,12 +216,6 @@ fun UsageScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                 }
             }
 
-            Text(
-                "DeepSeek 按官方价当场计算（人民币，分高峰和空闲）。其他服务按你在「其他模型服务」里填的价格算，没填的显示「未计价」；" +
-                    "美元价按 1 美元 ≈ ${Pricing.USD_TO_CNY} 元换算。实际以各家账单为准。",
-                style = MaterialTheme.typography.bodySmall,
-                color = colors.outline,
-            )
         }
     }
 
@@ -278,8 +268,7 @@ private fun ContextCard(vm: ChatViewModel, conv: Conversation?) {
             }
             val real = conv?.lastPromptTokens ?: 0
             Text(
-                "合计约 ${tokens(total.toLong())}（估算）" + (if (real > 0) "，上次请求实际用了 ${tokens(real.toLong())}" else "") +
-                    "。项目里超过 2 万字的资料不会整份放进来，用到时才检索。",
+                "合计约 ${tokens(total.toLong())}" + if (real > 0) "，上次实际 ${tokens(real.toLong())}" else "",
                 style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
             )
         }

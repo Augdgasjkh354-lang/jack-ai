@@ -75,11 +75,6 @@ fun SkillsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             item {
-                Text(
-                    "AI 只在需要时读取技能的详细做法，多开几个也不会变慢。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
             items(skills, key = { it.id }) { s ->
                 Card(Modifier.fillMaxWidth().clickable { if (s.builtin) viewing = s else editing = s }) {
@@ -87,8 +82,6 @@ fun SkillsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit) {
                         verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(s.name + if (s.builtin) "" else "（自定义）", style = MaterialTheme.typography.titleSmall)
-                            Text(s.description, style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             if (s.id == SkillIds.WEB && settings.tavilyKey.isBlank()) {
                                 Text("需要先在设置里填 Tavily Key", style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.error)
@@ -105,12 +98,6 @@ fun SkillsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit) {
                     Spacer(Modifier.padding(4.dp))
                     Text("写一个自己的技能")
                 }
-                Text(
-                    "告诉 AI 遇到某类事情该怎么做，比如“写周报”“小红书文案”。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 6.dp),
-                )
             }
         }
     }
@@ -139,7 +126,7 @@ fun SkillsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit) {
                 Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(name, { name = it }, label = { Text("名字") }, singleLine = true,
                         placeholder = { Text("比如：写周报") })
-                    OutlinedTextField(desc, { desc = it }, label = { Text("一句话简介（AI 靠它判断什么时候用）") },
+                    OutlinedTextField(desc, { desc = it }, label = { Text("简介") },
                         placeholder = { Text("比如：把用户这周做的事整理成周报") }, minLines = 2, maxLines = 3)
                     OutlinedTextField(ins, { ins = it }, label = { Text("详细做法") },
                         placeholder = { Text("一步一步写清楚怎么做、格式是什么、要注意什么") }, minLines = 6, maxLines = 14)

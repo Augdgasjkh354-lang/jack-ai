@@ -72,11 +72,6 @@ fun LibraryScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             item {
-                Text(
-                    "把书、笔记、课件放进来（PDF、Word、文本、Markdown），直接问“那本书里关于…怎么说”。资料只存在手机里，提问时只发送相关段落。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
                 Spacer(Modifier.size(10.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedButton(onClick = { pick.launch(arrayOf("*/*")) }, enabled = !state.importing) { Text("导入文档") }
@@ -158,18 +153,13 @@ fun ReviewScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
         ) {
             val totalDue = state.cards.count { it.due <= now }
             item {
-                Text(
-                    "学完一个主题，AI 会把重点做成卡片。记得越牢，复习间隔越长。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
                 if (totalDue > 0) {
                     Spacer(Modifier.size(12.dp))
                     Button(onClick = { reviewing = "*" }, modifier = Modifier.fillMaxWidth()) { Text("开始复习（$totalDue 张到期）") }
                 }
             }
             if (state.cards.isEmpty()) {
-                item { Text("还没有卡片。跟 AI 说“教我…”，学完它会帮你做卡片。", color = MaterialTheme.colorScheme.outline) }
+                item { Text("还没有卡片。", color = MaterialTheme.colorScheme.outline) }
             }
             items(state.cards.groupBy { it.deck }.toList(), key = { it.first }) { (name, cards) ->
                 val dueCount = cards.count { it.due <= now }
@@ -220,7 +210,6 @@ private fun FlashcardView(card: Flashcard, remaining: Int, onGrade: (Int) -> Uni
                 }
                 if (!shown) {
                     Spacer(Modifier.size(24.dp))
-                    Text("先想一想，再点一下看答案", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
                 }
             }
         }

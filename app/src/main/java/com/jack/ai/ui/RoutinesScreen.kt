@@ -102,7 +102,6 @@ fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text("还没有通知权限", style = MaterialTheme.typography.titleSmall)
-                            Text("没有通知权限，到点时提醒弹不出来。", style = MaterialTheme.typography.bodySmall)
                             OutlinedButton(onClick = { permission.launch(Manifest.permission.POST_NOTIFICATIONS) }) { Text("允许通知") }
                         }
                     }
@@ -113,19 +112,12 @@ fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text("日历", style = MaterialTheme.typography.titleSmall)
-                            Text("允许后，跟 AI 说“下周三下午三点开会”会直接写进手机日历，也能问它“我明天有什么安排”。",
-                                style = MaterialTheme.typography.bodySmall)
                             OutlinedButton(onClick = { calendarPermission.launch(CalendarTool.PERMISSIONS) }) { Text("允许读写日历") }
                         }
                     }
                 }
             }
             item {
-                Text(
-                    "跟 AI 说“明天 9 点提醒我交报告”就会自动设好。定时任务的结果发到「⏰」对话里，并弹通知。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
             if (state.routines.none { it.title == "早安问候" }) {
                 item {
@@ -201,8 +193,6 @@ private fun RoutineDialog(r: Routine, isNew: Boolean, onDismiss: () -> Unit, onS
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text("避开高峰时段")
-                            Text("碰上 DeepSeek 高峰（工作日 9–12、14–18 点）就顺延到空闲时再做，省一半钱",
-                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Switch(offPeak, { offPeak = it })
                     }

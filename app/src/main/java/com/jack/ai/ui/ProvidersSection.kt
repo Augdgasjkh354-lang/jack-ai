@@ -70,11 +70,6 @@ fun ProvidersSection(vm: ChatViewModel, providers: List<Provider>) {
     var editing by remember { mutableStateOf<Provider?>(null) }
     var deleting by remember { mutableStateOf<Provider?>(null) }
     val colors = MaterialTheme.colorScheme
-    Text(
-        "支持所有 OpenAI 兼容接口。填好地址和 Key，会自动列出能用的模型。",
-        style = MaterialTheme.typography.bodySmall,
-        color = colors.onSurfaceVariant,
-    )
     providers.forEach { p ->
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -201,7 +196,7 @@ private fun ProviderDialog(vm: ChatViewModel, initial: Provider, onDismiss: () -
                 }
                 if (available.isNotEmpty()) {
                     Text(
-                        "勾选要用的模型（已选 ${chosen.size} 个）。能力是按名字猜的，不对可以点开关改；用的时候报参数错误，先试试关掉「深度思考」。",
+                        "已选 ${chosen.size} 个",
                         style = MaterialTheme.typography.bodySmall,
                         color = colors.onSurfaceVariant,
                     )
@@ -278,7 +273,7 @@ private fun PriceDialog(model: String, initial: Price?, onDismiss: () -> Unit, o
         title = { Text("价格 · $model", maxLines = 1, overflow = TextOverflow.Ellipsis) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("单位：元 / 百万 token，照服务商价格页填。美元价乘以 ${Pricing.USD_TO_CNY}。全部留空表示不计价。",
+                Text("元 / 百万 token，留空不计价",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 listOf(
                     Triple("输入（未命中缓存）", miss) { v: String -> miss = v },

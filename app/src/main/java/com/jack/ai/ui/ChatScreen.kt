@@ -8,7 +8,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -148,8 +150,12 @@ fun ChatScreen(
         Scaffold(
             containerColor = bg,
             topBar = {
+                // 顶栏透明：背景色从上往下渐变到全透明，消息滚上去时自然淡出
                 CenterAlignedTopAppBar(
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = bg, scrolledContainerColor = bg),
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                        containerColor = Color.Transparent, scrolledContainerColor = Color.Transparent,
+                    ),
+                    modifier = Modifier.background(Brush.verticalGradient(listOf(bg, bg.copy(alpha = 0.9f), bg.copy(alpha = 0f)))),
                     title = {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
@@ -193,11 +199,12 @@ fun ChatScreen(
                 )
             },
         ) { padding ->
-            Box(Modifier.padding(padding).fillMaxSize()) {
+            // 消息铺满整屏，从上下两个半透明的框后面滚过去
+            Box(Modifier.fillMaxSize()) {
                 if (conv == null || conv.messages.isEmpty()) {
-                    EmptyState(vm, state, conv, onOpenMemory, onSuggest = { text = it })
+                    Box(Modifier.padding(padding)) { EmptyState(vm, state, conv, onOpenMemory, onSuggest = { text = it }) }
                 } else {
-                    MessageList(vm, conv, state.streaming)
+                    MessageList(vm, conv, state.streaming, padding)
                 }
             }
         }
@@ -279,7 +286,6 @@ private fun ModelPicker(settings: Settings, projectName: String?, onPick: (Strin
                     text = {
                         Column {
                             Text(c.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            if (c.desc.isNotEmpty()) Text(c.desc, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                         }
                     },
                     leadingIcon = { if (c.key == model) Icon(Icons.Default.Check, null, tint = colors.primary) else Spacer(Modifier.size(24.dp)) },
@@ -290,13 +296,13 @@ private fun ModelPicker(settings: Settings, projectName: String?, onPick: (Strin
     }
 }
 
-private data class Suggestion(val title: String, val sub: String, val prompt: String)
+private data class Suggestion(val title: String, val prompt: String)
 
 private val SUGGESTIONS = listOf(
-    Suggestion("写一份周报", "生成 Word 文档", "帮我写一份本周工作周报，做成 Word 文档。我这周做了："),
-    Suggestion("做个演示文稿", "PPT，自动配色", "帮我做一个关于「」的 PPT，大概 8 页。"),
-    Suggestion("今天有什么新闻", "联网搜索最新消息", "今天有什么值得关注的新闻？"),
-    Suggestion("整理成表格", "生成 Excel", "帮我把下面的内容整理成 Excel 表格：\n"),
+    Suggestion("写一份周报", "帮我写一份本周工作周报，做成 Word 文档。我这周做了："),
+    Suggestion("做个演示文稿", "帮我做一个关于「」的 PPT，大概 8 页。"),
+    Suggestion("今天有什么新闻", "今天有什么值得关注的新闻？"),
+    Suggestion("整理成表格", "帮我把下面的内容整理成 Excel 表格：\n"),
 )
 
 private fun greeting(): String = when (Calendar.getInstance().get(Calendar.HOUR_OF_DAY)) {
@@ -355,7 +361,6 @@ private fun EmptyState(
                     ) {
                         Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
                             Text(sg.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                            Text(sg.sub, style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
                         }
                     }
                 }
@@ -407,7 +412,7 @@ private fun Pill(
 }
 
 @Composable
-private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolean) {
+private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolean, bars: PaddingValues) {
     val listState = rememberLazyListState()
     val reversed = conv.messages.asReversed()
     val lastId = conv.messages.last().id
@@ -416,7 +421,10 @@ private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolea
         state = listState,
         reverseLayout = true,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        contentPadding = PaddingValues(
+            start = 16.dp, end = 16.dp,
+            top = bars.calculateTopPadding() + 12.dp, bottom = bars.calculateBottomPadding() + 12.dp,
+        ),
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
         reversed.forEach { msg ->
@@ -453,7 +461,7 @@ private fun SummaryDivider(summary: String) {
     ) {
         HorizontalDivider(Modifier.weight(1f))
         Text(
-            "  以上较早的内容已压缩 · 点击查看提要  ",
+            "  已压缩 · 查看提要  ",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.primary,
         )
@@ -549,9 +557,10 @@ private fun InputBar(
         }
         Surface(
             shape = RoundedCornerShape(26.dp),
-            color = if (dark) colors.surfaceContainerHigh else colors.surfaceContainerLowest,
+            // 输入框半透明，能隐约看到后面的消息
+            color = (if (dark) colors.surfaceContainerHigh else colors.surfaceContainerLowest).copy(alpha = 0.82f),
             border = BorderStroke(1.dp, colors.outlineVariant),
-            shadowElevation = if (dark) 0.dp else 3.dp,
+            shadowElevation = 0.dp,
             modifier = Modifier.fillMaxWidth(),
         ) {
             Column(Modifier.padding(start = 6.dp, end = 8.dp, top = 6.dp, bottom = 8.dp)) {
@@ -615,7 +624,7 @@ private fun InputBar(
                                 },
                             )
                             DropdownMenuItem(
-                                text = { Text("文件（PDF、Word、文本、代码）") },
+                                text = { Text("文件") },
                                 leadingIcon = { Icon(AppIcons.File, null) },
                                 onClick = {
                                     attachMenu = false
@@ -630,7 +639,7 @@ private fun InputBar(
                                         Column {
                                             Text("压缩上下文")
                                             Text(
-                                                "已用约 ${conv.lastPromptTokens / 1000}k / ${settings.compressTokens / 1000}k，到了会自动压缩",
+                                                "${conv.lastPromptTokens / 1000}k / ${settings.compressTokens / 1000}k",
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = colors.onSurfaceVariant,
                                             )
@@ -658,21 +667,7 @@ private fun InputBar(
                         DropdownMenu(expanded = thinkMenu, onDismissRequest = { thinkMenu = false }) {
                             ThinkLevel.entries.forEach { lv ->
                                 DropdownMenuItem(
-                                    text = {
-                                        Column {
-                                            Text(lv.label)
-                                            Text(
-                                                when (lv) {
-                                                    ThinkLevel.OFF -> "直接回答，最快"
-                                                    ThinkLevel.LOW -> "简单想一想"
-                                                    ThinkLevel.HIGH -> "认真思考（默认）"
-                                                    ThinkLevel.MAX -> "想到最透，最慢最贵"
-                                                },
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = colors.onSurfaceVariant,
-                                            )
-                                        }
-                                    },
+                                    text = { Text(lv.label) },
                                     leadingIcon = {
                                         if (lv == settings.thinking) Icon(Icons.Default.Check, null, tint = colors.primary)
                                         else Spacer(Modifier.size(24.dp))

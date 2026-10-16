@@ -95,7 +95,6 @@ fun FilesSheet(vm: ChatViewModel, conv: Conversation, inProject: Boolean, onDism
         AlertDialog(
             onDismissRequest = { deleting = null },
             title = { Text("删除「${f.name}」？") },
-            text = { Text("删除后 AI 也读不到了。") },
             confirmButton = {
                 TextButton(onClick = { vm.deleteWorkspaceFile(f) { version++ }; deleting = null }) { Text("删除") }
             },
