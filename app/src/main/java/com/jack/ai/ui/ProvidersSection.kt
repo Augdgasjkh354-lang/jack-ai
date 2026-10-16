@@ -1,0 +1,245 @@
+package com.jack.ai.ui
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import com.jack.ai.ChatViewModel
+import com.jack.ai.api.ApiException
+import com.jack.ai.data.Provider
+import com.jack.ai.data.ProviderModel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
+import java.io.IOException
+
+/** 常见的 OpenAI 兼容服务，点一下填好名字和地址。 */
+private val PROVIDER_PRESETS = listOf(
+    "Kimi" to "https://api.moonshot.cn/v1",
+    "通义千问" to "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "智谱" to "https://open.bigmodel.cn/api/paas/v4",
+    "豆包" to "https://ark.cn-beijing.volces.com/api/v3",
+    "硅基流动" to "https://api.siliconflow.cn/v1",
+    "OpenRouter" to "https://openrouter.ai/api/v1",
+    "OpenAI" to "https://api.openai.com/v1",
+)
+
+/** 设置页里的「其他模型服务」：列出已加的服务，可以添加、修改、删除。 */
+@Composable
+fun ProvidersSection(vm: ChatViewModel, providers: List<Provider>) {
+    var editing by remember { mutableStateOf<Provider?>(null) }
+    var deleting by remember { mutableStateOf<Provider?>(null) }
+    val colors = MaterialTheme.colorScheme
+    Text(
+        "支持所有 OpenAI 兼容接口。填好地址和 Key，会自动列出能用的模型。",
+        style = MaterialTheme.typography.bodySmall,
+        color = colors.onSurfaceVariant,
+    )
+    providers.forEach { p ->
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().clickable { editing = p }.padding(vertical = 4.dp),
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(p.name, style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    (if (p.apiKey.isBlank()) "还没填 Key · " else "") + "${p.models.size} 个模型 · " + p.baseUrl,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (p.apiKey.isBlank()) colors.error else colors.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            TextButton(onClick = { deleting = p }) { Text("删除", color = colors.error) }
+        }
+    }
+    OutlinedButton(onClick = { editing = Provider(name = "", baseUrl = "") }) {
+        Icon(Icons.Default.Add, null, Modifier.size(18.dp))
+        Spacer(Modifier.size(4.dp))
+        Text("添加服务")
+    }
+    editing?.let { p ->
+        ProviderDialog(vm, p, onDismiss = { editing = null }) { vm.saveProvider(it); editing = null }
+    }
+    deleting?.let { p ->
+        ConfirmDeleteDialog("删除「${p.name}」？", "这个服务和它的模型会从列表里移除。", onDismiss = { deleting = null }) {
+            vm.deleteProvider(p.id); deleting = null
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ProviderDialog(vm: ChatViewModel, initial: Provider, onDismiss: () -> Unit, onSave: (Provider) -> Unit) {
+    val scope = rememberCoroutineScope()
+    val colors = MaterialTheme.colorScheme
+    var name by remember { mutableStateOf(initial.name) }
+    var url by remember { mutableStateOf(initial.baseUrl) }
+    var key by remember { mutableStateOf(initial.apiKey) }
+    // 服务上全部模型的 id；已勾选的模型和它们的能力单独记
+    var available by remember { mutableStateOf(initial.models.map { it.id }) }
+    val chosen = remember { mutableStateListOf<ProviderModel>().apply { addAll(initial.models) } }
+    var loading by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var filter by remember { mutableStateOf("") }
+    var manual by remember { mutableStateOf("") }
+
+    fun fetch() {
+        loading = true
+        error = null
+        scope.launch {
+            try {
+                val (base, ids) = vm.fetchModels(url, key)
+                url = base
+                available = ids
+                if (ids.isEmpty()) error = "这个服务没有返回任何模型"
+                // 原来勾选的模型服务上已经没有了，就去掉
+                chosen.removeAll { it.id !in ids }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: ApiException) {
+                error = e.message
+            } catch (e: IOException) {
+                error = "连不上这个地址：${e.message ?: "网络问题"}"
+            } catch (e: Exception) {
+                error = e.message ?: "获取失败"
+            } finally {
+                loading = false
+            }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (initial.name.isEmpty()) "添加模型服务" else "编辑「${initial.name}」") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (initial.name.isEmpty()) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        PROVIDER_PRESETS.forEach { (n, u) ->
+                            AssistChip(onClick = { name = n; url = u }, label = { Text(n) })
+                        }
+                    }
+                }
+                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("名字") },
+                    singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = url, onValueChange = { url = it.trim() }, label = { Text("接口地址") },
+                    placeholder = { Text("https://…/v1") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    value = key, onValueChange = { key = it.trim() }, label = { Text("API Key") },
+                    singleLine = true, visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedButton(onClick = { fetch() }, enabled = url.isNotBlank() && !loading) {
+                        Text(if (available.isEmpty()) "获取模型列表" else "刷新模型列表")
+                    }
+                    if (loading) {
+                        Spacer(Modifier.size(12.dp))
+                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    }
+                }
+                error?.let { Text(it, color = colors.error, style = MaterialTheme.typography.bodySmall) }
+                // 有的服务不提供模型列表，可以手动填模型名
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(value = manual, onValueChange = { manual = it.trim() }, placeholder = { Text("手动填模型名") },
+                        singleLine = true, modifier = Modifier.weight(1f))
+                    TextButton(enabled = manual.isNotEmpty(), onClick = {
+                        if (manual !in available) available = listOf(manual) + available
+                        if (chosen.none { it.id == manual }) chosen.add(vm.guessModel(manual))
+                        manual = ""
+                    }) { Text("添加") }
+                }
+                if (available.isNotEmpty()) {
+                    Text(
+                        "勾选要用的模型（已选 ${chosen.size} 个）。能力是按名字猜的，不对可以点开关改；用的时候报参数错误，先试试关掉「深度思考」。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.onSurfaceVariant,
+                    )
+                    if (available.size > 8) {
+                        OutlinedTextField(value = filter, onValueChange = { filter = it }, placeholder = { Text("搜索模型") },
+                            singleLine = true, modifier = Modifier.fillMaxWidth())
+                    }
+                    // 已勾选的排前面
+                    val shown = available.filter { filter.isBlank() || it.contains(filter.trim(), ignoreCase = true) }
+                        .sortedBy { id -> if (chosen.any { it.id == id }) 0 else 1 }
+                    LazyColumn(Modifier.fillMaxWidth().heightIn(max = 320.dp)) {
+                        items(shown, key = { it }) { id ->
+                            val m = chosen.firstOrNull { it.id == id }
+                            Column {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.fillMaxWidth().clickable {
+                                        if (m != null) chosen.remove(m) else chosen.add(vm.guessModel(id))
+                                    },
+                                ) {
+                                    Checkbox(checked = m != null, onCheckedChange = null, modifier = Modifier.padding(8.dp))
+                                    Text(id, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                }
+                                if (m != null) {
+                                    Row(Modifier.padding(start = 40.dp, bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        fun set(new: ProviderModel) { chosen[chosen.indexOf(m)] = new }
+                                        FilterChip(selected = m.vision, onClick = { set(m.copy(vision = !m.vision)) }, label = { Text("能看图") })
+                                        FilterChip(selected = m.reasoning, onClick = { set(m.copy(reasoning = !m.reasoning)) }, label = { Text("深度思考") })
+                                    }
+                                }
+                                HorizontalDivider(color = colors.outlineVariant)
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = name.isNotBlank() && url.isNotBlank() && chosen.isNotEmpty(),
+                onClick = {
+                    // 保持服务上的顺序
+                    val order = available.withIndex().associate { it.value to it.index }
+                    onSave(initial.copy(name = name.trim(), baseUrl = url.trimEnd('/'), apiKey = key,
+                        models = chosen.sortedBy { order[it.id] ?: Int.MAX_VALUE }))
+                },
+            ) { Text("保存") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+    )
+}

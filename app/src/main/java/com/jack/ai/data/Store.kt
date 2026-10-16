@@ -92,6 +92,11 @@ class Store(context: Context) {
         val obj = kotlinx.serialization.json.buildJsonObject {
             prefs.all.forEach { (k, v) ->
                 if (k == "apiKey" || k == "tavilyKey") return@forEach
+                // 其他服务的 Key 也不进备份
+                val v = if (k == "providers" && v is String) runCatching {
+                    val list = json.decodeFromString(ListSerializer(Provider.serializer()), v).map { it.copy(apiKey = "") }
+                    json.encodeToString(ListSerializer(Provider.serializer()), list)
+                }.getOrDefault("[]") else v
                 val e = when (v) {
                     is Boolean -> kotlinx.serialization.json.JsonPrimitive(v)
                     is Number -> kotlinx.serialization.json.JsonPrimitive(v)
@@ -170,6 +175,9 @@ class Store(context: Context) {
             fontScale = prefs.getFloat("fontScale", 1f),
             accent = prefs.getString("accent", "clay") ?: "clay",
             appLock = prefs.getBoolean("appLock", false),
+            providers = prefs.getString("providers", null)?.let {
+                runCatching { json.decodeFromString(ListSerializer(Provider.serializer()), it) }.getOrNull()
+            } ?: emptyList(),
         )
     }
 
@@ -196,6 +204,7 @@ class Store(context: Context) {
             .putFloat("fontScale", s.fontScale)
             .putString("accent", s.accent)
             .putBoolean("appLock", s.appLock)
+            .putString("providers", json.encodeToString(ListSerializer(Provider.serializer()), s.providers))
             .apply()
     }
 }

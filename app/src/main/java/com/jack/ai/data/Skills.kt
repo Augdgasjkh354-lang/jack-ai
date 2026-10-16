@@ -41,6 +41,7 @@ object SkillIds {
     const val LIBRARY = "builtin-library"
     const val LEARN = "builtin-learn"
     const val PYTHON = "builtin-python"
+    const val CALENDAR = "builtin-calendar"
 }
 
 private fun schema(s: String): JsonObject = Json.parseToJsonElement(s).jsonObject
@@ -145,6 +146,18 @@ val BUILTIN_SKILLS = listOf(
 8. 用户说“闹钟”“叫我起床”“X 点叫醒我”时，用 set_alarm 在手机自带的时钟里设真正的闹钟（会一直响到用户按掉）；只是“提醒我做某事”就用 create_reminder。
    - set_alarm 只需要时和分（24 小时制），days 不填是一次性闹钟，填了就是每周这几天重复（1=周一 … 7=周日）。
    - 要关掉或改闹钟：用 cancel_alarm 按时间或标签关掉旧的，需要时再 set_alarm 设新的。手机不允许读取已有闹钟列表，你看不到用户有哪些闹钟，不知道时就问用户。""",
+    ),
+    Skill(
+        id = SkillIds.CALENDAR, builtin = true, name = "日历",
+        description = "在手机系统日历里添加、查看、删除日程（“下周三下午三点开会”“我明天有什么安排”“把周五的聚餐取消”）。",
+        instructions = """日历的做法：
+1. 用户要记一个有具体时间的安排（开会、约会、考试、出差、生日），用 add_calendar_event 写进手机日历。只是想到点被提醒一下、不算日程的，用提醒技能。
+2. start 写成 “yyyy-MM-dd HH:mm”，根据系统提示里的当前日期换算“明天”“下周三”等说法；全天的事（生日、假期、出差一整天）只写 “yyyy-MM-dd” 并把 all_day 设为 true。没说结束时间就不填 end（默认 1 小时）。没说几点时按常理挑一个并在回复里说明。
+3. remind_minutes 是提前多少分钟提醒，默认 15；用户说了提前多久就按用户的来，不要提醒写 -1。
+4. 用户问“我某天有什么安排”时，用 list_calendar_events 查，start_date 写 yyyy-MM-dd，days 写查几天。回答时按时间顺序简洁列出。
+5. 要删除或修改日程，先用 list_calendar_events 找到它的编号，再用 delete_calendar_event 删掉；修改就是删掉旧的再加新的。删除前如果有多个相似的，先问用户是哪一个。
+6. 工具返回“没有日历权限”时，告诉用户去左侧菜单「提醒和任务」页面点「允许读写日历」。添加日程时没有权限会打开日历 App 让用户自己点保存，照实告诉用户。
+7. 加好后用一句话确认：哪天几点、什么事。""",
     ),
     Skill(
         id = SkillIds.CALC, builtin = true, name = "计算与图表",
@@ -257,6 +270,12 @@ object SkillTools {
     val SAVE_FLASHCARDS = schema("""{"type":"function","function":{"name":"save_flashcards","description":"把知识点保存成复习卡片，用户之后会按间隔重复复习。","parameters":{"type":"object","properties":{"deck":{"type":"string","description":"卡组名，一般是主题"},"cards":{"type":"array","items":{"type":"object","properties":{"front":{"type":"string","description":"问题"},"back":{"type":"string","description":"答案"}},"required":["front","back"]}}},"required":["deck","cards"]}}}""")
 
     val SEARCH_HISTORY = schema("""{"type":"function","function":{"name":"search_history","description":"在本对话较早的原始聊天记录里按关键词查找原话和细节。提要里找不到的信息用它查。","parameters":{"type":"object","properties":{"query":{"type":"string","description":"关键词，多个用空格隔开"}},"required":["query"]}}}""")
+
+    val ADD_EVENT = schema("""{"type":"function","function":{"name":"add_calendar_event","description":"在手机日历里添加一个日程。","parameters":{"type":"object","properties":{"title":{"type":"string","description":"日程标题"},"start":{"type":"string","description":"开始时间 yyyy-MM-dd HH:mm；全天日程只写 yyyy-MM-dd"},"end":{"type":"string","description":"结束时间，格式同 start，可以不填"},"all_day":{"type":"boolean"},"location":{"type":"string"},"notes":{"type":"string","description":"备注"},"remind_minutes":{"type":"integer","description":"提前多少分钟提醒，默认 15，不要提醒写 -1"}},"required":["title","start"]}}}""")
+
+    val LIST_EVENTS = schema("""{"type":"function","function":{"name":"list_calendar_events","description":"查看手机日历里一段时间内的日程。","parameters":{"type":"object","properties":{"start_date":{"type":"string","description":"从哪天开始，yyyy-MM-dd，默认今天"},"days":{"type":"integer","description":"查几天，默认 1，最多 62"}}}}}""")
+
+    val DELETE_EVENT = schema("""{"type":"function","function":{"name":"delete_calendar_event","description":"删除手机日历里的一个日程。","parameters":{"type":"object","properties":{"id":{"type":"string","description":"list_calendar_events 返回的编号"}},"required":["id"]}}}""")
 
     val SAVE_MEMORY = schema("""{"type":"function","function":{"name":"save_memory","description":"把一条关于用户的信息存进长期记忆。仅在用户明确要求“记住”时使用。","parameters":{"type":"object","properties":{"content":{"type":"string","description":"要记住的内容，一句完整的话"}},"required":["content"]}}}""")
 }

@@ -36,6 +36,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -111,10 +112,11 @@ private fun ImageViewer(path: String, onDismiss: () -> Unit) {
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
-fun UserBubble(msg: ChatMessage, onDelete: () -> Unit) {
+fun UserBubble(msg: ChatMessage, onDelete: () -> Unit, onEdit: ((String) -> Unit)? = null) {
     val clipboard = LocalClipboardManager.current
     val ctx = LocalContext.current
     var menu by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf(false) }
     var viewing by remember { mutableStateOf<String?>(null) }
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
         val images = msg.attachments.filter { it.kind == "image" }
@@ -168,15 +170,40 @@ fun UserBubble(msg: ChatMessage, onDelete: () -> Unit) {
             onDismissRequest = { menu = false },
             title = { Text("这条消息") },
             confirmButton = {
-                TextButton(onClick = {
-                    clipboard.setText(AnnotatedString(msg.content))
-                    Toast.makeText(ctx, "已复制", Toast.LENGTH_SHORT).show()
-                    menu = false
-                }) { Text("复制") }
+                Row {
+                    if (onEdit != null) TextButton(onClick = { menu = false; editing = true }) { Text("编辑") }
+                    TextButton(onClick = {
+                        clipboard.setText(AnnotatedString(msg.content))
+                        Toast.makeText(ctx, "已复制", Toast.LENGTH_SHORT).show()
+                        menu = false
+                    }) { Text("复制") }
+                }
             },
             dismissButton = {
                 TextButton(onClick = { onDelete(); menu = false }) { Text("删除") }
             },
+        )
+    }
+    if (editing && onEdit != null) {
+        var text by remember { mutableStateOf(msg.content) }
+        AlertDialog(
+            onDismissRequest = { editing = false },
+            title = { Text("编辑消息") },
+            text = {
+                Column {
+                    Text("发送后，这条消息之后的对话会被替换成新的回答。",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(value = text, onValueChange = { text = it }, minLines = 3, maxLines = 10,
+                        modifier = Modifier.fillMaxWidth())
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = text.isNotBlank() || msg.attachments.isNotEmpty(), onClick = { onEdit(text); editing = false }) {
+                    Text("发送")
+                }
+            },
+            dismissButton = { TextButton(onClick = { editing = false }) { Text("取消") } },
         )
     }
 }

@@ -25,6 +25,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
+import com.jack.ai.data.Endpoint
 import com.jack.ai.data.ThinkLevel
 
 sealed interface StreamEvent {
@@ -54,22 +55,27 @@ class DeepSeekClient(
     private val json = Json { ignoreUnknownKeys = true }
 
     fun stream(
-        baseUrl: String,
-        apiKey: String,
-        model: String,
+        ep: Endpoint,
         messages: List<JsonObject>,
         thinking: ThinkLevel,
         temperature: Float,
         tools: JsonArray? = null,
     ): Flow<StreamEvent> = flow {
         val body = buildJsonObject {
-            put("model", model)
+            put("model", ep.model)
             put("stream", true)
-            put("thinking", buildJsonObject { put("type", if (thinking.effort == null) "disabled" else "enabled") })
-            if (thinking.effort != null) {
-                put("reasoning_effort", thinking.effort)
-            } else {
-                // 思考模式下 temperature 不起作用，只在不思考时传
+            if (ep.deepseek) {
+                put("thinking", buildJsonObject { put("type", if (thinking.effort == null) "disabled" else "enabled") })
+                if (thinking.effort != null) {
+                    put("reasoning_effort", thinking.effort)
+                } else {
+                    // 思考模式下 temperature 不起作用，只在不思考时传
+                    put("temperature", temperature.toDouble())
+                }
+            } else if (ep.reasoning && thinking.effort != null) {
+                // OpenAI 格式只认 low / medium / high
+                put("reasoning_effort", if (thinking.effort == "max") "high" else thinking.effort)
+            } else if (!ep.reasoning) {
                 put("temperature", temperature.toDouble())
             }
             put("messages", JsonArray(messages))
@@ -78,8 +84,8 @@ class DeepSeekClient(
         }.toString()
 
         val request = Request.Builder()
-            .url(baseUrl.trimEnd('/') + "/chat/completions")
-            .header("Authorization", "Bearer $apiKey")
+            .url(ep.baseUrl.trimEnd('/') + "/chat/completions")
+            .header("Authorization", "Bearer ${ep.apiKey}")
             .header("Accept", "text/event-stream")
             .post(body.toRequestBody("application/json".toMediaType()))
             .build()
@@ -99,12 +105,14 @@ class DeepSeekClient(
                 (obj["usage"] as? JsonObject)?.let { u ->
                     val p = (u["prompt_tokens"] as? JsonPrimitive)?.intOrNull ?: 0
                     val c = (u["completion_tokens"] as? JsonPrimitive)?.intOrNull ?: 0
-                    val h = (u["prompt_cache_hit_tokens"] as? JsonPrimitive)?.intOrNull ?: 0
+                    val h = (u["prompt_cache_hit_tokens"] as? JsonPrimitive)?.intOrNull
+                        ?: ((u["prompt_tokens_details"] as? JsonObject)?.get("cached_tokens") as? JsonPrimitive)?.intOrNull ?: 0
                     if (p > 0) emit(StreamEvent.Usage(p, c, h))
                 }
                 val choice = obj["choices"]?.jsonArray?.firstOrNull()?.jsonObject ?: continue
                 val delta = choice["delta"] as? JsonObject ?: continue
-                val r = delta["reasoning_content"].str()
+                // DeepSeek、通义、Kimi 用 reasoning_content，OpenRouter 用 reasoning
+                val r = delta["reasoning_content"].str().ifEmpty { delta["reasoning"].str() }
                 val c = delta["content"].str()
                 if (r.isNotEmpty() || c.isNotEmpty()) emit(StreamEvent.Text(r, c))
                 (delta["tool_calls"] as? JsonArray)?.forEach { el ->
@@ -127,25 +135,26 @@ class DeepSeekClient(
      * 一次性（非流式）请求，用于压缩、做梦这类后台任务。不开思考，速度快、篇幅留给正文。
      */
     suspend fun complete(
-        baseUrl: String,
-        apiKey: String,
-        model: String,
+        ep: Endpoint,
         messages: List<JsonObject>,
         maxTokens: Int = 16384,
         jsonMode: Boolean = false,
     ): String = withContext(Dispatchers.IO) {
         val body = buildJsonObject {
-            put("model", model)
+            put("model", ep.model)
             put("stream", false)
-            put("thinking", buildJsonObject { put("type", "disabled") })
-            put("temperature", 0.7)
-            put("max_tokens", maxTokens)
+            if (ep.deepseek) {
+                put("thinking", buildJsonObject { put("type", "disabled") })
+                put("max_tokens", maxTokens)
+            }
+            // 推理模型大多不接受自定义 temperature
+            if (!ep.reasoning || ep.deepseek) put("temperature", 0.7)
             if (jsonMode) put("response_format", buildJsonObject { put("type", "json_object") })
             put("messages", JsonArray(messages))
         }.toString()
         val request = Request.Builder()
-            .url(baseUrl.trimEnd('/') + "/chat/completions")
-            .header("Authorization", "Bearer $apiKey")
+            .url(ep.baseUrl.trimEnd('/') + "/chat/completions")
+            .header("Authorization", "Bearer ${ep.apiKey}")
             .post(body.toRequestBody("application/json".toMediaType()))
             .build()
         http.newCall(request).execute().use { resp ->
@@ -154,7 +163,7 @@ class DeepSeekClient(
             val obj = json.parseToJsonElement(text ?: "{}").jsonObject
             (obj["usage"] as? JsonObject)?.let { u ->
                 fun n(k: String) = (u[k] as? JsonPrimitive)?.intOrNull ?: 0
-                onUsage?.invoke(model, n("prompt_tokens"), n("prompt_cache_hit_tokens"), n("completion_tokens"))
+                onUsage?.invoke(ep.key, n("prompt_tokens"), n("prompt_cache_hit_tokens"), n("completion_tokens"))
             }
             val msg = obj["choices"]?.jsonArray?.firstOrNull()?.jsonObject?.get("message") as? JsonObject
             msg?.get("content").str().ifBlank { throw ApiException("模型没有返回内容") }
@@ -182,6 +191,48 @@ class DeepSeekClient(
         }
     }
 
+    /**
+     * 列出服务上能用的模型（OpenAI 格式的 GET /models）。
+     * 用户填的地址少了 /v1 时自动补上再试一次，返回实际可用的地址和模型列表。
+     */
+    suspend fun listModels(baseUrl: String, apiKey: String): Pair<String, List<String>> = withContext(Dispatchers.IO) {
+        val base = baseUrl.trim().trimEnd('/')
+        if (!base.startsWith("http")) throw ApiException("接口地址要以 http:// 或 https:// 开头")
+        val candidates = listOf(base) + (if (!Regex("""/v\d+[a-z]*$""").containsMatchIn(base)) listOf("$base/v1") else emptyList())
+        var last: ApiException? = null
+        for (b in candidates) {
+            val request = Request.Builder().url("$b/models").header("Authorization", "Bearer $apiKey").get().build()
+            val result = http.newCall(request).execute().use { resp ->
+                val text = resp.body?.string()
+                if (!resp.isSuccessful) {
+                    last = ApiException(describeError(resp.code, text), resp.code)
+                    return@use null
+                }
+                val el = runCatching { json.parseToJsonElement(text ?: "") }.getOrNull()
+                val arr = when (el) {
+                    is JsonArray -> el
+                    is JsonObject -> (el["data"] ?: el["models"]) as? JsonArray
+                    else -> null
+                }
+                if (arr == null) {
+                    last = ApiException("这个地址返回的不是模型列表，检查一下地址对不对")
+                    return@use null
+                }
+                arr.mapNotNull { m ->
+                    when (m) {
+                        is JsonObject -> m["id"].str().ifEmpty { m["name"].str() }.takeIf { it.isNotEmpty() }
+                        is JsonPrimitive -> m.content
+                        else -> null
+                    }
+                }.distinct().sorted()
+            }
+            if (result != null) return@withContext b to result
+            // 401 这类错误换地址也没用
+            if (last?.code == 401 || last?.code == 403) break
+        }
+        throw last ?: ApiException("获取模型列表失败")
+    }
+
     private fun describeError(code: Int, body: String?): String {
         val detail = body?.let {
             runCatching {
@@ -190,11 +241,12 @@ class DeepSeekClient(
         }.orEmpty()
         val hint = when (code) {
             400 -> "请求格式有问题"
-            401 -> "API Key 不对，请到设置里检查"
-            402 -> "账户余额不足，请到 DeepSeek 官网充值"
+            401, 403 -> "API Key 不对或没有权限，请到设置里检查"
+            404 -> "接口地址或模型名不对"
+            402 -> "账户余额不足，请先充值"
             422 -> "参数有误"
             429 -> "请求太频繁，稍等一下再试"
-            500, 502, 503 -> "DeepSeek 服务器繁忙，稍后再试"
+            500, 502, 503 -> "服务器繁忙，稍后再试"
             else -> "请求失败"
         }
         return if (detail.isNotBlank()) "$hint（$code：$detail）" else "$hint（$code）"

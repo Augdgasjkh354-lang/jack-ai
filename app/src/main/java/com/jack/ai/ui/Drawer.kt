@@ -17,6 +17,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -60,6 +69,7 @@ fun HistoryDrawer(
     onSelect: (String) -> Unit,
     onDelete: (String) -> Unit,
     onRename: (String, String) -> Unit,
+    onPin: (String) -> Unit,
     onOpenProject: (String) -> Unit,
     onNewProject: () -> Unit,
     onOpenMemory: () -> Unit,
@@ -71,9 +81,15 @@ fun HistoryDrawer(
 ) {
     var renaming by remember { mutableStateOf<Conversation?>(null) }
     var deleting by remember { mutableStateOf<Conversation?>(null) }
-    // 项目里的对话放在项目页面里，这里只列普通对话
-    val chats = state.conversations.filter { it.messages.isNotEmpty() && it.projectId == null }
+    var query by remember { mutableStateOf("") }
+    // 置顶的对话（包括项目里的）放最上面；其余项目里的对话放在项目页面里，这里只列普通对话
+    val pinned = state.conversations.filter { it.messages.isNotEmpty() && it.pinned }
+    val chats = state.conversations.filter { it.messages.isNotEmpty() && it.projectId == null && !it.pinned }
+    val results = remember(query, state.conversations) { if (query.isBlank()) emptyList() else searchConversations(state.conversations, query) }
     val colors = MaterialTheme.colorScheme
+    fun chatRow(c: Conversation): @Composable () -> Unit = {
+        ChatItem(c, c.id == state.currentId, { onSelect(c.id) }, { renaming = c }, { deleting = c }, onPin = { onPin(c.id) })
+    }
     ModalDrawerSheet(drawerContainerColor = colors.surfaceContainerLow) {
         Column(Modifier.fillMaxSize()) {
             Row(
@@ -97,7 +113,19 @@ fun HistoryDrawer(
                     Text("新对话", style = MaterialTheme.typography.titleSmall)
                 }
             }
-            LazyColumn(Modifier.weight(1f).padding(top = 8.dp)) {
+            SearchField(query, { query = it }, Modifier.padding(start = 16.dp, end = 16.dp, top = 10.dp))
+            if (query.isNotBlank()) {
+                LazyColumn(Modifier.weight(1f).padding(top = 4.dp)) {
+                    item { SectionLabel(if (results.isEmpty()) "没有找到相关对话" else "找到 ${results.size} 个对话") }
+                    items(results, key = { "s" + it.first.id }) { (c, snippet) ->
+                        SearchResultRow(c.title, snippet, query, state.project(c.projectId)?.name) { onSelect(c.id) }
+                    }
+                }
+            } else LazyColumn(Modifier.weight(1f).padding(top = 8.dp)) {
+                if (pinned.isNotEmpty()) {
+                    item { SectionLabel("置顶") }
+                    items(pinned, key = { "pin" + it.id }) { c -> chatRow(c)() }
+                }
                 item { SectionLabel("项目") }
                 items(state.projects, key = { "p" + it.id }) { p ->
                     val count = state.conversations.count { it.projectId == p.id && it.messages.isNotEmpty() }
@@ -123,9 +151,7 @@ fun HistoryDrawer(
                         )
                     }
                 }
-                items(chats, key = { it.id }) { c ->
-                    ChatItem(c, c.id == state.currentId, { onSelect(c.id) }, { renaming = c }, { deleting = c })
-                }
+                items(chats, key = { it.id }) { c -> chatRow(c)() }
             }
             HorizontalDivider(color = colors.outlineVariant)
             Column(Modifier.padding(vertical = 8.dp)) {
@@ -169,7 +195,14 @@ private fun SectionLabel(text: String) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun ChatItem(c: Conversation, selected: Boolean, onClick: () -> Unit, onRename: () -> Unit, onDelete: () -> Unit) {
+fun ChatItem(
+    c: Conversation,
+    selected: Boolean,
+    onClick: () -> Unit,
+    onRename: () -> Unit,
+    onDelete: () -> Unit,
+    onPin: (() -> Unit)? = null,
+) {
     var menu by remember { mutableStateOf(false) }
     val colors = MaterialTheme.colorScheme
     Box(Modifier.padding(horizontal = 12.dp)) {
@@ -182,6 +215,9 @@ fun ChatItem(c: Conversation, selected: Boolean, onClick: () -> Unit, onRename: 
                 .combinedClickable(onClick = onClick, onLongClick = { menu = true })
                 .padding(start = 16.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
         ) {
+            if (c.pinned) {
+                Icon(AppIcons.Pin, null, Modifier.padding(end = 6.dp).size(14.dp), tint = colors.primary)
+            }
             Text(
                 c.title, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.bodyMedium,
@@ -192,6 +228,13 @@ fun ChatItem(c: Conversation, selected: Boolean, onClick: () -> Unit, onRename: 
             }
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            if (onPin != null) {
+                DropdownMenuItem(
+                    text = { Text(if (c.pinned) "取消置顶" else "置顶") },
+                    leadingIcon = { Icon(AppIcons.Pin, null) },
+                    onClick = { menu = false; onPin() },
+                )
+            }
             DropdownMenuItem(
                 text = { Text("重命名") },
                 leadingIcon = { Icon(Icons.Default.Edit, null) },
@@ -204,6 +247,89 @@ fun ChatItem(c: Conversation, selected: Boolean, onClick: () -> Unit, onRename: 
             )
         }
     }
+}
+
+/** 按标题和消息内容搜索对话，返回 (对话, 命中的一小段原文)。标题命中的排前面。 */
+internal fun searchConversations(all: List<Conversation>, query: String): List<Pair<Conversation, String>> {
+    val q = query.trim()
+    val out = mutableListOf<Triple<Conversation, String, Int>>()
+    for (c in all) {
+        if (c.messages.isEmpty()) continue
+        val inTitle = c.title.contains(q, ignoreCase = true)
+        val hit = c.messages.asReversed().firstOrNull { it.content.contains(q, ignoreCase = true) }
+        if (!inTitle && hit == null) continue
+        val snippet = hit?.let { m ->
+            val i = m.content.indexOf(q, ignoreCase = true)
+            val start = (i - 18).coerceAtLeast(0)
+            val end = (i + q.length + 40).coerceAtMost(m.content.length)
+            (if (start > 0) "…" else "") + m.content.substring(start, end).replace('\n', ' ') + (if (end < m.content.length) "…" else "")
+        } ?: ""
+        out += Triple(c, snippet, if (inTitle) 0 else 1)
+    }
+    return out.sortedWith(compareBy<Triple<Conversation, String, Int>> { it.third }.thenByDescending { it.first.updatedAt })
+        .take(100).map { it.first to it.second }
+}
+
+@Composable
+private fun SearchField(value: String, onChange: (String) -> Unit, modifier: Modifier = Modifier) {
+    val colors = MaterialTheme.colorScheme
+    Surface(shape = RoundedCornerShape(14.dp), color = colors.surfaceContainerHigh, modifier = modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 12.dp)) {
+            Icon(Icons.Default.Search, null, Modifier.size(18.dp), tint = colors.onSurfaceVariant)
+            Spacer(Modifier.size(8.dp))
+            Box(Modifier.weight(1f).padding(vertical = 11.dp)) {
+                if (value.isEmpty()) Text("搜索对话", style = MaterialTheme.typography.bodyMedium, color = colors.outline)
+                BasicTextField(
+                    value = value,
+                    onValueChange = onChange,
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = colors.onSurface),
+                    cursorBrush = SolidColor(colors.primary),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            if (value.isNotEmpty()) {
+                IconButton(onClick = { onChange("") }, modifier = Modifier.size(28.dp)) {
+                    Icon(Icons.Default.Close, "清空", Modifier.size(16.dp), tint = colors.onSurfaceVariant)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchResultRow(title: String, snippet: String, query: String, project: String?, onClick: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Column(
+        Modifier
+            .padding(horizontal = 12.dp)
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+    ) {
+        Text(highlight(title, query, colors.primary), maxLines = 1, overflow = TextOverflow.Ellipsis,
+            style = MaterialTheme.typography.bodyMedium)
+        val sub = listOfNotNull(project?.let { "项目：$it" }, snippet.takeIf { it.isNotEmpty() }).joinToString(" · ")
+        if (sub.isNotEmpty()) {
+            Text(highlight(sub, query, colors.primary), maxLines = 2, overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+        }
+    }
+}
+
+/** 把命中的关键词标成主题色。 */
+private fun highlight(text: String, query: String, color: Color): AnnotatedString = buildAnnotatedString {
+    val q = query.trim()
+    var i = 0
+    while (q.isNotEmpty()) {
+        val j = text.indexOf(q, i, ignoreCase = true)
+        if (j < 0) break
+        append(text.substring(i, j))
+        withStyle(SpanStyle(color = color, fontWeight = FontWeight.SemiBold)) { append(text.substring(j, j + q.length)) }
+        i = j + q.length
+    }
+    append(text.substring(i))
 }
 
 @Composable

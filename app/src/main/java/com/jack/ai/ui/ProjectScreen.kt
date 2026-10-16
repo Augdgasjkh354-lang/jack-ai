@@ -164,6 +164,7 @@ fun ProjectScreen(
                     onClick = { vm.select(c.id); onOpenChat() },
                     onRename = { renaming = c },
                     onDelete = { deleting = c },
+                    onPin = { vm.togglePin(c.id) },
                 )
             }
         }

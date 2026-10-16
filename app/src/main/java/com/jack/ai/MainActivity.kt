@@ -24,6 +24,7 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.jack.ai.data.Project
+import com.jack.ai.data.hasAnyKey
 import com.jack.ai.ui.ChatScreen
 import com.jack.ai.ui.JackTheme
 import com.jack.ai.ui.LibraryScreen
@@ -147,7 +148,7 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         PDFBoxResourceLoader.init(applicationContext)
         enableEdgeToEdge()
-        if (vm.state.value.settings.apiKey.isBlank() && savedInstanceState == null) stack.add(Screen.Settings)
+        if (!vm.state.value.settings.hasAnyKey() && savedInstanceState == null) stack.add(Screen.Settings)
         if (savedInstanceState == null) handleIntent(intent)
         setContent {
             val state by vm.state.collectAsStateWithLifecycle()

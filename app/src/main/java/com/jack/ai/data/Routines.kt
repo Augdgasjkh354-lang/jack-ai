@@ -189,6 +189,7 @@ object Routines {
         }
         val updated = r.copy(lastRunAt = System.currentTimeMillis(), enabled = r.repeat != "none")
         store.saveRoutines(list.map { if (it.id == id) updated else it })
+        com.jack.ai.AskWidget.refresh(ctx)
         schedule(ctx, updated)
     }
 
@@ -196,7 +197,7 @@ object Routines {
     suspend fun runTask(ctx: Context, r: Routine): String {
         val store = Store(ctx)
         val s = store.loadSettings()
-        if (s.apiKey.isBlank()) return "还没有填写 DeepSeek API Key，任务没法执行。"
+        val ep = s.backgroundEndpoint() ?: return "还没有填写 API Key，任务没法执行。"
         val client = DeepSeekClient()
         val tavily = TavilyClient()
         val web = s.tavilyKey.isNotBlank()
@@ -221,7 +222,7 @@ object Routines {
         repeat(7) { round ->
             val content = StringBuilder()
             val calls = sortedMapOf<Int, Triple<StringBuilder, StringBuilder, StringBuilder>>()
-            client.stream(s.baseUrl, s.apiKey, MODEL_FLASH, messages, ThinkLevel.OFF, 1.0f, if (round < 6) tools else null)
+            client.stream(ep, messages, ThinkLevel.OFF, 1.0f, if (round < 6) tools else null)
                 .collect { ev ->
                     when (ev) {
                         is StreamEvent.Text -> content.append(ev.content)
@@ -231,7 +232,7 @@ object Routines {
                             if (ev.name.isNotEmpty()) acc.second.append(ev.name)
                             acc.third.append(ev.arguments)
                         }
-                        is StreamEvent.Usage -> store.addUsage(MODEL_FLASH, ev.promptTokens, ev.cacheHit, ev.completionTokens)
+                        is StreamEvent.Usage -> store.addUsage(ep.key, ev.promptTokens, ev.cacheHit, ev.completionTokens)
                     }
                 }
             if (calls.isEmpty()) return content.toString().trim().ifBlank { "（这次没有生成内容）" }

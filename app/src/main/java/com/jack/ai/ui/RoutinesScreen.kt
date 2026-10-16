@@ -53,6 +53,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.jack.ai.ChatViewModel
 import com.jack.ai.UiState
+import com.jack.ai.data.CalendarTool
 import com.jack.ai.data.REPEAT_LABELS
 import com.jack.ai.data.Routine
 import com.jack.ai.data.Routines
@@ -75,6 +76,10 @@ fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
     var editing by remember { mutableStateOf<Routine?>(null) }
     var canNotify by remember { mutableStateOf(Routines.canNotify(ctx)) }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { canNotify = it }
+    var canCalendar by remember { mutableStateOf(CalendarTool.canWrite(ctx)) }
+    val calendarPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        canCalendar = CalendarTool.canWrite(ctx)
+    }
 
     Scaffold(
         topBar = {
@@ -99,6 +104,18 @@ fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                             Text("还没有通知权限", style = MaterialTheme.typography.titleSmall)
                             Text("没有通知权限，到点时提醒弹不出来。", style = MaterialTheme.typography.bodySmall)
                             OutlinedButton(onClick = { permission.launch(Manifest.permission.POST_NOTIFICATIONS) }) { Text("允许通知") }
+                        }
+                    }
+                }
+            }
+            if (!canCalendar) {
+                item {
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("日历", style = MaterialTheme.typography.titleSmall)
+                            Text("允许后，跟 AI 说“下周三下午三点开会”会直接写进手机日历，也能问它“我明天有什么安排”。",
+                                style = MaterialTheme.typography.bodySmall)
+                            OutlinedButton(onClick = { calendarPermission.launch(CalendarTool.PERMISSIONS) }) { Text("允许读写日历") }
                         }
                     }
                 }

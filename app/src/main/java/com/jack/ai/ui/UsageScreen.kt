@@ -138,7 +138,7 @@ fun UsageScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                                     style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
                                 )
                             }
-                            Text(money(l.sumOf { it.cost() }), color = colors.primary)
+                            Text(if (m.startsWith("c:")) "未计价" else money(l.sumOf { it.cost() }), color = colors.primary)
                         }
                     }
                 }
@@ -160,7 +160,7 @@ fun UsageScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
             }
 
             Text(
-                "费用按 DeepSeek 参考价估算（美元）：Flash 输入 $0.14、缓存命中 $0.0028、输出 $0.28；Pro 输入 $1.74、缓存命中 $0.145、输出 $3.48，都是每百万 token。实际以 DeepSeek 账单为准。",
+                "费用按 DeepSeek 参考价估算（美元）：Flash 输入 $0.14、缓存命中 $0.0028、输出 $0.28；Pro 输入 $1.74、缓存命中 $0.145、输出 $3.48，都是每百万 token。实际以 DeepSeek 账单为准。其他服务的模型不估算费用。",
                 style = MaterialTheme.typography.bodySmall,
                 color = colors.outline,
             )

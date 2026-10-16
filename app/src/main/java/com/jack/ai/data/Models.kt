@@ -50,6 +50,7 @@ data class Conversation(
     val systemPrompt: String = "",
     val presetName: String = "",
     val projectId: String? = null,
+    val pinned: Boolean = false,
     val messages: List<ChatMessage> = emptyList(),
     /** 压缩后的前情提要，以及它覆盖到哪条消息（含）为止。 */
     val summary: String = "",
@@ -131,7 +132,93 @@ data class Settings(
     val fontScale: Float = 1f,
     val accent: String = "clay",
     val appLock: Boolean = false,
+    /** 用户自己加的 OpenAI 兼容服务（Kimi、通义、OpenRouter 等）。 */
+    val providers: List<Provider> = emptyList(),
 )
+
+/** OpenAI 兼容的模型服务。 */
+@Serializable
+data class Provider(
+    val id: String = newId(),
+    val name: String,
+    val baseUrl: String,
+    val apiKey: String = "",
+    val models: List<ProviderModel> = emptyList(),
+)
+
+/** vision：能看图；reasoning：支持 reasoning_effort（深度思考）。 */
+@Serializable
+data class ProviderModel(val id: String, val vision: Boolean = false, val reasoning: Boolean = false)
+
+/** 一次请求发到哪里、用什么模型。deepseek=true 时按 DeepSeek 的参数格式发。 */
+data class Endpoint(
+    val baseUrl: String,
+    val apiKey: String,
+    val model: String,
+    val deepseek: Boolean,
+    val vision: Boolean,
+    val reasoning: Boolean,
+    /** 记用量用的模型标识（自定义模型是 c:服务:模型）。 */
+    val key: String = model,
+)
+
+/** 自定义模型在设置里存成 "c:服务id:模型id"，内置 DeepSeek 模型直接存模型名。 */
+fun customModelKey(providerId: String, modelId: String) = "c:$providerId:$modelId"
+
+private fun parseCustomKey(key: String): Pair<String, String>? {
+    if (!key.startsWith("c:")) return null
+    val rest = key.substring(2)
+    val i = rest.indexOf(':')
+    return if (i <= 0) null else rest.substring(0, i) to rest.substring(i + 1)
+}
+
+fun Settings.endpoint(key: String = model): Endpoint? {
+    val custom = parseCustomKey(key)
+    if (custom == null) {
+        return Endpoint(baseUrl, apiKey, key, deepseek = true, vision = key != MODEL_PRO, reasoning = true)
+    }
+    val p = providers.firstOrNull { it.id == custom.first } ?: return null
+    val m = p.models.firstOrNull { it.id == custom.second } ?: ProviderModel(custom.second)
+    return Endpoint(p.baseUrl, p.apiKey, m.id, deepseek = false, vision = m.vision, reasoning = m.reasoning, key = key)
+}
+
+/** 压缩、做梦、定时任务这类后台活：有 DeepSeek Key 就用 Flash（便宜），否则用当前选的模型。 */
+fun Settings.backgroundEndpoint(): Endpoint? =
+    if (apiKey.isNotBlank()) endpoint(MODEL_FLASH) else endpoint(model)?.takeIf { it.apiKey.isNotBlank() }
+
+/** 至少配好了一个能用的服务。 */
+fun Settings.hasAnyKey(): Boolean = apiKey.isNotBlank() || providers.any { it.apiKey.isNotBlank() && it.models.isNotEmpty() }
+
+data class ModelChoice(val key: String, val label: String, val group: String, val desc: String)
+
+/** 模型选择菜单里列出的全部模型：DeepSeek 两个（填了 Key 或者没加别的服务时）+ 每个服务里勾选的模型。 */
+fun Settings.modelChoices(): List<ModelChoice> {
+    val list = mutableListOf<ModelChoice>()
+    if (apiKey.isNotBlank() || providers.none { it.models.isNotEmpty() }) {
+        list += ModelChoice(MODEL_FLASH, modelLabel(MODEL_FLASH), "DeepSeek", "快、便宜，能看图片")
+        list += ModelChoice(MODEL_PRO, modelLabel(MODEL_PRO), "DeepSeek", "更聪明，适合难题（不能看图）")
+    }
+    providers.forEach { p ->
+        p.models.forEach { m ->
+            val tags = listOfNotNull("能看图".takeIf { m.vision }, "能深度思考".takeIf { m.reasoning })
+            list += ModelChoice(customModelKey(p.id, m.id), modelLabel(m.id), p.name, tags.joinToString("，"))
+        }
+    }
+    return list
+}
+
+/** 按模型名猜它能不能看图、会不会深度思考，用户可以再改。 */
+fun guessVision(id: String): Boolean {
+    val s = id.lowercase()
+    return listOf("vl", "vision", "4o", "gpt-4.1", "gpt-5", "gemini", "claude", "omni", "qvq", "glm-4v", "glm-4.5v",
+        "pixtral", "llava", "llama-4", "kimi-k2.5", "kimi-latest", "moonshot-v1-8k-vision", "grok-4", "mistral-medium").any { it in s }
+}
+
+fun guessReasoning(id: String): Boolean {
+    val s = id.lowercase()
+    return Regex("""(^|[/\-_.])(o1|o3|o4)([\-_.]|$)""").containsMatchIn(s) ||
+        listOf("reason", "r1", "think", "qwq", "gpt-5", "deepseek-r", "grok-3-mini", "grok-4").any { it in s }
+}
 
 /** 每天每个模型用了多少 token。 */
 @Serializable
@@ -145,8 +232,9 @@ data class UsageDay(
 )
 
 /** 参考价（美元 / 百万 token）：缓存命中输入、未命中输入、输出。 */
-fun modelPrice(model: String): Triple<Double, Double, Double> = when (model) {
-    MODEL_PRO -> Triple(0.145, 1.74, 3.48)
+fun modelPrice(model: String): Triple<Double, Double, Double> = when {
+    model == MODEL_PRO -> Triple(0.145, 1.74, 3.48)
+    model.startsWith("c:") -> Triple(0.0, 0.0, 0.0) // 其他服务的价格不知道，不估算
     else -> Triple(0.0028, 0.14, 0.28)
 }
 
@@ -159,13 +247,12 @@ const val DEFAULT_BASE_URL = "https://api.deepseek.com"
 const val MODEL_FLASH = "deepseek-flash"
 const val MODEL_PRO = "deepseek-v4-pro"
 
-fun modelLabel(model: String): String = when (model) {
-    MODEL_FLASH -> "V4.1 Flash"
-    MODEL_PRO -> "V4 Pro"
-    else -> model
+fun modelLabel(model: String): String = when {
+    model == MODEL_FLASH -> "V4.1 Flash"
+    model == MODEL_PRO -> "V4 Pro"
+    // 自定义模型只显示模型名；OpenRouter 这类 "厂商/模型" 去掉厂商前缀
+    else -> (parseCustomKey(model)?.second ?: model).substringAfterLast('/')
 }
-
-fun modelSupportsImages(model: String) = model != MODEL_PRO
 
 val DEFAULT_PRESETS = listOf(
     Preset(name = "通用助手", prompt = ""),

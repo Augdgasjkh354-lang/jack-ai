@@ -18,15 +18,34 @@
         android:src="@drawable/ic_widget_chat"
         android:contentDescription="Jack AI" />
 
-    <TextView
-        android:id="@+id/widget_text"
+    <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginStart="12dp"
+        android:layout_marginEnd="6dp"
         android:layout_weight="1"
-        android:text="问点什么…"
-        android:textColor="#8A8178"
-        android:textSize="15sp" />
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/widget_text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="问点什么…"
+            android:textColor="#8A8178"
+            android:textSize="15sp" />
+
+        <!-- 下一个提醒、日程、待复习卡片，没有就隐藏 -->
+        <TextView
+            android:id="@+id/widget_sub"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:ellipsize="end"
+            android:maxLines="2"
+            android:textColor="#C4673F"
+            android:textSize="12sp"
+            android:visibility="gone" />
+    </LinearLayout>
 
     <ImageView
         android:id="@+id/widget_mic"

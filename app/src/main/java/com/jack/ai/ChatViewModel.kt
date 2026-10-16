@@ -17,6 +17,8 @@ import com.jack.ai.data.Attachment
 import com.jack.ai.data.Attachments
 import com.jack.ai.data.Backup
 import com.jack.ai.data.ChartWriter
+import com.jack.ai.data.ChatExport
+import com.jack.ai.data.CalendarTool
 import com.jack.ai.data.Diagram
 import com.jack.ai.data.DiagramWriter
 import com.jack.ai.data.TextEdit
@@ -54,7 +56,13 @@ import com.jack.ai.data.Settings
 import com.jack.ai.data.Store
 import com.jack.ai.data.ThinkLevel
 import com.jack.ai.data.MODEL_PRO
-import com.jack.ai.data.modelSupportsImages
+import com.jack.ai.data.backgroundEndpoint
+import com.jack.ai.data.endpoint
+import com.jack.ai.data.Provider
+import com.jack.ai.data.ProviderModel
+import com.jack.ai.data.guessReasoning
+import com.jack.ai.data.guessVision
+import com.jack.ai.data.modelChoices
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -130,6 +138,12 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(routines = store.loadRoutines(), library = store.loadLibrary(), cards = store.loadCards()) }
         Routines.scheduleAll(app)
         mergeInbox()
+        refreshWidget()
+    }
+
+    private fun refreshWidget() {
+        val app = getApplication<Application>()
+        viewModelScope.launch(Dispatchers.IO) { AskWidget.refresh(app) }
     }
 
     fun consumeToast() = _state.update { it.copy(toast = null) }
@@ -161,6 +175,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     fun rename(id: String, title: String) {
         updateConv(id) { it.copy(title = title.ifBlank { it.title }) }
+        persist()
+    }
+
+    fun togglePin(id: String) {
+        updateConvQuiet(id) { it.copy(pinned = !it.pinned) }
         persist()
     }
 
@@ -337,6 +356,30 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) { paths.forEach { runCatching { File(it).delete() } } }
     }
 
+    // ---------- 导出 ----------
+
+    val exporting = MutableStateFlow(false)
+
+    /** 把当前对话导出成文件，准备好后交给界面分享。 */
+    fun exportChat(format: ChatExport.Format, onReady: (File) -> Unit) {
+        val conv = _state.value.current?.takeIf { it.messages.isNotEmpty() } ?: return
+        if (exporting.value) return
+        exporting.value = true
+        viewModelScope.launch {
+            try {
+                val file = withContext(Dispatchers.IO) { ChatExport.export(getApplication<Application>(), conv, format) }
+                onReady(file)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                // 长图太大时可能内存不够
+                _state.update { it.copy(toast = if (e is OutOfMemoryError) "对话太长，生成长图时内存不够，换成 PDF 试试" else "导出失败：${e.message}") }
+            } finally {
+                exporting.value = false
+            }
+        }
+    }
+
     // ---------- 设置 ----------
 
     fun updateSettings(transform: (Settings) -> Settings) {
@@ -345,6 +388,26 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val after = _state.value.settings
         store.saveSettings(after)
         if (before.dreamEnabled != after.dreamEnabled) Dreamer.schedule(getApplication<Application>(), after.dreamEnabled)
+    }
+
+    /** 获取某个服务的模型列表，返回 (可用的地址, 模型 id)。 */
+    suspend fun fetchModels(baseUrl: String, apiKey: String): Pair<String, List<String>> = client.listModels(baseUrl, apiKey)
+
+    fun guessModel(id: String) = ProviderModel(id, vision = guessVision(id), reasoning = guessReasoning(id))
+
+    fun saveProvider(p: Provider) {
+        updateSettings { s ->
+            val list = if (s.providers.any { it.id == p.id }) s.providers.map { if (it.id == p.id) p else it } else s.providers + p
+            fixModel(s.copy(providers = list))
+        }
+    }
+
+    fun deleteProvider(id: String) = updateSettings { s -> fixModel(s.copy(providers = s.providers.filterNot { it.id == id })) }
+
+    /** 当前选的模型没了（服务删了、模型取消勾选），换成第一个能用的。 */
+    private fun fixModel(s: Settings): Settings {
+        val choices = s.modelChoices()
+        return if (choices.any { it.key == s.model } || choices.isEmpty()) s else s.copy(model = choices.first().key)
     }
 
     suspend fun checkBalance(): String {
@@ -366,8 +429,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val trimmed = text.trim()
         val atts = _state.value.pending
         if ((trimmed.isEmpty() && atts.isEmpty()) || _state.value.streaming || _state.value.importing) return false
-        if (atts.any { it.kind == "image" } && !modelSupportsImages(_state.value.settings.model)) {
-            _state.update { it.copy(toast = "V4 Pro 看不了图片，请点右上角切换到 V4.1 Flash") }
+        if (atts.any { it.kind == "image" } && _state.value.settings.endpoint()?.vision == false) {
+            _state.update { it.copy(toast = "当前模型看不了图片，请点顶部的模型名换一个能看图的") }
             return false
         }
         var conv = _state.value.current
@@ -412,6 +475,34 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         persist()
     }
 
+    /** 改写一条自己发的消息：它之后的对话全部丢掉，用新内容重新回答。 */
+    fun editMessage(messageId: String, text: String) {
+        val conv = _state.value.current ?: return
+        val idx = conv.messages.indexOfFirst { it.id == messageId }
+        if (idx < 0 || conv.messages[idx].role != "user") return
+        val old = conv.messages[idx]
+        val trimmed = text.trim()
+        if (trimmed.isEmpty() && old.attachments.isEmpty()) return
+        // 正在回答时先停下，等旧的收尾（它会把 streaming 置回 false）再开始
+        val running = job
+        stop()
+        viewModelScope.launch {
+            running?.join()
+            val cur = _state.value.conversations.firstOrNull { it.id == conv.id } ?: return@launch
+            val i = cur.messages.indexOfFirst { it.id == messageId }
+            if (i < 0) return@launch
+            // 这条消息自己的附件留着，只清理后面的
+            cleanup(cur.messages.drop(i + 1))
+            updateConv(conv.id) { c ->
+                c.copy(
+                    title = if (i == 0) trimmed.ifEmpty { c.title }.take(20).replace('\n', ' ') else c.title,
+                    messages = c.messages.take(i) + old.copy(content = trimmed, createdAt = System.currentTimeMillis()),
+                )
+            }
+            startReply(conv.id)
+        }
+    }
+
     fun stop() {
         job?.cancel()
         job = null
@@ -422,7 +513,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val conv = _state.value.current ?: return
         if (_state.value.streaming) return
         if (conv.messages.lastOrNull()?.let { it.role == "assistant" && it.content.isNotBlank() } != true) return
-        startReply(conv.id, modelOverride = MODEL_PRO, extraUser = REVIEW_PROMPT)
+        // 有 DeepSeek Key 时用 V4 Pro 复核，否则用当前模型
+        val model = if (_state.value.settings.apiKey.isNotBlank()) MODEL_PRO else _state.value.settings.model
+        startReply(conv.id, modelOverride = model, extraUser = REVIEW_PROMPT)
     }
 
     private fun startReply(convId: String, modelOverride: String? = null, extraUser: String? = null) {
@@ -434,16 +527,21 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val reply = ChatMessage(role = "assistant", model = model)
         updateConv(convId) { it.copy(messages = it.messages + reply) }
 
-        if (settings.apiKey.isBlank()) {
-            patchMessage(convId, reply.id) { it.copy(error = "还没有填写 DeepSeek API Key，请点左上角菜单 → 设置") }
+        val ep = settings.endpoint(model)
+        if (ep == null || ep.apiKey.isBlank()) {
+            patchMessage(convId, reply.id) {
+                it.copy(error = if (ep == null) "这个模型已经不在列表里了，请点顶部的模型名重新选一个"
+                else if (ep.deepseek) "还没有填写 DeepSeek API Key，请点左上角菜单 → 设置" else "这个服务还没有填写 API Key，请到设置里检查")
+            }
             persist()
             return
         }
         val skills = settings.activeSkills()
         val skillIds = skills.map { it.id }.toSet()
         val web = SkillIds.WEB in skillIds
-        val thinkingOn = thinking.effort != null
-        val images = modelSupportsImages(model)
+        // 思考内容只有 DeepSeek 要求原样发回；其他服务不发，免得不认识这个字段报错
+        val thinkingOn = ep.deepseek && thinking.effort != null
+        val images = ep.vision
         val compressed = conv.summary.isNotBlank()
         val memories = if (settings.memoryEnabled) store.loadMemories() else emptyList()
         val app = getApplication<Application>()
@@ -467,6 +565,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 add(SkillTools.LIST_ROUTINES); add(SkillTools.DELETE_ROUTINE)
                 add(SkillTools.SET_ALARM); add(SkillTools.CANCEL_ALARM)
             }
+            if (SkillIds.CALENDAR in skillIds) { add(SkillTools.ADD_EVENT); add(SkillTools.LIST_EVENTS); add(SkillTools.DELETE_EVENT) }
             if (compressed) add(SkillTools.SEARCH_HISTORY)
             if (settings.memoryEnabled) add(SkillTools.SAVE_MEMORY)
         }.takeIf { it.isNotEmpty() }
@@ -781,6 +880,53 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     "已删除「${r.title}」。" to SearchRecord("删除：${r.title}")
                 }
             }
+            suspend fun addEvent(args: JsonObject): String {
+                val title = args["title"].text().ifBlank { "日程" }
+                return runTool("添加日程：$title") {
+                    val (begin, dateOnly) = CalendarTool.parse(args["start"].text())
+                        ?: throw IllegalArgumentException("start 要写成 yyyy-MM-dd HH:mm 或 yyyy-MM-dd")
+                    val allDay = args["all_day"].text() == "true" || dateOnly
+                    val end = CalendarTool.parse(args["end"].text())?.first?.takeIf { it > begin }
+                        ?: (begin + if (allDay) 86_400_000L else 3_600_000L)
+                    val location = args["location"].text()
+                    val notes = args["notes"].text()
+                    val remind = args["remind_minutes"].text().toIntOrNull() ?: 15
+                    val shown = SimpleDateFormat(if (allDay) "M月d日 EEE" else "M月d日 EEE HH:mm", Locale.CHINA).format(Date(begin))
+                    val id = if (CalendarTool.canWrite(app)) withContext(Dispatchers.IO) {
+                        CalendarTool.insert(app, title, begin, end, allDay, location, notes, remind.takeIf { it >= 0 })
+                    } else null
+                    if (id != null) {
+                        refreshWidget()
+                        "已写进手机日历：$shown「$title」${if (remind >= 0) "，提前 $remind 分钟提醒" else ""}。编号 $id。" to
+                            SearchRecord("添加日程：$title")
+                    } else {
+                        startClock(CalendarTool.insertIntent(title, begin, end, allDay, location, notes), "手机上没找到日历 App")
+                        "没有日历写入权限（或没有可写的日历），已打开日历 App 的新建页面并填好内容（$shown「$title」），需要用户点一下保存。" +
+                            "想让以后自动写入，可以在左侧菜单「提醒和任务」里点「允许读写日历」。" to SearchRecord("打开日历：$title")
+                    }
+                }
+            }
+            suspend fun listEvents(args: JsonObject) = runTool("查看日程") {
+                if (!CalendarTool.canRead(app)) {
+                    "没有日历权限。请用户打开左侧菜单「提醒和任务」，点「允许读写日历」。" to SearchRecord("查看日程", error = "没有权限")
+                } else {
+                    val from = CalendarTool.dayStart(args["start_date"].text().ifBlank { null })
+                    val days = (args["days"].text().toIntOrNull() ?: 1).coerceIn(1, 62)
+                    val list = withContext(Dispatchers.IO) { CalendarTool.list(app, from, from + days * 86_400_000L) }
+                    val range = SimpleDateFormat("M月d日", Locale.CHINA).format(Date(from)) + if (days > 1) " 起 $days 天" else ""
+                    (if (list.isEmpty()) "$range 日历里没有日程。" else "$range 的日程：\n" + list.joinToString("\n") { CalendarTool.describe(it) }) to
+                        SearchRecord("查看日程：$range")
+                }
+            }
+            suspend fun deleteEvent(id: String) = runTool("删除日程") {
+                val n = id.trim().removePrefix("编号").trim().toLongOrNull() ?: throw IllegalArgumentException("编号不对")
+                if (!CalendarTool.canWrite(app)) "没有日历权限，删不了。请用户在「提醒和任务」页面授权。" to SearchRecord("删除日程", error = "没有权限")
+                else if (withContext(Dispatchers.IO) { CalendarTool.delete(app, n) }) {
+                    refreshWidget()
+                    "已删除日程 $n。" to SearchRecord("删除日程 $n")
+                }
+                else "没找到编号 $n 的日程。" to SearchRecord("删除日程", error = "没找到")
+            }
             suspend fun useSkill(name: String) = runTool("使用技能：$name") {
                 val skill = findSkill(skills, name)
                 if (skill?.id == SkillIds.RESEARCH) maxRounds = 25
@@ -800,8 +946,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     val roundContent = StringBuilder()
                     if (content.isNotEmpty() && !content.endsWith("\n")) content.append("\n\n")
                     try {
-                        client.stream(settings.baseUrl, settings.apiKey, model, messages,
-                            thinking, settings.temperature, tools)
+                        client.stream(ep, messages, thinking, settings.temperature, tools)
                             .collect { ev ->
                                 when (ev) {
                                     is StreamEvent.Text -> {
@@ -813,7 +958,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                                     is StreamEvent.Usage -> {
                                         val total = ev.promptTokens + ev.completionTokens
                                         updateConvQuiet(convId) { it.copy(lastPromptTokens = total, spentTokens = it.spentTokens + total) }
-                                        launch(Dispatchers.IO) { store.addUsage(model, ev.promptTokens, ev.cacheHit, ev.completionTokens) }
+                                        launch(Dispatchers.IO) { store.addUsage(ep.key, ev.promptTokens, ev.cacheHit, ev.completionTokens) }
                                     }
                                     is StreamEvent.ToolCall -> {
                                         val acc = calls.getOrPut(ev.index) { ToolAcc() }
@@ -875,7 +1020,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                             "save_memory" -> "content"
                             "use_skill" -> "name"
                             "run_js", "run_python" -> "code"
-                            "delete_routine" -> "id"
+                            "delete_routine", "delete_calendar_event" -> "id"
                             else -> "query"
                         }
                         val arg = args?.get(key).text()
@@ -895,12 +1040,15 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                             tc.name == "save_flashcards" && SkillIds.LEARN in skillIds -> saveCards(args)
                             tc.name == "create_reminder" && SkillIds.ROUTINE in skillIds -> makeRoutine("reminder", args)
                             tc.name == "create_task" && SkillIds.ROUTINE in skillIds -> makeRoutine("task", args)
+                            tc.name == "add_calendar_event" && SkillIds.CALENDAR in skillIds -> addEvent(args)
+                            tc.name == "list_calendar_events" && SkillIds.CALENDAR in skillIds -> listEvents(args)
                             arg.isBlank() -> "参数缺失"
                             tc.name == "use_skill" -> useSkill(arg)
                             tc.name == "run_js" && SkillIds.CALC in skillIds -> runJs(arg)
                             tc.name == "run_python" && SkillIds.PYTHON in skillIds -> runPython(arg)
                             tc.name == "search_library" && SkillIds.LIBRARY in skillIds -> searchLibrary(arg)
                             tc.name == "delete_routine" && SkillIds.ROUTINE in skillIds -> removeRoutine(arg)
+                            tc.name == "delete_calendar_event" && SkillIds.CALENDAR in skillIds -> deleteEvent(arg)
                             tc.name == "web_search" && web -> search(arg)
                             tc.name == "read_webpage" && web -> readPage(arg)
                             tc.name == "search_history" -> searchOld(arg)
@@ -961,7 +1109,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         if (s.streaming || s.compressingId != null) return
         val conv = s.conversations.firstOrNull { it.id == id } ?: return
         val settings = s.settings
-        if (settings.apiKey.isBlank()) return
+        val ep = settings.backgroundEndpoint() ?: return
         // 保留约 16% 阈值的最近原文（手动压缩时保留少一些，至少 8k）
         val retain = (settings.compressTokens * 0.16).toInt().let { if (manual) (it / 2).coerceAtLeast(8_000) else it }
         val msgs = Compression.toCompress(conv, retain)
@@ -973,8 +1121,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try {
                 val summary = client.complete(
-                    settings.baseUrl, settings.apiKey, MODEL_FLASH,
-                    Compression.buildRequest(conv.summary, msgs, imagesOk = true),
+                    ep,
+                    Compression.buildRequest(conv.summary, msgs, imagesOk = ep.vision),
                 )
                 updateConvQuiet(id) {
                     it.copy(summary = summary.trim(), summaryUntilId = msgs.last().id, lastPromptTokens = 0)
@@ -1035,8 +1183,12 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                         Backup.import(getApplication<Application>(), it)
                     } ?: throw IOException("打不开这个文件")
                 }
-                val keys = _state.value.settings.let { it.apiKey to it.tavilyKey }
-                val s = store.loadSettings().copy(apiKey = keys.first, tavilyKey = keys.second)
+                val old = _state.value.settings
+                val loaded = store.loadSettings()
+                // 备份里没有 Key，沿用手机上现有的
+                val s = loaded.copy(apiKey = old.apiKey, tavilyKey = old.tavilyKey, providers = loaded.providers.map { p ->
+                    p.copy(apiKey = old.providers.firstOrNull { it.id == p.id }?.apiKey.orEmpty())
+                })
                 store.saveSettings(s)
                 _state.value = UiState(
                     conversations = store.loadConversations().sortedByDescending { it.updatedAt },
@@ -1106,6 +1258,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             val list = transform(store.loadCards())
             store.saveCards(list)
             _state.update { it.copy(cards = list) }
+            AskWidget.refresh(getApplication<Application>())
         }
     }
 
@@ -1120,6 +1273,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         store.saveRoutines(list)
         Routines.schedule(getApplication<Application>(), r)
         _state.update { it.copy(routines = list) }
+        refreshWidget()
     }
 
     fun deleteRoutine(id: String) {
@@ -1127,6 +1281,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val list = store.loadRoutines().filterNot { it.id == id }
         store.saveRoutines(list)
         _state.update { it.copy(routines = list) }
+        refreshWidget()
     }
 
     fun reloadRoutines() = _state.update { it.copy(routines = store.loadRoutines()) }
@@ -1398,11 +1553,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private suspend fun startClock(intent: Intent) = withContext(Dispatchers.Main) {
+    private suspend fun startClock(intent: Intent, missing: String = "手机上没找到能设闹钟的时钟 App") = withContext(Dispatchers.Main) {
         try {
             getApplication<Application>().startActivity(intent)
         } catch (e: ActivityNotFoundException) {
-            throw IllegalStateException("手机上没找到能设闹钟的时钟 App")
+            throw IllegalStateException(missing)
         } catch (e: SecurityException) {
             throw IllegalStateException("没有设闹钟的权限")
         }

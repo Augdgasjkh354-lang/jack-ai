@@ -62,10 +62,8 @@ import androidx.compose.ui.unit.dp
 import com.jack.ai.ChatViewModel
 import com.jack.ai.data.DEFAULT_BASE_URL
 import com.jack.ai.data.DEFAULT_DEV_PROMPT
-import com.jack.ai.data.MODEL_FLASH
-import com.jack.ai.data.MODEL_PRO
 import com.jack.ai.data.ThinkLevel
-import com.jack.ai.data.modelLabel
+import com.jack.ai.data.modelChoices
 import com.jack.ai.data.Preset
 import com.jack.ai.data.Settings
 import com.jack.ai.data.ThemeMode
@@ -153,6 +151,10 @@ fun SettingsScreen(
                 balance?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
             }
 
+            Section("其他模型服务") {
+                ProvidersSection(vm, settings.providers)
+            }
+
             // ---- Tavily ----
             Section("Tavily API Key（联网搜索用）") {
                 var tavilyInput by remember { mutableStateOf(settings.tavilyKey) }
@@ -192,17 +194,17 @@ fun SettingsScreen(
 
             // ---- 模型 ----
             Section("模型和思考") {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(MODEL_FLASH, MODEL_PRO).forEach { m ->
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    settings.modelChoices().forEach { c ->
                         FilterChip(
-                            selected = settings.model == m,
-                            onClick = { vm.updateSettings { it.copy(model = m) } },
-                            label = { Text(modelLabel(m)) },
+                            selected = settings.model == c.key,
+                            onClick = { vm.updateSettings { it.copy(model = c.key) } },
+                            label = { Text(c.label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                         )
                     }
                 }
                 Text(
-                    "Flash 快、便宜、能看图；Pro 更聪明，不能看图，价格约 4 倍。",
+                    "Flash 快、便宜、能看图；Pro 更聪明，不能看图，价格约 4 倍。压缩、做梦、定时任务有 DeepSeek Key 时用 Flash，否则用这里选的模型。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

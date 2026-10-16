@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -37,6 +38,9 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.runtime.collectAsState
+import com.jack.ai.data.ChatExport
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
@@ -80,9 +84,10 @@ import com.jack.ai.ChatViewModel
 import com.jack.ai.UiState
 import com.jack.ai.data.Attachment
 import com.jack.ai.data.Conversation
-import com.jack.ai.data.MODEL_FLASH
-import com.jack.ai.data.MODEL_PRO
+import com.jack.ai.data.Settings
 import com.jack.ai.data.ThinkLevel
+import com.jack.ai.data.endpoint
+import com.jack.ai.data.modelChoices
 import com.jack.ai.data.modelLabel
 import kotlinx.coroutines.launch
 import java.util.Calendar
@@ -126,6 +131,7 @@ fun ChatScreen(
                 onSelect = { vm.select(it); scope.launch { drawerState.close() } },
                 onDelete = vm::delete,
                 onRename = vm::rename,
+                onPin = vm::togglePin,
                 onOpenProject = { scope.launch { drawerState.close() }; onOpenProject(it) },
                 onNewProject = { scope.launch { drawerState.close() }; onNewProject() },
                 onOpenMemory = { scope.launch { drawerState.close() }; onOpenMemory() },
@@ -151,7 +157,7 @@ fun ChatScreen(
                                 style = MaterialTheme.typography.titleMedium,
                                 modifier = Modifier.widthIn(max = 220.dp),
                             )
-                            ModelPicker(state.settings.model, project?.name) { m -> vm.updateSettings { it.copy(model = m) } }
+                            ModelPicker(state.settings, project?.name) { m -> vm.updateSettings { it.copy(model = m) } }
                         }
                     },
                     navigationIcon = {
@@ -168,6 +174,7 @@ fun ChatScreen(
                         IconButton(onClick = { vm.newChat(state.currentProjectId) }) {
                             Icon(AppIcons.NewChat, contentDescription = "新对话", Modifier.size(22.dp))
                         }
+                        if (conv != null && conv.messages.isNotEmpty()) ExportMenu(vm)
                     },
                 )
             },
@@ -199,7 +206,46 @@ fun ChatScreen(
 }
 
 @Composable
-private fun ModelPicker(model: String, projectName: String?, onPick: (String) -> Unit) {
+private fun ExportMenu(vm: ChatViewModel) {
+    var open by remember { mutableStateOf(false) }
+    val busy by vm.exporting.collectAsState()
+    val ctx = LocalContext.current
+    Box {
+        IconButton(onClick = { open = true }, enabled = !busy) {
+            if (busy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+            else Icon(Icons.Default.MoreVert, contentDescription = "更多")
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            listOf(
+                ChatExport.Format.IMAGE to "分享为长图",
+                ChatExport.Format.PDF to "导出为 PDF",
+                ChatExport.Format.MARKDOWN to "导出为 Markdown",
+            ).forEach { (fmt, label) ->
+                DropdownMenuItem(
+                    text = { Text(label) },
+                    leadingIcon = { Icon(AppIcons.Share, null) },
+                    onClick = {
+                        open = false
+                        vm.exportChat(fmt) { file -> shareExport(ctx, file, fmt.mime) }
+                    },
+                )
+            }
+        }
+    }
+}
+
+private fun shareExport(ctx: android.content.Context, file: java.io.File, mime: String) {
+    val uri = androidx.core.content.FileProvider.getUriForFile(ctx, ctx.packageName + ".files", file)
+    val send = Intent(Intent.ACTION_SEND)
+        .setType(mime)
+        .putExtra(Intent.EXTRA_STREAM, uri)
+        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    ctx.startActivity(Intent.createChooser(send, file.name))
+}
+
+@Composable
+private fun ModelPicker(settings: Settings, projectName: String?, onPick: (String) -> Unit) {
+    val model = settings.model
     var open by remember { mutableStateOf(false) }
     val colors = MaterialTheme.colorScheme
     Box {
@@ -217,20 +263,25 @@ private fun ModelPicker(model: String, projectName: String?, onPick: (String) ->
             )
             Icon(Icons.Default.KeyboardArrowDown, null, Modifier.size(16.dp), tint = colors.onSurfaceVariant)
         }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            listOf(
-                MODEL_FLASH to "快、便宜，能看图片",
-                MODEL_PRO to "更聪明，适合难题（不能看图）",
-            ).forEach { (id, desc) ->
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.heightIn(max = 460.dp)) {
+            val choices = settings.modelChoices()
+            val groups = choices.map { it.group }.distinct()
+            choices.forEachIndexed { i, c ->
+                // 有多个服务时，每组前面标一下服务名
+                if (groups.size > 1 && (i == 0 || choices[i - 1].group != c.group)) {
+                    if (i > 0) HorizontalDivider()
+                    Text(c.group, style = MaterialTheme.typography.labelMedium, color = colors.outline,
+                        modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 2.dp))
+                }
                 DropdownMenuItem(
                     text = {
                         Column {
-                            Text(modelLabel(id))
-                            Text(desc, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                            Text(c.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            if (c.desc.isNotEmpty()) Text(c.desc, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                         }
                     },
-                    leadingIcon = { if (id == model) Icon(Icons.Default.Check, null, tint = colors.primary) else Spacer(Modifier.size(24.dp)) },
-                    onClick = { onPick(id); open = false },
+                    leadingIcon = { if (c.key == model) Icon(Icons.Default.Check, null, tint = colors.primary) else Spacer(Modifier.size(24.dp)) },
+                    onClick = { onPick(c.key); open = false },
                 )
             }
         }
@@ -373,7 +424,7 @@ private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolea
             item(key = msg.id) {
                 Box(Modifier.animateItem()) {
                     if (msg.role == "user") {
-                        UserBubble(msg, onDelete = { vm.deleteFrom(msg.id) })
+                        UserBubble(msg, onDelete = { vm.deleteFrom(msg.id) }, onEdit = { vm.editMessage(msg.id, it) })
                     } else {
                         val isLast = msg.id == lastId
                         AssistantMessage(
@@ -454,6 +505,22 @@ private fun InputBar(
         vm.addFiles(it)
     }
     val ctx = LocalContext.current
+    // 拍照：相机 App 把照片写进缓存目录里的这个文件
+    var photoUri by rememberSaveable { mutableStateOf<android.net.Uri?>(null) }
+    val takePhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        photoUri?.let { if (ok) vm.addImages(listOf(it)) }
+    }
+    fun startCamera() {
+        val dir = java.io.File(ctx.cacheDir, "camera").apply { mkdirs(); listFiles()?.forEach { it.delete() } }
+        val file = java.io.File(dir, "photo-${System.currentTimeMillis()}.jpg")
+        val uri = androidx.core.content.FileProvider.getUriForFile(ctx, ctx.packageName + ".files", file)
+        photoUri = uri
+        try {
+            takePhoto.launch(uri)
+        } catch (e: ActivityNotFoundException) {
+            Toast.makeText(ctx, "手机上没有相机 App", Toast.LENGTH_SHORT).show()
+        }
+    }
     val speech = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
         r.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.let { vm.receiveText(it) }
     }
@@ -530,6 +597,14 @@ private fun InputBar(
                         }
                         DropdownMenu(expanded = attachMenu, onDismissRequest = { attachMenu = false }) {
                             DropdownMenuItem(
+                                text = { Text("拍照") },
+                                leadingIcon = { Icon(AppIcons.Camera, null) },
+                                onClick = {
+                                    attachMenu = false
+                                    startCamera()
+                                },
+                            )
+                            DropdownMenuItem(
                                 text = { Text("图片") },
                                 leadingIcon = { Icon(AppIcons.Image, null) },
                                 onClick = {
@@ -569,7 +644,8 @@ private fun InputBar(
                             }
                         }
                     }
-                    Box {
+                    // 不支持深度思考的模型不显示思考开关
+                    if (settings.endpoint()?.reasoning != false) Box {
                         Pill(
                             label = settings.thinking.label,
                             active = settings.thinking != ThinkLevel.OFF,

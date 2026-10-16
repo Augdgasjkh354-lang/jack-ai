@@ -94,7 +94,8 @@ object Dreamer {
     suspend fun dream(ctx: Context, force: Boolean = false): DreamEntry? {
         val store = Store(ctx)
         val settings = store.loadSettings()
-        if (settings.apiKey.isBlank() || (!force && !settings.dreamEnabled)) return null
+        val ep = settings.backgroundEndpoint() ?: return null
+        if (!force && !settings.dreamEnabled) return null
         val since = store.lastDreamAt.takeIf { it > 0 } ?: (System.currentTimeMillis() - TimeUnit.DAYS.toMillis(1))
         val fmt = SimpleDateFormat("M月d日 HH:mm", Locale.CHINA)
 
@@ -124,7 +125,7 @@ object Dreamer {
         }
         val client = DeepSeekClient(store::addUsage)
         val raw = client.complete(
-            settings.baseUrl, settings.apiKey, MODEL_FLASH,
+            ep,
             listOf(
                 buildJsonObject { put("role", "system"); put("content", INSTRUCTIONS) },
                 buildJsonObject { put("role", "user"); put("content", input) },
