@@ -50,6 +50,8 @@ object PromptBuilder {
         val projectMemory: String = "",
         /** 最近一篇做梦日记。 */
         val journal: String = "",
+        /** 已上传到 DeepSeek 的图片：路径 → file_id，这些图只发编号。 */
+        val fileIds: Map<String, String> = emptyMap(),
         val now: Long = System.currentTimeMillis(),
         val imageUrl: (String) -> String? = Attachments::imageDataUrl,
     )
@@ -69,7 +71,7 @@ object PromptBuilder {
         for (m in Compression.liveMessages(conv)) {
             if (m.error != null) continue
             if (m.role == "user") {
-                list += userMessage(m, input.vision, input.imageUrl)
+                list += userMessage(m, input.vision, input.imageUrl, input.fileIds)
             } else if (m.content.isNotBlank()) {
                 val trail = if (withTools && !flat) m.trail.mapNotNull { t ->
                     runCatching { Json.parseToJsonElement(t).jsonObject }.getOrNull()
@@ -96,7 +98,10 @@ object PromptBuilder {
     }
 
     /** 用户消息：文字 + 文件内容；有图片且模型支持时用多段格式。 */
-    fun userMessage(m: ChatMessage, imagesOk: Boolean, imageUrl: (String) -> String? = Attachments::imageDataUrl): JsonObject {
+    fun userMessage(
+        m: ChatMessage, imagesOk: Boolean, imageUrl: (String) -> String? = Attachments::imageDataUrl,
+        fileIds: Map<String, String> = emptyMap(),
+    ): JsonObject {
         val files = m.attachments.filter { it.kind == "file" }
         val imgs = m.attachments.filter { it.kind == "image" }
         val text = buildString {
@@ -114,6 +119,10 @@ object PromptBuilder {
             put("role", "user")
             put("content", buildJsonArray {
                 imgs.forEach { img ->
+                    fileIds[img.path]?.let { id ->
+                        add(buildJsonObject { put("type", "file"); put("file_id", id) })
+                        return@forEach
+                    }
                     val url = imageUrl(img.path) ?: return@forEach
                     add(buildJsonObject {
                         put("type", "image_url")

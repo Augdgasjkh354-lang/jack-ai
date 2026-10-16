@@ -100,6 +100,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val store = Store(app)
     private val client = DeepSeekClient(store::addUsage)
     private val tavily = TavilyClient()
+    private val dsFiles = com.jack.ai.api.DeepSeekFiles(app.filesDir)
     private val web = com.jack.ai.api.WebClient(tavily) { store.addPaidCall(com.jack.ai.api.WebClient.USAGE_KEY, com.jack.ai.api.WebClient.PRICE) }
     private val core = AppCore(app, store, viewModelScope).also {
         it.stop = { stop() }
@@ -353,7 +354,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val toolSet = PromptBuilder.toolSet(settings, skills, conv, project)
 
         val (chatMemory, projectMemory) = knowledge.memoryTexts(conv)
-        val promptInput = PromptBuilder.Input(settings, conv, project, memories, skills, vision = images, sendReasoning = thinkingOn,
+        var promptInput = PromptBuilder.Input(settings, conv, project, memories, skills, vision = images, sendReasoning = thinkingOn,
             extraUser = extraUser, chatMemory = chatMemory, projectMemory = projectMemory,
             journal = _state.value.dreams.firstOrNull { it.journal.isNotBlank() }?.journal.orEmpty())
         fun buildHistory(withTools: Boolean, flat: Boolean = false): MutableList<JsonObject> =
@@ -364,6 +365,12 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             // 上一次回答（被停止的）先收尾，免得它的收尾把这次的状态改乱
             previous?.join()
             _state.update { it.copy(streaming = true) }
+            // DeepSeek 看图：图片先传一次，之后只发编号；传不上的照旧内联
+            if (ep.deepseek && images) {
+                val paths = com.jack.ai.data.Compression.liveMessages(conv).flatMap { m -> m.attachments.filter { it.kind == "image" }.map { it.path } }
+                if (paths.isNotEmpty()) promptInput = promptInput.copy(fileIds = runCatching { dsFiles.ensure(ep, paths) }.getOrDefault(emptyMap()))
+            }
+            var filesDropped = false
             val session = ToolSession(toolHost, settings, conv, project, skills, object : ToolUi {
                 override fun started(label: String) =
                     patchMessage(convId, reply.id) { it.copy(searches = it.searches + SearchRecord(label, pending = true)) }
@@ -410,7 +417,15 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     onRound = { flush() },
                     // 带工具的请求被拒（比如旧记录格式接口不认）：先去掉旧的工具调用过程再试，工具照样能用；
                     // 还不行就不用工具，改成“先搜再答”
-                    recovery = Agent.Recovery { attempt ->
+                    recovery = Agent.Recovery { tried ->
+                        // 先怀疑图片编号失效（过期或被删）：清掉记录，改回内联图片再试一次
+                        if (!filesDropped && promptInput.fileIds.isNotEmpty()) {
+                            filesDropped = true
+                            dsFiles.forget()
+                            promptInput = promptInput.copy(fileIds = emptyMap())
+                            return@Recovery withContext(Dispatchers.Default) { buildHistory(toolSet != null) } to toolSet
+                        }
+                        val attempt = if (filesDropped) tried - 1 else tried
                         when {
                             toolSet == null -> null
                             attempt == 1 -> withContext(Dispatchers.Default) { buildHistory(true, flat = true) } to toolSet

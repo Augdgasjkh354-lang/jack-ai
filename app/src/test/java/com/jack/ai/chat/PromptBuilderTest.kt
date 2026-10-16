@@ -176,6 +176,18 @@ class PromptBuilderTest {
         assertEquals("请看图片。", (parts[1] as JsonObject)["text"]!!.jsonPrimitive.content)
     }
 
+    @Test
+    fun uploadedImagesAreSentById() {
+        val a = Attachment(kind = "image", name = "a.jpg", path = "/x/a.jpg")
+        val b = Attachment(kind = "image", name = "b.jpg", path = "/x/b.jpg")
+        val m = PromptBuilder.userMessage(user("", a, b), imagesOk = true, imageUrl = { "data:image/jpeg;base64,AAA" },
+            fileIds = mapOf("/x/a.jpg" to "file-api-1"))
+        val parts = m["content"] as JsonArray
+        assertEquals("file", (parts[0] as JsonObject)["type"]!!.jsonPrimitive.content)
+        assertEquals("file-api-1", (parts[0] as JsonObject)["file_id"]!!.jsonPrimitive.content)
+        assertEquals("image_url", (parts[1] as JsonObject)["type"]!!.jsonPrimitive.content)
+    }
+
     // ---------- 工具列表 ----------
 
     @Test
