@@ -244,6 +244,22 @@ class PromptBuilderTest {
     }
 
     @Test
+    fun mentionsAttachSkillAndMailbox() {
+        val skills = settings.activeSkills()
+        val mail = com.jack.ai.data.mailPresetFor("jack@163.com")!!.copy(password = "code")
+        val web = skills.first { it.id == com.jack.ai.data.SkillIds.WEB }
+        val note = PromptBuilder.mentionNote("@${web.name} 查一下 @jack@163.com 的信", skills, listOf(mail))
+        assertTrue(note.contains("「${web.name}」"))
+        assertTrue(note.contains(web.instructions.trim().take(20)))
+        assertTrue(note.contains("account 填 jack@163.com"))
+        assertEquals("", PromptBuilder.mentionNote("没有点名", skills, listOf(mail)))
+        // 只加在最后一条用户消息上
+        val conv = Conversation(messages = listOf(user("@${web.name} 今天天气")))
+        val h = PromptBuilder.history(PromptBuilder.Input(settings, conv, null, memories, skills, vision = false, sendReasoning = false), null)
+        assertTrue(h.last()["content"]!!.jsonPrimitive.content.contains("这次一定按它来做"))
+    }
+
+    @Test
     fun tokenEstimate() {
         assertEquals(6, PromptBuilder.estTokens("一二三四五六七八九十"))
         assertEquals(3, PromptBuilder.estTokens("abcdefghij"))

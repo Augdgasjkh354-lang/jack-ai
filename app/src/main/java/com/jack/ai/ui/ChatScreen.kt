@@ -35,6 +35,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -42,6 +43,8 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.runtime.collectAsState
+import com.jack.ai.data.activeSkills
+import com.jack.ai.data.readyMails
 import com.jack.ai.data.ChatExport
 import com.jack.ai.data.Pricing
 import androidx.compose.runtime.produceState
@@ -508,6 +511,8 @@ private fun InputBar(
     onNeedTavily: () -> Unit,
 ) {
     var attachMenu by remember { mutableStateOf(false) }
+    // 「@技能」「@邮箱」选择框：null 不显示
+    var mentionPick by remember { mutableStateOf<List<String>?>(null) }
     var thinkMenu by remember { mutableStateOf(false) }
     val settings = state.settings
     val colors = MaterialTheme.colorScheme
@@ -551,6 +556,26 @@ private fun InputBar(
         }
     }
     fun startVoice() = startVoiceIntent(ctx, speech)
+    mentionPick?.let { options ->
+        AlertDialog(
+            onDismissRequest = { mentionPick = null },
+            title = { Text("@") },
+            text = {
+                Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                    options.forEach { name ->
+                        Text(
+                            name,
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.fillMaxWidth()
+                                .clickable { onTextChange(withMention(text, name)); mentionPick = null }
+                                .padding(vertical = 12.dp),
+                        )
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { mentionPick = null }) { Text("取消") } },
+        )
+    }
     Column(
         Modifier
             .fillMaxWidth()
@@ -639,6 +664,22 @@ private fun InputBar(
                                 onClick = {
                                     attachMenu = false
                                     try { pickFiles.launch(arrayOf("*/*")) } catch (e: Exception) { Toast.makeText(ctx, "打不开：${e.message}", Toast.LENGTH_LONG).show() }
+                                },
+                            )
+                            val skillNames = settings.activeSkills().map { it.name }
+                            if (skillNames.isNotEmpty()) DropdownMenuItem(
+                                text = { Text("@技能") },
+                                leadingIcon = { Text("@", style = MaterialTheme.typography.titleMedium) },
+                                onClick = { attachMenu = false; mentionPick = skillNames },
+                            )
+                            val mailNames = settings.readyMails.map { it.address }
+                            if (mailNames.isNotEmpty() && settings.activeSkills().any { it.id == com.jack.ai.data.SkillIds.MAIL }) DropdownMenuItem(
+                                text = { Text("@邮箱") },
+                                leadingIcon = { Icon(Icons.Default.Email, null) },
+                                onClick = {
+                                    attachMenu = false
+                                    // 只有一个邮箱就直接插进去
+                                    if (mailNames.size == 1) onTextChange(withMention(text, mailNames[0])) else mentionPick = mailNames
                                 },
                             )
                             val conv = state.current
@@ -759,4 +800,11 @@ private fun PendingChip(att: Attachment, onRemove: () -> Unit) {
             trailingIcon = { Icon(Icons.Default.Close, "移除", Modifier.size(16.dp)) },
         )
     }
+}
+
+/** 在输入框末尾插入「@名字 」，前面不是空白就先补个空格。 */
+private fun withMention(text: String, name: String): String {
+    if ("@$name" in text) return text
+    val sep = if (text.isEmpty() || text.last().isWhitespace()) "" else " "
+    return "$text$sep@$name "
 }

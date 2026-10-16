@@ -6,6 +6,8 @@ import com.jack.ai.data.ChatMessage
 import com.jack.ai.data.Compression
 import com.jack.ai.data.Conversation
 import com.jack.ai.data.MemoryItem
+import com.jack.ai.data.MailAccount
+import com.jack.ai.data.readyMails
 import com.jack.ai.data.Project
 import com.jack.ai.data.Settings
 import com.jack.ai.data.Skill
@@ -93,7 +95,8 @@ object PromptBuilder {
             }
         }
         if (input.extraUser != null) list += msg("user", input.extraUser)
-        stampLastUser(list, input.now)
+        val lastText = conv.messages.lastOrNull { it.role == "user" }?.content.orEmpty()
+        stampLastUser(list, input.now, mentionNote(lastText, skills, settings.readyMails))
         return list
     }
 
@@ -307,17 +310,34 @@ object PromptBuilder {
     fun timeNote(now: Long): String = "【当前时间：" + SimpleDateFormat("yyyy年M月d日 EEEE HH:mm", Locale.CHINA).format(Date(now)) + "】\n"
 
     /** 给最后一条用户消息前面加上当前时间。 */
-    fun stampLastUser(list: MutableList<JsonObject>, now: Long) {
+    fun stampLastUser(list: MutableList<JsonObject>, now: Long, extra: String = "") {
         val i = list.indexOfLast { it["role"].text() == "user" }
         if (i < 0) return
         val m = list[i]
-        val note = timeNote(now)
+        val note = timeNote(now) + extra
         list[i] = when (val c = m["content"]) {
             is JsonArray -> JsonObject(m + ("content" to buildJsonArray {
                 add(buildJsonObject { put("type", "text"); put("text", note.trim()) })
                 c.forEach { add(it) }
             }))
             else -> JsonObject(m + ("content" to JsonPrimitive(note + c.text())))
+        }
+    }
+
+    /**
+     * 用户在消息里用 @ 点名的技能和邮箱（输入框「+」菜单里插进来的「@技能名」「@邮箱地址」）。
+     * 点名的技能直接附上做法，省一轮 use_skill；只加在这一轮的消息上，不进系统提示，不影响缓存。
+     */
+    fun mentionNote(text: String, skills: List<Skill>, mails: List<MailAccount>): String {
+        if ('@' !in text) return ""
+        return buildString {
+            skills.filter { "@${it.name}" in text }.forEach { sk ->
+                append("【用户用 @ 指定了技能「${sk.name}」，这次一定按它来做。做法：】\n")
+                append(sk.instructions.ifBlank { sk.description }.trim()).append("\n【做法结束】\n")
+            }
+            mails.filter { "@${it.address}" in text }.forEach { m ->
+                append("【用户用 @ 指定了邮箱 ${m.address}：这次的邮件操作都用它（account 填 ${m.address}）。】\n")
+            }
         }
     }
 
