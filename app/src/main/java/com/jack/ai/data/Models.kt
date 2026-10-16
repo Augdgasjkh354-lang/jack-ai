@@ -94,7 +94,10 @@ data class MemoryItem(
 data class DreamEntry(
     val id: String = newId(),
     val createdAt: Long = System.currentTimeMillis(),
-    val dream: String,
+    /** 旧版的梦（诗），现在不再生成，只为显示以前的记录。 */
+    val dream: String = "",
+    /** AI 写给自己的日记：对用户的理解、进行中的事、复盘、下次怎么做。会放进之后聊天的上下文。 */
+    val journal: String = "",
     val summary: String = "",
     val changes: String = "",
     /** 醒来后想对用户说的一句话。 */

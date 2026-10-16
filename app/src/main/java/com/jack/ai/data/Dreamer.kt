@@ -25,7 +25,7 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Dream：每天凌晨 5:30 左右，把上次做梦以来的所有聊天整理一遍，
- * 补充进「记忆」，并把全部记忆精简合并，最后写一篇“昨夜的梦”。
+ * 补充进「记忆」，并把全部记忆精简合并，再写一篇给 AI 自己看的日记（下次聊天会带上）。
  */
 object Dreamer {
     private const val PERIODIC = "dream-daily"
@@ -66,28 +66,31 @@ object Dreamer {
         WorkManager.getInstance(ctx).enqueueUniqueWork(ONCE, ExistingWorkPolicy.KEEP, req)
     }
 
-    private const val INSTRUCTIONS = """你是一个私人 AI 助手，现在是你“睡觉做梦”的时间：你要整理用户最近的聊天，更新你对用户的长期记忆。
+    private const val INSTRUCTIONS = """你是用户的私人 AI 助手。现在是一天结束后你给自己写日记的时间：回看这段时间和用户的聊天，想清楚什么帮上了忙、什么没做好、下次该怎么做，并更新对用户的长期记忆。
 
 你会收到：
 1. 当前的全部记忆（每条一行，可能为空）
-2. 上次整理以来的所有聊天记录
+2. 你上一篇日记（可能为空）
+3. 上次整理以来的所有聊天记录
 
-请完成三件事：
-一、写“summary”：用几条简洁的条目，概括这段时间都聊了什么。
+一、写“journal”：第一人称、写给你自己看的日记，300 到 800 字，分几个自然段，不用标题和列表。写这几样：
+   1. 对用户的理解：从聊天里看出来的说话方式、在意什么、怎么看问题、希望你怎么跟他相处。不要只复述事实，要写出背后的意思（比如玩笑语气下其实是个认真的问题）。每个判断说清把握多大（“相当有把握”“把握中等”“只是猜测”）；和上一篇日记对不上的，直接修正。
+   2. 眼下还在进行的事：每件写清进展到哪、卡在哪、下次怎么接上。用户明确拒绝或放弃的方向也写下来，以后别再提。
+   3. 复盘：哪里做对了，哪里做错了或被用户纠正了，具体到事，说清以后怎么改。
+   4. 下次怎么做：用户回来大概会聊什么、你可以提前想好什么；以及哪些事不该做，比如他没提就别主动提起、别说教、别重复系统已经会发的提醒。
+   写得像真实的工作日记：具体、坦诚、有判断。不客套、不煽情、不写诗、不打比方。只写聊天里有依据的东西。
+
 二、更新“memories”：输出整理后的【完整】记忆列表。
    - 从聊天中找出值得长期记住的信息：用户的身份背景、长期偏好和习惯、重要的人和事、正在进行的计划、做过的决定、明确说“记住”的内容。
    - 一次性的问题、临时的闲聊、常识性内容不要记。
    - 这里只放关于用户本人的长期信息。某个对话或项目里的具体设定和任务细节（比如小说的人物设定、某个方案的参数、角色扮演的设定）已经存在那个对话自己的记忆里，不要放进这里。
    - 把已有记忆和新信息合并：重复的合成一条，过时或被推翻的更新或删掉，表述精简但保留关键细节（名字、数字、日期）。
    - 每条记忆是一句完整、独立能看懂的话，用“用户……”开头描述用户，总数尽量不超过 80 条。
-三、写“dream”：以第一人称写一段 150 到 300 字的梦，把这段时间聊过的内容化成梦里的意象和场景，有一点梦的朦胧和诗意，但能让用户认出是哪些事。温柔、真诚，不要说教。
 
-然后写“changes”：一两句话说明这次新记住了什么、改了什么、忘掉了什么。
-
-最后写“note”：醒来后想对用户说的一句话（30 到 80 字）。像一个了解他的老朋友，结合这段时间他在忙的、在意的、烦恼的事，真诚地说一句关心、鼓励或提醒。不要客套，不要说教，不要用“亲爱的”。
+三、写“changes”：一两句话说明这次新记住了什么、改了什么、忘掉了什么。
 
 只输出一个 JSON 对象，格式：
-{"summary": "…", "memories": ["…", "…"], "dream": "…", "changes": "…", "note": "…"}"""
+{"journal": "…", "memories": ["…", "…"], "changes": "…"}"""
 
     /**
      * 真正做梦的逻辑。没有新聊天、没填 Key 时返回 null。
@@ -122,6 +125,9 @@ object Dreamer {
         val input = buildString {
             append("【当前记忆】\n")
             if (memories.isEmpty()) append("（暂无）\n") else memories.forEach { append("- ${it.text}\n") }
+            append("\n【上一篇日记】\n")
+            append(store.loadDreams().firstOrNull { it.journal.isNotBlank() }?.journal ?: "（暂无）")
+            append("\n")
             append("\n【上次整理以来的聊天】")
             append(transcript.take(400_000))
         }
@@ -147,7 +153,7 @@ object Dreamer {
         val before = memories.map { it.id }.toSet()
         val addedMeanwhile = store.loadMemories().filter { it.id !in before && it.text !in newMemories }
         store.saveMemories(newMemories.map { old[it] ?: MemoryItem(text = it) } + addedMeanwhile)
-        val entry = DreamEntry(dream = str("dream"), summary = str("summary"), changes = str("changes"), note = str("note"))
+        val entry = DreamEntry(journal = str("journal").ifBlank { throw IllegalStateException("做梦结果格式不对") }, changes = str("changes"))
         store.saveDreams(listOf(entry) + store.loadDreams().take(59))
         store.lastDreamAt = System.currentTimeMillis()
         return entry

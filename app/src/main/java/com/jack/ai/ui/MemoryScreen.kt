@@ -2,6 +2,7 @@ package com.jack.ai.ui
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -122,12 +123,14 @@ fun MemoryScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
             }
 
             item {
-                Text("梦境日记", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 12.dp))
+                Text("日记", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 12.dp))
                 if (state.dreams.isEmpty()) {
-                    Text("还没有做过梦。", color = MaterialTheme.colorScheme.outline)
+                    Text("还没有写过。", color = MaterialTheme.colorScheme.outline)
                 }
             }
-            items(state.dreams, key = { it.id }) { d -> DreamCard(d, initiallyOpen = d == state.dreams.first()) }
+            items(state.dreams, key = { it.id }) { d ->
+                DreamCard(d, initiallyOpen = d == state.dreams.first(), onEdit = { vm.editJournal(d.id, it) }, onDelete = { vm.deleteDream(d.id) })
+            }
         }
     }
 
@@ -160,36 +163,33 @@ fun MemoryScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
 private val dreamDate = SimpleDateFormat("M月d日 EEEE", Locale.CHINA)
 
 @Composable
-fun DreamCard(d: DreamEntry, initiallyOpen: Boolean, onClick: (() -> Unit)? = null) {
+fun DreamCard(d: DreamEntry, initiallyOpen: Boolean, onEdit: (String) -> Unit, onDelete: () -> Unit) {
     var open by remember { mutableStateOf(initiallyOpen) }
+    var editing by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf(false) }
+    val body = d.journal.ifBlank { d.dream }
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-        modifier = Modifier.fillMaxWidth().clickable { if (onClick != null) onClick() else open = !open },
+        modifier = Modifier.fillMaxWidth().clickable { open = !open },
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(AppIcons.Moon, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.size(6.dp))
-                Text(dreamDate.format(Date(d.createdAt)) + " 的梦", style = MaterialTheme.typography.titleSmall)
+                Text(dreamDate.format(Date(d.createdAt)), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                if (open) {
+                    if (d.journal.isNotBlank()) TextButton(onClick = { editing = true }) { Text("编辑") }
+                    TextButton(onClick = { deleting = true }) { Text("删除") }
+                }
             }
             Text(
-                d.dream,
-                style = MaterialTheme.typography.bodyMedium.copy(fontStyle = FontStyle.Italic),
+                body,
+                style = if (d.journal.isNotBlank()) MaterialTheme.typography.bodyMedium
+                    else MaterialTheme.typography.bodyMedium.copy(fontStyle = FontStyle.Italic),
                 maxLines = if (open) Int.MAX_VALUE else 3,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (d.note.isNotBlank()) {
-                Row {
-                    Text("“", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
-                    Text(
-                        d.note,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        modifier = Modifier.padding(top = 4.dp, start = 2.dp),
-                    )
-                }
-            }
-            AnimatedVisibility(open && onClick == null) {
+            AnimatedVisibility(open) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (d.summary.isNotBlank()) {
                         Text("聊过的事", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
@@ -201,6 +201,21 @@ fun DreamCard(d: DreamEntry, initiallyOpen: Boolean, onClick: (() -> Unit)? = nu
                     }
                 }
             }
+        }
+    }
+    if (editing) {
+        var text by remember(d.id) { mutableStateOf(d.journal) }
+        AlertDialog(
+            onDismissRequest = { editing = false },
+            title = { Text("编辑日记") },
+            text = { OutlinedTextField(text, { text = it }, Modifier.fillMaxWidth().heightIn(min = 200.dp, max = 420.dp)) },
+            confirmButton = { TextButton(onClick = { onEdit(text); editing = false }, enabled = text.isNotBlank()) { Text("保存") } },
+            dismissButton = { TextButton(onClick = { editing = false }) { Text("取消") } },
+        )
+    }
+    if (deleting) {
+        ConfirmDeleteDialog("删除这篇日记？", "删掉后之后的聊天不会再参考它。", onDismiss = { deleting = false }) {
+            onDelete(); deleting = false
         }
     }
 }

@@ -105,6 +105,17 @@ class KnowledgeFeature(core: AppCore) : Feature(core) {
         }
     }
 
+    fun editJournal(id: String, text: String) = changeDreams { list -> list.map { if (it.id == id) it.copy(journal = text.trim()) else it } }
+    fun deleteDream(id: String) = changeDreams { list -> list.filterNot { it.id == id } }
+
+    private fun changeDreams(transform: (List<com.jack.ai.data.DreamEntry>) -> List<com.jack.ai.data.DreamEntry>) {
+        scope.launch(ioSerial) {
+            val list = transform(store.loadDreams())
+            store.saveDreams(list)
+            state.update { it.copy(dreams = list) }
+        }
+    }
+
     fun dreamNow() {
         if (state.value.dreaming) return
         state.update { it.copy(dreaming = true) }

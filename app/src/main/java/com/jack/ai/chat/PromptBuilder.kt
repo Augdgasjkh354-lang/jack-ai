@@ -48,6 +48,8 @@ object PromptBuilder {
         /** 对话记忆和项目记忆文件的内容（调用方读好传进来，这里不碰文件）。 */
         val chatMemory: String = "",
         val projectMemory: String = "",
+        /** 最近一篇做梦日记。 */
+        val journal: String = "",
         val now: Long = System.currentTimeMillis(),
         val imageUrl: (String) -> String? = Attachments::imageDataUrl,
     )
@@ -62,7 +64,7 @@ object PromptBuilder {
         val thinkingOn = input.sendReasoning
         val withTools = tools != null
         val list = mutableListOf<JsonObject>()
-        val system = systemPrompt(settings, conv, project, tools, memories, skills, input.chatMemory, input.projectMemory)
+        val system = systemPrompt(settings, conv, project, tools, memories, skills, input.chatMemory, input.projectMemory, input.journal)
         if (system.isNotBlank()) list += msg("system", system)
         for (m in Compression.liveMessages(conv)) {
             if (m.error != null) continue
@@ -170,12 +172,12 @@ object PromptBuilder {
     /** 一次请求的上下文大概由哪些部分组成（名字, 估算 token）。 */
     fun contextBreakdown(
         settings: Settings, conv: Conversation, project: Project?, memories: List<MemoryItem>, skills: List<Skill>,
-        chatMemory: String = "", projectMemory: String = "",
+        chatMemory: String = "", projectMemory: String = "", journal: String = "",
     ): List<Pair<String, Int>> {
         val tools = toolSet(settings, skills, conv, project)
         val out = linkedMapOf<String, Int>()
         out["工具说明"] = tools?.let { estTokens(it.toString()) } ?: 0
-        systemParts(settings, conv, project, tools, memories, skills, chatMemory, projectMemory).forEach { (k, v) -> out[k] = (out[k] ?: 0) + estTokens(v) }
+        systemParts(settings, conv, project, tools, memories, skills, chatMemory, projectMemory, journal).forEach { (k, v) -> out[k] = (out[k] ?: 0) + estTokens(v) }
         val history = Compression.liveMessages(conv).filter { it.error == null }.sumOf { m ->
             estTokens(m.content) + m.attachments.sumOf { estTokens(it.text) } + m.trail.sumOf { estTokens(it) }
         }
@@ -196,7 +198,8 @@ object PromptBuilder {
         skills: List<Skill>,
         chatMemory: String = "",
         projectMemory: String = "",
-    ): String = systemParts(settings, conv, project, tools, memories, skills, chatMemory, projectMemory).joinToString("\n\n") { it.second }
+        journal: String = "",
+    ): String = systemParts(settings, conv, project, tools, memories, skills, chatMemory, projectMemory, journal).joinToString("\n\n") { it.second }
 
     /** 系统提示词的各个部分（名字, 内容），统计页用它算上下文构成。 */
     fun systemParts(
@@ -208,6 +211,7 @@ object PromptBuilder {
         skills: List<Skill>,
         chatMemory: String = "",
         projectMemory: String = "",
+        journal: String = "",
     ): List<Pair<String, String>> {
         val parts = mutableListOf<Pair<String, String>>()
         val globalOn = settings.memoryEnabled && conv.useGlobalMemory
@@ -261,6 +265,10 @@ object PromptBuilder {
         if (globalOn && memories.isNotEmpty()) {
             parts += "长期记忆" to "【关于用户的长期记忆】\n以下是你之前记住的关于用户的信息，自然地运用，不要刻意提起“我记得”：\n" +
                 memories.joinToString("\n") { "- ${it.text}" }
+        }
+        if (globalOn && journal.isNotBlank()) {
+            parts += "日记" to "【你的日记】\n这是你上次回看聊天后写给自己的笔记，用来更懂用户、接上进行中的事。只在和眼下话题有关时自然运用；" +
+                "用户没提起的事不要主动提，也不要说起“日记”。\n" + journal.trim()
         }
         if (project != null && projectMemory.isNotBlank()) {
             parts += "项目记忆" to "【项目记忆】（项目文件夹里的「${ChatMemory.PROJECT_FILE}」，这个项目的所有对话共用）\n" + projectMemory.trim()

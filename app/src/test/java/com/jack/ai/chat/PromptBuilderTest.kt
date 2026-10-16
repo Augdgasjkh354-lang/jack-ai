@@ -222,6 +222,16 @@ class PromptBuilderTest {
     }
 
     @Test
+    fun journalGoesWithGlobalMemoryOnly() {
+        val conv = Conversation()
+        val sys = PromptBuilder.systemPrompt(settings, conv, null, null, memories, settings.activeSkills(), journal = "他说话玩笑裹着认真")
+        assertTrue(sys.contains("【你的日记】"))
+        assertTrue(sys.contains("玩笑裹着认真"))
+        val off = PromptBuilder.systemPrompt(settings, conv.copy(useGlobalMemory = false), null, null, memories, settings.activeSkills(), journal = "他说话玩笑裹着认真")
+        assertFalse(off.contains("玩笑裹着认真"))
+    }
+
+    @Test
     fun tokenEstimate() {
         assertEquals(6, PromptBuilder.estTokens("一二三四五六七八九十"))
         assertEquals(3, PromptBuilder.estTokens("abcdefghij"))

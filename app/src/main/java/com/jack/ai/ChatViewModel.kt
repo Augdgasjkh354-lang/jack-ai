@@ -353,7 +353,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
         val (chatMemory, projectMemory) = knowledge.memoryTexts(conv)
         val promptInput = PromptBuilder.Input(settings, conv, project, memories, skills, vision = images, sendReasoning = thinkingOn,
-            extraUser = extraUser, chatMemory = chatMemory, projectMemory = projectMemory)
+            extraUser = extraUser, chatMemory = chatMemory, projectMemory = projectMemory,
+            journal = _state.value.dreams.firstOrNull { it.journal.isNotBlank() }?.journal.orEmpty())
         fun buildHistory(withTools: Boolean, flat: Boolean = false): MutableList<JsonObject> =
             PromptBuilder.history(promptInput, if (withTools) toolSet else null, flat)
 
@@ -509,7 +510,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val memories = if (st.settings.memoryEnabled) st.memories else emptyList()
         val (chatMemory, projectMemory) = knowledge.memoryTexts(c)
         return PromptBuilder.contextBreakdown(st.settings, c, st.project(c.projectId), memories, st.settings.activeSkills(),
-            chatMemory, projectMemory)
+            chatMemory, projectMemory, st.dreams.firstOrNull { it.journal.isNotBlank() }?.journal.orEmpty())
     }
 
     private fun updateConv(id: String, transform: (Conversation) -> Conversation) = core.updateConv(id, transform)
@@ -564,6 +565,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun clearMemories() = knowledge.clearMemories()
     fun markDreamsSeen() = knowledge.markDreamsSeen()
     fun dreamNow() = knowledge.dreamNow()
+    fun editJournal(id: String, text: String) = knowledge.editJournal(id, text)
+    fun deleteDream(id: String) = knowledge.deleteDream(id)
 
     // 对话记忆和项目记忆（存在文件夹里的 Markdown 文件）
     fun chatMemory(conv: Conversation) = knowledge.chatMemory(conv)

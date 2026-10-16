@@ -353,10 +353,6 @@ private fun EmptyState(
             color = colors.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
-        state.dreams.firstOrNull { !it.seen }?.let { d ->
-            Spacer(Modifier.height(20.dp))
-            DreamCard(d, initiallyOpen = false, onClick = onOpenMemory)
-        }
         Spacer(Modifier.height(28.dp))
         SUGGESTIONS.chunked(2).forEach { row ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {

@@ -166,7 +166,7 @@ fun HistoryDrawer(
             Column(Modifier.padding(vertical = 8.dp)) {
                 DrawerRow(
                     icon = AppIcons.Moon, label = "记忆与梦",
-                    trailing = if (state.dreams.any { !it.seen }) "新梦" else null,
+                    trailing = if (state.dreams.any { !it.seen }) "新日记" else null,
                     onClick = onOpenMemory,
                 )
                 DrawerRow(icon = AppIcons.File, label = "资料库",
