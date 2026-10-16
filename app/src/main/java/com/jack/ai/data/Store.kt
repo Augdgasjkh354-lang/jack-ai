@@ -185,7 +185,11 @@ class Store(context: Context) {
                 // 邮箱授权码也不进备份
                 else if (k == "mail" && v is String) runCatching {
                     json.encodeToString(MailAccount.serializer(), json.decodeFromString(MailAccount.serializer(), v).copy(password = ""))
-                }.getOrDefault("") else v
+                }.getOrDefault("")
+                else if (k == "mails" && v is String) runCatching {
+                    val list = json.decodeFromString(ListSerializer(MailAccount.serializer()), v).map { it.copy(password = "") }
+                    json.encodeToString(ListSerializer(MailAccount.serializer()), list)
+                }.getOrDefault("[]") else v
                 val e = when (v) {
                     is Boolean -> kotlinx.serialization.json.JsonPrimitive(v)
                     is Number -> kotlinx.serialization.json.JsonPrimitive(v)
@@ -265,7 +269,9 @@ class Store(context: Context) {
             accent = prefs.getString("accent", "clay") ?: "clay",
             appLock = prefs.getBoolean("appLock", false),
             monthlyBudget = prefs.getFloat("monthlyBudget", 0f).toDouble(),
-            mail = prefs.getString("mail", null)?.let { runCatching { json.decodeFromString(MailAccount.serializer(), it) }.getOrNull() },
+            mails = prefs.getString("mails", null)?.let { runCatching { json.decodeFromString(ListSerializer(MailAccount.serializer()), it) }.getOrNull() }
+                // 旧版本只有一个邮箱
+                ?: listOfNotNull(prefs.getString("mail", null)?.let { runCatching { json.decodeFromString(MailAccount.serializer(), it) }.getOrNull() }),
             providers = prefs.getString("providers", null)?.let {
                 runCatching { json.decodeFromString(ListSerializer(Provider.serializer()), it) }.getOrNull()
             } ?: emptyList(),
@@ -297,7 +303,8 @@ class Store(context: Context) {
             .putBoolean("appLock", s.appLock)
             .putString("providers", json.encodeToString(ListSerializer(Provider.serializer()), s.providers))
             .putFloat("monthlyBudget", s.monthlyBudget.toFloat())
-            .apply { if (s.mail == null) remove("mail") else putString("mail", json.encodeToString(MailAccount.serializer(), s.mail)) }
+            .remove("mail")
+            .putString("mails", json.encodeToString(ListSerializer(MailAccount.serializer()), s.mails))
             .apply()
     }
 }

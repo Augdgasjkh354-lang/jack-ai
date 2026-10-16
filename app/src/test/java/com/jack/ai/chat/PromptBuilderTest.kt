@@ -297,9 +297,9 @@ class PromptBuilderTest {
     fun mailToolsOnlyWhenAccountIsReady() {
         val conv = Conversation()
         assertFalse("send_email" in toolNames(conv))
-        val half = settings.copy(mail = com.jack.ai.data.mailPresetFor("jack@163.com"))
+        val half = settings.copy(mails = listOfNotNull(com.jack.ai.data.mailPresetFor("jack@163.com")))
         assertFalse("send_email" in toolNames(conv, s = half))
-        val ready = settings.copy(mail = com.jack.ai.data.mailPresetFor("jack@163.com")!!.copy(password = "code"))
+        val ready = settings.copy(mails = listOf(com.jack.ai.data.mailPresetFor("jack@163.com")!!.copy(password = "code")))
         assertTrue(listOf("list_emails", "read_email", "send_email", "mark_email_read").all { it in toolNames(conv, s = ready) })
     }
 }

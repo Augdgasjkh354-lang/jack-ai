@@ -5,6 +5,7 @@ import com.jack.ai.data.MailClient
 import com.jack.ai.data.MailException
 import com.jack.ai.data.SearchRecord
 import com.jack.ai.data.Workspace
+import com.jack.ai.data.readyMails
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
@@ -15,8 +16,17 @@ import java.util.Locale
 
 /** 邮箱：列出、阅读、发送、标记已读。发信前一定弹窗问用户。 */
 
-private fun ToolSession.account(): MailAccount =
-    settings.mail?.takeIf { it.ready } ?: throw MailException("还没有设置邮箱，请到 设置 → 邮箱 里填写")
+private fun ToolSession.accounts(): List<MailAccount> =
+    settings.readyMails.ifEmpty { throw MailException("还没有设置邮箱，请到 设置 → 邮箱 里填写") }
+
+/** 按 account 参数找邮箱；不填用默认（第一个）。 */
+private fun ToolSession.account(args: JsonObject): MailAccount {
+    val all = accounts()
+    val want = args["account"].text().trim()
+    if (want.isBlank()) return all.first()
+    return all.firstOrNull { it.address.equals(want, ignoreCase = true) }
+        ?: throw MailException("没有「$want」这个邮箱。已设置的邮箱：${all.joinToString("、") { it.address }}")
+}
 
 private val WHEN = SimpleDateFormat("M月d日 HH:mm", Locale.CHINA)
 
@@ -25,19 +35,35 @@ internal suspend fun ToolSession.listEmails(args: JsonObject): String {
     val query = args["query"].text()
     val label = "查看邮件" + if (query.isNotBlank()) "：$query" else ""
     return runTool(label) {
-        val list = withContext(Dispatchers.IO) {
-            MailClient.list(
-                account(), folder,
-                limit = (args["limit"].text().toIntOrNull() ?: 10).coerceIn(1, 30),
-                unreadOnly = args["unread_only"].text() == "true",
-                query = query,
-                sinceDays = args["since_days"].text().toIntOrNull()?.coerceIn(1, 3650),
-            )
+        // 没指定邮箱：每个都列一遍
+        val targets = if (args["account"].text().isBlank()) accounts() else listOf(account(args))
+        var total = 0
+        val parts = mutableListOf<String>()
+        for (acc in targets) {
+            val list = try {
+                withContext(Dispatchers.IO) {
+                    MailClient.list(
+                        acc, folder,
+                        limit = (args["limit"].text().toIntOrNull() ?: 10).coerceIn(1, 30),
+                        unreadOnly = args["unread_only"].text() == "true",
+                        query = query,
+                        sinceDays = args["since_days"].text().toIntOrNull()?.coerceIn(1, 3650),
+                    )
+                }
+            } catch (e: MailException) {
+                // 只有一个邮箱时照常报错；多个时某个出错不耽误其他的
+                if (targets.size == 1) throw e
+                parts += "【${acc.address}】出错：${e.message}"
+                continue
+            }
+            total += list.size
+            val body = if (list.isEmpty()) "「$folder」里没有符合条件的邮件。" else list.joinToString("\n") { m ->
+                "编号 ${m.uid}｜${WHEN.format(Date(m.date))}｜${if (m.unread) "未读｜" else ""}${m.from}｜${m.subject}"
+            }
+            parts += if (targets.size > 1 || accounts().size > 1) "【${acc.address}】\n$body" else body
         }
-        val text = if (list.isEmpty()) "「$folder」里没有符合条件的邮件。" else list.joinToString("\n") { m ->
-            "编号 ${m.uid}｜${WHEN.format(Date(m.date))}｜${if (m.unread) "未读｜" else ""}${m.from}｜${m.subject}"
-        }
-        text to SearchRecord("$label（${list.size} 封）")
+        val text = parts.joinToString("\n\n")
+        text to SearchRecord("$label（$total 封）")
     }
 }
 
@@ -46,7 +72,7 @@ internal suspend fun ToolSession.readEmail(args: JsonObject): String {
     val folder = args["folder"].text().ifBlank { "INBOX" }
     val save = args["save_attachments"].text() == "true"
     return runTool("读邮件 $uid") {
-        val m = withContext(Dispatchers.IO) { MailClient.read(account(), folder, uid, if (save) wsDir else null) }
+        val m = withContext(Dispatchers.IO) { MailClient.read(account(args), folder, uid, if (save) wsDir else null) }
         m.saved.forEach { ui.attach(it) }
         val text = buildString {
             append("发件人：${m.summary.from}\n")
@@ -73,7 +99,7 @@ internal suspend fun ToolSession.sendEmail(args: JsonObject): String {
     val replyUid = args["reply_to_uid"].text().toLongOrNull()
     val replyFolder = args["reply_folder"].text().ifBlank { "INBOX" }
     return runTool("发邮件给 $to") {
-        val acc = account()
+        val acc = account(args)
         if (to.isBlank()) throw MailException("没有收件人")
         val files = names.map { n ->
             Workspace.find(wsDir, n) ?: throw MailException("对话文件夹里没有「$n」")
@@ -100,7 +126,7 @@ internal suspend fun ToolSession.markEmailRead(args: JsonObject): String {
     val folder = args["folder"].text().ifBlank { "INBOX" }
     val read = args["read"].text() != "false"
     return runTool(if (read) "标为已读" else "标为未读") {
-        withContext(Dispatchers.IO) { MailClient.setRead(account(), folder, uid, read) }
+        withContext(Dispatchers.IO) { MailClient.setRead(account(args), folder, uid, read) }
         (if (read) "已标为已读。" else "已标为未读。") to SearchRecord(if (read) "标为已读" else "标为未读")
     }
 }

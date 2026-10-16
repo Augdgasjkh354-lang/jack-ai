@@ -172,7 +172,8 @@ val BUILTIN_SKILLS = listOf(
 5. send_email 执行前会弹窗让用户确认，用户点取消就是不发，照实告诉用户，不要再试。
 6. 要附上对话文件夹里的文件，把文件名填进 attachments。读信时 save_attachments 设为 true 会把附件存进对话文件夹。
 7. 读过的邮件不会自动标成已读；用户要求时用 mark_email_read。
-8. 找不到文件夹时，报错里会列出现有的文件夹名，用对应的名字（比如「已发送」「垃圾邮件」）再试。""",
+8. 找不到文件夹时，报错里会列出现有的文件夹名，用对应的名字（比如「已发送」「垃圾邮件」）再试。
+9. 用户可能有好几个邮箱。list_emails 不填 account 会把每个邮箱都列出来；读信、回信、标记时，account 填那封信所在的邮箱。发新信时用户没说用哪个，就用默认邮箱（不填 account）；用户说了，就填对应的地址。""",
     ),
     Skill(
         id = SkillIds.CALC, builtin = true, name = "计算与图表",
@@ -294,13 +295,13 @@ object SkillTools {
 
     val SEARCH_PROJECT = schema("""{"type":"function","function":{"name":"search_project","description":"在当前项目的大份资料里按关键词检索，返回最相关的原文段落和出处。","parameters":{"type":"object","properties":{"query":{"type":"string","description":"关键词，多个用空格隔开"}},"required":["query"]}}}""")
 
-    val LIST_EMAILS = schema("""{"type":"function","function":{"name":"list_emails","description":"列出邮件（最新的在前），只有编号、发件人、主题、时间、是否未读。","parameters":{"type":"object","properties":{"folder":{"type":"string","description":"文件夹，默认 INBOX（收件箱）"},"unread_only":{"type":"boolean"},"query":{"type":"string","description":"主题或发件人里包含的词，多个用空格隔开"},"since_days":{"type":"integer","description":"只看最近几天"},"limit":{"type":"integer","description":"最多几封，默认 10，最多 30"}}}}}""")
+    val LIST_EMAILS = schema("""{"type":"function","function":{"name":"list_emails","description":"列出邮件（最新的在前），只有编号、发件人、主题、时间、是否未读。","parameters":{"type":"object","properties":{"account":{"type":"string","description":"用哪个邮箱（邮箱地址），不填就把每个邮箱都列出来"},"folder":{"type":"string","description":"文件夹，默认 INBOX（收件箱）"},"unread_only":{"type":"boolean"},"query":{"type":"string","description":"主题或发件人里包含的词，多个用空格隔开"},"since_days":{"type":"integer","description":"只看最近几天"},"limit":{"type":"integer","description":"最多几封，默认 10，最多 30"}}}}}""")
 
-    val READ_EMAIL = schema("""{"type":"function","function":{"name":"read_email","description":"读一封邮件的全文。","parameters":{"type":"object","properties":{"uid":{"type":"integer","description":"list_emails 给出的编号"},"folder":{"type":"string","description":"文件夹，默认 INBOX"},"save_attachments":{"type":"boolean","description":"把附件存进对话文件夹"}},"required":["uid"]}}}""")
+    val READ_EMAIL = schema("""{"type":"function","function":{"name":"read_email","description":"读一封邮件的全文。","parameters":{"type":"object","properties":{"account":{"type":"string","description":"用哪个邮箱（邮箱地址），不填用默认邮箱"},"uid":{"type":"integer","description":"list_emails 给出的编号"},"folder":{"type":"string","description":"文件夹，默认 INBOX"},"save_attachments":{"type":"boolean","description":"把附件存进对话文件夹"}},"required":["uid"]}}}""")
 
-    val SEND_EMAIL = schema("""{"type":"function","function":{"name":"send_email","description":"发送邮件。发之前会弹窗让用户确认。","parameters":{"type":"object","properties":{"to":{"type":"string","description":"收件人邮箱，多个用逗号隔开"},"cc":{"type":"string","description":"抄送，可以不填"},"subject":{"type":"string"},"body":{"type":"string","description":"正文，纯文本"},"attachments":{"type":"array","items":{"type":"string"},"description":"对话文件夹里要附上的文件名"},"reply_to_uid":{"type":"integer","description":"回信时填原信的编号"},"reply_folder":{"type":"string","description":"原信所在文件夹，默认 INBOX"}},"required":["to","body"]}}}""")
+    val SEND_EMAIL = schema("""{"type":"function","function":{"name":"send_email","description":"发送邮件。发之前会弹窗让用户确认。","parameters":{"type":"object","properties":{"account":{"type":"string","description":"用哪个邮箱（邮箱地址），不填用默认邮箱"},"to":{"type":"string","description":"收件人邮箱，多个用逗号隔开"},"cc":{"type":"string","description":"抄送，可以不填"},"subject":{"type":"string"},"body":{"type":"string","description":"正文，纯文本"},"attachments":{"type":"array","items":{"type":"string"},"description":"对话文件夹里要附上的文件名"},"reply_to_uid":{"type":"integer","description":"回信时填原信的编号"},"reply_folder":{"type":"string","description":"原信所在文件夹，默认 INBOX"}},"required":["to","body"]}}}""")
 
-    val MARK_EMAIL_READ = schema("""{"type":"function","function":{"name":"mark_email_read","description":"把邮件标成已读或未读。","parameters":{"type":"object","properties":{"uid":{"type":"integer"},"folder":{"type":"string"},"read":{"type":"boolean","description":"true 已读，false 未读"}},"required":["uid"]}}}""")
+    val MARK_EMAIL_READ = schema("""{"type":"function","function":{"name":"mark_email_read","description":"把邮件标成已读或未读。","parameters":{"type":"object","properties":{"account":{"type":"string","description":"用哪个邮箱（邮箱地址），不填用默认邮箱"},"uid":{"type":"integer"},"folder":{"type":"string"},"read":{"type":"boolean","description":"true 已读，false 未读"}},"required":["uid"]}}}""")
 
     val SAVE_MEMORY = schema("""{"type":"function","function":{"name":"save_memory","description":"存一条记忆。","parameters":{"type":"object","properties":{"content":{"type":"string","description":"要记住的内容，一句完整、独立能看懂的话"},"scope":{"type":"string","enum":["chat","project","global"],"description":"存到哪：chat 本对话记忆，project 项目记忆，global 全局记忆"}},"required":["content","scope"]}}}""")
 }
@@ -308,7 +309,7 @@ object SkillTools {
 /** 当前开着的 skill：内置的看开关（联网还要有 Tavily 或 DeepSeek Key），自定义的看它自己的 enabled。 */
 fun Settings.activeSkills(): List<Skill> =
     allSkills().filter {
-        it.enabled && (it.id != SkillIds.WEB || tavilyKey.isNotBlank() || apiKey.isNotBlank()) && (it.id != SkillIds.MAIL || mail?.ready == true)
+        it.enabled && (it.id != SkillIds.WEB || tavilyKey.isNotBlank() || apiKey.isNotBlank()) && (it.id != SkillIds.MAIL || mails.any { it.ready })
     }
 
 /** 全部 skill（内置 + 自定义），enabled 反映当前开关状态。 */

@@ -151,7 +151,8 @@ data class Settings(
     /** 每月预算（元），0 表示不设。 */
     val monthlyBudget: Double = 0.0,
     /** 邮箱账号（IMAP 收信、SMTP 发信），没设置时为空。 */
-    val mail: MailAccount? = null,
+    /** 邮箱，可以有好几个；第一个是默认的。 */
+    val mails: List<MailAccount> = emptyList(),
 )
 
 /** 邮箱账号。password 是邮箱的「授权码」，不是登录密码；不进备份。 */
@@ -166,6 +167,9 @@ data class MailAccount(
 ) {
     val ready: Boolean get() = address.isNotBlank() && password.isNotBlank() && imapHost.isNotBlank() && smtpHost.isNotBlank()
 }
+
+/** 填好、能用的邮箱。 */
+val Settings.readyMails: List<MailAccount> get() = mails.filter { it.ready }
 
 /** 常见邮箱的服务器：后缀 → (IMAP, SMTP, SMTP 端口)。 */
 val MAIL_PRESETS = mapOf(

@@ -153,7 +153,7 @@ fun SettingsScreen(
             }
 
             Section("邮箱") {
-                MailSection(vm, settings.mail)
+                MailSection(vm, settings.mails)
             }
 
             // ---- Tavily ----
