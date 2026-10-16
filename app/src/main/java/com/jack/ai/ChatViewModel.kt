@@ -146,7 +146,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 currentId = if (s.currentId == id) null else s.currentId,
             )
         }
-        conv?.let { files.cleanup(it.messages); if (it.projectId == null) files.deleteWorkspace(it.id) }
+        conv?.let {
+            files.cleanup(it.messages)
+            // 普通对话整个文件夹删掉；项目里的对话只删它自己的记忆文件
+            if (it.projectId == null) files.deleteWorkspace(it.id) else knowledge.deleteChatMemory(it)
+        }
         persist()
     }
 
@@ -307,7 +311,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val memories = if (settings.memoryEnabled) store.loadMemories() else emptyList()
         val toolSet = PromptBuilder.toolSet(settings, skills, conv, project)
 
-        val promptInput = PromptBuilder.Input(settings, conv, project, memories, skills, vision = images, sendReasoning = thinkingOn, extraUser = extraUser)
+        val (chatMemory, projectMemory) = knowledge.memoryTexts(conv)
+        val promptInput = PromptBuilder.Input(settings, conv, project, memories, skills, vision = images, sendReasoning = thinkingOn,
+            extraUser = extraUser, chatMemory = chatMemory, projectMemory = projectMemory)
         fun buildHistory(withTools: Boolean, flat: Boolean = false): MutableList<JsonObject> =
             PromptBuilder.history(promptInput, if (withTools) toolSet else null, flat)
 
@@ -454,7 +460,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val st = _state.value
         val c = conv ?: Conversation()
         val memories = if (st.settings.memoryEnabled) st.memories else emptyList()
-        return PromptBuilder.contextBreakdown(st.settings, c, st.project(c.projectId), memories, st.settings.activeSkills())
+        val (chatMemory, projectMemory) = knowledge.memoryTexts(c)
+        return PromptBuilder.contextBreakdown(st.settings, c, st.project(c.projectId), memories, st.settings.activeSkills(),
+            chatMemory, projectMemory)
     }
 
     private fun updateConv(id: String, transform: (Conversation) -> Conversation) = core.updateConv(id, transform)
@@ -508,6 +516,17 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun clearMemories() = knowledge.clearMemories()
     fun markDreamsSeen() = knowledge.markDreamsSeen()
     fun dreamNow() = knowledge.dreamNow()
+
+    // 对话记忆和项目记忆（存在文件夹里的 Markdown 文件）
+    fun chatMemory(conv: Conversation) = knowledge.chatMemory(conv)
+    fun setChatMemory(conv: Conversation, items: List<String>) = knowledge.setChatMemory(conv, items)
+    fun moveToGlobal(conv: Conversation, item: String) = knowledge.moveToGlobal(conv, item)
+    fun projectMemory(projectId: String) = knowledge.projectMemory(projectId)
+    fun setProjectMemory(projectId: String, items: List<String>) = knowledge.setProjectMemory(projectId, items)
+    fun setMemoryFlags(id: String, useGlobal: Boolean, inDream: Boolean) {
+        updateConvQuiet(id) { it.copy(useGlobalMemory = useGlobal, inDream = inDream) }
+        persist()
+    }
 
     // 提醒和定时任务
     fun saveRoutine(r: Routine) = routines.saveRoutine(r)

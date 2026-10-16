@@ -77,6 +77,7 @@ object Dreamer {
 二、更新“memories”：输出整理后的【完整】记忆列表。
    - 从聊天中找出值得长期记住的信息：用户的身份背景、长期偏好和习惯、重要的人和事、正在进行的计划、做过的决定、明确说“记住”的内容。
    - 一次性的问题、临时的闲聊、常识性内容不要记。
+   - 这里只放关于用户本人的长期信息。某个对话或项目里的具体设定和任务细节（比如小说的人物设定、某个方案的参数、角色扮演的设定）已经存在那个对话自己的记忆里，不要放进这里。
    - 把已有记忆和新信息合并：重复的合成一条，过时或被推翻的更新或删掉，表述精简但保留关键细节（名字、数字、日期）。
    - 每条记忆是一句完整、独立能看懂的话，用“用户……”开头描述用户，总数尽量不超过 80 条。
 三、写“dream”：以第一人称写一段 150 到 300 字的梦，把这段时间聊过的内容化成梦里的意象和场景，有一点梦的朦胧和诗意，但能让用户认出是哪些事。温柔、真诚，不要说教。
@@ -101,7 +102,8 @@ object Dreamer {
 
         val transcript = StringBuilder()
         store.loadConversations()
-            .filter { c -> c.messages.any { it.createdAt > since } }
+            // 关了「参与做梦」的对话不整理
+            .filter { c -> c.inDream && c.messages.any { it.createdAt > since } }
             .sortedBy { c -> c.messages.first { it.createdAt > since }.createdAt }
             .forEach { c ->
                 transcript.append("\n\n### 对话「${c.title}」\n")

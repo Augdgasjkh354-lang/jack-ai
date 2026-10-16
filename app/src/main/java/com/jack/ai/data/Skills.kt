@@ -280,7 +280,7 @@ object SkillTools {
 
     val SEARCH_PROJECT = schema("""{"type":"function","function":{"name":"search_project","description":"在当前项目的大份资料里按关键词检索，返回最相关的原文段落和出处。","parameters":{"type":"object","properties":{"query":{"type":"string","description":"关键词，多个用空格隔开"}},"required":["query"]}}}""")
 
-    val SAVE_MEMORY = schema("""{"type":"function","function":{"name":"save_memory","description":"把一条关于用户的信息存进长期记忆。仅在用户明确要求“记住”时使用。","parameters":{"type":"object","properties":{"content":{"type":"string","description":"要记住的内容，一句完整的话"}},"required":["content"]}}}""")
+    val SAVE_MEMORY = schema("""{"type":"function","function":{"name":"save_memory","description":"存一条记忆。","parameters":{"type":"object","properties":{"content":{"type":"string","description":"要记住的内容，一句完整、独立能看懂的话"},"scope":{"type":"string","enum":["chat","project","global"],"description":"存到哪：chat 本对话记忆，project 项目记忆，global 全局记忆"}},"required":["content","scope"]}}}""")
 }
 
 /** 当前开着的 skill：内置的看开关（联网还要有 Tavily Key），自定义的看它自己的 enabled。 */

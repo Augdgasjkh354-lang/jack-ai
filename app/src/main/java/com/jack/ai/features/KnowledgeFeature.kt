@@ -122,4 +122,29 @@ class KnowledgeFeature(core: AppCore) : Feature(core) {
             }
         }
     }
+
+    // ---------- 对话记忆、项目记忆 ----------
+
+    /** 回答时带上的两份记忆文件内容：(本对话记忆, 项目记忆)。 */
+    fun memoryTexts(conv: Conversation): Pair<String, String> =
+        ChatMemory.read(ChatMemory.chatFile(app, conv)) to
+            (conv.projectId?.let { ChatMemory.read(ChatMemory.projectFile(app, it)) } ?: "")
+
+    fun chatMemory(conv: Conversation): List<String> = ChatMemory.items(ChatMemory.read(ChatMemory.chatFile(app, conv)))
+
+    fun setChatMemory(conv: Conversation, items: List<String>) = ChatMemory.write(ChatMemory.chatFile(app, conv), items)
+
+    fun projectMemory(projectId: String): List<String> = ChatMemory.items(ChatMemory.read(ChatMemory.projectFile(app, projectId)))
+
+    fun setProjectMemory(projectId: String, items: List<String>) = ChatMemory.write(ChatMemory.projectFile(app, projectId), items)
+
+    /** 把一条本对话记忆挪到全局记忆。 */
+    fun moveToGlobal(conv: Conversation, item: String) {
+        setChatMemory(conv, chatMemory(conv) - item)
+        addMemory(item)
+    }
+
+    fun deleteChatMemory(conv: Conversation) {
+        scope.launch(Dispatchers.IO) { runCatching { ChatMemory.chatFile(app, conv).delete() } }
+    }
 }

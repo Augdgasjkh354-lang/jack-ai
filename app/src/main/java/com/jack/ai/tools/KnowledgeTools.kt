@@ -21,11 +21,29 @@ internal suspend fun ToolSession.searchOld(query: String) = runTool("翻阅旧�
         SearchRecord("翻阅旧记录：$query")
 }
 
-internal suspend fun ToolSession.remember(text: String) = runTool("记住：$text") {
-    val list = host.store.loadMemories() + MemoryItem(text = text)
-    host.store.saveMemories(list)
-    host.setMemories(list)
-    "已记住。" to SearchRecord("记住：$text")
+/** 存记忆：本对话、项目、全局三种。不该存全局的（这个对话关了全局记忆）就存进本对话。 */
+internal suspend fun ToolSession.remember(args: JsonObject): String {
+    val text = args["content"].text().trim()
+    val globalOn = settings.memoryEnabled && conv.useGlobalMemory
+    val scope = when (val s = args["scope"].text()) {
+        "global" -> if (globalOn) s else "chat"
+        "project" -> if (project != null) s else "chat"
+        else -> "chat"
+    }
+    val where = when (scope) { "global" -> "全局"; "project" -> "项目"; else -> "本对话" }
+    return runTool("记住（$where）：$text") {
+        if (text.isEmpty()) throw IllegalArgumentException("内容是空的")
+        when (scope) {
+            "global" -> {
+                val list = host.store.loadMemories() + MemoryItem(text = text)
+                host.store.saveMemories(list)
+                host.setMemories(list)
+            }
+            "project" -> withContext(Dispatchers.IO) { ChatMemory.add(ChatMemory.projectFile(app, project!!.id), text) }
+            else -> withContext(Dispatchers.IO) { ChatMemory.add(ChatMemory.chatFile(app, conv), text) }
+        }
+        "已存进${where}记忆。" to SearchRecord("记住（$where）：$text")
+    }
 }
 
 internal suspend fun ToolSession.searchChats(query: String) = runTool("翻阅聊天记录：$query") {

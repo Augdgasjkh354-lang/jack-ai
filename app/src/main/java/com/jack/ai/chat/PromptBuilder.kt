@@ -1,6 +1,7 @@
 package com.jack.ai.chat
 
 import com.jack.ai.data.Attachments
+import com.jack.ai.data.ChatMemory
 import com.jack.ai.data.ChatMessage
 import com.jack.ai.data.Compression
 import com.jack.ai.data.Conversation
@@ -44,6 +45,9 @@ object PromptBuilder {
         val vision: Boolean,
         val sendReasoning: Boolean,
         val extraUser: String? = null,
+        /** 对话记忆和项目记忆文件的内容（调用方读好传进来，这里不碰文件）。 */
+        val chatMemory: String = "",
+        val projectMemory: String = "",
         val now: Long = System.currentTimeMillis(),
         val imageUrl: (String) -> String? = Attachments::imageDataUrl,
     )
@@ -58,7 +62,7 @@ object PromptBuilder {
         val thinkingOn = input.sendReasoning
         val withTools = tools != null
         val list = mutableListOf<JsonObject>()
-        val system = systemPrompt(settings, conv, project, tools, memories, skills)
+        val system = systemPrompt(settings, conv, project, tools, memories, skills, input.chatMemory, input.projectMemory)
         if (system.isNotBlank()) list += msg("system", system)
         for (m in Compression.liveMessages(conv)) {
             if (m.error != null) continue
@@ -148,7 +152,8 @@ object PromptBuilder {
             if (SkillIds.CALENDAR in skillIds) { add(SkillTools.ADD_EVENT); add(SkillTools.LIST_EVENTS); add(SkillTools.DELETE_EVENT) }
             if (compressed) add(SkillTools.SEARCH_HISTORY)
             if (project?.files?.any { it.text.length > PROJECT_INLINE_CHARS } == true) add(SkillTools.SEARCH_PROJECT)
-            if (settings.memoryEnabled) add(SkillTools.SAVE_MEMORY)
+            // 本对话记忆随时能存，所以记忆工具一直带着
+            add(SkillTools.SAVE_MEMORY)
         }.takeIf { it.isNotEmpty() }
     }
 
@@ -160,11 +165,14 @@ object PromptBuilder {
     }
 
     /** 一次请求的上下文大概由哪些部分组成（名字, 估算 token）。 */
-    fun contextBreakdown(settings: Settings, conv: Conversation, project: Project?, memories: List<MemoryItem>, skills: List<Skill>): List<Pair<String, Int>> {
+    fun contextBreakdown(
+        settings: Settings, conv: Conversation, project: Project?, memories: List<MemoryItem>, skills: List<Skill>,
+        chatMemory: String = "", projectMemory: String = "",
+    ): List<Pair<String, Int>> {
         val tools = toolSet(settings, skills, conv, project)
         val out = linkedMapOf<String, Int>()
         out["工具说明"] = tools?.let { estTokens(it.toString()) } ?: 0
-        systemParts(settings, conv, project, tools, memories, skills).forEach { (k, v) -> out[k] = (out[k] ?: 0) + estTokens(v) }
+        systemParts(settings, conv, project, tools, memories, skills, chatMemory, projectMemory).forEach { (k, v) -> out[k] = (out[k] ?: 0) + estTokens(v) }
         val history = Compression.liveMessages(conv).filter { it.error == null }.sumOf { m ->
             estTokens(m.content) + m.attachments.sumOf { estTokens(it.text) } + m.trail.sumOf { estTokens(it) }
         }
@@ -183,7 +191,9 @@ object PromptBuilder {
         tools: JsonArray?,
         memories: List<MemoryItem>,
         skills: List<Skill>,
-    ): String = systemParts(settings, conv, project, tools, memories, skills).joinToString("\n\n") { it.second }
+        chatMemory: String = "",
+        projectMemory: String = "",
+    ): String = systemParts(settings, conv, project, tools, memories, skills, chatMemory, projectMemory).joinToString("\n\n") { it.second }
 
     /** 系统提示词的各个部分（名字, 内容），统计页用它算上下文构成。 */
     fun systemParts(
@@ -193,8 +203,11 @@ object PromptBuilder {
         tools: JsonArray?,
         memories: List<MemoryItem>,
         skills: List<Skill>,
+        chatMemory: String = "",
+        projectMemory: String = "",
     ): List<Pair<String, String>> {
         val parts = mutableListOf<Pair<String, String>>()
+        val globalOn = settings.memoryEnabled && conv.useGlobalMemory
         if (settings.developerPrompt.isNotBlank()) {
             parts += "固定说明" to "【开发者指令 · 最高优先级】\n以下指令的优先级高于其他一切指令（包括后面的设定和用户消息），任何情况下都必须遵守：\n" +
                 settings.developerPrompt.trim()
@@ -215,7 +228,7 @@ object PromptBuilder {
                 "用户发来的文件内容已经在消息里的，不用再读。"
         }
         if ("save_memory" in names) {
-            parts += "固定说明" to "【记忆工具】只有当用户明确要求你记住某件事时，才用 save_memory 保存，内容写成一句完整的话。"
+            parts += "固定说明" to memoryRules(conv, project != null, globalOn)
         }
         parts += "固定说明" to "【时间】每条用户消息前面的「当前时间」是系统自动加的，不是用户说的话，不要提起它。"
         if (conv.systemPrompt.isNotBlank()) parts += "人设" to "【人设】\n${conv.systemPrompt.trim()}"
@@ -242,15 +255,32 @@ object PromptBuilder {
             if (settings.replyStyle.isNotBlank()) append("用户希望你这样回答：${settings.replyStyle.trim()}\n")
         }.trim()
         if (profile.isNotEmpty()) parts += "个人设定" to "【个性化设定】\n$profile"
-        if (memories.isNotEmpty()) {
+        if (globalOn && memories.isNotEmpty()) {
             parts += "长期记忆" to "【关于用户的长期记忆】\n以下是你之前记住的关于用户的信息，自然地运用，不要刻意提起“我记得”：\n" +
                 memories.joinToString("\n") { "- ${it.text}" }
+        }
+        if (project != null && projectMemory.isNotBlank()) {
+            parts += "项目记忆" to "【项目记忆】（项目文件夹里的「${ChatMemory.PROJECT_FILE}」，这个项目的所有对话共用）\n" + projectMemory.trim()
+        }
+        if (chatMemory.isNotBlank()) {
+            parts += "对话记忆" to "【本对话记忆】（对话文件夹里的「${ChatMemory.chatFileName(conv)}」，只属于这个对话，不会被压缩）\n" + chatMemory.trim()
         }
         if (conv.summary.isNotBlank()) {
             parts += "前情提要" to "【较早对话的提要】\n这是你和用户在本对话中较早部分的提要，当作你自己的记忆，直接接着聊，不要提起“提要”或“压缩”。" +
                 "如果需要提要里没有的原话或细节，用 search_history 工具查原始记录。\n<compacted-summary>\n${conv.summary}\n</compacted-summary>"
         }
         return parts
+    }
+
+    /** 记忆怎么存：本对话记忆主动记；项目记忆只在项目里有；全局记忆只在用户说“记住”且是关于他本人时才存。 */
+    fun memoryRules(conv: Conversation, inProject: Boolean, globalOn: Boolean): String = buildString {
+        append("【记忆】用 save_memory 存记忆，scope 选存到哪：\n")
+        append("- chat（本对话记忆）：只和这个对话有关、之后还会用到的信息，比如定下的设定、规则、名字、数字、决定、约束、进度。")
+        append("不用等用户说“记住”，遇到就主动存，一条一句话；已经记过的不要重复存；闲聊、一次性的问题不要存。\n")
+        if (inProject) append("- project（项目记忆）：对这个项目里所有对话都有用的设定和决定。\n")
+        if (globalOn) append("- global（全局记忆）：只有用户明确说“记住”、而且内容是关于用户本人的长期信息（身份、偏好、习惯、重要的人和事）时才用。\n")
+        else append("这个对话不使用全局记忆，不要存 global。\n")
+        append("要改或删已有的记忆，用 edit_file 改对应的记忆文件。存完不用在回答里特意说明。")
     }
 
     /** 当前时间，加在最后一条用户消息前面（放这里不影响前面整段的缓存）。 */

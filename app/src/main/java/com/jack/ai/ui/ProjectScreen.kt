@@ -65,6 +65,7 @@ fun ProjectScreen(
     var deletingProject by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf<Conversation?>(null) }
     var deleting by remember { mutableStateOf<Conversation?>(null) }
+    var memoryOf by remember { mutableStateOf<Conversation?>(null) }
     val chats = state.conversations.filter { it.projectId == projectId && it.messages.isNotEmpty() }
     val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) vm.addProjectFile(projectId, uri)
@@ -118,6 +119,14 @@ fun ProjectScreen(
             }
             item {
                 Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("项目记忆", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                        ProjectMemory(vm, project.id)
+                    }
+                }
+            }
+            item {
+                Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("项目资料", style = MaterialTheme.typography.titleSmall,
@@ -163,11 +172,13 @@ fun ProjectScreen(
                     onRename = { renaming = c },
                     onDelete = { deleting = c },
                     onPin = { vm.togglePin(c.id) },
+                    onMemory = { memoryOf = c },
                 )
             }
         }
     }
 
+    memoryOf?.let { c -> ConversationMemoryDialog(vm, c) { memoryOf = null } }
     if (renamingProject) {
         RenameDialog(project.name, "项目名称", onDismiss = { renamingProject = false }) {
             vm.saveProject(project.copy(name = it)); renamingProject = false

@@ -51,6 +51,9 @@ data class Conversation(
     val presetName: String = "",
     val projectId: String? = null,
     val pinned: Boolean = false,
+    /** 这个对话带不带全局记忆；参不参与每晚的「做梦」整理。 */
+    val useGlobalMemory: Boolean = true,
+    val inDream: Boolean = true,
     val messages: List<ChatMessage> = emptyList(),
     /** 压缩后的前情提要，以及它覆盖到哪条消息（含）为止。 */
     val summary: String = "",

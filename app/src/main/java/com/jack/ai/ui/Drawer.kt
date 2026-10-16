@@ -71,6 +71,7 @@ fun HistoryDrawer(
     onDelete: (String) -> Unit,
     onRename: (String, String) -> Unit,
     onPin: (String) -> Unit,
+    onMemory: (Conversation) -> Unit,
     onOpenProject: (String) -> Unit,
     onNewProject: () -> Unit,
     onOpenMemory: () -> Unit,
@@ -89,7 +90,8 @@ fun HistoryDrawer(
     val results = remember(query, state.conversations) { if (query.isBlank()) emptyList() else searchConversations(state.conversations, query) }
     val colors = MaterialTheme.colorScheme
     fun chatRow(c: Conversation): @Composable () -> Unit = {
-        ChatItem(c, c.id == state.currentId, { onSelect(c.id) }, { renaming = c }, { deleting = c }, onPin = { onPin(c.id) })
+        ChatItem(c, c.id == state.currentId, { onSelect(c.id) }, { renaming = c }, { deleting = c }, onPin = { onPin(c.id) },
+            onMemory = { onMemory(c) })
     }
     ModalDrawerSheet(drawerContainerColor = colors.surfaceContainerLow) {
         Column(Modifier.fillMaxSize()) {
@@ -203,6 +205,7 @@ fun ChatItem(
     onRename: () -> Unit,
     onDelete: () -> Unit,
     onPin: (() -> Unit)? = null,
+    onMemory: (() -> Unit)? = null,
 ) {
     var menu by remember { mutableStateOf(false) }
     var showUsage by remember { mutableStateOf(false) }
@@ -235,6 +238,13 @@ fun ChatItem(
                     text = { Text(if (c.pinned) "取消置顶" else "置顶") },
                     leadingIcon = { Icon(AppIcons.Pin, null) },
                     onClick = { menu = false; onPin() },
+                )
+            }
+            if (onMemory != null) {
+                DropdownMenuItem(
+                    text = { Text("记忆") },
+                    leadingIcon = { Icon(AppIcons.Moon, null) },
+                    onClick = { menu = false; onMemory() },
                 )
             }
             DropdownMenuItem(

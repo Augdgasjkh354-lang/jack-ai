@@ -117,6 +117,7 @@ fun ChatScreen(
     val ctx = LocalContext.current
     var text by rememberSaveable { mutableStateOf("") }
     var showFiles by remember { mutableStateOf(false) }
+    var memoryOf by remember { mutableStateOf<Conversation?>(null) }
     val bg = MaterialTheme.colorScheme.background
     // 分享进来或语音识别的文字，接到输入框后面
     LaunchedEffect(state.incomingText) {
@@ -136,6 +137,7 @@ fun ChatScreen(
                 onDelete = vm::delete,
                 onRename = vm::rename,
                 onPin = vm::togglePin,
+                onMemory = { memoryOf = it },
                 onOpenProject = { scope.launch { drawerState.close() }; onOpenProject(it) },
                 onNewProject = { scope.launch { drawerState.close() }; onNewProject() },
                 onOpenMemory = { scope.launch { drawerState.close() }; onOpenMemory() },
@@ -182,7 +184,7 @@ fun ChatScreen(
                         IconButton(onClick = { vm.newChat(state.currentProjectId) }) {
                             Icon(AppIcons.NewChat, contentDescription = "新对话", Modifier.size(22.dp))
                         }
-                        if (conv != null && conv.messages.isNotEmpty()) ExportMenu(vm)
+                        if (conv != null && conv.messages.isNotEmpty()) ExportMenu(vm, onMemory = { memoryOf = conv })
                     },
                 )
             },
@@ -209,13 +211,14 @@ fun ChatScreen(
             }
         }
     }
+    memoryOf?.let { c -> ConversationMemoryDialog(vm, c) { memoryOf = null } }
     if (showFiles && conv != null) {
         FilesSheet(vm, conv, inProject = conv.projectId != null, onDismiss = { showFiles = false })
     }
 }
 
 @Composable
-private fun ExportMenu(vm: ChatViewModel) {
+private fun ExportMenu(vm: ChatViewModel, onMemory: () -> Unit) {
     var open by remember { mutableStateOf(false) }
     val busy by vm.exporting.collectAsState()
     val ctx = LocalContext.current
@@ -225,6 +228,12 @@ private fun ExportMenu(vm: ChatViewModel) {
             else Icon(Icons.Default.MoreVert, contentDescription = "更多")
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = { Text("记忆") },
+                leadingIcon = { Icon(AppIcons.Moon, null) },
+                onClick = { open = false; onMemory() },
+            )
+            HorizontalDivider()
             listOf(
                 ChatExport.Format.IMAGE to "分享为长图",
                 ChatExport.Format.PDF to "导出为 PDF",

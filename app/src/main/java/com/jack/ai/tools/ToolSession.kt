@@ -102,7 +102,6 @@ class ToolSession(
         val args = runCatching { Json.parseToJsonElement(argsText).jsonObject }.getOrNull()
         val key = when (name) {
             "read_webpage" -> "url"
-            "save_memory" -> "content"
             "use_skill" -> "name"
             "run_js", "run_python" -> "code"
             "delete_routine", "delete_calendar_event" -> "id"
@@ -127,6 +126,7 @@ class ToolSession(
             name == "create_task" && SkillIds.ROUTINE in skillIds -> makeRoutine("task", args)
             name == "add_calendar_event" && SkillIds.CALENDAR in skillIds -> addEvent(args)
             name == "list_calendar_events" && SkillIds.CALENDAR in skillIds -> listEvents(args)
+            name == "save_memory" -> remember(args)
             arg.isBlank() -> "参数缺失"
             name == "use_skill" -> useSkill(arg)
             name == "run_js" && SkillIds.CALC in skillIds -> runJs(arg)
@@ -139,7 +139,6 @@ class ToolSession(
             name == "search_history" -> searchOld(arg)
             name == "search_project" -> searchProject(arg)
             name == "search_chats" && SkillIds.CHATS in skillIds -> searchChats(arg)
-            name == "save_memory" -> remember(arg)
             else -> "这个工具现在不可用"
         }
     }

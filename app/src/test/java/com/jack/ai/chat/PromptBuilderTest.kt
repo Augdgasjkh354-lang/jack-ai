@@ -188,7 +188,8 @@ class PromptBuilderTest {
         assertFalse("search_project" in names)
         assertTrue("add_calendar_event" in names)
 
-        assertFalse("save_memory" in toolNames(conv, s = settings.copy(memoryEnabled = false)))
+        // 本对话记忆随时能存，关了全局记忆工具也在
+        assertTrue("save_memory" in toolNames(conv, s = settings.copy(memoryEnabled = false)))
         assertTrue("web_search" in toolNames(conv, s = settings.copy(tavilyKey = "t")))
         assertTrue("search_history" in toolNames(conv.copy(summary = "提要")))
         assertFalse("add_calendar_event" in toolNames(conv, s = settings.copy(disabledSkills = setOf(SkillIds.CALENDAR))))
@@ -224,5 +225,49 @@ class PromptBuilderTest {
     fun tokenEstimate() {
         assertEquals(6, PromptBuilder.estTokens("一二三四五六七八九十"))
         assertEquals(3, PromptBuilder.estTokens("abcdefghij"))
+    }
+
+    // ---------- 三层记忆 ----------
+
+    @Test
+    fun chatAndProjectMemoryComeAfterGlobalAndBeforeSummary() {
+        val project = Project(name = "小说")
+        val conv = Conversation(projectId = project.id, summary = "提要", summaryUntilId = "x")
+        val sys = PromptBuilder.systemPrompt(settings, conv, project, tools(conv, project), memories, settings.activeSkills(),
+            chatMemory = "- 主角叫阿明", projectMemory = "- 故事发生在 1990 年")
+        val order = listOf("【关于用户的长期记忆】", "【项目记忆】", "【本对话记忆】", "【较早对话的提要】").map { sys.indexOf(it) }
+        order.forEach { assertTrue("缺少某段：$order", it >= 0) }
+        assertEquals(order.sorted(), order)
+        assertTrue(sys.contains("主角叫阿明"))
+        assertTrue(sys.contains("故事发生在 1990 年"))
+        assertTrue(sys.contains("对话记忆-"))
+    }
+
+    @Test
+    fun chatCanOptOutOfGlobalMemory() {
+        val conv = Conversation(useGlobalMemory = false)
+        val sys = PromptBuilder.systemPrompt(settings, conv, null, tools(conv), memories, settings.activeSkills(), chatMemory = "- 只在这里")
+        assertFalse(sys.contains("喜欢简短的回答"))
+        assertTrue(sys.contains("不要存 global"))
+        assertTrue(sys.contains("只在这里"))
+        assertTrue(sys.contains("「记忆.md」"))
+    }
+
+    @Test
+    fun memoryRulesMatchWhereWeAre() {
+        val plain = PromptBuilder.memoryRules(Conversation(), inProject = false, globalOn = true)
+        assertTrue(plain.contains("chat（本对话记忆）"))
+        assertTrue(plain.contains("global（全局记忆）"))
+        assertFalse(plain.contains("project（项目记忆）"))
+        assertTrue(PromptBuilder.memoryRules(Conversation(), inProject = true, globalOn = true).contains("project（项目记忆）"))
+    }
+
+    @Test
+    fun memoryRulesAreStableSoCacheHolds() {
+        // 规则只跟对话类型有关，存了新记忆也不变
+        val conv = Conversation()
+        val a = PromptBuilder.systemPrompt(settings, conv, null, tools(conv), memories, settings.activeSkills())
+        val b = PromptBuilder.systemPrompt(settings, conv, null, tools(conv), memories, settings.activeSkills(), chatMemory = "- 新的一条")
+        assertTrue(b.startsWith(a.substringBefore("【个性化设定】")))
     }
 }
