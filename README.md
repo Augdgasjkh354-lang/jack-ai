@@ -22,7 +22,7 @@
 - 项目里的大份资料（超过 2 万字）按需检索，不整份占用上下文
 
 ### 工具
-- 联网搜索、读网页、深度研究（需要 Tavily API Key）
+- 联网搜索、读网页、深度研究：优先用 Tavily（免费额度），没填或失败时自动改用 DeepSeek 搜索（每次 0.005 元，计入统计）
 - 运行 JavaScript 做精确计算
 - 运行 Python（自带 numpy、pandas、matplotlib、openpyxl）
 - 搜索全部聊天记录
@@ -61,6 +61,6 @@
 1. 打开本仓库的 [Releases](../../releases/latest) 页面，下载最新的 `JackAI-*.apk`
 2. 在手机上点开安装（第一次需要允许"安装未知来源应用"）
 3. 打开 App，在设置里填入 DeepSeek API Key（在 https://platform.deepseek.com/api_keys 创建）；想用别家模型，在设置「其他模型服务」里添加
-4. 想用联网搜索的话，再填一个 Tavily API Key（在 https://app.tavily.com 免费申请）
+4. 想用联网搜索的话，可以再填一个 Tavily API Key（在 https://app.tavily.com 免费申请）；不填也行，会用 DeepSeek 的搜索
 
 每次往 `main` 分支推代码，GitHub Actions 都会自动打包一个新版本。

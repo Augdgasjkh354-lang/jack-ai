@@ -17,13 +17,13 @@ import java.util.Locale
 /** 联网：搜索、读网页。 */
 
 internal suspend fun ToolSession.search(query: String) = runTool(query) {
-    val results = host.tavily.search(settings.tavilyKey, query)
+    val results = host.web.search(settings, query)
     val text = formatResultsForModel(results, sourceCount + 1)
     sourceCount += results.size
     text to SearchRecord(query, results.toSources())
 }
 
 internal suspend fun ToolSession.readPage(url: String) = runTool("读取 $url") {
-    val text = host.tavily.extract(settings.tavilyKey, url)
+    val text = host.web.read(settings, url)
     text to SearchRecord("读取 $url", listOf(com.jack.ai.data.SearchSource(url, url)))
 }

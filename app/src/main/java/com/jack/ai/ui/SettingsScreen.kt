@@ -164,7 +164,7 @@ fun SettingsScreen(
                     value = tavilyInput,
                     onValueChange = {
                         tavilyInput = it.trim()
-                        vm.updateSettings { s -> s.copy(tavilyKey = tavilyInput, webSearch = s.webSearch && tavilyInput.isNotBlank()) }
+                        vm.updateSettings { s -> s.copy(tavilyKey = tavilyInput, webSearch = s.webSearch && (tavilyInput.isNotBlank() || s.apiKey.isNotBlank())) }
                     },
                     placeholder = { Text("tvly-...") },
                     singleLine = true,

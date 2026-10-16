@@ -36,6 +36,7 @@ interface ToolHost {
     val app: Application
     val store: Store
     val tavily: TavilyClient
+    val web: com.jack.ai.api.WebClient
     fun conversations(): List<Conversation>
     fun setMemories(list: List<MemoryItem>)
     fun editCards(transform: (List<Flashcard>) -> List<Flashcard>)

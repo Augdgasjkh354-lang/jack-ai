@@ -142,6 +142,18 @@ class Store(context: Context) {
         cost
     }
 
+    /** 记一次按次收费的调用（比如 DeepSeek 联网），算进当天统计。 */
+    fun addPaidCall(key: String, price: Double) = synchronized(LOCK) {
+        val date = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
+        val list = loadUnlocked("usage.json", UsageDay.serializer()).toMutableList()
+        val i = list.indexOfFirst { it.date == date && it.model == key }
+        val old = if (i >= 0) list[i] else UsageDay(date, key, costed = true)
+        val new = old.copy(requests = old.requests + 1, cost = old.cost + price, costed = true)
+        if (i >= 0) list[i] = new else list += new
+        atomicWrite("usage.json", json.encodeToString(ListSerializer(UsageDay.serializer()), list.takeLast(800)))
+        checkBudget(list, date.take(7))
+    }
+
     /** 本月花费到预算的 80% 和 100% 时各提醒一次。 */
     private fun checkBudget(list: List<UsageDay>, month: String) {
         val budget = prefs.getFloat("monthlyBudget", 0f).toDouble()

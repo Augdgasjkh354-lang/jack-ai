@@ -689,10 +689,10 @@ private fun InputBar(
                     }
                     Pill(
                         label = "联网",
-                        active = settings.webSearch && settings.tavilyKey.isNotBlank(),
+                        active = settings.webSearch && (settings.tavilyKey.isNotBlank() || settings.apiKey.isNotBlank()),
                         icon = AppIcons.Globe,
                         onClick = {
-                            if (settings.tavilyKey.isBlank()) onNeedTavily()
+                            if (settings.tavilyKey.isBlank() && settings.apiKey.isBlank()) onNeedTavily()
                             else vm.updateSettings { it.copy(webSearch = !it.webSearch) }
                         },
                     )

@@ -100,6 +100,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val store = Store(app)
     private val client = DeepSeekClient(store::addUsage)
     private val tavily = TavilyClient()
+    private val web = com.jack.ai.api.WebClient(tavily) { store.addPaidCall(com.jack.ai.api.WebClient.USAGE_KEY, com.jack.ai.api.WebClient.PRICE) }
     private val core = AppCore(app, store, viewModelScope).also {
         it.stop = { stop() }
         it.stopAndWait = { val j = job; stop(); j?.join() }
@@ -493,6 +494,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         override val app: Application get() = getApplication()
         override val store: Store get() = this@ChatViewModel.store
         override val tavily: TavilyClient get() = this@ChatViewModel.tavily
+        override val web get() = this@ChatViewModel.web
         override fun conversations() = _state.value.conversations
         override fun setMemories(list: List<MemoryItem>) = _state.update { it.copy(memories = list) }
         override fun editCards(transform: (List<Flashcard>) -> List<Flashcard>) = knowledge.editCards(transform)

@@ -50,7 +50,7 @@ private fun schema(s: String): JsonObject = Json.parseToJsonElement(s).jsonObjec
 val BUILTIN_SKILLS = listOf(
     Skill(
         id = SkillIds.WEB, builtin = true, name = "联网搜索",
-        description = "用 Tavily 搜索互联网、读取网页全文，回答时效性问题和核实事实。",
+        description = "搜索互联网、读取网页全文，回答时效性问题和核实事实。",
         instructions = """联网搜索的做法：
 1. 先判断需不需要搜：新闻、价格、天气、最新版本、近期事件、你不确定的事实，才搜；常识、闲聊、写作、编程不搜。
 2. 搜索词简洁精准，像人在搜索引擎里打的那样，3 到 8 个词。中文话题用中文搜，国外话题用英文搜效果更好。
@@ -305,10 +305,10 @@ object SkillTools {
     val SAVE_MEMORY = schema("""{"type":"function","function":{"name":"save_memory","description":"存一条记忆。","parameters":{"type":"object","properties":{"content":{"type":"string","description":"要记住的内容，一句完整、独立能看懂的话"},"scope":{"type":"string","enum":["chat","project","global"],"description":"存到哪：chat 本对话记忆，project 项目记忆，global 全局记忆"}},"required":["content","scope"]}}}""")
 }
 
-/** 当前开着的 skill：内置的看开关（联网还要有 Tavily Key），自定义的看它自己的 enabled。 */
+/** 当前开着的 skill：内置的看开关（联网还要有 Tavily 或 DeepSeek Key），自定义的看它自己的 enabled。 */
 fun Settings.activeSkills(): List<Skill> =
     allSkills().filter {
-        it.enabled && (it.id != SkillIds.WEB || tavilyKey.isNotBlank()) && (it.id != SkillIds.MAIL || mail?.ready == true)
+        it.enabled && (it.id != SkillIds.WEB || tavilyKey.isNotBlank() || apiKey.isNotBlank()) && (it.id != SkillIds.MAIL || mail?.ready == true)
     }
 
 /** 全部 skill（内置 + 自定义），enabled 反映当前开关状态。 */

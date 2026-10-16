@@ -101,7 +101,7 @@ class TavilyClient {
             if (!resp.isSuccessful) throw ApiException("读取网页失败（${resp.code}）", resp.code)
             val results = json.parseToJsonElement(text).jsonObject["results"] as? JsonArray
             val first = results?.firstOrNull() as? JsonObject
-            first?.get("raw_content").str().ifBlank { "没能读取这个网页的内容。" }.take(30_000)
+            first?.get("raw_content").str().ifBlank { WebClient.NO_CONTENT }.take(30_000)
         }
     }
 }

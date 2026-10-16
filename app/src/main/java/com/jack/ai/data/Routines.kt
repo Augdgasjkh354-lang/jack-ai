@@ -208,7 +208,8 @@ object Routines {
         val ep = s.backgroundEndpoint() ?: return "还没有填写 API Key，任务没法执行。"
         val client = DeepSeekClient()
         val tavily = TavilyClient()
-        val web = s.tavilyKey.isNotBlank()
+        val webClient = com.jack.ai.api.WebClient(tavily) { store.addPaidCall(com.jack.ai.api.WebClient.USAGE_KEY, com.jack.ai.api.WebClient.PRICE) }
+        val web = s.tavilyKey.isNotBlank() || s.apiKey.isNotBlank()
         val tools = if (web) JsonArray(listOf(SkillTools.WEB_SEARCH, SkillTools.READ_WEBPAGE)) else null
         val today = SimpleDateFormat("yyyy年M月d日 EEEE HH:mm", Locale.CHINA).format(Date())
         val memories = if (s.memoryEnabled) store.loadMemories() else emptyList()
@@ -237,10 +238,10 @@ object Routines {
                 fun arg(k: String) = (obj?.get(k) as? JsonPrimitive)?.content.orEmpty()
                 try {
                     when (name) {
-                        "web_search" -> tavily.search(s.tavilyKey, arg("query")).let {
+                        "web_search" -> webClient.search(s, arg("query")).let {
                             formatResultsForModel(it, sources + 1).also { _ -> sources += it.size }
                         }
-                        "read_webpage" -> tavily.extract(s.tavilyKey, arg("url"))
+                        "read_webpage" -> webClient.read(s, arg("url"))
                         else -> "这个工具不可用"
                     }
                 } catch (e: Exception) {

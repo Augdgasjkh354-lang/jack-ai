@@ -183,7 +183,7 @@ class PromptBuilderTest {
         val conv = Conversation()
         val names = toolNames(conv)
         assertTrue("save_memory" in names)
-        assertFalse("web_search" in names) // 没有 Tavily Key
+        assertTrue("web_search" in names) // 没有 Tavily Key，但有 DeepSeek Key 也能联网
         assertFalse("search_history" in names)
         assertFalse("search_project" in names)
         assertTrue("add_calendar_event" in names)

@@ -310,6 +310,7 @@ const val MODEL_PRO = "deepseek-v4-pro"
 fun modelLabel(model: String): String = when {
     model == MODEL_FLASH -> "V4.1 Flash"
     model == MODEL_PRO -> "V4 Pro"
+    model == com.jack.ai.api.WebClient.USAGE_KEY -> "DeepSeek 联网"
     // 自定义模型只显示模型名；OpenRouter 这类 "厂商/模型" 去掉厂商前缀
     else -> (parseCustomKey(model)?.second ?: model).substringAfterLast('/')
 }
