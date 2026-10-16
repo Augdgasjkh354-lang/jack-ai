@@ -1,5 +1,7 @@
 package com.jack.ai.tools
 
+import com.jack.ai.data.PlanItem
+
 import android.app.Application
 import android.content.ActivityNotFoundException
 import android.content.Intent
@@ -21,6 +23,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -58,6 +61,8 @@ interface ToolUi {
     fun attach(file: File)
     /** 做了就收不回的操作（发邮件等）先问用户，返回 true 才执行。 */
     suspend fun confirm(title: String, body: String, action: String): Boolean
+    /** Work 模式的任务清单更新了。 */
+    fun plan(items: List<PlanItem>) {}
 }
 
 /**
@@ -119,6 +124,7 @@ class ToolSession(
             name in FILE_TOOLS && FILE_TOOLS[name] in skillIds -> makeFile(name, args)
             name == "create_chart" && SkillIds.CALC in skillIds -> makeChart(args)
             name == "create_diagram" && SkillIds.CALC in skillIds -> makeDiagram(args)
+            name == "update_plan" && conv.work -> updatePlan(args)
             name == "list_files" -> listFiles()
             name == "read_file" -> readFile(args)
             name == "write_file" -> writeFile(args)
@@ -232,4 +238,17 @@ internal suspend fun ToolSession.startClock(intent: Intent, missing: String = "�
     } catch (e: SecurityException) {
         throw IllegalStateException("没有设闹钟的权限")
     }
+}
+
+/** 任务清单：整份替换，显示在回答上方。不算一次“工具调用”的标记，免得刷屏。 */
+internal fun ToolSession.updatePlan(args: JsonObject): String {
+    val items = (args["items"] as? JsonArray).orEmpty().mapNotNull { el ->
+        val o = el as? JsonObject ?: return@mapNotNull null
+        val text = o["text"].text().trim().ifBlank { return@mapNotNull null }
+        PlanItem(text.take(120), o["status"].text().takeIf { it in setOf("pending", "doing", "done") } ?: "pending")
+    }.take(30)
+    if (items.isEmpty()) return "清单是空的"
+    ui.plan(items)
+    val done = items.count { it.status == "done" }
+    return "清单已更新（$done/${items.size} 完成）"
 }

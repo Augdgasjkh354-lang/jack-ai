@@ -260,6 +260,20 @@ class PromptBuilderTest {
     }
 
     @Test
+    fun workUsesItsOwnPromptAndPlanTool() {
+        val s2 = settings.copy(developerPrompt = "CHAT规则", workDeveloperPrompt = "WORK规则")
+        val chat = Conversation()
+        val work = Conversation(work = true)
+        val chatSys = PromptBuilder.systemPrompt(s2, chat, null, tools(chat), memories, s2.activeSkills())
+        val workSys = PromptBuilder.systemPrompt(s2, work, null, tools(work), memories, s2.activeSkills())
+        assertTrue("CHAT规则" in chatSys && "WORK规则" !in chatSys)
+        assertTrue("WORK规则" in workSys && "CHAT规则" !in workSys)
+        assertFalse("update_plan" in toolNames(chat))
+        assertTrue("update_plan" in toolNames(work))
+        assertTrue("【任务清单】" in workSys)
+    }
+
+    @Test
     fun tokenEstimate() {
         assertEquals(6, PromptBuilder.estTokens("一二三四五六七八九十"))
         assertEquals(3, PromptBuilder.estTokens("abcdefghij"))

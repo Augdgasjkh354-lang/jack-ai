@@ -255,6 +255,13 @@ class Store(context: Context) {
                 .getOrDefault(ThemeMode.SYSTEM),
             presets = presets,
             developerPrompt = prefs.getString("devPrompt2", null) ?: DEFAULT_DEV_PROMPT,
+            workDeveloperPrompt = prefs.getString("workDevPrompt", null) ?: DEFAULT_WORK_PROMPT,
+            activeWork = prefs.getBoolean("activeWork", false),
+            chatModel = prefs.getString("chatModel", "") ?: "",
+            chatThinking = prefs.getString("chatThinking", null)?.let { runCatching { ThinkLevel.valueOf(it) }.getOrNull() },
+            workModel = prefs.getString("workModel", MODEL_PRO) ?: MODEL_PRO,
+            workThinking = prefs.getString("workThinking", null)?.let { runCatching { ThinkLevel.valueOf(it) }.getOrNull() } ?: ThinkLevel.HIGH,
+            workCostLimit = prefs.getFloat("workCostLimit", 1f).toDouble(),
             compressTokens = prefs.getInt("compressTokens", 200_000),
             memoryEnabled = prefs.getBoolean("memoryEnabled", true),
             dreamEnabled = prefs.getBoolean("dreamEnabled", true),
@@ -290,6 +297,13 @@ class Store(context: Context) {
             .putString("themeMode", s.themeMode.name)
             .putString("presets", json.encodeToString(ListSerializer(Preset.serializer()), s.presets))
             .putString("devPrompt2", s.developerPrompt)
+            .putString("workDevPrompt", s.workDeveloperPrompt)
+            .putBoolean("activeWork", s.activeWork)
+            .putString("chatModel", s.chatModel)
+            .putString("chatThinking", s.chatThinking?.name)
+            .putString("workModel", s.workModel)
+            .putString("workThinking", s.workThinking.name)
+            .putFloat("workCostLimit", s.workCostLimit.toFloat())
             .putInt("compressTokens", s.compressTokens)
             .putBoolean("memoryEnabled", s.memoryEnabled)
             .putBoolean("dreamEnabled", s.dreamEnabled)

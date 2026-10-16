@@ -81,6 +81,7 @@ private fun hitRate(l: List<UsageDay>): String {
 fun UsageScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
     val usage by produceState<List<UsageDay>?>(null) { value = vm.loadUsage() }
     var editBudget by remember { mutableStateOf(false) }
+    var editWorkLimit by remember { mutableStateOf(false) }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -119,6 +120,12 @@ fun UsageScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("每月预算", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
                         TextButton(onClick = { editBudget = true }) { Text(if (budget > 0) "修改" else "设置") }
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        val wl = state.settings.workCostLimit
+                        Text("Work 单次任务上限" + if (wl > 0) " ${yuan(wl)}" else "：不限",
+                            style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                        TextButton(onClick = { editWorkLimit = true }) { Text("修改") }
                     }
                     if (budget > 0) {
                         val spent = monthList.money
@@ -239,6 +246,27 @@ fun UsageScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                 }) { Text("保存") }
             },
             dismissButton = { TextButton(onClick = { editBudget = false }) { Text("取消") } },
+        )
+    }
+    if (editWorkLimit) {
+        var text by remember { mutableStateOf(state.settings.workCostLimit.takeIf { it > 0 }?.toString().orEmpty()) }
+        AlertDialog(
+            onDismissRequest = { editWorkLimit = false },
+            title = { Text("Work 单次任务上限") },
+            text = {
+                OutlinedTextField(
+                    value = text, onValueChange = { text = it.filter { ch -> ch.isDigit() || ch == '.' } },
+                    label = { Text("花到这么多先停下问你（元），留空不限") }, singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.updateSettings { it.copy(workCostLimit = (text.toDoubleOrNull() ?: 0.0).coerceAtLeast(0.0)) }
+                    editWorkLimit = false
+                }) { Text("保存") }
+            },
+            dismissButton = { TextButton(onClick = { editWorkLimit = false }) { Text("取消") } },
         )
     }
 }

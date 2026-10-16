@@ -219,6 +219,10 @@ fun AssistantMessage(
     val ctx = LocalContext.current
     val colors = MaterialTheme.colorScheme
     Column(Modifier.fillMaxWidth()) {
+        if (msg.plan.isNotEmpty()) {
+            PlanCard(msg.plan)
+            Spacer(Modifier.height(8.dp))
+        }
         if (msg.searches.isNotEmpty()) {
             SearchBox(msg.searches)
             Spacer(Modifier.height(8.dp))
@@ -240,6 +244,14 @@ fun AssistantMessage(
         msg.files.forEach { f ->
             Spacer(Modifier.height(8.dp))
             if (f.mime.startsWith("image/")) ChartImage(f) else GeneratedFileCard(f)
+        }
+        if (msg.cost > 0) {
+            Text(
+                "本次 ¥" + String.format(java.util.Locale.US, if (msg.cost < 0.1) "%.3f" else "%.2f", msg.cost),
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.outline,
+                modifier = Modifier.padding(top = 6.dp),
+            )
         }
         msg.error?.let { err ->
             Spacer(Modifier.height(4.dp))
@@ -522,3 +534,33 @@ private fun SearchBox(searches: List<SearchRecord>) {
 }
 
 private fun isOther(label: String) = listOf("读取", "翻阅", "记住", "使用技能", "生成", "运行", "设置", "查看", "删除", "写入", "修改", "设闹钟", "关闹钟", "读邮件", "发邮件", "已发邮件", "标为", "添加日程", "打开日历").any { label.startsWith(it) }
+
+/** Work 模式的任务清单：做完的打勾划掉，正在做的高亮。 */
+@Composable
+private fun PlanCard(items: List<com.jack.ai.data.PlanItem>) {
+    val colors = MaterialTheme.colorScheme
+    Surface(color = colors.surfaceVariant.copy(alpha = 0.6f), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                "任务清单 ${items.count { it.status == "done" }}/${items.size}",
+                style = MaterialTheme.typography.labelMedium,
+                color = colors.primary,
+            )
+            items.forEach { item ->
+                val mark = when (item.status) { "done" -> "✓"; "doing" -> "▸"; else -> "○" }
+                Text(
+                    "$mark  ${item.text}",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        textDecoration = if (item.status == "done") androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
+                    ),
+                    color = when (item.status) {
+                        "done" -> colors.outline
+                        "doing" -> colors.onSurface
+                        else -> colors.onSurfaceVariant
+                    },
+                    fontWeight = if (item.status == "doing") androidx.compose.ui.text.font.FontWeight.Medium else null,
+                )
+            }
+        }
+    }
+}

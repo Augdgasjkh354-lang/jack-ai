@@ -79,8 +79,14 @@ class MainActivity : FragmentActivity() {
         if (!locked) lastActive = SystemClock.elapsedRealtime()
     }
 
+    override fun onPause() {
+        super.onPause()
+        visible = false
+    }
+
     override fun onResume() {
         super.onResume()
+        visible = true
         // 后台做梦可能更新了记忆
         vm.reloadMemory()
         vm.reloadRoutines()
@@ -262,6 +268,8 @@ class MainActivity : FragmentActivity() {
     companion object {
         /** 最后一次在前台（已解锁）的时间，跨页面重建保留。 */
         private var lastActive = 0L
+        /** App 现在是否在眼前（Work 任务做完时据此决定要不要发通知）。 */
+        @Volatile var visible = false
 
         const val ACTION_NEW_CHAT = "com.jack.ai.NEW_CHAT"
         const val ACTION_VOICE = "com.jack.ai.VOICE"

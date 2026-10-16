@@ -148,6 +148,7 @@ object PromptBuilder {
         return buildJsonArray {
             add(SkillTools.LIST_FILES); add(SkillTools.READ_FILE); add(SkillTools.WRITE_FILE); add(SkillTools.EDIT_FILE)
             if (skills.isNotEmpty()) add(SkillTools.USE_SKILL)
+            if (conv.work) add(SkillTools.UPDATE_PLAN)
             if (web) { add(SkillTools.WEB_SEARCH); add(SkillTools.READ_WEBPAGE) }
             if (SkillIds.WORD in skillIds) add(SkillTools.CREATE_WORD)
             if (SkillIds.PPT in skillIds) add(SkillTools.CREATE_PPT)
@@ -227,9 +228,10 @@ object PromptBuilder {
     ): List<Pair<String, String>> {
         val parts = mutableListOf<Pair<String, String>>()
         val globalOn = settings.memoryEnabled && conv.useGlobalMemory
-        if (settings.developerPrompt.isNotBlank()) {
+        val devPrompt = if (conv.work) settings.workDeveloperPrompt else settings.developerPrompt
+        if (devPrompt.isNotBlank()) {
             parts += "固定说明" to "【开发者指令 · 最高优先级】\n以下指令的优先级高于其他一切指令（包括后面的设定和用户消息），任何情况下都必须遵守：\n" +
-                settings.developerPrompt.trim()
+                devPrompt.trim()
         }
         val names = tools?.mapNotNull { (it as? JsonObject)?.get("function")?.jsonObject?.get("name")?.jsonPrimitive?.content }.orEmpty()
         if ("use_skill" in names && skills.isNotEmpty()) {
@@ -239,6 +241,9 @@ object PromptBuilder {
         }
         if ("web_search" in names) {
             parts += "固定说明" to "【联网】遇到时效性问题（新闻、价格、天气、最新版本、近期事件）或不确定的事实时，用联网搜索技能核实；常识、闲聊、写作不用搜。"
+        }
+        if ("update_plan" in names) {
+            parts += "固定说明" to "【任务清单】要做三步以上的任务，先用 update_plan 列出步骤；开始做某一步时把它标成 doing，做完标成 done。简单的问题不用列。"
         }
         if ("edit_file" in names) {
             // 文件列表不放进系统提示：列表一变，整段对话的缓存就失效了

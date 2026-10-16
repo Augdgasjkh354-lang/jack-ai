@@ -151,17 +151,36 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun newChat(projectId: String? = null) {
         stop()
         _state.update { it.copy(currentId = null, draftProjectId = projectId, pending = emptyList()) }
+        applyMode(_state.value.draftWork)
     }
 
     /** 新对话开始前切换 Chat / Work。 */
     fun setWork(on: Boolean) {
         _state.update { it.copy(draftWork = on) }
         _state.value.current?.takeIf { it.messages.isEmpty() }?.let { c -> updateConvQuiet(c.id) { it.copy(work = on) } }
+        applyMode(on)
+    }
+
+    /**
+     * Chat 和 Work 各记一套模型和思考强度：切模式时把当前的存进旧模式，换上新模式的。
+     * 新模式的模型用不了（比如没填 DeepSeek Key）就保持现在的模型。
+     */
+    private fun applyMode(work: Boolean) {
+        if (_state.value.settings.activeWork == work) return
+        updateSettings { st ->
+            val saved = if (st.activeWork) st.copy(workModel = st.model, workThinking = st.thinking)
+                else st.copy(chatModel = st.model, chatThinking = st.thinking)
+            val model = if (work) saved.workModel else saved.chatModel.ifBlank { st.model }
+            val thinking = if (work) saved.workThinking else saved.chatThinking ?: st.thinking
+            val usable = saved.endpoint(model)?.apiKey?.isNotBlank() == true
+            saved.copy(activeWork = work, model = if (usable) model else st.model, thinking = thinking)
+        }
     }
 
     fun select(id: String) {
         stop()
         _state.update { it.copy(currentId = id, pending = emptyList()) }
+        _state.value.current?.let { applyMode(it.work) }
     }
 
     fun delete(id: String) {
@@ -380,9 +399,27 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 if (paths.isNotEmpty()) promptInput = promptInput.copy(fileIds = runCatching { dsFiles.ensure(ep, paths) }.getOrDefault(emptyMap()))
             }
             var filesDropped = false
+            // Work：开前台服务，切到后台也接着干；花费到上限先问一声
+            val work = conv.work
+            val workTitle = conv.title
+            if (work) WorkService.start(getApplication(), convId, workTitle)
+            var spent = 0.0
+            val limit = settings.workCostLimit
+            var nextLimit = limit
             val session = ToolSession(toolHost, settings, conv, project, skills, object : ToolUi {
-                override fun started(label: String) =
+                override fun started(label: String) {
                     patchMessage(convId, reply.id) { it.copy(searches = it.searches + SearchRecord(label, pending = true)) }
+                    if (work) WorkService.progress(getApplication(), convId, workTitle, label)
+                }
+
+                override fun plan(items: List<com.jack.ai.data.PlanItem>) {
+                    patchMessage(convId, reply.id) { it.copy(plan = items) }
+                    if (work) {
+                        val doing = items.firstOrNull { it.status == "doing" }?.text
+                        WorkService.progress(getApplication(), convId, workTitle,
+                            "${items.count { it.status == "done" }}/${items.size}" + (doing?.let { " · $it" } ?: ""))
+                    }
+                }
 
                 override fun finished(label: String, record: SearchRecord) = patchMessage(convId, reply.id) { m ->
                     m.copy(searches = m.searches.map { if (it.query == label && it.pending) record else it })
@@ -413,7 +450,21 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     messages = history,
                     tools = toolSet,
                     maxRounds = { session.maxRounds },
-                    execute = session::execute,
+                    execute = { name, args ->
+                        if (work && limit > 0 && spent >= nextLimit) {
+                            if (!MainActivity.visible) com.jack.ai.data.Routines.notify(getApplication(), "work-ask-$convId",
+                                "需要你确认：$workTitle", "这次任务已经花了 ¥%.2f，打开看看要不要继续".format(spent), openChat = convId)
+                            val ok = core.confirm(
+                                "这次任务已经花了 ¥%.2f".format(spent),
+                                "超过了设定的 ¥%.2f。继续的话，再多花 ¥%.2f 会再问你。".format(nextLimit, limit),
+                                "继续",
+                            )
+                            if (ok) nextLimit = spent + limit
+                            else session.maxRounds = 0
+                        }
+                        if (session.maxRounds == 0) "用户让你先停下（花费到了上限）。不要再调用工具，直接说明目前做到哪一步、还差什么。"
+                        else session.execute(name, args)
+                    },
                     onText = {
                         val now = System.currentTimeMillis()
                         if (now - lastFlush > 60) { lastFlush = now; flush() }
@@ -422,6 +473,13 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                         val total = ev.promptTokens + ev.completionTokens
                         updateConvQuiet(convId) { it.copy(lastPromptTokens = total) }
                         core.recordSpend(convId, ep, ev.promptTokens, ev.cacheHit, ev.completionTokens)
+                        if (work) {
+                            val c = com.jack.ai.data.Pricing.priceAt(ep, System.currentTimeMillis())
+                                ?.let { com.jack.ai.data.Pricing.cost(it, ev.promptTokens, ev.cacheHit ?: 0, ev.completionTokens) } ?: 0.0
+                            spent += c
+                            val total = spent
+                            patchMessage(convId, reply.id) { it.copy(cost = total) }
+                        }
                     },
                     onRound = { flush() },
                     // 带工具的请求被拒（比如旧记录格式接口不认）：先去掉旧的工具调用过程再试，工具照样能用；
@@ -474,6 +532,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 _state.update { it.copy(streaming = false) }
                 persist()
+                if (work) {
+                    val m = _state.value.conversations.firstOrNull { it.id == convId }?.messages?.firstOrNull { it.id == reply.id }
+                    val result = m?.error ?: m?.content?.takeLast(200)?.trim().orEmpty().ifBlank { "已停止" }
+                    WorkService.finish(getApplication(), convId, workTitle, result)
+                }
                 compression.maybeAutoCompress(convId)
             }
         }

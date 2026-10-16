@@ -235,6 +235,7 @@ val BUILTIN_SKILLS = listOf(
 
 /** 每个内置 skill 对应的工具定义（OpenAI 兼容格式）。 */
 object SkillTools {
+    val UPDATE_PLAN = schema("""{"type":"function","function":{"name":"update_plan","description":"写下或更新这次任务的步骤清单，会显示给用户看进度。每次都传完整的清单。","parameters":{"type":"object","properties":{"items":{"type":"array","items":{"type":"object","properties":{"text":{"type":"string","description":"这一步做什么，简短"},"status":{"type":"string","enum":["pending","doing","done"],"description":"pending 没开始，doing 正在做，done 做完了"}},"required":["text","status"]}}},"required":["items"]}}}""")
     val USE_SKILL = schema("""{"type":"function","function":{"name":"use_skill","description":"读取某个 skill 的详细做法说明。使用一个 skill 之前必须先调用它。","parameters":{"type":"object","properties":{"name":{"type":"string","description":"skill 的名字"}},"required":["name"]}}}""")
 
     val WEB_SEARCH = schema("""{"type":"function","function":{"name":"web_search","description":"在互联网上搜索最新信息，返回若干网页的标题、链接和摘要。","parameters":{"type":"object","properties":{"query":{"type":"string","description":"搜索关键词，简洁明确"}},"required":["query"]}}}""")

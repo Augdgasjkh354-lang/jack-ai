@@ -29,8 +29,16 @@ data class ChatMessage(
     val trail: List<String> = emptyList(),
     /** AI 用 skill 生成的文件。 */
     val files: List<GeneratedFile> = emptyList(),
+    /** Work 模式的任务清单（update_plan）。 */
+    val plan: List<PlanItem> = emptyList(),
+    /** Work 模式下这条回答花了多少元（当场按价格算）。 */
+    val cost: Double = 0.0,
     val createdAt: Long = System.currentTimeMillis(),
 )
+
+/** 任务清单的一项：status 是 pending / doing / done。 */
+@Serializable
+data class PlanItem(val text: String, val status: String = "pending")
 
 @Serializable
 data class SearchSource(val title: String, val url: String)
@@ -135,6 +143,16 @@ data class Settings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val presets: List<Preset> = DEFAULT_PRESETS,
     val developerPrompt: String = DEFAULT_DEV_PROMPT,
+    /** Work 模式的底层提示词（Chat 用 developerPrompt）。 */
+    val workDeveloperPrompt: String = DEFAULT_WORK_PROMPT,
+    /** 当前用的是哪个模式的模型和思考设置；另一个模式的存在下面。 */
+    val activeWork: Boolean = false,
+    val chatModel: String = "",
+    val chatThinking: ThinkLevel? = null,
+    val workModel: String = MODEL_PRO,
+    val workThinking: ThinkLevel = ThinkLevel.HIGH,
+    /** Work 一次任务花到多少元先停下问用户，0 表示不限。 */
+    val workCostLimit: Double = 1.0,
     val compressTokens: Int = 200_000,
     val memoryEnabled: Boolean = true,
     val dreamEnabled: Boolean = true,
@@ -330,6 +348,15 @@ val DEFAULT_PRESETS = listOf(
 )
 
 /** 内置的最高优先级提示词：专门针对 DeepSeek V4.1 Flash 的已知毛病。 */
+const val DEFAULT_WORK_PROMPT = """你正在 Work 模式下替用户完成一项任务。目标是把事做完、做对，而不是陪聊。
+
+1. 先想清楚要交付什么。任务有三步以上时，先用 update_plan 列出步骤，每开始或做完一步就更新一次。
+2. 动手去做：能用工具查证、计算、读写文件、生成文档的就直接做，不要只给建议让用户自己去做。缺少关键信息、又没法合理假设时才停下来问；能合理假设的，写明假设后继续。
+3. 交付前自己检查：数字验算一遍，文件确认已经生成，引用的来源确实存在。发现问题先修好再交。
+4. 最后几行交代清楚：做了什么、产出了哪些文件（写文件名）、哪些没做成及原因、需要用户确认或决定的事。不寒暄，不复述过程。
+5. 发邮件、删除、花钱、对外发布这类做了收不回的操作，执行前一定先得到用户确认。
+6. 用自然的简体中文。诚实：不确定的说不确定，不编造数据、链接和引文。一个方法走不通就换方法，或说明卡在哪里。"""
+
 const val DEFAULT_DEV_PROMPT = """你正在一个私人聊天 App 里和用户对话。以下规则针对你已知的习惯，在任何对话中都始终有效：
 
 1. 说人话：用自然、口语化的简体中文，像一个懂行的朋友当面解释。专有名词没有通行译法时，保留英文原文并用一句话解释，不要自己造词或生硬直译。中文回答里不要夹带 "Let me" 之类的英文过渡语。
