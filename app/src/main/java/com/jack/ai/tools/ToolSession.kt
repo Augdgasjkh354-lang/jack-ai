@@ -32,6 +32,9 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 
 /** 工具要改 App 里的数据时找它（由 ChatViewModel 提供）。 */
+/** Chat 模式一次回答最多调用几轮工具。 */
+const val CHAT_MAX_ROUNDS = 20
+
 interface ToolHost {
     val app: Application
     val store: Store
@@ -75,8 +78,8 @@ class ToolSession(
     val wsDir: File = Workspace.dir(host.app, Workspace.key(conv))
     val wsCache = File(wsDir, ".cache")
 
-    /** 最多几轮工具；用了「深度研究」技能会放宽到 25。 */
-    var maxRounds = 5
+    /** 最多几轮工具：Chat 20 轮（用了「深度研究」放宽到 25），Work 不限。 */
+    var maxRounds = if (conv.work) Int.MAX_VALUE else CHAT_MAX_ROUNDS
     /** 搜索结果的编号接着往下排，引用时不重号。 */
     internal var sourceCount = 0
 

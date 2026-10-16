@@ -339,7 +339,8 @@ private fun EmptyState(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Spacer(Modifier.height(36.dp))
+        ModeSwitch(work = conv?.work ?: state.draftWork, onChange = vm::setWork)
+        Spacer(Modifier.height(24.dp))
         LogoMark(52.dp)
         Spacer(Modifier.height(20.dp))
         val name = state.settings.userName.trim()
@@ -807,4 +808,30 @@ private fun withMention(text: String, name: String): String {
     if ("@$name" in text) return text
     val sep = if (text.isEmpty() || text.last().isWhitespace()) "" else " "
     return "$text$sep@$name "
+}
+
+/** 新对话顶部的 Chat / Work 切换。Work 不限工具轮数。 */
+@Composable
+private fun ModeSwitch(work: Boolean, onChange: (Boolean) -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Surface(shape = CircleShape, color = colors.surfaceVariant) {
+        Row(Modifier.padding(3.dp)) {
+            listOf(false to "Chat", true to "Work").forEach { (w, label) ->
+                val on = w == work
+                Surface(
+                    onClick = { onChange(w) },
+                    shape = CircleShape,
+                    color = if (on) colors.surface else Color.Transparent,
+                    shadowElevation = if (on) 1.dp else 0.dp,
+                ) {
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (on) colors.onSurface else colors.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 7.dp),
+                    )
+                }
+            }
+        }
+    }
 }

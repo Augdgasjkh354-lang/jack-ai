@@ -68,6 +68,8 @@ data class UiState(
     val currentId: String? = null,
     /** 还没发出去的新对话属于哪个项目。 */
     val draftProjectId: String? = null,
+    /** 新对话开始前选的模式：false = Chat，true = Work。 */
+    val draftWork: Boolean = false,
     val streaming: Boolean = false,
     val settings: Settings = Settings(),
     val pending: List<Attachment> = emptyList(),
@@ -151,6 +153,12 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(currentId = null, draftProjectId = projectId, pending = emptyList()) }
     }
 
+    /** 新对话开始前切换 Chat / Work。 */
+    fun setWork(on: Boolean) {
+        _state.update { it.copy(draftWork = on) }
+        _state.value.current?.takeIf { it.messages.isEmpty() }?.let { c -> updateConvQuiet(c.id) { it.copy(work = on) } }
+    }
+
     fun select(id: String) {
         stop()
         _state.update { it.copy(currentId = id, pending = emptyList()) }
@@ -202,6 +210,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 systemPrompt = preset.prompt,
                 presetName = preset.name,
                 projectId = _state.value.draftProjectId,
+                work = _state.value.draftWork,
             )
             _state.update { it.copy(conversations = listOf(conv) + it.conversations, currentId = conv.id) }
         } else if (cur.messages.isEmpty()) {
@@ -222,7 +231,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
         var conv = _state.value.current
         if (conv == null) {
-            conv = Conversation(projectId = _state.value.draftProjectId)
+            conv = Conversation(projectId = _state.value.draftProjectId, work = _state.value.draftWork)
             val c = conv
             _state.update { it.copy(conversations = listOf(c) + it.conversations, currentId = c.id) }
         }

@@ -88,7 +88,7 @@ internal suspend fun ToolSession.saveCards(args: JsonObject) = runTool("生成�
 
 internal suspend fun ToolSession.useSkill(name: String) = runTool("使用技能：$name") {
     val skill = findSkill(skills, name)
-    if (skill?.id == SkillIds.RESEARCH) maxRounds = 25
+    if (skill?.id == SkillIds.RESEARCH) maxRounds = maxOf(maxRounds, 25)
     val text = skill?.let { "【${it.name}】\n${it.instructions}" }
         ?: ("没有这个技能。可用的技能：" + skills.joinToString("、") { it.name })
     text to SearchRecord("使用技能：${skill?.name ?: name}")
