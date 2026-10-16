@@ -2,6 +2,7 @@ package com.jack.ai.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
@@ -234,6 +235,16 @@ fun ChatItem(
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (selected) colors.onSecondaryContainer else colors.onSurface,
             )
+            if (c.work) {
+                Text(
+                    "Work",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.primary,
+                    modifier = Modifier.padding(start = 6.dp)
+                        .border(1.dp, colors.primary.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 5.dp, vertical = 1.dp),
+                )
+            }
             IconButton(onClick = { menu = true }, modifier = Modifier.size(36.dp)) {
                 Icon(Icons.Default.MoreVert, "更多", Modifier.size(18.dp), tint = colors.outline)
             }
