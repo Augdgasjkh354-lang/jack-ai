@@ -525,7 +525,7 @@ private fun InputBar(
     val takePhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         photoUri?.let { if (ok) vm.addImages(listOf(it)) }
     }
-    fun startCamera() {
+    fun startCameraInner() {
         val dir = java.io.File(ctx.cacheDir, "camera").apply { mkdirs(); listFiles()?.forEach { it.delete() } }
         val file = java.io.File(dir, "photo-${System.currentTimeMillis()}.jpg")
         val uri = androidx.core.content.FileProvider.getUriForFile(ctx, ctx.packageName + ".files", file)
@@ -534,7 +534,12 @@ private fun InputBar(
             takePhoto.launch(uri)
         } catch (e: ActivityNotFoundException) {
             Toast.makeText(ctx, "手机上没有相机 App", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Toast.makeText(ctx, "打不开相机：${e.message}", Toast.LENGTH_LONG).show()
         }
+    }
+    fun startCamera() = try { startCameraInner() } catch (e: Exception) {
+        Toast.makeText(ctx, "打不开相机：${e.message}", Toast.LENGTH_LONG).show()
     }
     val speech = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
         r.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.let { vm.receiveText(it) }
@@ -625,7 +630,7 @@ private fun InputBar(
                                 leadingIcon = { Icon(AppIcons.Image, null) },
                                 onClick = {
                                     attachMenu = false
-                                    pickImages.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                                    try { pickImages.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) } catch (e: Exception) { Toast.makeText(ctx, "打不开：${e.message}", Toast.LENGTH_LONG).show() }
                                 },
                             )
                             DropdownMenuItem(
@@ -633,7 +638,7 @@ private fun InputBar(
                                 leadingIcon = { Icon(AppIcons.File, null) },
                                 onClick = {
                                     attachMenu = false
-                                    pickFiles.launch(arrayOf("*/*"))
+                                    try { pickFiles.launch(arrayOf("*/*")) } catch (e: Exception) { Toast.makeText(ctx, "打不开：${e.message}", Toast.LENGTH_LONG).show() }
                                 },
                             )
                             val conv = state.current

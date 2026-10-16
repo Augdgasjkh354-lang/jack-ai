@@ -154,7 +154,9 @@ class MainActivity : FragmentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        CrashLog.install(this)
         super.onCreate(savedInstanceState)
+        val lastCrash = CrashLog.take(this)
         PDFBoxResourceLoader.init(applicationContext)
         enableEdgeToEdge()
         if (!vm.state.value.settings.hasAnyKey() && savedInstanceState == null) stack.add(Screen.Settings)
@@ -162,6 +164,25 @@ class MainActivity : FragmentActivity() {
         setContent {
             val state by vm.state.collectAsStateWithLifecycle()
             var creatingProject by remember { mutableStateOf(false) }
+            var crash by remember { mutableStateOf(lastCrash) }
+            crash?.let { text ->
+                val clip = androidx.compose.ui.platform.LocalClipboardManager.current
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { crash = null },
+                    title = { androidx.compose.material3.Text("上次闪退了") },
+                    text = {
+                        androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
+                            androidx.compose.material3.Text(text, style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
+                        }
+                    },
+                    confirmButton = {
+                        androidx.compose.material3.TextButton(onClick = {
+                            clip.setText(androidx.compose.ui.text.AnnotatedString(text)); crash = null
+                        }) { androidx.compose.material3.Text("复制") }
+                    },
+                    dismissButton = { androidx.compose.material3.TextButton(onClick = { crash = null }) { androidx.compose.material3.Text("关闭") } },
+                )
+            }
 
             LaunchedEffect(state.toast) {
                 state.toast?.let {
