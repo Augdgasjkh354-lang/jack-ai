@@ -240,9 +240,20 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     // ---------- 发消息 ----------
 
     /** 返回 true 表示已发出，输入框可以清空。 */
+    /** 回答进行中用户插的话，等下一轮工具做完时交给 AI。 */
+    private val interjections = java.util.concurrent.ConcurrentLinkedQueue<String>()
+    /** 正在进行的回答：(对话 id, 回答消息 id)。 */
+    @Volatile private var running: Pair<String, String>? = null
+
     fun send(text: String): Boolean {
         val trimmed = text.trim()
         val atts = _state.value.pending
+        val run = running
+        if (busy() && run != null && run.first == _state.value.currentId && trimmed.isNotEmpty()) {
+            interjections += trimmed
+            patchMessage(run.first, run.second) { it.copy(searches = it.searches + SearchRecord("💬 $trimmed")) }
+            return true
+        }
         if ((trimmed.isEmpty() && atts.isEmpty()) || busy() || _state.value.importing) return false
         if (atts.any { it.kind == "image" } && _state.value.settings.endpoint()?.vision == false) {
             _state.update { it.copy(toast = "当前模型看不了图片，请点顶部的模型名换一个能看图的") }
@@ -347,6 +358,28 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private fun busy() = job?.isActive == true
 
     /** 让 V4 Pro 复核最后一条回答，并给出改进版。 */
+    /** Work 的回答是不是被打断了：出错、没写出结论、或清单还有没做完的。 */
+    fun canContinue(m: ChatMessage): Boolean =
+        m.role == "assistant" && (m.error != null || m.content.isBlank() || m.plan.any { it.status != "done" })
+
+    /** 断点续做：带上清单，让 AI 从没做完的那一步接着做。 */
+    fun continueWork() {
+        val conv = _state.value.current ?: return
+        if (busy()) return
+        val last = conv.messages.lastOrNull { it.role == "assistant" } ?: return
+        val plan = conv.messages.lastOrNull { it.plan.isNotEmpty() }?.plan.orEmpty()
+        val extra = buildString {
+            append("刚才的任务被打断了，请接着做完。已经做完的不要重做，文件夹里已有的文件先看一眼再决定。")
+            if (plan.isNotEmpty()) {
+                append("\n当时的清单：\n")
+                plan.forEach { append(if (it.status == "done") "- [完成] " else "- [没做完] ").append(it.text).append("\n") }
+                append("先用 update_plan 写出最新的清单，再从没做完的那步开始。")
+            }
+            last.error?.let { append("\n上次停下的原因：$it") }
+        }
+        startReply(conv.id, extraUser = extra)
+    }
+
     fun reviewLast() {
         val conv = _state.value.current ?: return
         if (busy()) return
@@ -402,23 +435,22 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             // Work：开前台服务，切到后台也接着干；花费到上限先问一声
             val work = conv.work
             val workTitle = conv.title
-            if (work) WorkService.start(getApplication(), convId, workTitle)
+            // 不管 Chat 还是 Work，回答期间都开前台服务，切到后台也接着跑
+            WorkService.start(getApplication(), convId, workTitle, work)
             var spent = 0.0
             val limit = settings.workCostLimit
             var nextLimit = limit
             val session = ToolSession(toolHost, settings, conv, project, skills, object : ToolUi {
                 override fun started(label: String) {
                     patchMessage(convId, reply.id) { it.copy(searches = it.searches + SearchRecord(label, pending = true)) }
-                    if (work) WorkService.progress(getApplication(), convId, workTitle, label)
+                    WorkService.progress(getApplication(), convId, workTitle, label, work)
                 }
 
                 override fun plan(items: List<com.jack.ai.data.PlanItem>) {
                     patchMessage(convId, reply.id) { it.copy(plan = items) }
-                    if (work) {
-                        val doing = items.firstOrNull { it.status == "doing" }?.text
-                        WorkService.progress(getApplication(), convId, workTitle,
-                            "${items.count { it.status == "done" }}/${items.size}" + (doing?.let { " · $it" } ?: ""))
-                    }
+                    val doing = items.firstOrNull { it.status == "doing" }?.text
+                    WorkService.progress(getApplication(), convId, workTitle,
+                        "${items.count { it.status == "done" }}/${items.size}" + (doing?.let { " · $it" } ?: ""), work)
                 }
 
                 override fun finished(label: String, record: SearchRecord) = patchMessage(convId, reply.id) { m ->
@@ -434,6 +466,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 }
             })
             val agent = Agent({ msgs, t -> client.stream(ep, msgs, thinking, settings.temperature, t) }, sendReasoning = thinkingOn)
+            interjections.clear()
+            running = convId to reply.id
             val reasoning = agent.reasoning
             val content = agent.content
             var lastFlush = 0L
@@ -484,6 +518,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     onRound = { flush() },
                     // 带工具的请求被拒（比如旧记录格式接口不认）：先去掉旧的工具调用过程再试，工具照样能用；
                     // 还不行就不用工具，改成“先搜再答”
+                    interjections = { generateSequence { interjections.poll() }.toList() },
                     recovery = Agent.Recovery { tried ->
                         // 先怀疑图片编号失效（过期或被删）：清掉记录，改回内联图片再试一次
                         if (!filesDropped && promptInput.fileIds.isNotEmpty()) {
@@ -530,12 +565,19 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 patchMessage(convId, reply.id) { m ->
                     m.copy(content = m.content.trimEnd(), searches = m.searches.map { if (it.pending) it.copy(pending = false) else it })
                 }
+                running = null
                 _state.update { it.copy(streaming = false) }
                 persist()
-                if (work) {
+                // 插的话没来得及用上（回答已经收尾了）：等这次结束后当成新消息发出去
+                val leftover = generateSequence { interjections.poll() }.toList()
+                if (leftover.isNotEmpty()) viewModelScope.launch {
+                    job?.join()
+                    if (_state.value.currentId == convId) send(leftover.joinToString("\n"))
+                }
+                run {
                     val m = _state.value.conversations.firstOrNull { it.id == convId }?.messages?.firstOrNull { it.id == reply.id }
                     val result = m?.error ?: m?.content?.takeLast(200)?.trim().orEmpty().ifBlank { "已停止" }
-                    WorkService.finish(getApplication(), convId, workTitle, result)
+                    WorkService.finish(getApplication(), convId, workTitle, result, work)
                 }
                 compression.maybeAutoCompress(convId)
             }

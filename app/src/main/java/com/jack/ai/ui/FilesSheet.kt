@@ -1,5 +1,7 @@
 package com.jack.ai.ui
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -65,6 +67,18 @@ fun FilesSheet(vm: ChatViewModel, conv: Conversation, inProject: Boolean, onDism
                     Icon(Icons.Default.Add, null)
                     Text("添加")
                 }
+            }
+            // Work：这次对话里 AI 做出来的文件放最上面
+            val made = if (conv.work) conv.messages.flatMap { it.files }.reversed().distinctBy { it.path }
+                .filter { File(it.path).exists() } else emptyList()
+            if (made.isNotEmpty()) {
+                Text("做出来的（${made.size}）", style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 12.dp, bottom = 6.dp))
+                Column(Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    made.forEach { GeneratedFileCard(it) }
+                }
+                Text("文件夹里的全部", style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 16.dp))
             }
             if (files.isEmpty()) {
                 Text(

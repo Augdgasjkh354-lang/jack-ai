@@ -148,7 +148,7 @@ object PromptBuilder {
         return buildJsonArray {
             add(SkillTools.LIST_FILES); add(SkillTools.READ_FILE); add(SkillTools.WRITE_FILE); add(SkillTools.EDIT_FILE)
             if (skills.isNotEmpty()) add(SkillTools.USE_SKILL)
-            if (conv.work) add(SkillTools.UPDATE_PLAN)
+            if (conv.work) { add(SkillTools.UPDATE_PLAN); add(SkillTools.DELEGATE_TASKS) }
             if (web) { add(SkillTools.WEB_SEARCH); add(SkillTools.READ_WEBPAGE) }
             if (SkillIds.WORD in skillIds) add(SkillTools.CREATE_WORD)
             if (SkillIds.PPT in skillIds) add(SkillTools.CREATE_PPT)
@@ -244,6 +244,9 @@ object PromptBuilder {
         }
         if ("update_plan" in names) {
             parts += "固定说明" to "【任务清单】要做三步以上的任务，先用 update_plan 列出步骤；开始做某一步时把它标成 doing，做完标成 done。简单的问题不用列。"
+        }
+        if ("delegate_tasks" in names) {
+            parts += "固定说明" to "【分头并行】任务里有几块彼此独立的调研（比如分别查几家公司、几个来源）时，用 delegate_tasks 一次派出去同时做，比一件件查快。子任务只能查资料和读文件，生成文件、发邮件还是你自己来。"
         }
         if ("edit_file" in names) {
             // 文件列表不放进系统提示：列表一变，整段对话的缓存就失效了

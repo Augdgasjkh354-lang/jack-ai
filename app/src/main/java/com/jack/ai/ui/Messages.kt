@@ -214,6 +214,8 @@ fun AssistantMessage(
     onRegenerate: () -> Unit,
     onDelete: () -> Unit,
     onReview: (() -> Unit)? = null,
+    /** Work：任务被打断（出错、停止、清单没做完）时“接着做”。 */
+    onContinue: (() -> Unit)? = null,
 ) {
     val clipboard = LocalClipboardManager.current
     val ctx = LocalContext.current
@@ -245,14 +247,6 @@ fun AssistantMessage(
             Spacer(Modifier.height(8.dp))
             if (f.mime.startsWith("image/")) ChartImage(f) else GeneratedFileCard(f)
         }
-        if (msg.cost > 0) {
-            Text(
-                "本次 ¥" + String.format(java.util.Locale.US, if (msg.cost < 0.1) "%.3f" else "%.2f", msg.cost),
-                style = MaterialTheme.typography.labelSmall,
-                color = colors.outline,
-                modifier = Modifier.padding(top = 6.dp),
-            )
-        }
         msg.error?.let { err ->
             Spacer(Modifier.height(4.dp))
             Surface(color = colors.errorContainer, shape = RoundedCornerShape(10.dp)) {
@@ -276,6 +270,12 @@ fun AssistantMessage(
                     val speaking = Speaker.speakingId == msg.id
                     SmallAction(if (speaking) AppIcons.Stop else AppIcons.Speaker, if (speaking) "停止朗读" else "朗读") {
                         Speaker.toggle(ctx, msg.id, msg.content)
+                    }
+                }
+                if (isLast && onContinue != null) {
+                    TextButton(onClick = onContinue, modifier = Modifier.height(32.dp),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp)) {
+                        Text("接着做", style = MaterialTheme.typography.labelMedium, color = colors.primary)
                     }
                 }
                 if (isLast) SmallAction(Icons.Default.Refresh, "重新回答", onRegenerate)

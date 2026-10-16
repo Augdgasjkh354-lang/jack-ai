@@ -136,7 +136,7 @@ fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                         Column(Modifier.weight(1f)) {
                             Text((if (r.kind == "reminder") "⏰ " else "🤖 ") + r.title, style = MaterialTheme.typography.titleSmall)
                             Text(
-                                r.describe() + (if (r.offPeak) " · 避开高峰" else "") + if (r.enabled && r.nextAt() == null) "（已过期）" else if (!r.enabled && r.repeat == "none") "（已完成）" else "",
+                                r.describe() + (if (r.work) " · Work" else "") + (if (r.offPeak) " · 避开高峰" else "") + if (r.enabled && r.nextAt() == null) "（已过期）" else if (!r.enabled && r.repeat == "none") "（已完成）" else "",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -170,11 +170,12 @@ private fun RoutineDialog(r: Routine, isNew: Boolean, onDismiss: () -> Unit, onS
     var repeat by remember { mutableStateOf(r.repeat) }
     var date by remember { mutableStateOf(r.date.ifBlank { dayFmt.format(Date()) }) }
     var offPeak by remember { mutableStateOf(r.offPeak) }
+    var work by remember { mutableStateOf(r.work) }
     var pickTime by remember { mutableStateOf(false) }
     var pickDate by remember { mutableStateOf(false) }
 
     val draft = r.copy(kind = kind, title = title.trim(), prompt = prompt.trim(), hour = hour, minute = minute,
-        repeat = repeat, date = date, enabled = true, offPeak = kind == "task" && offPeak)
+        repeat = repeat, date = date, enabled = true, offPeak = kind == "task" && offPeak, work = kind == "task" && work)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (isNew) "添加" else "修改") },
@@ -195,6 +196,14 @@ private fun RoutineDialog(r: Routine, isNew: Boolean, onDismiss: () -> Unit, onS
                             Text("避开高峰时段")
                         }
                         Switch(offPeak, { offPeak = it })
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Work 模式")
+                            Text("能用全部技能（邮箱、生成文件…），不限步数", style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(work, { work = it })
                     }
                 }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

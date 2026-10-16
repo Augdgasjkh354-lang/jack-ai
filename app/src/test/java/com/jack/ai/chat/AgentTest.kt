@@ -156,4 +156,20 @@ class AgentTest {
             assertEquals(false, asked)
         }
     }
+
+    @Test
+    fun interjectionGoesIntoNextRound() = runBlocking {
+        val api = FakeApi(toolCall("web_search"), text("好的"))
+        val agent = Agent(api::stream)
+        val queue = ArrayDeque(listOf("顺便查一下明天"))
+        val msgs = mutableListOf(userMsg("今天天气"))
+        agent.run(msgs, someTools, { 5 }, { _, _ -> "晴" },
+            interjections = { generateSequence { queue.removeFirstOrNull() }.toList() })
+        val inserted = msgs.last()
+        assertEquals("user", inserted["role"]!!.jsonPrimitive.content)
+        assertTrue(inserted["content"]!!.jsonPrimitive.content.contains("顺便查一下明天"))
+        assertTrue(agent.trail.any { "顺便查一下明天" in it })
+        // 第二轮请求带上了插话：user + assistant(调用) + tool + 插话
+        assertEquals(4, api.sizes[1])
+    }
 }

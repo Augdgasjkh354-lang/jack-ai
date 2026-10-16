@@ -62,6 +62,8 @@ data class Routine(
     val lastRunAt: Long = 0,
     /** 定时任务碰上 DeepSeek 高峰时段时，顺延到空闲时段再跑（省一半钱）。 */
     val offPeak: Boolean = false,
+    /** Work 模式：后台能用全部技能（邮箱、生成文件……），不限工具轮数。 */
+    val work: Boolean = false,
 )
 
 /** 后台任务的结果，等 App 打开时并入对应的对话。 */
@@ -73,6 +75,9 @@ data class InboxItem(
     val prompt: String,
     val result: String,
     val at: Long = System.currentTimeMillis(),
+    /** 定时 Work 生成的文件。 */
+    val files: List<GeneratedFile> = emptyList(),
+    val work: Boolean = false,
 )
 
 val REPEAT_LABELS = linkedMapOf("none" to "只一次", "daily" to "每天", "weekdays" to "工作日", "weekly" to "每周")
@@ -264,6 +269,23 @@ class AlarmReceiver : BroadcastReceiver() {
 }
 
 class RoutineWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
+    private fun foregroundInfo(title: String, text: String = "进行中…"): androidx.work.ForegroundInfo {
+        val nm = applicationContext.getSystemService(NotificationManager::class.java)
+        if (nm.getNotificationChannel("work") == null) {
+            nm.createNotificationChannel(NotificationChannel("work", "回答和任务进度", NotificationManager.IMPORTANCE_LOW))
+        }
+        val n = NotificationCompat.Builder(applicationContext, "work")
+            .setSmallIcon(com.jack.ai.R.drawable.ic_widget_chat)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setProgress(0, 0, true)
+            .build()
+        return if (Build.VERSION.SDK_INT >= 29) androidx.work.ForegroundInfo(7302, n, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        else androidx.work.ForegroundInfo(7302, n)
+    }
+
     override suspend fun doWork(): Result {
         val id = inputData.getString("id") ?: return Result.failure()
         val store = Store(applicationContext)
@@ -271,9 +293,15 @@ class RoutineWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
         // 单次任务在 fire() 后会自动标记为完成，仍要允许这次执行。
         if (!r.enabled && r.repeat != "none") return Result.success()
         return try {
-            val result = Routines.runTask(applicationContext, r)
-            store.addInbox(InboxItem(r.id, r.convId, r.title, r.prompt, result))
-            Routines.notify(applicationContext, r.id, r.title, result.take(300), openChat = r.convId)
+            val result = if (r.work) {
+                // Work 可能跑很久，超过 WorkManager 的 10 分钟，要以前台方式运行
+                runCatching { setForeground(foregroundInfo("正在执行：${r.title}")) }
+                com.jack.ai.tools.runBackgroundWork(applicationContext, r) { label ->
+                    runCatching { setForegroundAsync(foregroundInfo("正在执行：${r.title}", label)) }
+                }
+            } else com.jack.ai.tools.TaskResult(Routines.runTask(applicationContext, r))
+            store.addInbox(InboxItem(r.id, r.convId, r.title, r.prompt, result.text, files = result.files, work = r.work))
+            Routines.notify(applicationContext, r.id, r.title, result.text.take(300), openChat = r.convId)
             Result.success()
         } catch (e: Exception) {
             if (runAttemptCount < 2) Result.retry()

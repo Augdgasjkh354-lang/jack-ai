@@ -50,6 +50,8 @@ class Agent(
         onUsage: (StreamEvent.Usage) -> Unit = {},
         onRound: () -> Unit = {},
         recovery: Recovery? = null,
+        /** 用户在回答进行中插的话：每做完一轮工具取一次，放进下一轮请求。 */
+        interjections: () -> List<String> = { emptyList() },
     ) {
         var currentTools = tools
         var round = 0
@@ -121,6 +123,14 @@ class Agent(
                 }
                 messages += toolMsg
                 trail += toolMsg.toString()
+            }
+            interjections().forEach { text ->
+                val m = buildJsonObject {
+                    put("role", "user")
+                    put("content", "【用户在你干活时插话，考虑进去后继续】\n$text")
+                }
+                messages += m
+                trail += m.toString()
             }
             onRound()
             if (round >= maxRounds()) currentTools = null

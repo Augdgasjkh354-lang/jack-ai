@@ -270,6 +270,8 @@ class PromptBuilderTest {
         assertTrue("WORK规则" in workSys && "CHAT规则" !in workSys)
         assertFalse("update_plan" in toolNames(chat))
         assertTrue("update_plan" in toolNames(work))
+        assertTrue("delegate_tasks" in toolNames(work))
+        assertFalse("delegate_tasks" in toolNames(chat))
         assertTrue("【任务清单】" in workSys)
     }
 

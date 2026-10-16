@@ -256,12 +256,16 @@ class Store(context: Context) {
             presets = presets,
             developerPrompt = prefs.getString("devPrompt2", null) ?: DEFAULT_DEV_PROMPT,
             workDeveloperPrompt = prefs.getString("workDevPrompt", null) ?: DEFAULT_WORK_PROMPT,
+            workTemplates = prefs.getString("workTemplates", null)?.let {
+                runCatching { json.decodeFromString(ListSerializer(Preset.serializer()), it) }.getOrNull()
+            } ?: DEFAULT_WORK_TEMPLATES,
             activeWork = prefs.getBoolean("activeWork", false),
             chatModel = prefs.getString("chatModel", "") ?: "",
             chatThinking = prefs.getString("chatThinking", null)?.let { runCatching { ThinkLevel.valueOf(it) }.getOrNull() },
             workModel = prefs.getString("workModel", MODEL_PRO) ?: MODEL_PRO,
             workThinking = prefs.getString("workThinking", null)?.let { runCatching { ThinkLevel.valueOf(it) }.getOrNull() } ?: ThinkLevel.HIGH,
-            workCostLimit = prefs.getFloat("workCostLimit", 1f).toDouble(),
+            // 默认值从 1 元改成了 5 元，换个键名，旧的默认值不沿用
+            workCostLimit = prefs.getFloat("workCostLimit5", 5f).toDouble(),
             compressTokens = prefs.getInt("compressTokens", 200_000),
             memoryEnabled = prefs.getBoolean("memoryEnabled", true),
             dreamEnabled = prefs.getBoolean("dreamEnabled", true),
@@ -298,12 +302,13 @@ class Store(context: Context) {
             .putString("presets", json.encodeToString(ListSerializer(Preset.serializer()), s.presets))
             .putString("devPrompt2", s.developerPrompt)
             .putString("workDevPrompt", s.workDeveloperPrompt)
+            .putString("workTemplates", json.encodeToString(ListSerializer(Preset.serializer()), s.workTemplates))
             .putBoolean("activeWork", s.activeWork)
             .putString("chatModel", s.chatModel)
             .putString("chatThinking", s.chatThinking?.name)
             .putString("workModel", s.workModel)
             .putString("workThinking", s.workThinking.name)
-            .putFloat("workCostLimit", s.workCostLimit.toFloat())
+            .putFloat("workCostLimit5", s.workCostLimit.toFloat())
             .putInt("compressTokens", s.compressTokens)
             .putBoolean("memoryEnabled", s.memoryEnabled)
             .putBoolean("dreamEnabled", s.dreamEnabled)

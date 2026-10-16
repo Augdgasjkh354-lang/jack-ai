@@ -1,0 +1,116 @@
+package com.jack.ai.tools
+
+import android.app.Application
+import android.content.Context
+import com.jack.ai.AskWidget
+import com.jack.ai.api.DeepSeekClient
+import com.jack.ai.api.TavilyClient
+import com.jack.ai.api.WebClient
+import com.jack.ai.chat.Agent
+import com.jack.ai.chat.PromptBuilder
+import com.jack.ai.data.Conversation
+import com.jack.ai.data.Flashcard
+import com.jack.ai.data.GeneratedFile
+import com.jack.ai.data.LibraryIndex
+import com.jack.ai.data.MemoryItem
+import com.jack.ai.data.Pricing
+import com.jack.ai.data.Project
+import com.jack.ai.data.Routine
+import com.jack.ai.data.Routines
+import com.jack.ai.data.SearchRecord
+import com.jack.ai.data.Store
+import com.jack.ai.data.ThinkLevel
+import com.jack.ai.data.activeSkills
+import com.jack.ai.data.backgroundEndpoint
+import com.jack.ai.data.endpoint
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+/** App 没打开时（定时 Work）工具要改数据就直接读写存储。 */
+class BackgroundToolHost(ctx: Context) : ToolHost {
+    override val app: Application = ctx.applicationContext as Application
+    override val store = Store(app)
+    override val tavily = TavilyClient()
+    override val web = WebClient(tavily) { store.addPaidCall(WebClient.USAGE_KEY, WebClient.PRICE) }
+    override fun conversations(): List<Conversation> = store.loadConversations()
+    override fun setMemories(list: List<MemoryItem>) {}
+    override fun editCards(transform: (List<Flashcard>) -> List<Flashcard>) = store.saveCards(transform(store.loadCards()))
+    override fun saveRoutine(r: Routine) {
+        val list = store.loadRoutines().let { l -> if (l.any { it.id == r.id }) l.map { if (it.id == r.id) r else it } else l + r }
+        store.saveRoutines(list)
+        Routines.schedule(app, r)
+    }
+    override fun deleteRoutine(id: String) {
+        Routines.cancel(app, id)
+        store.saveRoutines(store.loadRoutines().filterNot { it.id == id })
+    }
+    override fun libraryIndex() = LibraryIndex(store.loadLibrary().map { it.name to store.libraryText(it.id) })
+    override fun projectIndex(p: Project) =
+        LibraryIndex(p.files.filter { it.text.length > PromptBuilder.PROJECT_INLINE_CHARS }.map { it.name to it.text })
+    override fun refreshWidget() = AskWidget.refresh(app)
+}
+
+/** 定时 Work 的结果：文字和生成的文件。 */
+data class TaskResult(val text: String, val files: List<GeneratedFile> = emptyList())
+
+/**
+ * 到点在后台跑一个 Work 任务：和聊天里的 Work 一样能用全部开着的技能（邮箱、文件、联网……），
+ * 文件存进这个任务对话的文件夹。用户不在线，需要确认的操作（发邮件等）一律不做。
+ * 花费到 Work 上限就收尾。
+ */
+suspend fun runBackgroundWork(ctx: Context, r: Routine, onProgress: (String) -> Unit = {}): TaskResult {
+    val host = BackgroundToolHost(ctx)
+    val store = host.store
+    val s = store.loadSettings()
+    val ep = s.endpoint(s.workModel)?.takeIf { it.apiKey.isNotBlank() } ?: s.backgroundEndpoint()
+        ?: return TaskResult("还没有填写 API Key，任务没法执行。")
+    val conv = store.loadConversations().firstOrNull { it.id == r.convId }?.copy(work = true)
+        ?: Conversation(id = r.convId, title = "⏰ " + r.title, work = true)
+    val skills = s.activeSkills()
+    val tools = PromptBuilder.toolSet(s, skills, conv, null)
+    val memories = if (s.memoryEnabled) store.loadMemories() else emptyList()
+    val journal = store.loadDreams().firstOrNull { it.journal.isNotBlank() }?.journal.orEmpty()
+    val now = SimpleDateFormat("yyyy年M月d日 EEEE HH:mm", Locale.CHINA).format(Date())
+    val system = PromptBuilder.systemPrompt(s, conv, null, tools, memories, skills, journal = journal) +
+        "\n\n【后台定时任务】现在是$now。你在后台执行用户预先设定的定时任务「${r.title}」，用户此刻不在线，不能向他提问，直接把任务做完。" +
+        "发邮件、删除这类需要用户确认的操作会被拒绝，不要尝试；需要交给用户的内容直接写在最后的结果里。结果就是用户稍后会看到的消息，简洁好读，不要开场白。"
+    val messages = mutableListOf(
+        buildJsonObject { put("role", "system"); put("content", system) },
+        buildJsonObject { put("role", "user"); put("content", r.prompt.ifBlank { r.title }) },
+    )
+    val files = mutableListOf<GeneratedFile>()
+    val session = ToolSession(host, s, conv, null, skills, object : ToolUi {
+        override fun started(label: String) = onProgress(label)
+        override fun finished(label: String, record: SearchRecord) {}
+        override fun attach(file: File) {
+            files.removeAll { it.path == file.absolutePath }
+            files += GeneratedFile(file.name, file.absolutePath, ToolSession.mimeOf(file.name), file.length())
+        }
+        override suspend fun confirm(title: String, body: String, action: String) = false
+    })
+    val thinking = if (ep.reasoning && ep.deepseek) s.workThinking else ThinkLevel.OFF
+    val client = DeepSeekClient()
+    val agent = Agent({ msgs, t -> client.stream(ep, msgs, thinking, s.temperature, t) }, sendReasoning = ep.deepseek && thinking.effort != null)
+    var spent = 0.0
+    agent.run(
+        messages = messages,
+        tools = tools,
+        maxRounds = { session.maxRounds },
+        execute = { name, args ->
+            if (s.workCostLimit > 0 && spent >= s.workCostLimit) {
+                session.maxRounds = 0
+                "花费到了上限，不要再调用工具，直接写出目前的结果，并说明还差什么。"
+            } else session.execute(name, args)
+        },
+        onUsage = { ev ->
+            store.addUsage(ep, ev.promptTokens, ev.cacheHit, ev.completionTokens)
+            spent += Pricing.priceAt(ep, System.currentTimeMillis())
+                ?.let { Pricing.cost(it, ev.promptTokens, ev.cacheHit ?: 0, ev.completionTokens) } ?: 0.0
+        },
+    )
+    return TaskResult(agent.lastRound.trim().ifBlank { agent.content.toString().trim() }.ifBlank { "（这次没有生成内容）" }, files)
+}

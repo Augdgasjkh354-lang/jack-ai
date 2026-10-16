@@ -1,5 +1,9 @@
 package com.jack.ai.ui
 
+import androidx.compose.foundation.border
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.ui.draw.clip
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.speech.RecognizerIntent
@@ -181,7 +185,13 @@ fun ChatScreen(
                     actions = {
                         if (conv != null && conv.messages.isNotEmpty()) {
                             IconButton(onClick = { showFiles = true }) {
-                                Icon(AppIcons.Folder, contentDescription = "文件夹", Modifier.size(22.dp))
+                                // Work：文件夹图标上标出做出来的文件数
+                                val made = if (conv.work) conv.messages.flatMap { it.files }.distinctBy { it.path }.size else 0
+                                if (made > 0) {
+                                    androidx.compose.material3.BadgedBox(badge = { androidx.compose.material3.Badge { Text("$made") } }) {
+                                        Icon(AppIcons.Folder, contentDescription = "交付物", Modifier.size(22.dp))
+                                    }
+                                } else Icon(AppIcons.Folder, contentDescription = "文件夹", Modifier.size(22.dp))
                             }
                         }
                         IconButton(onClick = { vm.newChat(state.currentProjectId) }) {
@@ -358,7 +368,9 @@ private fun EmptyState(
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(28.dp))
-        SUGGESTIONS.chunked(2).forEach { row ->
+        if (conv?.work ?: state.draftWork) {
+            WorkTemplates(vm, state.settings.workTemplates, onSuggest)
+        } else SUGGESTIONS.chunked(2).forEach { row ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 row.forEach { sg ->
                     Surface(
@@ -453,6 +465,7 @@ private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolea
                             onRegenerate = vm::regenerate,
                             onDelete = { vm.deleteFrom(msg.id) },
                             onReview = vm::reviewLast,
+                            onContinue = if (conv.work && isLast && vm.canContinue(msg)) vm::continueWork else null,
                         )
                     }
                 }
@@ -747,6 +760,15 @@ private fun InputBar(
                         Text("高峰 ×2", style = MaterialTheme.typography.labelSmall, color = colors.outline,
                             modifier = Modifier.padding(end = 2.dp))
                     }
+                    if (state.streaming && text.isNotBlank()) {
+                        // 回答进行中也能发：作为插话，下一步就会看到
+                        Surface(onClick = { if (vm.send(text)) onTextChange("") }, shape = CircleShape, color = colors.primary,
+                            modifier = Modifier.size(38.dp)) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(AppIcons.ArrowUp, "插话", Modifier.size(20.dp), tint = colors.onPrimary)
+                            }
+                        }
+                    }
                     if (state.streaming) {
                         Surface(onClick = vm::stop, shape = CircleShape, color = colors.onSurface, modifier = Modifier.size(38.dp)) {
                             Box(contentAlignment = Alignment.Center) {
@@ -833,5 +855,69 @@ private fun ModeSwitch(work: Boolean, onChange: (Boolean) -> Unit) {
                 }
             }
         }
+    }
+}
+
+/** Work 空白页的模板：点一下填进输入框，长按修改或删除，最后一格新建。 */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun WorkTemplates(vm: ChatViewModel, templates: List<com.jack.ai.data.Preset>, onUse: (String) -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    var editing by remember { mutableStateOf<com.jack.ai.data.Preset?>(null) }
+    val tiles: List<com.jack.ai.data.Preset?> = templates + null
+    tiles.chunked(2).forEach { row ->
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            row.forEach { t ->
+                Box(
+                    Modifier.weight(1f)
+                        .clip(RoundedCornerShape(18.dp))
+                        .border(1.dp, colors.outlineVariant, RoundedCornerShape(18.dp))
+                        .background(colors.surfaceContainerLowest)
+                        .combinedClickable(
+                            onClick = { if (t == null) editing = com.jack.ai.data.Preset(name = "", prompt = "") else onUse(t.prompt) },
+                            onLongClick = { if (t != null) editing = t },
+                        )
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                ) {
+                    Text(t?.name ?: "＋ 新模板", style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = if (t != null) FontWeight.Medium else null,
+                        color = if (t != null) colors.onSurface else colors.onSurfaceVariant)
+                }
+            }
+            if (row.size == 1) Spacer(Modifier.weight(1f))
+        }
+        Spacer(Modifier.height(10.dp))
+    }
+    editing?.let { t ->
+        var name by remember(t.id) { mutableStateOf(t.name) }
+        var prompt by remember(t.id) { mutableStateOf(t.prompt) }
+        val exists = templates.any { it.id == t.id }
+        AlertDialog(
+            onDismissRequest = { editing = null },
+            title = { Text(if (exists) "修改模板" else "新模板") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(name, { name = it }, label = { Text("名字") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(prompt, { prompt = it }, label = { Text("要 AI 做什么") }, minLines = 4, maxLines = 8,
+                        modifier = Modifier.fillMaxWidth())
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = name.isNotBlank() && prompt.isNotBlank(), onClick = {
+                    val u = t.copy(name = name.trim(), prompt = prompt.trim())
+                    vm.updateSettings { s -> s.copy(workTemplates = if (exists) s.workTemplates.map { if (it.id == u.id) u else it } else s.workTemplates + u) }
+                    editing = null
+                }) { Text("保存") }
+            },
+            dismissButton = {
+                Row {
+                    if (exists) TextButton(onClick = {
+                        vm.updateSettings { s -> s.copy(workTemplates = s.workTemplates.filterNot { it.id == t.id }) }
+                        editing = null
+                    }) { Text("删除", color = colors.error) }
+                    TextButton(onClick = { editing = null }) { Text("取消") }
+                }
+            },
+        )
     }
 }

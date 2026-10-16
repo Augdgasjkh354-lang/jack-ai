@@ -68,7 +68,7 @@ internal suspend fun ToolSession.makeRoutine(kind: String, args: JsonObject): St
         val repeat = args["repeat"].text().takeIf { it in REPEAT_LABELS } ?: "none"
         val r = if (kind == "reminder") Routine(kind = "reminder", title = args["text"].text(), hour = h, minute = m, repeat = repeat, date = date)
         else Routine(kind = "task", title = args["title"].text(), prompt = args["prompt"].text(), hour = h, minute = m, repeat = repeat, date = date,
-            offPeak = args["off_peak"].text() == "true")
+            offPeak = args["off_peak"].text() == "true", work = args["work"].text() == "true")
         if (r.nextAt() == null) throw IllegalArgumentException("这个时间已经过去了")
         withContext(Dispatchers.Main) { host.saveRoutine(r) }
         val warn = if (!Routines.canNotify(app)) "（注意：App 还没有通知权限，用户需要打开左侧菜单「提醒和任务」页面授权）" else ""

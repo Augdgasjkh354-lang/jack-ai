@@ -15,7 +15,7 @@ import androidx.core.app.ServiceCompat
 import com.jack.ai.data.Routines
 
 /**
- * Work 模式回答期间开着的前台服务：App 切到后台也不会被系统停掉，通知栏显示进度。
+ * 回答期间（Chat 和 Work 都是）开着的前台服务：App 切到后台也不会被系统停掉，通知栏显示进度。
  * 服务本身不干活，活还是 ChatViewModel 里的协程在干；它只是让进程活着。
  */
 class WorkService : Service() {
@@ -25,7 +25,7 @@ class WorkService : Service() {
         val title = intent?.getStringExtra("title").orEmpty()
         val text = intent?.getStringExtra("text").orEmpty()
         val convId = intent?.getStringExtra("convId")
-        val n = build(this, title, text, convId)
+        val n = build(this, title, text, convId, intent?.getBooleanExtra("work", false) == true)
         try {
             ServiceCompat.startForeground(
                 this, ID, n,
@@ -47,7 +47,7 @@ class WorkService : Service() {
         private fun channel(ctx: Context) {
             val nm = ctx.getSystemService(NotificationManager::class.java)
             if (nm.getNotificationChannel(CHANNEL) == null) {
-                nm.createNotificationChannel(NotificationChannel(CHANNEL, "Work 任务进度", NotificationManager.IMPORTANCE_LOW))
+                nm.createNotificationChannel(NotificationChannel(CHANNEL, "回答和任务进度", NotificationManager.IMPORTANCE_LOW))
             }
         }
 
@@ -58,11 +58,11 @@ class WorkService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
-        private fun build(ctx: Context, title: String, text: String, convId: String?) = run {
+        private fun build(ctx: Context, title: String, text: String, convId: String?, work: Boolean) = run {
             channel(ctx)
             NotificationCompat.Builder(ctx, CHANNEL)
                 .setSmallIcon(R.drawable.ic_widget_chat)
-                .setContentTitle("正在工作：$title")
+                .setContentTitle((if (work) "正在工作：" else "正在回答：") + title)
                 .setContentText(text.ifBlank { "进行中…" })
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
@@ -71,27 +71,27 @@ class WorkService : Service() {
                 .build()
         }
 
-        fun start(ctx: Context, convId: String, title: String) {
-            val i = Intent(ctx, WorkService::class.java).putExtra("convId", convId).putExtra("title", title)
+        fun start(ctx: Context, convId: String, title: String, work: Boolean) {
+            val i = Intent(ctx, WorkService::class.java).putExtra("convId", convId).putExtra("title", title).putExtra("work", work)
             runCatching { androidx.core.content.ContextCompat.startForegroundService(ctx, i) }
         }
 
         /** 更新通知上的进度文字（最多每秒一次）。 */
-        fun progress(ctx: Context, convId: String, title: String, text: String) {
+        fun progress(ctx: Context, convId: String, title: String, text: String, work: Boolean) {
             val now = System.currentTimeMillis()
             if (now - lastUpdate < 1000) return
             lastUpdate = now
             if (!Routines.canNotify(ctx)) return
             try {
-                NotificationManagerCompat.from(ctx).notify(ID, build(ctx, title, text, convId))
+                NotificationManagerCompat.from(ctx).notify(ID, build(ctx, title, text, convId, work))
             } catch (_: SecurityException) {
             }
         }
 
         /** 干完了：关掉前台服务；App 不在眼前时发一条完成通知。 */
-        fun finish(ctx: Context, convId: String, title: String, result: String) {
+        fun finish(ctx: Context, convId: String, title: String, result: String, work: Boolean) {
             ctx.stopService(Intent(ctx, WorkService::class.java))
-            if (!MainActivity.visible) Routines.notify(ctx, "work-$convId", "完成了：$title", result, openChat = convId)
+            if (!MainActivity.visible) Routines.notify(ctx, "work-$convId", (if (work) "完成了：" else "回答好了：") + title, result, openChat = convId)
         }
     }
 }

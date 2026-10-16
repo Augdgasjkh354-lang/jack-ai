@@ -125,6 +125,7 @@ class ToolSession(
             name == "create_chart" && SkillIds.CALC in skillIds -> makeChart(args)
             name == "create_diagram" && SkillIds.CALC in skillIds -> makeDiagram(args)
             name == "update_plan" && conv.work -> updatePlan(args)
+            name == "delegate_tasks" && conv.work -> delegateTasks(args)
             name == "list_files" -> listFiles()
             name == "read_file" -> readFile(args)
             name == "write_file" -> writeFile(args)

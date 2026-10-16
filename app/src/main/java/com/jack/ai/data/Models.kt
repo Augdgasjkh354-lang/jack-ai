@@ -151,8 +151,10 @@ data class Settings(
     val chatThinking: ThinkLevel? = null,
     val workModel: String = MODEL_PRO,
     val workThinking: ThinkLevel = ThinkLevel.HIGH,
+    /** Work 模板：常做的任务，一点就填进输入框。 */
+    val workTemplates: List<Preset> = DEFAULT_WORK_TEMPLATES,
     /** Work 一次任务花到多少元先停下问用户，0 表示不限。 */
-    val workCostLimit: Double = 1.0,
+    val workCostLimit: Double = 5.0,
     val compressTokens: Int = 200_000,
     val memoryEnabled: Boolean = true,
     val dreamEnabled: Boolean = true,
@@ -348,6 +350,13 @@ val DEFAULT_PRESETS = listOf(
 )
 
 /** 内置的最高优先级提示词：专门针对 DeepSeek V4.1 Flash 的已知毛病。 */
+val DEFAULT_WORK_TEMPLATES = listOf(
+    Preset(name = "整理邮件", prompt = "看看我所有邮箱最近一天的新邮件，按重要程度整理：谁发的、什么事、要不要处理、截止时间。广告和通知合成一句带过。"),
+    Preset(name = "查资料出报告", prompt = "围绕「」查资料，至少看 5 个可靠来源，整理成一份 Word 报告：结论放前面，后面分点论证，最后附上来源链接。"),
+    Preset(name = "写周报", prompt = "根据我这周的聊天和对话文件夹里的资料，写一份周报：完成了什么、进行中的事、遇到的问题、下周计划。生成 Word。"),
+    Preset(name = "做 PPT", prompt = "把「」做成一份 8 页左右的 PPT：每页一个要点，配简短说明，风格简洁。"),
+)
+
 const val DEFAULT_WORK_PROMPT = """你正在 Work 模式下替用户完成一项任务。目标是把事做完、做对，而不是陪聊。
 
 1. 先想清楚要交付什么。任务有三步以上时，先用 update_plan 列出步骤，每开始或做完一步就更新一次。

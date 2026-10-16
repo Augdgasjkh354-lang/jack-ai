@@ -236,6 +236,7 @@ val BUILTIN_SKILLS = listOf(
 /** 每个内置 skill 对应的工具定义（OpenAI 兼容格式）。 */
 object SkillTools {
     val UPDATE_PLAN = schema("""{"type":"function","function":{"name":"update_plan","description":"写下或更新这次任务的步骤清单，会显示给用户看进度。每次都传完整的清单。","parameters":{"type":"object","properties":{"items":{"type":"array","items":{"type":"object","properties":{"text":{"type":"string","description":"这一步做什么，简短"},"status":{"type":"string","enum":["pending","doing","done"],"description":"pending 没开始，doing 正在做，done 做完了"}},"required":["text","status"]}}},"required":["items"]}}}""")
+    val DELEGATE_TASKS = schema("""{"type":"function","function":{"name":"delegate_tasks","description":"把几件彼此独立的子任务（主要是查资料、读文件）同时派出去并行做，全部做完后返回各自的结果。最多 5 件。","parameters":{"type":"object","properties":{"tasks":{"type":"array","items":{"type":"object","properties":{"title":{"type":"string","description":"子任务名，简短"},"instructions":{"type":"string","description":"要查清楚什么、结果要包含什么"}},"required":["title","instructions"]}}},"required":["tasks"]}}}""")
     val USE_SKILL = schema("""{"type":"function","function":{"name":"use_skill","description":"读取某个 skill 的详细做法说明。使用一个 skill 之前必须先调用它。","parameters":{"type":"object","properties":{"name":{"type":"string","description":"skill 的名字"}},"required":["name"]}}}""")
 
     val WEB_SEARCH = schema("""{"type":"function","function":{"name":"web_search","description":"在互联网上搜索最新信息，返回若干网页的标题、链接和摘要。","parameters":{"type":"object","properties":{"query":{"type":"string","description":"搜索关键词，简洁明确"}},"required":["query"]}}}""")
@@ -274,7 +275,7 @@ object SkillTools {
 
     val CREATE_REMINDER = schema("""{"type":"function","function":{"name":"create_reminder","description":"设置一个到点弹通知的提醒。","parameters":{"type":"object","properties":{"text":{"type":"string","description":"通知里显示的话"},"datetime":{"type":"string","description":"第一次提醒的时间，格式 yyyy-MM-dd HH:mm"},"repeat":{"type":"string","enum":["none","daily","weekdays","weekly"]}},"required":["text","datetime"]}}}""")
 
-    val CREATE_TASK = schema("""{"type":"function","function":{"name":"create_task","description":"设置一个定时任务：到点后你在后台自动执行 prompt，结果发给用户。","parameters":{"type":"object","properties":{"title":{"type":"string","description":"任务名，简短"},"prompt":{"type":"string","description":"到时候要执行的完整指令"},"datetime":{"type":"string","description":"第一次执行的时间，格式 yyyy-MM-dd HH:mm"},"repeat":{"type":"string","enum":["none","daily","weekdays","weekly"]},"off_peak":{"type":"boolean","description":"碰上高峰时段就顺延到空闲时段再执行，省一半钱；不急的任务可以开"}},"required":["title","prompt","datetime"]}}}""")
+    val CREATE_TASK = schema("""{"type":"function","function":{"name":"create_task","description":"设置一个定时任务：到点后你在后台自动执行 prompt，结果发给用户。","parameters":{"type":"object","properties":{"work":{"type":"boolean","description":"任务要用邮箱、生成文件等多种技能、步骤多时设为 true（后台 Work 模式）；只是搜索整理设 false"},"title":{"type":"string","description":"任务名，简短"},"prompt":{"type":"string","description":"到时候要执行的完整指令"},"datetime":{"type":"string","description":"第一次执行的时间，格式 yyyy-MM-dd HH:mm"},"repeat":{"type":"string","enum":["none","daily","weekdays","weekly"]},"off_peak":{"type":"boolean","description":"碰上高峰时段就顺延到空闲时段再执行，省一半钱；不急的任务可以开"}},"required":["title","prompt","datetime"]}}}""")
 
     val LIST_ROUTINES = schema("""{"type":"function","function":{"name":"list_routines","description":"列出用户现有的提醒和定时任务。","parameters":{"type":"object","properties":{}}}}""")
 
