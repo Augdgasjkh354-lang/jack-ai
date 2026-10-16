@@ -80,6 +80,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.biometric:biometric:1.1.0")
+    // biometric 自带的 fragment 1.2.5 太旧：不支持新式 ActivityResult，拍照/选图/选文件会报 requestCode 错
+    implementation("androidx.fragment:fragment-ktx:1.8.5")
     implementation("org.mozilla:rhino:1.7.15")
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
