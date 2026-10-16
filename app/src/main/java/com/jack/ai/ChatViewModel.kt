@@ -121,6 +121,12 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         Routines.scheduleAll(app)
         mergeInbox()
         core.refreshWidget()
+        // 数据文件坏了被自动恢复过，告诉用户一声
+        val fixed = generateSequence { Store.recovered.poll() }.toList()
+        if (fixed.isNotEmpty()) {
+            val lost = fixed.any { it.endsWith(":empty") }
+            core.toast(if (lost) "有数据文件损坏且没有副本，已清空并保留坏文件；可以从备份恢复" else "有数据文件损坏，已自动换用最近的副本")
+        }
     }
 
     fun consumeToast() = _state.update { it.copy(toast = null) }

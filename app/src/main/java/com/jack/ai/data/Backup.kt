@@ -4,7 +4,6 @@ import android.content.Context
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
-import java.io.ByteArrayOutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
@@ -40,8 +39,9 @@ object Backup {
     fun import(ctx: Context, input: InputStream): Int {
         val dir = ctx.filesDir
         val staging = File(ctx.cacheDir, "restore-${System.nanoTime()}").apply { mkdirs() }
-        val maxEntry = 32L * 1024 * 1024
-        val maxTotal = 256L * 1024 * 1024
+        // 防坏包：单个文件不超过 200 MB；总量不超过手机剩余空间的一半（解压一份、再复制一份）
+        val maxEntry = 200L * 1024 * 1024
+        val maxTotal = (dir.usableSpace / 2 - 64L * 1024 * 1024).coerceAtLeast(0)
         var total = 0L
         var count = 0
         var sawData = false
@@ -66,15 +66,13 @@ object Backup {
                                 if (n < 0) break
                                 size += n
                                 total += n
-                                require(size <= maxEntry && total <= maxTotal) { "备份解压后的数据太大" }
+                                require(size <= maxEntry) { "备份里的「$name」太大了" }
+                                require(total <= maxTotal) { "手机剩余空间不够恢复这个备份" }
                                 out.write(buf, 0, n)
                             }
                         }
-                        if (name in JSONS) {
-                            // Validate all JSON before changing any existing files.
-                            kotlinx.serialization.json.Json.parseToJsonElement(f.readText())
-                        }
-                        if (name == "prefs.json") {
+                        // 先检查所有 JSON 都能读，再动手机上的数据
+                        if (name in JSONS || name == "prefs.json") {
                             kotlinx.serialization.json.Json.parseToJsonElement(f.readText())
                         }
                         if (name in JSONS || name == "prefs.json") sawData = true
@@ -84,8 +82,8 @@ object Backup {
                 }
             }
             require(sawData) { "这不是 Jack AI 的备份文件" }
-            // Keep a rollback copy: imports can replace multiple independent files.
-            val rollback = File(ctx.filesDir, "last-restore-rollback").apply { mkdirs() }
+            // 被覆盖的旧文件留一份，只保留最近一次恢复前的
+            val rollback = File(ctx.filesDir, "last-restore-rollback").apply { deleteRecursively(); mkdirs() }
             staging.walkTopDown().filter { it.isFile }.forEach { incoming ->
                 val relative = incoming.relativeTo(staging).invariantSeparatorsPath
                 val target = File(dir, relative)
@@ -95,8 +93,10 @@ object Backup {
                     target.copyTo(original, overwrite = true)
                 }
             }
-            staging.walkTopDown().filter { it.isFile && it.name != "prefs.json" }.forEach { incoming ->
+            staging.walkTopDown().filter { it.isFile }.forEach { incoming ->
                 val relative = incoming.relativeTo(staging).invariantSeparatorsPath
+                // 设置单独导入；对话文件夹里同名的文件照常恢复
+                if (relative == "prefs.json") return@forEach
                 val target = File(dir, relative)
                 target.parentFile?.mkdirs()
                 incoming.copyTo(target, overwrite = true)

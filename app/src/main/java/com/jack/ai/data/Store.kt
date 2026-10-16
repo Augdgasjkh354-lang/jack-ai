@@ -8,9 +8,15 @@ import kotlinx.serialization.json.Json
 import java.io.File
 
 private val LOCK = Any()
+private const val PREV_INTERVAL = 60 * 60 * 1000L
 
 /** 聊天记录和项目存成手机里的 JSON 文件，设置存在 SharedPreferences。 */
 class Store(context: Context) {
+    companion object {
+        /** 这次启动时从副本恢复（或清空）过的文件，「文件名:prev」或「文件名:empty」。 */
+        val recovered = java.util.concurrent.ConcurrentLinkedQueue<String>()
+    }
+
     private val app = context.applicationContext
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val dir = context.filesDir
@@ -18,26 +24,40 @@ class Store(context: Context) {
 
     private fun <T> load(name: String, ser: KSerializer<T>): List<T> = synchronized(LOCK) { loadUnlocked(name, ser) }
 
+    /**
+     * 读一个 JSON 列表。文件坏了不闪退、也不悄悄清空：把坏文件改名留着（.corrupt-时间），
+     * 换用最近一份副本（.prev）；连副本都没有才返回空列表。恢复过的文件记进 [recovered]，界面会提示。
+     */
     private fun <T> loadUnlocked(name: String, ser: KSerializer<T>): List<T> {
         val f = File(dir, name)
-        if (!f.exists()) return emptyList()
         val decoder = ListSerializer(ser)
+        val text = try {
+            // AtomicFile 读的时候会顺带处理上次没写完的情况
+            String(AtomicFile(f).readFully(), Charsets.UTF_8)
+        } catch (e: java.io.FileNotFoundException) {
+            return emptyList()
+        }
         return try {
-            json.decodeFromString(decoder, f.readText())
-        } catch (primary: Exception) {
-            // Never silently turn corrupted data into an empty list.
-            val backup = File(dir, "$name.bak")
-            val restored = runCatching { json.decodeFromString(decoder, backup.readText()) }.getOrNull()
-            restored ?: throw IllegalStateException("无法读取 $name；原始文件已保留，请从备份恢复", primary)
+            json.decodeFromString(decoder, text)
+        } catch (e: Exception) {
+            f.renameTo(File(dir, "$name.corrupt-${System.currentTimeMillis()}"))
+            val prev = File(dir, "$name.prev")
+            val restored = runCatching { json.decodeFromString(decoder, prev.readText()) }.getOrNull()
+            if (restored != null) prev.copyTo(f, overwrite = true)
+            recovered += if (restored != null) "$name:prev" else "$name:empty"
+            restored ?: emptyList()
         }
     }
 
+    /**
+     * 原子写入（写一半断电也不会坏）。写之前把旧文件复制成 .prev 当副本，
+     * 每个文件最多一小时复制一次，免得每次保存都多读写一遍。
+     */
     private fun atomicWrite(name: String, content: String) {
         val target = File(dir, name)
-        if (target.exists()) {
-            // Save a copy of the most recent valid state before replacement.
-            val valid = runCatching { Json.parseToJsonElement(target.readText()) }.isSuccess
-            if (valid) target.copyTo(File(dir, "$name.bak"), overwrite = true)
+        val prev = File(dir, "$name.prev")
+        if (target.exists() && System.currentTimeMillis() - prev.lastModified() > PREV_INTERVAL) {
+            runCatching { target.copyTo(prev, overwrite = true) }
         }
         val af = AtomicFile(target)
         val stream = af.startWrite()
