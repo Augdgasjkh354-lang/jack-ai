@@ -142,8 +142,9 @@ val BUILTIN_SKILLS = listOf(
 4. 提醒的 text 写成到时候通知里显示的一句话，比如“该交周报了”。
 5. 定时任务的 prompt 要写成完整、独立的指令，因为到时候你是在后台、看不到现在这段对话的。比如“搜索过去 24 小时 AI 领域的重要新闻，整理成 5 条简报，每条一句话加来源链接”。
 6. 设置好后用一句话确认：什么时候、做什么。
-7. 用户想看或删除已有的提醒和任务时，先用 list_routines 查，再用 delete_routine 删。
-8. 用户说“闹钟”“叫我起床”“X 点叫醒我”时，用 set_alarm 在手机自带的时钟里设真正的闹钟（会一直响到用户按掉）；只是“提醒我做某事”就用 create_reminder。
+7. 不赶时间的定时任务（整理资料、写总结之类）可以把 off_peak 设为 true：碰上 DeepSeek 高峰时段（工作日 9–12 点、14–18 点）会自动顺延到空闲时段执行，价格减半。用户要求准点的（比如早安问候、开会前提醒）不要开。
+8. 用户想看或删除已有的提醒和任务时，先用 list_routines 查，再用 delete_routine 删。
+9. 用户说“闹钟”“叫我起床”“X 点叫醒我”时，用 set_alarm 在手机自带的时钟里设真正的闹钟（会一直响到用户按掉）；只是“提醒我做某事”就用 create_reminder。
    - set_alarm 只需要时和分（24 小时制），days 不填是一次性闹钟，填了就是每周这几天重复（1=周一 … 7=周日）。
    - 要关掉或改闹钟：用 cancel_alarm 按时间或标签关掉旧的，需要时再 set_alarm 设新的。手机不允许读取已有闹钟列表，你看不到用户有哪些闹钟，不知道时就问用户。""",
     ),
@@ -257,7 +258,7 @@ object SkillTools {
 
     val CREATE_REMINDER = schema("""{"type":"function","function":{"name":"create_reminder","description":"设置一个到点弹通知的提醒。","parameters":{"type":"object","properties":{"text":{"type":"string","description":"通知里显示的话"},"datetime":{"type":"string","description":"第一次提醒的时间，格式 yyyy-MM-dd HH:mm"},"repeat":{"type":"string","enum":["none","daily","weekdays","weekly"]}},"required":["text","datetime"]}}}""")
 
-    val CREATE_TASK = schema("""{"type":"function","function":{"name":"create_task","description":"设置一个定时任务：到点后你在后台自动执行 prompt，结果发给用户。","parameters":{"type":"object","properties":{"title":{"type":"string","description":"任务名，简短"},"prompt":{"type":"string","description":"到时候要执行的完整指令"},"datetime":{"type":"string","description":"第一次执行的时间，格式 yyyy-MM-dd HH:mm"},"repeat":{"type":"string","enum":["none","daily","weekdays","weekly"]}},"required":["title","prompt","datetime"]}}}""")
+    val CREATE_TASK = schema("""{"type":"function","function":{"name":"create_task","description":"设置一个定时任务：到点后你在后台自动执行 prompt，结果发给用户。","parameters":{"type":"object","properties":{"title":{"type":"string","description":"任务名，简短"},"prompt":{"type":"string","description":"到时候要执行的完整指令"},"datetime":{"type":"string","description":"第一次执行的时间，格式 yyyy-MM-dd HH:mm"},"repeat":{"type":"string","enum":["none","daily","weekdays","weekly"]},"off_peak":{"type":"boolean","description":"碰上高峰时段就顺延到空闲时段再执行，省一半钱；不急的任务可以开"}},"required":["title","prompt","datetime"]}}}""")
 
     val LIST_ROUTINES = schema("""{"type":"function","function":{"name":"list_routines","description":"列出用户现有的提醒和定时任务。","parameters":{"type":"object","properties":{}}}}""")
 
@@ -276,6 +277,8 @@ object SkillTools {
     val LIST_EVENTS = schema("""{"type":"function","function":{"name":"list_calendar_events","description":"查看手机日历里一段时间内的日程。","parameters":{"type":"object","properties":{"start_date":{"type":"string","description":"从哪天开始，yyyy-MM-dd，默认今天"},"days":{"type":"integer","description":"查几天，默认 1，最多 62"}}}}}""")
 
     val DELETE_EVENT = schema("""{"type":"function","function":{"name":"delete_calendar_event","description":"删除手机日历里的一个日程。","parameters":{"type":"object","properties":{"id":{"type":"string","description":"list_calendar_events 返回的编号"}},"required":["id"]}}}""")
+
+    val SEARCH_PROJECT = schema("""{"type":"function","function":{"name":"search_project","description":"在当前项目的大份资料里按关键词检索，返回最相关的原文段落和出处。","parameters":{"type":"object","properties":{"query":{"type":"string","description":"关键词，多个用空格隔开"}},"required":["query"]}}}""")
 
     val SAVE_MEMORY = schema("""{"type":"function","function":{"name":"save_memory","description":"把一条关于用户的信息存进长期记忆。仅在用户明确要求“记住”时使用。","parameters":{"type":"object","properties":{"content":{"type":"string","description":"要记住的内容，一句完整的话"}},"required":["content"]}}}""")
 }

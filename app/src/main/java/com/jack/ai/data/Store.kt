@@ -10,6 +10,7 @@ private val LOCK = Any()
 
 /** 聊天记录和项目存成手机里的 JSON 文件，设置存在 SharedPreferences。 */
 class Store(context: Context) {
+    private val app = context.applicationContext
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val dir = context.filesDir
     private val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
@@ -70,21 +71,52 @@ class Store(context: Context) {
 
     fun loadUsage() = load("usage.json", UsageDay.serializer())
 
-    /** 记一笔用量（按天、按模型累加）。 */
-    fun addUsage(model: String, prompt: Int, cacheHit: Int, completion: Int) = synchronized(LOCK) {
-        val date = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
+    /**
+     * 记一笔用量（按天、按模型累加），并按请求发生的这一刻的价格算钱。
+     * cacheHit 为 null 表示服务没返回缓存命中数。返回这次花了多少元，不知道价格时返回 null。
+     */
+    fun addUsage(ep: Endpoint, prompt: Int, cacheHit: Int?, completion: Int): Double? = synchronized(LOCK) {
+        val now = System.currentTimeMillis()
+        val date = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date(now))
+        val price = Pricing.priceAt(ep, now)
+        val hit = cacheHit ?: 0
+        val cost = price?.let { Pricing.cost(it, prompt, hit, completion) }
         val list = loadUnlocked("usage.json", UsageDay.serializer()).toMutableList()
-        val i = list.indexOfFirst { it.date == date && it.model == model }
-        val old = if (i >= 0) list[i] else UsageDay(date, model)
-        val new = old.copy(
-            prompt = old.prompt + prompt, cacheHit = old.cacheHit + cacheHit,
-            completion = old.completion + completion, requests = old.requests + 1,
+        val i = list.indexOfFirst { it.date == date && it.model == ep.key }
+        val old = if (i >= 0) list[i] else UsageDay(date, ep.key, costed = true)
+        // 旧版本记的这一天先换算成当场计价的格式，再往上加
+        val base = if (old.costed) old else old.copy(cost = old.costYuan() ?: 0.0, costed = true, hitKnown = old.cacheHit > 0)
+        val new = base.copy(
+            prompt = base.prompt + prompt, cacheHit = base.cacheHit + hit,
+            completion = base.completion + completion, requests = base.requests + 1,
+            cost = base.cost + (cost ?: 0.0),
+            unpriced = base.unpriced + if (cost == null) 1 else 0,
+            hitKnown = base.hitKnown || cacheHit != null,
         )
         if (i >= 0) list[i] = new else list += new
         val tmp = File(dir, "usage.json.tmp")
         tmp.writeText(json.encodeToString(ListSerializer(UsageDay.serializer()), list.takeLast(800)))
         tmp.renameTo(File(dir, "usage.json"))
-        Unit
+        checkBudget(list, date.take(7))
+        cost
+    }
+
+    /** 本月花费到预算的 80% 和 100% 时各提醒一次。 */
+    private fun checkBudget(list: List<UsageDay>, month: String) {
+        val budget = prefs.getFloat("monthlyBudget", 0f).toDouble()
+        if (budget <= 0) return
+        val spent = list.filter { it.date.startsWith(month) }.sumOf { it.costYuan() ?: 0.0 }
+        val level = when {
+            spent >= budget -> 100
+            spent >= budget * 0.8 -> 80
+            else -> return
+        }
+        val sent = prefs.getString("budgetAlert", "") ?: ""
+        val key = "$month:$level"
+        if (sent == key || (level == 80 && sent == "$month:100")) return
+        prefs.edit().putString("budgetAlert", key).apply()
+        val text = String.format(java.util.Locale.US, "本月已花 ¥%.2f，预算 ¥%.2f", spent, budget)
+        Routines.notify(app, "budget", if (level == 100) "本月预算已用完" else "本月预算已用 80%", text)
     }
 
     /** 备份用：导出全部设置（不含两个 Key）。 */
@@ -175,6 +207,7 @@ class Store(context: Context) {
             fontScale = prefs.getFloat("fontScale", 1f),
             accent = prefs.getString("accent", "clay") ?: "clay",
             appLock = prefs.getBoolean("appLock", false),
+            monthlyBudget = prefs.getFloat("monthlyBudget", 0f).toDouble(),
             providers = prefs.getString("providers", null)?.let {
                 runCatching { json.decodeFromString(ListSerializer(Provider.serializer()), it) }.getOrNull()
             } ?: emptyList(),
@@ -205,6 +238,7 @@ class Store(context: Context) {
             .putString("accent", s.accent)
             .putBoolean("appLock", s.appLock)
             .putString("providers", json.encodeToString(ListSerializer(Provider.serializer()), s.providers))
+            .putFloat("monthlyBudget", s.monthlyBudget.toFloat())
             .apply()
     }
 }

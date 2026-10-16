@@ -45,6 +45,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jack.ai.ChatViewModel
 import com.jack.ai.api.ApiException
+import com.jack.ai.data.Price
+import com.jack.ai.data.Pricing
 import com.jack.ai.data.Provider
 import com.jack.ai.data.ProviderModel
 import kotlinx.coroutines.CancellationException
@@ -88,6 +90,7 @@ fun ProvidersSection(vm: ChatViewModel, providers: List<Provider>) {
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            BalanceButton(vm, p)
             TextButton(onClick = { deleting = p }) { Text("删除", color = colors.error) }
         }
     }
@@ -116,6 +119,9 @@ private fun ProviderDialog(vm: ChatViewModel, initial: Provider, onDismiss: () -
     var key by remember { mutableStateOf(initial.apiKey) }
     // 服务上全部模型的 id；已勾选的模型和它们的能力单独记
     var available by remember { mutableStateOf(initial.models.map { it.id }) }
+    // 服务返回的价格（OpenRouter 才有）
+    var prices by remember { mutableStateOf<Map<String, Price>>(emptyMap()) }
+    var pricing by remember { mutableStateOf<ProviderModel?>(null) }
     val chosen = remember { mutableStateListOf<ProviderModel>().apply { addAll(initial.models) } }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -127,9 +133,13 @@ private fun ProviderDialog(vm: ChatViewModel, initial: Provider, onDismiss: () -
         error = null
         scope.launch {
             try {
-                val (base, ids) = vm.fetchModels(url, key)
+                val (base, list) = vm.fetchModels(url, key)
+                val ids = list.map { it.first }
                 url = base
                 available = ids
+                prices = list.mapNotNull { (id, p) -> p?.let { id to it } }.toMap()
+                // 已勾选但还没价格的，用服务给的价格补上
+                chosen.forEachIndexed { i, m -> if (m.price == null) prices[m.id]?.let { chosen[i] = m.copy(price = it) } }
                 if (ids.isEmpty()) error = "这个服务没有返回任何模型"
                 // 原来勾选的模型服务上已经没有了，就去掉
                 chosen.removeAll { it.id !in ids }
@@ -209,7 +219,7 @@ private fun ProviderDialog(vm: ChatViewModel, initial: Provider, onDismiss: () -
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier.fillMaxWidth().clickable {
-                                        if (m != null) chosen.remove(m) else chosen.add(vm.guessModel(id))
+                                        if (m != null) chosen.remove(m) else chosen.add(vm.guessModel(id, prices[id]))
                                     },
                                 ) {
                                     Checkbox(checked = m != null, onCheckedChange = null, modifier = Modifier.padding(8.dp))
@@ -220,6 +230,8 @@ private fun ProviderDialog(vm: ChatViewModel, initial: Provider, onDismiss: () -
                                         fun set(new: ProviderModel) { chosen[chosen.indexOf(m)] = new }
                                         FilterChip(selected = m.vision, onClick = { set(m.copy(vision = !m.vision)) }, label = { Text("能看图") })
                                         FilterChip(selected = m.reasoning, onClick = { set(m.copy(reasoning = !m.reasoning)) }, label = { Text("深度思考") })
+                                        FilterChip(selected = m.price != null, onClick = { pricing = m },
+                                            label = { Text(m.price?.let { "¥${short(it.miss)}/${short(it.out)}" } ?: "填价格") })
                                     }
                                 }
                                 HorizontalDivider(color = colors.outlineVariant)
@@ -242,4 +254,63 @@ private fun ProviderDialog(vm: ChatViewModel, initial: Provider, onDismiss: () -
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
     )
+    pricing?.let { m ->
+        PriceDialog(m.id, m.price, onDismiss = { pricing = null }) { p ->
+            val i = chosen.indexOfFirst { it.id == m.id }
+            if (i >= 0) chosen[i] = chosen[i].copy(price = p)
+            pricing = null
+        }
+    }
+}
+
+private fun short(d: Double): String = if (d == d.toLong().toDouble()) d.toLong().toString() else String.format(java.util.Locale.US, "%.2f", d).trimEnd('0').trimEnd('.')
+
+/** 手动填一个模型的价格（元 / 百万 token）。全部留空表示不计价。 */
+@Composable
+private fun PriceDialog(model: String, initial: Price?, onDismiss: () -> Unit, onSave: (Price?) -> Unit) {
+    fun str(d: Double?) = d?.let { short(it) }.orEmpty()
+    var miss by remember { mutableStateOf(str(initial?.miss)) }
+    var hit by remember { mutableStateOf(str(initial?.hit)) }
+    var out by remember { mutableStateOf(str(initial?.out)) }
+    fun num(s: String) = s.toDoubleOrNull()?.takeIf { it >= 0 }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("价格 · $model", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("单位：元 / 百万 token，照服务商价格页填。美元价乘以 ${Pricing.USD_TO_CNY}。全部留空表示不计价。",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                listOf(
+                    Triple("输入（未命中缓存）", miss) { v: String -> miss = v },
+                    Triple("输入（缓存命中），不知道就留空", hit) { v: String -> hit = v },
+                    Triple("输出", out) { v: String -> out = v },
+                ).forEach { (label, value, set) ->
+                    OutlinedTextField(value = value, onValueChange = { set(it.filter { c -> c.isDigit() || c == '.' }) },
+                        label = { Text(label) }, singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val m = num(miss)
+                val o = num(out)
+                onSave(if (m == null && o == null) null else Price(hit = num(hit) ?: m ?: 0.0, miss = m ?: 0.0, out = o ?: 0.0))
+            }) { Text("确定") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+    )
+}
+
+/** 支持查余额的服务（Kimi、硅基流动、OpenRouter）显示一个「余额」按钮，点了显示结果。 */
+@Composable
+private fun BalanceButton(vm: ChatViewModel, p: Provider) {
+    val host = remember(p.baseUrl) { runCatching { java.net.URI(p.baseUrl).host.orEmpty() }.getOrDefault("") }
+    if (p.apiKey.isBlank() || listOf("moonshot", "siliconflow", "openrouter", "deepseek").none { it in host }) return
+    val scope = rememberCoroutineScope()
+    var result by remember { mutableStateOf<String?>(null) }
+    TextButton(onClick = {
+        result = "…"
+        scope.launch { result = vm.providerBalance(p) ?: "不支持" }
+    }) { Text(result ?: "余额") }
 }

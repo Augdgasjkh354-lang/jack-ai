@@ -41,6 +41,8 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.runtime.collectAsState
 import com.jack.ai.data.ChatExport
+import com.jack.ai.data.Pricing
+import androidx.compose.runtime.produceState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
@@ -690,6 +692,14 @@ private fun InputBar(
                         },
                     )
                     Spacer(Modifier.weight(1f))
+                    // DeepSeek 高峰时段价格翻倍，提示一下（每分钟刷新）
+                    val now by produceState(System.currentTimeMillis()) {
+                        while (true) { kotlinx.coroutines.delay(60_000); value = System.currentTimeMillis() }
+                    }
+                    if (settings.endpoint()?.deepseek == true && Pricing.isPeak(now)) {
+                        Text("高峰 ×2", style = MaterialTheme.typography.labelSmall, color = colors.outline,
+                            modifier = Modifier.padding(end = 2.dp))
+                    }
                     if (state.streaming) {
                         Surface(onClick = vm::stop, shape = CircleShape, color = colors.onSurface, modifier = Modifier.size(38.dp)) {
                             Box(contentAlignment = Alignment.Center) {

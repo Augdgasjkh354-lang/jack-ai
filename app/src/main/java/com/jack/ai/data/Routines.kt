@@ -59,6 +59,8 @@ data class Routine(
     val enabled: Boolean = true,
     val convId: String = newId(),
     val lastRunAt: Long = 0,
+    /** 定时任务碰上 DeepSeek 高峰时段时，顺延到空闲时段再跑（省一半钱）。 */
+    val offPeak: Boolean = false,
 )
 
 /** 后台任务的结果，等 App 打开时并入对应的对话。 */
@@ -181,8 +183,11 @@ object Routines {
         if (r.kind == "reminder") {
             notify(ctx, r.id, "⏰ 提醒", r.title)
         } else {
+            val now = System.currentTimeMillis()
+            val wait = if (r.offPeak) Pricing.nextOffPeak(now) - now else 0L
             val req = OneTimeWorkRequestBuilder<RoutineWorker>()
                 .setInputData(workDataOf("id" to r.id))
+                .setInitialDelay(wait, java.util.concurrent.TimeUnit.MILLISECONDS)
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .build()
             WorkManager.getInstance(ctx).enqueue(req)
@@ -232,7 +237,7 @@ object Routines {
                             if (ev.name.isNotEmpty()) acc.second.append(ev.name)
                             acc.third.append(ev.arguments)
                         }
-                        is StreamEvent.Usage -> store.addUsage(ep.key, ev.promptTokens, ev.cacheHit, ev.completionTokens)
+                        is StreamEvent.Usage -> { store.addUsage(ep, ev.promptTokens, ev.cacheHit, ev.completionTokens) }
                     }
                 }
             if (calls.isEmpty()) return content.toString().trim().ifBlank { "（这次没有生成内容）" }

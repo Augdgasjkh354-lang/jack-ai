@@ -26,6 +26,8 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
 import com.jack.ai.data.Endpoint
+import com.jack.ai.data.Price
+import com.jack.ai.data.Pricing
 import com.jack.ai.data.ThinkLevel
 
 sealed interface StreamEvent {
@@ -33,7 +35,8 @@ sealed interface StreamEvent {
     /** 工具调用是分片流式返回的，按 index 拼起来。 */
     data class ToolCall(val index: Int, val id: String, val name: String, val arguments: String) : StreamEvent
     /** 本次请求用掉的 token（最后一个数据块里返回）。 */
-    data class Usage(val promptTokens: Int, val completionTokens: Int, val cacheHit: Int = 0) : StreamEvent
+    /** cacheHit 为 null 表示服务没告诉我们缓存命中了多少。 */
+    data class Usage(val promptTokens: Int, val completionTokens: Int, val cacheHit: Int? = null) : StreamEvent
 }
 
 class ApiException(message: String, val code: Int = 0) : Exception(message)
@@ -49,7 +52,7 @@ internal val sharedHttp: OkHttpClient = OkHttpClient.Builder()
 
 class DeepSeekClient(
     /** 非流式请求的用量回调：模型、输入、缓存命中、输出。 */
-    private val onUsage: ((String, Int, Int, Int) -> Unit)? = null,
+    private val onUsage: ((Endpoint, Int, Int?, Int) -> Unit)? = null,
 ) {
     private val http = sharedHttp
     private val json = Json { ignoreUnknownKeys = true }
@@ -105,9 +108,7 @@ class DeepSeekClient(
                 (obj["usage"] as? JsonObject)?.let { u ->
                     val p = (u["prompt_tokens"] as? JsonPrimitive)?.intOrNull ?: 0
                     val c = (u["completion_tokens"] as? JsonPrimitive)?.intOrNull ?: 0
-                    val h = (u["prompt_cache_hit_tokens"] as? JsonPrimitive)?.intOrNull
-                        ?: ((u["prompt_tokens_details"] as? JsonObject)?.get("cached_tokens") as? JsonPrimitive)?.intOrNull ?: 0
-                    if (p > 0) emit(StreamEvent.Usage(p, c, h))
+                    if (p > 0) emit(StreamEvent.Usage(p, c, cacheHitOf(u)))
                 }
                 val choice = obj["choices"]?.jsonArray?.firstOrNull()?.jsonObject ?: continue
                 val delta = choice["delta"] as? JsonObject ?: continue
@@ -163,7 +164,7 @@ class DeepSeekClient(
             val obj = json.parseToJsonElement(text ?: "{}").jsonObject
             (obj["usage"] as? JsonObject)?.let { u ->
                 fun n(k: String) = (u[k] as? JsonPrimitive)?.intOrNull ?: 0
-                onUsage?.invoke(ep.key, n("prompt_tokens"), n("prompt_cache_hit_tokens"), n("completion_tokens"))
+                onUsage?.invoke(ep, n("prompt_tokens"), cacheHitOf(u), n("completion_tokens"))
             }
             val msg = obj["choices"]?.jsonArray?.firstOrNull()?.jsonObject?.get("message") as? JsonObject
             msg?.get("content").str().ifBlank { throw ApiException("模型没有返回内容") }
@@ -195,7 +196,7 @@ class DeepSeekClient(
      * 列出服务上能用的模型（OpenAI 格式的 GET /models）。
      * 用户填的地址少了 /v1 时自动补上再试一次，返回实际可用的地址和模型列表。
      */
-    suspend fun listModels(baseUrl: String, apiKey: String): Pair<String, List<String>> = withContext(Dispatchers.IO) {
+    suspend fun listModels(baseUrl: String, apiKey: String): Pair<String, List<Pair<String, Price?>>> = withContext(Dispatchers.IO) {
         val base = baseUrl.trim().trimEnd('/')
         if (!base.startsWith("http")) throw ApiException("接口地址要以 http:// 或 https:// 开头")
         val candidates = listOf(base) + (if (!Regex("""/v\d+[a-z]*$""").containsMatchIn(base)) listOf("$base/v1") else emptyList())
@@ -220,11 +221,11 @@ class DeepSeekClient(
                 }
                 arr.mapNotNull { m ->
                     when (m) {
-                        is JsonObject -> m["id"].str().ifEmpty { m["name"].str() }.takeIf { it.isNotEmpty() }
-                        is JsonPrimitive -> m.content
+                        is JsonObject -> m["id"].str().ifEmpty { m["name"].str() }.takeIf { it.isNotEmpty() }?.let { it to priceOf(m) }
+                        is JsonPrimitive -> m.content to null
                         else -> null
                     }
-                }.distinct().sorted()
+                }.distinctBy { it.first }.sortedBy { it.first }
             }
             if (result != null) return@withContext b to result
             // 401 这类错误换地址也没用
@@ -232,6 +233,50 @@ class DeepSeekClient(
         }
         throw last ?: ApiException("获取模型列表失败")
     }
+
+    /** OpenRouter 的模型列表带价格（美元 / token），换算成 元 / 百万 token。别家没有就是 null。 */
+    private fun priceOf(m: JsonObject): Price? {
+        val p = m["pricing"] as? JsonObject ?: return null
+        fun usd(k: String) = p[k].str().toDoubleOrNull()?.takeIf { it >= 0 }?.let { it * 1_000_000 * Pricing.USD_TO_CNY }
+        val miss = usd("prompt") ?: return null
+        val out = usd("completion") ?: return null
+        return Price(hit = usd("input_cache_read") ?: miss, miss = miss, out = out)
+    }
+
+    /**
+     * 查其他服务的余额。支持 Kimi、硅基流动、OpenRouter 和 DeepSeek 兼容地址；不支持的返回 null。
+     */
+    suspend fun providerBalance(baseUrl: String, apiKey: String): String? = withContext(Dispatchers.IO) {
+        val base = baseUrl.trim().trimEnd('/')
+        val host = runCatching { java.net.URI(base).host.orEmpty() }.getOrDefault("")
+        fun get(url: String): JsonObject {
+            val req = Request.Builder().url(url).header("Authorization", "Bearer $apiKey").get().build()
+            return http.newCall(req).execute().use { resp ->
+                val text = resp.body?.string()
+                if (!resp.isSuccessful) throw ApiException(describeError(resp.code, text), resp.code)
+                json.parseToJsonElement(text ?: "{}").jsonObject
+            }
+        }
+        fun num(o: JsonObject?, vararg keys: String) = keys.firstNotNullOfOrNull { o?.get(it).str().toDoubleOrNull() }
+        when {
+            "moonshot" in host -> num(get("$base/users/me/balance")["data"] as? JsonObject, "available_balance")
+                ?.let { String.format(java.util.Locale.US, "¥%.2f", it) } ?: "未知"
+            "siliconflow" in host -> num(get("$base/user/info")["data"] as? JsonObject, "totalBalance", "balance")
+                ?.let { String.format(java.util.Locale.US, "¥%.2f", it) } ?: "未知"
+            "openrouter" in host -> {
+                val d = get("https://openrouter.ai/api/v1/credits")["data"] as? JsonObject
+                val left = (num(d, "total_credits") ?: 0.0) - (num(d, "total_usage") ?: 0.0)
+                String.format(java.util.Locale.US, "$%.2f", left)
+            }
+            "deepseek" in host -> balance(base.removeSuffix("/v1"), apiKey)
+            else -> null
+        }
+    }
+
+    /** DeepSeek 用 prompt_cache_hit_tokens，OpenAI 格式用 prompt_tokens_details.cached_tokens；都没有就是 null。 */
+    private fun cacheHitOf(u: JsonObject): Int? =
+        (u["prompt_cache_hit_tokens"] as? JsonPrimitive)?.intOrNull
+            ?: ((u["prompt_tokens_details"] as? JsonObject)?.get("cached_tokens") as? JsonPrimitive)?.intOrNull
 
     private fun describeError(code: Int, body: String?): String {
         val detail = body?.let {

@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -204,6 +205,7 @@ fun ChatItem(
     onPin: (() -> Unit)? = null,
 ) {
     var menu by remember { mutableStateOf(false) }
+    var showUsage by remember { mutableStateOf(false) }
     val colors = MaterialTheme.colorScheme
     Box(Modifier.padding(horizontal = 12.dp)) {
         Row(
@@ -236,6 +238,11 @@ fun ChatItem(
                 )
             }
             DropdownMenuItem(
+                text = { Text("用量") },
+                leadingIcon = { Icon(Icons.Default.Info, null) },
+                onClick = { menu = false; showUsage = true },
+            )
+            DropdownMenuItem(
                 text = { Text("重命名") },
                 leadingIcon = { Icon(Icons.Default.Edit, null) },
                 onClick = { menu = false; onRename() },
@@ -247,6 +254,47 @@ fun ChatItem(
             )
         }
     }
+    if (showUsage) ConversationUsageDialog(c) { showUsage = false }
+}
+
+/** 一个对话用了多少：请求次数、token、缓存命中、花费、当前上下文。 */
+@Composable
+private fun ConversationUsageDialog(c: Conversation, onDismiss: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    @Composable
+    fun line(label: String, value: String) {
+        Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+            Text(label, Modifier.weight(1f), color = colors.onSurfaceVariant)
+            Text(value)
+        }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("用量 · ${c.title}", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        text = {
+            Column {
+                if (c.requests == 0 && c.spentTokens == 0L) {
+                    Text("还没有用量记录。", color = colors.onSurfaceVariant)
+                } else {
+                    if (c.requests > 0) {
+                        line("请求次数", "${c.requests}")
+                        line("输入", tokens(c.spentPrompt))
+                        line("其中缓存命中", if (c.spentPrompt > 0) "${tokens(c.spentHit)}（${c.spentHit * 100 / c.spentPrompt}%）" else "0")
+                        line("输出", tokens(c.spentCompletion))
+                    }
+                    line("合计 token", tokens(c.spentTokens))
+                    line("花费", when {
+                        c.spentCost > 0 -> yuan(c.spentCost) + if (c.unpriced) "（部分未计价）" else ""
+                        c.unpriced -> "未计价"
+                        c.requests == 0 -> "以前的没有记录"
+                        else -> yuan(0.0)
+                    })
+                    if (c.lastPromptTokens > 0) line("当前上下文", tokens(c.lastPromptTokens.toLong()))
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("关闭") } },
+    )
 }
 
 /** 按标题和消息内容搜索对话，返回 (对话, 命中的一小段原文)。标题命中的排前面。 */

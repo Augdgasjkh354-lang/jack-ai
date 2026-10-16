@@ -59,6 +59,14 @@ data class Conversation(
     val lastPromptTokens: Int = 0,
     /** 这个对话累计用掉的 token。 */
     val spentTokens: Long = 0,
+    /** 累计明细：请求次数、输入、其中缓存命中、输出、费用（元）。 */
+    val requests: Int = 0,
+    val spentPrompt: Long = 0,
+    val spentHit: Long = 0,
+    val spentCompletion: Long = 0,
+    val spentCost: Double = 0.0,
+    /** 有没有请求的价格不知道（自定义模型没填价）。 */
+    val unpriced: Boolean = false,
     val updatedAt: Long = System.currentTimeMillis(),
 )
 
@@ -134,6 +142,8 @@ data class Settings(
     val appLock: Boolean = false,
     /** 用户自己加的 OpenAI 兼容服务（Kimi、通义、OpenRouter 等）。 */
     val providers: List<Provider> = emptyList(),
+    /** 每月预算（元），0 表示不设。 */
+    val monthlyBudget: Double = 0.0,
 )
 
 /** OpenAI 兼容的模型服务。 */
@@ -148,7 +158,13 @@ data class Provider(
 
 /** vision：能看图；reasoning：支持 reasoning_effort（深度思考）。 */
 @Serializable
-data class ProviderModel(val id: String, val vision: Boolean = false, val reasoning: Boolean = false)
+data class ProviderModel(
+    val id: String,
+    val vision: Boolean = false,
+    val reasoning: Boolean = false,
+    /** 价格（元 / 百万 token），不知道时为空。 */
+    val price: Price? = null,
+)
 
 /** 一次请求发到哪里、用什么模型。deepseek=true 时按 DeepSeek 的参数格式发。 */
 data class Endpoint(
@@ -160,6 +176,8 @@ data class Endpoint(
     val reasoning: Boolean,
     /** 记用量用的模型标识（自定义模型是 c:服务:模型）。 */
     val key: String = model,
+    /** 自定义模型的价格；DeepSeek 的价格按时段另算。 */
+    val price: Price? = null,
 )
 
 /** 自定义模型在设置里存成 "c:服务id:模型id"，内置 DeepSeek 模型直接存模型名。 */
@@ -179,7 +197,7 @@ fun Settings.endpoint(key: String = model): Endpoint? {
     }
     val p = providers.firstOrNull { it.id == custom.first } ?: return null
     val m = p.models.firstOrNull { it.id == custom.second } ?: ProviderModel(custom.second)
-    return Endpoint(p.baseUrl, p.apiKey, m.id, deepseek = false, vision = m.vision, reasoning = m.reasoning, key = key)
+    return Endpoint(p.baseUrl, p.apiKey, m.id, deepseek = false, vision = m.vision, reasoning = m.reasoning, key = key, price = m.price)
 }
 
 /** 压缩、做梦、定时任务这类后台活：有 DeepSeek Key 就用 Flash（便宜），否则用当前选的模型。 */
@@ -229,18 +247,20 @@ data class UsageDay(
     val cacheHit: Long = 0,
     val completion: Long = 0,
     val requests: Int = 0,
+    /** 当场算好的费用（元）。旧版本记的没有，costed=false。 */
+    val cost: Double = 0.0,
+    val costed: Boolean = false,
+    /** 价格不知道的请求次数。 */
+    val unpriced: Int = 0,
+    /** 服务有没有返回缓存命中数。 */
+    val hitKnown: Boolean = false,
 )
 
-/** 参考价（美元 / 百万 token）：缓存命中输入、未命中输入、输出。 */
-fun modelPrice(model: String): Triple<Double, Double, Double> = when {
-    model == MODEL_PRO -> Triple(0.145, 1.74, 3.48)
-    model.startsWith("c:") -> Triple(0.0, 0.0, 0.0) // 其他服务的价格不知道，不估算
-    else -> Triple(0.0028, 0.14, 0.28)
-}
-
-fun UsageDay.cost(): Double {
-    val (hit, miss, out) = modelPrice(model)
-    return (cacheHit * hit + (prompt - cacheHit).coerceAtLeast(0) * miss + completion * out) / 1_000_000.0
+/** 这一天这个模型花了多少钱（元）；完全不知道价格时返回 null。 */
+fun UsageDay.costYuan(): Double? {
+    if (costed) return if (unpriced >= requests && cost == 0.0) null else cost
+    val p = Pricing.legacyPrice(model) ?: return null
+    return Pricing.cost(p, prompt.toInt(), cacheHit.toInt(), completion.toInt())
 }
 
 const val DEFAULT_BASE_URL = "https://api.deepseek.com"

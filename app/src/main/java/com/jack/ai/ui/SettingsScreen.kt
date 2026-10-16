@@ -64,6 +64,8 @@ import com.jack.ai.data.DEFAULT_BASE_URL
 import com.jack.ai.data.DEFAULT_DEV_PROMPT
 import com.jack.ai.data.ThinkLevel
 import com.jack.ai.data.modelChoices
+import com.jack.ai.data.costYuan
+import androidx.compose.runtime.produceState
 import com.jack.ai.data.Preset
 import com.jack.ai.data.Settings
 import com.jack.ai.data.ThemeMode
@@ -224,6 +226,23 @@ fun SettingsScreen(
                 )
             }
 
+            // ---- 统计 ----
+            Section("统计") {
+                val monthSpent by produceState<Double?>(null) {
+                    val month = java.text.SimpleDateFormat("yyyy-MM", Locale.US).format(java.util.Date())
+                    value = vm.loadUsage().filter { it.date.startsWith(month) }.sumOf { it.costYuan() ?: 0.0 }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("本月已花 " + (monthSpent?.let { yuan(it) } ?: "…") +
+                            if (settings.monthlyBudget > 0) " / 预算 ${yuan(settings.monthlyBudget)}" else "")
+                        Text("每天、每个模型的花费，缓存命中率，上下文构成",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    OutlinedButton(onClick = onOpenUsage) { Text("查看") }
+                }
+            }
+
             // ---- 个性化 ----
             Section("个性化") {
                 SettingField("怎么称呼你", settings.userName, "例如：Jack") { v ->
@@ -331,7 +350,6 @@ fun SettingsScreen(
                     )
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = onOpenUsage) { Text("用量统计") }
                     OutlinedButton(onClick = {
                         val date = java.text.SimpleDateFormat("yyyyMMdd", Locale.US).format(java.util.Date())
                         exportLauncher.launch("JackAI备份-$date.zip")

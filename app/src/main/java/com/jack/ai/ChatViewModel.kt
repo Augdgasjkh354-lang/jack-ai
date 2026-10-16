@@ -390,10 +390,21 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         if (before.dreamEnabled != after.dreamEnabled) Dreamer.schedule(getApplication<Application>(), after.dreamEnabled)
     }
 
-    /** 获取某个服务的模型列表，返回 (可用的地址, 模型 id)。 */
-    suspend fun fetchModels(baseUrl: String, apiKey: String): Pair<String, List<String>> = client.listModels(baseUrl, apiKey)
+    /** 获取某个服务的模型列表，返回 (可用的地址, [模型 id 和价格])。 */
+    suspend fun fetchModels(baseUrl: String, apiKey: String): Pair<String, List<Pair<String, com.jack.ai.data.Price?>>> =
+        client.listModels(baseUrl, apiKey)
 
-    fun guessModel(id: String) = ProviderModel(id, vision = guessVision(id), reasoning = guessReasoning(id))
+    /** 查其他服务的余额；这个服务不支持查询时返回 null。 */
+    suspend fun providerBalance(p: Provider): String? = try {
+        client.providerBalance(p.baseUrl, p.apiKey)
+    } catch (e: ApiException) {
+        e.message ?: "查询失败"
+    } catch (e: IOException) {
+        "网络连接失败"
+    }
+
+    fun guessModel(id: String, price: com.jack.ai.data.Price? = null) =
+        ProviderModel(id, vision = guessVision(id), reasoning = guessReasoning(id), price = price)
 
     fun saveProvider(p: Provider) {
         updateSettings { s ->
@@ -547,28 +558,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val app = getApplication<Application>()
         val wsDir = Workspace.dir(app, Workspace.key(conv))
         val wsCache = File(wsDir, ".cache")
-        val toolSet = buildJsonArray {
-            add(SkillTools.LIST_FILES); add(SkillTools.READ_FILE); add(SkillTools.WRITE_FILE); add(SkillTools.EDIT_FILE)
-            if (skills.isNotEmpty()) add(SkillTools.USE_SKILL)
-            if (web) { add(SkillTools.WEB_SEARCH); add(SkillTools.READ_WEBPAGE) }
-            if (SkillIds.WORD in skillIds) add(SkillTools.CREATE_WORD)
-            if (SkillIds.PPT in skillIds) add(SkillTools.CREATE_PPT)
-            if (SkillIds.EXCEL in skillIds) add(SkillTools.CREATE_EXCEL)
-            if (SkillIds.PDF in skillIds) add(SkillTools.CREATE_PDF)
-            if (SkillIds.CHATS in skillIds) add(SkillTools.SEARCH_CHATS)
-            if (SkillIds.CALC in skillIds) { add(SkillTools.RUN_JS); add(SkillTools.CREATE_CHART); add(SkillTools.CREATE_DIAGRAM) }
-            if (SkillIds.LIBRARY in skillIds) { add(SkillTools.SEARCH_LIBRARY); add(SkillTools.LIST_LIBRARY) }
-            if (SkillIds.LEARN in skillIds) add(SkillTools.SAVE_FLASHCARDS)
-            if (SkillIds.PYTHON in skillIds) add(SkillTools.RUN_PYTHON)
-            if (SkillIds.ROUTINE in skillIds) {
-                add(SkillTools.CREATE_REMINDER); add(SkillTools.CREATE_TASK)
-                add(SkillTools.LIST_ROUTINES); add(SkillTools.DELETE_ROUTINE)
-                add(SkillTools.SET_ALARM); add(SkillTools.CANCEL_ALARM)
-            }
-            if (SkillIds.CALENDAR in skillIds) { add(SkillTools.ADD_EVENT); add(SkillTools.LIST_EVENTS); add(SkillTools.DELETE_EVENT) }
-            if (compressed) add(SkillTools.SEARCH_HISTORY)
-            if (settings.memoryEnabled) add(SkillTools.SAVE_MEMORY)
-        }.takeIf { it.isNotEmpty() }
+        val toolSet = toolSetFor(settings, skills, conv, project)
 
         /**
          * flat=true 时不发回以前的工具调用过程，只保留最终回答。
@@ -604,6 +594,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
             if (extraUser != null) list += msg("user", extraUser)
+            stampLastUser(list)
             return list
         }
 
@@ -672,6 +663,13 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 (if (hits.isEmpty()) "资料库里没有找到和“$query”相关的内容。" else hits.joinToString("\n\n") {
                     "【《${it.doc}》第 ${it.part} 段】\n${it.text}"
                 }) to SearchRecord("翻阅资料库：$query")
+            }
+            suspend fun searchProject(query: String) = runTool("翻阅项目资料：$query") {
+                val p = project ?: throw IllegalStateException("不在项目里")
+                val hits = withContext(Dispatchers.Default) { projectIndex(p).search(query) }
+                (if (hits.isEmpty()) "项目资料里没有找到和“$query”相关的内容。" else hits.joinToString("\n\n") {
+                    "【《${it.doc}》第 ${it.part} 段】\n${it.text}"
+                }) to SearchRecord("翻阅项目资料：$query")
             }
             suspend fun listLibrary() = runTool("查看资料库") {
                 val docs = store.loadLibrary()
@@ -857,7 +855,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                         ?: throw IllegalArgumentException("时间格式不对，要写成 yyyy-MM-dd HH:mm")
                     val repeat = args["repeat"].text().takeIf { it in REPEAT_LABELS } ?: "none"
                     val r = if (kind == "reminder") Routine(kind = "reminder", title = args["text"].text(), hour = h, minute = m, repeat = repeat, date = date)
-                    else Routine(kind = "task", title = args["title"].text(), prompt = args["prompt"].text(), hour = h, minute = m, repeat = repeat, date = date)
+                    else Routine(kind = "task", title = args["title"].text(), prompt = args["prompt"].text(), hour = h, minute = m, repeat = repeat, date = date,
+                        offPeak = args["off_peak"].text() == "true")
                     if (r.nextAt() == null) throw IllegalArgumentException("这个时间已经过去了")
                     withContext(Dispatchers.Main) { saveRoutine(r) }
                     val warn = if (!Routines.canNotify(getApplication<Application>())) "（注意：App 还没有通知权限，用户需要打开左侧菜单「提醒和任务」页面授权）" else ""
@@ -957,8 +956,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                                     }
                                     is StreamEvent.Usage -> {
                                         val total = ev.promptTokens + ev.completionTokens
-                                        updateConvQuiet(convId) { it.copy(lastPromptTokens = total, spentTokens = it.spentTokens + total) }
-                                        launch(Dispatchers.IO) { store.addUsage(ep.key, ev.promptTokens, ev.cacheHit, ev.completionTokens) }
+                                        updateConvQuiet(convId) { it.copy(lastPromptTokens = total) }
+                                        recordSpend(convId, ep, ev.promptTokens, ev.cacheHit, ev.completionTokens)
                                     }
                                     is StreamEvent.ToolCall -> {
                                         val acc = calls.getOrPut(ev.index) { ToolAcc() }
@@ -1052,6 +1051,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                             tc.name == "web_search" && web -> search(arg)
                             tc.name == "read_webpage" && web -> readPage(arg)
                             tc.name == "search_history" -> searchOld(arg)
+                            tc.name == "search_project" -> searchProject(arg)
                             tc.name == "search_chats" && SkillIds.CHATS in skillIds -> searchChats(arg)
                             tc.name == "save_memory" -> remember(arg)
                             else -> "这个工具现在不可用"
@@ -1120,7 +1120,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(compressingId = id) }
         viewModelScope.launch {
             try {
-                val summary = client.complete(
+                // 压缩的花费也算进这个对话
+                val counted = DeepSeekClient { e, p, h, c -> recordSpend(id, e, p, h, c) }
+                val summary = counted.complete(
                     ep,
                     Compression.buildRequest(conv.summary, msgs, imagesOk = ep.vision),
                 )
@@ -1213,6 +1215,16 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     // ---------- 资料库 ----------
 
     @Volatile private var libraryIndex: LibraryIndex? = null
+
+    /** 项目大份资料的检索索引，按项目缓存；项目内容变了（updatedAt 变了）就重建。 */
+    private val projectIndexes = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, LibraryIndex>>()
+
+    private fun projectIndex(p: Project): LibraryIndex {
+        projectIndexes[p.id]?.let { (at, idx) -> if (at == p.updatedAt) return idx }
+        val idx = LibraryIndex(p.files.filter { it.text.length > PROJECT_INLINE_CHARS }.map { it.name to it.text })
+        projectIndexes[p.id] = p.updatedAt to idx
+        return idx
+    }
 
     private fun index(): LibraryIndex = libraryIndex ?: LibraryIndex(
         store.loadLibrary().map { it.name to store.libraryText(it.id) },
@@ -1397,6 +1409,64 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    private fun toolSetFor(settings: Settings, skills: List<Skill>, conv: Conversation, project: Project?): JsonArray? {
+        val skillIds = skills.map { it.id }.toSet()
+        val web = SkillIds.WEB in skillIds
+        val compressed = conv.summary.isNotBlank()
+        return buildJsonArray {
+            add(SkillTools.LIST_FILES); add(SkillTools.READ_FILE); add(SkillTools.WRITE_FILE); add(SkillTools.EDIT_FILE)
+            if (skills.isNotEmpty()) add(SkillTools.USE_SKILL)
+            if (web) { add(SkillTools.WEB_SEARCH); add(SkillTools.READ_WEBPAGE) }
+            if (SkillIds.WORD in skillIds) add(SkillTools.CREATE_WORD)
+            if (SkillIds.PPT in skillIds) add(SkillTools.CREATE_PPT)
+            if (SkillIds.EXCEL in skillIds) add(SkillTools.CREATE_EXCEL)
+            if (SkillIds.PDF in skillIds) add(SkillTools.CREATE_PDF)
+            if (SkillIds.CHATS in skillIds) add(SkillTools.SEARCH_CHATS)
+            if (SkillIds.CALC in skillIds) { add(SkillTools.RUN_JS); add(SkillTools.CREATE_CHART); add(SkillTools.CREATE_DIAGRAM) }
+            if (SkillIds.LIBRARY in skillIds) { add(SkillTools.SEARCH_LIBRARY); add(SkillTools.LIST_LIBRARY) }
+            if (SkillIds.LEARN in skillIds) add(SkillTools.SAVE_FLASHCARDS)
+            if (SkillIds.PYTHON in skillIds) add(SkillTools.RUN_PYTHON)
+            if (SkillIds.ROUTINE in skillIds) {
+                add(SkillTools.CREATE_REMINDER); add(SkillTools.CREATE_TASK)
+                add(SkillTools.LIST_ROUTINES); add(SkillTools.DELETE_ROUTINE)
+                add(SkillTools.SET_ALARM); add(SkillTools.CANCEL_ALARM)
+            }
+            if (SkillIds.CALENDAR in skillIds) { add(SkillTools.ADD_EVENT); add(SkillTools.LIST_EVENTS); add(SkillTools.DELETE_EVENT) }
+            if (compressed) add(SkillTools.SEARCH_HISTORY)
+            if (project?.files?.any { it.text.length > PROJECT_INLINE_CHARS } == true) add(SkillTools.SEARCH_PROJECT)
+            if (settings.memoryEnabled) add(SkillTools.SAVE_MEMORY)
+        }.takeIf { it.isNotEmpty() }
+    }
+
+    /** 估算 token：中文约 0.6 个一字，其他字符约 0.3 个。 */
+    private fun estTokens(s: String): Int {
+        var zh = 0
+        for (ch in s) if (ch.code in 0x3000..0x9fff || ch.code in 0xff00..0xffef) zh++
+        return (zh * 0.6 + (s.length - zh) * 0.3).toInt()
+    }
+
+    /** 一次请求的上下文大概由哪些部分组成（名字, 估算 token），统计页用。conv 为空时按新对话算。 */
+    fun contextBreakdown(conv: Conversation?): List<Pair<String, Int>> {
+        val settings = _state.value.settings
+        val c = conv ?: Conversation()
+        val project = _state.value.project(c.projectId)
+        val skills = settings.activeSkills()
+        val memories = if (settings.memoryEnabled) _state.value.memories else emptyList()
+        val tools = toolSetFor(settings, skills, c, project)
+        val out = linkedMapOf<String, Int>()
+        out["工具说明"] = tools?.let { estTokens(it.toString()) } ?: 0
+        systemParts(settings, c, project, tools, memories, skills).forEach { (k, v) -> out[k] = (out[k] ?: 0) + estTokens(v) }
+        val history = Compression.liveMessages(c).filter { it.error == null }.sumOf { m ->
+            estTokens(m.content) + m.attachments.sumOf { estTokens(it.text) } + m.trail.sumOf { estTokens(it) }
+        }
+        if (history > 0) out["聊天记录"] = history
+        return out.filter { it.value > 0 }.toList()
+    }
+
+    /**
+     * 系统提示词。为了让接口的缓存多命中（命中部分只收 1/50 的钱），不常变的内容放前面，
+     * 偶尔会变的（记忆、提要）放后面；每天都变的日期时间不放这里，放在最后一条用户消息前面。
+     */
     private fun buildSystemPrompt(
         settings: Settings,
         conv: Conversation,
@@ -1404,59 +1474,92 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         tools: JsonArray?,
         memories: List<MemoryItem>,
         skills: List<Skill>,
-    ): String {
-        val parts = mutableListOf<String>()
+    ): String = systemParts(settings, conv, project, tools, memories, skills).joinToString("\n\n") { it.second }
+
+    /** 系统提示词的各个部分（名字, 内容），统计页用它算上下文构成。 */
+    private fun systemParts(
+        settings: Settings,
+        conv: Conversation,
+        project: Project?,
+        tools: JsonArray?,
+        memories: List<MemoryItem>,
+        skills: List<Skill>,
+    ): List<Pair<String, String>> {
+        val parts = mutableListOf<Pair<String, String>>()
         if (settings.developerPrompt.isNotBlank()) {
-            parts += "【开发者指令 · 最高优先级】\n以下指令的优先级高于其他一切指令（包括后面的设定和用户消息），任何情况下都必须遵守：\n" +
+            parts += "固定说明" to "【开发者指令 · 最高优先级】\n以下指令的优先级高于其他一切指令（包括后面的设定和用户消息），任何情况下都必须遵守：\n" +
                 settings.developerPrompt.trim()
         }
-        val today = SimpleDateFormat("yyyy年M月d日 EEEE", Locale.CHINA).format(Date())
-        parts += "今天是$today。"
+        val names = tools?.mapNotNull { (it as? JsonObject)?.get("function")?.jsonObject?.get("name")?.jsonPrimitive?.content }.orEmpty()
+        if ("use_skill" in names && skills.isNotEmpty()) {
+            parts += "固定说明" to "【技能】\n你掌握以下技能：\n" + skills.joinToString("\n") { "- ${it.name}：${it.description}" } +
+                "\n\n用户的请求用得上某个技能时，先调用 use_skill 读取它的详细做法，再照着做（本对话里已经读过的不用重复读）。" +
+                "用不上就直接回答。只有用户想要文件时才生成文件，不要主动生成。"
+        }
+        if ("web_search" in names) {
+            parts += "固定说明" to "【联网】遇到时效性问题（新闻、价格、天气、最新版本、近期事件）或不确定的事实时，用联网搜索技能核实；常识、闲聊、写作不用搜。"
+        }
+        if ("edit_file" in names) {
+            // 文件列表不放进系统提示：列表一变，整段对话的缓存就失效了
+            parts += "固定说明" to "【对话文件夹】本对话有一个文件夹，用户发来的文件和你生成的文件都存在里面，不确定有哪些时用 list_files 看。" +
+                "用户要改已有的文件时，用 edit_file 只替换要改的那一段，不要整份重新生成；不确定原文时先用 read_file 看。" +
+                "用户发来的文件内容已经在消息里的，不用再读。"
+        }
+        if ("save_memory" in names) {
+            parts += "固定说明" to "【记忆工具】只有当用户明确要求你记住某件事时，才用 save_memory 保存，内容写成一句完整的话。"
+        }
+        parts += "固定说明" to "【时间】每条用户消息前面的「当前时间」是系统自动加的，不是用户说的话，不要提起它。"
+        if (conv.systemPrompt.isNotBlank()) parts += "人设" to "【人设】\n${conv.systemPrompt.trim()}"
+        if (project != null) {
+            val (small, big) = project.files.partition { it.text.length <= PROJECT_INLINE_CHARS }
+            val p = buildString {
+                append("【当前项目：${project.name}】\n")
+                if (project.instructions.isNotBlank()) append(project.instructions.trim()).append("\n")
+                if (small.isNotEmpty()) {
+                    append("\n项目资料：\n")
+                    small.forEach { f -> append("【文件：${f.name}】\n${f.text}\n【文件结束】\n") }
+                }
+                if (big.isNotEmpty()) {
+                    // 大份资料整份放进来会占掉大半上下文，而且压缩也压不掉，所以只列名字，用到时检索
+                    append("\n下面这些项目资料比较长，没有放在这里，需要时用 search_project 检索相关段落：\n")
+                    big.forEach { f -> append("- 《${f.name}》${f.text.length} 字\n") }
+                }
+            }.trim()
+            parts += "项目资料" to p
+        }
         val profile = buildString {
             if (settings.userName.isNotBlank()) append("用户希望被称呼为：${settings.userName.trim()}\n")
             if (settings.aboutMe.isNotBlank()) append("关于用户：${settings.aboutMe.trim()}\n")
             if (settings.replyStyle.isNotBlank()) append("用户希望你这样回答：${settings.replyStyle.trim()}\n")
         }.trim()
-        if (profile.isNotEmpty()) parts += "【个性化设定】\n$profile"
+        if (profile.isNotEmpty()) parts += "个人设定" to "【个性化设定】\n$profile"
         if (memories.isNotEmpty()) {
-            parts += "【关于用户的长期记忆】\n以下是你之前记住的关于用户的信息，自然地运用，不要刻意提起“我记得”：\n" +
+            parts += "长期记忆" to "【关于用户的长期记忆】\n以下是你之前记住的关于用户的信息，自然地运用，不要刻意提起“我记得”：\n" +
                 memories.joinToString("\n") { "- ${it.text}" }
         }
-        if (project != null) {
-            val p = buildString {
-                append("【当前项目：${project.name}】\n")
-                if (project.instructions.isNotBlank()) append(project.instructions.trim()).append("\n")
-                if (project.files.isNotEmpty()) {
-                    append("\n项目资料：\n")
-                    project.files.forEach { f -> append("【文件：${f.name}】\n${f.text}\n【文件结束】\n") }
-                }
-            }.trim()
-            parts += p
-        }
-        if (conv.systemPrompt.isNotBlank()) parts += "【人设】\n${conv.systemPrompt.trim()}"
         if (conv.summary.isNotBlank()) {
-            parts += "【较早对话的提要】\n这是你和用户在本对话中较早部分的提要，当作你自己的记忆，直接接着聊，不要提起“提要”或“压缩”。" +
+            parts += "前情提要" to "【较早对话的提要】\n这是你和用户在本对话中较早部分的提要，当作你自己的记忆，直接接着聊，不要提起“提要”或“压缩”。" +
                 "如果需要提要里没有的原话或细节，用 search_history 工具查原始记录。\n<compacted-summary>\n${conv.summary}\n</compacted-summary>"
         }
-        val names = tools?.mapNotNull { (it as? JsonObject)?.get("function")?.jsonObject?.get("name")?.jsonPrimitive?.content }.orEmpty()
-        if ("use_skill" in names && skills.isNotEmpty()) {
-            parts += "【技能】\n你掌握以下技能：\n" + skills.joinToString("\n") { "- ${it.name}：${it.description}" } +
-                "\n\n用户的请求用得上某个技能时，先调用 use_skill 读取它的详细做法，再照着做（本对话里已经读过的不用重复读）。" +
-                "用不上就直接回答。只有用户想要文件时才生成文件，不要主动生成。"
+        return parts
+    }
+
+    /** 当前时间，加在最后一条用户消息前面（放这里不影响前面整段的缓存）。 */
+    private fun timeNote(): String = "【当前时间：" + SimpleDateFormat("yyyy年M月d日 EEEE HH:mm", Locale.CHINA).format(Date()) + "】\n"
+
+    /** 给最后一条用户消息前面加上当前时间。 */
+    private fun stampLastUser(list: MutableList<JsonObject>) {
+        val i = list.indexOfLast { it["role"].text() == "user" }
+        if (i < 0) return
+        val m = list[i]
+        val note = timeNote()
+        list[i] = when (val c = m["content"]) {
+            is JsonArray -> JsonObject(m + ("content" to buildJsonArray {
+                add(buildJsonObject { put("type", "text"); put("text", note.trim()) })
+                c.forEach { add(it) }
+            }))
+            else -> JsonObject(m + ("content" to JsonPrimitive(note + c.text())))
         }
-        if ("web_search" in names) {
-            parts += "【联网】遇到时效性问题（新闻、价格、天气、最新版本、近期事件）或不确定的事实时，用联网搜索技能核实；常识、闲聊、写作不用搜。"
-        }
-        if ("edit_file" in names) {
-            // 文件列表不放进系统提示：列表一变，整段对话的缓存就失效了
-            parts += "【对话文件夹】本对话有一个文件夹，用户发来的文件和你生成的文件都存在里面，不确定有哪些时用 list_files 看。" +
-                "用户要改已有的文件时，用 edit_file 只替换要改的那一段，不要整份重新生成；不确定原文时先用 read_file 看。" +
-                "用户发来的文件内容已经在消息里的，不用再读。"
-        }
-        if ("save_memory" in names) {
-            parts += "【记忆工具】只有当用户明确要求你记住某件事时，才用 save_memory 保存，内容写成一句完整的话。"
-        }
-        return parts.joinToString("\n\n")
     }
 
     private class ToolAcc(var id: String = "", var name: String = "", val args: StringBuilder = StringBuilder())
@@ -1651,6 +1754,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
         val TIME = Regex("""(\d{1,2})[:：](\d{2})""")
 
+        /** 项目资料超过这么多字就不整份放进系统提示词，改成按需检索。 */
+        const val PROJECT_INLINE_CHARS = 20_000
+
         fun mimeOf(name: String): String = when (name.substringAfterLast('.', "").lowercase()) {
             "docx" -> MIME_DOCX
             "pptx" -> MIME_PPTX
@@ -1675,6 +1781,25 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // ---------- 工具函数 ----------
+
+    /** 记一笔用量：写进每日统计（当场算钱），再累加到对话上。 */
+    private fun recordSpend(convId: String, ep: com.jack.ai.data.Endpoint, prompt: Int, hit: Int?, completion: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val cost = store.addUsage(ep, prompt, hit, completion)
+            updateConvQuiet(convId) {
+                it.copy(
+                    spentTokens = it.spentTokens + prompt + completion,
+                    requests = it.requests + 1,
+                    spentPrompt = it.spentPrompt + prompt,
+                    spentHit = it.spentHit + (hit ?: 0),
+                    spentCompletion = it.spentCompletion + completion,
+                    spentCost = it.spentCost + (cost ?: 0.0),
+                    unpriced = it.unpriced || cost == null,
+                )
+            }
+            persist()
+        }
+    }
 
     private fun updateConv(id: String, transform: (Conversation) -> Conversation) {
         _state.update { s ->
