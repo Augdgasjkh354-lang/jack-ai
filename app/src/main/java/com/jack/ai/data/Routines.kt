@@ -23,6 +23,7 @@ import androidx.work.workDataOf
 import com.jack.ai.MainActivity
 import com.jack.ai.R
 import com.jack.ai.api.DeepSeekClient
+import com.jack.ai.chat.Agent
 import com.jack.ai.api.StreamEvent
 import com.jack.ai.api.TavilyClient
 import com.jack.ai.api.formatResultsForModel
@@ -224,40 +225,16 @@ object Routines {
             buildJsonObject { put("role", "user"); put("content", r.prompt.ifBlank { r.title }) },
         )
         var sources = 0
-        repeat(7) { round ->
-            val content = StringBuilder()
-            val calls = sortedMapOf<Int, Triple<StringBuilder, StringBuilder, StringBuilder>>()
-            client.stream(ep, messages, ThinkLevel.OFF, 1.0f, if (round < 6) tools else null)
-                .collect { ev ->
-                    when (ev) {
-                        is StreamEvent.Text -> content.append(ev.content)
-                        is StreamEvent.ToolCall -> {
-                            val acc = calls.getOrPut(ev.index) { Triple(StringBuilder(), StringBuilder(), StringBuilder()) }
-                            if (ev.id.isNotEmpty()) acc.first.append(ev.id)
-                            if (ev.name.isNotEmpty()) acc.second.append(ev.name)
-                            acc.third.append(ev.arguments)
-                        }
-                        is StreamEvent.Usage -> { store.addUsage(ep, ev.promptTokens, ev.cacheHit, ev.completionTokens) }
-                    }
-                }
-            if (calls.isEmpty()) return content.toString().trim().ifBlank { "（这次没有生成内容）" }
-            messages += buildJsonObject {
-                put("role", "assistant")
-                if (content.isEmpty()) put("content", JsonNull) else put("content", content.toString())
-                put("tool_calls", buildJsonArray {
-                    calls.values.forEach { (id, name, args) ->
-                        add(buildJsonObject {
-                            put("id", id.toString()); put("type", "function")
-                            put("function", buildJsonObject { put("name", name.toString()); put("arguments", args.toString()) })
-                        })
-                    }
-                })
-            }
-            for ((id, name, args) in calls.values) {
-                val obj = runCatching { Json.parseToJsonElement(args.toString()).jsonObject }.getOrNull()
+        val agent = Agent({ msgs, t -> client.stream(ep, msgs, ThinkLevel.OFF, 1.0f, t) })
+        agent.run(
+            messages = messages,
+            tools = tools,
+            maxRounds = { 6 },
+            execute = { name, args ->
+                val obj = runCatching { Json.parseToJsonElement(args).jsonObject }.getOrNull()
                 fun arg(k: String) = (obj?.get(k) as? JsonPrimitive)?.content.orEmpty()
-                val result = try {
-                    when (name.toString()) {
+                try {
+                    when (name) {
                         "web_search" -> tavily.search(s.tavilyKey, arg("query")).let {
                             formatResultsForModel(it, sources + 1).also { _ -> sources += it.size }
                         }
@@ -267,10 +244,10 @@ object Routines {
                 } catch (e: Exception) {
                     "工具调用失败：${e.message}"
                 }
-                messages += buildJsonObject { put("role", "tool"); put("tool_call_id", id.toString()); put("content", result) }
-            }
-        }
-        return "（任务没有完成）"
+            },
+            onUsage = { ev -> store.addUsage(ep, ev.promptTokens, ev.cacheHit, ev.completionTokens) },
+        )
+        return agent.lastRound.trim().ifBlank { "（这次没有生成内容）" }
     }
 }
 

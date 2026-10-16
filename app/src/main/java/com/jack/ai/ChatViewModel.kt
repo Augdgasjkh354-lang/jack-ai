@@ -8,7 +8,12 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.jack.ai.api.ApiException
+import com.jack.ai.chat.Agent
 import com.jack.ai.chat.PromptBuilder
+import com.jack.ai.tools.ToolHost
+import com.jack.ai.tools.ToolSession
+import com.jack.ai.tools.ToolUi
+import com.jack.ai.tools.search
 import com.jack.ai.api.DeepSeekClient
 import com.jack.ai.api.StreamEvent
 import com.jack.ai.api.TavilyClient
@@ -549,16 +554,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         val skills = settings.activeSkills()
-        val skillIds = skills.map { it.id }.toSet()
-        val web = SkillIds.WEB in skillIds
         // 思考内容只有 DeepSeek 要求原样发回；其他服务不发，免得不认识这个字段报错
         val thinkingOn = ep.deepseek && thinking.effort != null
         val images = ep.vision
-        val compressed = conv.summary.isNotBlank()
         val memories = if (settings.memoryEnabled) store.loadMemories() else emptyList()
-        val app = getApplication<Application>()
-        val wsDir = Workspace.dir(app, Workspace.key(conv))
-        val wsCache = File(wsDir, ".cache")
         val toolSet = PromptBuilder.toolSet(settings, skills, conv, project)
 
         val promptInput = PromptBuilder.Input(settings, conv, project, memories, skills, vision = images, sendReasoning = thinkingOn, extraUser = extraUser)
@@ -567,474 +566,66 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
         _state.update { it.copy(streaming = true) }
         job = viewModelScope.launch {
-            val reasoning = StringBuilder()
-            val content = StringBuilder()
-            val trail = mutableListOf<String>()
+            val session = ToolSession(toolHost, settings, conv, project, skills, object : ToolUi {
+                override fun started(label: String) =
+                    patchMessage(convId, reply.id) { it.copy(searches = it.searches + SearchRecord(label, pending = true)) }
+
+                override fun finished(label: String, record: SearchRecord) = patchMessage(convId, reply.id) { m ->
+                    m.copy(searches = m.searches.map { if (it.query == label && it.pending) record else it })
+                }
+
+                /** 把生成或修改过的文件挂到这条回答上，显示成卡片。 */
+                override fun attach(file: File) {
+                    val gen = GeneratedFile(file.name, file.absolutePath, ToolSession.mimeOf(file.name), file.length())
+                    patchMessage(convId, reply.id) { m -> m.copy(files = m.files.filterNot { it.path == gen.path } + gen) }
+                }
+            })
+            val agent = Agent({ msgs, t -> client.stream(ep, msgs, thinking, settings.temperature, t) }, sendReasoning = thinkingOn)
+            val reasoning = agent.reasoning
+            val content = agent.content
             var lastFlush = 0L
             fun flush() {
                 val r = reasoning.toString()
                 val c = content.toString()
-                val t = trail.toList()
+                val t = agent.trail.toList()
                 patchMessage(convId, reply.id) { it.copy(reasoning = r, content = c, trail = t) }
             }
-            var sourceCount = 0
-            var maxRounds = 5
-            suspend fun runTool(label: String, action: suspend () -> Pair<String, SearchRecord>): String {
-                patchMessage(convId, reply.id) { it.copy(searches = it.searches + SearchRecord(label, pending = true)) }
-                fun finish(rec: SearchRecord) = patchMessage(convId, reply.id) { m ->
-                    m.copy(searches = m.searches.map { if (it.query == label && it.pending) rec else it })
-                }
-                return try {
-                    val (text, rec) = action()
-                    finish(rec)
-                    text
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    val err = when (e) {
-                        is ApiException -> e.message ?: "接口出错"
-                        is IOException -> "网络连接失败"
-                        else -> e.message ?: "出错了"
-                    }
-                    finish(SearchRecord(label, error = err))
-                    "工具调用失败：$err"
-                }
-            }
-            suspend fun search(query: String) = runTool(query) {
-                val results = tavily.search(settings.tavilyKey, query)
-                val text = formatResultsForModel(results, sourceCount + 1)
-                sourceCount += results.size
-                text to SearchRecord(query, results.toSources())
-            }
-            suspend fun readPage(url: String) = runTool("读取 $url") {
-                val text = tavily.extract(settings.tavilyKey, url)
-                text to SearchRecord("读取 $url", listOf(com.jack.ai.data.SearchSource(url, url)))
-            }
-            suspend fun searchOld(query: String) = runTool("翻阅旧记录：$query") {
-                Compression.searchHistory(Compression.compressedMessages(conv), query) to
-                    SearchRecord("翻阅旧记录：$query")
-            }
-            suspend fun remember(text: String) = runTool("记住：$text") {
-                val list = store.loadMemories() + MemoryItem(text = text)
-                store.saveMemories(list)
-                _state.update { it.copy(memories = list) }
-                "已记住。" to SearchRecord("记住：$text")
-            }
-            suspend fun searchChats(query: String) = runTool("翻阅聊天记录：$query") {
-                val all = _state.value.conversations
-                withContext(Dispatchers.Default) { Compression.searchAllChats(all, query, convId) } to
-                    SearchRecord("翻阅聊天记录：$query")
-            }
-            suspend fun searchLibrary(query: String) = runTool("翻阅资料库：$query") {
-                val hits = withContext(Dispatchers.IO) { index().search(query) }
-                (if (hits.isEmpty()) "资料库里没有找到和“$query”相关的内容。" else hits.joinToString("\n\n") {
-                    "【《${it.doc}》第 ${it.part} 段】\n${it.text}"
-                }) to SearchRecord("翻阅资料库：$query")
-            }
-            suspend fun searchProject(query: String) = runTool("翻阅项目资料：$query") {
-                val p = project ?: throw IllegalStateException("不在项目里")
-                val hits = withContext(Dispatchers.Default) { projectIndex(p).search(query) }
-                (if (hits.isEmpty()) "项目资料里没有找到和“$query”相关的内容。" else hits.joinToString("\n\n") {
-                    "【《${it.doc}》第 ${it.part} 段】\n${it.text}"
-                }) to SearchRecord("翻阅项目资料：$query")
-            }
-            suspend fun listLibrary() = runTool("查看资料库") {
-                val docs = store.loadLibrary()
-                (if (docs.isEmpty()) "资料库是空的。用户可以在左侧菜单「资料库」里导入文档。"
-                else docs.joinToString("\n") { "《${it.name}》${it.chars} 字" }) to SearchRecord("查看资料库")
-            }
-            suspend fun saveCards(args: JsonObject) = runTool("生成复习卡片") {
-                val deck = args["deck"].text().ifBlank { "未分类" }
-                val cards = (args["cards"] as? JsonArray).orEmpty().mapNotNull { el ->
-                    val o = el as? JsonObject ?: return@mapNotNull null
-                    val f = o["front"].text().trim()
-                    val b = o["back"].text().trim()
-                    if (f.isEmpty() || b.isEmpty()) null else Flashcard(deck = deck, front = f, back = b)
-                }
-                if (cards.isEmpty()) throw IllegalArgumentException("没有卡片内容")
-                editCards { it + cards }
-                "已保存 ${cards.size} 张卡片到卡组「$deck」。" to SearchRecord("生成复习卡片：$deck（${cards.size} 张）")
-            }
-            suspend fun runJs(code: String) = runTool("运行代码计算") {
-                withContext(Dispatchers.Default) { JsRunner.run(code) } to SearchRecord("运行代码计算")
-            }
-            /** 把生成或修改过的文件挂到这条回答上，显示成卡片。 */
-            fun attach(file: File) {
-                val gen = GeneratedFile(file.name, file.absolutePath, mimeOf(file.name), file.length())
-                patchMessage(convId, reply.id) { m -> m.copy(files = m.files.filterNot { it.path == gen.path } + gen) }
-            }
-            suspend fun create(tool: String, args: JsonObject, base: String, ext: String, label: String): String =
-                runTool("生成 $label：$base.$ext") {
-                    val file = withContext(Dispatchers.IO) { Workspace.uniqueFile(wsDir, "$base.$ext") }
-                    try {
-                        renderFile(tool, args, file, wsCache)
-                    } catch (e: Exception) {
-                        file.delete(); throw e
-                    }
-                    withContext(Dispatchers.IO) { Workspace.saveSource(file, tool, args) }
-                    attach(file)
-                    val shown = if (ext == "png") "图已生成并显示在聊天里" else "已生成文件「${file.name}」，用户可以在聊天里打开或分享"
-                    "$shown。文件保存在对话文件夹里，以后要修改就用 edit_file 改它的底稿，不要重新生成。" to
-                        SearchRecord("生成 $label：${file.name}")
-                }
-            suspend fun makeChart(args: JsonObject) =
-                create("create_chart", args, safeFileName(args["title"].text()).ifBlank { "图表" }, "png", "图表")
-            suspend fun makeDiagram(args: JsonObject): String {
-                val kind = if (args["type"].text() == "flowchart") "流程图" else "思维导图"
-                return create("create_diagram", args, safeFileName(args["title"].text()).ifBlank { kind }, "png", kind)
-            }
-            suspend fun makeFile(kind: String, args: JsonObject): String {
-                val base = safeFileName(args["filename"].text()).ifBlank { "未命名" }
-                val (ext, label) = when (kind) {
-                    "create_word" -> "docx" to "Word"
-                    "create_ppt" -> "pptx" to "PPT"
-                    "create_pdf" -> "pdf" to "PDF"
-                    else -> "xlsx" to "Excel"
-                }
-                return create(kind, args, base, ext, label)
-            }
-            fun wsFile(name: String): File = Workspace.find(wsDir, name) ?: throw TextEdit.EditException(
-                "对话文件夹里没有「$name」。" + Workspace.files(wsDir).let { l ->
-                    if (l.isEmpty()) "文件夹是空的。" else "现有文件：" + l.joinToString("、") { it.name }
-                })
-            suspend fun listFiles() = runTool("查看文件夹") {
-                val list = withContext(Dispatchers.IO) { Workspace.files(wsDir).map { "${it.name}｜${sizeText(it.length())}｜${Workspace.editKind(it)}" } }
-                (if (list.isEmpty()) "对话文件夹是空的。" else list.joinToString("\n")) to SearchRecord("查看文件夹")
-            }
-            suspend fun readFile(args: JsonObject): String {
-                val name = args["name"].text()
-                return runTool("查看 $name") {
-                    val file = wsFile(name)
-                    val text = withContext(Dispatchers.IO) { Workspace.readText(file) }
-                    val lines = text.lines()
-                    val start = (args["start_line"].text().toIntOrNull() ?: 1).coerceIn(1, lines.size.coerceAtLeast(1))
-                    val max = (args["max_lines"].text().toIntOrNull() ?: 400).coerceIn(1, 2000)
-                    val part = lines.drop(start - 1).take(max)
-                    var body = part.joinToString("\n")
-                    if (body.length > 40_000) body = body.take(40_000) + "\n…（太长，后面截断了，用 start_line 接着读）"
-                    val end = start + part.size - 1
-                    val head = "「${file.name}」共 ${lines.size} 行" +
-                        (if (Workspace.hasSource(file)) "，下面是你生成它时的底稿，edit_file 改的就是这份底稿" else "") +
-                        (if (start > 1 || end < lines.size) "，这里是第 $start–$end 行" else "") + "：\n"
-                    head + body to SearchRecord("查看 ${file.name}")
-                }
-            }
-            suspend fun writeFile(args: JsonObject): String {
-                val name = Workspace.safeName(args["name"].text())
-                return runTool("写入 $name") {
-                    val ext = name.substringAfterLast('.', "").lowercase()
-                    if (ext in setOf("docx", "pptx", "xlsx", "pdf", "png", "jpg", "jpeg")) {
-                        throw TextEdit.EditException("write_file 只能写文字文件。Word/PPT/Excel/PDF 用对应的生成工具，已有的用 edit_file 改")
-                    }
-                    val file = File(wsDir, name)
-                    withContext(Dispatchers.IO) {
-                        wsDir.mkdirs()
-                        file.writeText(args["content"].text())
-                    }
-                    attach(file)
-                    "已写入「${file.name}」（${file.length()} 字节）。" to SearchRecord("写入 ${file.name}")
-                }
-            }
-            suspend fun editFile(args: JsonObject): String {
-                val name = args["name"].text()
-                return runTool("修改 $name") {
-                    val file = wsFile(name)
-                    val old = args["old_text"].text()
-                    val new = args["new_text"].text()
-                    val all = args["replace_all"].text() == "true"
-                    val src = withContext(Dispatchers.IO) { Workspace.source(file) }
-                    val n = if (src != null) {
-                        val (tool, a) = src
-                        val (edited, count) = TextEdit.replace(Workspace.sourceText(tool, a), old, new, all)
-                        val newArgs = Workspace.argsFromText(tool, a, edited)
-                        renderFile(tool, newArgs, file, wsCache)
-                        withContext(Dispatchers.IO) { Workspace.saveSource(file, tool, newArgs) }
-                        count
-                    } else withContext(Dispatchers.IO) {
-                        when {
-                            Workspace.ext(file) == "docx" -> {
-                                val (bytes, count) = TextEdit.replaceInDocx(file.readBytes(), old, new, all)
-                                file.writeBytes(bytes); count
-                            }
-                            Workspace.isText(file) -> {
-                                val (text, count) = TextEdit.replace(file.readText(), old, new, all)
-                                file.writeText(text); count
-                            }
-                            else -> throw TextEdit.EditException("「${file.name}」这种文件没法直接修改")
-                        }
-                    }
-                    attach(file)
-                    "已修改「${file.name}」，替换了 $n 处，其他内容没动。" to SearchRecord("修改 ${file.name}")
-                }
-            }
-            suspend fun runPython(code: String) = runTool("运行 Python") {
-                val r = PyRunner.run(app, code, wsDir)
-                r.changed.forEach { attach(it) }
-                val files = if (r.changed.isEmpty()) "" else "\n\n新建或改动的文件（已显示在聊天里）：" + r.changed.joinToString("、") { it.name }
-                (r.output.ifBlank { "（运行完成，没有输出）" } + files) to SearchRecord("运行 Python")
-            }
-            suspend fun setAlarm(args: JsonObject): String {
-                val time = args["time"].text()
-                return runTool("设闹钟 $time") {
-                    val m = TIME.find(time) ?: throw IllegalArgumentException("时间要写成 HH:mm")
-                    val h = m.groupValues[1].toInt()
-                    val min = m.groupValues[2].toInt()
-                    if (h !in 0..23 || min !in 0..59) throw IllegalArgumentException("时间不对")
-                    val days = (args["days"] as? JsonArray).orEmpty().mapNotNull { it.text().toIntOrNull() }.filter { it in 1..7 }.distinct()
-                    val label = args["label"].text()
-                    val intent = Intent(AlarmClock.ACTION_SET_ALARM)
-                        .putExtra(AlarmClock.EXTRA_HOUR, h)
-                        .putExtra(AlarmClock.EXTRA_MINUTES, min)
-                        .putExtra(AlarmClock.EXTRA_SKIP_UI, true)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    if (label.isNotBlank()) intent.putExtra(AlarmClock.EXTRA_MESSAGE, label)
-                    // 1=周一 … 7=周日 → Calendar 的 2…7、1
-                    if (days.isNotEmpty()) intent.putExtra(AlarmClock.EXTRA_DAYS, ArrayList(days.map { it % 7 + 1 }))
-                    startClock(intent)
-                    val hm = String.format(Locale.US, "%02d:%02d", h, min)
-                    val repeat = if (days.isEmpty()) "一次性" else "每周" + days.sorted().joinToString("、") { "一二三四五六日"[it - 1].toString() } + "重复"
-                    "已在手机时钟里设好 $hm 的闹钟（$repeat${if (label.isNotBlank()) "，标签「$label」" else ""}）。" to
-                        SearchRecord("设闹钟 $hm")
-                }
-            }
-            suspend fun cancelAlarm(args: JsonObject): String {
-                val time = args["time"].text()
-                val label = args["label"].text()
-                return runTool("关闹钟 ${time.ifBlank { label }}") {
-                    val intent = Intent(AlarmClock.ACTION_DISMISS_ALARM).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    val m = TIME.find(time)
-                    when {
-                        m != null -> intent.putExtra(AlarmClock.EXTRA_ALARM_SEARCH_MODE, AlarmClock.ALARM_SEARCH_MODE_TIME)
-                            .putExtra(AlarmClock.EXTRA_HOUR, m.groupValues[1].toInt())
-                            .putExtra(AlarmClock.EXTRA_MINUTES, m.groupValues[2].toInt())
-                        label.isNotBlank() -> intent.putExtra(AlarmClock.EXTRA_ALARM_SEARCH_MODE, AlarmClock.ALARM_SEARCH_MODE_LABEL)
-                            .putExtra(AlarmClock.EXTRA_MESSAGE, label)
-                        else -> throw IllegalArgumentException("要给出闹钟的时间或标签")
-                    }
-                    startClock(intent)
-                    "已让时钟 App 关掉这个闹钟。有的手机会弹出确认页面，需要用户点一下。" to SearchRecord("关闹钟 ${time.ifBlank { label }}")
-                }
-            }
-            suspend fun makeRoutine(kind: String, args: JsonObject): String {
-                val label = if (kind == "reminder") "设置提醒" else "设置定时任务"
-                return runTool("$label：" + (if (kind == "reminder") args["text"] else args["title"]).text()) {
-                    val (date, h, m) = parseDateTime(args["datetime"].text())
-                        ?: throw IllegalArgumentException("时间格式不对，要写成 yyyy-MM-dd HH:mm")
-                    val repeat = args["repeat"].text().takeIf { it in REPEAT_LABELS } ?: "none"
-                    val r = if (kind == "reminder") Routine(kind = "reminder", title = args["text"].text(), hour = h, minute = m, repeat = repeat, date = date)
-                    else Routine(kind = "task", title = args["title"].text(), prompt = args["prompt"].text(), hour = h, minute = m, repeat = repeat, date = date,
-                        offPeak = args["off_peak"].text() == "true")
-                    if (r.nextAt() == null) throw IllegalArgumentException("这个时间已经过去了")
-                    withContext(Dispatchers.Main) { saveRoutine(r) }
-                    val warn = if (!Routines.canNotify(getApplication<Application>())) "（注意：App 还没有通知权限，用户需要打开左侧菜单「提醒和任务」页面授权）" else ""
-                    "已设置：${r.describe()}，${if (kind == "reminder") "提醒" else "任务"}「${r.title}」。编号 ${r.id.take(8)}。$warn" to
-                        SearchRecord("$label：${r.title}")
-                }
-            }
-            suspend fun listRoutines() = runTool("查看提醒和任务") {
-                val list = store.loadRoutines()
-                (if (list.isEmpty()) "用户还没有任何提醒和定时任务。" else list.joinToString("\n") { r ->
-                    "编号 ${r.id.take(8)}｜${if (r.kind == "reminder") "提醒" else "任务"}｜${r.describe()}｜${r.title}" +
-                        (if (r.enabled) "" else "｜已结束或已关闭")
-                }) to SearchRecord("查看提醒和任务")
-            }
-            suspend fun removeRoutine(id: String) = runTool("删除提醒或任务") {
-                val r = store.loadRoutines().firstOrNull { it.id.startsWith(id.trim()) }
-                if (r == null) "没有找到这个编号。" to SearchRecord("删除提醒或任务", error = "没找到")
-                else {
-                    withContext(Dispatchers.Main) { deleteRoutine(r.id) }
-                    "已删除「${r.title}」。" to SearchRecord("删除：${r.title}")
-                }
-            }
-            suspend fun addEvent(args: JsonObject): String {
-                val title = args["title"].text().ifBlank { "日程" }
-                return runTool("添加日程：$title") {
-                    val (begin, dateOnly) = CalendarTool.parse(args["start"].text())
-                        ?: throw IllegalArgumentException("start 要写成 yyyy-MM-dd HH:mm 或 yyyy-MM-dd")
-                    val allDay = args["all_day"].text() == "true" || dateOnly
-                    val end = CalendarTool.parse(args["end"].text())?.first?.takeIf { it > begin }
-                        ?: (begin + if (allDay) 86_400_000L else 3_600_000L)
-                    val location = args["location"].text()
-                    val notes = args["notes"].text()
-                    val remind = args["remind_minutes"].text().toIntOrNull() ?: 15
-                    val shown = SimpleDateFormat(if (allDay) "M月d日 EEE" else "M月d日 EEE HH:mm", Locale.CHINA).format(Date(begin))
-                    val id = if (CalendarTool.canWrite(app)) withContext(Dispatchers.IO) {
-                        CalendarTool.insert(app, title, begin, end, allDay, location, notes, remind.takeIf { it >= 0 })
-                    } else null
-                    if (id != null) {
-                        refreshWidget()
-                        "已写进手机日历：$shown「$title」${if (remind >= 0) "，提前 $remind 分钟提醒" else ""}。编号 $id。" to
-                            SearchRecord("添加日程：$title")
-                    } else {
-                        startClock(CalendarTool.insertIntent(title, begin, end, allDay, location, notes), "手机上没找到日历 App")
-                        "没有日历写入权限（或没有可写的日历），已打开日历 App 的新建页面并填好内容（$shown「$title」），需要用户点一下保存。" +
-                            "想让以后自动写入，可以在左侧菜单「提醒和任务」里点「允许读写日历」。" to SearchRecord("打开日历：$title")
-                    }
-                }
-            }
-            suspend fun listEvents(args: JsonObject) = runTool("查看日程") {
-                if (!CalendarTool.canRead(app)) {
-                    "没有日历权限。请用户打开左侧菜单「提醒和任务」，点「允许读写日历」。" to SearchRecord("查看日程", error = "没有权限")
-                } else {
-                    val from = CalendarTool.dayStart(args["start_date"].text().ifBlank { null })
-                    val days = (args["days"].text().toIntOrNull() ?: 1).coerceIn(1, 62)
-                    val list = withContext(Dispatchers.IO) { CalendarTool.list(app, from, from + days * 86_400_000L) }
-                    val range = SimpleDateFormat("M月d日", Locale.CHINA).format(Date(from)) + if (days > 1) " 起 $days 天" else ""
-                    (if (list.isEmpty()) "$range 日历里没有日程。" else "$range 的日程：\n" + list.joinToString("\n") { CalendarTool.describe(it) }) to
-                        SearchRecord("查看日程：$range")
-                }
-            }
-            suspend fun deleteEvent(id: String) = runTool("删除日程") {
-                val n = id.trim().removePrefix("编号").trim().toLongOrNull() ?: throw IllegalArgumentException("编号不对")
-                if (!CalendarTool.canWrite(app)) "没有日历权限，删不了。请用户在「提醒和任务」页面授权。" to SearchRecord("删除日程", error = "没有权限")
-                else if (withContext(Dispatchers.IO) { CalendarTool.delete(app, n) }) {
-                    refreshWidget()
-                    "已删除日程 $n。" to SearchRecord("删除日程 $n")
-                }
-                else "没找到编号 $n 的日程。" to SearchRecord("删除日程", error = "没找到")
-            }
-            suspend fun useSkill(name: String) = runTool("使用技能：$name") {
-                val skill = findSkill(skills, name)
-                if (skill?.id == SkillIds.RESEARCH) maxRounds = 25
-                val text = skill?.let { "【${it.name}】\n${it.instructions}" }
-                    ?: ("没有这个技能。可用的技能：" + skills.joinToString("、") { it.name })
-                text to SearchRecord("使用技能：${skill?.name ?: name}")
-            }
-
             try {
-                var tools: JsonArray? = toolSet
-                val messages = buildHistory(tools != null)
-                var round = 0
-                var flatTried = false
-                while (true) {
-                    val calls = sortedMapOf<Int, ToolAcc>()
-                    val roundReasoning = StringBuilder()
-                    val roundContent = StringBuilder()
-                    if (content.isNotEmpty() && !content.endsWith("\n")) content.append("\n\n")
-                    try {
-                        client.stream(ep, messages, thinking, settings.temperature, tools)
-                            .collect { ev ->
-                                when (ev) {
-                                    is StreamEvent.Text -> {
-                                        reasoning.append(ev.reasoning); roundReasoning.append(ev.reasoning)
-                                        content.append(ev.content); roundContent.append(ev.content)
-                                        val now = System.currentTimeMillis()
-                                        if (now - lastFlush > 60) { lastFlush = now; flush() }
-                                    }
-                                    is StreamEvent.Usage -> {
-                                        val total = ev.promptTokens + ev.completionTokens
-                                        updateConvQuiet(convId) { it.copy(lastPromptTokens = total) }
-                                        recordSpend(convId, ep, ev.promptTokens, ev.cacheHit, ev.completionTokens)
-                                    }
-                                    is StreamEvent.ToolCall -> {
-                                        val acc = calls.getOrPut(ev.index) { ToolAcc() }
-                                        if (ev.id.isNotEmpty()) acc.id = ev.id
-                                        if (ev.name.isNotEmpty()) acc.name = ev.name
-                                        acc.args.append(ev.arguments)
-                                    }
+                agent.run(
+                    messages = buildHistory(toolSet != null),
+                    tools = toolSet,
+                    maxRounds = { session.maxRounds },
+                    execute = session::execute,
+                    onText = {
+                        val now = System.currentTimeMillis()
+                        if (now - lastFlush > 60) { lastFlush = now; flush() }
+                    },
+                    onUsage = { ev ->
+                        val total = ev.promptTokens + ev.completionTokens
+                        updateConvQuiet(convId) { it.copy(lastPromptTokens = total) }
+                        recordSpend(convId, ep, ev.promptTokens, ev.cacheHit, ev.completionTokens)
+                    },
+                    onRound = { flush() },
+                    // 带工具的请求被拒（比如旧记录格式接口不认）：先去掉旧的工具调用过程再试，工具照样能用；
+                    // 还不行就不用工具，改成“先搜再答”
+                    recovery = Agent.Recovery { attempt ->
+                        when {
+                            toolSet == null -> null
+                            attempt == 1 -> buildHistory(true, flat = true) to toolSet
+                            attempt == 2 -> {
+                                val q = conv.messages.last { it.role == "user" }.content.take(300)
+                                val fresh = buildHistory(false)
+                                if (session.web && q.isNotBlank()) {
+                                    val results = session.search(q)
+                                    fresh.add(1.coerceAtMost(fresh.size), msg("system",
+                                        "以下是联网搜索结果，回答时参考并用 [编号](链接) 标注来源：\n\n$results"))
                                 }
+                                fresh to null
                             }
-                    } catch (e: ApiException) {
-                        // 带工具的请求被拒（比如旧记录缺少思考内容），退回到“先搜再答”
-                        if (tools != null && round == 0 && e.code == 400 && roundContent.isEmpty() && !flatTried) {
-                            // 先试试去掉旧的工具调用过程，工具照样能用
-                            flatTried = true
-                            messages.clear(); messages.addAll(buildHistory(true, flat = true))
-                            continue
+                            else -> null
                         }
-                        if (tools != null && round == 0 && e.code == 400 && roundContent.isEmpty()) {
-                            tools = null
-                            val q = conv.messages.last { it.role == "user" }.content.take(300)
-                            val fresh = buildHistory(false)
-                            if (web && q.isNotBlank()) {
-                                val results = search(q)
-                                fresh.add(1.coerceAtMost(fresh.size), msg("system",
-                                    "以下是联网搜索结果，回答时参考并用 [编号](链接) 标注来源：\n\n$results"))
-                            }
-                            messages.clear(); messages.addAll(fresh)
-                            continue
-                        }
-                        throw e
-                    }
-                    flush()
-                    if (calls.isEmpty()) break
-
-                    round++
-                    val assistantCall = buildJsonObject {
-                        put("role", "assistant")
-                        if (roundContent.isEmpty()) put("content", JsonNull) else put("content", roundContent.toString())
-                        if (thinkingOn) put("reasoning_content", roundReasoning.toString())
-                        put("tool_calls", buildJsonArray {
-                            calls.values.forEach { tc ->
-                                add(buildJsonObject {
-                                    put("id", tc.id)
-                                    put("type", "function")
-                                    put("function", buildJsonObject {
-                                        put("name", tc.name)
-                                        put("arguments", tc.args.toString())
-                                    })
-                                })
-                            }
-                        })
-                    }
-                    messages += assistantCall
-                    trail += assistantCall.toString()
-                    for (tc in calls.values) {
-                        val args = runCatching { Json.parseToJsonElement(tc.args.toString()).jsonObject }.getOrNull()
-                        val key = when (tc.name) {
-                            "read_webpage" -> "url"
-                            "save_memory" -> "content"
-                            "use_skill" -> "name"
-                            "run_js", "run_python" -> "code"
-                            "delete_routine", "delete_calendar_event" -> "id"
-                            else -> "query"
-                        }
-                        val arg = args?.get(key).text()
-                        val result = when {
-                            args == null -> "参数不是有效的 JSON，可能内容太长被截断了，请精简后重试"
-                            tc.name in FILE_TOOLS && FILE_TOOLS[tc.name] in skillIds -> makeFile(tc.name, args)
-                            tc.name == "create_chart" && SkillIds.CALC in skillIds -> makeChart(args)
-                            tc.name == "create_diagram" && SkillIds.CALC in skillIds -> makeDiagram(args)
-                            tc.name == "list_files" -> listFiles()
-                            tc.name == "read_file" -> readFile(args)
-                            tc.name == "write_file" -> writeFile(args)
-                            tc.name == "edit_file" -> editFile(args)
-                            tc.name == "set_alarm" && SkillIds.ROUTINE in skillIds -> setAlarm(args)
-                            tc.name == "cancel_alarm" && SkillIds.ROUTINE in skillIds -> cancelAlarm(args)
-                            tc.name == "list_routines" && SkillIds.ROUTINE in skillIds -> listRoutines()
-                            tc.name == "list_library" && SkillIds.LIBRARY in skillIds -> listLibrary()
-                            tc.name == "save_flashcards" && SkillIds.LEARN in skillIds -> saveCards(args)
-                            tc.name == "create_reminder" && SkillIds.ROUTINE in skillIds -> makeRoutine("reminder", args)
-                            tc.name == "create_task" && SkillIds.ROUTINE in skillIds -> makeRoutine("task", args)
-                            tc.name == "add_calendar_event" && SkillIds.CALENDAR in skillIds -> addEvent(args)
-                            tc.name == "list_calendar_events" && SkillIds.CALENDAR in skillIds -> listEvents(args)
-                            arg.isBlank() -> "参数缺失"
-                            tc.name == "use_skill" -> useSkill(arg)
-                            tc.name == "run_js" && SkillIds.CALC in skillIds -> runJs(arg)
-                            tc.name == "run_python" && SkillIds.PYTHON in skillIds -> runPython(arg)
-                            tc.name == "search_library" && SkillIds.LIBRARY in skillIds -> searchLibrary(arg)
-                            tc.name == "delete_routine" && SkillIds.ROUTINE in skillIds -> removeRoutine(arg)
-                            tc.name == "delete_calendar_event" && SkillIds.CALENDAR in skillIds -> deleteEvent(arg)
-                            tc.name == "web_search" && web -> search(arg)
-                            tc.name == "read_webpage" && web -> readPage(arg)
-                            tc.name == "search_history" -> searchOld(arg)
-                            tc.name == "search_project" -> searchProject(arg)
-                            tc.name == "search_chats" && SkillIds.CHATS in skillIds -> searchChats(arg)
-                            tc.name == "save_memory" -> remember(arg)
-                            else -> "这个工具现在不可用"
-                        }
-                        val toolMsg = buildJsonObject {
-                            put("role", "tool")
-                            put("tool_call_id", tc.id)
-                            put("content", result)
-                        }
-                        messages += toolMsg
-                        trail += toolMsg.toString()
-                    }
-                    flush()
-                    // 最多用 5 轮工具，之后必须直接回答
-                    if (round >= maxRounds) tools = null
-                }
+                    },
+                )
                 if (content.isBlank() && reasoning.isEmpty()) {
                     patchMessage(convId, reply.id) { it.copy(error = "没有收到回复，请重试") }
                 }
@@ -1343,8 +934,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private class ToolAcc(var id: String = "", var name: String = "", val args: StringBuilder = StringBuilder())
-
     private fun msg(role: String, content: String) = buildJsonObject {
         put("role", role)
         put("content", content)
@@ -1356,209 +945,30 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         else -> toString()
     }
 
-    /** "2026-10-15 09:00" → (日期, 时, 分)；只给 "09:00" 时取最近的那个时间点。 */
-    private fun parseDateTime(s: String): Triple<String, Int, Int>? {
-        val m = Regex("""(?:(\d{4})-(\d{1,2})-(\d{1,2})[ T]+)?(\d{1,2})[:：](\d{2})""").find(s.trim()) ?: return null
-        val h = m.groupValues[4].toInt()
-        val min = m.groupValues[5].toInt()
-        if (h !in 0..23 || min !in 0..59) return null
-        val cal = java.util.Calendar.getInstance()
-        if (m.groupValues[1].isNotEmpty()) {
-            cal.set(m.groupValues[1].toInt(), m.groupValues[2].toInt() - 1, m.groupValues[3].toInt())
-        } else {
-            val now = cal.clone() as java.util.Calendar
-            cal.set(java.util.Calendar.HOUR_OF_DAY, h); cal.set(java.util.Calendar.MINUTE, min)
-            if (!cal.after(now)) cal.add(java.util.Calendar.DAY_OF_YEAR, 1)
-        }
-        return Triple(SimpleDateFormat("yyyy-MM-dd", Locale.US).format(cal.time), h, min)
-    }
-
-    /** 按工具名和参数生成文件。先写到临时文件，成功了再替换，失败不会弄坏原文件。 */
-    private suspend fun renderFile(tool: String, args: JsonObject, file: File, cache: File) {
-        val slides = if (tool == "create_ppt") withImages(parseSlides(args), args, cache) else null
-        withContext(Dispatchers.IO) {
-            file.parentFile?.mkdirs()
-            val tmp = File(file.parentFile, ".tmp-" + file.name)
-            try {
-                tmp.outputStream().buffered().use { out ->
-                    when (tool) {
-                        "create_word" -> OfficeWriter.writeDocx(args["markdown"].text(), out)
-                        "create_ppt" -> OfficeWriter.writePptx(slides!!, args["theme"].text().ifBlank { "blue" }, out)
-                        "create_pdf" -> PdfWriter.write(args["markdown"].text(), out)
-                        "create_excel" -> OfficeWriter.writeXlsx(parseSheets(args), out)
-                        "create_chart" -> renderChart(args, out)
-                        "create_diagram" -> renderDiagram(args, out)
-                        else -> throw IllegalArgumentException("不认识的文件类型")
-                    }
-                }
-                if (!tmp.renameTo(file)) {
-                    file.delete()
-                    if (!tmp.renameTo(file)) throw IOException("保存文件失败")
-                }
-            } finally {
-                tmp.delete()
-            }
-        }
-    }
-
-    private fun renderChart(args: JsonObject, out: java.io.OutputStream) {
-        val labels = (args["labels"] as? JsonArray).orEmpty().map { it.text() }
-        val series = (args["series"] as? JsonArray).orEmpty().mapNotNull { el ->
-            val o = el as? JsonObject ?: return@mapNotNull null
-            val values = (o["values"] as? JsonArray).orEmpty().map { it.text().toDoubleOrNull() ?: 0.0 }
-            ChartWriter.Series(o["name"].text(), values)
-        }
-        ChartWriter.render(args["type"].text(), args["title"].text().ifBlank { "图表" }, args["unit"].text(), labels, series, out)
-    }
-
-    private fun renderDiagram(args: JsonObject, out: java.io.OutputStream) {
-        val title = args["title"].text().trim()
-        if (args["type"].text() == "flowchart") {
-            val nodes = (args["nodes"] as? JsonArray).orEmpty().mapNotNull { el ->
-                val o = el as? JsonObject ?: return@mapNotNull null
-                val id = o["id"].text().trim()
-                if (id.isEmpty()) null else Diagram.FNode(id, o["label"].text().ifBlank { id }, o["shape"].text().ifBlank { "box" })
-            }
-            val edges = (args["edges"] as? JsonArray).orEmpty().mapNotNull { el ->
-                val o = el as? JsonObject ?: return@mapNotNull null
-                val from = o["from"].text().trim()
-                val to = o["to"].text().trim()
-                if (from.isEmpty() || to.isEmpty()) null else Diagram.FEdge(from, to, o["label"].text())
-            }
-            if (nodes.isEmpty() && edges.isEmpty()) throw IllegalArgumentException("流程图没有节点")
-            val layout = Diagram.flow(nodes, edges, args["direction"].text() == "LR", DiagramWriter.measure)
-            DiagramWriter.render(layout, title, mindmap = false, out = out)
-        } else {
-            val outline = args["outline"].text()
-            if (outline.isBlank()) throw IllegalArgumentException("思维导图需要 outline")
-            val root = Diagram.parseOutline(outline, title)
-            val layout = Diagram.tree(root, DiagramWriter.measure)
-            DiagramWriter.render(layout, if (root.label == title) "" else title, mindmap = true, out = out)
-        }
-    }
-
-    private suspend fun startClock(intent: Intent, missing: String = "手机上没找到能设闹钟的时钟 App") = withContext(Dispatchers.Main) {
-        try {
-            getApplication<Application>().startActivity(intent)
-        } catch (e: ActivityNotFoundException) {
-            throw IllegalStateException(missing)
-        } catch (e: SecurityException) {
-            throw IllegalStateException("没有设闹钟的权限")
-        }
-    }
-
-    /** PPT 配图存一份，修改 PPT 重新生成时不用再搜一遍。 */
-    private fun imageCacheFile(cache: File, query: String) =
-        File(cache, "img-" + query.trim().lowercase().hashCode().toUInt() + ".jpg")
-
-    private suspend fun cachedImage(cache: File, query: String): Triple<ByteArray, Int, Int>? = withContext(Dispatchers.IO) {
-        val f = imageCacheFile(cache, query)
-        if (!f.exists()) return@withContext null
-        val bytes = f.readBytes()
-        val o = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, o)
-        if (o.outWidth <= 0) null else Triple(bytes, o.outWidth, o.outHeight)
-    }
-
-    private suspend fun saveImage(cache: File, query: String, img: Triple<ByteArray, Int, Int>) = withContext(Dispatchers.IO) {
-        runCatching { cache.mkdirs(); imageCacheFile(cache, query).writeBytes(img.first) }
-    }
-
-    private fun findSkill(skills: List<Skill>, name: String): Skill? {
-        val n = name.trim()
-        return skills.firstOrNull { it.name == n }
-            ?: skills.firstOrNull { it.name.contains(n, true) || n.contains(it.name, true) }
-    }
-
-    private fun safeFileName(name: String): String =
-        name.trim().replace(Regex("""[\\/:*?"<>|\n\r\t]"""), "_")
-            .removeSuffix(".docx").removeSuffix(".pptx").removeSuffix(".xlsx").removeSuffix(".pdf").take(60).trim()
-
-    private fun parseSlides(args: JsonObject): List<OfficeWriter.Slide> =
-        (args["slides"] as? JsonArray).orEmpty().mapNotNull { el ->
-            val o = el as? JsonObject ?: return@mapNotNull null
-            val bullets = when (val b = o["bullets"]) {
-                is JsonArray -> b.map { it.text() }.filter { it.isNotBlank() }
-                null, JsonNull -> emptyList()
-                else -> b.text().lines().filter { it.isNotBlank() }
-            }
-            OfficeWriter.Slide(o["layout"].text().ifBlank { "content" }, o["title"].text(), bullets)
-        }.ifEmpty { throw IllegalArgumentException("没有幻灯片内容") }
-
-    /** 给写了 image_query 的正文页搜一张图，下载失败就不配图。最多 6 张。 */
-    private suspend fun withImages(slides: List<OfficeWriter.Slide>, args: JsonObject, cache: File): List<OfficeWriter.Slide> {
-        val key = _state.value.settings.tavilyKey
-        if (key.isBlank()) return slides
-        val queries = (args["slides"] as? JsonArray).orEmpty().map { (it as? JsonObject)?.get("image_query").text() }
-        var count = 0
-        return slides.mapIndexed { i, s ->
-            val q = queries.getOrNull(i).orEmpty()
-            if (q.isBlank() || s.layout != "content" || count >= 6) return@mapIndexed s
-            val img = runCatching { cachedImage(cache, q) ?: fetchImage(key, q)?.also { saveImage(cache, q, it) } }.getOrNull()
-                ?: return@mapIndexed s
-            count++
-            s.copy(image = img.first, imageExt = "jpeg", imageW = img.second, imageH = img.third)
-        }
-    }
-
-    private suspend fun fetchImage(key: String, query: String): Triple<ByteArray, Int, Int>? {
-        for (url in tavily.searchImages(key, query).take(4)) {
-            val bytes = tavily.download(url) ?: continue
-            val img = withContext(Dispatchers.Default) { Attachments.toJpeg(bytes, 1600) } ?: continue
-            if (img.second >= 300 && img.third >= 200) return img
-        }
-        return null
-    }
-
-    private fun parseSheets(args: JsonObject): List<OfficeWriter.Sheet> =
-        (args["sheets"] as? JsonArray).orEmpty().mapIndexedNotNull { i, el ->
-            val o = el as? JsonObject ?: return@mapIndexedNotNull null
-            val rows = (o["rows"] as? JsonArray).orEmpty().map { r ->
-                (r as? JsonArray)?.map { it.text() } ?: listOf(r.text())
-            }
-            OfficeWriter.Sheet(o["name"].text().ifBlank { "Sheet${i + 1}" }, rows)
-        }.ifEmpty { throw IllegalArgumentException("没有表格内容") }
-
     companion object {
         const val REVIEW_PROMPT = "请换一个更严格的视角，复核你上面那条回答：检查事实错误、计算错误、逻辑漏洞、" +
             "遗漏的重要信息和表达不清的地方，需要时可以联网核实。然后直接给出改进后的完整回答，" +
             "开头用一句话说明修正或补充了什么。如果原回答没有问题，就说“复核没有发现问题”，" +
             "并简要说明理由，不要重复全文。"
 
-        val FILE_TOOLS = mapOf(
-            "create_word" to SkillIds.WORD, "create_ppt" to SkillIds.PPT,
-            "create_excel" to SkillIds.EXCEL, "create_pdf" to SkillIds.PDF,
-        )
-        const val MIME_DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        const val MIME_PPTX = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-        const val MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-
-        val TIME = Regex("""(\d{1,2})[:：](\d{2})""")
-
-        fun mimeOf(name: String): String = when (name.substringAfterLast('.', "").lowercase()) {
-            "docx" -> MIME_DOCX
-            "pptx" -> MIME_PPTX
-            "xlsx" -> MIME_XLSX
-            "pdf" -> "application/pdf"
-            "png" -> "image/png"
-            "jpg", "jpeg" -> "image/jpeg"
-            "webp" -> "image/webp"
-            "gif" -> "image/gif"
-            "html", "htm" -> "text/html"
-            "csv" -> "text/csv"
-            "json" -> "application/json"
-            "md", "markdown" -> "text/markdown"
-            else -> "text/plain"
-        }
-
-        fun sizeText(bytes: Long): String = when {
-            bytes >= 1024 * 1024 -> String.format(Locale.US, "%.1f MB", bytes / 1024.0 / 1024.0)
-            bytes >= 1024 -> "${bytes / 1024} KB"
-            else -> "$bytes B"
-        }
     }
 
     // ---------- 工具函数 ----------
+
+    /** 工具改 App 数据时走这里。 */
+    private val toolHost = object : ToolHost {
+        override val app: Application get() = getApplication()
+        override val store: Store get() = this@ChatViewModel.store
+        override val tavily: TavilyClient get() = this@ChatViewModel.tavily
+        override fun conversations() = _state.value.conversations
+        override fun setMemories(list: List<MemoryItem>) = _state.update { it.copy(memories = list) }
+        override fun editCards(transform: (List<Flashcard>) -> List<Flashcard>) = this@ChatViewModel.editCards(transform)
+        override fun saveRoutine(r: Routine) = this@ChatViewModel.saveRoutine(r)
+        override fun deleteRoutine(id: String) = this@ChatViewModel.deleteRoutine(id)
+        override fun libraryIndex() = index()
+        override fun projectIndex(p: Project) = this@ChatViewModel.projectIndex(p)
+        override fun refreshWidget() = this@ChatViewModel.refreshWidget()
+    }
 
     /** 一次请求的上下文大概由哪些部分组成（名字, 估算 token），统计页用。conv 为空时按新对话算。 */
     fun contextBreakdown(conv: Conversation?): List<Pair<String, Int>> {

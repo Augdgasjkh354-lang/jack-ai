@@ -80,7 +80,7 @@ fun FilesSheet(vm: ChatViewModel, conv: Conversation, inProject: Boolean, onDism
                     items(files, key = { it.absolutePath }) { f ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(Modifier.weight(1f)) {
-                                GeneratedFileCard(GeneratedFile(f.name, f.absolutePath, ChatViewModel.mimeOf(f.name), f.length()))
+                                GeneratedFileCard(GeneratedFile(f.name, f.absolutePath, com.jack.ai.tools.ToolSession.mimeOf(f.name), f.length()))
                             }
                             IconButton(onClick = { deleting = f }) {
                                 Icon(Icons.Default.Delete, "删除", tint = MaterialTheme.colorScheme.outline)
