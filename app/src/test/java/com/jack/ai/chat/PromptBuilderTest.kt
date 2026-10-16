@@ -270,4 +270,14 @@ class PromptBuilderTest {
         val b = PromptBuilder.systemPrompt(settings, conv, null, tools(conv), memories, settings.activeSkills(), chatMemory = "- 新的一条")
         assertTrue(b.startsWith(a.substringBefore("【个性化设定】")))
     }
+
+    @Test
+    fun mailToolsOnlyWhenAccountIsReady() {
+        val conv = Conversation()
+        assertFalse("send_email" in toolNames(conv))
+        val half = settings.copy(mail = com.jack.ai.data.mailPresetFor("jack@163.com"))
+        assertFalse("send_email" in toolNames(conv, s = half))
+        val ready = settings.copy(mail = com.jack.ai.data.mailPresetFor("jack@163.com")!!.copy(password = "code"))
+        assertTrue(listOf("list_emails", "read_email", "send_email", "mark_email_read").all { it in toolNames(conv, s = ready) })
+    }
 }

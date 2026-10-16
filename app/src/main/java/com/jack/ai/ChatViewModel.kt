@@ -59,6 +59,9 @@ import kotlinx.serialization.json.put
 import java.io.File
 import java.io.IOException
 
+/** 一次「执行前确认」：标题、要确认的内容、确认按钮的字。 */
+data class ConfirmRequest(val id: String, val title: String, val body: String, val action: String)
+
 data class UiState(
     val conversations: List<Conversation> = emptyList(),
     val projects: List<Project> = emptyList(),
@@ -81,6 +84,8 @@ data class UiState(
     val routines: List<Routine> = emptyList(),
     val library: List<LibraryDoc> = emptyList(),
     val cards: List<Flashcard> = emptyList(),
+    /** 工具执行前等用户确认（比如发邮件），界面弹窗。 */
+    val confirm: ConfirmRequest? = null,
 ) {
     val current: Conversation? get() = conversations.firstOrNull { it.id == currentId }
     val currentProjectId: String? get() = current?.projectId ?: if (currentId == null) draftProjectId else null
@@ -130,6 +135,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun consumeToast() = _state.update { it.copy(toast = null) }
+
+    /** 用户在确认弹窗里点了确认或取消。 */
+    fun answerConfirm(id: String, ok: Boolean) = core.answerConfirm(id, ok)
 
     // ---------- 对话管理 ----------
 
@@ -350,6 +358,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     m.copy(searches = m.searches.map { if (it.query == label && it.pending) record else it })
                 }
 
+                override suspend fun confirm(title: String, body: String, action: String) = core.confirm(title, body, action)
+
                 /** 把生成或修改过的文件挂到这条回答上，显示成卡片。 */
                 override fun attach(file: File) {
                     val gen = GeneratedFile(file.name, file.absolutePath, ToolSession.mimeOf(file.name), file.length())
@@ -522,6 +532,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun saveProvider(p: Provider) = settingsFeature.saveProvider(p)
     fun deleteProvider(id: String) = settingsFeature.deleteProvider(id)
     suspend fun checkBalance() = settingsFeature.checkBalance()
+    suspend fun testMail(acc: com.jack.ai.data.MailAccount) = settingsFeature.testMail(acc)
 
     // 压缩
     fun compress(convId: String? = _state.value.currentId, manual: Boolean = true) = compression.compress(convId, manual)

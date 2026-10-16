@@ -86,6 +86,10 @@ fun SkillsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit) {
                                 Text("需要先在设置里填 Tavily Key", style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.error)
                             }
+                            if (s.id == SkillIds.MAIL && settings.mail?.ready != true) {
+                                Text("需要先在设置里填邮箱", style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.error)
+                            }
                         }
                         Spacer(Modifier.padding(4.dp))
                         Switch(s.enabled, { on -> toggle(s, on) })

@@ -147,7 +147,41 @@ data class Settings(
     val providers: List<Provider> = emptyList(),
     /** 每月预算（元），0 表示不设。 */
     val monthlyBudget: Double = 0.0,
+    /** 邮箱账号（IMAP 收信、SMTP 发信），没设置时为空。 */
+    val mail: MailAccount? = null,
 )
+
+/** 邮箱账号。password 是邮箱的「授权码」，不是登录密码；不进备份。 */
+@Serializable
+data class MailAccount(
+    val address: String = "",
+    val password: String = "",
+    val imapHost: String = "",
+    val imapPort: Int = 993,
+    val smtpHost: String = "",
+    val smtpPort: Int = 465,
+) {
+    val ready: Boolean get() = address.isNotBlank() && password.isNotBlank() && imapHost.isNotBlank() && smtpHost.isNotBlank()
+}
+
+/** 常见邮箱的服务器：后缀 → (IMAP, SMTP, SMTP 端口)。 */
+val MAIL_PRESETS = mapOf(
+    "163.com" to Triple("imap.163.com", "smtp.163.com", 465),
+    "126.com" to Triple("imap.126.com", "smtp.126.com", 465),
+    "yeah.net" to Triple("imap.yeah.net", "smtp.yeah.net", 465),
+    "qq.com" to Triple("imap.qq.com", "smtp.qq.com", 465),
+    "foxmail.com" to Triple("imap.qq.com", "smtp.qq.com", 465),
+    "gmail.com" to Triple("imap.gmail.com", "smtp.gmail.com", 465),
+    "outlook.com" to Triple("outlook.office365.com", "smtp.office365.com", 587),
+    "hotmail.com" to Triple("outlook.office365.com", "smtp.office365.com", 587),
+)
+
+/** 按邮箱地址的后缀填好服务器；认不出的后缀返回 null。 */
+fun mailPresetFor(address: String): MailAccount? {
+    val domain = address.substringAfter('@', "").trim().lowercase()
+    val (imap, smtp, port) = MAIL_PRESETS[domain] ?: return null
+    return MailAccount(address = address.trim(), imapHost = imap, smtpHost = smtp, smtpPort = port)
+}
 
 /** OpenAI 兼容的模型服务。 */
 @Serializable

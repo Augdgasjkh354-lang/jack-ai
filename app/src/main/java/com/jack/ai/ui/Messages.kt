@@ -521,4 +521,4 @@ private fun SearchBox(searches: List<SearchRecord>) {
     }
 }
 
-private fun isOther(label: String) = listOf("读取", "翻阅", "记住", "使用技能", "生成", "运行", "设置", "查看", "删除", "写入", "修改", "设闹钟", "关闹钟").any { label.startsWith(it) }
+private fun isOther(label: String) = listOf("读取", "翻阅", "记住", "使用技能", "生成", "运行", "设置", "查看", "删除", "写入", "修改", "设闹钟", "关闹钟", "读邮件", "发邮件", "已发邮件", "标为", "添加日程", "打开日历").any { label.startsWith(it) }

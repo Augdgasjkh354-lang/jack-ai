@@ -26,6 +26,28 @@ class AppCore(val app: Application, val store: Store, val scope: CoroutineScope)
 
     fun toast(msg: String) = state.update { it.copy(toast = msg) }
 
+    private val waiting = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.CompletableDeferred<Boolean>>()
+
+    /**
+     * 弹窗问用户，等他点了再继续。用户停止回答（协程被取消）时弹窗自动收起。
+     */
+    suspend fun confirm(title: String, body: String, action: String): Boolean {
+        val req = com.jack.ai.ConfirmRequest(com.jack.ai.data.newId(), title, body, action)
+        val answer = kotlinx.coroutines.CompletableDeferred<Boolean>()
+        waiting[req.id] = answer
+        state.update { it.copy(confirm = req) }
+        return try {
+            answer.await()
+        } finally {
+            waiting.remove(req.id)
+            state.update { if (it.confirm?.id == req.id) it.copy(confirm = null) else it }
+        }
+    }
+
+    fun answerConfirm(id: String, ok: Boolean) {
+        waiting[id]?.complete(ok)
+    }
+
     fun updateConv(id: String, transform: (Conversation) -> Conversation) {
         state.update { s ->
             s.copy(conversations = s.conversations.map {

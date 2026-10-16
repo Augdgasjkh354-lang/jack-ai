@@ -58,6 +58,17 @@ class SettingsFeature(core: AppCore, private val client: DeepSeekClient) : Featu
         return if (choices.any { it.key == s.model } || choices.isEmpty()) s else s.copy(model = choices.first().key)
     }
 
+    /** 试着登录邮箱，返回给用户看的一句话。 */
+    suspend fun testMail(acc: MailAccount): String = withContext(Dispatchers.IO) {
+        try {
+            MailClient.test(acc)
+        } catch (e: MailException) {
+            e.message ?: "连接失败"
+        } catch (e: Exception) {
+            "连接失败：${e.message}"
+        }
+    }
+
     suspend fun checkBalance(): String {
         val s = state.value.settings
         if (s.apiKey.isBlank()) return "请先填写 API Key"

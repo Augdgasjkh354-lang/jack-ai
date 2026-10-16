@@ -150,6 +150,9 @@ object PromptBuilder {
                 add(SkillTools.SET_ALARM); add(SkillTools.CANCEL_ALARM)
             }
             if (SkillIds.CALENDAR in skillIds) { add(SkillTools.ADD_EVENT); add(SkillTools.LIST_EVENTS); add(SkillTools.DELETE_EVENT) }
+            if (SkillIds.MAIL in skillIds) {
+                add(SkillTools.LIST_EMAILS); add(SkillTools.READ_EMAIL); add(SkillTools.SEND_EMAIL); add(SkillTools.MARK_EMAIL_READ)
+            }
             if (compressed) add(SkillTools.SEARCH_HISTORY)
             if (project?.files?.any { it.text.length > PROJECT_INLINE_CHARS } == true) add(SkillTools.SEARCH_PROJECT)
             // 本对话记忆随时能存，所以记忆工具一直带着

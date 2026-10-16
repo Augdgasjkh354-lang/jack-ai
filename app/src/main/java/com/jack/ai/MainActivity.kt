@@ -14,6 +14,15 @@ import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_WEAK
 import androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
 import androidx.biometric.BiometricPrompt
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -201,6 +210,19 @@ class MainActivity : FragmentActivity() {
                         projectId = top.id,
                         onBack = back,
                         onOpenChat = { stack.clear() },
+                    )
+                }
+                // 工具执行前的确认（发邮件之类），在哪个页面都能弹出来
+                state.confirm?.let { req ->
+                    AlertDialog(
+                        onDismissRequest = { vm.answerConfirm(req.id, false) },
+                        title = { Text(req.title) },
+                        text = {
+                            Text(req.body, Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
+                                style = MaterialTheme.typography.bodyMedium)
+                        },
+                        confirmButton = { TextButton(onClick = { vm.answerConfirm(req.id, true) }) { Text(req.action) } },
+                        dismissButton = { TextButton(onClick = { vm.answerConfirm(req.id, false) }) { Text("取消") } },
                     )
                 }
                 if (creatingProject) {

@@ -152,6 +152,10 @@ fun SettingsScreen(
                 ProvidersSection(vm, settings.providers)
             }
 
+            Section("邮箱") {
+                MailSection(vm, settings.mail)
+            }
+
             // ---- Tavily ----
             Section("Tavily API Key") {
                 var tavilyInput by remember { mutableStateOf(settings.tavilyKey) }

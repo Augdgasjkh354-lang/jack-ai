@@ -52,6 +52,8 @@ interface ToolUi {
     fun started(label: String)
     fun finished(label: String, record: SearchRecord)
     fun attach(file: File)
+    /** 做了就收不回的操作（发邮件等）先问用户，返回 true 才执行。 */
+    suspend fun confirm(title: String, body: String, action: String): Boolean
 }
 
 /**
@@ -127,6 +129,10 @@ class ToolSession(
             name == "add_calendar_event" && SkillIds.CALENDAR in skillIds -> addEvent(args)
             name == "list_calendar_events" && SkillIds.CALENDAR in skillIds -> listEvents(args)
             name == "save_memory" -> remember(args)
+            name == "list_emails" && SkillIds.MAIL in skillIds -> listEmails(args)
+            name == "read_email" && SkillIds.MAIL in skillIds -> readEmail(args)
+            name == "send_email" && SkillIds.MAIL in skillIds -> sendEmail(args)
+            name == "mark_email_read" && SkillIds.MAIL in skillIds -> markEmailRead(args)
             arg.isBlank() -> "参数缺失"
             name == "use_skill" -> useSkill(arg)
             name == "run_js" && SkillIds.CALC in skillIds -> runJs(arg)
