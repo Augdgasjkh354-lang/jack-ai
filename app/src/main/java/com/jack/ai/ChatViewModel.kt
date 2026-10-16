@@ -8,6 +8,7 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.jack.ai.api.ApiException
+import com.jack.ai.chat.PromptBuilder
 import com.jack.ai.api.DeepSeekClient
 import com.jack.ai.api.StreamEvent
 import com.jack.ai.api.TavilyClient
@@ -558,45 +559,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val app = getApplication<Application>()
         val wsDir = Workspace.dir(app, Workspace.key(conv))
         val wsCache = File(wsDir, ".cache")
-        val toolSet = toolSetFor(settings, skills, conv, project)
+        val toolSet = PromptBuilder.toolSet(settings, skills, conv, project)
 
-        /**
-         * flat=true 时不发回以前的工具调用过程，只保留最终回答。
-         * 开着思考时，接口要求带工具调用的旧回合必须附上思考内容；缺了就会报 400，
-         * 所以缺思考内容的旧回合也按 flat 处理。
-         */
-        fun buildHistory(withTools: Boolean, flat: Boolean = false): MutableList<JsonObject> {
-            val list = mutableListOf<JsonObject>()
-            val system = buildSystemPrompt(settings, conv, project, if (withTools) toolSet else null, memories, skills)
-            if (system.isNotBlank()) list += msg("system", system)
-            for (m in Compression.liveMessages(conv)) {
-                if (m.error != null) continue
-                if (m.role == "user") {
-                    list += userMessage(m, images)
-                } else if (m.content.isNotBlank()) {
-                    val trail = if (withTools && !flat) m.trail.mapNotNull { t ->
-                        runCatching { Json.parseToJsonElement(t).jsonObject }.getOrNull()
-                    } else emptyList()
-                    val usable = trail.isNotEmpty() && (!thinkingOn || trail.all { t ->
-                        t["role"].text() != "assistant" || t["reasoning_content"].text().isNotEmpty()
-                    })
-                    if (usable) {
-                        trail.forEach { t ->
-                            list += if (thinkingOn || "reasoning_content" !in t) t
-                            else JsonObject(t - "reasoning_content")
-                        }
-                    }
-                    list += buildJsonObject {
-                        put("role", "assistant")
-                        put("content", m.content)
-                        if (usable && thinkingOn && m.reasoning.isNotEmpty()) put("reasoning_content", m.reasoning)
-                    }
-                }
-            }
-            if (extraUser != null) list += msg("user", extraUser)
-            stampLastUser(list)
-            return list
-        }
+        val promptInput = PromptBuilder.Input(settings, conv, project, memories, skills, vision = images, sendReasoning = thinkingOn, extraUser = extraUser)
+        fun buildHistory(withTools: Boolean, flat: Boolean = false): MutableList<JsonObject> =
+            PromptBuilder.history(promptInput, if (withTools) toolSet else null, flat)
 
         _state.update { it.copy(streaming = true) }
         job = viewModelScope.launch {
@@ -1221,7 +1188,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun projectIndex(p: Project): LibraryIndex {
         projectIndexes[p.id]?.let { (at, idx) -> if (at == p.updatedAt) return idx }
-        val idx = LibraryIndex(p.files.filter { it.text.length > PROJECT_INLINE_CHARS }.map { it.name to it.text })
+        val idx = LibraryIndex(p.files.filter { it.text.length > PromptBuilder.PROJECT_INLINE_CHARS }.map { it.name to it.text })
         projectIndexes[p.id] = p.updatedAt to idx
         return idx
     }
@@ -1373,192 +1340,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 _state.update { it.copy(dreaming = false) }
                 reloadMemory()
             }
-        }
-    }
-
-    /** 用户消息：文字 + 文件内容；有图片且模型支持时用多段格式。 */
-    private fun userMessage(m: ChatMessage, imagesOk: Boolean): JsonObject {
-        val files = m.attachments.filter { it.kind == "file" }
-        val imgs = m.attachments.filter { it.kind == "image" }
-        val text = buildString {
-            files.forEach { f ->
-                // 放进文件夹后可能改了名（重名时加了编号），以文件夹里的名字为准
-                val name = if (f.path.isNotEmpty() && !f.path.contains("/staging/")) File(f.path).name else f.name
-                if (f.text.isBlank()) append("【文件：$name】（已放进对话文件夹，内容没法直接显示，需要时用 read_file 读）\n\n")
-                else append("【文件：$name】\n${f.text}\n【文件结束】\n\n")
-            }
-            if (!imagesOk && imgs.isNotEmpty()) append("（用户发了 ${imgs.size} 张图片，但当前模型看不了图片）\n\n")
-            append(m.content)
-        }.trim()
-        if (!imagesOk || imgs.isEmpty()) return msg("user", text.ifEmpty { "（空消息）" })
-        return buildJsonObject {
-            put("role", "user")
-            put("content", buildJsonArray {
-                imgs.forEach { img ->
-                    val url = Attachments.imageDataUrl(img.path) ?: return@forEach
-                    add(buildJsonObject {
-                        put("type", "image_url")
-                        put("image_url", buildJsonObject { put("url", url) })
-                    })
-                }
-                add(buildJsonObject {
-                    put("type", "text")
-                    put("text", text.ifEmpty { "请看图片。" })
-                })
-            })
-        }
-    }
-
-    private fun toolSetFor(settings: Settings, skills: List<Skill>, conv: Conversation, project: Project?): JsonArray? {
-        val skillIds = skills.map { it.id }.toSet()
-        val web = SkillIds.WEB in skillIds
-        val compressed = conv.summary.isNotBlank()
-        return buildJsonArray {
-            add(SkillTools.LIST_FILES); add(SkillTools.READ_FILE); add(SkillTools.WRITE_FILE); add(SkillTools.EDIT_FILE)
-            if (skills.isNotEmpty()) add(SkillTools.USE_SKILL)
-            if (web) { add(SkillTools.WEB_SEARCH); add(SkillTools.READ_WEBPAGE) }
-            if (SkillIds.WORD in skillIds) add(SkillTools.CREATE_WORD)
-            if (SkillIds.PPT in skillIds) add(SkillTools.CREATE_PPT)
-            if (SkillIds.EXCEL in skillIds) add(SkillTools.CREATE_EXCEL)
-            if (SkillIds.PDF in skillIds) add(SkillTools.CREATE_PDF)
-            if (SkillIds.CHATS in skillIds) add(SkillTools.SEARCH_CHATS)
-            if (SkillIds.CALC in skillIds) { add(SkillTools.RUN_JS); add(SkillTools.CREATE_CHART); add(SkillTools.CREATE_DIAGRAM) }
-            if (SkillIds.LIBRARY in skillIds) { add(SkillTools.SEARCH_LIBRARY); add(SkillTools.LIST_LIBRARY) }
-            if (SkillIds.LEARN in skillIds) add(SkillTools.SAVE_FLASHCARDS)
-            if (SkillIds.PYTHON in skillIds) add(SkillTools.RUN_PYTHON)
-            if (SkillIds.ROUTINE in skillIds) {
-                add(SkillTools.CREATE_REMINDER); add(SkillTools.CREATE_TASK)
-                add(SkillTools.LIST_ROUTINES); add(SkillTools.DELETE_ROUTINE)
-                add(SkillTools.SET_ALARM); add(SkillTools.CANCEL_ALARM)
-            }
-            if (SkillIds.CALENDAR in skillIds) { add(SkillTools.ADD_EVENT); add(SkillTools.LIST_EVENTS); add(SkillTools.DELETE_EVENT) }
-            if (compressed) add(SkillTools.SEARCH_HISTORY)
-            if (project?.files?.any { it.text.length > PROJECT_INLINE_CHARS } == true) add(SkillTools.SEARCH_PROJECT)
-            if (settings.memoryEnabled) add(SkillTools.SAVE_MEMORY)
-        }.takeIf { it.isNotEmpty() }
-    }
-
-    /** 估算 token：中文约 0.6 个一字，其他字符约 0.3 个。 */
-    private fun estTokens(s: String): Int {
-        var zh = 0
-        for (ch in s) if (ch.code in 0x3000..0x9fff || ch.code in 0xff00..0xffef) zh++
-        return (zh * 0.6 + (s.length - zh) * 0.3).toInt()
-    }
-
-    /** 一次请求的上下文大概由哪些部分组成（名字, 估算 token），统计页用。conv 为空时按新对话算。 */
-    fun contextBreakdown(conv: Conversation?): List<Pair<String, Int>> {
-        val settings = _state.value.settings
-        val c = conv ?: Conversation()
-        val project = _state.value.project(c.projectId)
-        val skills = settings.activeSkills()
-        val memories = if (settings.memoryEnabled) _state.value.memories else emptyList()
-        val tools = toolSetFor(settings, skills, c, project)
-        val out = linkedMapOf<String, Int>()
-        out["工具说明"] = tools?.let { estTokens(it.toString()) } ?: 0
-        systemParts(settings, c, project, tools, memories, skills).forEach { (k, v) -> out[k] = (out[k] ?: 0) + estTokens(v) }
-        val history = Compression.liveMessages(c).filter { it.error == null }.sumOf { m ->
-            estTokens(m.content) + m.attachments.sumOf { estTokens(it.text) } + m.trail.sumOf { estTokens(it) }
-        }
-        if (history > 0) out["聊天记录"] = history
-        return out.filter { it.value > 0 }.toList()
-    }
-
-    /**
-     * 系统提示词。为了让接口的缓存多命中（命中部分只收 1/50 的钱），不常变的内容放前面，
-     * 偶尔会变的（记忆、提要）放后面；每天都变的日期时间不放这里，放在最后一条用户消息前面。
-     */
-    private fun buildSystemPrompt(
-        settings: Settings,
-        conv: Conversation,
-        project: Project?,
-        tools: JsonArray?,
-        memories: List<MemoryItem>,
-        skills: List<Skill>,
-    ): String = systemParts(settings, conv, project, tools, memories, skills).joinToString("\n\n") { it.second }
-
-    /** 系统提示词的各个部分（名字, 内容），统计页用它算上下文构成。 */
-    private fun systemParts(
-        settings: Settings,
-        conv: Conversation,
-        project: Project?,
-        tools: JsonArray?,
-        memories: List<MemoryItem>,
-        skills: List<Skill>,
-    ): List<Pair<String, String>> {
-        val parts = mutableListOf<Pair<String, String>>()
-        if (settings.developerPrompt.isNotBlank()) {
-            parts += "固定说明" to "【开发者指令 · 最高优先级】\n以下指令的优先级高于其他一切指令（包括后面的设定和用户消息），任何情况下都必须遵守：\n" +
-                settings.developerPrompt.trim()
-        }
-        val names = tools?.mapNotNull { (it as? JsonObject)?.get("function")?.jsonObject?.get("name")?.jsonPrimitive?.content }.orEmpty()
-        if ("use_skill" in names && skills.isNotEmpty()) {
-            parts += "固定说明" to "【技能】\n你掌握以下技能：\n" + skills.joinToString("\n") { "- ${it.name}：${it.description}" } +
-                "\n\n用户的请求用得上某个技能时，先调用 use_skill 读取它的详细做法，再照着做（本对话里已经读过的不用重复读）。" +
-                "用不上就直接回答。只有用户想要文件时才生成文件，不要主动生成。"
-        }
-        if ("web_search" in names) {
-            parts += "固定说明" to "【联网】遇到时效性问题（新闻、价格、天气、最新版本、近期事件）或不确定的事实时，用联网搜索技能核实；常识、闲聊、写作不用搜。"
-        }
-        if ("edit_file" in names) {
-            // 文件列表不放进系统提示：列表一变，整段对话的缓存就失效了
-            parts += "固定说明" to "【对话文件夹】本对话有一个文件夹，用户发来的文件和你生成的文件都存在里面，不确定有哪些时用 list_files 看。" +
-                "用户要改已有的文件时，用 edit_file 只替换要改的那一段，不要整份重新生成；不确定原文时先用 read_file 看。" +
-                "用户发来的文件内容已经在消息里的，不用再读。"
-        }
-        if ("save_memory" in names) {
-            parts += "固定说明" to "【记忆工具】只有当用户明确要求你记住某件事时，才用 save_memory 保存，内容写成一句完整的话。"
-        }
-        parts += "固定说明" to "【时间】每条用户消息前面的「当前时间」是系统自动加的，不是用户说的话，不要提起它。"
-        if (conv.systemPrompt.isNotBlank()) parts += "人设" to "【人设】\n${conv.systemPrompt.trim()}"
-        if (project != null) {
-            val (small, big) = project.files.partition { it.text.length <= PROJECT_INLINE_CHARS }
-            val p = buildString {
-                append("【当前项目：${project.name}】\n")
-                if (project.instructions.isNotBlank()) append(project.instructions.trim()).append("\n")
-                if (small.isNotEmpty()) {
-                    append("\n项目资料：\n")
-                    small.forEach { f -> append("【文件：${f.name}】\n${f.text}\n【文件结束】\n") }
-                }
-                if (big.isNotEmpty()) {
-                    // 大份资料整份放进来会占掉大半上下文，而且压缩也压不掉，所以只列名字，用到时检索
-                    append("\n下面这些项目资料比较长，没有放在这里，需要时用 search_project 检索相关段落：\n")
-                    big.forEach { f -> append("- 《${f.name}》${f.text.length} 字\n") }
-                }
-            }.trim()
-            parts += "项目资料" to p
-        }
-        val profile = buildString {
-            if (settings.userName.isNotBlank()) append("用户希望被称呼为：${settings.userName.trim()}\n")
-            if (settings.aboutMe.isNotBlank()) append("关于用户：${settings.aboutMe.trim()}\n")
-            if (settings.replyStyle.isNotBlank()) append("用户希望你这样回答：${settings.replyStyle.trim()}\n")
-        }.trim()
-        if (profile.isNotEmpty()) parts += "个人设定" to "【个性化设定】\n$profile"
-        if (memories.isNotEmpty()) {
-            parts += "长期记忆" to "【关于用户的长期记忆】\n以下是你之前记住的关于用户的信息，自然地运用，不要刻意提起“我记得”：\n" +
-                memories.joinToString("\n") { "- ${it.text}" }
-        }
-        if (conv.summary.isNotBlank()) {
-            parts += "前情提要" to "【较早对话的提要】\n这是你和用户在本对话中较早部分的提要，当作你自己的记忆，直接接着聊，不要提起“提要”或“压缩”。" +
-                "如果需要提要里没有的原话或细节，用 search_history 工具查原始记录。\n<compacted-summary>\n${conv.summary}\n</compacted-summary>"
-        }
-        return parts
-    }
-
-    /** 当前时间，加在最后一条用户消息前面（放这里不影响前面整段的缓存）。 */
-    private fun timeNote(): String = "【当前时间：" + SimpleDateFormat("yyyy年M月d日 EEEE HH:mm", Locale.CHINA).format(Date()) + "】\n"
-
-    /** 给最后一条用户消息前面加上当前时间。 */
-    private fun stampLastUser(list: MutableList<JsonObject>) {
-        val i = list.indexOfLast { it["role"].text() == "user" }
-        if (i < 0) return
-        val m = list[i]
-        val note = timeNote()
-        list[i] = when (val c = m["content"]) {
-            is JsonArray -> JsonObject(m + ("content" to buildJsonArray {
-                add(buildJsonObject { put("type", "text"); put("text", note.trim()) })
-                c.forEach { add(it) }
-            }))
-            else -> JsonObject(m + ("content" to JsonPrimitive(note + c.text())))
         }
     }
 
@@ -1754,9 +1535,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
         val TIME = Regex("""(\d{1,2})[:：](\d{2})""")
 
-        /** 项目资料超过这么多字就不整份放进系统提示词，改成按需检索。 */
-        const val PROJECT_INLINE_CHARS = 20_000
-
         fun mimeOf(name: String): String = when (name.substringAfterLast('.', "").lowercase()) {
             "docx" -> MIME_DOCX
             "pptx" -> MIME_PPTX
@@ -1781,6 +1559,14 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // ---------- 工具函数 ----------
+
+    /** 一次请求的上下文大概由哪些部分组成（名字, 估算 token），统计页用。conv 为空时按新对话算。 */
+    fun contextBreakdown(conv: Conversation?): List<Pair<String, Int>> {
+        val st = _state.value
+        val c = conv ?: Conversation()
+        val memories = if (st.settings.memoryEnabled) st.memories else emptyList()
+        return PromptBuilder.contextBreakdown(st.settings, c, st.project(c.projectId), memories, st.settings.activeSkills())
+    }
 
     /** 记一笔用量：写进每日统计（当场算钱），再累加到对话上。 */
     private fun recordSpend(convId: String, ep: com.jack.ai.data.Endpoint, prompt: Int, hit: Int?, completion: Int) {
