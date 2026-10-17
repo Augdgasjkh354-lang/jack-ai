@@ -120,7 +120,7 @@ internal suspend fun ToolSession.deleteRows(args: JsonObject): String {
         nums.forEach { if (it !in 1..t.rows.size) throw IllegalArgumentException("没有第 $it 行（共 ${t.rows.size} 行）") }
         if (nums.size > 3) {
             val preview = nums.sorted().joinToString("\n") { "$it：" + t.rows[it - 1].joinToString("，") }
-            if (!ui.confirm("从「$name」删掉 ${nums.size} 行？", preview, "删除")) return@runTool "用户取消了，没有删。" to SearchRecord("删行：已取消")
+            if (!approve("从「$name」删掉 ${nums.size} 行？", preview, "删除")) return@runTool "用户取消了，没有删。" to SearchRecord("删行：已取消")
         }
         withContext(Dispatchers.IO) { Tables.save(app, t.copy(rows = t.rows.filterIndexed { i, _ -> i + 1 !in nums })) }
         "已删 ${nums.size} 行，剩 ${t.rows.size - nums.size} 行。注意行号已经变了，再操作前先重新查。" to SearchRecord("「$name」删了 ${nums.size} 行")
@@ -131,7 +131,7 @@ internal suspend fun ToolSession.deleteTable(args: JsonObject): String {
     val name = args["name"].text()
     return runTool("删表：$name") {
         val t = withContext(Dispatchers.IO) { table(name) }
-        if (!ui.confirm("删除整张表「$name」？", "共 ${t.rows.size} 行，删了找不回来。", "删除")) return@runTool "用户取消了，没有删。" to SearchRecord("删表：已取消")
+        if (!approve("删除整张表「$name」？", "共 ${t.rows.size} 行，删了找不回来。", "删除")) return@runTool "用户取消了，没有删。" to SearchRecord("删表：已取消")
         withContext(Dispatchers.IO) { Tables.delete(app, name) }
         "已删除「$name」。" to SearchRecord("删表：$name")
     }

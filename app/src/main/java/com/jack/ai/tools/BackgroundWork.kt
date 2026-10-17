@@ -23,6 +23,7 @@ import com.jack.ai.data.ThinkLevel
 import com.jack.ai.data.activeSkills
 import com.jack.ai.data.backgroundEndpoint
 import com.jack.ai.data.endpoint
+import com.jack.ai.data.fullAuth
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.io.File
@@ -77,7 +78,9 @@ suspend fun runBackgroundWork(ctx: Context, r: Routine, onProgress: (String) -> 
     val now = SimpleDateFormat("yyyy年M月d日 EEEE HH:mm", Locale.CHINA).format(Date())
     val system = PromptBuilder.systemPrompt(s, conv, null, tools, memories, skills, journal = journal) +
         "\n\n【后台定时任务】现在是$now。你在后台执行用户预先设定的定时任务「${r.title}」，用户此刻不在线，不能向他提问，直接把任务做完。" +
-        "发邮件、删除这类需要用户确认的操作会被拒绝，不要尝试；需要交给用户的内容直接写在最后的结果里。结果就是用户稍后会看到的消息，简洁好读，不要开场白。"
+        (if (s.fullAuth) "用户开了完全授权，发邮件、删除这类操作不会弹窗确认、会直接执行，只做任务里明确要求的，拿不准的不要做。"
+        else "发邮件、删除这类需要用户确认的操作会被拒绝，不要尝试。") +
+        "需要交给用户的内容直接写在最后的结果里。结果就是用户稍后会看到的消息，简洁好读，不要开场白。"
     val messages = mutableListOf(
         buildJsonObject { put("role", "system"); put("content", system) },
         buildJsonObject { put("role", "user"); put("content", r.prompt.ifBlank { r.title }) },

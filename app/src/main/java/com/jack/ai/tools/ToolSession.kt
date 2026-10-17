@@ -19,6 +19,7 @@ import com.jack.ai.data.Skill
 import com.jack.ai.data.SkillIds
 import com.jack.ai.data.Store
 import com.jack.ai.data.Workspace
+import com.jack.ai.data.fullAuth
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -59,7 +60,7 @@ interface ToolUi {
     fun started(label: String)
     fun finished(label: String, record: SearchRecord)
     fun attach(file: File)
-    /** 做了就收不回的操作（发邮件等）先问用户，返回 true 才执行。 */
+    /** 做了就收不回的操作（发邮件等）先问用户，返回 true 才执行。工具里别直接调，用 ToolSession.approve。 */
     suspend fun confirm(title: String, body: String, action: String): Boolean
     /** Work 模式的任务清单更新了。 */
     fun plan(items: List<PlanItem>) {}
@@ -87,6 +88,12 @@ class ToolSession(
     var maxRounds = if (conv.work) Int.MAX_VALUE else CHAT_MAX_ROUNDS
     /** 搜索结果的编号接着往下排，引用时不重号。 */
     internal var sourceCount = 0
+
+    /**
+     * 做了就收不回的操作先问用户。设置里开了「完全授权」就直接放行；每次现读设置，到点关掉或用户手动关掉立刻生效。
+     */
+    suspend fun approve(title: String, body: String, action: String): Boolean =
+        withContext(Dispatchers.IO) { host.store.loadSettings().fullAuth } || ui.confirm(title, body, action)
 
     /** 执行一个工具，聊天里显示「进行中」→「完成/出错」。出错时把原因交给模型，不抛出。 */
     suspend fun runTool(label: String, action: suspend () -> Pair<String, SearchRecord>): String {
@@ -151,6 +158,9 @@ class ToolSession(
             name == "read_email" && SkillIds.MAIL in skillIds -> readEmail(args)
             name == "send_email" && SkillIds.MAIL in skillIds -> sendEmail(args)
             name == "mark_email_read" && SkillIds.MAIL in skillIds -> markEmailRead(args)
+            name == "delete_emails" && SkillIds.MAIL in skillIds -> deleteEmails(args)
+            name == "move_emails" && SkillIds.MAIL in skillIds -> moveEmails(args)
+            name == "empty_mail_trash" && SkillIds.MAIL in skillIds -> emptyMailTrash(args)
             arg.isBlank() -> "参数缺失"
             name == "use_skill" -> useSkill(arg)
             name == "run_js" && SkillIds.CALC in skillIds -> runJs(arg)

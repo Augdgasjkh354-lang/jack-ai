@@ -177,7 +177,12 @@ data class Settings(
     /** 邮箱账号（IMAP 收信、SMTP 发信），没设置时为空。 */
     /** 邮箱，可以有好几个；第一个是默认的。 */
     val mails: List<MailAccount> = emptyList(),
+    /** 完全授权到什么时候（毫秒）：0 关闭，Long.MAX_VALUE 一直开着。开着时发邮件、删除等操作不再弹窗确认。 */
+    val fullAuthUntil: Long = 0,
 )
+
+/** 完全授权现在是否有效（到点自动失效）。 */
+val Settings.fullAuth: Boolean get() = fullAuthUntil > System.currentTimeMillis()
 
 /** 邮箱账号。password 是邮箱的「授权码」，不是登录密码；不进备份。 */
 @Serializable

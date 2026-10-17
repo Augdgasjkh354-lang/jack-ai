@@ -46,6 +46,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -70,6 +71,7 @@ import androidx.compose.runtime.produceState
 import com.jack.ai.data.Preset
 import com.jack.ai.data.Settings
 import com.jack.ai.data.ThemeMode
+import com.jack.ai.data.fullAuth
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -321,6 +323,7 @@ fun SettingsScreen(
                         },
                     )
                 }
+                FullAuthRow(vm, settings)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = {
                         val date = java.text.SimpleDateFormat("yyyyMMdd", Locale.US).format(java.util.Date())
@@ -507,4 +510,58 @@ private fun PresetDialog(preset: Preset, onDismiss: () -> Unit, onSave: (Preset)
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
     )
+}
+
+/** 完全授权：开着时发邮件、删邮件、删表格这类操作不再弹窗确认。可以开 1 小时，到点自动关。 */
+@Composable
+private fun FullAuthRow(vm: ChatViewModel, settings: Settings) {
+    // 到点时刷新一下，让开关自己变回关
+    var tick by remember { mutableStateOf(0) }
+    LaunchedEffect(settings.fullAuthUntil, tick) {
+        val wait = settings.fullAuthUntil - System.currentTimeMillis()
+        if (wait > 0 && settings.fullAuthUntil != Long.MAX_VALUE) {
+            kotlinx.coroutines.delay(wait + 500)
+            tick++
+        }
+    }
+    val on = tick >= 0 && settings.fullAuth
+    var asking by remember { mutableStateOf(false) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text("完全授权")
+            Text(
+                when {
+                    !on -> "发邮件、删除等操作前弹窗确认"
+                    settings.fullAuthUntil == Long.MAX_VALUE -> "已开启：所有操作不再确认，直接执行"
+                    else -> "已开启，" + java.text.SimpleDateFormat("HH:mm", Locale.CHINA).format(java.util.Date(settings.fullAuthUntil)) + " 自动关闭"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = if (on) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(
+            checked = on,
+            onCheckedChange = { want ->
+                if (want) asking = true else vm.updateSettings { it.copy(fullAuthUntil = 0) }
+            },
+        )
+    }
+    if (asking) {
+        val grant = { until: Long -> vm.updateSettings { it.copy(fullAuthUntil = until) }; asking = false }
+        AlertDialog(
+            onDismissRequest = { asking = false },
+            title = { Text("开启完全授权？") },
+            text = {
+                Text("开启后，发邮件、删除和移动邮件、清空已删除、删除表格这些操作都不再弹窗确认，AI 会直接执行，定时任务在后台也能做。\n\n" +
+                    "风险：AI 会读你的邮件，如果有人在邮件里藏了指令，可能骗它去发信或删信，没有弹窗替你拦着。建议只在需要时打开，用完就关。")
+            },
+            confirmButton = {
+                Row {
+                    TextButton(onClick = { grant(Long.MAX_VALUE) }) { Text("一直开着") }
+                    TextButton(onClick = { grant(System.currentTimeMillis() + 3_600_000L) }) { Text("开 1 小时") }
+                }
+            },
+            dismissButton = { TextButton(onClick = { asking = false }) { Text("取消") } },
+        )
+    }
 }

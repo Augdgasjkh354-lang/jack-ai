@@ -69,6 +69,8 @@ chaquopy {
 
 dependencies {
     testImplementation("junit:junit:4.13.2")
+    // 测试用的内存邮件服务器，验证删信、移信
+    testImplementation("com.icegreen:greenmail:1.6.15") { exclude(group = "com.sun.mail") }
     val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
     implementation(composeBom)
     implementation("androidx.compose.ui:ui")

@@ -171,6 +171,7 @@ object PromptBuilder {
             }
             if (SkillIds.MAIL in skillIds) {
                 add(SkillTools.LIST_EMAILS); add(SkillTools.READ_EMAIL); add(SkillTools.SEND_EMAIL); add(SkillTools.MARK_EMAIL_READ)
+                add(SkillTools.DELETE_EMAILS); add(SkillTools.MOVE_EMAILS); add(SkillTools.EMPTY_MAIL_TRASH)
             }
             if (compressed) add(SkillTools.SEARCH_HISTORY)
             if (project?.files?.any { it.text.length > PROJECT_INLINE_CHARS } == true) add(SkillTools.SEARCH_PROJECT)

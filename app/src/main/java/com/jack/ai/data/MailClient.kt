@@ -28,7 +28,7 @@ class MailException(message: String) : Exception(message)
 
 /**
  * 收发邮件：IMAP 收信、SMTP 发信。每次调用连一次、用完就断，不常驻后台。
- * 读信用只读方式打开文件夹，不会把邮件标成已读。
+ * 读信用只读方式打开文件夹，不会把邮件标成已读。删信默认移到「已删除」。
  */
 object MailClient {
     data class Summary(
@@ -143,6 +143,74 @@ object MailClient {
         m.setFlag(Flags.Flag.SEEN, read)
     }
 
+    /** 按编号取信的概要，删除、移动前给用户看；找不到的编号跳过。同时给出「已删除」文件夹的名字（没有为 null）。 */
+    fun inspect(acc: MailAccount, folder: String, uids: List<Long>): Pair<List<Summary>, String?> = withFolder(acc, folder) { f ->
+        val msgs = byUids(f, uids)
+        f.fetch(msgs, FetchProfile().apply {
+            add(FetchProfile.Item.ENVELOPE)
+            add(FetchProfile.Item.FLAGS)
+            add(UIDFolder.FetchProfileItem.UID)
+        })
+        msgs.map { summary(f, it) } to trashFolder(f.store as IMAPStore)?.fullName
+    }
+
+    /**
+     * 删信：默认移到「已删除」，找回还来得及；permanent 或信本来就在「已删除」里时彻底删掉。
+     * 返回（删了几封, 移到的文件夹名；彻底删除时为 null）。
+     */
+    fun delete(acc: MailAccount, folder: String, uids: List<Long>, permanent: Boolean): Pair<Int, String?> =
+        withFolder(acc, folder, write = true) { f ->
+            val msgs = byUids(f, uids)
+            if (msgs.isEmpty()) throw MailException("找不到这些邮件，可能已经被删了")
+            val store = f.store as IMAPStore
+            val trash = trashFolder(store)
+            if (permanent || trash?.fullName == f.fullName) {
+                f.setFlags(msgs, Flags(Flags.Flag.DELETED), true)
+                expunge(store, f, msgs)
+                msgs.size to null
+            } else {
+                trash ?: throw MailException("找不到「已删除」文件夹。现有的文件夹：" + folderNames(store).joinToString("、"))
+                moveTo(store, f, msgs, trash)
+                msgs.size to trash.fullName
+            }
+        }
+
+    /** 把信移到另一个文件夹，返回移了几封。 */
+    fun move(acc: MailAccount, folder: String, uids: List<Long>, target: String): Int = withFolder(acc, folder, write = true) { f ->
+        val store = f.store as IMAPStore
+        val dest = store.getFolder(target)
+        if (target.isBlank() || !dest.exists()) {
+            throw MailException("没有「$target」这个文件夹。现有的文件夹：" + folderNames(store).joinToString("、"))
+        }
+        if (dest.fullName == f.fullName) throw MailException("这些邮件已经在「$target」里了")
+        val msgs = byUids(f, uids)
+        if (msgs.isEmpty()) throw MailException("找不到这些邮件，可能已经被删了")
+        moveTo(store, f, msgs, dest)
+        msgs.size
+    }
+
+    /** 「已删除」文件夹的名字和里面有几封。 */
+    fun trashInfo(acc: MailAccount): Pair<String, Int> = withStore(acc) { store ->
+        val trash = trashFolder(store) ?: throw MailException("找不到「已删除」文件夹。现有的文件夹：" + folderNames(store).joinToString("、"))
+        trash.fullName to trash.messageCount
+    }
+
+    /** 清空「已删除」，彻底删掉里面所有的信，返回删了几封。 */
+    fun emptyTrash(acc: MailAccount): Int = withStore(acc) { store ->
+        val trash = trashFolder(store) ?: throw MailException("找不到「已删除」文件夹")
+        trash.open(Folder.READ_WRITE)
+        try {
+            val n = trash.messageCount
+            if (n > 0) {
+                trash.setFlags(1, n, Flags(Flags.Flag.DELETED), true)
+                trash.expunge()
+            }
+            n
+        } finally {
+            runCatching { trash.close(false) }
+        }
+    }
+
     /** 发信。replyTo 给出时按回复处理：带上原信的 Message-ID，主题自动加「Re: 」。 */
     fun send(
         acc: MailAccount,
@@ -201,6 +269,30 @@ object MailClient {
     }
 
     // ---------- 内部 ----------
+
+    private fun byUids(f: IMAPFolder, uids: List<Long>): Array<Message> =
+        f.getMessagesByUID(uids.distinct().toLongArray()).filterNotNull().toTypedArray()
+
+    /** 常见的「已删除」文件夹名，服务器没标 \Trash 时按名字找。 */
+    private val TRASH_NAMES = listOf("已删除", "已删除邮件", "Deleted Messages", "Deleted Items", "Deleted", "Trash", "[Gmail]/Trash")
+
+    /** 找「已删除」文件夹：先看服务器标的 \Trash，再按名字找。 */
+    private fun trashFolder(store: IMAPStore): IMAPFolder? {
+        val all = store.defaultFolder.list("*").filterIsInstance<IMAPFolder>().filter { it.type and Folder.HOLDS_MESSAGES != 0 }
+        all.firstOrNull { f -> f.attributes.orEmpty().any { it.equals("\\Trash", ignoreCase = true) } }?.let { return it }
+        return TRASH_NAMES.firstNotNullOfOrNull { n -> all.firstOrNull { it.fullName.equals(n, true) || it.name.equals(n, true) } }
+    }
+
+    /** 服务器支持 MOVE 就直接移；不支持时 JavaMail 是复制后打删除标记，原件得自己清掉。 */
+    private fun moveTo(store: IMAPStore, f: IMAPFolder, msgs: Array<Message>, dest: Folder) {
+        f.moveMessages(msgs, dest)
+        if (!store.hasCapability("MOVE")) expunge(store, f, msgs)
+    }
+
+    /** 清掉打了删除标记的信：支持 UIDPLUS 时只清这几封，否则清整个文件夹里打了标记的。 */
+    private fun expunge(store: IMAPStore, f: IMAPFolder, msgs: Array<Message>) {
+        if (store.hasCapability("UIDPLUS")) f.expunge(msgs) else f.expunge()
+    }
 
     private fun summary(f: IMAPFolder, m: Message) = Summary(
         uid = f.getUID(m),

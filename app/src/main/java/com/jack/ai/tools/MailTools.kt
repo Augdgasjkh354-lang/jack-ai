@@ -14,7 +14,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** 邮箱：列出、阅读、发送、标记已读。发信前一定弹窗问用户。 */
+/** 邮箱：列出、阅读、发送、标记已读、删除、移动。发信、删信、移信前弹窗问用户（开了完全授权就不问）。 */
 
 private fun ToolSession.accounts(): List<MailAccount> =
     settings.readyMails.ifEmpty { throw MailException("还没有设置邮箱，请到 设置 → 邮箱 里填写") }
@@ -44,7 +44,7 @@ internal suspend fun ToolSession.listEmails(args: JsonObject): String {
                 withContext(Dispatchers.IO) {
                     MailClient.list(
                         acc, folder,
-                        limit = (args["limit"].text().toIntOrNull() ?: 10).coerceIn(1, 30),
+                        limit = (args["limit"].text().toIntOrNull() ?: 10).coerceIn(1, 100),
                         unreadOnly = args["unread_only"].text() == "true",
                         query = query,
                         sinceDays = args["since_days"].text().toIntOrNull()?.coerceIn(1, 3650),
@@ -111,7 +111,7 @@ internal suspend fun ToolSession.sendEmail(args: JsonObject): String {
             if (files.isNotEmpty()) append("附件：${files.joinToString("、") { it.name }}\n")
             append("\n").append(body)
         }
-        if (!ui.confirm("发送这封邮件？", preview, "发送")) {
+        if (!approve("发送这封邮件？", preview, "发送")) {
             return@runTool "用户取消了发送，邮件没有发出。" to SearchRecord("发邮件：已取消")
         }
         val result = withContext(Dispatchers.IO) {
@@ -129,4 +129,74 @@ internal suspend fun ToolSession.markEmailRead(args: JsonObject): String {
         withContext(Dispatchers.IO) { MailClient.setRead(account(args), folder, uid, read) }
         (if (read) "已标为已读。" else "已标为未读。") to SearchRecord(if (read) "标为已读" else "标为未读")
     }
+}
+
+/** uids 数组，也接受单个 uid。 */
+private fun JsonObject.uids(): List<Long> =
+    ((this["uids"] as? JsonArray).orEmpty().mapNotNull { it.text().toLongOrNull() } + listOfNotNull(this["uid"].text().toLongOrNull())).distinct()
+
+private const val MAX_BATCH = 200
+
+/** 确认弹窗里列出要处理的信，太多时只列前 20 封。 */
+private fun preview(list: List<MailClient.Summary>): String =
+    list.take(20).joinToString("\n") { "· ${it.from}｜${it.subject}" } +
+        if (list.size > 20) "\n…还有 ${list.size - 20} 封" else ""
+
+private fun notFound(uids: List<Long>, found: List<MailClient.Summary>) =
+    (uids.size - found.size).let { if (it > 0) "另有 $it 个编号没找到（可能已经删了）。" else "" }
+
+internal suspend fun ToolSession.deleteEmails(args: JsonObject): String {
+    val uids = args.uids()
+    if (uids.isEmpty()) return "缺少邮件编号 uids"
+    if (uids.size > MAX_BATCH) return "一次最多删 $MAX_BATCH 封，分几次来"
+    val folder = args["folder"].text().ifBlank { "INBOX" }
+    val askedPermanent = args["permanent"].text() == "true"
+    return runTool(if (askedPermanent) "彻底删除邮件" else "删除邮件") {
+        val acc = account(args)
+        val (found, trash) = withContext(Dispatchers.IO) { MailClient.inspect(acc, folder, uids) }
+        if (found.isEmpty()) throw MailException("「$folder」里找不到这些编号的邮件，可能已经删了，先用 list_emails 重新看一下")
+        // 本来就在「已删除」里的，再删就是彻底删除
+        val permanent = askedPermanent || trash.equals(folder, ignoreCase = true)
+        if (!permanent && trash == null) {
+            throw MailException("找不到「已删除」文件夹，没法移过去。可以问用户是移到别的文件夹（move_emails），还是彻底删除")
+        }
+        val title = if (permanent) "彻底删除 ${found.size} 封邮件？" else "删除 ${found.size} 封邮件？"
+        val note = if (permanent) "彻底删除后找不回来。" else "会移到「$trash」，需要时还能找回。"
+        if (!approve(title, note + "\n\n" + preview(found), if (permanent) "彻底删除" else "删除")) {
+            return@runTool "用户取消了，邮件没有删。" to SearchRecord("删邮件：已取消")
+        }
+        val (n, where) = withContext(Dispatchers.IO) { MailClient.delete(acc, folder, found.map { it.uid }, permanent) }
+        val text = (if (where == null) "已彻底删除 $n 封。" else "已把 $n 封移到「$where」。") + notFound(uids, found)
+        text to SearchRecord(if (where == null) "彻底删除 $n 封邮件" else "删除 $n 封邮件")
+    }
+}
+
+internal suspend fun ToolSession.moveEmails(args: JsonObject): String {
+    val uids = args.uids()
+    if (uids.isEmpty()) return "缺少邮件编号 uids"
+    if (uids.size > MAX_BATCH) return "一次最多移 $MAX_BATCH 封，分几次来"
+    val folder = args["folder"].text().ifBlank { "INBOX" }
+    val target = args["target_folder"].text().trim()
+    if (target.isBlank()) return "缺少目标文件夹 target_folder"
+    return runTool("移动邮件到「$target」") {
+        val acc = account(args)
+        val (found, _) = withContext(Dispatchers.IO) { MailClient.inspect(acc, folder, uids) }
+        if (found.isEmpty()) throw MailException("「$folder」里找不到这些编号的邮件，先用 list_emails 重新看一下")
+        if (!approve("把 ${found.size} 封邮件移到「$target」？", preview(found), "移动")) {
+            return@runTool "用户取消了，邮件没有移动。" to SearchRecord("移动邮件：已取消")
+        }
+        val n = withContext(Dispatchers.IO) { MailClient.move(acc, folder, found.map { it.uid }, target) }
+        "已把 $n 封移到「$target」。${notFound(uids, found)}" to SearchRecord("移动 $n 封邮件到「$target」")
+    }
+}
+
+internal suspend fun ToolSession.emptyMailTrash(args: JsonObject): String = runTool("清空已删除") {
+    val acc = account(args)
+    val (trash, count) = withContext(Dispatchers.IO) { MailClient.trashInfo(acc) }
+    if (count == 0) return@runTool "「$trash」已经是空的。" to SearchRecord("清空已删除：本来就是空的")
+    if (!approve("清空「$trash」？", "${acc.address} 的「$trash」里共 $count 封，彻底删除后找不回来。", "清空")) {
+        return@runTool "用户取消了，没有清空。" to SearchRecord("清空已删除：已取消")
+    }
+    val n = withContext(Dispatchers.IO) { MailClient.emptyTrash(acc) }
+    "已清空「$trash」，彻底删除了 $n 封。" to SearchRecord("清空已删除（$n 封）")
 }
