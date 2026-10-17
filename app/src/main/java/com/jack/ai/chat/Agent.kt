@@ -26,6 +26,9 @@ class Agent(
     /** 最后一轮请求说的话（中间轮次“我先搜一下”之类的不算），后台任务只要这个。 */
     var lastRound: String = ""
         private set
+    /** 最后一轮是不是写到长度上限被截断了。 */
+    var truncated = false
+        private set
 
     /**
      * 第一轮还没出字就被接口拒绝（400）时怎么补救：返回换过的消息和工具，返回 null 就不补救、直接报错。
@@ -70,6 +73,7 @@ class Agent(
                             onText()
                         }
                         is StreamEvent.Usage -> onUsage(ev)
+                        is StreamEvent.Finish -> truncated = ev.reason == "length"
                         is StreamEvent.ToolCall -> {
                             // 工具调用是分片流式返回的，按 index 拼起来
                             val c = calls.getOrPut(ev.index) { Call() }

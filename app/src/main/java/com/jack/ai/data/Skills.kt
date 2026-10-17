@@ -43,6 +43,7 @@ object SkillIds {
     const val PYTHON = "builtin-python"
     const val CALENDAR = "builtin-calendar"
     const val MAIL = "builtin-mail"
+    const val TABLES = "builtin-tables"
 }
 
 private fun schema(s: String): JsonObject = Json.parseToJsonElement(s).jsonObject
@@ -176,6 +177,17 @@ val BUILTIN_SKILLS = listOf(
 9. 用户可能有好几个邮箱。list_emails 不填 account 会把每个邮箱都列出来；读信、回信、标记时，account 填那封信所在的邮箱。发新信时用户没说用哪个，就用默认邮箱（不填 account）；用户说了，就填对应的地址。""",
     ),
     Skill(
+        id = SkillIds.TABLES, builtin = true, name = "表格",
+        description = "记账、清单、记录这类表格数据：建表、记一笔、查询、汇总、修改、删除（“记一下午饭 25”“这个月花了多少”“把书单里看完的标出来”）。所有对话共用。",
+        instructions = """表格的做法：
+1. 先用 list_tables 看看有哪些表、各有哪些列。已经有合适的表就往里加，不要另建一张差不多的。
+2. 没有合适的表才用 create_table 建，列名简短（比如 记账：日期、类别、金额、备注）。
+3. add_rows 每行按列名填：日期统一写 yyyy-MM-dd，金额只写数字，不带单位；用户没说日期就用今天。
+4. 查询和汇总用 query_table：where 筛选（比如 日期 >= 2026-10-01），sum 求和。数字一律以工具算出的为准，不要自己心算。
+5. 改和删要用行号：先 query_table 查到行号，再 update_rows / delete_rows。删了之后行号会变，再操作前重新查。
+6. 记好、改好后用一句话确认结果，比如“记好了：10月17日 午饭 25 元，这个月餐饮共 680 元”。""",
+    ),
+    Skill(
         id = SkillIds.CALC, builtin = true, name = "计算与图表",
         description = "真正运行代码来算数、统计、处理数据；把数据画成柱状图、折线图、饼图；画思维导图（树状图）和流程图。涉及精确计算（贷款、利息、汇率换算、统计）或用户想要图时使用。",
         instructions = """计算与图表的做法：
@@ -237,6 +249,13 @@ val BUILTIN_SKILLS = listOf(
 object SkillTools {
     val UPDATE_PLAN = schema("""{"type":"function","function":{"name":"update_plan","description":"写下或更新这次任务的步骤清单，会显示给用户看进度。每次都传完整的清单。","parameters":{"type":"object","properties":{"items":{"type":"array","items":{"type":"object","properties":{"text":{"type":"string","description":"这一步做什么，简短"},"status":{"type":"string","enum":["pending","doing","done"],"description":"pending 没开始，doing 正在做，done 做完了"}},"required":["text","status"]}}},"required":["items"]}}}""")
     val DELEGATE_TASKS = schema("""{"type":"function","function":{"name":"delegate_tasks","description":"把几件彼此独立的子任务（主要是查资料、读文件）同时派出去并行做，全部做完后返回各自的结果。最多 5 件。","parameters":{"type":"object","properties":{"tasks":{"type":"array","items":{"type":"object","properties":{"title":{"type":"string","description":"子任务名，简短"},"instructions":{"type":"string","description":"要查清楚什么、结果要包含什么"}},"required":["title","instructions"]}}},"required":["tasks"]}}}""")
+    val LIST_TABLES = schema("""{"type":"function","function":{"name":"list_tables","description":"列出所有表格：表名、行数、列名。","parameters":{"type":"object","properties":{}}}}""")
+    val CREATE_TABLE = schema("""{"type":"function","function":{"name":"create_table","description":"新建一张表。","parameters":{"type":"object","properties":{"name":{"type":"string","description":"表名"},"columns":{"type":"array","items":{"type":"string"},"description":"列名"}},"required":["name","columns"]}}}""")
+    val ADD_ROWS = schema("""{"type":"function","function":{"name":"add_rows","description":"往表里加行。每行是一个对象，键是列名；没有的列会自动加上。","parameters":{"type":"object","properties":{"name":{"type":"string"},"rows":{"type":"array","items":{"type":"object"},"description":"比如 [{\"日期\":\"2026-10-17\",\"类别\":\"餐饮\",\"金额\":\"25\"}]"}},"required":["name","rows"]}}}""")
+    val QUERY_TABLE = schema("""{"type":"function","function":{"name":"query_table","description":"查表：按条件筛选行，可以对某些列求和。返回行号和内容。","parameters":{"type":"object","properties":{"name":{"type":"string"},"where":{"type":"array","items":{"type":"object","properties":{"column":{"type":"string"},"op":{"type":"string","enum":["=","!=","contains",">","<",">=","<="]},"value":{"type":"string"}},"required":["column","op","value"]},"description":"都满足才算，不填就是全部"},"sum":{"type":"array","items":{"type":"string"},"description":"要求和的列"},"limit":{"type":"integer","description":"最多返回几行，默认 50"}},"required":["name"]}}}""")
+    val UPDATE_ROWS = schema("""{"type":"function","function":{"name":"update_rows","description":"按行号修改某几行的某些列。","parameters":{"type":"object","properties":{"name":{"type":"string"},"rows":{"type":"array","items":{"type":"integer"},"description":"行号，从 1 开始"},"set":{"type":"object","description":"要改成什么，键是列名"}},"required":["name","rows","set"]}}}""")
+    val DELETE_ROWS = schema("""{"type":"function","function":{"name":"delete_rows","description":"按行号删除行。超过 3 行会先问用户。","parameters":{"type":"object","properties":{"name":{"type":"string"},"rows":{"type":"array","items":{"type":"integer"}}},"required":["name","rows"]}}}""")
+    val DELETE_TABLE = schema("""{"type":"function","function":{"name":"delete_table","description":"删除整张表，会先问用户。","parameters":{"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}}}""")
     val USE_SKILL = schema("""{"type":"function","function":{"name":"use_skill","description":"读取某个 skill 的详细做法说明。使用一个 skill 之前必须先调用它。","parameters":{"type":"object","properties":{"name":{"type":"string","description":"skill 的名字"}},"required":["name"]}}}""")
 
     val WEB_SEARCH = schema("""{"type":"function","function":{"name":"web_search","description":"在互联网上搜索最新信息，返回若干网页的标题、链接和摘要。","parameters":{"type":"object","properties":{"query":{"type":"string","description":"搜索关键词，简洁明确"}},"required":["query"]}}}""")

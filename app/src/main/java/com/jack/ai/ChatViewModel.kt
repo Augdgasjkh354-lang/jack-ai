@@ -55,6 +55,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
+import com.jack.ai.api.StreamEvent
 import kotlinx.serialization.json.put
 import java.io.File
 import java.io.IOException
@@ -298,6 +299,64 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** 删除某条消息（以及它之后的所有消息）。 */
+    /**
+     * 回答写到长度上限被截断时，从断的地方接着写，接在同一条消息后面。
+     * DeepSeek 用“对话前缀续写”（beta 接口，模型从已有内容直接往下写）；其他服务让它“接着写，不要重复”。
+     */
+    fun continueWriting() {
+        val conv = _state.value.current ?: return
+        if (busy()) return
+        val m = conv.messages.lastOrNull()?.takeIf { it.role == "assistant" && it.truncated && it.content.isNotBlank() } ?: return
+        val settings = _state.value.settings
+        val ep0 = settings.endpoint(m.model.ifBlank { settings.model })?.takeIf { it.apiKey.isNotBlank() }
+            ?: settings.endpoint()?.takeIf { it.apiKey.isNotBlank() }
+        if (ep0 == null) { _state.update { it.copy(toast = "这个模型用不了了，请先选一个能用的模型") }; return }
+        val convId = conv.id
+        patchMessage(convId, m.id) { it.copy(truncated = false) }
+        val previous = job
+        job = viewModelScope.launch {
+            previous?.join()
+            _state.update { it.copy(streaming = true) }
+            WorkService.start(getApplication(), convId, conv.title, conv.work)
+            try {
+                val (chatMemory, projectMemory) = knowledge.memoryTexts(conv)
+                val input = PromptBuilder.Input(settings, conv, _state.value.project(conv.projectId),
+                    if (settings.memoryEnabled) store.loadMemories() else emptyList(), settings.activeSkills(),
+                    vision = false, sendReasoning = false, chatMemory = chatMemory, projectMemory = projectMemory)
+                val hist = withContext(Dispatchers.Default) { PromptBuilder.history(input, null, flat = true) }
+                val ep = if (ep0.deepseek) {
+                    // 最后一条是要接着写的回答，标成前缀
+                    val i = hist.indexOfLast { it["role"]?.let { r -> (r as? kotlinx.serialization.json.JsonPrimitive)?.content } == "assistant" }
+                    if (i >= 0) hist[i] = buildJsonObject { put("role", "assistant"); put("content", m.content); put("prefix", true) }
+                    while (hist.size > i + 1 && i >= 0) hist.removeAt(hist.lastIndex)
+                    ep0.copy(baseUrl = ep0.baseUrl.trimEnd('/').removeSuffix("/v1") + "/beta")
+                } else {
+                    hist += msg("user", "你上一条回答写到长度上限被截断了。从中断的地方直接接着写，不要重复已经写过的内容，不要加开场白。")
+                    ep0
+                }
+                var cut = false
+                client.stream(ep, hist, ThinkLevel.OFF, settings.temperature, null).collect { ev ->
+                    when (ev) {
+                        is StreamEvent.Text -> if (ev.content.isNotEmpty()) patchMessage(convId, m.id) { it.copy(content = it.content + ev.content) }
+                        is StreamEvent.Usage -> core.recordSpend(convId, ep0, ev.promptTokens, ev.cacheHit, ev.completionTokens)
+                        is StreamEvent.Finish -> cut = ev.reason == "length"
+                        else -> {}
+                    }
+                }
+                if (cut) patchMessage(convId, m.id) { it.copy(truncated = true) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                patchMessage(convId, m.id) { it.copy(truncated = true) }
+                _state.update { it.copy(toast = "接着写失败：${e.message ?: "网络问题"}") }
+            } finally {
+                _state.update { it.copy(streaming = false) }
+                persist()
+                WorkService.finish(getApplication(), convId, conv.title, "接着写完了", conv.work)
+            }
+        }
+    }
+
     fun deleteFrom(messageId: String) {
         val conv = _state.value.current ?: return
         stop()
@@ -547,6 +606,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 )
                 if (content.isBlank() && reasoning.isEmpty()) {
                     patchMessage(convId, reply.id) { it.copy(error = "没有收到回复，请重试") }
+                }
+                if (agent.truncated) {
+                    flush()
+                    patchMessage(convId, reply.id) { it.copy(truncated = true) }
                 }
             } catch (e: CancellationException) {
                 flush()

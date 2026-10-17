@@ -115,6 +115,7 @@ fun ChatScreen(
     onOpenSkills: () -> Unit,
     onOpenRoutines: () -> Unit,
     onOpenLibrary: () -> Unit,
+    onOpenTables: () -> Unit,
     onOpenReview: () -> Unit,
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -151,6 +152,7 @@ fun ChatScreen(
                 onOpenSkills = { scope.launch { drawerState.close() }; onOpenSkills() },
                 onOpenRoutines = { scope.launch { drawerState.close() }; onOpenRoutines() },
                 onOpenLibrary = { scope.launch { drawerState.close() }; onOpenLibrary() },
+                onOpenTables = { scope.launch { drawerState.close() }; onOpenTables() },
                 onOpenReview = { scope.launch { drawerState.close() }; onOpenReview() },
                 onSettings = { scope.launch { drawerState.close() }; onOpenSettings() },
             )
@@ -465,7 +467,8 @@ private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolea
                             onRegenerate = vm::regenerate,
                             onDelete = { vm.deleteFrom(msg.id) },
                             onReview = vm::reviewLast,
-                            onContinue = if (conv.work && isLast && vm.canContinue(msg)) vm::continueWork else null,
+                            onContinue = if (conv.work && isLast && !msg.truncated && vm.canContinue(msg)) vm::continueWork else null,
+                            onContinueWriting = vm::continueWriting,
                         )
                     }
                 }

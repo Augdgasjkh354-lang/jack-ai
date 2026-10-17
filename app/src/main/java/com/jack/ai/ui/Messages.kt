@@ -216,6 +216,8 @@ fun AssistantMessage(
     onReview: (() -> Unit)? = null,
     /** Work：任务被打断（出错、停止、清单没做完）时“接着做”。 */
     onContinue: (() -> Unit)? = null,
+    /** 回答被长度上限截断时“接着写”。 */
+    onContinueWriting: (() -> Unit)? = null,
 ) {
     val clipboard = LocalClipboardManager.current
     val ctx = LocalContext.current
@@ -270,6 +272,12 @@ fun AssistantMessage(
                     val speaking = Speaker.speakingId == msg.id
                     SmallAction(if (speaking) AppIcons.Stop else AppIcons.Speaker, if (speaking) "停止朗读" else "朗读") {
                         Speaker.toggle(ctx, msg.id, msg.content)
+                    }
+                }
+                if (isLast && msg.truncated && onContinueWriting != null) {
+                    TextButton(onClick = onContinueWriting, modifier = Modifier.height(32.dp),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp)) {
+                        Text("接着写", style = MaterialTheme.typography.labelMedium, color = colors.primary)
                     }
                 }
                 if (isLast && onContinue != null) {

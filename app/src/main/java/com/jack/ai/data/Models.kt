@@ -33,6 +33,8 @@ data class ChatMessage(
     val plan: List<PlanItem> = emptyList(),
     /** Work 模式下这条回答花了多少元（当场按价格算）。 */
     val cost: Double = 0.0,
+    /** 写到长度上限被截断了，可以“接着写”。 */
+    val truncated: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
 )
 

@@ -2,6 +2,7 @@
 <paths>
     <files-path name="outputs" path="outputs/" />
     <files-path name="workspaces" path="workspaces/" />
+    <files-path name="tables" path="tables/" />
     <cache-path name="exports" path="exports/" />
     <cache-path name="camera" path="camera/" />
 </paths>

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Surface
@@ -79,6 +80,7 @@ fun HistoryDrawer(
     onOpenSkills: () -> Unit,
     onOpenRoutines: () -> Unit,
     onOpenLibrary: () -> Unit,
+    onOpenTables: () -> Unit,
     onOpenReview: () -> Unit,
     onSettings: () -> Unit,
 ) {
@@ -172,6 +174,7 @@ fun HistoryDrawer(
                 )
                 DrawerRow(icon = AppIcons.File, label = "资料库",
                     trailing = state.library.size.takeIf { it > 0 }?.toString(), onClick = onOpenLibrary)
+                DrawerRow(icon = Icons.Default.List, label = "表格", onClick = onOpenTables)
                 DrawerRow(icon = Icons.Default.Star, label = "复习卡片",
                     trailing = state.cards.count { it.due <= System.currentTimeMillis() }.takeIf { it > 0 }?.let { "$it 待复习" },
                     onClick = onOpenReview)

@@ -41,6 +41,8 @@ sealed interface StreamEvent {
     /** 本次请求用掉的 token（最后一个数据块里返回）。 */
     /** cacheHit 为 null 表示服务没告诉我们缓存命中了多少。 */
     data class Usage(val promptTokens: Int, val completionTokens: Int, val cacheHit: Int? = null) : StreamEvent
+    /** 这一轮怎么结束的：length 表示写到长度上限被截断了。 */
+    data class Finish(val reason: String) : StreamEvent
 }
 
 class ApiException(message: String, val code: Int = 0) : Exception(message)
@@ -120,6 +122,9 @@ class DeepSeekClient(
                                 if (p > 0 && trySendBlocking(StreamEvent.Usage(p, c, cacheHitOf(u))).isFailure) return
                             }
                             val choice = obj["choices"]?.jsonArray?.firstOrNull()?.jsonObject ?: continue
+                            choice["finish_reason"].str().takeIf { it.isNotEmpty() }?.let { reason ->
+                                if (trySendBlocking(StreamEvent.Finish(reason)).isFailure) return
+                            }
                             val delta = choice["delta"] as? JsonObject ?: continue
                             val r = delta["reasoning_content"].str().ifEmpty { delta["reasoning"].str() }
                             val c = delta["content"].str()

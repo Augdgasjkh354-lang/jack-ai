@@ -165,6 +165,10 @@ object PromptBuilder {
                 add(SkillTools.SET_ALARM); add(SkillTools.CANCEL_ALARM)
             }
             if (SkillIds.CALENDAR in skillIds) { add(SkillTools.ADD_EVENT); add(SkillTools.LIST_EVENTS); add(SkillTools.DELETE_EVENT) }
+            if (SkillIds.TABLES in skillIds) {
+                add(SkillTools.LIST_TABLES); add(SkillTools.CREATE_TABLE); add(SkillTools.ADD_ROWS); add(SkillTools.QUERY_TABLE)
+                add(SkillTools.UPDATE_ROWS); add(SkillTools.DELETE_ROWS); add(SkillTools.DELETE_TABLE)
+            }
             if (SkillIds.MAIL in skillIds) {
                 add(SkillTools.LIST_EMAILS); add(SkillTools.READ_EMAIL); add(SkillTools.SEND_EMAIL); add(SkillTools.MARK_EMAIL_READ)
             }
