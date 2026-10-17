@@ -566,6 +566,12 @@ private fun InputBar(
     val speech = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
         r.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.let { vm.receiveText(it) }
     }
+    LaunchedEffect(state.cameraRequest) {
+        if (state.cameraRequest) {
+            vm.consumeCameraRequest()
+            startCamera()
+        }
+    }
     LaunchedEffect(state.voiceRequest) {
         if (state.voiceRequest) {
             vm.consumeVoiceRequest()

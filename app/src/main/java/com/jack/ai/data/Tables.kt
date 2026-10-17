@@ -30,6 +30,7 @@ object Tables {
         val tmp = File(f.parentFile, f.name + ".tmp")
         tmp.writeText("﻿" + toCsv(t))
         if (!tmp.renameTo(f)) { f.delete(); tmp.renameTo(f) }
+        com.jack.ai.Widgets.refreshAll(ctx)
     }
 
     fun delete(ctx: Context, name: String) = synchronized(lock) { file(ctx, name).delete() }

@@ -37,4 +37,18 @@ class TablesTest {
     fun safeNameStripsPathCharacters() {
         assertEquals("a_b_c", Tables.safeName("a/b\\c"))
     }
+
+    @Test
+    fun ledgerTotalsTodayAndMonth() {
+        val now = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).parse("2026-10-17")!!.time
+        val l = Table("记账", listOf("日期", "类别", "金额"), listOf(
+            listOf("2026-09-30", "餐饮", "30"),
+            listOf("2026-10-01", "餐饮", "¥25"),
+            listOf("2026-10-17", "交通", "18"),
+            listOf("2026-10-17", "餐饮", "1,000"),
+        ))
+        val (day, month) = com.jack.ai.LedgerWidget.totals(l, now)
+        assertEquals(1018.0, day, 0.001)
+        assertEquals(1043.0, month, 0.001)
+    }
 }

@@ -1,0 +1,9 @@
+<resources>
+    <color name="widget_bg">#23201D</color>
+    <color name="widget_stroke">#3A3530</color>
+    <color name="widget_text">#EDE6DF</color>
+    <color name="widget_hint">#A39A90</color>
+    <color name="widget_accent">#E08A63</color>
+    <color name="widget_chip">#4A2E22</color>
+    <color name="widget_on_chip">#F6E2D7</color>
+</resources>

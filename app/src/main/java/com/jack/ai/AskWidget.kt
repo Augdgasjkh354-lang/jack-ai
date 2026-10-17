@@ -21,16 +21,10 @@ class AskWidget : AppWidgetProvider() {
     override fun onUpdate(ctx: Context, manager: AppWidgetManager, ids: IntArray) = render(ctx, manager, ids)
 
     companion object {
-        /** 提醒、卡片、日程有变化时调用，刷新桌面上所有的小组件。 */
-        fun refresh(ctx: Context) {
-            runCatching {
-                val manager = AppWidgetManager.getInstance(ctx)
-                val ids = manager.getAppWidgetIds(ComponentName(ctx, AskWidget::class.java))
-                if (ids.isNotEmpty()) render(ctx, manager, ids)
-            }
-        }
+        /** 提醒、卡片、日程、对话、表格有变化时调用，刷新桌面上所有的小组件。 */
+        fun refresh(ctx: Context) = Widgets.refreshAll(ctx)
 
-        private fun render(ctx: Context, manager: AppWidgetManager, ids: IntArray) {
+        internal fun render(ctx: Context, manager: AppWidgetManager, ids: IntArray) {
             val views = RemoteViews(ctx.packageName, R.layout.widget_ask)
             views.setOnClickPendingIntent(R.id.widget_root, open(ctx, MainActivity.ACTION_NEW_CHAT, 1))
             views.setOnClickPendingIntent(R.id.widget_mic, open(ctx, MainActivity.ACTION_VOICE, 2))

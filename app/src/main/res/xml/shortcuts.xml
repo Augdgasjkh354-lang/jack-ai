@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 长按 App 图标弹出的快捷菜单 -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut android:shortcutId="new_chat" android:enabled="true" android:icon="@drawable/ic_sc_chat"
+        android:shortcutShortLabel="@string/sc_chat" android:shortcutLongLabel="@string/sc_chat">
+        <intent android:action="com.jack.ai.NEW_CHAT" android:targetPackage="com.jack.ai" android:targetClass="com.jack.ai.MainActivity" />
+    </shortcut>
+    <shortcut android:shortcutId="new_work" android:enabled="true" android:icon="@drawable/ic_sc_work"
+        android:shortcutShortLabel="@string/sc_work" android:shortcutLongLabel="@string/sc_work">
+        <intent android:action="com.jack.ai.NEW_WORK" android:targetPackage="com.jack.ai" android:targetClass="com.jack.ai.MainActivity" />
+    </shortcut>
+    <shortcut android:shortcutId="voice" android:enabled="true" android:icon="@drawable/ic_sc_mic"
+        android:shortcutShortLabel="@string/sc_voice" android:shortcutLongLabel="@string/sc_voice">
+        <intent android:action="com.jack.ai.VOICE" android:targetPackage="com.jack.ai" android:targetClass="com.jack.ai.MainActivity" />
+    </shortcut>
+    <shortcut android:shortcutId="camera" android:enabled="true" android:icon="@drawable/ic_sc_camera"
+        android:shortcutShortLabel="@string/sc_camera" android:shortcutLongLabel="@string/sc_camera">
+        <intent android:action="com.jack.ai.CAMERA" android:targetPackage="com.jack.ai" android:targetClass="com.jack.ai.MainActivity" />
+    </shortcut>
+</shortcuts>

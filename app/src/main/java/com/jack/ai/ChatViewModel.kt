@@ -84,6 +84,8 @@ data class UiState(
     val incomingText: String? = null,
     /** 桌面小组件点了话筒，等输入框打开语音识别。 */
     val voiceRequest: Boolean = false,
+    /** 从桌面快捷方式进来，要直接打开相机。 */
+    val cameraRequest: Boolean = false,
     val routines: List<Routine> = emptyList(),
     val library: List<LibraryDoc> = emptyList(),
     val cards: List<Flashcard> = emptyList(),
@@ -653,6 +655,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun consumeIncomingText() = _state.update { it.copy(incomingText = null) }
     fun requestVoice() = _state.update { it.copy(voiceRequest = true) }
     fun consumeVoiceRequest() = _state.update { it.copy(voiceRequest = false) }
+    fun requestCamera() = _state.update { it.copy(cameraRequest = true) }
+    fun consumeCameraRequest() = _state.update { it.copy(cameraRequest = false) }
 
     /** 别的 App 分享过来的内容：开一个新对话，文字放进输入框，图片和文件作为附件。 */
     fun handleShare(text: String?, uris: List<Uri>, mime: String?) {

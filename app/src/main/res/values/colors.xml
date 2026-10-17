@@ -1,3 +1,11 @@
 <resources>
     <color name="ic_launcher_background">#C4673F</color>
+    <!-- 小组件配色，夜间模式在 values-night 里 -->
+    <color name="widget_bg">#FFFFFF</color>
+    <color name="widget_stroke">#E5DFD7</color>
+    <color name="widget_text">#2B2622</color>
+    <color name="widget_hint">#8A8178</color>
+    <color name="widget_accent">#C4673F</color>
+    <color name="widget_chip">#F6E2D7</color>
+    <color name="widget_on_chip">#5A2610</color>
 </resources>

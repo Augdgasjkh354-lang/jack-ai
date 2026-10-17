@@ -1,4 +1,12 @@
 <resources>
     <string name="app_name">Jack AI</string>
     <string name="widget_desc">桌面上直接问 Jack AI</string>
+    <string name="widget_quick_desc">Chat、Work、语音、拍照四个按钮</string>
+    <string name="widget_today_desc">下一个提醒、今天的日程、待复习、本月花费</string>
+    <string name="widget_recent_desc">最近的几个对话，点一下直接进去</string>
+    <string name="widget_ledger_desc">今天和本月花了多少，一键记一笔</string>
+    <string name="sc_chat">新 Chat</string>
+    <string name="sc_work">新 Work</string>
+    <string name="sc_voice">语音提问</string>
+    <string name="sc_camera">拍照提问</string>
 </resources>

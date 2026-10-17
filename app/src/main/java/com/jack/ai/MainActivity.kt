@@ -84,11 +84,13 @@ class MainActivity : FragmentActivity() {
     override fun onPause() {
         super.onPause()
         visible = false
+        Widgets.refreshAll(applicationContext)
     }
 
     override fun onResume() {
         super.onResume()
         visible = true
+        Widgets.refreshAll(applicationContext)
         // 后台做梦可能更新了记忆
         vm.reloadMemory()
         vm.reloadRoutines()
@@ -103,7 +105,12 @@ class MainActivity : FragmentActivity() {
 
     private fun handleIntent(intent: Intent?) {
         when (intent?.action) {
-            ACTION_NEW_CHAT -> { stack.clear(); vm.newChat() }
+            ACTION_NEW_CHAT -> {
+                stack.clear(); vm.newChat(); vm.setWork(false)
+                intent.getStringExtra("prefill")?.let { vm.receiveText(it) }
+            }
+            ACTION_NEW_WORK -> { stack.clear(); vm.newChat(); vm.setWork(true) }
+            ACTION_CAMERA -> { stack.clear(); vm.newChat(); vm.requestCamera() }
             ACTION_OPEN_CHAT -> { stack.clear(); vm.mergeInbox(intent.getStringExtra("convId")) }
             ACTION_VOICE -> { stack.clear(); vm.newChat(); vm.requestVoice() }
             Intent.ACTION_SEND -> {
@@ -277,6 +284,8 @@ class MainActivity : FragmentActivity() {
 
         const val ACTION_NEW_CHAT = "com.jack.ai.NEW_CHAT"
         const val ACTION_VOICE = "com.jack.ai.VOICE"
+        const val ACTION_NEW_WORK = "com.jack.ai.NEW_WORK"
+        const val ACTION_CAMERA = "com.jack.ai.CAMERA"
         const val ACTION_OPEN_CHAT = "com.jack.ai.OPEN_CHAT"
     }
 }
