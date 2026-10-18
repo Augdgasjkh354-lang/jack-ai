@@ -82,7 +82,7 @@ object CalendarTool {
     /** 直接写进日历，返回日程编号；没有可写的日历时返回 null。 */
     fun insert(
         ctx: Context, title: String, begin: Long, end: Long, allDay: Boolean,
-        location: String, notes: String, remindMinutes: Int?,
+        location: String, notes: String, remindMinutes: Int?, rrule: String? = null,
     ): Long? {
         val calId = writableCalendarId(ctx) ?: return null
         val values = ContentValues().apply {
@@ -94,14 +94,18 @@ object CalendarTool {
                 val start = utcMidnight(begin)
                 val days = ((utcMidnight(end) - start) / 86_400_000L).coerceAtLeast(1)
                 put(CalendarContract.Events.DTSTART, start)
-                put(CalendarContract.Events.DTEND, start + days * 86_400_000L)
+                // 重复日程不能写结束时间，要写时长
+                if (rrule != null) put(CalendarContract.Events.DURATION, "P${days}D")
+                else put(CalendarContract.Events.DTEND, start + days * 86_400_000L)
                 put(CalendarContract.Events.ALL_DAY, 1)
                 put(CalendarContract.Events.EVENT_TIMEZONE, "UTC")
             } else {
                 put(CalendarContract.Events.DTSTART, begin)
-                put(CalendarContract.Events.DTEND, end)
+                if (rrule != null) put(CalendarContract.Events.DURATION, "P${((end - begin) / 1000).coerceAtLeast(60)}S")
+                else put(CalendarContract.Events.DTEND, end)
                 put(CalendarContract.Events.EVENT_TIMEZONE, TimeZone.getDefault().id)
             }
+            if (rrule != null) put(CalendarContract.Events.RRULE, rrule)
         }
         val uri = ctx.contentResolver.insert(CalendarContract.Events.CONTENT_URI, values) ?: return null
         val id = ContentUris.parseId(uri)
@@ -118,8 +122,19 @@ object CalendarTool {
     }
 
     /** 没有写权限时，打开日历 App 的新建日程页面，内容都填好了。 */
-    fun insertIntent(title: String, begin: Long, end: Long, allDay: Boolean, location: String, notes: String): Intent =
+    /** 重复方式 → 日历的 RRULE；不重复返回 null。 */
+    fun rrule(repeat: String): String? = when (repeat) {
+        "daily" -> "FREQ=DAILY"
+        "weekdays" -> "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"
+        "weekly" -> "FREQ=WEEKLY"
+        "monthly" -> "FREQ=MONTHLY"
+        "yearly" -> "FREQ=YEARLY"
+        else -> null
+    }
+
+    fun insertIntent(title: String, begin: Long, end: Long, allDay: Boolean, location: String, notes: String, rrule: String? = null): Intent =
         Intent(Intent.ACTION_INSERT, CalendarContract.Events.CONTENT_URI)
+            .apply { if (rrule != null) putExtra(CalendarContract.Events.RRULE, rrule) }
             .putExtra(CalendarContract.Events.TITLE, title)
             .putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, begin)
             .putExtra(CalendarContract.EXTRA_EVENT_END_TIME, end)

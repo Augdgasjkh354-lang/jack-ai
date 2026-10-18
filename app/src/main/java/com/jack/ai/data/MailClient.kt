@@ -23,6 +23,12 @@ import javax.mail.internet.MimeBodyPart
 import javax.mail.internet.MimeMessage
 import javax.mail.internet.MimeMultipart
 import javax.mail.internet.MimeUtility
+import javax.mail.search.AndTerm
+import javax.mail.search.BodyTerm
+import javax.mail.search.FromStringTerm
+import javax.mail.search.OrTerm
+import javax.mail.search.SearchTerm
+import javax.mail.search.SubjectTerm
 
 class MailException(message: String) : Exception(message)
 
@@ -100,26 +106,40 @@ object MailClient {
 
     /**
      * 列出邮件，最新的在前。有关键词或只看未读时，在最近的 300 封里找（网易的服务器搜中文不可靠，所以在手机上筛）。
+     * searchBody 时连正文一起搜：只看最近 150 封，先让服务器搜，服务器不支持就逐封下载来搜（会慢一些）。
      */
-    fun list(acc: MailAccount, folder: String, limit: Int, unreadOnly: Boolean, query: String, sinceDays: Int?): List<Summary> =
+    fun list(
+        acc: MailAccount, folder: String, limit: Int, unreadOnly: Boolean, query: String, sinceDays: Int?,
+        searchBody: Boolean = false,
+    ): List<Summary> =
         withFolder(acc, folder) { f ->
             val total = f.messageCount
             if (total == 0) return@withFolder emptyList()
-            val window = if (unreadOnly || query.isNotBlank() || sinceDays != null) 300 else limit
+            val words = query.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+            val body = searchBody && words.isNotEmpty()
+            val window = when {
+                body -> 150
+                unreadOnly || words.isNotEmpty() || sinceDays != null -> 300
+                else -> limit
+            }
             val from = (total - window + 1).coerceAtLeast(1)
-            val msgs = f.getMessages(from, total)
+            var msgs = f.getMessages(from, total)
+            if (body) {
+                // 每个词都要出现在主题、发件人或正文里
+                val term = AndTerm(words.map { w -> OrTerm(arrayOf(SubjectTerm(w), FromStringTerm(w), BodyTerm(w))) }.toTypedArray<SearchTerm>())
+                msgs = f.search(term, msgs)
+            }
             f.fetch(msgs, FetchProfile().apply {
                 add(FetchProfile.Item.ENVELOPE)
                 add(FetchProfile.Item.FLAGS)
                 add(UIDFolder.FetchProfileItem.UID)
             })
             val since = sinceDays?.let { System.currentTimeMillis() - it * 86_400_000L }
-            val words = query.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
-            msgs.reversed().asSequence()
+            msgs.sortedBy { it.messageNumber }.reversed().asSequence()
                 .map { summary(f, it) }
                 .filter { !unreadOnly || it.unread }
                 .filter { since == null || it.date >= since }
-                .filter { s -> words.all { w -> s.subject.contains(w, true) || s.from.contains(w, true) } }
+                .filter { s -> body || words.all { w -> s.subject.contains(w, true) || s.from.contains(w, true) } }
                 .take(limit)
                 .toList()
         }

@@ -74,4 +74,14 @@ class MailServerTest {
         assertEquals(0, MailClient.trashInfo(acc).second)
         assertEquals(0, inbox().size)
     }
+
+    @Test
+    fun bodySearchFindsWordsInTheText() {
+        val user = server.setUser("jack@test.com", "jack@test.com", "pw")
+        user.deliver(GreenMailUtil.createTextEmail("jack@test.com", "boss@b.com", "周会", "请把合同改好发我", server.imaps.serverSetup))
+        // 只搜主题和发件人找不到，连正文搜才找到
+        assertEquals(0, MailClient.list(acc, "INBOX", 30, false, "合同", null).size)
+        val hits = MailClient.list(acc, "INBOX", 30, false, "合同", null, searchBody = true)
+        assertEquals(listOf("周会"), hits.map { it.subject })
+    }
 }

@@ -23,6 +23,7 @@ object ContextNote {
             append("【表格】")
             if (tables.isEmpty()) append("还没有")
             else append(tables.take(MAX_ITEMS).joinToString("；") { "「${it.name}」${it.rows.size} 行：${it.columns.joinToString("、")}" })
+            if (tables.size > MAX_ITEMS) append("；……还有 ${tables.size - MAX_ITEMS} 张")
             append("\n")
         }
         if (SkillIds.ROUTINE in skillIds) {
@@ -32,6 +33,7 @@ object ContextNote {
                 list.take(MAX_ITEMS).forEach { r ->
                     append("编号 ${r.id.take(8)}｜${if (r.kind == "reminder") "提醒" else "任务"}｜${r.describe()}｜${r.title}\n")
                 }
+                if (list.size > MAX_ITEMS) append("……还有 ${list.size - MAX_ITEMS} 条没列出，在左侧菜单「提醒和任务」里能看全\n")
             }
         }
     }

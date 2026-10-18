@@ -86,8 +86,6 @@ class ToolSession(
 
     /** 最多几轮工具：Chat 20 轮（用了「深度研究」放宽到 25），Work 不限。 */
     var maxRounds = if (conv.work) Int.MAX_VALUE else CHAT_MAX_ROUNDS
-    /** 这次回答里读过的信在哪个文件夹（编号 → 文件夹），回信时自动带上。 */
-    internal val readFolders = mutableMapOf<Long, String>()
     /** 搜索结果的编号接着往下排，引用时不重号。 */
     internal var sourceCount = 0
 
@@ -148,6 +146,7 @@ class ToolSession(
             name == "read_file" -> readFile(args)
             name == "write_file" -> writeFile(args)
             name == "edit_file" -> editFile(args)
+            name == "delete_file" -> deleteFiles(args)
             name == "search_my_data" -> searchMyData(args)
             name == "schedule" && SkillIds.ROUTINE in skillIds -> schedule(args)
             name == "cancel_schedule" && SkillIds.ROUTINE in skillIds -> cancelSchedule(args)

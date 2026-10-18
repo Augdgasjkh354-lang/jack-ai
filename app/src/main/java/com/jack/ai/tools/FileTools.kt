@@ -91,6 +91,22 @@ internal suspend fun ToolSession.readFile(args: JsonObject): String {
     }
 }
 
+/** 删对话文件夹里的文件：先问用户，连同生成时的底稿一起删。 */
+internal suspend fun ToolSession.deleteFiles(args: JsonObject): String {
+    val names = (args["names"] as? JsonArray).orEmpty().map { it.text().trim() }.filter { it.isNotEmpty() }
+        .ifEmpty { listOfNotNull(args["name"].text().trim().takeIf { it.isNotEmpty() }) }
+    if (names.isEmpty()) return "缺少文件名 names"
+    return runTool("删除文件：${names.joinToString("、")}") {
+        val files = names.map { wsFile(it) }.distinct()
+        val list = files.joinToString("\n") { "· ${it.name}（${ToolSession.sizeText(it.length())}）" }
+        if (!approve("删除 ${files.size} 个文件？", "删了找不回来。\n\n$list", "删除")) {
+            return@runTool "用户取消了，文件没有删。" to SearchRecord("删除文件：已取消")
+        }
+        withContext(Dispatchers.IO) { files.forEach { Workspace.delete(it) } }
+        "已删除：${files.joinToString("、") { it.name }}。" to SearchRecord("删除 ${files.size} 个文件")
+    }
+}
+
 internal suspend fun ToolSession.writeFile(args: JsonObject): String {
     val name = Workspace.safeName(args["name"].text())
     return runTool("写入 $name") {

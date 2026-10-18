@@ -148,7 +148,7 @@ object PromptBuilder {
         val web = SkillIds.WEB in skillIds
         return buildJsonArray {
             // 文件、表格、提醒的清单直接写在最后一条用户消息前面（见 Input.contextNote），不用专门调工具去列
-            add(SkillTools.READ_FILE); add(SkillTools.WRITE_FILE); add(SkillTools.EDIT_FILE)
+            add(SkillTools.READ_FILE); add(SkillTools.WRITE_FILE); add(SkillTools.EDIT_FILE); add(SkillTools.DELETE_FILE)
             if (skills.isNotEmpty()) add(SkillTools.USE_SKILL)
             if (conv.work) { add(SkillTools.UPDATE_PLAN); add(SkillTools.DELEGATE_TASKS) }
             if (web) { add(SkillTools.WEB_SEARCH); add(SkillTools.READ_WEBPAGE) }

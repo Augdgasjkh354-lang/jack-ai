@@ -110,9 +110,11 @@ internal suspend fun ToolSession.addEvent(args: JsonObject): String {
         val location = args["location"].text()
         val notes = args["notes"].text()
         val remind = args["remind_minutes"].text().toIntOrNull() ?: 15
+        val rrule = CalendarTool.rrule(args["repeat"].text())
+        val repeatText = REPEAT_NAMES[args["repeat"].text()]?.let { "，$it" }.orEmpty()
         val shown = SimpleDateFormat(if (allDay) "M月d日 EEE" else "M月d日 EEE HH:mm", Locale.CHINA).format(Date(begin))
         val id = if (CalendarTool.canWrite(app)) withContext(Dispatchers.IO) {
-            CalendarTool.insert(app, title, begin, end, allDay, location, notes, remind.takeIf { it >= 0 })
+            CalendarTool.insert(app, title, begin, end, allDay, location, notes, remind.takeIf { it >= 0 }, rrule)
         } else null
         if (id != null) {
             val removed = oldId != null && withContext(Dispatchers.IO) { CalendarTool.delete(app, oldId) }
@@ -122,10 +124,10 @@ internal suspend fun ToolSession.addEvent(args: JsonObject): String {
                 removed -> "旧日程 $oldId 已删掉。"
                 else -> "没找到旧日程 $oldId，没删。"
             }
-            "已写进手机日历：$shown「$title」${if (remind >= 0) "，提前 $remind 分钟提醒" else ""}。编号 $id。$replaced" to
+            "已写进手机日历：$shown「$title」$repeatText${if (remind >= 0) "，提前 $remind 分钟提醒" else ""}。编号 $id。$replaced" to
                 SearchRecord(if (removed) "改日程：$title" else "添加日程：$title")
         } else {
-            startClock(CalendarTool.insertIntent(title, begin, end, allDay, location, notes), "手机上没找到日历 App")
+            startClock(CalendarTool.insertIntent(title, begin, end, allDay, location, notes, rrule), "手机上没找到日历 App")
             "没有日历写入权限（或没有可写的日历），已打开日历 App 的新建页面并填好内容（$shown「$title」），需要用户点一下保存。" +
                 "想让以后自动写入，可以在左侧菜单「提醒和任务」里点「允许读写日历」。" +
                 (if (oldId != null) "没有权限也删不了旧日程，请用户自己在日历里删掉。" else "") to SearchRecord("打开日历：$title")
@@ -225,3 +227,5 @@ internal suspend fun ToolSession.cancelSchedule(args: JsonObject): String {
         else -> cancelAlarm(buildJsonObject { put("label", target) })
     }
 }
+
+private val REPEAT_NAMES = mapOf("daily" to "每天重复", "weekdays" to "工作日重复", "weekly" to "每周重复", "monthly" to "每月重复", "yearly" to "每年重复")
