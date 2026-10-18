@@ -396,4 +396,16 @@ class PromptBuilderTest {
         assertTrue(other.indexOf("【人设】") > other.indexOf(journal))
         assertTrue(other.indexOf("【当前项目") > other.indexOf(journal))
     }
+
+    @Test
+    fun updateNoteShowsOnceAfterAppUpdate() {
+        val old = Conversation(messages = listOf(user("你好"), bot("你好呀"), user("再试试读 PDF")))
+        assertTrue(PromptBuilder.updateNote(old, appVersion = 46).contains("App 刚更新过"))
+        // 上一条回答已经是新版写的，就不再提醒
+        val fresh = old.copy(messages = listOf(user("你好"), bot("你好呀").copy(appVersion = 46), user("再试试")))
+        assertEquals("", PromptBuilder.updateNote(fresh, appVersion = 46))
+        // 新对话、不知道版本号都不提醒
+        assertEquals("", PromptBuilder.updateNote(Conversation(messages = listOf(user("你好"))), appVersion = 46))
+        assertEquals("", PromptBuilder.updateNote(old, appVersion = 0))
+    }
 }

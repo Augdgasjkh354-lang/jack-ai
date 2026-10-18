@@ -456,7 +456,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val project = _state.value.project(conv.projectId)
         val model = modelOverride ?: settings.model
         val thinking = if (modelOverride != null && settings.thinking == ThinkLevel.OFF) ThinkLevel.HIGH else settings.thinking
-        val reply = ChatMessage(role = "assistant", model = model)
+        val reply = ChatMessage(role = "assistant", model = model, appVersion = com.jack.ai.data.appVersion(getApplication()))
         updateConv(convId) { it.copy(messages = it.messages + reply) }
 
         val ep = settings.endpoint(model)
@@ -477,6 +477,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
         val (chatMemory, projectMemory) = knowledge.memoryTexts(conv)
         var promptInput = PromptBuilder.Input(settings, conv, project, memories, skills, vision = images, sendReasoning = thinkingOn,
+            appVersion = reply.appVersion,
             extraUser = extraUser, chatMemory = chatMemory, projectMemory = projectMemory,
             journal = _state.value.dreams.firstOrNull { it.journal.isNotBlank() }?.journal.orEmpty())
         fun buildHistory(withTools: Boolean, flat: Boolean = false): MutableList<JsonObject> =

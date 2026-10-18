@@ -57,6 +57,8 @@ object PromptBuilder {
         val now: Long = System.currentTimeMillis(),
         /** 对话文件夹、表格、提醒的清单，加在最后一条用户消息前面（调用方读好传进来）。 */
         val contextNote: String = "",
+        /** 现在 App 的版本号；0 表示不知道，不提醒更新。 */
+        val appVersion: Int = 0,
         val imageUrl: (String) -> String? = Attachments::imageDataUrl,
     )
 
@@ -98,7 +100,7 @@ object PromptBuilder {
         }
         if (input.extraUser != null) list += msg("user", input.extraUser)
         val lastText = conv.messages.lastOrNull { it.role == "user" }?.content.orEmpty()
-        stampLastUser(list, input.now, input.contextNote + mentionNote(lastText, skills, settings.readyMails))
+        stampLastUser(list, input.now, updateNote(conv, input.appVersion) + input.contextNote + mentionNote(lastText, skills, settings.readyMails))
         return list
     }
 
@@ -336,6 +338,17 @@ object PromptBuilder {
         "这个对话不在项目里，不要存 project。".takeIf { !inProject },
         "这个对话不使用全局记忆，不要存 global。".takeIf { !globalOn },
     ).joinToString("")
+
+    /**
+     * 上一条回答是旧版 App 写的，就提醒一次：工具和能力可能变了，以前说做不到的别当真。
+     * 这一轮回答存下新版本号后，下一轮就不再提醒。
+     */
+    fun updateNote(conv: Conversation, appVersion: Int): String {
+        if (appVersion <= 0) return ""
+        val last = conv.messages.lastOrNull { it.role == "assistant" && it.error == null && it.content.isNotBlank() } ?: return ""
+        if (last.appVersion >= appVersion) return ""
+        return "【App 刚更新过：工具和能力可能和这个对话前面不一样了。之前说做不到、出过错的事，以现在的工具为准，不确定就重新试一次，不要照搬前面的结论。】\n"
+    }
 
     /** 当前时间，加在最后一条用户消息前面（放这里不影响前面整段的缓存）。 */
     fun timeNote(now: Long): String = "【当前时间：" + SimpleDateFormat("yyyy年M月d日 EEEE HH:mm", Locale.CHINA).format(Date(now)) + "】\n"

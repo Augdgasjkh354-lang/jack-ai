@@ -35,8 +35,16 @@ data class ChatMessage(
     val cost: Double = 0.0,
     /** 写到长度上限被截断了，可以“接着写”。 */
     val truncated: Boolean = false,
+    /** 写这条回答时 App 的版本号（旧消息是 0）。App 更新后旧对话据此提醒模型：工具可能变了。 */
+    val appVersion: Int = 0,
     val createdAt: Long = System.currentTimeMillis(),
 )
+
+/** 当前装的 App 的版本号（每次打包加一）。 */
+fun appVersion(ctx: android.content.Context): Int = runCatching {
+    val info = ctx.packageManager.getPackageInfo(ctx.packageName, 0)
+    if (android.os.Build.VERSION.SDK_INT >= 28) info.longVersionCode.toInt() else @Suppress("DEPRECATION") info.versionCode
+}.getOrDefault(0)
 
 /** 任务清单的一项：status 是 pending / doing / done。 */
 @Serializable

@@ -50,7 +50,8 @@ class RoutinesFeature(core: AppCore) : Feature(core) {
                     items.forEach { item ->
                         val msgs = listOf(
                             ChatMessage(role = "user", content = "⏰ " + item.prompt.ifBlank { item.title }, createdAt = item.at),
-                            ChatMessage(role = "assistant", content = item.result, model = MODEL_FLASH, files = item.files, createdAt = item.at + 1),
+                            ChatMessage(role = "assistant", content = item.result, model = MODEL_FLASH, files = item.files,
+                                appVersion = com.jack.ai.data.appVersion(app), createdAt = item.at + 1),
                         )
                         convs = if (convs.any { it.id == item.convId }) {
                             convs.map { c -> if (c.id == item.convId) c.copy(messages = c.messages + msgs, updatedAt = item.at) else c }
