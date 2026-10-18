@@ -17,8 +17,65 @@ import java.util.Locale
 /** 知识类工具：旧记录、聊天记录、资料库、项目资料、记忆、复习卡片、技能说明。 */
 
 internal suspend fun ToolSession.searchOld(query: String) = runTool("翻阅旧记录：$query") {
-    Compression.searchHistory(Compression.compressedMessages(conv), query) to
-        SearchRecord("翻阅旧记录：$query")
+    findOld(query) to SearchRecord("翻阅旧记录：$query")
+}
+
+private fun ToolSession.findOld(query: String) = Compression.searchHistory(Compression.compressedMessages(conv), query)
+
+private suspend fun ToolSession.findChats(query: String): String {
+    val all = host.conversations()
+    return withContext(Dispatchers.Default) { Compression.searchAllChats(all, query, conv.id) }
+}
+
+private suspend fun ToolSession.findLibrary(query: String): String {
+    val hits = withContext(Dispatchers.IO) { host.libraryIndex().search(query) }
+    return if (hits.isEmpty()) "资料库里没有找到和“$query”相关的内容。" else hits.joinToString("\n\n") {
+        "【《${it.doc}》第 ${it.part} 段】\n${it.text}"
+    }
+}
+
+private suspend fun ToolSession.findProject(query: String): String {
+    val p = project ?: throw IllegalStateException("不在项目里")
+    val hits = withContext(Dispatchers.Default) { host.projectIndex(p).search(query) }
+    return if (hits.isEmpty()) "项目资料里没有找到和“$query”相关的内容。" else hits.joinToString("\n\n") {
+        "【《${it.doc}》第 ${it.part} 段】\n${it.text}"
+    }
+}
+
+private fun ToolSession.libraryDocs(): String {
+    val docs = host.store.loadLibrary()
+    return if (docs.isEmpty()) "资料库是空的。用户可以在左侧菜单「资料库」里导入文档。"
+    else docs.joinToString("\n") { "《${it.name}》${it.chars} 字" }
+}
+
+private val SOURCE_NAMES = mapOf("chats" to "以前的聊天", "history" to "本对话较早的原话", "library" to "资料库", "project" to "项目资料")
+
+/**
+ * search_my_data：在用户自己的东西里找，合并了以前的 search_chats、search_history、search_library、list_library、search_project。
+ * where 不填就把能搜的地方都搜一遍；query 不填就列出资料库或项目里有哪些文档。
+ */
+internal suspend fun ToolSession.searchMyData(args: JsonObject): String {
+    val query = args["query"].text().trim()
+    val available = com.jack.ai.chat.PromptBuilder.searchSources(skillIds, conv, project)
+    val want = args["where"].text().ifBlank { "all" }
+    val where = if (want == "all") available else listOf(want).filter { it in available }
+    if (where.isEmpty()) return "现在不能在「$want」里找。能找的地方：" + available.joinToString("、") { "$it（${SOURCE_NAMES[it]}）" }
+    val label = if (query.isEmpty()) "查看资料" else "翻找：$query"
+    return runTool(label) {
+        val parts = where.mapNotNull { w ->
+            val text = when {
+                query.isEmpty() && w == "library" -> libraryDocs()
+                query.isEmpty() && w == "project" -> project!!.files.joinToString("\n") { "《${it.name}》${it.text.length} 字" }
+                query.isEmpty() -> null
+                w == "chats" -> findChats(query)
+                w == "history" -> findOld(query)
+                w == "library" -> findLibrary(query)
+                else -> findProject(query)
+            } ?: return@mapNotNull null
+            if (where.size == 1) text else "【${SOURCE_NAMES[w]}】\n$text"
+        }
+        (parts.joinToString("\n\n").ifBlank { "要给出搜索关键词 query。" }) to SearchRecord(label)
+    }
 }
 
 /** 存记忆：本对话、项目、全局三种。不该存全局的（这个对话关了全局记忆）就存进本对话。 */
@@ -47,30 +104,19 @@ internal suspend fun ToolSession.remember(args: JsonObject): String {
 }
 
 internal suspend fun ToolSession.searchChats(query: String) = runTool("翻阅聊天记录：$query") {
-    val all = host.conversations()
-    withContext(Dispatchers.Default) { Compression.searchAllChats(all, query, conv.id) } to
-        SearchRecord("翻阅聊天记录：$query")
+    findChats(query) to SearchRecord("翻阅聊天记录：$query")
 }
 
 internal suspend fun ToolSession.searchLibrary(query: String) = runTool("翻阅资料库：$query") {
-    val hits = withContext(Dispatchers.IO) { host.libraryIndex().search(query) }
-    (if (hits.isEmpty()) "资料库里没有找到和“$query”相关的内容。" else hits.joinToString("\n\n") {
-        "【《${it.doc}》第 ${it.part} 段】\n${it.text}"
-    }) to SearchRecord("翻阅资料库：$query")
+    findLibrary(query) to SearchRecord("翻阅资料库：$query")
 }
 
 internal suspend fun ToolSession.searchProject(query: String) = runTool("翻阅项目资料：$query") {
-    val p = project ?: throw IllegalStateException("不在项目里")
-    val hits = withContext(Dispatchers.Default) { host.projectIndex(p).search(query) }
-    (if (hits.isEmpty()) "项目资料里没有找到和“$query”相关的内容。" else hits.joinToString("\n\n") {
-        "【《${it.doc}》第 ${it.part} 段】\n${it.text}"
-    }) to SearchRecord("翻阅项目资料：$query")
+    findProject(query) to SearchRecord("翻阅项目资料：$query")
 }
 
 internal suspend fun ToolSession.listLibrary() = runTool("查看资料库") {
-    val docs = host.store.loadLibrary()
-    (if (docs.isEmpty()) "资料库是空的。用户可以在左侧菜单「资料库」里导入文档。"
-    else docs.joinToString("\n") { "《${it.name}》${it.chars} 字" }) to SearchRecord("查看资料库")
+    libraryDocs() to SearchRecord("查看资料库")
 }
 
 internal suspend fun ToolSession.saveCards(args: JsonObject) = runTool("生成复习卡片") {

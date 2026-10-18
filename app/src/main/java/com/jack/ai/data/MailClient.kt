@@ -138,9 +138,12 @@ object MailClient {
         )
     }
 
-    fun setRead(acc: MailAccount, folder: String, uid: Long, read: Boolean) = withFolder(acc, folder, write = true) { f ->
-        val m = f.getMessageByUID(uid) ?: throw MailException("找不到这封邮件（编号 $uid）")
-        m.setFlag(Flags.Flag.SEEN, read)
+    /** 标成已读或未读，返回标了几封。 */
+    fun setRead(acc: MailAccount, folder: String, uids: List<Long>, read: Boolean): Int = withFolder(acc, folder, write = true) { f ->
+        val msgs = byUids(f, uids)
+        if (msgs.isEmpty()) throw MailException("找不到这些邮件（编号 ${uids.joinToString("、")}）")
+        f.setFlags(msgs, Flags(Flags.Flag.SEEN), read)
+        msgs.size
     }
 
     /** 按编号取信的概要，删除、移动前给用户看；找不到的编号跳过。同时给出「已删除」文件夹的名字（没有为 null）。 */

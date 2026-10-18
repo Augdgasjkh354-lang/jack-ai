@@ -50,6 +50,18 @@ internal suspend fun ToolSession.makeFile(kind: String, args: JsonObject): Strin
     return create(kind, args, base, ext, label)
 }
 
+/** create_document：Word 和 PDF 合成一个，按 format 分开；底稿照旧记成 create_word / create_pdf，改起来不受影响。 */
+internal suspend fun ToolSession.createDocument(args: JsonObject): String {
+    val word = SkillIds.WORD in skillIds
+    val pdf = SkillIds.PDF in skillIds
+    val tool = when (args["format"].text().lowercase()) {
+        "pdf" -> if (pdf) "create_pdf" else return "PDF 技能没开，用 format=word"
+        "word", "docx" -> if (word) "create_word" else return "Word 技能没开，用 format=pdf"
+        else -> if (word) "create_word" else "create_pdf"
+    }
+    return makeFile(tool, JsonObject(args - "format"))
+}
+
 internal fun ToolSession.wsFile(name: String): File = Workspace.find(wsDir, name) ?: throw TextEdit.EditException(
     "对话文件夹里没有「$name」。" + Workspace.files(wsDir).let { l ->
         if (l.isEmpty()) "文件夹是空的。" else "现有文件：" + l.joinToString("、") { it.name }

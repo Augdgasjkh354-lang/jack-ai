@@ -10,6 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -73,6 +74,7 @@ internal suspend fun ToolSession.readEmail(args: JsonObject): String {
     val save = args["save_attachments"].text() == "true"
     return runTool("读邮件 $uid") {
         val m = withContext(Dispatchers.IO) { MailClient.read(account(args), folder, uid, if (save) wsDir else null) }
+        readFolders[uid] = folder
         m.saved.forEach { ui.attach(it) }
         val text = buildString {
             append("发件人：${m.summary.from}\n")
@@ -97,7 +99,8 @@ internal suspend fun ToolSession.sendEmail(args: JsonObject): String {
     val body = args["body"].text()
     val names = (args["attachments"] as? JsonArray).orEmpty().map { it.text() }.filter { it.isNotBlank() }
     val replyUid = args["reply_to_uid"].text().toLongOrNull()
-    val replyFolder = args["reply_folder"].text().ifBlank { "INBOX" }
+    // 原信所在的文件夹：模型不用填，这次回答里读过就用读的那个
+    val replyFolder = args["reply_folder"].text().ifBlank { replyUid?.let { readFolders[it] } ?: "INBOX" }
     return runTool("发邮件给 $to") {
         val acc = account(args)
         if (to.isBlank()) throw MailException("没有收件人")
@@ -121,14 +124,25 @@ internal suspend fun ToolSession.sendEmail(args: JsonObject): String {
     }
 }
 
-internal suspend fun ToolSession.markEmailRead(args: JsonObject): String {
-    val uid = args["uid"].text().toLongOrNull() ?: return "缺少邮件编号 uid"
+internal suspend fun ToolSession.markEmailRead(args: JsonObject, read: Boolean = args["read"].text() != "false"): String {
+    val uids = args.uids()
+    if (uids.isEmpty()) return "缺少邮件编号 uids"
     val folder = args["folder"].text().ifBlank { "INBOX" }
-    val read = args["read"].text() != "false"
     return runTool(if (read) "标为已读" else "标为未读") {
-        withContext(Dispatchers.IO) { MailClient.setRead(account(args), folder, uid, read) }
-        (if (read) "已标为已读。" else "已标为未读。") to SearchRecord(if (read) "标为已读" else "标为未读")
+        val n = withContext(Dispatchers.IO) { MailClient.setRead(account(args), folder, uids, read) }
+        "已把 $n 封标为${if (read) "已读" else "未读"}。" to SearchRecord("$n 封标为${if (read) "已读" else "未读"}")
     }
+}
+
+/** manage_emails：标已读/未读、删除、彻底删除、移动、清空已删除合成一个，按 action 分给各自的实现。 */
+internal suspend fun ToolSession.manageEmails(args: JsonObject): String = when (args["action"].text()) {
+    "read" -> markEmailRead(args, read = true)
+    "unread" -> markEmailRead(args, read = false)
+    "trash" -> deleteEmails(JsonObject(args + ("permanent" to JsonPrimitive(false))))
+    "delete_forever" -> deleteEmails(JsonObject(args + ("permanent" to JsonPrimitive(true))))
+    "move" -> moveEmails(args)
+    "empty_trash" -> emptyMailTrash(args)
+    else -> "action 要填 read、unread、trash、delete_forever、move 或 empty_trash"
 }
 
 /** uids 数组，也接受单个 uid。 */
@@ -158,7 +172,7 @@ internal suspend fun ToolSession.deleteEmails(args: JsonObject): String {
         // 本来就在「已删除」里的，再删就是彻底删除
         val permanent = askedPermanent || trash.equals(folder, ignoreCase = true)
         if (!permanent && trash == null) {
-            throw MailException("找不到「已删除」文件夹，没法移过去。可以问用户是移到别的文件夹（move_emails），还是彻底删除")
+            throw MailException("找不到「已删除」文件夹，没法移过去。可以问用户是移到别的文件夹（action=move），还是彻底删除（action=delete_forever）")
         }
         val title = if (permanent) "彻底删除 ${found.size} 封邮件？" else "删除 ${found.size} 封邮件？"
         val note = if (permanent) "彻底删除后找不回来。" else "会移到「$trash」，需要时还能找回。"

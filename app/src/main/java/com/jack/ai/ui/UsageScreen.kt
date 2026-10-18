@@ -205,6 +205,8 @@ fun UsageScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
 
             ContextCard(vm, state.current)
 
+            ToolStatsCard(vm)
+
             val top = state.conversations.filter { it.spentTokens > 0 }.sortedWith(
                 compareByDescending<Conversation> { it.spentCost }.thenByDescending { it.spentTokens },
             ).take(5)
@@ -299,6 +301,36 @@ private fun ContextCard(vm: ChatViewModel, conv: Conversation?) {
                 "合计约 ${tokens(total.toLong())}" + if (real > 0) "，上次实际 ${tokens(real.toLong())}" else "",
                 style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
             )
+        }
+    }
+}
+
+/** 每个工具调了几次、失败几次，失败多的排前面：用来看哪个工具不好用。 */
+@Composable
+private fun ToolStatsCard(vm: ChatViewModel) {
+    val stats by produceState<List<com.jack.ai.data.ToolStat>?>(null) { value = vm.loadToolStats() }
+    val list = stats.orEmpty().sortedWith(compareByDescending<com.jack.ai.data.ToolStat> { it.failures }.thenByDescending { it.calls })
+    if (list.isEmpty()) return
+    val colors = MaterialTheme.colorScheme
+    var all by remember { mutableStateOf(false) }
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("工具调用", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                Text("共 ${list.sumOf { it.calls }} 次 · 失败 ${list.sumOf { it.failures }} 次",
+                    style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
+            }
+            (if (all) list else list.take(8)).forEach { t ->
+                Row {
+                    Text(t.name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    Text(
+                        "${t.calls} 次" + if (t.failures > 0) " · 失败 ${t.failures}（${t.failures * 100 / t.calls}%）" else "",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (t.failures > 0) colors.error else colors.onSurfaceVariant,
+                    )
+                }
+            }
+            if (list.size > 8) TextButton(onClick = { all = !all }) { Text(if (all) "收起" else "全部 ${list.size} 个") }
         }
     }
 }

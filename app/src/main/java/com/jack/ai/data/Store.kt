@@ -114,6 +114,18 @@ class Store(context: Context) {
 
     fun loadUsage() = load("usage.json", UsageDay.serializer())
 
+    fun loadToolStats() = load("tool_stats.json", ToolStat.serializer())
+
+    /** 记一次工具调用。 */
+    fun addToolStat(name: String, failed: Boolean) = synchronized(LOCK) {
+        val list = loadUnlocked("tool_stats.json", ToolStat.serializer()).toMutableList()
+        val i = list.indexOfFirst { it.name == name }
+        val old = if (i >= 0) list[i] else ToolStat(name)
+        val new = old.copy(calls = old.calls + 1, failures = old.failures + if (failed) 1 else 0)
+        if (i >= 0) list[i] = new else list += new
+        atomicWrite("tool_stats.json", json.encodeToString(ListSerializer(ToolStat.serializer()), list))
+    }
+
     /**
      * 记一笔用量（按天、按模型累加），并按请求发生的这一刻的价格算钱。
      * cacheHit 为 null 表示服务没返回缓存命中数。返回这次花了多少元，不知道价格时返回 null。

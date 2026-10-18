@@ -55,6 +55,8 @@ object PromptBuilder {
         /** 已上传到 DeepSeek 的图片：路径 → file_id，这些图只发编号。 */
         val fileIds: Map<String, String> = emptyMap(),
         val now: Long = System.currentTimeMillis(),
+        /** 对话文件夹、表格、提醒的清单，加在最后一条用户消息前面（调用方读好传进来）。 */
+        val contextNote: String = "",
         val imageUrl: (String) -> String? = Attachments::imageDataUrl,
     )
 
@@ -96,7 +98,7 @@ object PromptBuilder {
         }
         if (input.extraUser != null) list += msg("user", input.extraUser)
         val lastText = conv.messages.lastOrNull { it.role == "user" }?.content.orEmpty()
-        stampLastUser(list, input.now, mentionNote(lastText, skills, settings.readyMails))
+        stampLastUser(list, input.now, input.contextNote + mentionNote(lastText, skills, settings.readyMails))
         return list
     }
 
@@ -144,41 +146,43 @@ object PromptBuilder {
     fun toolSet(settings: Settings, skills: List<Skill>, conv: Conversation, project: Project?): JsonArray? {
         val skillIds = skills.map { it.id }.toSet()
         val web = SkillIds.WEB in skillIds
-        val compressed = conv.summary.isNotBlank()
         return buildJsonArray {
-            add(SkillTools.LIST_FILES); add(SkillTools.READ_FILE); add(SkillTools.WRITE_FILE); add(SkillTools.EDIT_FILE)
+            // 文件、表格、提醒的清单直接写在最后一条用户消息前面（见 Input.contextNote），不用专门调工具去列
+            add(SkillTools.READ_FILE); add(SkillTools.WRITE_FILE); add(SkillTools.EDIT_FILE)
             if (skills.isNotEmpty()) add(SkillTools.USE_SKILL)
             if (conv.work) { add(SkillTools.UPDATE_PLAN); add(SkillTools.DELEGATE_TASKS) }
             if (web) { add(SkillTools.WEB_SEARCH); add(SkillTools.READ_WEBPAGE) }
-            if (SkillIds.WORD in skillIds) add(SkillTools.CREATE_WORD)
+            val word = SkillIds.WORD in skillIds
+            val pdf = SkillIds.PDF in skillIds
+            if (word || pdf) add(SkillTools.createDocument(word, pdf))
             if (SkillIds.PPT in skillIds) add(SkillTools.CREATE_PPT)
             if (SkillIds.EXCEL in skillIds) add(SkillTools.CREATE_EXCEL)
-            if (SkillIds.PDF in skillIds) add(SkillTools.CREATE_PDF)
-            if (SkillIds.CHATS in skillIds) add(SkillTools.SEARCH_CHATS)
-            if (SkillIds.CALC in skillIds) { add(SkillTools.RUN_JS); add(SkillTools.CREATE_CHART); add(SkillTools.CREATE_DIAGRAM) }
-            if (SkillIds.LIBRARY in skillIds) { add(SkillTools.SEARCH_LIBRARY); add(SkillTools.LIST_LIBRARY) }
+            searchSources(skillIds, conv, project).takeIf { it.isNotEmpty() }?.let { add(SkillTools.searchMyData(it)) }
+            if (SkillIds.CALC in skillIds) {
+                // 开着 Python 就只留 run_python，两个都给模型会犹豫用哪个
+                if (SkillIds.PYTHON !in skillIds) add(SkillTools.RUN_JS)
+                add(SkillTools.CREATE_CHART); add(SkillTools.CREATE_DIAGRAM)
+            }
             if (SkillIds.LEARN in skillIds) add(SkillTools.SAVE_FLASHCARDS)
             if (SkillIds.PYTHON in skillIds) add(SkillTools.RUN_PYTHON)
-            if (SkillIds.ROUTINE in skillIds) {
-                add(SkillTools.CREATE_REMINDER); add(SkillTools.CREATE_TASK)
-                add(SkillTools.LIST_ROUTINES); add(SkillTools.DELETE_ROUTINE)
-                add(SkillTools.SET_ALARM); add(SkillTools.CANCEL_ALARM)
-            }
+            if (SkillIds.ROUTINE in skillIds) { add(SkillTools.SCHEDULE); add(SkillTools.CANCEL_SCHEDULE) }
             if (SkillIds.CALENDAR in skillIds) { add(SkillTools.ADD_EVENT); add(SkillTools.LIST_EVENTS); add(SkillTools.DELETE_EVENT) }
-            if (SkillIds.TABLES in skillIds) {
-                add(SkillTools.LIST_TABLES); add(SkillTools.CREATE_TABLE); add(SkillTools.ADD_ROWS); add(SkillTools.QUERY_TABLE)
-                add(SkillTools.UPDATE_ROWS); add(SkillTools.DELETE_ROWS); add(SkillTools.DELETE_TABLE)
-            }
+            if (SkillIds.TABLES in skillIds) { add(SkillTools.ADD_ROWS); add(SkillTools.QUERY_TABLE); add(SkillTools.EDIT_TABLE) }
             if (SkillIds.MAIL in skillIds) {
-                add(SkillTools.LIST_EMAILS); add(SkillTools.READ_EMAIL); add(SkillTools.SEND_EMAIL); add(SkillTools.MARK_EMAIL_READ)
-                add(SkillTools.DELETE_EMAILS); add(SkillTools.MOVE_EMAILS); add(SkillTools.EMPTY_MAIL_TRASH)
+                add(SkillTools.LIST_EMAILS); add(SkillTools.READ_EMAIL); add(SkillTools.SEND_EMAIL); add(SkillTools.MANAGE_EMAILS)
             }
-            if (compressed) add(SkillTools.SEARCH_HISTORY)
-            if (project?.files?.any { it.text.length > PROJECT_INLINE_CHARS } == true) add(SkillTools.SEARCH_PROJECT)
             // 本对话记忆随时能存，所以记忆工具一直带着
             add(SkillTools.SAVE_MEMORY)
         }.takeIf { it.isNotEmpty() }
     }
+
+    /** search_my_data 这次能搜哪些地方：聊天记录、本对话被压缩的旧记录、资料库、项目里的大份资料。 */
+    fun searchSources(skillIds: Set<String>, conv: Conversation, project: Project?): List<String> = listOfNotNull(
+        "chats".takeIf { SkillIds.CHATS in skillIds },
+        "history".takeIf { conv.summary.isNotBlank() },
+        "library".takeIf { SkillIds.LIBRARY in skillIds },
+        "project".takeIf { project?.files?.any { it.text.length > PROJECT_INLINE_CHARS } == true },
+    )
 
     /** 估算 token：中文约 0.6 个一字，其他字符约 0.3 个。 */
     fun estTokens(s: String): Int {
@@ -255,14 +259,14 @@ object PromptBuilder {
         }
         if ("edit_file" in names) {
             // 文件列表不放进系统提示：列表一变，整段对话的缓存就失效了
-            parts += "固定说明" to "【对话文件夹】本对话有一个文件夹，用户发来的文件和你生成的文件都存在里面，不确定有哪些时用 list_files 看。" +
+            parts += "固定说明" to "【对话文件夹】本对话有一个文件夹，用户发来的文件和你生成的文件都存在里面，现有文件列在最后一条用户消息前面。" +
                 "用户要改已有的文件时，用 edit_file 只替换要改的那一段，不要整份重新生成；不确定原文时先用 read_file 看。" +
                 "用户发来的文件内容已经在消息里的，不用再读。"
         }
         if ("save_memory" in names) {
             parts += "固定说明" to memoryRules(conv, project != null, globalOn)
         }
-        parts += "固定说明" to "【时间】每条用户消息前面的「当前时间」是系统自动加的，不是用户说的话，不要提起它。"
+        parts += "固定说明" to "【时间】每条用户消息前面的「当前时间」以及文件、表格、提醒清单是系统自动加的，不是用户说的话，不要提起它。"
         if (conv.systemPrompt.isNotBlank()) parts += "人设" to "【人设】\n${conv.systemPrompt.trim()}"
         if (project != null) {
             val (small, big) = project.files.partition { it.text.length <= PROJECT_INLINE_CHARS }
@@ -275,7 +279,7 @@ object PromptBuilder {
                 }
                 if (big.isNotEmpty()) {
                     // 大份资料整份放进来会占掉大半上下文，而且压缩也压不掉，所以只列名字，用到时检索
-                    append("\n下面这些项目资料比较长，没有放在这里，需要时用 search_project 检索相关段落：\n")
+                    append("\n下面这些项目资料比较长，没有放在这里，需要时用 search_my_data（where 填 project）检索相关段落：\n")
                     big.forEach { f -> append("- 《${f.name}》${f.text.length} 字\n") }
                 }
             }.trim()
@@ -303,7 +307,7 @@ object PromptBuilder {
         }
         if (conv.summary.isNotBlank()) {
             parts += "前情提要" to "【较早对话的提要】\n这是你和用户在本对话中较早部分的提要，当作你自己的记忆，直接接着聊，不要提起“提要”或“压缩”。" +
-                "如果需要提要里没有的原话或细节，用 search_history 工具查原始记录。\n<compacted-summary>\n${conv.summary}\n</compacted-summary>"
+                "如果需要提要里没有的原话或细节，用 search_my_data（where 填 history）查原始记录。\n<compacted-summary>\n${conv.summary}\n</compacted-summary>"
         }
         return parts
     }

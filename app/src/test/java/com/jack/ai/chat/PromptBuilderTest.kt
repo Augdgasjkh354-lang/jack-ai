@@ -11,11 +11,13 @@ import com.jack.ai.data.activeSkills
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -46,6 +48,13 @@ class PromptBuilderTest {
 
     private fun tools(conv: Conversation, project: Project? = null, s: Settings = settings) =
         PromptBuilder.toolSet(s, s.activeSkills(), conv, project)
+
+    private fun tool(conv: Conversation, name: String, s: Settings = settings, project: Project? = null) =
+        tools(conv, project, s)!!.map { it.jsonObject["function"]!!.jsonObject }.firstOrNull { it["name"]!!.jsonPrimitive.content == name }
+
+    private fun whereOptions(conv: Conversation, project: Project? = null) =
+        tool(conv, "search_my_data", project = project)?.get("parameters")!!.jsonObject["properties"]!!
+            .jsonObject["where"]!!.jsonObject["enum"]!!.jsonArray.map { it.jsonPrimitive.content }
 
     private fun toolNames(conv: Conversation, project: Project? = null, s: Settings = settings) =
         tools(conv, project, s)!!.map { it.jsonObject["function"]!!.jsonObject["name"]!!.jsonPrimitive.content }
@@ -196,14 +205,14 @@ class PromptBuilderTest {
         val names = toolNames(conv)
         assertTrue("save_memory" in names)
         assertTrue("web_search" in names) // 没有 Tavily Key，但有 DeepSeek Key 也能联网
-        assertFalse("search_history" in names)
-        assertFalse("search_project" in names)
+        // 默认开着聊天记录和资料库，所以 search_my_data 在，但还不能搜旧记录和项目
+        assertEquals(listOf("all", "chats", "library"), whereOptions(conv))
         assertTrue("add_calendar_event" in names)
 
         // 本对话记忆随时能存，关了全局记忆工具也在
         assertTrue("save_memory" in toolNames(conv, s = settings.copy(memoryEnabled = false)))
         assertTrue("web_search" in toolNames(conv, s = settings.copy(tavilyKey = "t")))
-        assertTrue("search_history" in toolNames(conv.copy(summary = "提要")))
+        assertTrue("history" in whereOptions(conv.copy(summary = "提要")))
         assertFalse("add_calendar_event" in toolNames(conv, s = settings.copy(disabledSkills = setOf(SkillIds.CALENDAR))))
     }
 
@@ -219,7 +228,7 @@ class PromptBuilderTest {
         assertTrue(sys.contains("第一章：出发"))
         assertTrue(sys.contains("《全文.txt》"))
         assertFalse(sys.contains("字".repeat(1000)))
-        assertTrue("search_project" in toolNames(conv, project))
+        assertTrue("project" in whereOptions(conv, project))
     }
 
     @Test
@@ -332,6 +341,40 @@ class PromptBuilderTest {
         val half = settings.copy(mails = listOfNotNull(com.jack.ai.data.mailPresetFor("jack@163.com")))
         assertFalse("send_email" in toolNames(conv, s = half))
         val ready = settings.copy(mails = listOf(com.jack.ai.data.mailPresetFor("jack@163.com")!!.copy(password = "code")))
-        assertTrue(listOf("list_emails", "read_email", "send_email", "mark_email_read").all { it in toolNames(conv, s = ready) })
+        assertTrue(listOf("list_emails", "read_email", "send_email", "manage_emails").all { it in toolNames(conv, s = ready) })
+    }
+
+    @Test
+    fun toolsAreConsolidated() {
+        val all = toolNames(Conversation(work = true))
+        // 合并掉的旧工具一个都不发
+        listOf("list_files", "list_tables", "create_table", "delete_table", "list_routines", "create_reminder", "set_alarm",
+            "search_chats", "list_library", "create_word", "create_pdf", "run_js").forEach { assertFalse(it, it in all) }
+        listOf("create_document", "search_my_data", "schedule", "cancel_schedule", "edit_table", "run_python").forEach { assertTrue(it, it in all) }
+        assertTrue("技能全开时工具不该超过 26 个，现在 ${all.size} 个", all.size <= 26)
+        // 关了 Python，算数就用 run_js
+        assertTrue("run_js" in toolNames(Conversation(), s = settings.copy(disabledSkills = setOf(SkillIds.PYTHON))))
+    }
+
+    @Test
+    fun documentFormatFollowsSkills() {
+        fun formats(s: Settings) = tool(Conversation(), "create_document", s)!!["parameters"]!!.jsonObject["properties"]!!
+            .jsonObject["format"]!!.jsonObject["enum"]!!.jsonArray.map { it.jsonPrimitive.content }
+        assertEquals(listOf("word", "pdf"), formats(settings))
+        assertEquals(listOf("pdf"), formats(settings.copy(disabledSkills = setOf(SkillIds.WORD))))
+        assertNull(tool(Conversation(), "create_document", settings.copy(disabledSkills = setOf(SkillIds.WORD, SkillIds.PDF))))
+    }
+
+    @Test
+    fun contextNoteGoesOnLastUserMessageOnly() {
+        val conv = Conversation(messages = listOf(user("第一句"), bot("好"), user("第二句")))
+        val input = PromptBuilder.Input(settings, conv, null, memories, settings.activeSkills(), vision = false, sendReasoning = false,
+            contextNote = "【表格】「记账」3 行：日期、金额\n")
+        val hist = PromptBuilder.history(input, tools(conv))
+        val users = hist.filter { it["role"]!!.jsonPrimitive.content == "user" }.map { it["content"]!!.jsonPrimitive.content }
+        assertFalse(users.first().contains("【表格】"))
+        assertTrue(users.last().contains("【表格】「记账」") && users.last().endsWith("第二句"))
+        // 清单不进系统提示词，免得缓存失效
+        assertFalse(hist.first()["content"]!!.jsonPrimitive.content.contains("「记账」"))
     }
 }

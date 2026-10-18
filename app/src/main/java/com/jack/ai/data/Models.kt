@@ -311,6 +311,10 @@ fun guessReasoning(id: String): Boolean {
         listOf("reason", "r1", "think", "qwq", "gpt-5", "deepseek-r", "grok-3-mini", "grok-4").any { it in s }
 }
 
+/** 每个工具一共调了几次、失败几次（统计页看工具好不好用）。 */
+@Serializable
+data class ToolStat(val name: String, val calls: Int = 0, val failures: Int = 0)
+
 /** 每天每个模型用了多少 token。 */
 @Serializable
 data class UsageDay(

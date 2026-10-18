@@ -86,6 +86,8 @@ class ToolSession(
 
     /** 最多几轮工具：Chat 20 轮（用了「深度研究」放宽到 25），Work 不限。 */
     var maxRounds = if (conv.work) Int.MAX_VALUE else CHAT_MAX_ROUNDS
+    /** 这次回答里读过的信在哪个文件夹（编号 → 文件夹），回信时自动带上。 */
+    internal val readFolders = mutableMapOf<Long, String>()
     /** 搜索结果的编号接着往下排，引用时不重号。 */
     internal var sourceCount = 0
 
@@ -95,12 +97,16 @@ class ToolSession(
     suspend fun approve(title: String, body: String, action: String): Boolean =
         withContext(Dispatchers.IO) { host.store.loadSettings().fullAuth } || ui.confirm(title, body, action)
 
+    /** 成功跑完的工具次数；execute 前后比一比，就知道这次调用成没成（参数不对没进 runTool 的也算失败）。 */
+    private val succeeded = java.util.concurrent.atomic.AtomicInteger()
+
     /** 执行一个工具，聊天里显示「进行中」→「完成/出错」。出错时把原因交给模型，不抛出。 */
     suspend fun runTool(label: String, action: suspend () -> Pair<String, SearchRecord>): String {
         ui.started(label)
         return try {
             val (text, rec) = action()
             ui.finished(label, rec)
+            succeeded.incrementAndGet()
             text
         } catch (e: CancellationException) {
             throw e
@@ -115,8 +121,17 @@ class ToolSession(
         }
     }
 
-    /** 按工具名执行，返回给模型看的结果。没开对应技能的工具一律不可用。 */
+    /** 按工具名执行，返回给模型看的结果，顺便记进工具统计。 */
     suspend fun execute(name: String, argsText: String): String {
+        val before = succeeded.get()
+        val result = dispatch(name, argsText)
+        val failed = succeeded.get() == before
+        withContext(Dispatchers.IO) { runCatching { host.store.addToolStat(name, failed) } }
+        return result
+    }
+
+    /** 按工具名分给各自的实现。没开对应技能的工具一律不可用。 */
+    private suspend fun dispatch(name: String, argsText: String): String {
         val args = runCatching { Json.parseToJsonElement(argsText).jsonObject }.getOrNull()
         val key = when (name) {
             "read_webpage" -> "url"
@@ -128,35 +143,42 @@ class ToolSession(
         val arg = args?.get(key).text()
         return when {
             args == null -> "参数不是有效的 JSON，可能内容太长被截断了，请精简后重试"
+            name == "create_document" && (SkillIds.WORD in skillIds || SkillIds.PDF in skillIds) -> createDocument(args)
             name in FILE_TOOLS && FILE_TOOLS[name] in skillIds -> makeFile(name, args)
             name == "create_chart" && SkillIds.CALC in skillIds -> makeChart(args)
             name == "create_diagram" && SkillIds.CALC in skillIds -> makeDiagram(args)
             name == "update_plan" && conv.work -> updatePlan(args)
             name == "delegate_tasks" && conv.work -> delegateTasks(args)
-            name == "list_files" -> listFiles()
             name == "read_file" -> readFile(args)
             name == "write_file" -> writeFile(args)
             name == "edit_file" -> editFile(args)
-            name == "set_alarm" && SkillIds.ROUTINE in skillIds -> setAlarm(args)
-            name == "cancel_alarm" && SkillIds.ROUTINE in skillIds -> cancelAlarm(args)
-            name == "list_routines" && SkillIds.ROUTINE in skillIds -> listRoutines()
-            name == "list_library" && SkillIds.LIBRARY in skillIds -> listLibrary()
+            name == "search_my_data" -> searchMyData(args)
+            name == "schedule" && SkillIds.ROUTINE in skillIds -> schedule(args)
+            name == "cancel_schedule" && SkillIds.ROUTINE in skillIds -> cancelSchedule(args)
             name == "save_flashcards" && SkillIds.LEARN in skillIds -> saveCards(args)
-            name == "create_reminder" && SkillIds.ROUTINE in skillIds -> makeRoutine("reminder", args)
-            name == "create_task" && SkillIds.ROUTINE in skillIds -> makeRoutine("task", args)
             name == "add_calendar_event" && SkillIds.CALENDAR in skillIds -> addEvent(args)
             name == "list_calendar_events" && SkillIds.CALENDAR in skillIds -> listEvents(args)
             name == "save_memory" -> remember(args)
-            name == "list_tables" && SkillIds.TABLES in skillIds -> listTables()
-            name == "create_table" && SkillIds.TABLES in skillIds -> createTable(args)
             name == "add_rows" && SkillIds.TABLES in skillIds -> addRows(args)
             name == "query_table" && SkillIds.TABLES in skillIds -> queryTable(args)
-            name == "update_rows" && SkillIds.TABLES in skillIds -> updateRows(args)
-            name == "delete_rows" && SkillIds.TABLES in skillIds -> deleteRows(args)
-            name == "delete_table" && SkillIds.TABLES in skillIds -> deleteTable(args)
+            name == "edit_table" && SkillIds.TABLES in skillIds -> editTable(args)
             name == "list_emails" && SkillIds.MAIL in skillIds -> listEmails(args)
             name == "read_email" && SkillIds.MAIL in skillIds -> readEmail(args)
             name == "send_email" && SkillIds.MAIL in skillIds -> sendEmail(args)
+            name == "manage_emails" && SkillIds.MAIL in skillIds -> manageEmails(args)
+            // 旧工具名：现在不再发给模型，但老对话里模型可能照着以前的调用记录用，照样能用
+            name == "list_files" -> listFiles()
+            name == "set_alarm" && SkillIds.ROUTINE in skillIds -> setAlarm(args)
+            name == "cancel_alarm" && SkillIds.ROUTINE in skillIds -> cancelAlarm(args)
+            name == "list_routines" && SkillIds.ROUTINE in skillIds -> listRoutines()
+            name == "create_reminder" && SkillIds.ROUTINE in skillIds -> makeRoutine("reminder", args)
+            name == "create_task" && SkillIds.ROUTINE in skillIds -> makeRoutine("task", args)
+            name == "list_library" && SkillIds.LIBRARY in skillIds -> listLibrary()
+            name == "list_tables" && SkillIds.TABLES in skillIds -> listTables()
+            name == "create_table" && SkillIds.TABLES in skillIds -> createTable(args)
+            name == "update_rows" && SkillIds.TABLES in skillIds -> updateRows(args)
+            name == "delete_rows" && SkillIds.TABLES in skillIds -> deleteRows(args)
+            name == "delete_table" && SkillIds.TABLES in skillIds -> deleteTable(args)
             name == "mark_email_read" && SkillIds.MAIL in skillIds -> markEmailRead(args)
             name == "delete_emails" && SkillIds.MAIL in skillIds -> deleteEmails(args)
             name == "move_emails" && SkillIds.MAIL in skillIds -> moveEmails(args)
@@ -165,11 +187,11 @@ class ToolSession(
             name == "use_skill" -> useSkill(arg)
             name == "run_js" && SkillIds.CALC in skillIds -> runJs(arg)
             name == "run_python" && SkillIds.PYTHON in skillIds -> runPython(arg)
-            name == "search_library" && SkillIds.LIBRARY in skillIds -> searchLibrary(arg)
-            name == "delete_routine" && SkillIds.ROUTINE in skillIds -> removeRoutine(arg)
             name == "delete_calendar_event" && SkillIds.CALENDAR in skillIds -> deleteEvent(arg)
             name == "web_search" && web -> search(arg)
             name == "read_webpage" && web -> readPage(arg)
+            name == "search_library" && SkillIds.LIBRARY in skillIds -> searchLibrary(arg)
+            name == "delete_routine" && SkillIds.ROUTINE in skillIds -> removeRoutine(arg)
             name == "search_history" -> searchOld(arg)
             name == "search_project" -> searchProject(arg)
             name == "search_chats" && SkillIds.CHATS in skillIds -> searchChats(arg)

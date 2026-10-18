@@ -9,12 +9,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** 时间相关：闹钟、提醒、定时任务、日历。 */
+/** 时间相关：闹钟、提醒、定时任务（对模型只露出 schedule / cancel_schedule）、日历。 */
 
 internal suspend fun ToolSession.setAlarm(args: JsonObject): String {
     val time = args["time"].text()
@@ -142,4 +145,64 @@ internal suspend fun ToolSession.deleteEvent(id: String) = runTool("删除日程
         "已删除日程 $n。" to SearchRecord("删除日程 $n")
     }
     else "没找到编号 $n 的日程。" to SearchRecord("删除日程", error = "没找到")
+}
+
+/**
+ * schedule：提醒、定时任务、闹钟合成一个工具，参数统一成 kind + when + text。
+ * 里面照旧交给 makeRoutine / setAlarm 去做。
+ */
+internal suspend fun ToolSession.schedule(args: JsonObject): String {
+    val whenText = args["when"].text()
+    val text = args["text"].text().trim()
+    val repeat = args["repeat"].text().ifBlank { "none" }
+    return when (args["kind"].text()) {
+        "reminder" -> {
+            if (text.isBlank()) return "提醒要写 text（通知里显示的话）"
+            makeRoutine("reminder", buildJsonObject { put("text", text); put("datetime", whenText); put("repeat", repeat) })
+        }
+        "task" -> {
+            val prompt = args["prompt"].text().trim()
+            if (prompt.isBlank()) return "定时任务要写 prompt（到时候要执行的完整指令）"
+            makeRoutine("task", buildJsonObject {
+                put("title", text.ifBlank { prompt.take(20) })
+                put("prompt", prompt)
+                put("datetime", whenText)
+                put("repeat", repeat)
+                put("off_peak", args["off_peak"].text() == "true")
+                put("work", args["work"].text() == "true")
+            })
+        }
+        "alarm" -> {
+            val (date, h, m) = parseDateTime(whenText) ?: return "闹钟时间要写成 HH:mm"
+            // 1=周一 … 7=周日；每周就是 when 那一天
+            val days = when (repeat) {
+                "daily" -> (1..7).toList()
+                "weekdays" -> (1..5).toList()
+                "weekly" -> {
+                    val c = java.util.Calendar.getInstance().apply { time = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(date)!! }
+                    listOf((c.get(java.util.Calendar.DAY_OF_WEEK) + 5) % 7 + 1)
+                }
+                else -> emptyList()
+            }
+            setAlarm(buildJsonObject {
+                put("time", String.format(Locale.US, "%02d:%02d", h, m))
+                put("label", text)
+                put("days", JsonArray(days.map { JsonPrimitive(it) }))
+            })
+        }
+        else -> "kind 要填 reminder、task 或 alarm"
+    }
+}
+
+/** cancel_schedule：先按编号或名字找提醒和任务，找不到就当成闹钟（时间或标签）去关。 */
+internal suspend fun ToolSession.cancelSchedule(args: JsonObject): String {
+    val target = args["target"].text().trim().removePrefix("编号").trim()
+    if (target.isBlank()) return "要填编号、闹钟时间或标签"
+    val routines = host.store.loadRoutines()
+    val r = routines.firstOrNull { target.length >= 4 && it.id.startsWith(target) } ?: routines.firstOrNull { it.title == target }
+    return when {
+        r != null -> removeRoutine(r.id)
+        ToolSession.TIME.matches(target) -> cancelAlarm(buildJsonObject { put("time", target) })
+        else -> cancelAlarm(buildJsonObject { put("label", target) })
+    }
 }

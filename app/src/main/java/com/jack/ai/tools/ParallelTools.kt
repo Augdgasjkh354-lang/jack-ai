@@ -15,7 +15,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
 /** 子任务能用的工具：查资料、读文件，不能生成文件、发信、改数据。 */
-private val SUB_TOOLS = setOf("web_search", "read_webpage", "list_files", "read_file", "search_library", "search_project")
+private val SUB_TOOLS = setOf("web_search", "read_webpage", "read_file")
 
 /**
  * 分头并行（Work）：把几件彼此独立的子任务同时派给“分身”去做，各自查资料、读文件，
@@ -32,9 +32,10 @@ internal suspend fun ToolSession.delegateTasks(args: JsonObject): String {
     val ep = settings.backgroundEndpoint() ?: return "没有可用的模型"
     return runTool("分头做 ${tasks.size} 件事") {
         val client = DeepSeekClient()
+        val folder = ContextNote.files(wsDir)
         val tools = JsonArray(listOfNotNull(
             SkillTools.WEB_SEARCH.takeIf { web }, SkillTools.READ_WEBPAGE.takeIf { web },
-            SkillTools.LIST_FILES, SkillTools.READ_FILE,
+            SkillTools.READ_FILE,
         ))
         val results = coroutineScope {
             tasks.map { (title, what) ->
@@ -44,7 +45,7 @@ internal suspend fun ToolSession.delegateTasks(args: JsonObject): String {
                         buildJsonObject {
                             put("role", "system")
                             put("content", "你是一个助手的分身，只负责下面这一件子任务。用工具查清楚后，给出简洁但完整的结果：" +
-                                "要点、关键数字和事实，需要时附来源链接 [编号](链接)。不要寒暄，不要做子任务以外的事。")
+                                "要点、关键数字和事实，需要时附来源链接 [编号](链接)。不要寒暄，不要做子任务以外的事。\n" + folder)
                         },
                         buildJsonObject { put("role", "user"); put("content", "子任务「$title」：$what") },
                     )

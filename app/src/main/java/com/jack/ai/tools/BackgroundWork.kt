@@ -83,7 +83,10 @@ suspend fun runBackgroundWork(ctx: Context, r: Routine, onProgress: (String) -> 
         "需要交给用户的内容直接写在最后的结果里。结果就是用户稍后会看到的消息，简洁好读，不要开场白。"
     val messages = mutableListOf(
         buildJsonObject { put("role", "system"); put("content", system) },
-        buildJsonObject { put("role", "user"); put("content", r.prompt.ifBlank { r.title }) },
+        buildJsonObject {
+            put("role", "user")
+            put("content", runCatching { ContextNote.build(ctx, store, conv, skills.map { it.id }.toSet()) }.getOrDefault("") + r.prompt.ifBlank { r.title })
+        },
     )
     val files = mutableListOf<GeneratedFile>()
     val session = ToolSession(host, s, conv, null, skills, object : ToolUi {

@@ -492,6 +492,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 val paths = com.jack.ai.data.Compression.liveMessages(conv).flatMap { m -> m.attachments.filter { it.kind == "image" }.map { it.path } }
                 if (paths.isNotEmpty()) promptInput = promptInput.copy(fileIds = runCatching { dsFiles.ensure(ep, paths) }.getOrDefault(emptyMap()))
             }
+            promptInput = promptInput.copy(contextNote = withContext(Dispatchers.IO) {
+                runCatching { com.jack.ai.tools.ContextNote.build(getApplication(), store, conv, skills.map { it.id }.toSet()) }.getOrDefault("")
+            })
             var filesDropped = false
             // Work：开前台服务，切到后台也接着干；花费到上限先问一声
             val work = conv.work
@@ -669,6 +672,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     suspend fun loadUsage(): List<UsageDay> = withContext(Dispatchers.IO) { store.loadUsage() }
+    suspend fun loadToolStats(): List<com.jack.ai.data.ToolStat> = withContext(Dispatchers.IO) { store.loadToolStats() }
 
     private fun msg(role: String, content: String) = buildJsonObject {
         put("role", role)

@@ -49,8 +49,15 @@ internal suspend fun ToolSession.addRows(args: JsonObject): String {
     val items = (args["rows"] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
     return runTool("往「$name」加 ${items.size} 行") {
         if (items.isEmpty()) throw IllegalArgumentException("没有要加的行")
+        var created = false
         val total = withContext(Dispatchers.IO) {
-            var t = table(name)
+            // 表不存在就按第一行的列名新建，省掉单独建表这一步
+            var t = Tables.get(app, name) ?: run {
+                val safe = Tables.safeName(name)
+                if (safe.isBlank()) throw IllegalArgumentException("要有表名")
+                created = true
+                Table(safe, emptyList(), emptyList())
+            }
             items.forEach { o ->
                 val (t2, row) = o.toRow(t)
                 t = t2.copy(rows = t2.rows + listOf(row))
@@ -58,7 +65,8 @@ internal suspend fun ToolSession.addRows(args: JsonObject): String {
             Tables.save(app, t)
             t.rows.size
         }
-        "已加 ${items.size} 行，「$name」现在共 $total 行。" to SearchRecord("「$name」+${items.size} 行")
+        (if (created) "新建了表「$name」，" else "") + "已加 ${items.size} 行，「$name」现在共 $total 行。" to
+            SearchRecord("「$name」+${items.size} 行")
     }
 }
 
@@ -135,4 +143,12 @@ internal suspend fun ToolSession.deleteTable(args: JsonObject): String {
         withContext(Dispatchers.IO) { Tables.delete(app, name) }
         "已删除「$name」。" to SearchRecord("删表：$name")
     }
+}
+
+/** edit_table：改行、删行、删表合成一个，按 action 分给原来的实现。 */
+internal suspend fun ToolSession.editTable(args: JsonObject): String = when (args["action"].text()) {
+    "update" -> updateRows(args)
+    "delete_rows" -> deleteRows(args)
+    "drop" -> deleteTable(args)
+    else -> "action 要填 update、delete_rows 或 drop"
 }

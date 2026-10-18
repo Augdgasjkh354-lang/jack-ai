@@ -1,0 +1,46 @@
+package com.jack.ai.tools
+
+import android.content.Context
+import com.jack.ai.data.Conversation
+import com.jack.ai.data.SkillIds
+import com.jack.ai.data.Store
+import com.jack.ai.data.Tables
+import com.jack.ai.data.Workspace
+import com.jack.ai.data.describe
+import java.io.File
+
+/**
+ * 每轮加在最后一条用户消息前面的清单：对话文件夹里的文件、表格、提醒和任务。
+ * 模型一开始就知道有什么，不用专门调工具去列；放在最后一条消息上，不影响前面的缓存。
+ */
+object ContextNote {
+    private const val MAX_ITEMS = 30
+
+    fun build(ctx: Context, store: Store, conv: Conversation, skillIds: Set<String>): String = buildString {
+        append(files(Workspace.dir(ctx, Workspace.key(conv))))
+        if (SkillIds.TABLES in skillIds) {
+            val tables = Tables.list(ctx)
+            append("【表格】")
+            if (tables.isEmpty()) append("还没有")
+            else append(tables.take(MAX_ITEMS).joinToString("；") { "「${it.name}」${it.rows.size} 行：${it.columns.joinToString("、")}" })
+            append("\n")
+        }
+        if (SkillIds.ROUTINE in skillIds) {
+            val list = store.loadRoutines().filter { it.enabled }
+            if (list.isNotEmpty()) {
+                append("【提醒和任务】\n")
+                list.take(MAX_ITEMS).forEach { r ->
+                    append("编号 ${r.id.take(8)}｜${if (r.kind == "reminder") "提醒" else "任务"}｜${r.describe()}｜${r.title}\n")
+                }
+            }
+        }
+    }
+
+    /** 对话文件夹里的文件，空的就不写。 */
+    fun files(dir: File): String {
+        val list = Workspace.files(dir)
+        if (list.isEmpty()) return ""
+        val shown = list.take(MAX_ITEMS).joinToString("、") { "${it.name}（${ToolSession.sizeText(it.length())}）" }
+        return "【对话文件夹】$shown" + (if (list.size > MAX_ITEMS) " 等 ${list.size} 个" else "") + "\n"
+    }
+}
