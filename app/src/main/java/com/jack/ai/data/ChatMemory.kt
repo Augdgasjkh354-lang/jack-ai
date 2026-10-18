@@ -46,6 +46,26 @@ object ChatMemory {
         return true
     }
 
+    /**
+     * 把 old 认出的那一条换成 new；new 为空就删掉。old 可以是原话的一段，但要能唯一认出一条：
+     * 先找一字不差的，没有再找包含它的。认不出或认出好几条都报错，并把候选列出来。
+     */
+    fun replace(items: List<String>, old: String, new: String): List<String> {
+        val key = old.trim().removePrefix("- ").trim()
+        if (key.isEmpty()) throw IllegalArgumentException("replace 要填旧记忆的原话")
+        val exact = items.indices.filter { items[it] == key }
+        val hits = exact.ifEmpty { items.indices.filter { items[it].contains(key, ignoreCase = true) } }
+        when {
+            hits.isEmpty() -> throw IllegalArgumentException("没找到包含「$key」的记忆。现有的：" +
+                items.ifEmpty { listOf("（还没有）") }.joinToString("；"))
+            hits.size > 1 -> throw IllegalArgumentException("「$key」对上了 ${hits.size} 条，写得再具体些：" +
+                hits.joinToString("；") { items[it] })
+        }
+        val i = hits.single()
+        val text = new.trim().removePrefix("- ").trim()
+        return if (text.isEmpty()) items.filterIndexed { j, _ -> j != i } else items.mapIndexed { j, v -> if (j == i) text else v }
+    }
+
     fun write(file: File, items: List<String>) {
         if (items.isEmpty()) {
             file.delete()

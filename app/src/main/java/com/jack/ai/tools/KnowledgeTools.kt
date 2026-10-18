@@ -79,9 +79,13 @@ internal suspend fun ToolSession.searchMyData(args: JsonObject): String {
     }
 }
 
-/** 存记忆：本对话、项目、全局三种。不该存全局的（这个对话关了全局记忆）就存进本对话。 */
+/**
+ * 存记忆：本对话、项目、全局三种。不该存全局的（这个对话关了全局记忆）就存进本对话。
+ * 填了 replace 就是改旧的那条，content 留空就是删掉它。
+ */
 internal suspend fun ToolSession.remember(args: JsonObject): String {
     val text = args["content"].text().trim()
+    val old = args["replace"].text().trim()
     val globalOn = settings.memoryEnabled && conv.useGlobalMemory
     val scope = when (val s = args["scope"].text()) {
         "global" -> if (globalOn) s else "chat"
@@ -89,18 +93,37 @@ internal suspend fun ToolSession.remember(args: JsonObject): String {
         else -> "chat"
     }
     val where = when (scope) { "global" -> "全局"; "project" -> "项目"; else -> "本对话" }
-    return runTool("记住（$where）：$text") {
-        if (text.isEmpty()) throw IllegalArgumentException("内容是空的")
+    val label = when {
+        old.isEmpty() -> "记住（$where）：$text"
+        text.isEmpty() -> "忘掉（$where）：$old"
+        else -> "改记忆（$where）：$text"
+    }
+    return runTool(label) {
+        if (text.isEmpty() && old.isEmpty()) throw IllegalArgumentException("内容是空的")
         when (scope) {
             "global" -> {
-                val list = host.store.loadMemories() + MemoryItem(text = text)
-                host.store.saveMemories(list)
-                host.setMemories(list)
+                val list = host.store.loadMemories()
+                val updated = if (old.isEmpty()) list + MemoryItem(text = text) else {
+                    // 按文字改，没动的条目保留原来的编号和时间
+                    val texts = ChatMemory.replace(list.map { it.text }, old, text)
+                    val byText = list.associateBy { it.text }
+                    texts.map { byText[it] ?: MemoryItem(text = it) }
+                }
+                host.store.saveMemories(updated)
+                host.setMemories(updated)
             }
-            "project" -> withContext(Dispatchers.IO) { ChatMemory.add(ChatMemory.projectFile(app, project!!.id), text) }
-            else -> withContext(Dispatchers.IO) { ChatMemory.add(ChatMemory.chatFile(app, conv), text) }
+            else -> withContext(Dispatchers.IO) {
+                val file = if (scope == "project") ChatMemory.projectFile(app, project!!.id) else ChatMemory.chatFile(app, conv)
+                if (old.isEmpty()) ChatMemory.add(file, text)
+                else ChatMemory.write(file, ChatMemory.replace(ChatMemory.items(ChatMemory.read(file)), old, text))
+            }
         }
-        "已存进${where}记忆。" to SearchRecord("记住（$where）：$text")
+        val done = when {
+            old.isEmpty() -> "已存进${where}记忆。"
+            text.isEmpty() -> "已从${where}记忆里删掉。"
+            else -> "已改好${where}记忆。"
+        }
+        done to SearchRecord(label)
     }
 }
 

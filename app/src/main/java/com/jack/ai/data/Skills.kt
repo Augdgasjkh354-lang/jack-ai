@@ -144,8 +144,8 @@ val BUILTIN_SKILLS = listOf(
 4. when 写 “yyyy-MM-dd HH:mm”，根据当前时间换算“明天”“下周一”“今晚”；闹钟可以只写 HH:mm。用户没说几点时按常理挑一个（早上 9:00、晚上 20:00 等），并在回复里说明。
 5. repeat：none 一次、daily 每天、weekdays 工作日、weekly 每周 when 那一天。
 6. 不赶时间的任务（整理资料、写总结之类）可以把 off_peak 设为 true：碰上 DeepSeek 高峰时段（工作日 9–12 点、14–18 点）会顺延到空闲时段，价格减半。要求准点的不要开。
-7. 现有的提醒和任务列在每条用户消息前面的【提醒和任务】里。要删或改，用 cancel_schedule 填编号；改就是删掉旧的再设新的。
-8. 手机不允许读取已有闹钟，你看不到用户有哪些闹钟。要关闹钟，cancel_schedule 填时间 HH:mm 或标签；不知道时就问用户。
+7. 现有的提醒和任务列在每条用户消息前面的【提醒和任务】里。要删用 cancel_schedule 填编号；要改（换时间、改内容），直接用 schedule 设新的，replace 填旧的编号，一步完成。
+8. 手机不允许读取已有闹钟，你看不到用户有哪些闹钟。要关闹钟，cancel_schedule 填时间 HH:mm 或标签；改闹钟时间，schedule 设新的、replace 填旧的时间。不知道时就问用户。
 9. 设置好后用一句话确认：什么时候、做什么。""",
 
     ),
@@ -157,7 +157,7 @@ val BUILTIN_SKILLS = listOf(
 2. start 写成 “yyyy-MM-dd HH:mm”，根据系统提示里的当前日期换算“明天”“下周三”等说法；全天的事（生日、假期、出差一整天）只写 “yyyy-MM-dd”。没说结束时间就不填 end（默认 1 小时）。没说几点时按常理挑一个并在回复里说明。
 3. remind_minutes 是提前多少分钟提醒，默认 15；用户说了提前多久就按用户的来，不要提醒写 -1。
 4. 用户问“我某天有什么安排”时，用 list_calendar_events 查，start_date 写 yyyy-MM-dd，days 写查几天。回答时按时间顺序简洁列出。
-5. 要删除或修改日程，先用 list_calendar_events 找到它的编号，再用 delete_calendar_event 删掉；修改就是删掉旧的再加新的。删除前如果有多个相似的，先问用户是哪一个。
+5. 要删除或修改日程，先用 list_calendar_events 找到它的编号：删除用 delete_calendar_event；修改直接用 add_calendar_event 写新的，replace 填旧编号，一步完成。删除前如果有多个相似的，先问用户是哪一个。
 6. 工具返回“没有日历权限”时，告诉用户去左侧菜单「提醒和任务」页面点「允许读写日历」。添加日程时没有权限会打开日历 App 让用户自己点保存，照实告诉用户。
 7. 加好后用一句话确认：哪天几点、什么事。""",
     ),
@@ -280,7 +280,7 @@ object SkillTools {
 
     val SAVE_FLASHCARDS = schema("""{"type":"function","function":{"name":"save_flashcards","description":"把知识点保存成复习卡片，用户之后会按间隔重复复习。","parameters":{"type":"object","properties":{"deck":{"type":"string","description":"卡组名，一般是主题"},"cards":{"type":"array","items":{"type":"object","properties":{"front":{"type":"string","description":"问题"},"back":{"type":"string","description":"答案"}},"required":["front","back"]}}},"required":["deck","cards"]}}}""")
 
-    val ADD_EVENT = schema("""{"type":"function","function":{"name":"add_calendar_event","description":"在手机日历里添加一个日程。","parameters":{"type":"object","properties":{"title":{"type":"string","description":"日程标题"},"start":{"type":"string","description":"开始时间 yyyy-MM-dd HH:mm；全天的事只写 yyyy-MM-dd"},"end":{"type":"string","description":"结束时间，格式同 start，不填默认 1 小时"},"location":{"type":"string"},"notes":{"type":"string","description":"备注"},"remind_minutes":{"type":"integer","description":"提前多少分钟提醒，默认 15，不要提醒写 -1"}},"required":["title","start"]}}}""")
+    val ADD_EVENT = schema("""{"type":"function","function":{"name":"add_calendar_event","description":"在手机日历里添加一个日程。","parameters":{"type":"object","properties":{"title":{"type":"string","description":"日程标题"},"start":{"type":"string","description":"开始时间 yyyy-MM-dd HH:mm；全天的事只写 yyyy-MM-dd"},"end":{"type":"string","description":"结束时间，格式同 start，不填默认 1 小时"},"location":{"type":"string"},"notes":{"type":"string","description":"备注"},"remind_minutes":{"type":"integer","description":"提前多少分钟提醒，默认 15，不要提醒写 -1"},"replace":{"type":"string","description":"改已有日程时填：旧日程的编号。新的写好后自动删掉旧的"}},"required":["title","start"]}}}""")
 
     val LIST_EVENTS = schema("""{"type":"function","function":{"name":"list_calendar_events","description":"查看手机日历里一段时间内的日程。","parameters":{"type":"object","properties":{"start_date":{"type":"string","description":"从哪天开始，yyyy-MM-dd，默认今天"},"days":{"type":"integer","description":"查几天，默认 1，最多 62"}}}}}""")
 
@@ -304,7 +304,7 @@ object SkillTools {
     val SEARCH_MY_DATA = schema("""{"type":"function","function":{"name":"search_my_data","description":"在用户自己的东西里按关键词找原文：以前所有的聊天、本对话较早的原话、资料库、项目资料。返回最相关的段落和出处。","parameters":{"type":"object","properties":{"query":{"type":"string","description":"关键词，2 到 5 个，用空格隔开；不填就列出资料库或项目里有哪些文档"},"where":{"type":"string","enum":["all","chats","history","library","project"],"description":"在哪找：chats 以前的聊天，history 本对话较早的原话（只有对话很长、被压缩过才有），library 资料库，project 项目资料（只在项目里有）；默认 all，能找的地方都找"}}}}}""")
 
 
-    val SCHEDULE = schema("""{"type":"function","function":{"name":"schedule","description":"到点做事：reminder 到点弹通知；task 到点你在后台自动执行 prompt 并把结果发给用户；alarm 在手机时钟里设真正的闹钟（一直响到用户按掉）。","parameters":{"type":"object","properties":{"kind":{"type":"string","enum":["reminder","task","alarm"]},"when":{"type":"string","description":"第一次的时间 yyyy-MM-dd HH:mm；闹钟可以只写 HH:mm"},"text":{"type":"string","description":"提醒：通知里显示的话；任务：任务名；闹钟：标签，可以不填"},"prompt":{"type":"string","description":"只有 task 用：到时候要执行的完整、独立的指令"},"repeat":{"type":"string","enum":["none","daily","weekdays","weekly"],"description":"默认 none；weekly 是每周 when 那一天"},"work":{"type":"boolean","description":"只有 task 用：要用邮箱、生成文件等多种技能、步骤多时设 true"},"off_peak":{"type":"boolean","description":"只有 task 用：碰上高峰时段就顺延到空闲时段，省一半钱；不急的任务可以开"}},"required":["kind","when"]}}}""")
+    val SCHEDULE = schema("""{"type":"function","function":{"name":"schedule","description":"到点做事：reminder 到点弹通知；task 到点你在后台自动执行 prompt 并把结果发给用户；alarm 在手机时钟里设真正的闹钟（一直响到用户按掉）。","parameters":{"type":"object","properties":{"kind":{"type":"string","enum":["reminder","task","alarm"]},"when":{"type":"string","description":"第一次的时间 yyyy-MM-dd HH:mm；闹钟可以只写 HH:mm"},"text":{"type":"string","description":"提醒：通知里显示的话；任务：任务名；闹钟：标签，可以不填"},"prompt":{"type":"string","description":"只有 task 用：到时候要执行的完整、独立的指令"},"repeat":{"type":"string","enum":["none","daily","weekdays","weekly"],"description":"默认 none；weekly 是每周 when 那一天"},"work":{"type":"boolean","description":"只有 task 用：要用邮箱、生成文件等多种技能、步骤多时设 true"},"off_peak":{"type":"boolean","description":"只有 task 用：碰上高峰时段就顺延到空闲时段，省一半钱；不急的任务可以开"},"replace":{"type":"string","description":"改已有的提醒、任务或闹钟时填：旧的编号（闹钟填旧的时间 HH:mm）。新的设好后自动删掉旧的"}},"required":["kind","when"]}}}""")
 
     val CANCEL_SCHEDULE = schema("""{"type":"function","function":{"name":"cancel_schedule","description":"取消一个提醒、定时任务或闹钟。","parameters":{"type":"object","properties":{"target":{"type":"string","description":"提醒和任务填编号（每条用户消息前面的【提醒和任务】里有）；闹钟填时间 HH:mm 或标签"}},"required":["target"]}}}""")
 
@@ -312,7 +312,7 @@ object SkillTools {
 
     val MANAGE_EMAILS = schema("""{"type":"function","function":{"name":"manage_emails","description":"处理邮件：read/unread 标成已读或未读；trash 删除（移到「已删除」，能找回）；delete_forever 彻底删除；move 移到 target_folder；empty_trash 清空「已删除」（不用填 uids）。删除和移动前一般会弹窗让用户确认。","parameters":{"type":"object","properties":{"action":{"type":"string","enum":["read","unread","trash","delete_forever","move","empty_trash"]},"uids":{"type":"array","items":{"type":"integer"},"description":"list_emails 给出的编号，可以多个，一次最多 200"},"folder":{"type":"string","description":"邮件现在所在的文件夹，默认 INBOX"},"target_folder":{"type":"string","description":"只有 move 用：移到哪个文件夹"},"account":{"type":"string","description":"用哪个邮箱（邮箱地址），不填用默认邮箱"}},"required":["action"]}}}""")
 
-    val SAVE_MEMORY = schema("""{"type":"function","function":{"name":"save_memory","description":"存一条记忆。","parameters":{"type":"object","properties":{"content":{"type":"string","description":"要记住的内容，一句完整、独立能看懂的话"},"scope":{"type":"string","enum":["chat","project","global"],"description":"存到哪：chat 本对话记忆，project 项目记忆，global 全局记忆"}},"required":["content","scope"]}}}""")
+    val SAVE_MEMORY = schema("""{"type":"function","function":{"name":"save_memory","description":"存、改、删一条记忆。","parameters":{"type":"object","properties":{"content":{"type":"string","description":"要记住的内容，一句完整、独立能看懂的话；删除时留空"},"scope":{"type":"string","enum":["chat","project","global"],"description":"存在哪：chat 本对话记忆，project 项目记忆，global 全局记忆"},"replace":{"type":"string","description":"改或删旧记忆时填：旧记忆的原话（一段也行，能唯一认出就好）。不填就是新存一条"}},"required":["scope"]}}}""")
 }
 
 /** 当前开着的 skill：内置的看开关（联网还要有 Tavily 或 DeepSeek Key），自定义的看它自己的 enabled。 */

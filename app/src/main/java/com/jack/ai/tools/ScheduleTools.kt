@@ -99,6 +99,8 @@ internal suspend fun ToolSession.removeRoutine(id: String) = runTool("删除提�
 
 internal suspend fun ToolSession.addEvent(args: JsonObject): String {
     val title = args["title"].text().ifBlank { "日程" }
+    // 改日程：新的写进日历后再删旧的
+    val oldId = args["replace"].text().trim().removePrefix("编号").trim().toLongOrNull()
     return runTool("添加日程：$title") {
         val (begin, dateOnly) = CalendarTool.parse(args["start"].text())
             ?: throw IllegalArgumentException("start 要写成 yyyy-MM-dd HH:mm 或 yyyy-MM-dd")
@@ -113,13 +115,20 @@ internal suspend fun ToolSession.addEvent(args: JsonObject): String {
             CalendarTool.insert(app, title, begin, end, allDay, location, notes, remind.takeIf { it >= 0 })
         } else null
         if (id != null) {
+            val removed = oldId != null && withContext(Dispatchers.IO) { CalendarTool.delete(app, oldId) }
             host.refreshWidget()
-            "已写进手机日历：$shown「$title」${if (remind >= 0) "，提前 $remind 分钟提醒" else ""}。编号 $id。" to
-                SearchRecord("添加日程：$title")
+            val replaced = when {
+                oldId == null -> ""
+                removed -> "旧日程 $oldId 已删掉。"
+                else -> "没找到旧日程 $oldId，没删。"
+            }
+            "已写进手机日历：$shown「$title」${if (remind >= 0) "，提前 $remind 分钟提醒" else ""}。编号 $id。$replaced" to
+                SearchRecord(if (removed) "改日程：$title" else "添加日程：$title")
         } else {
             startClock(CalendarTool.insertIntent(title, begin, end, allDay, location, notes), "手机上没找到日历 App")
             "没有日历写入权限（或没有可写的日历），已打开日历 App 的新建页面并填好内容（$shown「$title」），需要用户点一下保存。" +
-                "想让以后自动写入，可以在左侧菜单「提醒和任务」里点「允许读写日历」。" to SearchRecord("打开日历：$title")
+                "想让以后自动写入，可以在左侧菜单「提醒和任务」里点「允许读写日历」。" +
+                (if (oldId != null) "没有权限也删不了旧日程，请用户自己在日历里删掉。" else "") to SearchRecord("打开日历：$title")
         }
     }
 }
@@ -152,6 +161,16 @@ internal suspend fun ToolSession.deleteEvent(id: String) = runTool("删除日程
  * 里面照旧交给 makeRoutine / setAlarm 去做。
  */
 internal suspend fun ToolSession.schedule(args: JsonObject): String {
+    val replace = args["replace"].text().trim()
+    if (replace.isEmpty()) return createSchedule(args)
+    // 改时间：先设新的，设成功了再删旧的，免得新的没设上旧的也没了
+    val before = succeeded.get()
+    val created = createSchedule(args)
+    if (succeeded.get() == before) return created
+    return created + "\n" + cancelSchedule(buildJsonObject { put("target", replace) })
+}
+
+private suspend fun ToolSession.createSchedule(args: JsonObject): String {
     val whenText = args["when"].text()
     val text = args["text"].text().trim()
     val repeat = args["repeat"].text().ifBlank { "none" }

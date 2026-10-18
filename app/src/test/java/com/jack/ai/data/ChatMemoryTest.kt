@@ -41,4 +41,20 @@ class ChatMemoryTest {
         val c = Conversation(projectId = "p1")
         assertEquals("对话记忆-${c.id.take(6)}.md", ChatMemory.chatFileName(c))
     }
+
+    @Test
+    fun replaceChangesOrDeletesOneItem() {
+        val items = listOf("用户在准备考大学语文", "用户喜欢简短的回答", "用户养了一只猫")
+        assertEquals(listOf("用户在准备考研", "用户喜欢简短的回答", "用户养了一只猫"),
+            ChatMemory.replace(items, "考大学语文", "用户在准备考研"))
+        assertEquals(listOf("用户喜欢简短的回答", "用户养了一只猫"), ChatMemory.replace(items, "- 用户在准备考大学语文", ""))
+        // 认不出、认出好几条都报错，并列出候选
+        val none = runCatching { ChatMemory.replace(items, "狗", "") }.exceptionOrNull()!!
+        assertTrue(none.message!!.contains("养了一只猫"))
+        val many = runCatching { ChatMemory.replace(items, "用户", "") }.exceptionOrNull()!!
+        assertTrue(many.message!!.contains("3 条"))
+        // 一字不差的优先，即使别的条目也包含它
+        assertEquals(listOf("猫"), ChatMemory.replace(listOf("猫", "一只猫"), "一只猫", ""))
+        assertEquals(listOf("一只猫"), ChatMemory.replace(listOf("猫", "一只猫"), "猫", ""))
+    }
 }
