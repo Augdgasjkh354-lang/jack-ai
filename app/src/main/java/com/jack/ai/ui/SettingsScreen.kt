@@ -62,8 +62,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jack.ai.ChatViewModel
 import com.jack.ai.data.DEFAULT_BASE_URL
-import com.jack.ai.data.DEFAULT_DEV_PROMPT
-import com.jack.ai.data.DEFAULT_WORK_PROMPT
 import com.jack.ai.data.ThinkLevel
 import com.jack.ai.data.modelChoices
 import com.jack.ai.data.costYuan
@@ -92,8 +90,6 @@ fun SettingsScreen(
     var balance by remember { mutableStateOf<String?>(null) }
     var editing by remember { mutableStateOf<Preset?>(null) }
     var confirmClear by remember { mutableStateOf(false) }
-    /** 正在改哪份底层提示词：null 没在改，false Chat，true Work。 */
-    var editingDev by remember { mutableStateOf<Boolean?>(null) }
     var confirmRestore by remember { mutableStateOf<android.net.Uri?>(null) }
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         uri?.let { vm.exportBackup(it) }
@@ -381,14 +377,6 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 OutlinedButton(onClick = { confirmClear = true }) { Text("清空全部聊天记录") }
-                Row {
-                    TextButton(onClick = { editingDev = false }) {
-                        Text("Chat 底层提示词", color = MaterialTheme.colorScheme.outline)
-                    }
-                    TextButton(onClick = { editingDev = true }) {
-                        Text("Work 底层提示词", color = MaterialTheme.colorScheme.outline)
-                    }
-                }
             }
 
             Spacer(Modifier.height(24.dp))
@@ -402,33 +390,6 @@ fun SettingsScreen(
         }
         editing = null
     } }
-
-    editingDev?.let { work ->
-        var text by remember(work) { mutableStateOf(if (work) settings.workDeveloperPrompt else settings.developerPrompt) }
-        AlertDialog(
-            onDismissRequest = { editingDev = null },
-            title = { Text(if (work) "Work 底层提示词" else "Chat 底层提示词") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = text,
-                        onValueChange = { text = it },
-                        minLines = 8,
-                        maxLines = 14,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    TextButton(onClick = { text = if (work) DEFAULT_WORK_PROMPT else DEFAULT_DEV_PROMPT }) { Text("恢复默认") }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    vm.updateSettings { if (work) it.copy(workDeveloperPrompt = text.trim()) else it.copy(developerPrompt = text.trim()) }
-                    editingDev = null
-                }) { Text("保存") }
-            },
-            dismissButton = { TextButton(onClick = { editingDev = null }) { Text("取消") } },
-        )
-    }
 
     confirmRestore?.let { uri ->
         AlertDialog(

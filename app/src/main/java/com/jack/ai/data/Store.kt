@@ -254,8 +254,6 @@ class Store(context: Context) {
             themeMode = runCatching { ThemeMode.valueOf(prefs.getString("themeMode", "SYSTEM")!!) }
                 .getOrDefault(ThemeMode.SYSTEM),
             presets = presets,
-            developerPrompt = prefs.getString("devPrompt2", null) ?: DEFAULT_DEV_PROMPT,
-            workDeveloperPrompt = prefs.getString("workDevPrompt", null) ?: DEFAULT_WORK_PROMPT,
             workTemplates = prefs.getString("workTemplates", null)?.let {
                 runCatching { json.decodeFromString(ListSerializer(Preset.serializer()), it) }.getOrNull()
             } ?: DEFAULT_WORK_TEMPLATES,
@@ -301,8 +299,9 @@ class Store(context: Context) {
             .putFloat("temperature", s.temperature)
             .putString("themeMode", s.themeMode.name)
             .putString("presets", json.encodeToString(ListSerializer(Preset.serializer()), s.presets))
-            .putString("devPrompt2", s.developerPrompt)
-            .putString("workDevPrompt", s.workDeveloperPrompt)
+            // 底层提示词固定用内置的，旧版本存过的清掉
+            .remove("devPrompt2")
+            .remove("workDevPrompt")
             .putString("workTemplates", json.encodeToString(ListSerializer(Preset.serializer()), s.workTemplates))
             .putBoolean("activeWork", s.activeWork)
             .putString("chatModel", s.chatModel)
