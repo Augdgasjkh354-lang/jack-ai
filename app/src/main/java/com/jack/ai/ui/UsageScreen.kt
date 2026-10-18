@@ -207,6 +207,8 @@ fun UsageScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
 
             ToolStatsCard(vm)
 
+            FeedbackCard(vm)
+
             val top = state.conversations.filter { it.spentTokens > 0 }.sortedWith(
                 compareByDescending<Conversation> { it.spentCost }.thenByDescending { it.spentTokens },
             ).take(5)
@@ -331,6 +333,36 @@ private fun ToolStatsCard(vm: ChatViewModel) {
                 }
             }
             if (list.size > 8) TextButton(onClick = { all = !all }) { Text(if (all) "收起" else "全部 ${list.size} 个") }
+        }
+    }
+}
+
+/** 攒下的问题反馈：导出成文件发给开发者，或清空。 */
+@Composable
+private fun FeedbackCard(vm: ChatViewModel) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var refresh by remember { mutableStateOf(0) }
+    val count by produceState(0, refresh) { value = vm.feedbackCount() }
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("问题反馈", style = MaterialTheme.typography.titleSmall)
+            Text(
+                if (count == 0) "回答下面点「⚠」可以记下有问题的那一轮，攒几条后在这里导出，发给帮你改 App 的人。"
+                else "已记下 $count 条",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (count > 0) Row {
+                TextButton(onClick = {
+                    vm.exportFeedback { file ->
+                        val uri = androidx.core.content.FileProvider.getUriForFile(ctx, ctx.packageName + ".files", file)
+                        val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/markdown")
+                            .putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                            .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        ctx.startActivity(android.content.Intent.createChooser(send, file.name))
+                    }
+                }) { Text("导出") }
+                TextButton(onClick = { vm.clearFeedback(); refresh++ }) { Text("清空") }
+            }
         }
     }
 }

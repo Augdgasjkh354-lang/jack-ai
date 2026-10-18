@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Refresh
@@ -218,7 +219,26 @@ fun AssistantMessage(
     onContinue: (() -> Unit)? = null,
     /** 回答被长度上限截断时“接着写”。 */
     onContinueWriting: (() -> Unit)? = null,
+    /** 「这条有问题」：把这一轮的现场存下来，之后导出。 */
+    onReport: ((String) -> Unit)? = null,
 ) {
+    var reporting by remember { mutableStateOf(false) }
+    if (reporting && onReport != null) {
+        var note by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { reporting = false },
+            title = { Text("这条有问题") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("会存下这一轮的问题、回答和工具调用过程，之后在「统计」页最下面导出。", style = MaterialTheme.typography.bodySmall)
+                    OutlinedTextField(value = note, onValueChange = { note = it }, placeholder = { Text("哪里不对？可以不填") },
+                        minLines = 2, modifier = Modifier.fillMaxWidth())
+                }
+            },
+            confirmButton = { TextButton(onClick = { onReport(note); reporting = false }) { Text("记下") } },
+            dismissButton = { TextButton(onClick = { reporting = false }) { Text("取消") } },
+        )
+    }
     val clipboard = LocalClipboardManager.current
     val ctx = LocalContext.current
     val colors = MaterialTheme.colorScheme
@@ -294,6 +314,7 @@ fun AssistantMessage(
                     }
                 }
                 SmallAction(Icons.Default.Delete, "删除", onDelete)
+                if (onReport != null) SmallAction(Icons.Default.Warning, "这条有问题") { reporting = true }
                 if (msg.model.isNotEmpty()) {
                     Text(modelLabel(msg.model), style = MaterialTheme.typography.labelSmall, color = colors.outline)
                 }

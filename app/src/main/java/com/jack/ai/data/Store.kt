@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.AtomicFile
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import java.io.File
 
@@ -115,6 +116,23 @@ class Store(context: Context) {
     fun loadUsage() = load("usage.json", UsageDay.serializer())
 
     fun loadToolStats() = load("tool_stats.json", ToolStat.serializer())
+
+    /** 发过信的地址（小写）。读过外部内容后发给不在这里的地址，完全授权下也要确认。 */
+    fun knownRecipients(): Set<String> = load("recipients.json", String.serializer()).toSet()
+
+    fun addRecipients(list: Collection<String>) = synchronized(LOCK) {
+        val all = (loadUnlocked("recipients.json", String.serializer()) + list.map { it.lowercase() }).distinct()
+        atomicWrite("recipients.json", json.encodeToString(ListSerializer(String.serializer()), all.takeLast(2000)))
+    }
+
+    fun loadFeedback() = load("feedback.json", Feedback.serializer())
+
+    fun addFeedback(f: Feedback) = synchronized(LOCK) {
+        val list = loadUnlocked("feedback.json", Feedback.serializer()) + f
+        atomicWrite("feedback.json", json.encodeToString(ListSerializer(Feedback.serializer()), list.takeLast(100)))
+    }
+
+    fun clearFeedback() = synchronized(LOCK) { File(dir, "feedback.json").delete(); Unit }
 
     /** 记一次工具调用。 */
     fun addToolStat(name: String, failed: Boolean) = synchronized(LOCK) {
@@ -254,7 +272,7 @@ class Store(context: Context) {
         }
         val thinking = prefs.getString("thinking", null)
             ?.let { runCatching { ThinkLevel.valueOf(it) }.getOrNull() }
-            ?: if (oldModel == "deepseek-chat") ThinkLevel.OFF else ThinkLevel.HIGH
+            ?: if (oldModel == "deepseek-chat") ThinkLevel.OFF else ThinkLevel.AUTO
         return Settings(
             apiKey = prefs.getString("apiKey", "") ?: "",
             tavilyKey = prefs.getString("tavilyKey", "") ?: "",
@@ -266,9 +284,12 @@ class Store(context: Context) {
             themeMode = runCatching { ThemeMode.valueOf(prefs.getString("themeMode", "SYSTEM")!!) }
                 .getOrDefault(ThemeMode.SYSTEM),
             presets = presets,
-            workTemplates = prefs.getString("workTemplates", null)?.let {
+            workTemplates = (prefs.getString("workTemplates", null)?.let {
                 runCatching { json.decodeFromString(ListSerializer(Preset.serializer()), it) }.getOrNull()
-            } ?: DEFAULT_WORK_TEMPLATES,
+            } ?: DEFAULT_WORK_TEMPLATES).let { list ->
+                // 自检模板总是用最新版（工具变了它也要跟着变）；用户删掉过也补回来
+                list.filterNot { it.id == SELF_CHECK.id } + SELF_CHECK
+            },
             activeWork = prefs.getBoolean("activeWork", false),
             chatModel = prefs.getString("chatModel", "") ?: "",
             chatThinking = prefs.getString("chatThinking", null)?.let { runCatching { ThinkLevel.valueOf(it) }.getOrNull() },

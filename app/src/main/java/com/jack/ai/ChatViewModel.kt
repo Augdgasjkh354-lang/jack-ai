@@ -121,6 +121,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val routines = RoutinesFeature(core)
     private val settingsFeature = SettingsFeature(core, client)
     private val backup = BackupFeature(core, knowledge)
+    private val feedback = com.jack.ai.features.FeedbackFeature(core)
     private val compression = CompressFeature(core)
 
     init {
@@ -455,7 +456,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val conv = _state.value.conversations.firstOrNull { it.id == convId } ?: return
         val project = _state.value.project(conv.projectId)
         val model = modelOverride ?: settings.model
-        val thinking = if (modelOverride != null && settings.thinking == ThinkLevel.OFF) ThinkLevel.HIGH else settings.thinking
+        val lastUser = conv.messages.lastOrNull { it.role == "user" }
+        val thinking = (if (modelOverride != null && settings.thinking == ThinkLevel.OFF) ThinkLevel.HIGH else settings.thinking)
+            .resolve(lastUser?.content.orEmpty(), conv.work, lastUser?.attachments?.isNotEmpty() == true)
         val reply = ChatMessage(role = "assistant", model = model, appVersion = com.jack.ai.data.appVersion(getApplication()))
         updateConv(convId) { it.copy(messages = it.messages + reply) }
 
@@ -739,6 +742,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     // 导出、备份
     val exporting get() = backup.exporting
     fun exportChat(format: ChatExport.Format, onReady: (File) -> Unit) = backup.exportChat(format, onReady)
+    fun reportIssue(msgId: String, note: String) { _state.value.current?.let { feedback.report(it.id, msgId, note) } }
+    suspend fun feedbackCount() = feedback.count()
+    fun exportFeedback(onReady: (File) -> Unit) = feedback.export(onReady)
+    fun clearFeedback() = feedback.clear()
     fun exportBackup(uri: Uri) = backup.exportBackup(uri)
     fun importBackup(uri: Uri) = backup.importBackup(uri)
 

@@ -469,6 +469,7 @@ private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolea
                             onReview = vm::reviewLast,
                             onContinue = if (conv.work && isLast && !msg.truncated && vm.canContinue(msg)) vm::continueWork else null,
                             onContinueWriting = vm::continueWriting,
+                            onReport = { note -> vm.reportIssue(msg.id, note) },
                         )
                     }
                 }

@@ -98,7 +98,7 @@ suspend fun runBackgroundWork(ctx: Context, r: Routine, onProgress: (String) -> 
         }
         override suspend fun confirm(title: String, body: String, action: String) = false
     })
-    val thinking = if (ep.reasoning && ep.deepseek) s.workThinking else ThinkLevel.OFF
+    val thinking = if (ep.reasoning && ep.deepseek) s.workThinking.resolve(r.prompt, work = true, hasFiles = false) else ThinkLevel.OFF
     val client = DeepSeekClient()
     val agent = Agent({ msgs, t -> client.stream(ep, msgs, thinking, s.temperature, t) }, sendReasoning = ep.deepseek && thinking.effort != null)
     var spent = 0.0

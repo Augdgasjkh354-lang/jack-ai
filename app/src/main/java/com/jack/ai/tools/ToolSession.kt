@@ -91,9 +91,10 @@ class ToolSession(
 
     /**
      * 做了就收不回的操作先问用户。设置里开了「完全授权」就直接放行；每次现读设置，到点关掉或用户手动关掉立刻生效。
+     * strict 的操作（读过外部内容后发信给新地址）完全授权下也要问。
      */
-    suspend fun approve(title: String, body: String, action: String): Boolean =
-        withContext(Dispatchers.IO) { host.store.loadSettings().fullAuth } || ui.confirm(title, body, action)
+    suspend fun approve(title: String, body: String, action: String, strict: Boolean = false): Boolean =
+        (!strict && withContext(Dispatchers.IO) { host.store.loadSettings().fullAuth }) || ui.confirm(title, body, action)
 
     /** 成功跑完的工具次数；execute 前后比一比，就知道这次调用成没成（参数不对没进 runTool 的也算失败）。 */
     internal val succeeded = java.util.concurrent.atomic.AtomicInteger()
@@ -115,8 +116,18 @@ class ToolSession(
         }
     }
 
+    private val loop = LoopGuard()
+
+    /** 这次回答里读过外部内容（邮件、网页）没有；读过之后发信给新地址，完全授权下也要确认。 */
+    @Volatile internal var sawExternal = false
+
     /** 按工具名执行，返回给模型看的结果，顺便记进工具统计。 */
     suspend fun execute(name: String, argsText: String): String {
+        loop.check(name, argsText)?.let { msg ->
+            withContext(Dispatchers.IO) { runCatching { host.store.addToolStat(name, failed = true) } }
+            return msg
+        }
+        if (name in EXTERNAL_TOOLS) sawExternal = true
         val before = succeeded.get()
         val result = dispatch(name, argsText)
         val failed = succeeded.get() == before
@@ -195,6 +206,9 @@ class ToolSession(
     }
 
     companion object {
+        /** 返回外部内容的工具：内容里可能藏着冒充用户的指令。 */
+        val EXTERNAL_TOOLS = setOf("list_emails", "read_email", "web_search", "read_webpage")
+
         /** 报错尽量带上具体原因，模型才知道该重试、换方法还是去问用户。 */
         fun errorText(e: Exception): String = when (e) {
             is ApiException -> e.message ?: "接口出错"

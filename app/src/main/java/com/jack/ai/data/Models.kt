@@ -140,6 +140,23 @@ enum class ThinkLevel(val label: String, val effort: String?) {
     LOW("思考·低", "low"),
     HIGH("思考·高", "high"),
     MAX("思考·最高", "max"),
+    /** 按问题难度自动选低档或高档；发请求前一定先用 resolve 换成具体档位（漏了也按低档发）。 */
+    AUTO("思考·自动", "low");
+
+    /**
+     * 自动档：简单问题用低档（1017 版低档已经够用，耗的 token 少一半以上），
+     * 编程、计算、分析、长问题、带文件的、Work 任务用高档。
+     */
+    fun resolve(text: String, work: Boolean, hasFiles: Boolean): ThinkLevel = when {
+        this != AUTO -> this
+        work || hasFiles || text.length > 400 || "```" in text -> HIGH
+        HARD.containsMatchIn(text) -> HIGH
+        else -> LOW
+    }
+
+    companion object {
+        private val HARD = Regex("代码|编程|程序|bug|报错|调试|debug|code|算法|证明|推导|方程|数学|计算|算一下|统计|分析|方案|规划|策略|对比|比较|优化|设计|论文|翻译整篇|逻辑", RegexOption.IGNORE_CASE)
+    }
 }
 
 data class Settings(
@@ -148,7 +165,7 @@ data class Settings(
     val webSearch: Boolean = true,
     val baseUrl: String = DEFAULT_BASE_URL,
     val model: String = MODEL_FLASH,
-    val thinking: ThinkLevel = ThinkLevel.HIGH,
+    val thinking: ThinkLevel = ThinkLevel.AUTO,
     val temperature: Float = 1.0f,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val presets: List<Preset> = DEFAULT_PRESETS,
@@ -319,6 +336,21 @@ fun guessReasoning(id: String): Boolean {
         listOf("reason", "r1", "think", "qwq", "gpt-5", "deepseek-r", "grok-3-mini", "grok-4").any { it in s }
 }
 
+/** 用户点「这条有问题」时存下的现场：问了什么、答了什么、中间调了哪些工具、哪里出错。导出发给开发者看。 */
+@Serializable
+data class Feedback(
+    val at: Long,
+    val convTitle: String,
+    val model: String,
+    val appVersion: Int,
+    val note: String,
+    val question: String,
+    val answer: String,
+    /** 工具调用过程（每步截断过）。 */
+    val steps: List<String> = emptyList(),
+    val errors: List<String> = emptyList(),
+)
+
 /** 每个工具一共调了几次、失败几次（统计页看工具好不好用）。 */
 @Serializable
 data class ToolStat(val name: String, val calls: Int = 0, val failures: Int = 0)
@@ -369,12 +401,29 @@ val DEFAULT_PRESETS = listOf(
     Preset(name = "朋友聊天", prompt = "你是用户的老朋友，说话自然、轻松、真诚，像微信聊天一样，不要长篇大论。"),
 )
 
+/** 内置的「自检」模板：每次更新后跑一遍，挨个试工具，只用测试数据。旧用户的模板列表里没有它时自动补上。 */
+val SELF_CHECK = Preset(id = "builtin-self-check", name = "自检", prompt = """对 App 的工具做一次自检。只用名字以「_自检」开头的测试数据，不要动我真实的邮件、表格、提醒和文件；测试中建的东西最后全部删掉。开着的技能才测，没开的写“未开启”。
+
+依次测：
+1. 文件：write_file 建「_自检.txt」→ read_file → edit_file 改一个词 → read_file 确认改了。
+2. 文档：create_document 生成一页 PDF「_自检」→ read_file 能读出文字 → delete_file 删掉它和「_自检.txt」。
+3. 表格：add_rows 往「_自检」记两行（自动建表）→ query_table 求和 → edit_table 改一行 → edit_table drop 删表。
+4. 提醒：schedule 设一个 2099-01-01 09:00 的提醒「_自检」→ 用 schedule 的 replace 改到 09:30 → cancel_schedule 删掉。
+5. 日历：add_calendar_event 加 2099-01-01「_自检」→ list_calendar_events 查到 → delete_calendar_event 删掉。
+6. 记忆：save_memory 存一条本对话记忆「_自检：测试」→ 用 replace 改成「_自检：已改」→ 再用 replace 删掉。
+7. 邮件（只读）：list_emails 列最新 3 封 → read_email 读第一封，只看能不能读，不要总结内容；不删、不移、不发。
+8. 搜索与计算：search_my_data 搜「自检」；run_python（或 run_js）算 1+1；联网开着就 web_search 搜一次今天的日期。
+
+最后用一张表交给我：工具｜结果（✅/❌/未开启）｜出错时的原话。再用一两句话说哪里最该修。中途某步失败就记下来接着测下一步，不要卡住。""")
 val DEFAULT_WORK_TEMPLATES = listOf(
     Preset(name = "整理邮件", prompt = "看看我所有邮箱最近一天的新邮件，按重要程度整理：谁发的、什么事、要不要处理、截止时间。广告和通知合成一句带过。"),
     Preset(name = "查资料出报告", prompt = "围绕「」查资料，至少看 5 个可靠来源，整理成一份 Word 报告：结论放前面，后面分点论证，最后附上来源链接。"),
     Preset(name = "写周报", prompt = "根据我这周的聊天和对话文件夹里的资料，写一份周报：完成了什么、进行中的事、遇到的问题、下周计划。生成 Word。"),
     Preset(name = "做 PPT", prompt = "把「」做成一份 8 页左右的 PPT：每页一个要点，配简短说明，风格简洁。"),
+    SELF_CHECK,
 )
+
+
 
 const val DEFAULT_WORK_PROMPT = """你正在 Work 模式下替用户完成一项任务。目标是把事做完、做对，而不是陪聊。
 

@@ -145,12 +145,20 @@ internal suspend fun ToolSession.sendEmail(args: JsonObject): String {
             if (files.isNotEmpty()) append("附件：${files.joinToString("、") { it.name }}\n")
             append("\n").append(body)
         }
-        if (!approve("发送这封邮件？", preview, "发送")) {
+        // 读过邮件或网页之后发给从没发过的地址：可能是内容里藏的指令在“借刀”，完全授权下也要问一声
+        val recipients = addressesOf(to) + addressesOf(cc)
+        val known = withContext(Dispatchers.IO) { host.store.knownRecipients() }
+        val unknown = recipients.filter { it !in known }
+        val strict = sawExternal && unknown.isNotEmpty()
+        val title = if (strict) "发给新的收件人？" else "发送这封邮件？"
+        val warn = if (strict) "以前没给 ${unknown.joinToString("、")} 发过信，而且这次读过邮件或网页，所以即使开着完全授权也要你确认。\n\n" else ""
+        if (!approve(title, warn + preview, "发送", strict = strict)) {
             return@runTool "用户取消了发送，邮件没有发出。" to SearchRecord("发邮件：已取消")
         }
         val result = withContext(Dispatchers.IO) {
             MailClient.send(acc, to, cc, subject, body, files, replyUid?.let { replyFolder!! to it })
         }
+        withContext(Dispatchers.IO) { runCatching { host.store.addRecipients(recipients) } }
         "$result。" to SearchRecord("已发邮件给 $to")
     }
 }
@@ -176,6 +184,11 @@ internal suspend fun ToolSession.manageEmails(args: JsonObject): String = when (
     "empty_trash" -> emptyMailTrash(args)
     else -> "action 要填 read、unread、trash、delete_forever、move 或 empty_trash"
 }
+
+/** 收件人里的邮箱地址（小写）；中文分号、英文分号都当分隔。 */
+private fun addressesOf(list: String): List<String> = if (list.isBlank()) emptyList() else
+    runCatching { javax.mail.internet.InternetAddress.parse(list.replace('；', ',').replace(';', ','), false).map { it.address.lowercase() } }
+        .getOrDefault(emptyList())
 
 /** uids 数组，也接受单个 uid。 */
 private fun JsonObject.uids(): List<Long> =
