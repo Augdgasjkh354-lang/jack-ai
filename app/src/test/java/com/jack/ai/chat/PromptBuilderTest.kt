@@ -52,10 +52,6 @@ class PromptBuilderTest {
     private fun tool(conv: Conversation, name: String, s: Settings = settings, project: Project? = null) =
         tools(conv, project, s)!!.map { it.jsonObject["function"]!!.jsonObject }.firstOrNull { it["name"]!!.jsonPrimitive.content == name }
 
-    private fun whereOptions(conv: Conversation, project: Project? = null) =
-        tool(conv, "search_my_data", project = project)?.get("parameters")!!.jsonObject["properties"]!!
-            .jsonObject["where"]!!.jsonObject["enum"]!!.jsonArray.map { it.jsonPrimitive.content }
-
     private fun toolNames(conv: Conversation, project: Project? = null, s: Settings = settings) =
         tools(conv, project, s)!!.map { it.jsonObject["function"]!!.jsonObject["name"]!!.jsonPrimitive.content }
 
@@ -77,7 +73,7 @@ class PromptBuilderTest {
         val conv = Conversation(summary = "之前聊了旅行计划", summaryUntilId = "x")
         val project = Project(name = "小说", instructions = "主角叫阿明")
         val sys = PromptBuilder.systemPrompt(settings, conv, project, tools(conv, project), memories, settings.activeSkills())
-        val order = listOf("【开发者指令", "【技能】", "【当前项目：小说】", "【个性化设定】", "【关于用户的长期记忆】", "【较早对话的提要】")
+        val order = listOf("【开发者指令", "【技能】", "【个性化设定】", "【关于用户的长期记忆】", "【当前项目：小说】", "【较早对话的提要】")
             .map { sys.indexOf(it) }
         order.forEach { assertTrue("缺少某个段落：$order", it >= 0) }
         assertEquals(order.sorted(), order)
@@ -205,14 +201,12 @@ class PromptBuilderTest {
         val names = toolNames(conv)
         assertTrue("save_memory" in names)
         assertTrue("web_search" in names) // 没有 Tavily Key，但有 DeepSeek Key 也能联网
-        // 默认开着聊天记录和资料库，所以 search_my_data 在，但还不能搜旧记录和项目
-        assertEquals(listOf("all", "chats", "library"), whereOptions(conv))
+        assertTrue("search_my_data" in names)
         assertTrue("add_calendar_event" in names)
 
         // 本对话记忆随时能存，关了全局记忆工具也在
         assertTrue("save_memory" in toolNames(conv, s = settings.copy(memoryEnabled = false)))
         assertTrue("web_search" in toolNames(conv, s = settings.copy(tavilyKey = "t")))
-        assertTrue("history" in whereOptions(conv.copy(summary = "提要")))
         assertFalse("add_calendar_event" in toolNames(conv, s = settings.copy(disabledSkills = setOf(SkillIds.CALENDAR))))
     }
 
@@ -228,7 +222,6 @@ class PromptBuilderTest {
         assertTrue(sys.contains("第一章：出发"))
         assertTrue(sys.contains("《全文.txt》"))
         assertFalse(sys.contains("字".repeat(1000)))
-        assertTrue("project" in whereOptions(conv, project))
     }
 
     @Test
@@ -321,8 +314,8 @@ class PromptBuilderTest {
         val plain = PromptBuilder.memoryRules(Conversation(), inProject = false, globalOn = true)
         assertTrue(plain.contains("chat（本对话记忆）"))
         assertTrue(plain.contains("global（全局记忆）"))
-        assertFalse(plain.contains("project（项目记忆）"))
-        assertTrue(PromptBuilder.memoryRules(Conversation(), inProject = true, globalOn = true).contains("project（项目记忆）"))
+        assertTrue(plain.contains("不要存 project"))
+        assertFalse(PromptBuilder.memoryRules(Conversation(), inProject = true, globalOn = true).contains("不要存 project"))
     }
 
     @Test
@@ -376,5 +369,31 @@ class PromptBuilderTest {
         assertTrue(users.last().contains("【表格】「记账」") && users.last().endsWith("第二句"))
         // 清单不进系统提示词，免得缓存失效
         assertFalse(hist.first()["content"]!!.jsonPrimitive.content.contains("「记账」"))
+    }
+
+    // ---------- 缓存：不同对话的开头尽量一样 ----------
+
+    @Test
+    fun toolListIsTheSameAcrossConversations() {
+        val project = Project(name = "小说", files = listOf(Attachment(kind = "file", name = "全文.txt",
+            text = "字".repeat(PromptBuilder.PROJECT_INLINE_CHARS + 1))))
+        val plain = tools(Conversation())
+        assertEquals(plain, tools(Conversation(summary = "提要")))
+        assertEquals(plain, tools(Conversation(systemPrompt = "你是一只猫"), project))
+    }
+
+    @Test
+    fun sharedPartsComeBeforeConversationParts() {
+        val journal = "他说话玩笑裹着认真"
+        val plain = PromptBuilder.systemPrompt(settings, Conversation(), null, tools(Conversation()), memories, settings.activeSkills(), journal = journal)
+        val project = Project(name = "小说", instructions = "写悬疑")
+        val special = Conversation(systemPrompt = "你是一只猫", projectId = project.id)
+        val other = PromptBuilder.systemPrompt(settings, special, project, tools(special), memories, settings.activeSkills(),
+            chatMemory = "- 主角叫阿明", journal = journal)
+        // 有人设、在项目里的对话，开头到日记为止都和普通对话一字不差
+        val shared = plain.substring(0, plain.indexOf(journal) + journal.length)
+        assertTrue(other.startsWith(shared))
+        assertTrue(other.indexOf("【人设】") > other.indexOf(journal))
+        assertTrue(other.indexOf("【当前项目") > other.indexOf(journal))
     }
 }

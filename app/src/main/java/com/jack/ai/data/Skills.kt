@@ -301,14 +301,8 @@ object SkillTools {
         return schema(CREATE_DOCUMENT.toString().replace(""""enum":["word","pdf"],"description":"默认 word"""", """"enum":["$only"]"""))
     }
 
-    val SEARCH_MY_DATA = schema("""{"type":"function","function":{"name":"search_my_data","description":"在用户自己的东西里按关键词找原文：以前所有的聊天、本对话较早的原话、资料库、项目资料。返回最相关的段落和出处。","parameters":{"type":"object","properties":{"query":{"type":"string","description":"关键词，2 到 5 个，用空格隔开；不填就列出资料库或项目里有哪些文档"},"where":{"type":"string","enum":["all","chats","history","library","project"],"description":"在哪找：chats 以前的聊天，history 本对话较早的原话，library 资料库，project 项目资料；默认 all 全找"}}}}}""")
+    val SEARCH_MY_DATA = schema("""{"type":"function","function":{"name":"search_my_data","description":"在用户自己的东西里按关键词找原文：以前所有的聊天、本对话较早的原话、资料库、项目资料。返回最相关的段落和出处。","parameters":{"type":"object","properties":{"query":{"type":"string","description":"关键词，2 到 5 个，用空格隔开；不填就列出资料库或项目里有哪些文档"},"where":{"type":"string","enum":["all","chats","history","library","project"],"description":"在哪找：chats 以前的聊天，history 本对话较早的原话（只有对话很长、被压缩过才有），library 资料库，project 项目资料（只在项目里有）；默认 all，能找的地方都找"}}}}}""")
 
-    /** where 只列出这次能用的来源。 */
-    fun searchMyData(sources: List<String>): JsonObject {
-        if (sources.size >= 4) return SEARCH_MY_DATA
-        val enum = (listOf("all") + sources).joinToString(",") { "\"$it\"" }
-        return schema(SEARCH_MY_DATA.toString().replace(""""enum":["all","chats","history","library","project"]""", """"enum":[$enum]"""))
-    }
 
     val SCHEDULE = schema("""{"type":"function","function":{"name":"schedule","description":"到点做事：reminder 到点弹通知；task 到点你在后台自动执行 prompt 并把结果发给用户；alarm 在手机时钟里设真正的闹钟（一直响到用户按掉）。","parameters":{"type":"object","properties":{"kind":{"type":"string","enum":["reminder","task","alarm"]},"when":{"type":"string","description":"第一次的时间 yyyy-MM-dd HH:mm；闹钟可以只写 HH:mm"},"text":{"type":"string","description":"提醒：通知里显示的话；任务：任务名；闹钟：标签，可以不填"},"prompt":{"type":"string","description":"只有 task 用：到时候要执行的完整、独立的指令"},"repeat":{"type":"string","enum":["none","daily","weekdays","weekly"],"description":"默认 none；weekly 是每周 when 那一天"},"work":{"type":"boolean","description":"只有 task 用：要用邮箱、生成文件等多种技能、步骤多时设 true"},"off_peak":{"type":"boolean","description":"只有 task 用：碰上高峰时段就顺延到空闲时段，省一半钱；不急的任务可以开"}},"required":["kind","when"]}}}""")
 

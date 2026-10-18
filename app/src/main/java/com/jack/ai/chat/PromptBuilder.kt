@@ -157,7 +157,8 @@ object PromptBuilder {
             if (word || pdf) add(SkillTools.createDocument(word, pdf))
             if (SkillIds.PPT in skillIds) add(SkillTools.CREATE_PPT)
             if (SkillIds.EXCEL in skillIds) add(SkillTools.CREATE_EXCEL)
-            searchSources(skillIds, conv, project).takeIf { it.isNotEmpty() }?.let { add(SkillTools.searchMyData(it)) }
+            // 一直带着、选项写全：工具说明不随对话变，缓存才能跨对话命中；眼下搜不了的地方由工具自己回话
+            add(SkillTools.SEARCH_MY_DATA)
             if (SkillIds.CALC in skillIds) {
                 // 开着 Python 就只留 run_python，两个都给模型会犹豫用哪个
                 if (SkillIds.PYTHON !in skillIds) add(SkillTools.RUN_JS)
@@ -208,8 +209,9 @@ object PromptBuilder {
     }
 
     /**
-     * 系统提示词。为了让接口的缓存多命中（命中部分只收 1/50 的钱），不常变的内容放前面，
-     * 偶尔会变的（记忆、提要）放后面；每天都变的日期时间不放这里，放在最后一条用户消息前面。
+     * 系统提示词。DeepSeek 的缓存按请求开头匹配、不分对话（命中部分只收 1/50 的钱），所以所有对话都一样的放前面
+     * （固定说明、个人设定、长期记忆、日记），每个对话自己的放后面（人设、项目、对话记忆、提要）；
+     * 每轮都变的时间和清单不放这里，放在最后一条用户消息前面。
      */
     fun systemPrompt(
         settings: Settings,
@@ -264,9 +266,26 @@ object PromptBuilder {
                 "用户发来的文件内容已经在消息里的，不用再读。"
         }
         if ("save_memory" in names) {
-            parts += "固定说明" to memoryRules(conv, project != null, globalOn)
+            // 这段每个对话都一样；跟对话有关的那句（在不在项目里、开没开全局记忆）放到后面
+            parts += "固定说明" to memoryRulesBase()
         }
         parts += "固定说明" to "【时间】每条用户消息前面的「当前时间」以及文件、表格、提醒清单是系统自动加的，不是用户说的话，不要提起它。"
+        val profile = buildString {
+            if (settings.userName.isNotBlank()) append("用户希望被称呼为：${settings.userName.trim()}\n")
+            if (settings.aboutMe.isNotBlank()) append("关于用户：${settings.aboutMe.trim()}\n")
+            if (settings.replyStyle.isNotBlank()) append("用户希望你这样回答：${settings.replyStyle.trim()}\n")
+        }.trim()
+        if (profile.isNotEmpty()) parts += "个人设定" to "【个性化设定】\n$profile"
+        if (globalOn && memories.isNotEmpty()) {
+            parts += "长期记忆" to "【关于用户的长期记忆】\n以下是你之前记住的关于用户的信息，自然地运用，不要刻意提起“我记得”：\n" +
+                memories.joinToString("\n") { "- ${it.text}" }
+        }
+        if (globalOn && journal.isNotBlank()) {
+            parts += "日记" to "【你的日记】\n这是你上次回看聊天后写给自己的笔记，用来更懂用户、接上进行中的事。只在和眼下话题有关时自然运用；" +
+                "用户没提起的事不要主动提，也不要说起“日记”。\n" + journal.trim()
+        }
+        // ---- 以上所有对话都一样（缓存能跨对话命中），以下每个对话自己的 ----
+        memoryScopeNote(project != null, globalOn).takeIf { "save_memory" in names && it.isNotEmpty() }?.let { parts += "固定说明" to it }
         if (conv.systemPrompt.isNotBlank()) parts += "人设" to "【人设】\n${conv.systemPrompt.trim()}"
         if (project != null) {
             val (small, big) = project.files.partition { it.text.length <= PROJECT_INLINE_CHARS }
@@ -285,20 +304,6 @@ object PromptBuilder {
             }.trim()
             parts += "项目资料" to p
         }
-        val profile = buildString {
-            if (settings.userName.isNotBlank()) append("用户希望被称呼为：${settings.userName.trim()}\n")
-            if (settings.aboutMe.isNotBlank()) append("关于用户：${settings.aboutMe.trim()}\n")
-            if (settings.replyStyle.isNotBlank()) append("用户希望你这样回答：${settings.replyStyle.trim()}\n")
-        }.trim()
-        if (profile.isNotEmpty()) parts += "个人设定" to "【个性化设定】\n$profile"
-        if (globalOn && memories.isNotEmpty()) {
-            parts += "长期记忆" to "【关于用户的长期记忆】\n以下是你之前记住的关于用户的信息，自然地运用，不要刻意提起“我记得”：\n" +
-                memories.joinToString("\n") { "- ${it.text}" }
-        }
-        if (globalOn && journal.isNotBlank()) {
-            parts += "日记" to "【你的日记】\n这是你上次回看聊天后写给自己的笔记，用来更懂用户、接上进行中的事。只在和眼下话题有关时自然运用；" +
-                "用户没提起的事不要主动提，也不要说起“日记”。\n" + journal.trim()
-        }
         if (project != null && projectMemory.isNotBlank()) {
             parts += "项目记忆" to "【项目记忆】（项目文件夹里的「${ChatMemory.PROJECT_FILE}」，这个项目的所有对话共用）\n" + projectMemory.trim()
         }
@@ -313,15 +318,24 @@ object PromptBuilder {
     }
 
     /** 记忆怎么存：本对话记忆主动记；项目记忆只在项目里有；全局记忆只在用户说“记住”且是关于他本人时才存。 */
-    fun memoryRules(conv: Conversation, inProject: Boolean, globalOn: Boolean): String = buildString {
+    fun memoryRules(conv: Conversation, inProject: Boolean, globalOn: Boolean): String =
+        memoryRulesBase() + memoryScopeNote(inProject, globalOn).let { if (it.isEmpty()) "" else "\n$it" }
+
+    /** 所有对话都一样的那部分，放在系统提示词前面，缓存能跨对话命中。 */
+    fun memoryRulesBase(): String = buildString {
         append("【记忆】用 save_memory 存记忆，scope 选存到哪：\n")
         append("- chat（本对话记忆）：只和这个对话有关、之后还会用到的信息，比如定下的设定、规则、名字、数字、决定、约束、进度。")
         append("不用等用户说“记住”，遇到就主动存，一条一句话；已经记过的不要重复存；闲聊、一次性的问题不要存。\n")
-        if (inProject) append("- project（项目记忆）：对这个项目里所有对话都有用的设定和决定。\n")
-        if (globalOn) append("- global（全局记忆）：只有用户明确说“记住”、而且内容是关于用户本人的长期信息（身份、偏好、习惯、重要的人和事）时才用。\n")
-        else append("这个对话不使用全局记忆，不要存 global。\n")
+        append("- project（项目记忆）：在项目里时，对这个项目里所有对话都有用的设定和决定。\n")
+        append("- global（全局记忆）：只有用户明确说“记住”、而且内容是关于用户本人的长期信息（身份、偏好、习惯、重要的人和事）时才用。\n")
         append("要改或删已有的记忆，用 edit_file 改对应的记忆文件。存完不用在回答里特意说明。")
     }
+
+    /** 跟这个对话有关的记忆限制，放在系统提示词后面。 */
+    fun memoryScopeNote(inProject: Boolean, globalOn: Boolean): String = listOfNotNull(
+        "这个对话不在项目里，不要存 project。".takeIf { !inProject },
+        "这个对话不使用全局记忆，不要存 global。".takeIf { !globalOn },
+    ).joinToString("")
 
     /** 当前时间，加在最后一条用户消息前面（放这里不影响前面整段的缓存）。 */
     fun timeNote(now: Long): String = "【当前时间：" + SimpleDateFormat("yyyy年M月d日 EEEE HH:mm", Locale.CHINA).format(Date(now)) + "】\n"

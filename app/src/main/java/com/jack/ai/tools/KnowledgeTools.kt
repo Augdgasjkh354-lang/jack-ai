@@ -59,6 +59,7 @@ internal suspend fun ToolSession.searchMyData(args: JsonObject): String {
     val available = com.jack.ai.chat.PromptBuilder.searchSources(skillIds, conv, project)
     val want = args["where"].text().ifBlank { "all" }
     val where = if (want == "all") available else listOf(want).filter { it in available }
+    if (available.isEmpty()) return "现在没有能找的地方：聊天记录搜索和资料库技能都没开，本对话也还没被压缩过。"
     if (where.isEmpty()) return "现在不能在「$want」里找。能找的地方：" + available.joinToString("、") { "$it（${SOURCE_NAMES[it]}）" }
     val label = if (query.isEmpty()) "查看资料" else "翻找：$query"
     return runTool(label) {
