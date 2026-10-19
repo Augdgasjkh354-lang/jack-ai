@@ -172,4 +172,14 @@ class AgentTest {
         // 第二轮请求带上了插话：user + assistant(调用) + tool + 插话
         assertEquals(4, api.sizes[1])
     }
+
+    @Test
+    fun missingToolCallIdIsFilledIn() = runBlocking {
+        val api = FakeApi(toolCall("web_search", id = ""), text("好了"))
+        val messages = mutableListOf(userMsg("天气"))
+        Agent(api::stream).run(messages, someTools, { 5 }, { _, _ -> "晴" })
+        val id = messages.first { it["tool_calls"] != null }["tool_calls"]!!.jsonArray[0].jsonObject["id"]!!.jsonPrimitive.content
+        assertTrue(id.isNotEmpty())
+        assertEquals(id, messages.first { it["role"]?.jsonPrimitive?.content == "tool" }["tool_call_id"]!!.jsonPrimitive.content)
+    }
 }

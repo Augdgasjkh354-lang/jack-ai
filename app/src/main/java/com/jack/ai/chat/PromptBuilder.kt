@@ -82,7 +82,7 @@ object PromptBuilder {
                 val trail = if (withTools && !flat) m.trail.mapNotNull { t ->
                     runCatching { Json.parseToJsonElement(t).jsonObject }.getOrNull()
                 } else emptyList()
-                val usable = trail.isNotEmpty() && (!thinkingOn || trail.all { t ->
+                val usable = trail.isNotEmpty() && complete(trail) && (!thinkingOn || trail.all { t ->
                     t["role"].text() != "assistant" || t["reasoning_content"].text().isNotEmpty()
                 })
                 if (usable) {
@@ -102,6 +102,18 @@ object PromptBuilder {
         val lastText = conv.messages.lastOrNull { it.role == "user" }?.content.orEmpty()
         stampLastUser(list, input.now, updateNote(conv, input.appVersion) + input.contextNote + mentionNote(lastText, skills, settings.readyMails))
         return list
+    }
+
+    /**
+     * 工具调用过程是不是完整的：每个调用都有对应的结果。工具跑到一半被停止时会缺结果，
+     * 原样发回接口会报 400，这种回合只发最终回答。
+     */
+    internal fun complete(trail: List<JsonObject>): Boolean {
+        val called = trail.flatMap { t ->
+            (t["tool_calls"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonObject)?.get("id").text().takeIf { id -> id.isNotEmpty() } }
+        }.toSet()
+        val answered = trail.filter { it["role"].text() == "tool" }.map { it["tool_call_id"].text() }.toSet()
+        return answered.containsAll(called)
     }
 
     /** 用户消息：文字 + 文件内容；有图片且模型支持时用多段格式。 */

@@ -99,6 +99,8 @@ class Agent(
             if (calls.isEmpty()) return
 
             round++
+            // 有的服务不给工具调用编号；编号空着的话，工具结果对不上调用，下一轮会被拒
+            calls.forEach { (i, c) -> if (c.id.isEmpty()) c.id = "call_${round}_$i" }
             val assistantCall = buildJsonObject {
                 put("role", "assistant")
                 if (roundContent.isEmpty()) put("content", JsonNull) else put("content", roundContent.toString())

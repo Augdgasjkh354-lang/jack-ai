@@ -136,7 +136,8 @@ internal suspend fun ToolSession.sendEmail(args: JsonObject): String {
         val replyFolder = replyUid?.let { folderOf(JsonObject(mapOf("folder" to (args["reply_folder"] ?: JsonPrimitive("")))), acc, listOf(it)) }
         if (to.isBlank()) throw MailException("没有收件人")
         val files = names.map { n ->
-            Workspace.find(wsDir, n) ?: throw MailException("对话文件夹里没有「$n」")
+            Workspace.findExact(wsDir, n) ?: throw MailException("对话文件夹里没有「$n」。现有文件：" +
+                Workspace.files(wsDir).joinToString("、") { it.name }.ifEmpty { "（空）" })
         }
         val preview = buildString {
             append("发件人：${acc.address}\n收件人：$to\n")
