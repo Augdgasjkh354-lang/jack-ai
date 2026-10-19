@@ -68,7 +68,11 @@ internal suspend fun ToolSession.makeRoutine(kind: String, args: JsonObject): St
     return runTool("$label：" + (if (kind == "reminder") args["text"] else args["title"]).text()) {
         val (date, h, m) = parseDateTime(args["datetime"].text())
             ?: throw IllegalArgumentException("时间格式不对，要写成 yyyy-MM-dd HH:mm")
-        val repeat = args["repeat"].text().takeIf { it in REPEAT_LABELS } ?: "none"
+        val asked = args["repeat"].text().ifBlank { "none" }
+        // 不认识的重复方式别悄悄当成只一次：用户以为每月都会提醒，结果只响一次
+        if (asked !in REPEAT_LABELS) throw IllegalArgumentException(
+            "提醒和任务的 repeat 只支持 none、daily、weekdays、weekly。每月、每年重复的事用日历（add_calendar_event 的 repeat），或者告诉用户这里设不了")
+        val repeat = asked
         val r = if (kind == "reminder") Routine(kind = "reminder", title = args["text"].text(), hour = h, minute = m, repeat = repeat, date = date)
         else Routine(kind = "task", title = args["title"].text(), prompt = args["prompt"].text(), hour = h, minute = m, repeat = repeat, date = date,
             offPeak = args["off_peak"].text() == "true", work = args["work"].text() == "true")

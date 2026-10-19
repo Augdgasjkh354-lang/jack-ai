@@ -19,6 +19,8 @@ import java.util.zip.ZipInputStream
 /** 单个文件最多保留的文字数，避免一次塞爆上下文。 */
 private const val MAX_FILE_CHARS = 200_000
 private const val MAX_ORIGINAL_BYTES = 30L * 1024 * 1024
+/** 当文字读的文件最多这么大；再大的只放进对话文件夹，不读内容。 */
+private const val MAX_TEXT_BYTES = 8 * 1024 * 1024
 
 object Attachments {
 
@@ -135,7 +137,18 @@ object Attachments {
     }
 
     private fun readText(ctx: Context, uri: Uri): String {
-        val bytes = ctx.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return ""
+        // 先读一小段判断是不是文字，再限量读：几百 MB 的视频当文件发过来，整个读进内存会闪退
+        val bytes = ctx.contentResolver.openInputStream(uri)?.use { input ->
+            val out = java.io.ByteArrayOutputStream()
+            val buf = ByteArray(64 * 1024)
+            while (out.size() <= MAX_TEXT_BYTES) {
+                val n = input.read(buf)
+                if (n < 0) break
+                out.write(buf, 0, n)
+            }
+            if (out.size() > MAX_TEXT_BYTES) throw IllegalArgumentException("文件太大，没法当文字读")
+            out.toByteArray()
+        } ?: return ""
         val sample = bytes.take(4000)
         if (sample.count { it == 0.toByte() } > 0) {
             throw IllegalArgumentException("这个文件不是文字格式，暂时读不了")
