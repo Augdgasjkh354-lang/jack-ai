@@ -396,7 +396,12 @@ object MailText {
             .replace(Regex("(?i)<li[^>]*>"), "- ")
             .replace(Regex("<[^>]+>"), "")
         ENTITIES.forEach { (k, v) -> s = s.replace(k, v, ignoreCase = true) }
-        s = s.replace(Regex("&#(\\d+);")) { m -> m.groupValues[1].toIntOrNull()?.let { String(Character.toChars(it)) } ?: m.value }
+        // 超出 Unicode 范围的编号（垃圾邮件里常见）原样留着，不能让整封信读不出来
+        s = s.replace(Regex("&#([xX][0-9a-fA-F]+|\\d+);")) { m ->
+            val v = m.groupValues[1]
+            val code = if (v[0] == 'x' || v[0] == 'X') v.drop(1).toIntOrNull(16) else v.toIntOrNull()
+            code?.takeIf { Character.isValidCodePoint(it) }?.let { String(Character.toChars(it)) } ?: m.value
+        }
         return s
     }
 

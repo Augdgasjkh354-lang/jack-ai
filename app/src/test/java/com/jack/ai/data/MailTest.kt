@@ -28,6 +28,12 @@ class MailTest {
     }
 
     @Test
+    fun badNumericEntitiesDoNotBreakTheMail() {
+        val t = MailText.htmlToText("a&#99999999;b &#x660E; &#26126;")
+        assertEquals("a&#99999999;b 明 明", t)
+    }
+
+    @Test
     fun longBodiesAreCut() {
         val t = MailText.tidy("字".repeat(30_000), max = 100)
         assertTrue(t.length < 200)

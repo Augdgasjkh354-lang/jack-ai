@@ -57,6 +57,13 @@ object Workspace {
             ?: list.firstOrNull { it.name.substringBeforeLast('.') == n.substringBeforeLast('.') }
     }
 
+    /** 只认名字完全一样的（不分大小写）。删文件、发附件这类收不回的操作用它，免得「报告.pdf」认成「报告.docx」。 */
+    fun findExact(dir: File, name: String): File? {
+        val n = name.trim().substringAfterLast('/')
+        val list = files(dir)
+        return list.firstOrNull { it.name == n } ?: list.firstOrNull { it.name.equals(n, true) }
+    }
+
     fun delete(file: File) {
         file.delete()
         sourceFile(file).delete()

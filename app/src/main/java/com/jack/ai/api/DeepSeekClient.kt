@@ -116,12 +116,17 @@ class DeepSeekClient(
                             val data = line.removePrefix("data:").trim()
                             if (data == "[DONE]") break
                             val obj = runCatching { json.parseToJsonElement(data).jsonObject }.getOrNull() ?: continue
+                            // 有的服务出错时仍回 200，把错误放在流里；不报出来就只会显示“没有收到回复”
+                            (obj["error"] as? JsonObject)?.let { err ->
+                                throw ApiException("服务返回错误：" + err["message"].str().ifBlank { err.toString() })
+                            }
                             (obj["usage"] as? JsonObject)?.let { u ->
                                 val p = (u["prompt_tokens"] as? JsonPrimitive)?.intOrNull ?: 0
                                 val c = (u["completion_tokens"] as? JsonPrimitive)?.intOrNull ?: 0
                                 if (p > 0 && trySendBlocking(StreamEvent.Usage(p, c, cacheHitOf(u))).isFailure) return
                             }
-                            val choice = obj["choices"]?.jsonArray?.firstOrNull()?.jsonObject ?: continue
+                            // 有的服务在最后的用量块里写 "choices": null
+                            val choice = (obj["choices"] as? JsonArray)?.firstOrNull() as? JsonObject ?: continue
                             choice["finish_reason"].str().takeIf { it.isNotEmpty() }?.let { reason ->
                                 if (trySendBlocking(StreamEvent.Finish(reason)).isFailure) return
                             }
@@ -130,7 +135,7 @@ class DeepSeekClient(
                             val c = delta["content"].str()
                             if ((r.isNotEmpty() || c.isNotEmpty()) && trySendBlocking(StreamEvent.Text(r, c)).isFailure) return
                             (delta["tool_calls"] as? JsonArray)?.forEach { el ->
-                                val tc = el.jsonObject
+                                val tc = el as? JsonObject ?: return@forEach
                                 val fn = tc["function"] as? JsonObject
                                 if (trySendBlocking(StreamEvent.ToolCall(
                                     index = (tc["index"] as? JsonPrimitive)?.intOrNull ?: 0,
@@ -185,7 +190,7 @@ class DeepSeekClient(
                 fun n(k: String) = (u[k] as? JsonPrimitive)?.intOrNull ?: 0
                 onUsage?.invoke(ep, n("prompt_tokens"), cacheHitOf(u), n("completion_tokens"))
             }
-            val msg = obj["choices"]?.jsonArray?.firstOrNull()?.jsonObject?.get("message") as? JsonObject
+            val msg = ((obj["choices"] as? JsonArray)?.firstOrNull() as? JsonObject)?.get("message") as? JsonObject
             msg?.get("content").str().ifBlank { throw ApiException("模型没有返回内容") }
         }
     }

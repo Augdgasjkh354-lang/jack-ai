@@ -78,11 +78,13 @@ def run(code, cwd, timeout):
         print("\n".join(l for l in lines if "jack_runner.py" not in l)[-4000:])
     finally:
         sys.stdout, sys.stderr = old_out, old_err
-        try:
-            import matplotlib.pyplot as plt
-            plt.close("all")
-        except Exception:
-            pass
+        # 只在代码真用过 pyplot 时收尾；不然每次运行都要先加载一遍 matplotlib，白白慢几秒
+        plt = sys.modules.get("matplotlib.pyplot")
+        if plt is not None:
+            try:
+                plt.close("all")
+            except Exception:
+                pass
         os.chdir(old_cwd)
     text = out.getvalue()
     if len(text) > 20000:

@@ -141,6 +141,15 @@ class PromptBuilderTest {
     }
 
     @Test
+    fun interruptedTrailIsNotReplayed() {
+        // 工具跑到一半被停止：有调用没结果，原样发回会报 400，只发最终回答
+        val conv = Conversation(messages = listOf(user("搜一下"), bot("我先搜", trail = listOf(trailCall)), user("继续")))
+        val list = PromptBuilder.history(input(conv), tools(conv))
+        assertEquals(0, list.count { it["tool_calls"] != null })
+        assertTrue(list.any { it.role() == "assistant" && it.textContent() == "我先搜" })
+    }
+
+    @Test
     fun thinkingModeDropsTrailWithoutReasoning() {
         // DeepSeek 开思考时，旧的工具回合缺思考内容会报 400，所以不发
         val conv = Conversation(messages = listOf(user("搜一下"), bot("搜到了", trail = listOf(trailCall, trailResult)), user("再说说")))

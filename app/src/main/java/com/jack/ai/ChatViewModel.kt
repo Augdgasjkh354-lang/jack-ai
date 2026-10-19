@@ -553,7 +553,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     tools = toolSet,
                     maxRounds = { session.maxRounds },
                     execute = { name, args ->
-                        if (work && limit > 0 && spent >= nextLimit) {
+                        // 用户已经点了“先停下”就不再问：同一轮里剩下的工具调用直接拦掉
+                        if (work && limit > 0 && spent >= nextLimit && session.maxRounds != 0) {
                             if (!MainActivity.visible) com.jack.ai.data.Routines.notify(getApplication(), "work-ask-$convId",
                                 "需要你确认：$workTitle", "这次任务已经花了 ¥%.2f，打开看看要不要继续".format(spent), openChat = convId)
                             val ok = core.confirm(

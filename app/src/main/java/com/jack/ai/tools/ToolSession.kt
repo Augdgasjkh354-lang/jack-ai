@@ -311,6 +311,8 @@ internal fun ToolSession.updatePlan(args: JsonObject): String {
     }.take(30)
     if (items.isEmpty()) return "清单是空的"
     ui.plan(items)
+    // 不走 runTool，自己记一次成功，工具统计里才不会算成失败
+    succeeded.incrementAndGet()
     val done = items.count { it.status == "done" }
     return "清单已更新（$done/${items.size} 完成）"
 }

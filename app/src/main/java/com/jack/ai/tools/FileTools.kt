@@ -62,7 +62,8 @@ internal suspend fun ToolSession.createDocument(args: JsonObject): String {
     return makeFile(tool, JsonObject(args - "format"))
 }
 
-internal fun ToolSession.wsFile(name: String): File = Workspace.find(wsDir, name) ?: throw TextEdit.EditException(
+internal fun ToolSession.wsFile(name: String, exact: Boolean = false): File =
+    (if (exact) Workspace.findExact(wsDir, name) else Workspace.find(wsDir, name)) ?: throw TextEdit.EditException(
     "对话文件夹里没有「$name」。" + Workspace.files(wsDir).let { l ->
         if (l.isEmpty()) "文件夹是空的。" else "现有文件：" + l.joinToString("、") { it.name }
     })
@@ -97,7 +98,7 @@ internal suspend fun ToolSession.deleteFiles(args: JsonObject): String {
         .ifEmpty { listOfNotNull(args["name"].text().trim().takeIf { it.isNotEmpty() }) }
     if (names.isEmpty()) return "缺少文件名 names"
     return runTool("删除文件：${names.joinToString("、")}") {
-        val files = names.map { wsFile(it) }.distinct()
+        val files = names.map { wsFile(it, exact = true) }.distinct()
         val list = files.joinToString("\n") { "· ${it.name}（${ToolSession.sizeText(it.length())}）" }
         if (!approve("删除 ${files.size} 个文件？", "删了找不回来。\n\n$list", "删除")) {
             return@runTool "用户取消了，文件没有删。" to SearchRecord("删除文件：已取消")
