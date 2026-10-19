@@ -100,7 +100,9 @@ object Dreamer {
         val settings = store.loadSettings()
         val ep = settings.backgroundEndpoint() ?: return null
         if (!force && !settings.dreamEnabled) return null
-        val since = store.lastDreamAt.takeIf { it > 0 } ?: (System.currentTimeMillis() - TimeUnit.DAYS.toMillis(1))
+        // 从开始整理的这一刻算：做梦要好几分钟，期间新聊的下次再整理，不会被跳过
+        val startedAt = System.currentTimeMillis()
+        val since = store.lastDreamAt.takeIf { it > 0 } ?: (startedAt - TimeUnit.DAYS.toMillis(1))
         val fmt = SimpleDateFormat("M月d日 HH:mm", Locale.CHINA)
 
         val transcript = StringBuilder()
@@ -118,7 +120,7 @@ object Dreamer {
                 }
             }
         if (transcript.isBlank()) {
-            store.lastDreamAt = System.currentTimeMillis()
+            store.lastDreamAt = startedAt
             return null
         }
         val memories = store.loadMemories()
@@ -150,12 +152,22 @@ object Dreamer {
         // 尽量保留旧记忆的 id 和时间，方便界面稳定显示
         val old = memories.associateBy { it.text }
         // 做梦要等好一会，期间用户或 AI 可能又记了几条：开始时不在的、现在有的，原样补回去
+        // 期间被用户删掉的旧记忆，也不要因为模型原样抄回来又冒出来
         val before = memories.map { it.id }.toSet()
-        val addedMeanwhile = store.loadMemories().filter { it.id !in before && it.text !in newMemories }
-        store.saveMemories(newMemories.map { old[it] ?: MemoryItem(text = it) } + addedMeanwhile)
+        val current = store.loadMemories()
+        val addedMeanwhile = current.filter { it.id !in before && it.text !in newMemories }
+        val removedMeanwhile = before - current.map { it.id }.toSet()
+        store.saveMemories(newMemories.mapNotNull { t ->
+            val o = old[t]
+            when {
+                o == null -> MemoryItem(text = t)
+                o.id in removedMeanwhile -> null
+                else -> o
+            }
+        } + addedMeanwhile)
         val entry = DreamEntry(journal = str("journal").ifBlank { throw IllegalStateException("做梦结果格式不对") }, changes = str("changes"))
         store.saveDreams(listOf(entry) + store.loadDreams().take(59))
-        store.lastDreamAt = System.currentTimeMillis()
+        store.lastDreamAt = startedAt
         return entry
     }
 }
