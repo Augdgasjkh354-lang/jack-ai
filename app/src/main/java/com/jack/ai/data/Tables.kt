@@ -36,7 +36,7 @@ object Tables {
     fun delete(ctx: Context, name: String) = synchronized(lock) { file(ctx, name).delete() }
 
     private fun read(f: File): Table? = runCatching {
-        val lines = parseCsv(f.readText().removePrefix("﻿"))
+        val lines = parseCsv(f.readText().removePrefix("﻿")).map { r -> r.map(::unguard) }
         val cols = lines.firstOrNull().orEmpty()
         Table(f.nameWithoutExtension, cols, lines.drop(1).filter { r -> r.any { it.isNotBlank() } }.map { r -> List(cols.size) { r.getOrElse(it) { "" } } })
     }.getOrNull()
@@ -45,7 +45,28 @@ object Tables {
         (listOf(t.columns) + t.rows).forEach { r -> append(r.joinToString(",") { cell(it) }).append("\r\n") }
     }
 
-    private fun cell(s: String) = if (s.any { it == ',' || it == '"' || it == '\n' || it == '\r' }) "\"" + s.replace("\"", "\"\"") + "\"" else s
+    private fun cell(raw: String): String {
+        val s = guard(raw)
+        return if (s.any { it == ',' || it == '"' || it == '\n' || it == '\r' }) "\"" + s.replace("\"", "\"\"") + "\"" else s
+    }
+
+    /**
+     * 以 = + - @ 开头的文字，Excel 打开 CSV 时会当成公式执行（内容可能来自邮件、网页）。
+     * 存的时候前面加个 ' 让 Excel 当文字看，读回来再去掉；负数之类的数字照常存。
+     */
+    private fun guard(s: String) = if (s.isNotEmpty() && s[0] in "=+-@" && s.toDoubleOrNull() == null) "'$s" else s
+
+    private fun unguard(s: String) = if (s.length > 1 && s[0] == '\'' && s[1] in "=+-@" && s.drop(1).toDoubleOrNull() == null) s.drop(1) else s
+
+    private val DATE = Regex("""^\s*(\d{4})\s*[-/.年]\s*(\d{1,2})\s*[-/.月]\s*(\d{1,2})\s*日?""")
+
+    /** 「2026-10-5」「2026/10/05」「2026年10月5日 12:00」都认成 2026-10-05；不是日期返回 null。 */
+    fun normDate(s: String): String? {
+        val m = DATE.find(s) ?: return null
+        val (y, mo, d) = m.destructured
+        if (mo.toInt() !in 1..12 || d.toInt() !in 1..31) return null
+        return String.format(java.util.Locale.US, "%s-%02d-%02d", y, mo.toInt(), d.toInt())
+    }
 
     /** 简单的 CSV 解析：支持引号、引号里的逗号和换行。 */
     fun parseCsv(text: String): List<List<String>> {
@@ -79,13 +100,18 @@ object Tables {
     fun matches(t: Table, row: List<String>, where: List<Where>): Boolean = where.all { w ->
         val i = t.columns.indexOf(w.column)
         if (i < 0) return@all false
-        val v = row[i]
+        val raw = row[i]
+        // 日期写法不统一（2026-10-5 和 2026-10-05）时按日期比，不按文字比
+        val da = normDate(raw)
+        val db = normDate(w.value)
+        val v = if (da != null && db != null && w.op != "contains") da else raw
+        val wv = if (da != null && db != null && w.op != "contains") db else w.value
         val a = v.toDoubleOrNull()
-        val b = w.value.toDoubleOrNull()
-        val cmp = if (a != null && b != null) a.compareTo(b) else v.compareTo(w.value)
+        val b = wv.toDoubleOrNull()
+        val cmp = if (a != null && b != null) a.compareTo(b) else v.compareTo(wv)
         when (w.op) {
-            "=", "==" -> if (a != null && b != null) a == b else v == w.value
-            "!=" -> if (a != null && b != null) a != b else v != w.value
+            "=", "==" -> if (a != null && b != null) a == b else v == wv
+            "!=" -> if (a != null && b != null) a != b else v != wv
             "contains" -> v.contains(w.value, ignoreCase = true)
             ">" -> cmp > 0
             "<" -> cmp < 0
