@@ -44,7 +44,8 @@ private fun buildMarkwon(ctx: Context, textColor: Int, codeBg: Int, textSizePx: 
 private val BLOCK_LATEX = Regex("""\\\[(.+?)\\]""", RegexOption.DOT_MATCHES_ALL)
 private val INLINE_LATEX = Regex("""\\\((.+?)\\\)""", RegexOption.DOT_MATCHES_ALL)
 private val DOLLAR_BLOCK = Regex("""(?<!\$)\$\$(?!\$)(.+?)(?<!\$)\$\$(?!\$)""", RegexOption.DOT_MATCHES_ALL)
-private val DOLLAR_INLINE = Regex("""(?<![\$\\])\$(?!\$)([^\$\n]+?)(?<![\$\\])\$(?!\$)""")
+// 结尾的 $ 后面紧跟数字时不算公式结束（$5-$10 这种价格区间），和 Pandoc 的规则一样
+private val DOLLAR_INLINE = Regex("""(?<![\$\\])\$(?!\$)([^\$\n]+?)(?<![\$\\])\$(?![\$\d])""")
 private val CODE = Regex("""```[\s\S]*?(```|$)|`[^`\n]*`""")
 
 /**

@@ -51,4 +51,39 @@ class TablesTest {
         assertEquals(1018.0, day, 0.001)
         assertEquals(1043.0, month, 0.001)
     }
+
+    @Test
+    fun ledgerAcceptsLooseDates() {
+        val now = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).parse("2026-10-05")!!.time
+        val l = Table("记账", listOf("日期", "金额"), listOf(
+            listOf("2026-10-5", "10"),
+            listOf("2026/10/05", "20"),
+            listOf("2026年10月5日 12:30", "30"),
+            listOf("2026-10-1", "40"),
+            listOf("2026-9-30", "50"),
+        ))
+        val (day, month) = com.jack.ai.LedgerWidget.totals(l, now)
+        assertEquals(60.0, day, 0.001)
+        assertEquals(100.0, month, 0.001)
+    }
+
+    @Test
+    fun looseDatesCompareAsDates() {
+        val d = Table("d", listOf("日期"), listOf(listOf("2026-10-5")))
+        // 按文字比 "2026-10-5" > "2026-10-10"，按日期比才对
+        assertTrue(Tables.matches(d, d.rows[0], listOf(Tables.Where("日期", "<", "2026-10-10"))))
+        assertTrue(Tables.matches(d, d.rows[0], listOf(Tables.Where("日期", "=", "2026-10-05"))))
+    }
+
+    @Test
+    fun formulasAreGuardedInCsvButNotInData() {
+        val f = Table("f", listOf("a", "b"), listOf(listOf("=HYPERLINK(\"x\")", "-12.5"), listOf("@SUM(A1)", "+86 123")))
+        val csv = Tables.toCsv(f)
+        assertTrue(csv.contains("'=HYPERLINK"))
+        assertTrue(csv.contains("'@SUM"))
+        assertTrue(csv.contains("'+86 123"))
+        // 数字不加引号，Excel 里照样能算
+        assertTrue(csv.contains(",-12.5"))
+        assertFalse(csv.contains("'-12.5"))
+    }
 }

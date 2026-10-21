@@ -175,8 +175,9 @@ class LedgerWidget : AppWidgetProvider() {
             if (d < 0 || a < 0) return 0.0 to 0.0
             val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(now))
             fun amount(r: List<String>) = r[a].replace(",", "").replace("¥", "").replace("元", "").trim().toDoubleOrNull() ?: 0.0
-            val month = t.rows.filter { it[d].startsWith(today.take(7)) }
-            return month.filter { it[d].startsWith(today) }.sumOf(::amount) to month.sumOf(::amount)
+            // 日期可能写成 2026-10-5、2026/10/05、2026年10月5日，统一成 2026-10-05 再比
+            val month = t.rows.filter { Tables.normDate(it[d])?.startsWith(today.take(7)) == true }
+            return month.filter { Tables.normDate(it[d]) == today }.sumOf(::amount) to month.sumOf(::amount)
         }
 
         fun render(ctx: Context, manager: AppWidgetManager, ids: IntArray) {
