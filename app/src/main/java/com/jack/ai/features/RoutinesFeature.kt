@@ -41,7 +41,7 @@ class RoutinesFeature(core: AppCore) : Feature(core) {
     fun reloadRoutines() = state.update { it.copy(routines = store.loadRoutines()) }
 
     /** 把后台任务的结果并进对话。openId 不为空时，合并后打开那个对话。 */
-    fun mergeInbox(openId: String? = null) {
+    fun mergeInbox(openId: String? = null, open: (String) -> Unit = {}) {
         scope.launch(ioSerial) {
             val items = store.takeInbox()
             if (items.isNotEmpty()) {
@@ -63,8 +63,9 @@ class RoutinesFeature(core: AppCore) : Feature(core) {
                 }
                 persist()
             }
+            // 交给调用方像点抽屉里的对话一样打开：要换上这个对话的 Chat/Work 模型，正在回答的也要停下
             if (openId != null && state.value.conversations.any { it.id == openId }) {
-                state.update { it.copy(currentId = openId, pending = emptyList()) }
+                withContext(Dispatchers.Main) { open(openId) }
             }
         }
     }

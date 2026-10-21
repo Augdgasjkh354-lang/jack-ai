@@ -25,6 +25,8 @@ object Speaker {
             return
         }
         val text = plain(markdown)
+        // 没有能读的字时别标成“正在朗读”，不然按钮一直停在朗读状态
+        if (text.isBlank()) return
         val run = {
             val t = tts!!
             t.language = Locale.CHINA

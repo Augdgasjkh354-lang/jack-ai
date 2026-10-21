@@ -794,5 +794,5 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun saveRoutine(r: Routine) = routines.saveRoutine(r)
     fun deleteRoutine(id: String) = routines.deleteRoutine(id)
     fun reloadRoutines() = routines.reloadRoutines()
-    fun mergeInbox(openId: String? = null) = routines.mergeInbox(openId)
+    fun mergeInbox(openId: String? = null) = routines.mergeInbox(openId) { if (it != _state.value.currentId) select(it) }
 }
