@@ -65,6 +65,11 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import kotlin.math.abs
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -135,6 +140,8 @@ fun ChatScreen(
         }
     }
 
+    // 侧边栏开着时按返回键先收起侧边栏
+    androidx.activity.compose.BackHandler(enabled = drawerState.isOpen) { scope.launch { drawerState.close() } }
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
@@ -217,7 +224,7 @@ fun ChatScreen(
             },
         ) { padding ->
             // 消息铺满整屏，从上下两个半透明的框后面滚过去
-            Box(Modifier.fillMaxSize()) {
+            Box(Modifier.fillMaxSize().swipeToOpen { scope.launch { drawerState.open() } }) {
                 if (conv == null || conv.messages.isEmpty()) {
                     Box(Modifier.padding(padding)) { EmptyState(vm, state, conv, onOpenMemory, onSuggest = { text = it }) }
                 } else {
@@ -229,6 +236,35 @@ fun ChatScreen(
     memoryOf?.let { c -> ConversationMemoryDialog(vm, c) { memoryOf = null } }
     if (showFiles && conv != null) {
         FilesSheet(vm, conv, inProject = conv.projectId != null, onDismiss = { showFiles = false })
+    }
+}
+
+/**
+ * 在聊天内容上往右滑就打开侧边栏，和常见的聊天 App 一样。
+ * 抽屉自带的拖动手势碰到消息气泡就失灵（气泡是 TextView，会把触摸吃掉），所以在父层先看一眼手指的走向：
+ * 明显是横着往右划才打开，竖着滑照常滚动消息。
+ */
+private fun Modifier.swipeToOpen(open: () -> Unit): Modifier = pointerInput(Unit) {
+    val distance = 56.dp.toPx()
+    val slop = viewConfiguration.touchSlop
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        var dx = 0f
+        var dy = 0f
+        while (true) {
+            val change = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id } ?: break
+            if (!change.pressed) break
+            dx += change.position.x - change.previousPosition.x
+            dy += change.position.y - change.previousPosition.y
+            // 先竖着动了、或者往左划：这次不是开侧边栏
+            if (abs(dy) > slop && abs(dy) > abs(dx)) break
+            if (dx < -slop) break
+            if (dx > distance && dx > abs(dy) * 2) {
+                change.consume()
+                open()
+                break
+            }
+        }
     }
 }
 
