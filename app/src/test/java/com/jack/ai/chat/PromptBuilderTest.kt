@@ -353,7 +353,7 @@ class PromptBuilderTest {
         listOf("list_files", "list_tables", "create_table", "delete_table", "list_routines", "create_reminder", "set_alarm",
             "search_chats", "list_library", "create_word", "create_pdf", "run_js").forEach { assertFalse(it, it in all) }
         listOf("create_document", "search_my_data", "schedule", "cancel_schedule", "edit_table", "run_python").forEach { assertTrue(it, it in all) }
-        assertTrue("技能全开时工具不该超过 26 个，现在 ${all.size} 个", all.size <= 26)
+        assertTrue("技能全开时工具不该超过 27 个，现在 ${all.size} 个", all.size <= 27)
         // 关了 Python，算数就用 run_js
         assertTrue("run_js" in toolNames(Conversation(), s = settings.copy(disabledSkills = setOf(SkillIds.PYTHON))))
     }

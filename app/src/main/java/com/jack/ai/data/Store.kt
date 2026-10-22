@@ -216,6 +216,11 @@ class Store(context: Context) {
                 else if (k == "mail" && v is String) runCatching {
                     json.encodeToString(MailAccount.serializer(), json.decodeFromString(MailAccount.serializer(), v).copy(password = ""))
                 }.getOrDefault("")
+                // 连接器的 Key 也不进备份
+                else if (k == "mcpServers" && v is String) runCatching {
+                    val list = json.decodeFromString(ListSerializer(McpServer.serializer()), v).map { it.copy(key = "") }
+                    json.encodeToString(ListSerializer(McpServer.serializer()), list)
+                }.getOrDefault("[]")
                 else if (k == "mails" && v is String) runCatching {
                     val list = json.decodeFromString(ListSerializer(MailAccount.serializer()), v).map { it.copy(password = "") }
                     json.encodeToString(ListSerializer(MailAccount.serializer()), list)
@@ -318,6 +323,9 @@ class Store(context: Context) {
             providers = prefs.getString("providers", null)?.let {
                 runCatching { json.decodeFromString(ListSerializer(Provider.serializer()), it) }.getOrNull()
             } ?: emptyList(),
+            mcpServers = prefs.getString("mcpServers", null)?.let {
+                runCatching { json.decodeFromString(ListSerializer(McpServer.serializer()), it) }.getOrNull()
+            } ?: emptyList(),
         )
     }
 
@@ -358,6 +366,7 @@ class Store(context: Context) {
             .putLong("fullAuthUntil", s.fullAuthUntil)
             .remove("mail")
             .putString("mails", json.encodeToString(ListSerializer(MailAccount.serializer()), s.mails))
+            .putString("mcpServers", json.encodeToString(ListSerializer(McpServer.serializer()), s.mcpServers))
             .apply()
     }
 }

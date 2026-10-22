@@ -154,6 +154,10 @@ fun SettingsScreen(
                 MailSection(vm, settings.mails)
             }
 
+            Section("连接器") {
+                ConnectorsSection(vm, settings.mcpServers)
+            }
+
             // ---- Tavily ----
             Section("Tavily API Key") {
                 var tavilyInput by remember { mutableStateOf(settings.tavilyKey) }

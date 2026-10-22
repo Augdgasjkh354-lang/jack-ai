@@ -742,6 +742,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteProvider(id: String) = settingsFeature.deleteProvider(id)
     suspend fun checkBalance() = settingsFeature.checkBalance()
     suspend fun testMail(acc: com.jack.ai.data.MailAccount) = settingsFeature.testMail(acc)
+    suspend fun saveConnector(server: com.jack.ai.data.McpServer) = settingsFeature.saveConnector(server)
+    fun setConnector(server: com.jack.ai.data.McpServer) = settingsFeature.setConnector(server)
+    fun deleteConnector(id: String) = settingsFeature.deleteConnector(id)
 
     // 压缩
     fun compress(convId: String? = _state.value.currentId, manual: Boolean = true) = compression.compress(convId, manual)

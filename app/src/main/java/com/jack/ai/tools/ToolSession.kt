@@ -127,7 +127,8 @@ class ToolSession(
             withContext(Dispatchers.IO) { runCatching { host.store.addToolStat(name, failed = true) } }
             return msg
         }
-        if (name in EXTERNAL_TOOLS) sawExternal = true
+        // 连接器返回的也是外部内容
+        if (name in EXTERNAL_TOOLS || name.startsWith(com.jack.ai.data.Mcp.PREFIX)) sawExternal = true
         val before = succeeded.get()
         val result = dispatch(name, argsText)
         val failed = succeeded.get() == before
@@ -148,6 +149,8 @@ class ToolSession(
         val arg = args?.get(key).text()
         return when {
             args == null -> "参数不是有效的 JSON，可能内容太长被截断了，请精简后重试"
+            name.startsWith(com.jack.ai.data.Mcp.PREFIX) -> callConnector(name, args)
+            name == "query_trains" && SkillIds.TRAIN in skillIds -> queryTrains(args)
             name == "create_document" && (SkillIds.WORD in skillIds || SkillIds.PDF in skillIds) -> createDocument(args)
             name in FILE_TOOLS && FILE_TOOLS[name] in skillIds -> makeFile(name, args)
             name == "create_chart" && SkillIds.CALC in skillIds -> makeChart(args)

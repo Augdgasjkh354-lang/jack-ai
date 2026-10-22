@@ -58,6 +58,25 @@ class SettingsFeature(core: AppCore, private val client: DeepSeekClient) : Featu
         return if (choices.any { it.key == s.model } || choices.isEmpty()) s else s.copy(model = choices.first().key)
     }
 
+    /** 连上连接器拿工具列表，成功就存下来（新加的或刷新的）。返回给用户看的一句话。 */
+    suspend fun saveConnector(server: McpServer): Result<McpServer> = try {
+        val tools = Mcp.listTools(server)
+        val saved = server.copy(tools = tools)
+        updateSettings { s ->
+            s.copy(mcpServers = if (s.mcpServers.any { it.id == saved.id }) s.mcpServers.map { if (it.id == saved.id) saved else it }
+            else s.mcpServers + saved)
+        }
+        Result.success(saved)
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+    fun setConnector(server: McpServer) = updateSettings { s -> s.copy(mcpServers = s.mcpServers.map { if (it.id == server.id) server else it }) }
+
+    fun deleteConnector(id: String) = updateSettings { s -> s.copy(mcpServers = s.mcpServers.filterNot { it.id == id }) }
+
     /** 试着登录邮箱，返回给用户看的一句话。 */
     suspend fun testMail(acc: MailAccount): String = withContext(Dispatchers.IO) {
         try {

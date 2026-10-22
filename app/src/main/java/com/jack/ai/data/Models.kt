@@ -204,6 +204,8 @@ data class Settings(
     val mails: List<MailAccount> = emptyList(),
     /** 完全授权到什么时候（毫秒）：0 关闭，Long.MAX_VALUE 一直开着。开着时发邮件、删除等操作不再弹窗确认。 */
     val fullAuthUntil: Long = 0,
+    /** 连接器（MCP 服务）。 */
+    val mcpServers: List<McpServer> = emptyList(),
 )
 
 /** 完全授权现在是否有效（到点自动失效）。 */

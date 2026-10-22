@@ -87,7 +87,7 @@ internal suspend fun ToolSession.makeRoutine(kind: String, args: JsonObject): St
 internal suspend fun ToolSession.listRoutines() = runTool("查看提醒和任务") {
     val list = host.store.loadRoutines()
     (if (list.isEmpty()) "用户还没有任何提醒和定时任务。" else list.joinToString("\n") { r ->
-        "编号 ${r.id.take(8)}｜${if (r.kind == "reminder") "提醒" else "任务"}｜${r.describe()}｜${r.title}" +
+        "编号 ${r.id.take(8)}｜${when (r.kind) { "reminder" -> "提醒"; "watch" -> "监控"; else -> "任务" }}｜${r.describe()}｜${r.title}" +
             (if (r.enabled) "" else "｜已结束或已关闭")
     }) to SearchRecord("查看提醒和任务")
 }
@@ -215,7 +215,33 @@ private suspend fun ToolSession.createSchedule(args: JsonObject): String {
                 put("days", JsonArray(days.map { JsonPrimitive(it) }))
             })
         }
-        else -> "kind 要填 reminder、task 或 alarm"
+        "watch" -> makeWatch(args, text)
+        else -> "kind 要填 reminder、task、alarm 或 watch"
+    }
+}
+
+/** 监控：每隔 every_minutes 在后台查一次，满足条件才通知；默认盯 3 天，最多 30 天。 */
+private suspend fun ToolSession.makeWatch(args: JsonObject, name: String): String {
+    val prompt = args["prompt"].text().trim()
+    if (prompt.isBlank()) return "监控要写 prompt：每次查什么、怎么查、满足什么条件算有结果"
+    return runTool("设置监控：" + name.ifBlank { prompt.take(20) }) {
+        val now = System.currentTimeMillis()
+        val every = (args["every_minutes"].text().toIntOrNull() ?: 30).coerceIn(15, 24 * 60)
+        val untilText = args["until"].text().trim()
+        val until = if (untilText.isEmpty()) now + 3 * 86_400_000L else {
+            val (ms, dateOnly) = CalendarTool.parse(untilText) ?: throw IllegalArgumentException("until 要写成 yyyy-MM-dd HH:mm")
+            // 只写了日期就盯到那天结束
+            if (dateOnly) ms + 86_400_000L - 60_000L else ms
+        }
+        if (until <= now + every * 60_000L) throw IllegalArgumentException("截止时间太近了，至少要留出一次检查的时间")
+        val r = Routine(
+            kind = "watch", title = name.ifBlank { prompt.take(20) }, prompt = prompt, hour = 0, minute = 0,
+            everyMin = every, until = until.coerceAtMost(now + 30 * 86_400_000L),
+        )
+        withContext(Dispatchers.Main) { host.saveRoutine(r) }
+        val warn = if (!Routines.canNotify(app)) "（注意：App 还没有通知权限，有结果也弹不出通知，用户需要打开左侧菜单「提醒和任务」页面授权）" else ""
+        "已开始监控「${r.title}」：${r.describe()}。有结果会通知用户并自动停止。编号 ${r.id.take(8)}。$warn" to
+            SearchRecord("设置监控：${r.title}")
     }
 }
 

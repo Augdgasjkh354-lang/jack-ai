@@ -131,12 +131,14 @@ fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                 item { Text("还没有提醒和任务。", color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(top = 12.dp)) }
             }
             items(state.routines.sortedBy { it.nextAt() ?: Long.MAX_VALUE }, key = { it.id }) { r ->
-                Card(onClick = { editing = r }, modifier = Modifier.fillMaxWidth()) {
+                // 监控在聊天里让 AI 设，这里只能开关和删除
+                Card(onClick = { if (r.kind != "watch") editing = r }, modifier = Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text((if (r.kind == "reminder") "⏰ " else "🤖 ") + r.title, style = MaterialTheme.typography.titleSmall)
+                            Text((when (r.kind) { "reminder" -> "⏰ "; "watch" -> "👀 "; else -> "🤖 " }) + r.title, style = MaterialTheme.typography.titleSmall)
                             Text(
-                                r.describe() + (if (r.work) " · Work" else "") + (if (r.offPeak) " · 避开高峰" else "") + if (r.enabled && r.nextAt() == null) "（已过期）" else if (!r.enabled && r.repeat == "none") "（已完成）" else "",
+                                r.describe() + (if (r.work) " · Work" else "") + (if (r.offPeak) " · 避开高峰" else "") + if (r.enabled && r.nextAt() == null) "（已过期）" else if (!r.enabled && r.kind == "watch") "（已结束）"
+                                    else if (!r.enabled && r.repeat == "none") "（已完成）" else "",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

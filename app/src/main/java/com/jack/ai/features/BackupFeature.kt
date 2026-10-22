@@ -74,6 +74,7 @@ class BackupFeature(core: AppCore, private val knowledge: KnowledgeFeature) : Fe
                 val s = loaded.copy(apiKey = old.apiKey, tavilyKey = old.tavilyKey, providers = loaded.providers.map { p ->
                     p.copy(apiKey = old.providers.firstOrNull { it.id == p.id }?.apiKey.orEmpty())
                 }, mails = loaded.mails.map { m -> m.copy(password = old.mails.firstOrNull { it.address == m.address }?.password.orEmpty()) },
+                    mcpServers = loaded.mcpServers.map { m -> m.copy(key = old.mcpServers.firstOrNull { it.id == m.id }?.key.orEmpty()) },
                     // 完全授权不跟着备份走，沿用手机上现在的
                     fullAuthUntil = old.fullAuthUntil)
                 store.saveSettings(s)

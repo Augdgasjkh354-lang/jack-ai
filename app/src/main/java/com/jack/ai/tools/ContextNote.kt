@@ -31,7 +31,7 @@ object ContextNote {
             if (list.isNotEmpty()) {
                 append("【提醒和任务】\n")
                 list.take(MAX_ITEMS).forEach { r ->
-                    append("编号 ${r.id.take(8)}｜${if (r.kind == "reminder") "提醒" else "任务"}｜${r.describe()}｜${r.title}\n")
+                    append("编号 ${r.id.take(8)}｜${when (r.kind) { "reminder" -> "提醒"; "watch" -> "监控"; else -> "任务" }}｜${r.describe()}｜${r.title}\n")
                 }
                 if (list.size > MAX_ITEMS) append("……还有 ${list.size - MAX_ITEMS} 条没列出，在左侧菜单「提醒和任务」里能看全\n")
             }

@@ -44,6 +44,7 @@ object SkillIds {
     const val CALENDAR = "builtin-calendar"
     const val MAIL = "builtin-mail"
     const val TABLES = "builtin-tables"
+    const val TRAIN = "builtin-train"
 }
 
 private fun schema(s: String): JsonObject = Json.parseToJsonElement(s).jsonObject
@@ -136,18 +137,30 @@ val BUILTIN_SKILLS = listOf(
     ),
     Skill(
         id = SkillIds.ROUTINE, builtin = true, name = "提醒和定时任务",
-        description = "设置闹钟（“明早 7 点叫我起床”）、到点弹通知的提醒（“明天 9 点提醒我交报告”），或让你定时在后台自动干活（“每天早上 8 点给我整理 AI 新闻”）。",
+        description = "设置闹钟（“明早 7 点叫我起床”）、到点弹通知的提醒（“明天 9 点提醒我交报告”），让你定时在后台自动干活（“每天早上 8 点给我整理 AI 新闻”），或者盯着一件事、有结果再通知（“有票了告诉我”）。",
         instructions = """提醒和定时任务的做法（都用 schedule，kind 选一种）：
 1. 只是到点通知用户一件事：kind=reminder，text 写通知里显示的一句话，比如“该交周报了”。
 2. 需要你到点去搜索、整理、写东西：kind=task，text 写任务名，prompt 写成完整、独立的指令（到时候你在后台，看不到现在这段对话）。比如“搜索过去 24 小时 AI 领域的重要新闻，整理成 5 条简报，每条一句话加来源链接”。步骤多、要用邮箱或生成文件的，work 设 true。
 3. 用户说“闹钟”“叫我起床”“X 点叫醒我”：kind=alarm，在手机时钟里设真正的闹钟；只是“提醒我做某事”就用 reminder。
 4. when 写 “yyyy-MM-dd HH:mm”，根据当前时间换算“明天”“下周一”“今晚”；闹钟可以只写 HH:mm。用户没说几点时按常理挑一个（早上 9:00、晚上 20:00 等），并在回复里说明。
 5. repeat：none 一次、daily 每天、weekdays 工作日、weekly 每周 when 那一天。
+   要持续盯着一件事、满足条件才通知（“有票告诉我”“降价到 3000 以下提醒我”“这个网页更新了告诉我”）：kind=watch。prompt 写清楚查什么、用什么查、满足什么条件算“有结果”；every_minutes 是隔多久查一次（最短 15，默认 30）；until 是盯到什么时候（yyyy-MM-dd HH:mm，默认 3 天后，最多 30 天）。有结果就通知用户并自动停止，到期没等到也会告诉用户。不用填 when。
 6. 不赶时间的任务（整理资料、写总结之类）可以把 off_peak 设为 true：碰上 DeepSeek 高峰时段（工作日 9–12 点、14–18 点）会顺延到空闲时段，价格减半。要求准点的不要开。
 7. 现有的提醒和任务列在每条用户消息前面的【提醒和任务】里。要删用 cancel_schedule 填编号；要改（换时间、改内容），直接用 schedule 设新的，replace 填旧的编号，一步完成。
 8. 手机不允许读取已有闹钟，你看不到用户有哪些闹钟。要关闹钟，cancel_schedule 填时间 HH:mm 或标签；改闹钟时间，schedule 设新的、replace 填旧的时间。不知道时就问用户。
 9. 设置好后用一句话确认：什么时候、做什么。""",
 
+    ),
+    Skill(
+        id = SkillIds.TRAIN, builtin = true, name = "火车票",
+        description = "查 12306 高铁、动车、火车的余票和时刻（只查不买），也能配合监控任务盯票，有票就提醒用户。",
+        instructions = """火车票的做法：
+1. 用 query_trains 查：from、to 写站名或城市名（写城市会查这个城市所有车站），date 写 yyyy-MM-dd，根据当前时间换算“明天”“下周五”。
+2. 用户说了车型或时间段，就用 types（G 高铁、D 动车、C 城际、K/T/Z 普速）和 depart_after、depart_before 筛，别把几十趟车全贴出来。
+3. 回答时挑用户关心的几趟列出来：车次、出发到达时间、历时、用户要的席位还剩多少。余票“有”是充足，数字是剩几张，“无”是卖完了。
+4. 只能查，不能买、不能抢票、不能候补。用户要买，让他打开 12306 App。
+5. 用户想等有票再买（“有票告诉我”“帮我盯着”），用 schedule 的 kind=watch 设监控任务，prompt 里写清楚出发地、目的地、日期、车型、时间段、席位，以及“有票”的标准。
+6. 12306 一般只能查今天起 15 天内的票；查不到时说明可能还没开售。""",
     ),
     Skill(
         id = SkillIds.CALENDAR, builtin = true, name = "日历",
@@ -307,7 +320,7 @@ object SkillTools {
     val SEARCH_MY_DATA = schema("""{"type":"function","function":{"name":"search_my_data","description":"在用户自己的东西里按关键词找原文：以前所有的聊天、本对话较早的原话、资料库、项目资料。返回最相关的段落和出处。","parameters":{"type":"object","properties":{"query":{"type":"string","description":"关键词，2 到 5 个，用空格隔开；不填就列出资料库或项目里有哪些文档"},"where":{"type":"string","enum":["all","chats","history","library","project"],"description":"在哪找：chats 以前的聊天，history 本对话较早的原话（只有对话很长、被压缩过才有），library 资料库，project 项目资料（只在项目里有）；默认 all，能找的地方都找"}}}}}""")
 
 
-    val SCHEDULE = schema("""{"type":"function","function":{"name":"schedule","description":"到点做事：reminder 到点弹通知；task 到点你在后台自动执行 prompt 并把结果发给用户；alarm 在手机时钟里设真正的闹钟（一直响到用户按掉）。","parameters":{"type":"object","properties":{"kind":{"type":"string","enum":["reminder","task","alarm"]},"when":{"type":"string","description":"第一次的时间 yyyy-MM-dd HH:mm；闹钟可以只写 HH:mm"},"text":{"type":"string","description":"提醒：通知里显示的话；任务：任务名；闹钟：标签，可以不填"},"prompt":{"type":"string","description":"只有 task 用：到时候要执行的完整、独立的指令"},"repeat":{"type":"string","enum":["none","daily","weekdays","weekly"],"description":"默认 none；weekly 是每周 when 那一天"},"work":{"type":"boolean","description":"只有 task 用：要用邮箱、生成文件等多种技能、步骤多时设 true"},"off_peak":{"type":"boolean","description":"只有 task 用：碰上高峰时段就顺延到空闲时段，省一半钱；不急的任务可以开"},"replace":{"type":"string","description":"改已有的提醒、任务或闹钟时填：旧的编号（闹钟填旧的时间 HH:mm）。新的设好后自动删掉旧的"}},"required":["kind","when"]}}}""")
+    val SCHEDULE = schema("""{"type":"function","function":{"name":"schedule","description":"到点做事：reminder 到点弹通知；task 到点你在后台自动执行 prompt 并把结果发给用户；alarm 在手机时钟里设真正的闹钟（一直响到用户按掉）；watch 监控：每隔一段时间在后台查一次，满足条件才通知用户。","parameters":{"type":"object","properties":{"kind":{"type":"string","enum":["reminder","task","alarm","watch"]},"when":{"type":"string","description":"第一次的时间 yyyy-MM-dd HH:mm；闹钟可以只写 HH:mm；watch 不用填"},"text":{"type":"string","description":"提醒：通知里显示的话；任务、监控：名字；闹钟：标签，可以不填"},"prompt":{"type":"string","description":"task：到时候要执行的完整、独立的指令；watch：每次要查什么、怎么查、满足什么条件算有结果"},"every_minutes":{"type":"integer","description":"只有 watch 用：隔多少分钟查一次，最短 15，默认 30"},"until":{"type":"string","description":"只有 watch 用：盯到什么时候 yyyy-MM-dd HH:mm，默认 3 天后，最多 30 天"},"repeat":{"type":"string","enum":["none","daily","weekdays","weekly"],"description":"默认 none；weekly 是每周 when 那一天"},"work":{"type":"boolean","description":"只有 task 用：要用邮箱、生成文件等多种技能、步骤多时设 true"},"off_peak":{"type":"boolean","description":"只有 task 用：碰上高峰时段就顺延到空闲时段，省一半钱；不急的任务可以开"},"replace":{"type":"string","description":"改已有的提醒、任务或闹钟时填：旧的编号（闹钟填旧的时间 HH:mm）。新的设好后自动删掉旧的"}},"required":["kind"]}}}""")
 
     val CANCEL_SCHEDULE = schema("""{"type":"function","function":{"name":"cancel_schedule","description":"取消一个提醒、定时任务或闹钟。","parameters":{"type":"object","properties":{"target":{"type":"string","description":"提醒和任务填编号（每条用户消息前面的【提醒和任务】里有）；闹钟填时间 HH:mm 或标签"}},"required":["target"]}}}""")
 
@@ -315,6 +328,7 @@ object SkillTools {
 
     val MANAGE_EMAILS = schema("""{"type":"function","function":{"name":"manage_emails","description":"处理邮件：read/unread 标成已读或未读；trash 删除（移到「已删除」，能找回）；delete_forever 彻底删除；move 移到 target_folder；empty_trash 清空「已删除」（不用填 uids）。删除和移动前一般会弹窗让用户确认。","parameters":{"type":"object","properties":{"action":{"type":"string","enum":["read","unread","trash","delete_forever","move","empty_trash"]},"uids":{"type":"array","items":{"type":"integer"},"description":"list_emails 给出的编号，可以多个，一次最多 200"},"folder":{"type":"string","description":"邮件所在的文件夹；不填就按列表里这几封信所在的文件夹（拿不准会报错让你写明）"},"target_folder":{"type":"string","description":"只有 move 用：移到哪个文件夹"},"account":{"type":"string","description":"用哪个邮箱（邮箱地址），不填用默认邮箱"}},"required":["action"]}}}""")
 
+    val QUERY_TRAINS = schema("""{"type":"function","function":{"name":"query_trains","description":"查 12306 某天两地之间的高铁、动车、火车车次和余票。只查不买。","parameters":{"type":"object","properties":{"from":{"type":"string","description":"出发站或城市，比如 北京、上海虹桥"},"to":{"type":"string","description":"到达站或城市"},"date":{"type":"string","description":"出发日期 yyyy-MM-dd"},"types":{"type":"string","description":"只看哪些车型，比如 GD（高铁和动车）；不填就全部"},"depart_after":{"type":"string","description":"最早出发时间 HH:mm"},"depart_before":{"type":"string","description":"最晚出发时间 HH:mm"}},"required":["from","to","date"]}}}""")
     val SAVE_MEMORY = schema("""{"type":"function","function":{"name":"save_memory","description":"存、改、删一条记忆。","parameters":{"type":"object","properties":{"content":{"type":"string","description":"要记住的内容，一句完整、独立能看懂的话；删除时留空"},"scope":{"type":"string","enum":["chat","project","global"],"description":"存在哪：chat 本对话记忆，project 项目记忆，global 全局记忆"},"replace":{"type":"string","description":"改或删旧记忆时填：旧记忆的原话（一段也行，能唯一认出就好）。不填就是新存一条"}},"required":["scope"]}}}""")
 }
 
