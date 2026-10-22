@@ -35,6 +35,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -87,6 +90,7 @@ fun HistoryDrawer(
     var renaming by remember { mutableStateOf<Conversation?>(null) }
     var deleting by remember { mutableStateOf<Conversation?>(null) }
     var query by remember { mutableStateOf("") }
+    var showAllProjects by remember { mutableStateOf(false) }
     // 置顶的对话（包括项目里的）放最上面；其余项目里的对话放在项目页面里，这里只列普通对话
     val pinned = state.conversations.filter { it.messages.isNotEmpty() && it.pinned }
     val chats = state.conversations.filter { it.messages.isNotEmpty() && it.projectId == null && !it.pinned }
@@ -99,8 +103,9 @@ fun HistoryDrawer(
     }
     val colors = MaterialTheme.colorScheme
     fun chatRow(c: Conversation): @Composable () -> Unit = {
+        // 「⋯」只在当前对话上显示，其他的长按出菜单，列表看着清爽些
         ChatItem(c, c.id == state.currentId, { onSelect(c.id) }, { renaming = c }, { deleting = c }, onPin = { onPin(c.id) },
-            onMemory = { onMemory(c) })
+            onMemory = { onMemory(c) }, showMore = c.id == state.currentId)
     }
     ModalDrawerSheet(drawerContainerColor = colors.surfaceContainerLow) {
         Column(Modifier.fillMaxSize()) {
@@ -134,12 +139,26 @@ fun HistoryDrawer(
                     }
                 }
             } else LazyColumn(Modifier.weight(1f).padding(top = 8.dp)) {
+                // 常用功能排成两行小方块，跟着列表一起滚，不再固定占掉下半屏
+                item {
+                    val now = System.currentTimeMillis()
+                    ToolGrid(listOf(
+                        Tool(AppIcons.Moon, "记忆与梦", dot = state.dreams.any { !it.seen }, onClick = onOpenMemory),
+                        Tool(AppIcons.File, "资料库", onClick = onOpenLibrary),
+                        Tool(Icons.Default.List, "表格", onClick = onOpenTables),
+                        Tool(Icons.Default.Star, "复习卡片", badge = state.cards.count { it.due <= now }.takeIf { it > 0 }?.toString(), onClick = onOpenReview),
+                        Tool(Icons.Default.Build, "技能", onClick = onOpenSkills),
+                        Tool(Icons.Default.Notifications, "提醒和任务", badge = state.routines.count { it.enabled }.takeIf { it > 0 }?.toString(), onClick = onOpenRoutines),
+                    ))
+                }
                 if (pinned.isNotEmpty()) {
                     item { SectionLabel("置顶") }
                     items(pinned, key = { "pin" + it.id }) { c -> chatRow(c)() }
                 }
                 item { SectionLabel("项目") }
-                items(state.projects, key = { "p" + it.id }) { p ->
+                // 项目多了只露出最近的 3 个，其余收起来，免得把聊天记录挤到下面去
+                val shownProjects = if (showAllProjects) state.projects else state.projects.take(PROJECTS_SHOWN)
+                items(shownProjects, key = { "p" + it.id }) { p ->
                     val count = state.conversations.count { it.projectId == p.id && it.messages.isNotEmpty() }
                     DrawerRow(
                         icon = AppIcons.Folder,
@@ -149,12 +168,21 @@ fun HistoryDrawer(
                         onClick = { onOpenProject(p.id) },
                     )
                 }
+                if (state.projects.size > PROJECTS_SHOWN) {
+                    item {
+                        DrawerRow(
+                            icon = if (showAllProjects) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            label = if (showAllProjects) "收起" else "全部 ${state.projects.size} 个项目",
+                            onClick = { showAllProjects = !showAllProjects },
+                        )
+                    }
+                }
                 item {
                     DrawerRow(icon = Icons.Default.Add, label = "新建项目", tint = colors.primary, onClick = onNewProject)
                 }
-                item {
-                    SectionLabel("最近")
-                    if (chats.isEmpty()) {
+                if (chats.isEmpty()) {
+                    item {
+                        SectionLabel("最近")
                         Text(
                             "还没有聊天记录",
                             color = colors.outline,
@@ -163,25 +191,35 @@ fun HistoryDrawer(
                         )
                     }
                 }
-                items(chats, key = { it.id }) { c -> chatRow(c)() }
+                // 按时间分组：今天、昨天、7 天内……一眼就能找到
+                chats.groupBy { dayGroup(it.updatedAt) }.forEach { (group, list) ->
+                    item(key = "g$group") { SectionLabel(group) }
+                    items(list, key = { it.id }) { c -> chatRow(c)() }
+                }
             }
             HorizontalDivider(color = colors.outlineVariant)
-            Column(Modifier.padding(vertical = 8.dp)) {
-                DrawerRow(
-                    icon = AppIcons.Moon, label = "记忆与梦",
-                    trailing = if (state.dreams.any { !it.seen }) "新日记" else null,
-                    onClick = onOpenMemory,
-                )
-                DrawerRow(icon = AppIcons.File, label = "资料库",
-                    trailing = state.library.size.takeIf { it > 0 }?.toString(), onClick = onOpenLibrary)
-                DrawerRow(icon = Icons.Default.List, label = "表格", onClick = onOpenTables)
-                DrawerRow(icon = Icons.Default.Star, label = "复习卡片",
-                    trailing = state.cards.count { it.due <= System.currentTimeMillis() }.takeIf { it > 0 }?.let { "$it 待复习" },
-                    onClick = onOpenReview)
-                DrawerRow(icon = Icons.Default.Build, label = "技能", onClick = onOpenSkills)
-                DrawerRow(icon = Icons.Default.Notifications, label = "提醒和任务",
-                    trailing = state.routines.count { it.enabled }.takeIf { it > 0 }?.toString(), onClick = onOpenRoutines)
-                DrawerRow(icon = Icons.Default.Settings, label = "设置", onClick = onSettings)
+            // 底部只留一行：名字和设置
+            val name = state.settings.userName.trim()
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable(onClick = onSettings)
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+            ) {
+                Box(
+                    Modifier.size(30.dp).clip(RoundedCornerShape(15.dp)).background(colors.secondaryContainer),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (name.isNotEmpty()) Text(name.take(1), style = MaterialTheme.typography.labelLarge, color = colors.onSecondaryContainer)
+                    else Icon(Icons.Default.Settings, null, Modifier.size(16.dp), tint = colors.onSecondaryContainer)
+                }
+                Spacer(Modifier.size(12.dp))
+                Text(name.ifEmpty { "设置" }, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodyMedium)
+                Icon(Icons.Default.Settings, "设置", Modifier.size(20.dp), tint = colors.onSurfaceVariant)
             }
         }
     }
@@ -193,6 +231,73 @@ fun HistoryDrawer(
         ConfirmDeleteDialog("删除对话？", "「${c.title}」会被永久删除。", onDismiss = { deleting = null }) {
             onDelete(c.id); deleting = null
         }
+    }
+}
+
+private const val PROJECTS_SHOWN = 3
+
+private class Tool(val icon: ImageVector, val label: String, val badge: String? = null, val dot: Boolean = false, val onClick: () -> Unit)
+
+/** 常用功能：三个一行的小方块，图标在上、字在下，有待办的右上角标数字或小红点。 */
+@Composable
+private fun ToolGrid(tools: List<Tool>) {
+    val colors = MaterialTheme.colorScheme
+    Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+        tools.chunked(3).forEach { row ->
+            Row(Modifier.fillMaxWidth()) {
+                row.forEach { t ->
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .padding(4.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(colors.surfaceContainerHigh)
+                            .clickable(onClick = t.onClick)
+                            .padding(vertical = 10.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(t.icon, null, Modifier.size(20.dp), tint = colors.onSurfaceVariant)
+                            Spacer(Modifier.size(4.dp))
+                            Text(t.label, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                color = colors.onSurface)
+                        }
+                        when {
+                            t.badge != null -> Text(
+                                t.badge,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = colors.onPrimary,
+                                modifier = Modifier.align(Alignment.TopEnd).padding(end = 8.dp)
+                                    .clip(RoundedCornerShape(8.dp)).background(colors.primary).padding(horizontal = 5.dp),
+                            )
+                            t.dot -> Box(
+                                Modifier.align(Alignment.TopEnd).padding(end = 12.dp).size(7.dp)
+                                    .clip(RoundedCornerShape(4.dp)).background(colors.primary),
+                            )
+                        }
+                    }
+                }
+                // 最后一行不满三个时补空位，方块大小保持一致
+                repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+    }
+}
+
+/** 对话按最后活动时间分组。 */
+internal fun dayGroup(at: Long, now: Long = System.currentTimeMillis()): String {
+    fun start(ms: Long) = java.util.Calendar.getInstance().apply {
+        timeInMillis = ms
+        set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0)
+        set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
+    }.timeInMillis
+    val days = ((start(now) - start(at)) / 86_400_000L).toInt()
+    return when {
+        days <= 0 -> "今天"
+        days == 1 -> "昨天"
+        days < 7 -> "7 天内"
+        days < 30 -> "30 天内"
+        else -> java.text.SimpleDateFormat("yyyy年M月", java.util.Locale.CHINA).format(java.util.Date(at))
     }
 }
 
@@ -216,6 +321,7 @@ fun ChatItem(
     onDelete: () -> Unit,
     onPin: (() -> Unit)? = null,
     onMemory: (() -> Unit)? = null,
+    showMore: Boolean = true,
 ) {
     var menu by remember { mutableStateOf(false) }
     var showUsage by remember { mutableStateOf(false) }
@@ -228,7 +334,8 @@ fun ChatItem(
                 .clip(RoundedCornerShape(12.dp))
                 .background(if (selected) colors.secondaryContainer else Color.Transparent)
                 .combinedClickable(onClick = onClick, onLongClick = { menu = true })
-                .padding(start = 16.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+                .heightIn(min = 44.dp)
+                .padding(start = 16.dp, end = if (showMore) 4.dp else 16.dp, top = 2.dp, bottom = 2.dp),
         ) {
             if (c.pinned) {
                 Icon(AppIcons.Pin, null, Modifier.padding(end = 6.dp).size(14.dp), tint = colors.primary)
@@ -248,8 +355,10 @@ fun ChatItem(
                         .padding(horizontal = 5.dp, vertical = 1.dp),
                 )
             }
-            IconButton(onClick = { menu = true }, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Default.MoreVert, "更多", Modifier.size(18.dp), tint = colors.outline)
+            if (showMore) {
+                IconButton(onClick = { menu = true }, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Default.MoreVert, "更多", Modifier.size(18.dp), tint = colors.outline)
+                }
             }
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {

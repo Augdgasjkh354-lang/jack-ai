@@ -66,7 +66,6 @@ import com.jack.ai.data.ThinkLevel
 import com.jack.ai.data.modelChoices
 import com.jack.ai.data.costYuan
 import androidx.compose.runtime.produceState
-import com.jack.ai.data.Preset
 import com.jack.ai.data.Settings
 import com.jack.ai.data.ThemeMode
 import com.jack.ai.data.fullAuth
@@ -88,7 +87,6 @@ fun SettingsScreen(
     var keyInput by remember { mutableStateOf(settings.apiKey) }
     var showKey by remember { mutableStateOf(false) }
     var balance by remember { mutableStateOf<String?>(null) }
-    var editing by remember { mutableStateOf<Preset?>(null) }
     var confirmClear by remember { mutableStateOf(false) }
     var confirmRestore by remember { mutableStateOf<android.net.Uri?>(null) }
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
@@ -331,33 +329,6 @@ fun SettingsScreen(
                 }
             }
 
-            // ---- 人设 ----
-            Section("人设") {
-                settings.presets.forEach { p ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(p.name, style = MaterialTheme.typography.bodyLarge)
-                            Text(
-                                p.prompt.ifBlank { "（无额外设定）" },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                        IconButton(onClick = { editing = p }) { Icon(Icons.Default.Edit, "编辑") }
-                        IconButton(onClick = {
-                            vm.updateSettings { s -> s.copy(presets = s.presets.filterNot { it.id == p.id }) }
-                        }) { Icon(Icons.Default.Delete, "删除") }
-                    }
-                }
-                OutlinedButton(onClick = { editing = Preset(name = "", prompt = "") }) {
-                    Icon(Icons.Default.Add, null)
-                    Spacer(Modifier.padding(4.dp))
-                    Text("添加人设")
-                }
-            }
-
             // ---- 高级 ----
             Section("高级") {
                 var url by remember { mutableStateOf(settings.baseUrl) }
@@ -382,14 +353,6 @@ fun SettingsScreen(
             Spacer(Modifier.height(24.dp))
         }
     }
-
-    editing?.let { p -> PresetDialog(p, onDismiss = { editing = null }) { updated ->
-        vm.updateSettings { s ->
-            val exists = s.presets.any { it.id == updated.id }
-            s.copy(presets = if (exists) s.presets.map { if (it.id == updated.id) updated else it } else s.presets + updated)
-        }
-        editing = null
-    } }
 
     confirmRestore?.let { uri ->
         AlertDialog(
@@ -442,35 +405,6 @@ private fun Section(title: String, content: @Composable () -> Unit) {
             content()
         }
     }
-}
-
-@Composable
-private fun PresetDialog(preset: Preset, onDismiss: () -> Unit, onSave: (Preset) -> Unit) {
-    var name by remember { mutableStateOf(preset.name) }
-    var prompt by remember { mutableStateOf(preset.prompt) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(if (preset.name.isEmpty()) "添加人设" else "编辑人设") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("名字") }, singleLine = true)
-                OutlinedTextField(
-                    value = prompt,
-                    onValueChange = { prompt = it },
-                    label = { Text("设定") },
-                    minLines = 4,
-                    maxLines = 8,
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                enabled = name.isNotBlank(),
-                onClick = { onSave(preset.copy(name = name.trim(), prompt = prompt.trim())) },
-            ) { Text("保存") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
-    )
 }
 
 /** 完全授权：开着时发邮件、删邮件、删表格这类操作不再弹窗确认。可以开 1 小时，到点自动关。 */

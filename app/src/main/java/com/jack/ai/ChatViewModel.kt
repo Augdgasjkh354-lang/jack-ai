@@ -36,7 +36,6 @@ import com.jack.ai.data.Dreamer
 import com.jack.ai.data.GeneratedFile
 import com.jack.ai.data.activeSkills
 import com.jack.ai.data.MemoryItem
-import com.jack.ai.data.Preset
 import com.jack.ai.data.Project
 import com.jack.ai.data.SearchRecord
 import com.jack.ai.data.Settings
@@ -223,22 +222,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             Workspace.root(getApplication<Application>()).listFiles()?.filterNot { it.name.startsWith("p_") }?.forEach { it.deleteRecursively() }
         }
         persist()
-    }
-
-    /** 在新对话开始前选择人设。 */
-    fun choosePreset(preset: Preset) {
-        val cur = _state.value.current
-        if (cur == null) {
-            val conv = Conversation(
-                systemPrompt = preset.prompt,
-                presetName = preset.name,
-                projectId = _state.value.draftProjectId,
-                work = _state.value.draftWork,
-            )
-            _state.update { it.copy(conversations = listOf(conv) + it.conversations, currentId = conv.id) }
-        } else if (cur.messages.isEmpty()) {
-            updateConv(cur.id) { it.copy(systemPrompt = preset.prompt, presetName = preset.name) }
-        }
     }
 
     // ---------- 发消息 ----------
