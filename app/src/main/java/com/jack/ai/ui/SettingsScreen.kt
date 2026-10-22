@@ -158,6 +158,10 @@ fun SettingsScreen(
                 ConnectorsSection(vm, settings.mcpServers)
             }
 
+            Section("Notion") {
+                NotionSection(vm, settings)
+            }
+
             Section("Jack 专用代理") {
                 ProxySection(vm, settings)
             }

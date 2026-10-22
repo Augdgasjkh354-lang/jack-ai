@@ -86,6 +86,10 @@ fun SkillsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit) {
                                 Text("需要先在设置里填 Tavily 或 DeepSeek Key", style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.error)
                             }
+                            if (s.id == SkillIds.NOTION && settings.notionToken.isBlank()) {
+                                Text("需要先在设置里填 Notion 密钥", style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.error)
+                            }
                             if (s.id == SkillIds.MAIL && settings.mails.none { it.ready }) {
                                 Text("需要先在设置里填邮箱", style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.error)

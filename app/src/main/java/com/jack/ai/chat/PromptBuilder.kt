@@ -188,6 +188,7 @@ object PromptBuilder {
             }
             if (SkillIds.TRAIN in skillIds) add(SkillTools.QUERY_TRAINS)
             if (SkillIds.APP in skillIds) add(SkillTools.CREATE_APP)
+            if (SkillIds.NOTION in skillIds) { add(SkillTools.NOTION_SEARCH); add(SkillTools.NOTION_READ); add(SkillTools.NOTION_WRITE) }
             // 本对话记忆随时能存，所以记忆工具一直带着
             add(SkillTools.SAVE_MEMORY)
             if (conv.id == com.jack.ai.data.INBOX_ID) add(SkillTools.SAVE_NOTE)

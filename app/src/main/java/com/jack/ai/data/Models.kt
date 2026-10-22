@@ -211,6 +211,8 @@ data class Settings(
     val proxySub: String = "",
     val proxyNodes: List<ProxyNode> = emptyList(),
     val proxyNode: String = "",
+    /** Notion 内部集成的密钥（ntn_…）。不进备份。 */
+    val notionToken: String = "",
 )
 
 /** 完全授权现在是否有效（到点自动失效）。 */

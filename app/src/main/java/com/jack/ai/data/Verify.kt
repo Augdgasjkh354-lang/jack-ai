@@ -10,10 +10,10 @@ import java.util.zip.ZipFile
  */
 object Verify {
     /** 附在工具结果后面的一行。problems 为空就是通过。 */
-    fun note(problems: List<String>, ok: String): String =
+    fun note(problems: List<String>, ok: String, fix: String = "用 edit_file 改"): String =
         if (problems.isEmpty()) "\n【核实】✓ $ok"
         else "\n【核实失败】" + problems.take(10).joinToString("；") + (if (problems.size > 10) "；……共 ${problems.size} 处" else "") +
-            "。先修好再交付（用 edit_file 改），修不好就如实告诉用户哪里有问题。"
+            "。先修好再交付（$fix），修不好就如实告诉用户哪里有问题。"
 
     /** 生成的文件能不能打开：Office 是不是完整的 zip、PDF 文件头对不对、有没有内容。 */
     fun fileOpens(file: File): String? {
