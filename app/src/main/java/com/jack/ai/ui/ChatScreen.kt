@@ -145,6 +145,9 @@ fun ChatScreen(
     androidx.activity.compose.BackHandler(enabled = drawerState.isOpen) { scope.launch { drawerState.close() } }
     ModalNavigationDrawer(
         drawerState = drawerState,
+        // 关着时由 swipeToOpen 负责打开：抽屉自带的拖动碰到消息气泡会失灵，两个一起开还会互相拉扯（刚打开又被拉回去）。
+        // 开着时交还给抽屉，往左划关上
+        gesturesEnabled = drawerState.isOpen,
         drawerContent = {
             HistoryDrawer(
                 state = state,
@@ -246,11 +249,13 @@ fun ChatScreen(
  * 抽屉自带的拖动手势碰到消息气泡就失灵（气泡是 TextView，会把触摸吃掉），所以在父层先看一眼手指的走向：
  * 明显是横着往右划才打开，竖着滑照常滚动消息。
  */
-private fun Modifier.swipeToOpen(open: () -> Unit): Modifier = pointerInput(Unit) {
-    val distance = 56.dp.toPx()
+internal fun Modifier.swipeToOpen(open: () -> Unit): Modifier = pointerInput(Unit) {
+    val distance = 40.dp.toPx()
     val slop = viewConfiguration.touchSlop
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        // 这里比网页先收到按下：先清掉上一次可能没清的标记，按在小工具上的话网页马上会再设上
+        AppTouch.active = false
         var dx = 0f
         var dy = 0f
         while (true) {

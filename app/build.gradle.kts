@@ -49,6 +49,12 @@ android {
     buildFeatures {
         compose = true
     }
+    // 界面测试（Robolectric）要用到 Android 资源
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+        // Robolectric 运行时要下载安卓系统包；设了 ROBOLECTRIC_REPO 就从这个镜像下（本机 Maven Central 被限流时用）
+        unitTests.all { t -> System.getenv("ROBOLECTRIC_REPO")?.let { t.systemProperty("robolectric.dependency.repo.url", it) } }
+    }
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
         resources.excludes += listOf("/META-INF/LICENSE.md", "/META-INF/NOTICE.md", "/META-INF/LICENSE.txt", "/META-INF/NOTICE.txt")
@@ -75,6 +81,12 @@ dependencies {
     testImplementation("com.icegreen:greenmail:1.6.15") { exclude(group = "com.sun.mail") }
     val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
     implementation(composeBom)
+    // 在电脑上模拟手势的界面测试（只在 debug 下跑，见 src/testDebug）
+    testImplementation(composeBom)
+    debugImplementation(composeBom)
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-core")
