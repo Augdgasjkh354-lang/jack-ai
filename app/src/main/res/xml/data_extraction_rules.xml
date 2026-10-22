@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12 及以上：系统自动备份（云端）和换机迁移时排除的东西。
+  settings.xml 里有各种 Key、令牌、邮箱授权码、代理订阅；app_webview 里有 Jack 浏览器的登录 Cookie。
+  其余（聊天、文件、表格……）照常备份。换手机要带设置，用 App 里的「备份」（它本来就不含 Key）。
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="settings.xml" />
+        <exclude domain="root" path="app_webview/" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="settings.xml" />
+        <exclude domain="root" path="app_webview/" />
+    </device-transfer>
+</data-extraction-rules>
