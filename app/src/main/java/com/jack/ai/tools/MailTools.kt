@@ -29,7 +29,7 @@ private fun ToolSession.account(args: JsonObject): MailAccount {
         ?: throw MailException("没有「$want」这个邮箱。已设置的邮箱：${all.joinToString("、") { it.address }}")
 }
 
-private val WHEN = SimpleDateFormat("M月d日 HH:mm", Locale.CHINA)
+private val WHEN get() = SimpleDateFormat("M月d日 HH:mm", Locale.CHINA)
 
 /**
  * 每个对话里列过、读过的信在哪个文件夹。不同文件夹的编号会重复（「已发送」的 5 和收件箱的 5 是两封信），

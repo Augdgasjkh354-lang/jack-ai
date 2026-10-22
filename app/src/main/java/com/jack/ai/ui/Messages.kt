@@ -28,6 +28,10 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -113,12 +117,13 @@ private fun ImageViewer(path: String, onDismiss: () -> Unit) {
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
-fun UserBubble(msg: ChatMessage, onDelete: () -> Unit, onEdit: ((String) -> Unit)? = null) {
+fun UserBubble(msg: ChatMessage, onDelete: () -> Unit, onEdit: ((String) -> Unit)? = null, laterCount: Int = 0) {
     val clipboard = LocalClipboardManager.current
     val ctx = LocalContext.current
     var menu by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf(false) }
     var viewing by remember { mutableStateOf<String?>(null) }
+    var confirmDelete by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
         val images = msg.attachments.filter { it.kind == "image" }
         val files = msg.attachments.filter { it.kind == "file" }
@@ -164,27 +169,26 @@ fun UserBubble(msg: ChatMessage, onDelete: () -> Unit, onEdit: ((String) -> Unit
         } else {
             TextButton(onClick = { menu = true }) { Text("…", color = MaterialTheme.colorScheme.outline) }
         }
+        // 长按：就地弹一个小菜单，不再弹对话框
+        Box {
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                if (msg.content.isNotEmpty()) DropdownMenuItem(text = { Text("复制") }, leadingIcon = { Icon(AppIcons.Copy, null) }, onClick = {
+                    clipboard.setText(AnnotatedString(msg.content))
+                    Toast.makeText(ctx, "已复制", Toast.LENGTH_SHORT).show()
+                    menu = false
+                })
+                if (onEdit != null) DropdownMenuItem(text = { Text("编辑后重发") }, leadingIcon = { Icon(Icons.Default.Edit, null) },
+                    onClick = { menu = false; editing = true })
+                DropdownMenuItem(
+                    text = { Text("删除", color = MaterialTheme.colorScheme.error) },
+                    leadingIcon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
+                    onClick = { menu = false; confirmDelete = true },
+                )
+            }
+        }
     }
     viewing?.let { ImageViewer(it) { viewing = null } }
-    if (menu) {
-        AlertDialog(
-            onDismissRequest = { menu = false },
-            title = { Text("这条消息") },
-            confirmButton = {
-                Row {
-                    if (onEdit != null) TextButton(onClick = { menu = false; editing = true }) { Text("编辑") }
-                    TextButton(onClick = {
-                        clipboard.setText(AnnotatedString(msg.content))
-                        Toast.makeText(ctx, "已复制", Toast.LENGTH_SHORT).show()
-                        menu = false
-                    }) { Text("复制") }
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { onDelete(); menu = false }) { Text("删除") }
-            },
-        )
-    }
+    if (confirmDelete) DeleteFromDialog(laterCount, onDismiss = { confirmDelete = false }) { confirmDelete = false; onDelete() }
     if (editing && onEdit != null) {
         var text by remember { mutableStateOf(msg.content) }
         AlertDialog(
@@ -223,7 +227,12 @@ fun AssistantMessage(
     onReport: ((String) -> Unit)? = null,
     /** 小工具出错时「让 Jack 修」：发一条消息给 AI。 */
     onFixApp: ((String) -> Unit)? = null,
+    /** 删除这条会连带删掉后面几条（删除前确认时告诉用户）。 */
+    laterCount: Int = 0,
 ) {
+    var more by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
+    if (confirmDelete) DeleteFromDialog(laterCount, onDismiss = { confirmDelete = false }) { confirmDelete = false; onDelete() }
     var reporting by remember { mutableStateOf(false) }
     if (reporting && onReport != null) {
         var note by remember { mutableStateOf("") }
@@ -278,14 +287,13 @@ fun AssistantMessage(
             }
         }
         msg.error?.let { err ->
-            Spacer(Modifier.height(4.dp))
-            Surface(color = colors.errorContainer, shape = RoundedCornerShape(10.dp)) {
-                Text(
-                    err,
-                    color = colors.onErrorContainer,
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(10.dp),
-                )
+            Spacer(Modifier.height(6.dp))
+            Surface(color = colors.errorContainer.copy(alpha = 0.6f), shape = RoundedCornerShape(14.dp)) {
+                Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                    Icon(Icons.Default.Warning, null, Modifier.padding(top = 2.dp).size(16.dp), tint = colors.error)
+                    Spacer(Modifier.size(8.dp))
+                    Text(err, color = colors.onErrorContainer, style = MaterialTheme.typography.bodyMedium)
+                }
             }
         }
         if (!streaming) {
@@ -294,12 +302,6 @@ fun AssistantMessage(
                     SmallAction(AppIcons.Copy, "复制") {
                         clipboard.setText(AnnotatedString(msg.content))
                         Toast.makeText(ctx, "已复制", Toast.LENGTH_SHORT).show()
-                    }
-                }
-                if (msg.content.isNotEmpty()) {
-                    val speaking = Speaker.speakingId == msg.id
-                    SmallAction(if (speaking) AppIcons.Stop else AppIcons.Speaker, if (speaking) "停止朗读" else "朗读") {
-                        Speaker.toggle(ctx, msg.id, msg.content)
                     }
                 }
                 if (isLast && msg.truncated && onContinueWriting != null) {
@@ -321,10 +323,34 @@ fun AssistantMessage(
                         Text("Pro 复核", style = MaterialTheme.typography.labelMedium, color = colors.primary)
                     }
                 }
-                SmallAction(Icons.Default.Delete, "删除", onDelete)
-                if (onReport != null) SmallAction(Icons.Default.Warning, "这条有问题") { reporting = true }
+                // 不常用的收进「⋯」：朗读、这条有问题、删除（删除要确认，它会连带删掉后面的消息）
+                Box {
+                    SmallAction(Icons.Default.MoreVert, "更多") { more = true }
+                    DropdownMenu(expanded = more, onDismissRequest = { more = false }) {
+                        if (msg.content.isNotEmpty()) {
+                            val speaking = Speaker.speakingId == msg.id
+                            DropdownMenuItem(
+                                text = { Text(if (speaking) "停止朗读" else "朗读") },
+                                leadingIcon = { Icon(if (speaking) AppIcons.Stop else AppIcons.Speaker, null) },
+                                onClick = { more = false; Speaker.toggle(ctx, msg.id, msg.content) },
+                            )
+                        }
+                        if (onReport != null) DropdownMenuItem(
+                            text = { Text("这条有问题") },
+                            leadingIcon = { Icon(Icons.Default.Warning, null) },
+                            onClick = { more = false; reporting = true },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("删除", color = colors.error) },
+                            leadingIcon = { Icon(Icons.Default.Delete, null, tint = colors.error) },
+                            onClick = { more = false; confirmDelete = true },
+                        )
+                    }
+                }
                 if (msg.model.isNotEmpty()) {
-                    Text(modelLabel(msg.model), style = MaterialTheme.typography.labelSmall, color = colors.outline)
+                    Spacer(Modifier.weight(1f))
+                    Text(modelLabel(msg.model), style = MaterialTheme.typography.labelSmall, color = colors.outline.copy(alpha = 0.8f),
+                        modifier = Modifier.padding(end = 4.dp))
                 }
             }
         }
@@ -616,4 +642,19 @@ private fun PlanCard(items: List<com.jack.ai.data.PlanItem>) {
             }
         }
     }
+}
+
+
+/** 删除一条消息会连带删掉它后面的消息和生成的文件，删之前说清楚。 */
+@Composable
+private fun DeleteFromDialog(laterCount: Int, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("删除这条消息？") },
+        text = {
+            Text(if (laterCount > 0) "它后面的 $laterCount 条消息也会一起删掉，生成的文件也会删除，删了找不回来。" else "删了找不回来。")
+        },
+        confirmButton = { TextButton(onClick = onConfirm) { Text("删除", color = MaterialTheme.colorScheme.error) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+    )
 }

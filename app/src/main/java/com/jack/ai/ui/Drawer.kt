@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -93,6 +94,7 @@ fun HistoryDrawer(
     var deleting by remember { mutableStateOf<Conversation?>(null) }
     var query by remember { mutableStateOf("") }
     var showAllProjects by remember { mutableStateOf(false) }
+    var showMoreTools by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     // 置顶的对话（包括项目里的）放最上面；其余项目里的对话放在项目页面里，这里只列普通对话
     val pinned = state.conversations.filter { it.messages.isNotEmpty() && it.pinned }
     val chats = state.conversations.filter { it.messages.isNotEmpty() && it.projectId == null && !it.pinned }
@@ -107,7 +109,7 @@ fun HistoryDrawer(
     fun chatRow(c: Conversation): @Composable () -> Unit = {
         // 「⋯」只在当前对话上显示，其他的长按出菜单，列表看着清爽些
         ChatItem(c, c.id == state.currentId, { onSelect(c.id) }, { renaming = c }, { deleting = c }, onPin = { onPin(c.id) },
-            onMemory = { onMemory(c) }, showMore = c.id == state.currentId)
+            onMemory = { onMemory(c) }, showMore = c.id == state.currentId, answering = state.streaming && state.streamingId == c.id)
     }
     ModalDrawerSheet(drawerContainerColor = colors.surfaceContainerLow) {
         Column(Modifier.fillMaxSize()) {
@@ -141,25 +143,40 @@ fun HistoryDrawer(
                     }
                 }
             } else LazyColumn(Modifier.weight(1f).padding(top = 8.dp)) {
-                // 常用功能排成两行小方块，跟着列表一起滚，不再固定占掉下半屏
+                // 常用功能：最常用的四个一行露在外面，其余的收进「更多」，侧边栏主要留给对话
                 item {
                     val now = System.currentTimeMillis()
-                    ToolGrid(listOf(
+                    val due = state.cards.count { it.due <= now }
+                    val main = listOf(
+                        Tool(Icons.Default.Notifications, "提醒和任务", badge = state.routines.count { it.enabled }.takeIf { it > 0 }?.toString(), onClick = onOpenRoutines),
                         Tool(AppIcons.Moon, "记忆与梦", dot = state.dreams.any { !it.seen }, onClick = onOpenMemory),
                         Tool(AppIcons.File, "资料库", onClick = onOpenLibrary),
-                        Tool(Icons.Default.List, "表格", onClick = onOpenTables),
-                        Tool(Icons.Default.Star, "复习卡片", badge = state.cards.count { it.due <= now }.takeIf { it > 0 }?.toString(), onClick = onOpenReview),
-                        Tool(Icons.Default.Build, "技能", onClick = onOpenSkills),
-                        Tool(Icons.Default.Notifications, "提醒和任务", badge = state.routines.count { it.enabled }.takeIf { it > 0 }?.toString(), onClick = onOpenRoutines),
-                        Tool(AppIcons.Code, "小工具", onClick = onOpenApps),
                         Tool(AppIcons.Globe, "浏览器", onClick = { ctx.startActivity(android.content.Intent(ctx, BrowserActivity::class.java)) }),
-                    ))
+                    )
+                    val more = listOf(
+                        Tool(Icons.Default.List, "表格", onClick = onOpenTables),
+                        Tool(Icons.Default.Star, "复习卡片", badge = due.takeIf { it > 0 }?.toString(), onClick = onOpenReview),
+                        Tool(Icons.Default.Build, "技能", onClick = onOpenSkills),
+                        Tool(AppIcons.Code, "小工具", onClick = onOpenApps),
+                    )
+                    ToolGrid(if (showMoreTools) main + more else main)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 12.dp).fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                            .clickable { showMoreTools = !showMoreTools }.padding(horizontal = 16.dp, vertical = 6.dp),
+                    ) {
+                        Text(if (showMoreTools) "收起" else "更多：表格、复习卡片、技能、小工具", Modifier.weight(1f),
+                            style = MaterialTheme.typography.labelMedium, color = colors.outline, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (!showMoreTools && due > 0) Box(Modifier.padding(end = 6.dp).size(6.dp).clip(RoundedCornerShape(3.dp)).background(colors.primary))
+                        Icon(if (showMoreTools) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, null,
+                            Modifier.size(16.dp), tint = colors.outline)
+                    }
                 }
                 if (pinned.isNotEmpty()) {
                     item { SectionLabel("置顶") }
                     items(pinned, key = { "pin" + it.id }) { c -> chatRow(c)() }
                 }
-                item { SectionLabel("项目") }
+                item { SectionLabel("项目", action = "新建", onAction = onNewProject) }
                 // 项目多了只露出最近的 3 个，其余收起来，免得把聊天记录挤到下面去
                 val shownProjects = if (showAllProjects) state.projects else state.projects.take(PROJECTS_SHOWN)
                 items(shownProjects, key = { "p" + it.id }) { p ->
@@ -181,8 +198,8 @@ fun HistoryDrawer(
                         )
                     }
                 }
-                item {
-                    DrawerRow(icon = Icons.Default.Add, label = "新建项目", tint = colors.primary, onClick = onNewProject)
+                if (state.projects.isEmpty()) {
+                    item { DrawerRow(icon = Icons.Default.Add, label = "新建项目", tint = colors.primary, onClick = onNewProject) }
                 }
                 if (chats.isEmpty()) {
                     item {
@@ -253,16 +270,18 @@ private fun ToolGrid(tools: List<Tool>) {
                     Box(
                         Modifier
                             .weight(1f)
-                            .padding(4.dp)
+                            .padding(2.dp)
                             .clip(RoundedCornerShape(14.dp))
-                            .background(colors.surfaceContainerHigh)
                             .clickable(onClick = t.onClick)
-                            .padding(vertical = 10.dp),
+                            .padding(vertical = 8.dp),
                         contentAlignment = Alignment.Center,
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(t.icon, null, Modifier.size(20.dp), tint = colors.onSurfaceVariant)
-                            Spacer(Modifier.size(4.dp))
+                            Box(
+                                Modifier.size(40.dp).clip(RoundedCornerShape(13.dp)).background(colors.surfaceContainerHigh),
+                                contentAlignment = Alignment.Center,
+                            ) { Icon(t.icon, null, Modifier.size(20.dp), tint = colors.onSurfaceVariant) }
+                            Spacer(Modifier.size(5.dp))
                             Text(t.label, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
                                 color = colors.onSurface)
                         }
@@ -306,13 +325,21 @@ internal fun dayGroup(at: Long, now: Long = System.currentTimeMillis()): String 
 }
 
 @Composable
-private fun SectionLabel(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.outline,
-        modifier = Modifier.padding(start = 28.dp, top = 16.dp, bottom = 6.dp),
-    )
+private fun SectionLabel(text: String, action: String? = null, onAction: (() -> Unit)? = null) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().padding(start = 28.dp, end = 16.dp, top = 18.dp, bottom = 4.dp),
+    ) {
+        Text(text, Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline)
+        if (action != null && onAction != null) {
+            Text(
+                "+ $action",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onAction).padding(horizontal = 8.dp, vertical = 2.dp),
+            )
+        }
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -326,6 +353,8 @@ fun ChatItem(
     onPin: (() -> Unit)? = null,
     onMemory: (() -> Unit)? = null,
     showMore: Boolean = true,
+    /** 这个对话正在后台写回答：标题后面转个小圈。 */
+    answering: Boolean = false,
 ) {
     var menu by remember { mutableStateOf(false) }
     var showUsage by remember { mutableStateOf(false) }
@@ -349,6 +378,9 @@ fun ChatItem(
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (selected) colors.onSecondaryContainer else colors.onSurface,
             )
+            if (answering) {
+                androidx.compose.material3.CircularProgressIndicator(Modifier.padding(start = 6.dp).size(12.dp), strokeWidth = 1.5.dp)
+            }
             if (c.work) {
                 Text(
                     "Work",
@@ -556,11 +588,15 @@ private fun DrawerRow(
 /** App 的小标志：陶土色圆角方块里一个对话气泡。 */
 @Composable
 fun LogoMark(size: Dp) {
+    // 和桌面图标同一张图：陶土底 + 圆润的 J。前景图四周留了安全边，放大一点再裁成圆角方块
     Box(
-        Modifier.size(size).clip(RoundedCornerShape(size * 0.3f)).background(MaterialTheme.colorScheme.primary),
+        Modifier.size(size).clip(RoundedCornerShape(size * 0.3f)).background(Color(0xFFC7673C)),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(AppIcons.Chat, null, Modifier.size(size * 0.58f), tint = MaterialTheme.colorScheme.onPrimary)
+        androidx.compose.foundation.Image(
+            androidx.compose.ui.res.painterResource(com.jack.ai.R.mipmap.ic_launcher_foreground), null,
+            Modifier.requiredSize(size * 1.5f),
+        )
     }
 }
 

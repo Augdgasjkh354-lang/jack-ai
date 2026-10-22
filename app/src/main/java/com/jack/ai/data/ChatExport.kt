@@ -30,7 +30,7 @@ object ChatExport {
         IMAGE("png", "image/png"),
     }
 
-    private val TIME = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA)
+    private val TIME get() = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA)
 
     fun markdown(conv: Conversation): String = buildString {
         append("# ").append(conv.title).append("\n\n")

@@ -90,7 +90,11 @@ data class UiState(
     val cards: List<Flashcard> = emptyList(),
     /** 工具执行前等用户确认（比如发邮件），界面弹窗。 */
     val confirm: ConfirmRequest? = null,
+    /** 正在回答的是哪个对话（streaming 时）。切去看别的对话不会打断它。 */
+    val streamingId: String? = null,
 ) {
+    /** 当前看着的这个对话正在回答。 */
+    val streamingHere: Boolean get() = streaming && streamingId == currentId
     val current: Conversation? get() = conversations.firstOrNull { it.id == currentId }
     val currentProjectId: String? get() = current?.projectId ?: if (currentId == null) draftProjectId else null
     fun project(id: String?): Project? = id?.let { pid -> projects.firstOrNull { it.id == pid } }
@@ -153,7 +157,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     // ---------- 对话管理 ----------
 
     fun newChat(projectId: String? = null) {
-        stop()
+        // 不打断别的对话里正在写的回答：它在后台写完，回去就能看到
         _state.update { it.copy(currentId = null, draftProjectId = projectId, pending = emptyList()) }
         applyMode(_state.value.draftWork)
     }
@@ -182,13 +186,12 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun select(id: String) {
-        stop()
         _state.update { it.copy(currentId = id, pending = emptyList()) }
         _state.value.current?.let { applyMode(it.work) }
     }
 
     fun delete(id: String) {
-        if (id == _state.value.currentId) stop()
+        if (id == _state.value.streamingId) stop()
         val conv = _state.value.conversations.firstOrNull { it.id == id }
         _state.update { s ->
             s.copy(
@@ -241,6 +244,12 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             interjections += trimmed
             patchMessage(run.first, run.second) { it.copy(searches = it.searches + SearchRecord("💬 $trimmed")) }
             return true
+        }
+        val sid = _state.value.streamingId
+        if (busy() && sid != null && sid != _state.value.currentId && (trimmed.isNotEmpty() || atts.isNotEmpty())) {
+            val other = _state.value.conversations.firstOrNull { it.id == sid }?.title ?: "另一个对话"
+            _state.update { it.copy(toast = "「$other」还在回答，等它写完再发，或者回去点停止") }
+            return false
         }
         if ((trimmed.isEmpty() && atts.isEmpty()) || busy() || _state.value.importing) return false
         if (atts.any { it.kind == "image" } && _state.value.settings.endpoint()?.vision == false) {
@@ -303,7 +312,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val previous = job
         job = viewModelScope.launch {
             previous?.join()
-            _state.update { it.copy(streaming = true) }
+            _state.update { it.copy(streaming = true, streamingId = convId) }
             WorkService.start(getApplication(), convId, conv.title, conv.work)
             try {
                 val (chatMemory, projectMemory) = knowledge.memoryTexts(conv)
@@ -337,7 +346,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 patchMessage(convId, m.id) { it.copy(truncated = true) }
                 _state.update { it.copy(toast = "接着写失败：${e.message ?: "网络问题"}") }
             } finally {
-                _state.update { it.copy(streaming = false) }
+                _state.update { it.copy(streaming = false, streamingId = null) }
                 persist()
                 WorkService.finish(getApplication(), convId, conv.title, "接着写完了", conv.work)
             }
@@ -346,7 +355,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     fun deleteFrom(messageId: String) {
         val conv = _state.value.current ?: return
-        stop()
+        if (_state.value.streamingId == conv.id) stop()
         val idx = conv.messages.indexOfFirst { it.id == messageId }
         if (idx < 0) return
         files.cleanup(conv.messages.drop(idx))
@@ -474,7 +483,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         job = viewModelScope.launch {
             // 上一次回答（被停止的）先收尾，免得它的收尾把这次的状态改乱
             previous?.join()
-            _state.update { it.copy(streaming = true) }
+            _state.update { it.copy(streaming = true, streamingId = convId) }
             // DeepSeek 看图：图片先传一次，之后只发编号；传不上的照旧内联
             if (ep.deepseek && images) {
                 val paths = com.jack.ai.data.Compression.liveMessages(conv).flatMap { m -> m.attachments.filter { it.kind == "image" }.map { it.path } }
@@ -625,7 +634,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     m.copy(content = m.content.trimEnd(), searches = m.searches.map { if (it.pending) it.copy(pending = false) else it })
                 }
                 running = null
-                _state.update { it.copy(streaming = false) }
+                _state.update { it.copy(streaming = false, streamingId = null) }
                 persist()
                 // 插的话没来得及用上（回答已经收尾了）：等这次结束后当成新消息发出去
                 val leftover = generateSequence { interjections.poll() }.toList()

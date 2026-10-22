@@ -75,6 +75,7 @@ private const val MORNING_PROMPT = "给我写一段早安问候：1. 今天的�
 fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
     val ctx = LocalContext.current
     var editing by remember { mutableStateOf<Routine?>(null) }
+    var deleting by remember { mutableStateOf<Routine?>(null) }
     var canNotify by remember { mutableStateOf(Routines.canNotify(ctx)) }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { canNotify = it }
     var canCalendar by remember { mutableStateOf(CalendarTool.canWrite(ctx)) }
@@ -118,8 +119,6 @@ fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                     }
                 }
             }
-            item {
-            }
             if (state.routines.none { it.title == "早安问候" }) {
                 item {
                     OutlinedButton(onClick = {
@@ -145,7 +144,7 @@ fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                             )
                         }
                         Switch(r.enabled, { on -> vm.saveRoutine(r.copy(enabled = on)) })
-                        IconButton(onClick = { vm.deleteRoutine(r.id) }) { Icon(Icons.Default.Delete, "删除") }
+                        IconButton(onClick = { deleting = r }) { Icon(Icons.Default.Delete, "删除", tint = MaterialTheme.colorScheme.outline) }
                     }
                     RunHistory(r.id)
                 }
@@ -153,6 +152,11 @@ fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
         }
     }
 
+    deleting?.let { r ->
+        ConfirmDeleteDialog("删除「${r.title}」？", "删掉后不会再提醒，运行记录也看不到了。", onDismiss = { deleting = null }) {
+            vm.deleteRoutine(r.id); deleting = null
+        }
+    }
     editing?.let { r ->
         RoutineDialog(r, isNew = state.routines.none { it.id == r.id }, onDismiss = { editing = null }) { saved ->
             vm.saveRoutine(saved)

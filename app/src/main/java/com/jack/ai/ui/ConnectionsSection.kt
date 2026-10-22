@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -39,6 +40,8 @@ fun ConnectionsSection(vm: ChatViewModel, s: Settings) {
         Triple("GitHub", (if (s.githubToken.isNotBlank()) "已连接" else "未填令牌，只能看公开项目") to s.githubToken.isNotBlank()) { GitHubSection(vm, s) },
         Triple("Notion", (if (s.notionToken.isNotBlank()) "已连接" else "未设置") to s.notionToken.isNotBlank()) { NotionSection(vm, s) },
         Triple("MCP 连接器", (if (mcp > 0) "$mcp 个开着" else "没有") to (mcp > 0)) { ConnectorsSection(vm, s.mcpServers) },
+        Triple("Jack 专用代理（VPN）", (if (s.proxyEnabled) "开着" + s.proxyNode.takeIf { it.isNotBlank() }?.let { "：$it" }.orEmpty()
+            else if (s.proxyNodes.isNotEmpty()) "关着" else "未设置") to s.proxyEnabled) { ProxySection(vm, s) },
     )
     val colors = MaterialTheme.colorScheme
     rows.forEachIndexed { i, (name, status, content) ->
@@ -51,6 +54,9 @@ fun ConnectionsSection(vm: ChatViewModel, s: Settings) {
             Text(name, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
             Text(
                 (if (status.second) "✓ " else "") + status.first,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = 150.dp).padding(start = 8.dp),
                 style = MaterialTheme.typography.bodySmall,
                 color = if (status.second) colors.primary else colors.onSurfaceVariant,
             )

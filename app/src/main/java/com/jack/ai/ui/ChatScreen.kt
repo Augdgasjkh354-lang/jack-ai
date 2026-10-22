@@ -133,6 +133,15 @@ fun ChatScreen(
     val project = state.project(state.currentProjectId)
     val ctx = LocalContext.current
     var text by rememberSaveable { mutableStateOf("") }
+    // 每个对话各有各的草稿：换到别的对话时把没发的字先收起来，回来再放回去，不会把 A 里写了一半的话发到 B 里。
+    // 在这里（组合时）就换掉，比分享、语音塞进来的文字先一步，后者会接在换好的草稿后面
+    val drafts = remember { mutableMapOf<String?, String>() }
+    var draftOf by remember { mutableStateOf(conv?.id) }
+    if (draftOf != conv?.id) {
+        drafts[draftOf] = text
+        text = drafts.remove(conv?.id).orEmpty()
+        draftOf = conv?.id
+    }
     var showFiles by remember { mutableStateOf(false) }
     var memoryOf by remember { mutableStateOf<Conversation?>(null) }
     val bg = MaterialTheme.colorScheme.background
@@ -236,7 +245,7 @@ fun ChatScreen(
                 if (conv == null || conv.messages.isEmpty()) {
                     Box(Modifier.padding(padding)) { EmptyState(vm, state, conv, onOpenMemory, onSuggest = { text = it }) }
                 } else {
-                    MessageList(vm, conv, state.streaming, padding)
+                    MessageList(vm, conv, state.streamingHere, padding)
                 }
                 BrowserPeek(Modifier.align(Alignment.TopEnd).padding(top = padding.calculateTopPadding() + 4.dp, end = 12.dp))
             }
@@ -370,11 +379,12 @@ private fun ModelPicker(settings: Settings, projectName: String?, onPick: (Strin
 
 private data class Suggestion(val title: String, val prompt: String)
 
+// 点一下只是填进输入框，不直接发；要补的内容放在最后，光标就在那里
 private val SUGGESTIONS = listOf(
-    Suggestion("写一份周报", "帮我写一份本周工作周报，做成 Word 文档。我这周做了："),
-    Suggestion("做个演示文稿", "帮我做一个关于「」的 PPT，大概 8 页。"),
     Suggestion("今天有什么新闻", "今天有什么值得关注的新闻？"),
-    Suggestion("整理成表格", "帮我把下面的内容整理成 Excel 表格：\n"),
+    Suggestion("帮我记一件事", "提醒我"),
+    Suggestion("读个网页给我听", "帮我打开这个网页，读完告诉我重点："),
+    Suggestion("整理成表格", "帮我把下面的内容整理成表格：\n"),
 )
 
 private fun greeting(): String = when (Calendar.getInstance().get(Calendar.HOUR_OF_DAY)) {
@@ -490,11 +500,12 @@ private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolea
             ),
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
-            conv.messages.forEach { msg ->
+            conv.messages.forEachIndexed { index, msg ->
+                val later = conv.messages.size - 1 - index
                 item(key = msg.id) {
                     Box(Modifier.animateItem()) {
                         if (msg.role == "user") {
-                            UserBubble(msg, onDelete = { vm.deleteFrom(msg.id) }, onEdit = { vm.editMessage(msg.id, it) })
+                            UserBubble(msg, onDelete = { vm.deleteFrom(msg.id) }, onEdit = { vm.editMessage(msg.id, it) }, laterCount = later)
                         } else {
                             val isLast = msg.id == lastId
                             AssistantMessage(
@@ -508,6 +519,7 @@ private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolea
                                 onContinueWriting = vm::continueWriting,
                                 onReport = { note -> vm.reportIssue(msg.id, note) },
                                 onFixApp = { text -> vm.send(text) },
+                                laterCount = later,
                             )
                         }
                     }
@@ -824,7 +836,7 @@ private fun InputBar(
                         Text("高峰 ×2", style = MaterialTheme.typography.labelSmall, color = colors.outline,
                             modifier = Modifier.padding(end = 2.dp))
                     }
-                    if (state.streaming && text.isNotBlank()) {
+                    if (state.streamingHere && text.isNotBlank()) {
                         // 回答进行中也能发：作为插话，下一步就会看到
                         Surface(onClick = { if (vm.send(text)) onTextChange("") }, shape = CircleShape, color = colors.primary,
                             modifier = Modifier.size(38.dp)) {
@@ -833,7 +845,7 @@ private fun InputBar(
                             }
                         }
                     }
-                    if (state.streaming) {
+                    if (state.streamingHere) {
                         Surface(onClick = vm::stop, shape = CircleShape, color = colors.onSurface, modifier = Modifier.size(38.dp)) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(AppIcons.Stop, "停止", Modifier.size(16.dp), tint = colors.surface)

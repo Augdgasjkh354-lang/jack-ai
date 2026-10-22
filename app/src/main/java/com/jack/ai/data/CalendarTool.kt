@@ -33,8 +33,8 @@ object CalendarTool {
 
     private fun granted(ctx: Context, p: String) = ContextCompat.checkSelfPermission(ctx, p) == PackageManager.PERMISSION_GRANTED
 
-    private val DAY = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-    private val SHOW = SimpleDateFormat("M月d日 EEE HH:mm", Locale.CHINA)
+    private val DAY get() = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+    private val SHOW get() = SimpleDateFormat("M月d日 EEE HH:mm", Locale.CHINA)
 
     /**
      * 解析 "yyyy-MM-dd HH:mm" 或 "yyyy-MM-dd"（全天）。返回 (毫秒, 是否只有日期)。

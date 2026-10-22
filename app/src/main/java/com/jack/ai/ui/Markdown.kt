@@ -23,7 +23,7 @@ import io.noties.markwon.ext.tables.TablePlugin
 import io.noties.markwon.inlineparser.MarkwonInlineParserPlugin
 import io.noties.markwon.linkify.LinkifyPlugin
 
-private fun buildMarkwon(ctx: Context, textColor: Int, codeBg: Int, textSizePx: Float): Markwon =
+private fun buildMarkwon(ctx: Context, textColor: Int, codeBg: Int, textSizePx: Float, accent: Int, muted: Int): Markwon =
     Markwon.builder(ctx)
         .usePlugin(MarkwonInlineParserPlugin.create())
         .usePlugin(JLatexMathPlugin.create(textSizePx) { builder ->
@@ -35,10 +35,23 @@ private fun buildMarkwon(ctx: Context, textColor: Int, codeBg: Int, textSizePx: 
         .usePlugin(LinkifyPlugin.create())
         .usePlugin(object : AbstractMarkwonPlugin() {
             override fun configureTheme(builder: MarkwonTheme.Builder) {
+                val dp = ctx.resources.displayMetrics.density
                 builder.codeBackgroundColor(codeBg)
                     .codeBlockBackgroundColor(codeBg)
                     .codeTextColor(textColor)
                     .codeBlockTextColor(textColor)
+                    .codeBlockMargin((12 * dp).toInt())
+                    .codeTextSize((textSizePx * 0.86f).toInt())
+                    // 聊天里标题不用太大：比正文大一点、加粗就够了
+                    .headingTextSizeMultipliers(floatArrayOf(1.3f, 1.2f, 1.1f, 1.0f, 1.0f, 1.0f))
+                    .headingBreakHeight(0)
+                    .linkColor(accent)
+                    .isLinkUnderlined(true)
+                    .listItemColor(accent)
+                    .bulletWidth((5 * dp).toInt())
+                    .blockQuoteColor(muted)
+                    .blockQuoteWidth((3 * dp).toInt())
+                    .thematicBreakColor(muted)
             }
         })
         .build()
@@ -93,20 +106,24 @@ fun MarkdownText(
     val ctx = LocalContext.current
     val argb = color.toArgb()
     val bg = codeBackground.toArgb()
+    val accent = androidx.compose.material3.MaterialTheme.colorScheme.primary.toArgb()
+    val muted = androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant.toArgb()
     val px = with(androidx.compose.ui.platform.LocalDensity.current) { textSizeSp.sp.toPx() }
-    val markwon = remember(argb, bg, px) { buildMarkwon(ctx, argb, bg, px) }
+    val markwon = remember(argb, bg, px, accent, muted) { buildMarkwon(ctx, argb, bg, px, accent, muted) }
     AndroidView(
         modifier = modifier,
         factory = { c ->
             TextView(c).apply {
                 setTextIsSelectable(true)
                 movementMethod = LinkMovementMethod.getInstance()
-                setLineSpacing(0f, 1.3f)
+                // 中文正文行高大约 1.6 倍字号读着最松快；字距稍微放开一点
+                setLineSpacing(0f, 1.38f)
+                letterSpacing = 0.02f
             }
         },
         update = { tv ->
             tv.setTextColor(argb)
-            tv.setLinkTextColor(argb)
+            tv.setLinkTextColor(accent)
             tv.setTextSize(TypedValue.COMPLEX_UNIT_PX, px)
             markwon.setMarkdown(tv, normalizeLatex(markdown))
         },
@@ -125,11 +142,13 @@ fun MarkdownBlocks(
     modifier: Modifier = Modifier,
     textSizeSp: Float = 16f,
 ) {
-    val blocks = remember(markdown) { splitBlocks(markdown) }
-    androidx.compose.foundation.layout.Column(modifier, verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
+    val blocks = remember(markdown) { splitBlocks(markdown).flatMap { splitTables(it) } }
+    androidx.compose.foundation.layout.Column(modifier, verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)) {
         blocks.forEachIndexed { i, b ->
             androidx.compose.runtime.key(i) {
-                MarkdownText(b, color, codeBackground, Modifier.fillMaxWidth(), textSizeSp)
+                val table = remember(b) { parseTable(b) }
+                if (table != null) MarkdownTable(table, Modifier.fillMaxWidth())
+                else MarkdownText(b, color, codeBackground, Modifier.fillMaxWidth(), textSizeSp)
             }
         }
     }

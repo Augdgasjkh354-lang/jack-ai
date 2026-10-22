@@ -59,6 +59,8 @@ fun MemoryScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
     var editing by remember { mutableStateOf<MemoryItem?>(null) }
     var adding by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
+    // 刚删掉的那条：列表上方给个「撤销」，误点了能拿回来
+    var undo by remember { mutableStateOf<String?>(null) }
     val settings = state.settings
     LaunchedEffect(Unit) {
         vm.reloadMemory()
@@ -106,6 +108,13 @@ fun MemoryScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                     IconButton(onClick = { adding = true }) { Icon(Icons.Default.Add, "添加记忆") }
                     if (state.memories.isNotEmpty()) TextButton(onClick = { confirmClear = true }) { Text("清空") }
                 }
+                undo?.let { t ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("已删除「${t.take(16)}${if (t.length > 16) "…" else ""}」", Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        TextButton(onClick = { vm.addMemory(t); undo = null }) { Text("撤销") }
+                    }
+                }
                 if (state.memories.isEmpty()) {
                     Text("还没有记忆。", color = MaterialTheme.colorScheme.outline)
                 }
@@ -116,7 +125,7 @@ fun MemoryScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                     IconButton(onClick = { editing = m }, modifier = Modifier.size(36.dp)) {
                         Icon(Icons.Default.Edit, "修改", Modifier.size(18.dp))
                     }
-                    IconButton(onClick = { vm.deleteMemory(m.id) }, modifier = Modifier.size(36.dp)) {
+                    IconButton(onClick = { undo = m.text; vm.deleteMemory(m.id) }, modifier = Modifier.size(36.dp)) {
                         Icon(Icons.Default.Delete, "删除", Modifier.size(18.dp))
                     }
                 }

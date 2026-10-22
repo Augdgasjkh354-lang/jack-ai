@@ -31,7 +31,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -115,8 +114,21 @@ fun SettingsScreen(
                 .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(22.dp),
         ) {
+            // ---- 个性化 ----
+            Section("个性化") {
+                SettingField("怎么称呼你", settings.userName, "例如：Jack") { v ->
+                    vm.updateSettings { it.copy(userName = v) }
+                }
+                SettingField("关于你", settings.aboutMe, "职业、兴趣、所在城市、正在做的事…AI 会参考这些来回答", minLines = 3) { v ->
+                    vm.updateSettings { it.copy(aboutMe = v) }
+                }
+                SettingField("希望 AI 怎么回答", settings.replyStyle, "例如：简洁直接、先给结论、用中文、像朋友一样说话", minLines = 3) { v ->
+                    vm.updateSettings { it.copy(replyStyle = v) }
+                }
+            }
+
             // ---- API Key ----
             Section("DeepSeek API Key") {
                 OutlinedTextField(
@@ -150,16 +162,12 @@ fun SettingsScreen(
                 ProvidersSection(vm, settings.providers)
             }
 
-            Section("连接") {
+            Section("连接", hint = "点开一项设置；连好之后只显示一行状态。") {
                 ConnectionsSection(vm, settings)
             }
 
-            Section("Jack 专用代理") {
-                ProxySection(vm, settings)
-            }
-
             // ---- Tavily ----
-            Section("Tavily API Key") {
+            Section("联网搜索（Tavily）") {
                 var tavilyInput by remember { mutableStateOf(settings.tavilyKey) }
                 var showTavily by remember { mutableStateOf(false) }
                 OutlinedTextField(
@@ -224,19 +232,6 @@ fun SettingsScreen(
                             if (settings.monthlyBudget > 0) " / 预算 ${yuan(settings.monthlyBudget)}" else "")
                     }
                     OutlinedButton(onClick = onOpenUsage) { Text("查看") }
-                }
-            }
-
-            // ---- 个性化 ----
-            Section("个性化") {
-                SettingField("怎么称呼你", settings.userName, "例如：Jack") { v ->
-                    vm.updateSettings { it.copy(userName = v) }
-                }
-                SettingField("关于你", settings.aboutMe, "职业、兴趣、所在城市、正在做的事…AI 会参考这些来回答", minLines = 3) { v ->
-                    vm.updateSettings { it.copy(aboutMe = v) }
-                }
-                SettingField("希望 AI 怎么回答", settings.replyStyle, "例如：简洁直接、先给结论、用中文、像朋友一样说话", minLines = 3) { v ->
-                    vm.updateSettings { it.copy(replyStyle = v) }
                 }
             }
 
@@ -360,7 +355,10 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                OutlinedButton(onClick = { confirmClear = true }) { Text("清空全部聊天记录") }
+                OutlinedButton(
+                    onClick = { confirmClear = true },
+                    colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) { Text("清空全部聊天记录") }
             }
 
             Spacer(Modifier.height(24.dp))
@@ -410,12 +408,25 @@ private fun SettingField(
     )
 }
 
+/** 一组设置：小标题在卡片外面，卡片是平的浅底圆角块，不要阴影。 */
 @Composable
-private fun Section(title: String, content: @Composable () -> Unit) {
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-            content()
+private fun Section(title: String, hint: String? = null, content: @Composable () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Column(Modifier.fillMaxWidth()) {
+        Text(title, style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant,
+            modifier = Modifier.padding(start = 6.dp, bottom = 6.dp))
+        androidx.compose.material3.Surface(
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+            color = colors.surfaceContainerLow,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                content()
+            }
+        }
+        hint?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
+                modifier = Modifier.padding(start = 6.dp, end = 6.dp, top = 6.dp))
         }
     }
 }
