@@ -150,20 +150,8 @@ fun SettingsScreen(
                 ProvidersSection(vm, settings.providers)
             }
 
-            Section("邮箱") {
-                MailSection(vm, settings.mails)
-            }
-
-            Section("连接器") {
-                ConnectorsSection(vm, settings.mcpServers)
-            }
-
-            Section("GitHub") {
-                GitHubSection(vm, settings)
-            }
-
-            Section("Notion") {
-                NotionSection(vm, settings)
+            Section("连接") {
+                ConnectionsSection(vm, settings)
             }
 
             Section("Jack 专用代理") {

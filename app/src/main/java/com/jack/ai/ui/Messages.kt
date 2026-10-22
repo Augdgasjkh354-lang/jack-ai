@@ -451,7 +451,8 @@ private fun SmallAction(icon: ImageVector, desc: String, onClick: () -> Unit) {
 
 @Composable
 private fun ThinkingBox(reasoning: String, thinking: Boolean) {
-    var expanded by rememberSaveable { mutableStateOf(thinking) }
+    // 默认收起：想看再点开。思考中只在标题下露一行最新的思路，不刷屏
+    var expanded by rememberSaveable { mutableStateOf(false) }
     val colors = MaterialTheme.colorScheme
     Surface(
         color = colors.surfaceContainer,
@@ -474,6 +475,16 @@ private fun ThinkingBox(reasoning: String, thinking: Boolean) {
                 Icon(
                     if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                     contentDescription = if (expanded) "收起" else "展开",
+                )
+            }
+            if (thinking && !expanded) {
+                Text(
+                    reasoning.trimEnd().substringAfterLast('\n').takeLast(80),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.onSurfaceVariant.copy(alpha = 0.7f),
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 4.dp, start = 22.dp),
                 )
             }
             AnimatedVisibility(expanded) {
