@@ -221,6 +221,8 @@ fun AssistantMessage(
     onContinueWriting: (() -> Unit)? = null,
     /** 「这条有问题」：把这一轮的现场存下来，之后导出。 */
     onReport: ((String) -> Unit)? = null,
+    /** 小工具出错时「让 Jack 修」：发一条消息给 AI。 */
+    onFixApp: ((String) -> Unit)? = null,
 ) {
     var reporting by remember { mutableStateOf(false) }
     if (reporting && onReport != null) {
@@ -267,7 +269,11 @@ fun AssistantMessage(
         }
         msg.files.forEach { f ->
             Spacer(Modifier.height(8.dp))
-            if (f.mime.startsWith("image/")) ChartImage(f) else GeneratedFileCard(f)
+            when {
+                f.mime.startsWith("image/") -> ChartImage(f)
+                f.name.endsWith(".html", true) -> AppCard(f, onFixApp)
+                else -> GeneratedFileCard(f)
+            }
         }
         msg.error?.let { err ->
             Spacer(Modifier.height(4.dp))
@@ -353,6 +359,11 @@ private fun ChartImage(f: GeneratedFile) {
 internal fun GeneratedFileCard(f: GeneratedFile) {
     val ctx = LocalContext.current
     val colors = MaterialTheme.colorScheme
+    // 网页（小工具）在 App 里全屏打开，能直接用
+    var viewingApp by remember { mutableStateOf(false) }
+    val isApp = f.name.endsWith(".html", true)
+    if (viewingApp) AppViewer(File(f.path)) { viewingApp = false }
+    val open = { if (isApp && File(f.path).exists()) viewingApp = true else openFile(ctx, f) }
     val (tag, tagColor) = when (f.name.substringAfterLast('.').lowercase()) {
         "docx" -> "W" to Color(0xFF2B579A)
         "pptx" -> "P" to Color(0xFFD24726)
@@ -369,7 +380,7 @@ internal fun GeneratedFileCard(f: GeneratedFile) {
         border = androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant),
         modifier = Modifier.widthIn(max = 340.dp).fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .clickable { openFile(ctx, f) },
+            .clickable { open() },
     ) {
         Row(Modifier.padding(start = 12.dp, top = 10.dp, bottom = 10.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically) {
@@ -389,7 +400,7 @@ internal fun GeneratedFileCard(f: GeneratedFile) {
                     color = colors.onSurfaceVariant,
                 )
             }
-            TextButton(onClick = { openFile(ctx, f) }) { Text("打开") }
+            TextButton(onClick = { open() }) { Text("打开") }
             TextButton(onClick = { shareFile(ctx, f) }) { Text("分享") }
         }
     }

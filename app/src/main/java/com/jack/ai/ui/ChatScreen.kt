@@ -122,6 +122,7 @@ fun ChatScreen(
     onOpenLibrary: () -> Unit,
     onOpenTables: () -> Unit,
     onOpenReview: () -> Unit,
+    onOpenApps: () -> Unit,
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -161,6 +162,7 @@ fun ChatScreen(
                 onOpenLibrary = { scope.launch { drawerState.close() }; onOpenLibrary() },
                 onOpenTables = { scope.launch { drawerState.close() }; onOpenTables() },
                 onOpenReview = { scope.launch { drawerState.close() }; onOpenReview() },
+                onOpenApps = { scope.launch { drawerState.close() }; onOpenApps() },
                 onSettings = { scope.launch { drawerState.close() }; onOpenSettings() },
             )
         },
@@ -256,7 +258,8 @@ private fun Modifier.swipeToOpen(open: () -> Unit): Modifier = pointerInput(Unit
             if (!change.pressed) break
             dx += change.position.x - change.previousPosition.x
             dy += change.position.y - change.previousPosition.y
-            // 先竖着动了、或者往左划：这次不是开侧边栏
+            // 先竖着动了、或者往左划：这次不是开侧边栏；手指在小工具上时是在拖滑块
+            if (AppTouch.active) break
             if (abs(dy) > slop && abs(dy) > abs(dx)) break
             if (dx < -slop) break
             if (dx > distance && dx > abs(dy) * 2) {
@@ -496,6 +499,7 @@ private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolea
                             onContinue = if (conv.work && isLast && !msg.truncated && vm.canContinue(msg)) vm::continueWork else null,
                             onContinueWriting = vm::continueWriting,
                             onReport = { note -> vm.reportIssue(msg.id, note) },
+                            onFixApp = { text -> vm.send(text) },
                         )
                     }
                 }

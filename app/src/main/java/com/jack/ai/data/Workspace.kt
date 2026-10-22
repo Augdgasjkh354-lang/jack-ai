@@ -87,16 +87,18 @@ object Workspace {
 
     fun hasSource(file: File) = sourceFile(file).exists()
 
-    private val MARKDOWN_TOOLS = setOf("create_word", "create_pdf")
+    /** 底稿就是一整段文字的工具：Word/PDF 是 Markdown，小工具是 HTML。其他的底稿是 JSON。 */
+    private val TEXT_FIELD = mapOf("create_word" to "markdown", "create_pdf" to "markdown", "create_app" to "html")
+    private val MARKDOWN_TOOLS = TEXT_FIELD.keys
 
     /** 给 AI 看、给 AI 改的底稿文字。Word/PDF 是 Markdown，其他是 JSON。 */
     fun sourceText(tool: String, args: JsonObject): String =
-        if (tool in MARKDOWN_TOOLS) (args["markdown"] as? JsonPrimitive)?.content.orEmpty()
+        if (tool in MARKDOWN_TOOLS) (args[TEXT_FIELD.getValue(tool)] as? JsonPrimitive)?.content.orEmpty()
         else pretty.encodeToString(JsonElement.serializer(), JsonObject(args - "filename"))
 
     /** 改过的底稿文字 → 新的参数。 */
     fun argsFromText(tool: String, old: JsonObject, text: String): JsonObject =
-        if (tool in MARKDOWN_TOOLS) JsonObject(old + ("markdown" to JsonPrimitive(text)))
+        if (tool in MARKDOWN_TOOLS) JsonObject(old + (TEXT_FIELD.getValue(tool) to JsonPrimitive(text)))
         else {
             val parsed = runCatching { Json.parseToJsonElement(text).jsonObject }.getOrNull()
                 ?: throw TextEdit.EditException("改完后底稿不是有效的 JSON 了（可能少了引号、逗号或括号），这次修改没有保存，请检查后重试")

@@ -45,6 +45,7 @@ object SkillIds {
     const val MAIL = "builtin-mail"
     const val TABLES = "builtin-tables"
     const val TRAIN = "builtin-train"
+    const val APP = "builtin-app"
 }
 
 private fun schema(s: String): JsonObject = Json.parseToJsonElement(s).jsonObject
@@ -151,6 +152,19 @@ val BUILTIN_SKILLS = listOf(
 8. 手机不允许读取已有闹钟，你看不到用户有哪些闹钟。要关闹钟，cancel_schedule 填时间 HH:mm 或标签；改闹钟时间，schedule 设新的、replace 填旧的时间。不知道时就问用户。
 9. 设置好后用一句话确认：什么时候、做什么。""",
 
+    ),
+    Skill(
+        id = SkillIds.APP, builtin = true, name = "小工具",
+        description = "在聊天里直接做出能点、能输入、能计算的小界面：贷款计算器、预算面板、换算器、打卡表、小游戏等。用户说“做一个……计算器/面板/工具”时使用。",
+        instructions = """做小工具的做法：
+1. 用 create_app，html 写一个完整、自包含的网页：CSS 和 JavaScript 都写在这一个文件里。它会直接显示在聊天里，用户能点、能输入。
+2. 为手机设计：竖屏、宽度自适应（不要写死宽度），字号 16px 起，按钮和输入框够大好点。支持深色模式（@media (prefers-color-scheme: dark)），背景色要写明。
+3. 能调的参数用 <input type="range"> 配数字输入框，改动后立刻重算，不要做“计算”按钮。结果放在显眼的位置，数字保留合适的小数位、加千分位。
+4. 需要图表可以用 Chart.js：<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>。只能从 cdn.jsdelivr.net、cdnjs.cloudflare.com、unpkg.com 加载代码；不能联网取数据（fetch 会被拦），要用的数据直接写进网页。
+5. 要记住用户填的内容（下次打开还在）：用 jack.save(对象) 保存、jack.load() 读取（没存过时返回 null）。页面加载时先 load，有变化就 save。不要用 localStorage。
+6. 计算要准：贷款等额本息、复利这类公式写对，用户给的例子心算核对一遍。
+7. 用户要改，用 edit_file 改它的底稿（就是这份 HTML），只改要改的那一段，不要整份重做。
+8. 生成后用一两句话说明怎么用，不要把代码贴进聊天。""",
     ),
     Skill(
         id = SkillIds.TRAIN, builtin = true, name = "火车票",
@@ -330,6 +344,7 @@ object SkillTools {
 
     val MANAGE_EMAILS = schema("""{"type":"function","function":{"name":"manage_emails","description":"处理邮件：read/unread 标成已读或未读；trash 删除（移到「已删除」，能找回）；delete_forever 彻底删除；move 移到 target_folder；empty_trash 清空「已删除」（不用填 uids）。删除和移动前一般会弹窗让用户确认。","parameters":{"type":"object","properties":{"action":{"type":"string","enum":["read","unread","trash","delete_forever","move","empty_trash"]},"uids":{"type":"array","items":{"type":"integer"},"description":"list_emails 给出的编号，可以多个，一次最多 200"},"folder":{"type":"string","description":"邮件所在的文件夹；不填就按列表里这几封信所在的文件夹（拿不准会报错让你写明）"},"target_folder":{"type":"string","description":"只有 move 用：移到哪个文件夹"},"account":{"type":"string","description":"用哪个邮箱（邮箱地址），不填用默认邮箱"}},"required":["action"]}}}""")
 
+    val CREATE_APP = schema("""{"type":"function","function":{"name":"create_app","description":"做一个小工具：一个完整的 HTML 网页，直接显示在聊天里，用户能点击、输入、计算，也能全屏打开、下次接着用。","parameters":{"type":"object","properties":{"title":{"type":"string","description":"小工具的名字，比如 贷款计算器"},"html":{"type":"string","description":"完整的 HTML，CSS 和 JS 都写在里面"}},"required":["title","html"]}}}""")
     val QUERY_TRAINS = schema("""{"type":"function","function":{"name":"query_trains","description":"查 12306 某天两地之间的高铁、动车、火车车次和余票。只查不买。","parameters":{"type":"object","properties":{"from":{"type":"string","description":"出发站或城市，比如 北京、上海虹桥"},"to":{"type":"string","description":"到达站或城市"},"date":{"type":"string","description":"出发日期 yyyy-MM-dd"},"types":{"type":"string","description":"只看哪些车型，比如 GD（高铁和动车）；不填就全部"},"depart_after":{"type":"string","description":"最早出发时间 HH:mm"},"depart_before":{"type":"string","description":"最晚出发时间 HH:mm"}},"required":["from","to","date"]}}}""")
     val SAVE_NOTE = schema("""{"type":"function","function":{"name":"save_note","description":"把一份整理好的笔记存进某个项目的资料，或存进资料库（以后能检索）。","parameters":{"type":"object","properties":{"title":{"type":"string","description":"标题，简短"},"content":{"type":"string","description":"笔记正文，Markdown；要点、原文摘录、来源链接都写进来"},"project":{"type":"string","description":"项目名；不填就存进资料库"}},"required":["title","content"]}}}""")
     val SAVE_MEMORY = schema("""{"type":"function","function":{"name":"save_memory","description":"存、改、删一条记忆。","parameters":{"type":"object","properties":{"content":{"type":"string","description":"要记住的内容，一句完整、独立能看懂的话；删除时留空"},"scope":{"type":"string","enum":["chat","project","global"],"description":"存在哪：chat 本对话记忆，project 项目记忆，global 全局记忆"},"replace":{"type":"string","description":"改或删旧记忆时填：旧记忆的原话（一段也行，能唯一认出就好）。不填就是新存一条"}},"required":["scope"]}}}""")

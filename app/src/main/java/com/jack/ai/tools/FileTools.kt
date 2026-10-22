@@ -26,7 +26,11 @@ internal suspend fun ToolSession.create(tool: String, args: JsonObject, base: St
         }
         withContext(Dispatchers.IO) { Workspace.saveSource(file, tool, args) }
         ui.attach(file)
-        val shown = if (ext == "png") "图已生成并显示在聊天里" else "已生成文件「${file.name}」，用户可以在聊天里打开或分享"
+        val shown = when (ext) {
+            "png" -> "图已生成并显示在聊天里"
+            "html" -> "小工具「${file.name}」已经显示在聊天里，用户可以直接点、输入、计算，也能全屏打开"
+            else -> "已生成文件「${file.name}」，用户可以在聊天里打开或分享"
+        }
         "$shown。文件保存在对话文件夹里，以后要修改就用 edit_file 改它的底稿，不要重新生成。" + verifyGenerated(tool, args, file) to
             SearchRecord("生成 $label：${file.name}")
     }
@@ -37,6 +41,12 @@ internal suspend fun ToolSession.makeChart(args: JsonObject) =
 internal suspend fun ToolSession.makeDiagram(args: JsonObject): String {
     val kind = if (args["type"].text() == "flowchart") "流程图" else "思维导图"
     return create("create_diagram", args, safeFileName(args["title"].text()).ifBlank { kind }, "png", kind)
+}
+
+/** 小工具：一个能在聊天里直接操作的网页（计算器、面板、小游戏……）。 */
+internal suspend fun ToolSession.makeApp(args: JsonObject): String {
+    if (args["html"].text().isBlank()) return "要写 html：完整的网页代码"
+    return create("create_app", args, safeFileName(args["title"].text()).ifBlank { "小工具" }, "html", "小工具")
 }
 
 internal suspend fun ToolSession.makeFile(kind: String, args: JsonObject): String {
@@ -165,9 +175,16 @@ internal suspend fun ToolSession.editFile(args: JsonObject): String {
 
 /** 生成的文件核实：能不能打开；Excel 再查公式引用。 */
 internal suspend fun ToolSession.verifyGenerated(tool: String, args: JsonObject, file: File): String = withContext(Dispatchers.IO) {
-    val problems = listOfNotNull(Verify.fileOpens(file)) +
-        if (tool == "create_excel") runCatching { Verify.xlsxFormulas(parseSheets(args)) }.getOrDefault(emptyList()) else emptyList()
-    Verify.note(problems, if (tool == "create_excel") "文件能正常打开，公式引用都在数据范围内" else "文件能正常打开")
+    val problems = listOfNotNull(Verify.fileOpens(file)) + when (tool) {
+        "create_excel" -> runCatching { Verify.xlsxFormulas(parseSheets(args)) }.getOrDefault(emptyList())
+        "create_app" -> Verify.html(args["html"].text())
+        else -> emptyList()
+    }
+    Verify.note(problems, when (tool) {
+        "create_excel" -> "文件能正常打开，公式引用都在数据范围内"
+        "create_app" -> "网页结构完整，没有引用会被拦截的外部资源（运行时出错会显示在卡片上）"
+        else -> "文件能正常打开"
+    })
 }
 
 /** 文字文件核实：JSON、CSV 查格式，Python、JavaScript 查语法（不运行）。其他类型不查，返回空。 */

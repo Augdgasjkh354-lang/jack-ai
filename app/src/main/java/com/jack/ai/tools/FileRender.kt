@@ -31,6 +31,7 @@ internal suspend fun ToolSession.renderFile(tool: String, args: JsonObject, file
                     "create_excel" -> OfficeWriter.writeXlsx(parseSheets(args), out)
                     "create_chart" -> renderChart(args, out)
                     "create_diagram" -> renderDiagram(args, out)
+                    "create_app" -> out.write(args["html"].text().toByteArray(Charsets.UTF_8))
                     else -> throw IllegalArgumentException("不认识的文件类型")
                 }
             }

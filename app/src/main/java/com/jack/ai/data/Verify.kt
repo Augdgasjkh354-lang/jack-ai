@@ -67,6 +67,23 @@ object Verify {
         return out.distinct()
     }
 
+    /** 小工具里能加载代码的网站（常用的前端库 CDN），别的联网一律拦掉。 */
+    val APP_HOSTS = setOf("cdn.jsdelivr.net", "cdnjs.cloudflare.com", "unpkg.com", "cdn.tailwindcss.com", "fonts.googleapis.com", "fonts.gstatic.com")
+
+    /** 小工具网页的静态检查：有没有内容、script 标签配不配对、有没有引用会被拦截的外部地址。 */
+    fun html(text: String): List<String> {
+        val out = mutableListOf<String>()
+        if (text.isBlank()) return listOf("网页是空的")
+        val lower = text.lowercase()
+        if ("<body" !in lower && "<div" !in lower && "<script" !in lower && "<input" !in lower) out += "网页里没有可显示的内容"
+        if (Regex("<script\\b").findAll(lower).count() != Regex("</script>").findAll(lower).count()) out += "<script> 标签没配对"
+        Regex("""(?:src|href)\s*=\s*["'](https?://[^"'/]+)""", RegexOption.IGNORE_CASE).findAll(text).map { it.groupValues[1] }
+            .map { it.substringAfter("://").lowercase() }.distinct()
+            .filter { it !in APP_HOSTS }
+            .forEach { out += "引用了 $it 上的资源，会被拦截（只能用 ${APP_HOSTS.take(3).joinToString("、")} 等 CDN，或者把代码直接写进网页）" }
+        return out
+    }
+
     fun colName(i: Int): String {
         var n = i + 1
         val sb = StringBuilder()

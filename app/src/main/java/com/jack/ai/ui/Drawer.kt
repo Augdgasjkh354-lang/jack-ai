@@ -85,6 +85,7 @@ fun HistoryDrawer(
     onOpenLibrary: () -> Unit,
     onOpenTables: () -> Unit,
     onOpenReview: () -> Unit,
+    onOpenApps: () -> Unit,
     onSettings: () -> Unit,
 ) {
     var renaming by remember { mutableStateOf<Conversation?>(null) }
@@ -149,6 +150,7 @@ fun HistoryDrawer(
                         Tool(Icons.Default.Star, "复习卡片", badge = state.cards.count { it.due <= now }.takeIf { it > 0 }?.toString(), onClick = onOpenReview),
                         Tool(Icons.Default.Build, "技能", onClick = onOpenSkills),
                         Tool(Icons.Default.Notifications, "提醒和任务", badge = state.routines.count { it.enabled }.takeIf { it > 0 }?.toString(), onClick = onOpenRoutines),
+                        Tool(AppIcons.Code, "小工具", onClick = onOpenApps),
                     ))
                 }
                 if (pinned.isNotEmpty()) {
@@ -238,12 +240,12 @@ private const val PROJECTS_SHOWN = 3
 
 private class Tool(val icon: ImageVector, val label: String, val badge: String? = null, val dot: Boolean = false, val onClick: () -> Unit)
 
-/** 常用功能：三个一行的小方块，图标在上、字在下，有待办的右上角标数字或小红点。 */
+/** 常用功能：四个一行的小方块，图标在上、字在下，有待办的右上角标数字或小红点。 */
 @Composable
 private fun ToolGrid(tools: List<Tool>) {
     val colors = MaterialTheme.colorScheme
     Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
-        tools.chunked(3).forEach { row ->
+        tools.chunked(4).forEach { row ->
             Row(Modifier.fillMaxWidth()) {
                 row.forEach { t ->
                     Box(
@@ -277,8 +279,8 @@ private fun ToolGrid(tools: List<Tool>) {
                         }
                     }
                 }
-                // 最后一行不满三个时补空位，方块大小保持一致
-                repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+                // 最后一行不满时补空位，方块大小保持一致
+                repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
             }
         }
     }

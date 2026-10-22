@@ -187,6 +187,7 @@ object PromptBuilder {
                 add(SkillTools.LIST_EMAILS); add(SkillTools.READ_EMAIL); add(SkillTools.SEND_EMAIL); add(SkillTools.MANAGE_EMAILS)
             }
             if (SkillIds.TRAIN in skillIds) add(SkillTools.QUERY_TRAINS)
+            if (SkillIds.APP in skillIds) add(SkillTools.CREATE_APP)
             // 本对话记忆随时能存，所以记忆工具一直带着
             add(SkillTools.SAVE_MEMORY)
             if (conv.id == com.jack.ai.data.INBOX_ID) add(SkillTools.SAVE_NOTE)
