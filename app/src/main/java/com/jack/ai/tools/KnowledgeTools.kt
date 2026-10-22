@@ -123,7 +123,20 @@ internal suspend fun ToolSession.remember(args: JsonObject): String {
             text.isEmpty() -> "已从${where}记忆里删掉。"
             else -> "已改好${where}记忆。"
         }
-        done to SearchRecord(label)
+        // 存完重新读一遍：新内容在不在；删除的话，原来那条还在不在
+        val now = withContext(Dispatchers.IO) {
+            when (scope) {
+                "global" -> host.store.loadMemories().map { it.text }
+                "project" -> ChatMemory.items(ChatMemory.read(ChatMemory.projectFile(app, project!!.id)))
+                else -> ChatMemory.items(ChatMemory.read(ChatMemory.chatFile(app, conv)))
+            }
+        }
+        val problem = when {
+            text.isNotEmpty() && text !in now -> "存完后在${where}记忆里查不到这条"
+            text.isEmpty() && now.any { it == old.removePrefix("- ").trim() } -> "删完后${where}记忆里还有这条"
+            else -> null
+        }
+        done + Verify.note(listOfNotNull(problem), "已重新读过${where}记忆，确认生效（现在共 ${now.size} 条）") to SearchRecord(label)
     }
 }
 

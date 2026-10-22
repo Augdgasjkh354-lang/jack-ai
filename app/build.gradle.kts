@@ -63,6 +63,8 @@ chaquopy {
             install("pandas")
             install("matplotlib")
             install("openpyxl")
+            // 读 PDF 文字（纯 Python，手机上能装）
+            install("pypdf")
         }
     }
 }

@@ -25,7 +25,7 @@ private val PIP = Regex("""(^|[\s"'(\[])(pip3?\s+install|-m\s+pip)\b|pip\.main""
 
 internal suspend fun ToolSession.runPython(code: String): String {
     if (PIP.containsMatchIn(code)) {
-        return "这个 Python 是装在 App 里的，没有 pip，不能安装任何库。能用的只有标准库、numpy、pandas、matplotlib、openpyxl、PIL。" +
+        return "这个 Python 是装在 App 里的，没有 pip，不能安装任何库。能用的只有标准库、numpy、pandas、matplotlib、openpyxl、PIL、pypdf。" +
             "要读 PDF、Word、PPT 的文字，直接用 read_file。"
     }
     return pythonRun(code)

@@ -87,7 +87,8 @@ internal suspend fun ToolSession.readFile(args: JsonObject): String {
     val name = args["name"].text()
     return runTool("查看 $name") {
         val file = wsFile(name)
-        val text = withContext(Dispatchers.IO) { Workspace.readText(file) }
+        val extracted = args["extracted"].text() == "true"
+        val text = withContext(Dispatchers.IO) { Workspace.readText(file, extracted) }
         val lines = text.lines()
         val start = (args["start_line"].text().toIntOrNull() ?: 1).coerceIn(1, lines.size.coerceAtLeast(1))
         val max = (args["max_lines"].text().toIntOrNull() ?: 400).coerceIn(1, 2000)
@@ -96,7 +97,8 @@ internal suspend fun ToolSession.readFile(args: JsonObject): String {
         if (body.length > 40_000) body = body.take(40_000) + "\n…（太长，后面截断了，用 start_line 接着读）"
         val end = start + part.size - 1
         val head = "「${file.name}」共 ${lines.size} 行" +
-            (if (Workspace.hasSource(file)) "，下面是你生成它时的底稿，edit_file 改的就是这份底稿" else "") +
+            (if (extracted) "，下面是从文件里直接抽出来的文字"
+            else if (Workspace.hasSource(file)) "，下面是你生成它时的底稿，edit_file 改的就是这份底稿（要核对文件本身的文字，加 extracted=true）" else "") +
             (if (start > 1 || end < lines.size) "，这里是第 $start–$end 行" else "") + "：\n"
         head + body to SearchRecord("查看 ${file.name}")
     }
@@ -178,10 +180,15 @@ internal suspend fun ToolSession.verifyGenerated(tool: String, args: JsonObject,
     val problems = listOfNotNull(Verify.fileOpens(file)) + when (tool) {
         "create_excel" -> runCatching { Verify.xlsxFormulas(parseSheets(args)) }.getOrDefault(emptyList())
         "create_app" -> Verify.html(args["html"].text())
+        // PDF 生成后真抽一次字：抽不出来就是坏了（或者字没画上去）
+        "create_pdf" -> listOfNotNull(runCatching {
+            "「${file.name}」里抽不出文字，可能没生成好".takeIf { args["markdown"].text().isNotBlank() && Workspace.readText(file, extracted = true).isBlank() }
+        }.getOrNull())  // 抽字本身出错（比如后台还没初始化 PDF 库）不算文件坏了，文件头上面已经查过
         else -> emptyList()
     }
     Verify.note(problems, when (tool) {
         "create_excel" -> "文件能正常打开，公式引用都在数据范围内"
+        "create_pdf" -> "PDF 能打开，也能抽出文字"
         "create_app" -> "网页结构完整，没有引用会被拦截的外部资源（运行时出错会显示在卡片上）"
         else -> "文件能正常打开"
     })

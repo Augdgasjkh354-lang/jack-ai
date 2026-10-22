@@ -408,14 +408,16 @@ val SELF_CHECK = Preset(id = "builtin-self-check", name = "自检", prompt = """
 
 依次测：
 1. 文件：write_file 建「_自检.txt」→ read_file → edit_file 改一个词 → read_file 确认改了。
-2. 文档：create_document 生成一页 PDF「_自检」→ read_file 能读出文字 → delete_file 删掉它和「_自检.txt」。
+2. 文档：create_document 生成一页 PDF「_自检」→ read_file 加 extracted=true，确认从 PDF 本身抽得出文字 → run_python 用 pypdf 读同一个 PDF 的文字 → create_excel 生成「_自检」表格，带一个 =SUM 公式 → create_app 做一个「_自检」小工具（一个输入框加一个按钮）→ delete_file 删掉这几个文件和「_自检.txt」。
 3. 表格：add_rows 往「_自检」记两行（自动建表）→ query_table 求和 → edit_table 改一行 → edit_table drop 删表。
 4. 提醒：schedule 设一个 2099-01-01 09:00 的提醒「_自检」→ 用 schedule 的 replace 改到 09:30 → cancel_schedule 删掉。
 5. 日历：add_calendar_event 加 2099-01-01「_自检」→ list_calendar_events 查到 → delete_calendar_event 删掉。
 6. 记忆：save_memory 存一条本对话记忆「_自检：测试」→ 用 replace 改成「_自检：已改」→ 再用 replace 删掉。
 7. 邮件（只读）：list_emails 列最新 3 封 → read_email 读第一封，只看能不能读，不要总结内容；不删、不移、不发。
-8. 搜索与计算：search_my_data 搜「自检」；run_python（或 run_js）算 1+1；联网开着就 web_search 搜一次今天的日期。
+8. 搜索与计算：search_my_data 搜「自检」；run_python（或 run_js）算 1+1；联网开着就 web_search 搜一次今天的日期，再 read_webpage 读其中一个结果。
+9. 火车票（只查）：query_trains 查 7 天后北京到上海的高铁，只看能不能查到。
 
+工具结果末尾的【核实】也记下来：✓ 算通过，【核实失败】算 ❌ 并抄下原因。
 最后用一张表交给我：工具｜结果（✅/❌/未开启）｜出错时的原话。再用一两句话说哪里最该修。中途某步失败就记下来接着测下一步，不要卡住。""")
 val DEFAULT_WORK_TEMPLATES = listOf(
     Preset(name = "整理邮件", prompt = "看看我所有邮箱最近一天的新邮件，按重要程度整理：谁发的、什么事、要不要处理、截止时间。广告和通知合成一句带过。"),

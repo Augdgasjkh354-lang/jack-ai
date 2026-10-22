@@ -97,7 +97,7 @@ internal suspend fun ToolSession.removeRoutine(id: String) = runTool("删除提�
     if (r == null) "没有找到这个编号。" to SearchRecord("删除提醒或任务", error = "没找到")
     else {
         withContext(Dispatchers.Main) { host.deleteRoutine(r.id) }
-        "已删除「${r.title}」。" to SearchRecord("删除：${r.title}")
+        "已删除「${r.title}」（编号 ${r.id.take(8)}）。" to SearchRecord("删除：${r.title}")
     }
 }
 
@@ -181,9 +181,12 @@ internal suspend fun ToolSession.schedule(args: JsonObject): String {
     if (replace.isEmpty()) return createSchedule(args)
     // 改时间：先设新的，设成功了再删旧的，免得新的没设上旧的也没了
     val before = succeeded.get()
+    val oldIds = withContext(Dispatchers.IO) { host.store.loadRoutines().map { it.id }.toSet() }
     val created = createSchedule(args)
     if (succeeded.get() == before) return created
-    return created + "\n" + cancelSchedule(buildJsonObject { put("target", replace) })
+    // 新建的那条不能算进“旧的”：新旧同名、用名字指定时，不然可能把刚建的删了
+    val newIds = withContext(Dispatchers.IO) { host.store.loadRoutines().map { it.id }.filter { it !in oldIds }.toSet() }
+    return created + "\n替换旧的：" + cancelSchedule(buildJsonObject { put("target", replace) }, exclude = newIds)
 }
 
 private suspend fun ToolSession.createSchedule(args: JsonObject): String {
@@ -258,10 +261,10 @@ private suspend fun ToolSession.makeWatch(args: JsonObject, name: String): Strin
 }
 
 /** cancel_schedule：先按编号或名字找提醒和任务，找不到就当成闹钟（时间或标签）去关。 */
-internal suspend fun ToolSession.cancelSchedule(args: JsonObject): String {
+internal suspend fun ToolSession.cancelSchedule(args: JsonObject, exclude: Set<String> = emptySet()): String {
     val target = args["target"].text().trim().removePrefix("编号").trim()
     if (target.isBlank()) return "要填编号、闹钟时间或标签"
-    val routines = host.store.loadRoutines()
+    val routines = host.store.loadRoutines().filterNot { it.id in exclude }
     val r = routines.firstOrNull { target.length >= 4 && it.id.startsWith(target) } ?: routines.firstOrNull { it.title == target }
     return when {
         r != null -> removeRoutine(r.id)

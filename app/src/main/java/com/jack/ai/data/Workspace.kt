@@ -128,8 +128,9 @@ object Workspace {
     }
 
     /** 读出文件的文字内容。有底稿的读底稿（可改），否则尽量抽出文字（Word 可改，其他只读）。 */
-    fun readText(file: File): String {
-        source(file)?.let { (tool, args) -> return sourceText(tool, args) }
+    /** extracted=true 时不看底稿，直接从文件里抽文字（核对生成出来的文件对不对）。 */
+    fun readText(file: File, extracted: Boolean = false): String {
+        if (!extracted) source(file)?.let { (tool, args) -> return sourceText(tool, args) }
         return when (ext(file)) {
             "docx" -> ZipFile(file).use { z ->
                 z.getEntry("word/document.xml")?.let { TextEdit.docxText(z.getInputStream(it).readBytes().toString(Charsets.UTF_8)) }.orEmpty()
