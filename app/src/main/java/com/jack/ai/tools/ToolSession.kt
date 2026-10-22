@@ -228,15 +228,30 @@ class ToolSession(
         val EXTERNAL_TOOLS = setOf("list_emails", "read_email", "web_search", "read_webpage", "notion_search", "notion_read", "browser", "github")
 
         /** 报错尽量带上具体原因，模型才知道该重试、换方法还是去问用户。 */
-        fun errorText(e: Exception): String = when (e) {
-            is ApiException -> e.message ?: "接口出错"
-            is java.net.SocketTimeoutException -> "网络连接失败（连接超时，可以稍后重试）" + com.jack.ai.api.Net.hint()
-            is java.net.UnknownHostException -> "网络连接失败（找不到服务器 ${e.message.orEmpty()}，检查网络或地址）"
-            is java.net.ConnectException -> "网络连接失败（连接被拒绝：${e.message.orEmpty()}）" + com.jack.ai.api.Net.hint()
-            is javax.net.ssl.SSLException -> "网络连接失败（安全连接出错：${e.message.orEmpty()}）"
-            is java.io.FileNotFoundException -> "找不到文件或没有权限（${e.message.orEmpty()}）"
-            is IOException -> "读写或网络出错（${e.message ?: e.javaClass.simpleName}）" + com.jack.ai.api.Net.hint()
-            else -> e.message ?: "出错了（${e.javaClass.simpleName}）"
+        /** 报错说清两件事：为什么失败，下一步该做什么（模型照着做，不用瞎试）。 */
+        fun errorText(e: Exception): String {
+            val net = com.jack.ai.api.Net
+            val msg = e.message.orEmpty()
+            // 「Failed to connect to api.x.com/1.2.3.4:443」「Unable to resolve host "api.x.com"」里抠出主机名
+            val host = Regex("""(?:to |host ")([\w.-]+\.[a-z]{2,})""").find(msg)?.groupValues?.get(1)
+                ?: msg.takeIf { e is java.net.UnknownHostException && it.matches(Regex("""[\w.-]+""")) }
+            val (what, next) = when (e) {
+                is ApiException -> return e.message ?: "接口出错"
+                is java.net.SocketTimeoutException -> "网络连接超时" to net.nextStep(host)
+                is java.net.UnknownHostException -> "网络连接失败（找不到服务器 ${host ?: msg}）" to net.nextStep(host)
+                is java.net.ConnectException ->
+                    if ("127.0.0.1" in msg) "连不上 Jack 专用代理" to "下一步：请用户到 设置 → Jack 专用代理 点「测试」；不通就换个节点或更新订阅，再重试。"
+                    else "网络连接失败（连接被拒绝：$msg）" to net.nextStep(host)
+                is javax.net.ssl.SSLException -> "网络连接失败（安全连接出错：$msg）" to
+                    "下一步：请用户确认手机时间是否准确；走代理的话换个节点再试。不要改成不校验证书。"
+                is SecurityException -> "没有权限（$msg）" to
+                    "下一步：请用户在系统设置里给 Jack 打开相应权限（日历权限可以在左侧菜单「提醒和任务」里授权），然后再试。"
+                is java.io.FileNotFoundException -> "找不到文件或没有权限（$msg）" to
+                    "下一步：对照【对话文件夹】清单确认文件名，再重试。"
+                is IOException -> "读写或网络出错（${msg.ifBlank { e.javaClass.simpleName }}）" to net.nextStep(host)
+                else -> return msg.ifBlank { "出错了（${e.javaClass.simpleName}）" }
+            }
+            return "$what。$next" + net.hint()
         }
 
 

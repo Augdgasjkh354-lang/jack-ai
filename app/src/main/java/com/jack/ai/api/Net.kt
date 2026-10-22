@@ -62,11 +62,20 @@ object Net {
     }
 
     /** 这个主机走不走代理。 */
-    fun shouldProxy(host: String, c: Config = config): Boolean {
-        if (!c.enabled) return false
+    fun shouldProxy(host: String, c: Config = config): Boolean = c.enabled && foreign(host)
+
+    /** 国外服务（不在直连名单里，也不是本机、局域网）。 */
+    fun foreign(host: String): Boolean {
         val h = host.lowercase().trimEnd('.')
-        if (h == "localhost" || h.startsWith("127.") || h == "::1" || h.startsWith("10.") || h.startsWith("192.168.")) return false
+        if (h.isEmpty() || h == "localhost" || h.startsWith("127.") || h == "::1" || h.startsWith("10.") || h.startsWith("192.168.")) return false
         return DOMESTIC.none { d -> if (d.startsWith(".")) h.endsWith(d) else h == d || h.endsWith(".$d") }
+    }
+
+    /** 网络出错时告诉模型下一步怎么办：看代理开没开、是不是国外服务。host 不知道就填 null。 */
+    fun nextStep(host: String?): String = when {
+        config.enabled -> "下一步：稍后重试一次；还不行就请用户到 设置 → Jack 专用代理 点「测试」看节点通不通，必要时换节点或更新订阅。"
+        host != null && foreign(host) -> "下一步：$host 是国外服务，需要先打开 Jack 专用代理（设置 → Jack 专用代理），再重试。"
+        else -> "下一步：检查手机网络后重试一次；连续失败就如实告诉用户网络有问题，不要反复重试。"
     }
 
     /** 把内核拉起来（已经在跑就直接返回）。失败时 ProxyCore.lastError 里有原因。 */
