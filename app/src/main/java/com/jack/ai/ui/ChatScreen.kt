@@ -426,16 +426,6 @@ private fun EmptyState(
             }
             Spacer(Modifier.height(10.dp))
         }
-        Spacer(Modifier.height(14.dp))
-        Text("人设", style = MaterialTheme.typography.labelMedium, color = colors.outline)
-        Spacer(Modifier.height(8.dp))
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(horizontal = 4.dp)) {
-            val selectedName = conv?.presetName ?: ""
-            items(state.settings.presets, key = { it.id }) { p ->
-                val sel = p.name == selectedName
-                Pill(label = p.name, active = sel, onClick = { vm.choosePreset(p) })
-            }
-        }
     }
 }
 
