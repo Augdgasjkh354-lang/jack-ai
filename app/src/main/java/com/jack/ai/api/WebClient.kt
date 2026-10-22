@@ -93,10 +93,21 @@ class WebClient(
         val content = json.parseToJsonElement(post(key, "fetch", body)).jsonObject["content"].str()
         if (content.isBlank()) return NO_CONTENT
         onPaid()
-        return content.take(30_000)
+        return unescapeFetch(content).take(30_000)
     }
 
     companion object {
+        /**
+         * DeepSeek Fetch 返回的 Markdown 会把 # . | 写成 \# \. \|。模型看得懂，但原样抄进回答或文件时会多出反斜杠，
+         * 所以先还原（代码块里的不动）。
+         */
+        fun unescapeFetch(md: String): String {
+            val parts = md.split("```")
+            return parts.mapIndexed { i, p -> if (i % 2 == 1) p else p.replace(FETCH_ESCAPE, "$1") }.joinToString("```")
+        }
+
+        private val FETCH_ESCAPE = Regex("""\\([#.|])""")
+
         const val NO_CONTENT = "没能读取这个网页的内容。"
         /** 计入统计时用的“模型”名。 */
         const val USAGE_KEY = "deepseek-web"
