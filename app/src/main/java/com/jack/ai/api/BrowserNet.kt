@@ -76,6 +76,29 @@ object BrowserNet {
             (p[0] == 172 && p[1] in 16..31) || (p[0] == 192 && p[1] == 168) || (p[0] == 100 && p[1] in 64..127)
     }
 
+    /** 做了收不回的事：买、付、发、删、提交…（中英文按钮上常见的字） */
+    private val RISKY = Regex(
+        "购买|买入|下单|支付|付款|结算|提交|确认订单|转账|汇款|充值|捐|发送|发布|发表|评论|回复|删除|注销|退订|取消订阅|清空|授权|" +
+            "\\b(pay|buy|purchase|order|checkout|donate|send|post|publish|tweet|reply|comment|delete|remove|unsubscribe|transfer|submit|authorize|confirm)\\b",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /**
+     * Jack 在网页上做这一步之前要不要先问用户；要问就返回原因。
+     * 点到上面那类按钮要问；点提交按钮、在输入框里回车，提交的是 POST 表单（登录除外）也要问。
+     * 输入、删字、选择本身不会提交，不问（密码框另外拦）。
+     */
+    fun confirmReason(action: String, label: String, submit: Boolean, formPost: Boolean, formPassword: Boolean, formButtons: String, key: String = ""): String? {
+        return when {
+            action == "click" && RISKY.containsMatchIn(label) -> "按钮上写着「$label」，可能会下单、付款、发出内容或删除东西。"
+            action == "click" && submit && formPost && !formPassword -> "这会提交网页上的表单。"
+            action == "key" && key == "enter" && formPost && !formPassword -> "回车会提交网页上的表单" +
+                (if (RISKY.containsMatchIn(formButtons)) "（表单的按钮是「$formButtons」）" else "") + "。"
+            action == "key" && key == "enter" && RISKY.containsMatchIn(formButtons) -> "回车会提交表单，表单的按钮是「$formButtons」。"
+            else -> null
+        }
+    }
+
     /**
      * 代理要密码时，只把口令交给 Jack 自己的代理（本机地址 + sing-box 的 realm）。
      * sing-box 的响应头写成 `Basic realm="sing-box" charset="UTF-8"`，Chromium 读出来的 realm 是

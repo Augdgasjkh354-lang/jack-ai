@@ -235,6 +235,7 @@ fun ChatScreen(
                 } else {
                     MessageList(vm, conv, state.streaming, padding)
                 }
+                BrowserPeek(Modifier.align(Alignment.TopEnd).padding(top = padding.calculateTopPadding() + 4.dp, end = 12.dp))
             }
         }
     }

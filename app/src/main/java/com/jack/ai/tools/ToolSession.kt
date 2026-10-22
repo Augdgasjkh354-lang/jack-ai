@@ -88,6 +88,12 @@ class ToolSession(
 
     /** 最多几轮工具：Chat 20 轮（用了「深度研究」放宽到 25），Work 不限。 */
     var maxRounds = if (conv.work) Int.MAX_VALUE else CHAT_MAX_ROUNDS
+    /** 当前模型能不能看图（浏览器截图要用）。 */
+    var canSee = false
+    /** 工具产生的图片（data URL），下一轮请求时作为一条用户消息补上，补完清空。 */
+    val images = java.util.concurrent.CopyOnWriteArrayList<String>()
+    fun takeImages(): List<String> = images.toList().also { images.clear() }
+
     /** 搜索结果的编号接着往下排，引用时不重号。 */
     internal var sourceCount = 0
 
@@ -154,6 +160,7 @@ class ToolSession(
             name.startsWith(com.jack.ai.data.Mcp.PREFIX) -> callConnector(name, args)
             name == "query_trains" && SkillIds.TRAIN in skillIds -> queryTrains(args)
             name == "create_app" && SkillIds.APP in skillIds -> makeApp(args)
+            name == "browser" && SkillIds.BROWSER in skillIds -> browse(args)
             name == "notion_search" && SkillIds.NOTION in skillIds -> notionSearch(args)
             name == "notion_read" && SkillIds.NOTION in skillIds -> notionRead(args)
             name == "notion_write" && SkillIds.NOTION in skillIds -> notionWrite(args)
@@ -217,7 +224,7 @@ class ToolSession(
 
     companion object {
         /** 返回外部内容的工具：内容里可能藏着冒充用户的指令。 */
-        val EXTERNAL_TOOLS = setOf("list_emails", "read_email", "web_search", "read_webpage", "notion_search", "notion_read")
+        val EXTERNAL_TOOLS = setOf("list_emails", "read_email", "web_search", "read_webpage", "notion_search", "notion_read", "browser")
 
         /** 报错尽量带上具体原因，模型才知道该重试、换方法还是去问用户。 */
         fun errorText(e: Exception): String = when (e) {

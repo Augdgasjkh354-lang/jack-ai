@@ -60,4 +60,22 @@ class BrowserNetTest {
         assertFalse(BrowserNet.isOurProxy("127.0.0.1", "Login"))
         assertFalse(BrowserNet.isOurProxy("127.0.0.1:${ProxyCore.port + 1}", "sing-box"))
     }
+
+    @Test
+    fun whatNeedsTheUsersOk() {
+        // 下单、付款、发送、删除：点了就要问
+        listOf("立即购买", "确认支付", "发送", "Delete repository", "Place order", "提交订单").forEach {
+            assertTrue(it, BrowserNet.confirmReason("click", it, false, false, false, "") != null)
+        }
+        // 普通链接和按钮不问
+        listOf("下一页", "Sign in", "Trending", "搜索", "展开").forEach {
+            assertEquals(it, null, BrowserNet.confirmReason("click", it, false, false, false, ""))
+        }
+        // 提交 POST 表单要问；登录表单（有密码框）不问；GET 搜索框回车不问
+        assertTrue(BrowserNet.confirmReason("click", "继续", true, true, false, "继续") != null)
+        assertEquals(null, BrowserNet.confirmReason("click", "登录", true, true, true, "登录"))
+        assertTrue(BrowserNet.confirmReason("key", "留言", false, true, false, "发表", "enter") != null)
+        assertEquals(null, BrowserNet.confirmReason("key", "搜点什么", false, false, false, "搜索", "enter"))
+        assertEquals(null, BrowserNet.confirmReason("type", "发表评论", false, true, false, "发表"))
+    }
 }

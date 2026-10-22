@@ -182,4 +182,21 @@ class AgentTest {
         assertTrue(id.isNotEmpty())
         assertEquals(id, messages.first { it["role"]?.jsonPrimitive?.content == "tool" }["tool_call_id"]!!.jsonPrimitive.content)
     }
+
+    @Test
+    fun screenshotsGoAfterToolResultsAndOldOnesAreDropped() = runBlocking {
+        val api = FakeApi(toolCall("browser", id = "a"), toolCall("browser", id = "b"), text("看完了"))
+        val agent = Agent(api::stream)
+        val messages = mutableListOf(userMsg("帮我看看网页"))
+        var shot = 0
+        agent.run(messages, someTools, { 5 }, { _, _ -> "页面清单" }, images = { listOf("data:image/jpeg;base64,${++shot}") })
+        // user, assistant, tool, 截图1（已换成一句话）, assistant, tool, 截图2
+        assertEquals(7, messages.size)
+        assertEquals("（之前的网页截图已省略）", messages[3]["content"]!!.jsonPrimitive.content)
+        val last = messages[6]["content"]!!.jsonArray
+        assertEquals("data:image/jpeg;base64,2", last[1].jsonObject["image_url"]!!.jsonObject["url"]!!.jsonPrimitive.content)
+        // 截图不进 trail（下次对话不用再发）
+        assertEquals(4, agent.trail.size)
+        assertTrue(agent.trail.none { "base64" in it })
+    }
 }

@@ -516,6 +516,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     patchMessage(convId, reply.id) { m -> m.copy(files = m.files.filterNot { it.path == gen.path } + gen) }
                 }
             })
+            session.canSee = ep.vision
             val agent = Agent({ msgs, t -> client.stream(ep, msgs, thinking, settings.temperature, t) }, sendReasoning = thinkingOn)
             interjections.clear()
             running = convId to reply.id
@@ -571,6 +572,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     // 带工具的请求被拒（比如旧记录格式接口不认）：先去掉旧的工具调用过程再试，工具照样能用；
                     // 还不行就不用工具，改成“先搜再答”
                     interjections = { generateSequence { interjections.poll() }.toList() },
+                    images = { session.takeImages() },
                     recovery = Agent.Recovery { tried ->
                         // 先怀疑图片编号失效（过期或被删）：清掉记录，改回内联图片再试一次
                         if (!filesDropped && promptInput.fileIds.isNotEmpty()) {
