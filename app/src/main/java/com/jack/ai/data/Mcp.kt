@@ -14,6 +14,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import okhttp3.Call
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -190,7 +191,15 @@ object Mcp {
 
     /** 一次连接：握手后发请求。先试 Streamable HTTP，服务器不认就换老式 SSE。 */
     private class Session(val server: McpServer) : Closeable {
-        private val http = com.jack.ai.api.sharedHttp
+        /**
+         * 这个连接器专用的客户端（和 sharedHttp 共用连接池）。服务器把请求跳转到别的网站时，
+         * 跳过去的那一跳去掉 Key 所在的请求头，不把 Key 带给别人。
+         */
+        val http = com.jack.ai.api.sharedHttp.newBuilder().addNetworkInterceptor { chain ->
+            val req = chain.request()
+            if (req.url.host.equals(server.url.trim().toHttpUrlOrNull()?.host, true)) chain.proceed(req)
+            else chain.proceed(req.newBuilder().removeHeader("Authorization").apply { keyHeader()?.let { removeHeader(it) } }.build())
+        }.build()
         private val jsonType = "application/json".toMediaType()
         private var nextId = 1
         private var sessionId: String? = null
@@ -220,6 +229,14 @@ object Mcp {
         }
 
         private class HttpStatus(val code: Int, message: String) : Exception(message)
+
+        /** Key 写成「名字: 值」时那个请求头的名字。 */
+        fun keyHeader(): String? {
+            val k = server.key.trim()
+            val colon = k.indexOf(':')
+            val name = if (colon > 0) k.substring(0, colon).trim() else return null
+            return name.takeIf { it.isNotEmpty() && !it.contains(' ') && !it.equals("Bearer", true) }
+        }
 
         fun auth(b: Request.Builder): Request.Builder {
             val k = server.key.trim()
@@ -310,7 +327,7 @@ object Mcp {
      */
     private class Legacy(private val session: Session) : Closeable {
         private val server = session.server
-        private val http = com.jack.ai.api.sharedHttp.newBuilder().readTimeout(0, TimeUnit.MILLISECONDS).build()
+        private val http = session.http.newBuilder().readTimeout(0, TimeUnit.MILLISECONDS).build()
         private val endpoint = CompletableFuture<String>()
         private val waiting = ConcurrentHashMap<Int, CompletableFuture<JsonObject>>()
         private val stream: Call
@@ -325,7 +342,12 @@ object Mcp {
                         val source = resp.body?.source() ?: throw McpException("连接器没有回应")
                         readEvents(source) { event, data ->
                             if (event == "endpoint") {
-                                endpoint.complete(session.url.toHttpUrl().resolve(data.trim())?.toString() ?: data.trim())
+                                val target = session.url.toHttpUrl().resolve(data.trim())
+                                val base = session.url.toHttpUrl()
+                                // 只往同一个网站发：服务器让我们把带 Key 的请求发去别的网站，一律拒绝
+                                if (target == null || !target.host.equals(base.host, true) || target.port != base.port || target.scheme != base.scheme) {
+                                    endpoint.completeExceptionally(McpException("连接器要求把请求发到另一个网站（${target?.host ?: data.trim().take(60)}），为了不把 Key 交出去，已拒绝"))
+                                } else endpoint.complete(target.toString())
                             } else {
                                 runCatching { json.parseToJsonElement(data).jsonObject }.getOrNull()?.let { o ->
                                     idOf(o)?.let { waiting.remove(it)?.complete(o) }
@@ -357,7 +379,7 @@ object Mcp {
         fun post(body: String) {
             val url = endpoint.await(30)
             val req = session.auth(Request.Builder().url(url)).post(body.toRequestBody("application/json".toMediaType())).build()
-            com.jack.ai.api.sharedHttp.newCall(req).execute().use { resp ->
+            session.http.newCall(req).execute().use { resp ->
                 if (!resp.isSuccessful) throw McpException("连接器出错（${resp.code}）")
             }
         }
