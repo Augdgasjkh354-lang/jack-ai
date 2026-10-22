@@ -75,7 +75,7 @@ data class TaskResult(val text: String, val files: List<GeneratedFile> = emptyLi
  * 文件存进这个任务对话的文件夹。用户不在线，需要确认的操作（发邮件等）一律不做。
  * 花费到 Work 上限就收尾。
  */
-suspend fun runBackgroundWork(ctx: Context, r: Routine, onProgress: (String) -> Unit = {}): TaskResult {
+suspend fun runBackgroundWork(ctx: Context, r: Routine, log: (com.jack.ai.data.RunStep) -> Unit = {}, onProgress: (String) -> Unit = {}): TaskResult {
     val host = BackgroundToolHost(ctx)
     val store = host.store
     val s = store.loadSettings()
@@ -122,7 +122,7 @@ suspend fun runBackgroundWork(ctx: Context, r: Routine, onProgress: (String) -> 
             if (s.workCostLimit > 0 && spent >= s.workCostLimit) {
                 session.maxRounds = 0
                 "花费到了上限，不要再调用工具，直接写出目前的结果，并说明还差什么。"
-            } else session.execute(name, args)
+            } else session.execute(name, args).also { log(com.jack.ai.data.RunLog.stepOf(name, it)) }
         },
         onUsage = { ev ->
             store.addUsage(ep, ev.promptTokens, ev.cacheHit, ev.completionTokens)

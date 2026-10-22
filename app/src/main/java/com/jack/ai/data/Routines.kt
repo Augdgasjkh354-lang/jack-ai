@@ -224,6 +224,8 @@ object Routines {
         if (!r.enabled) return
         if (r.kind == "reminder") {
             notify(ctx, r.id, "⏰ 提醒", r.title)
+            if (canNotify(ctx)) RunLog.once(ctx, r, "ok", "已弹出通知")
+            else RunLog.once(ctx, r, "failed", error = "App 没有通知权限，提醒没弹出来。下一步：打开左侧菜单「提醒和任务」授权通知")
         } else {
             val now = System.currentTimeMillis()
             val wait = if (r.offPeak) Pricing.nextOffPeak(now) - now else 0L
@@ -245,7 +247,7 @@ object Routines {
      * 后台跑一次任务：AI 可以联网搜索、查火车票、用不需要确认的连接器工具，最多 6 轮工具。
      * watch=true 是监控检查：回复第一行写【满足】或【不满足】，返回 (满足没有, 结果)。
      */
-    suspend fun runTask(ctx: Context, r: Routine, watch: Boolean = false): Pair<Boolean, String> {
+    suspend fun runTask(ctx: Context, r: Routine, watch: Boolean = false, log: (RunStep) -> Unit = {}): Pair<Boolean, String> {
         val store = Store(ctx)
         val s = store.loadSettings()
         val ep = s.backgroundEndpoint() ?: return false to "还没有填写 API Key，任务没法执行。"
@@ -295,7 +297,7 @@ object Routines {
             execute = { name, args ->
                 val obj = runCatching { Json.parseToJsonElement(args).jsonObject }.getOrNull()
                 fun arg(k: String) = (obj?.get(k) as? JsonPrimitive)?.content.orEmpty()
-                try {
+                (try {
                     when {
                         name == "web_search" && web -> webClient.search(s, arg("query")).let {
                             formatResultsForModel(it, sources + 1).also { _ -> sources += it.size }
@@ -313,8 +315,8 @@ object Routines {
                 } catch (e: kotlinx.coroutines.CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    "工具调用失败：${e.message}"
-                }
+                    "工具调用失败：" + com.jack.ai.tools.ToolSession.errorText(e)
+                }).also { log(RunLog.stepOf(name, it)) }
             },
             onUsage = { ev -> store.addUsage(ep, ev.promptTokens, ev.cacheHit, ev.completionTokens) },
         )
@@ -360,21 +362,32 @@ class RoutineWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
         if (r.kind == "watch") return watch(store, r)
         // 单次任务在 fire() 后会自动标记为完成，仍要允许这次执行。
         if (!r.enabled && r.repeat != "none") return Result.success()
+        val ctx = applicationContext
+        // 运行记录：跑到哪一步、成没成、为什么失败，在「提醒和任务」里能看到
+        val run = RunLog.start(ctx, r)
+        val log: (RunStep) -> Unit = { RunLog.step(ctx, run, it) }
         return try {
             val result = if (r.work) {
                 // Work 可能跑很久，超过 WorkManager 的 10 分钟，要以前台方式运行
                 runCatching { setForeground(foregroundInfo("正在执行：${r.title}")) }
-                com.jack.ai.tools.runBackgroundWork(applicationContext, r) { label ->
+                com.jack.ai.tools.runBackgroundWork(ctx, r, log = log) { label ->
                     runCatching { setForegroundAsync(foregroundInfo("正在执行：${r.title}", label)) }
                 }
-            } else com.jack.ai.tools.TaskResult(Routines.runTask(applicationContext, r).second)
+            } else com.jack.ai.tools.TaskResult(Routines.runTask(ctx, r, log = log).second)
             store.addInbox(InboxItem(r.id, r.convId, r.title, r.prompt, result.text, files = result.files, work = r.work))
-            Routines.notify(applicationContext, r.id, r.title, result.text.take(300), openChat = r.convId)
+            Routines.notify(ctx, r.id, r.title, result.text.take(300), openChat = r.convId)
+            RunLog.finish(ctx, run, "ok", result.text)
             Result.success()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            RunLog.finish(ctx, run, "failed", error = "被系统中途停掉了（可能是省电或 App 被关掉）", retry = true)
+            throw e
         } catch (e: Exception) {
-            if (runAttemptCount < 2) Result.retry()
+            val why = com.jack.ai.tools.ToolSession.errorText(e)
+            val again = runAttemptCount < 2
+            RunLog.finish(ctx, run, "failed", error = why, retry = again)
+            if (again) Result.retry()
             else {
-                store.addInbox(InboxItem(r.id, r.convId, r.title, r.prompt, "这次任务没完成：${e.message ?: "网络问题"}"))
+                store.addInbox(InboxItem(r.id, r.convId, r.title, r.prompt, "这次任务没完成：$why"))
                 Result.failure()
             }
         }
@@ -398,18 +411,24 @@ class RoutineWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
             return Result.success()
         }
         if (now >= r.until) {
+            RunLog.once(ctx, r, "not_met", "到截止时间也没等到，监控已经停了")
             store.addInbox(InboxItem(r.id, r.convId, r.title, r.prompt, "盯到截止时间也没等到结果，监控已经停了。需要的话可以让我再盯一段时间。"))
             Routines.notify(ctx, r.id, "没等到：${r.title}", "监控到期，已经停了", openChat = r.convId)
             update { it.copy(enabled = false) }
             return Result.success()
         }
+        val run = RunLog.start(ctx, r)
+        val log: (RunStep) -> Unit = { RunLog.step(ctx, run, it) }
         val (hit, text) = try {
-            Routines.runTask(ctx, r, watch = true)
+            Routines.runTask(ctx, r, watch = true, log = log)
         } catch (e: kotlinx.coroutines.CancellationException) {
+            RunLog.finish(ctx, run, "failed", error = "被系统中途停掉了", retry = true)
             throw e
         } catch (e: Exception) {
             // 这次查不了（断网、服务出错），等下一次
-            false to "检查出错：${e.message}"
+            val why = com.jack.ai.tools.ToolSession.errorText(e)
+            RunLog.finish(ctx, run, "failed", error = why, retry = true)
+            false to "检查出错：$why"
         }
         if (hit) {
             // 先标成停了，免得后续步骤跑得久、下一次检查又触发一遍；周期任务等做完再撤
@@ -417,7 +436,7 @@ class RoutineWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
             // 任务链：满足后按用户事先的安排接着做（Work，能用全部技能），做完再通知
             val follow = if (r.then.isBlank()) null else try {
                 runCatching { setForeground(foregroundInfo("条件满足，正在接着做：${r.title}")) }
-                com.jack.ai.tools.runBackgroundWork(ctx, r.copy(work = true, prompt = followPrompt(r, text))) { label ->
+                com.jack.ai.tools.runBackgroundWork(ctx, r.copy(work = true, prompt = followPrompt(r, text)), log = log) { label ->
                     runCatching { setForegroundAsync(foregroundInfo("正在接着做：${r.title}", label)) }
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
@@ -428,8 +447,10 @@ class RoutineWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
             val body = "🔔 $text" + (follow?.let { "\n\n**接着做的事**\n${it.text}" } ?: "")
             store.addInbox(InboxItem(r.id, r.convId, r.title, r.prompt, body, files = follow?.files.orEmpty(), work = follow != null))
             Routines.notify(ctx, r.id, "🔔 ${r.title}", (follow?.text ?: text).take(300), openChat = r.convId)
+            RunLog.finish(ctx, run, "ok", text + (follow?.let { "\n接着做：" + it.text } ?: ""))
             WorkManager.getInstance(ctx).cancelUniqueWork("watch:${r.id}")
         } else {
+            if (!text.startsWith("检查出错")) RunLog.finish(ctx, run, "not_met", text)
             update { it.copy(lastRunAt = now) }
         }
         return Result.success()

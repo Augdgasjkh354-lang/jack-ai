@@ -5,6 +5,7 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -146,6 +147,7 @@ fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                         Switch(r.enabled, { on -> vm.saveRoutine(r.copy(enabled = on)) })
                         IconButton(onClick = { vm.deleteRoutine(r.id) }) { Icon(Icons.Default.Delete, "删除") }
                     }
+                    RunHistory(r.id)
                 }
             }
         }
@@ -253,4 +255,43 @@ private fun RoutineDialog(r: Routine, isNew: Boolean, onDismiss: () -> Unit, onS
         ) { DatePicker(ds) }
     }
     Spacer(Modifier.size(0.dp))
+}
+
+/** 一条提醒或任务的运行记录：最近一次的结果一行；点开看最近几次，每次调了哪些工具、留下什么、为什么失败。 */
+@Composable
+private fun RunHistory(routineId: String) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val runs by androidx.compose.runtime.produceState(emptyList<com.jack.ai.data.RunRecord>(), routineId) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.jack.ai.data.RunLog.of(ctx, routineId) }
+    }
+    if (runs.isEmpty()) return
+    var open by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    val colors = MaterialTheme.colorScheme
+    val fmt = remember { java.text.SimpleDateFormat("M月d日 HH:mm", java.util.Locale.CHINA) }
+    fun mark(r: com.jack.ai.data.RunRecord) = when {
+        r.interrupted() || r.status == "failed" -> "✗"
+        r.status == "running" -> "…"
+        r.status == "not_met" -> "○"
+        else -> "✓"
+    }
+    val last = runs.first()
+    Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 10.dp)) {
+        Text(
+            "上次 ${fmt.format(java.util.Date(last.startedAt))} ${mark(last)} ${last.statusText()}" + if (runs.size > 1 || last.steps.isNotEmpty() || last.error.isNotBlank()) (if (open) "  收起" else "  查看记录") else "",
+            style = MaterialTheme.typography.labelSmall,
+            color = if (mark(last) == "✗") colors.error else colors.onSurfaceVariant,
+            modifier = Modifier.clickable { open = !open },
+        )
+        if (open) runs.take(8).forEach { r ->
+            Column(Modifier.padding(top = 6.dp)) {
+                Text("${mark(r)} ${fmt.format(java.util.Date(r.startedAt))} · ${r.statusText()}", style = MaterialTheme.typography.labelMedium)
+                r.steps.forEach { st ->
+                    Text("    ${if (st.ok) "·" else "✗"} ${st.tool}" + if (st.note.isNotBlank()) "：${st.note}" else "",
+                        style = MaterialTheme.typography.labelSmall, color = if (st.ok) colors.onSurfaceVariant else colors.error)
+                }
+                if (r.error.isNotBlank()) Text("    原因：${r.error}", style = MaterialTheme.typography.labelSmall, color = colors.error)
+                else if (r.result.isNotBlank()) Text("    ${r.result.lineSequence().first().take(100)}", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+            }
+        }
+    }
 }
