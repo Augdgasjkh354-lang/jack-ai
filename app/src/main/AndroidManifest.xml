@@ -48,6 +48,14 @@
             </intent-filter>
         </activity>
         <!-- 万能收件箱：分享菜单里的「存进 Jack 收件箱」，进来后自动归档，不用再按发送 -->
+        <!-- Jack 浏览器：自己翻网页，可以走 Jack 专用代理 -->
+        <activity
+            android:name=".ui.BrowserActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:windowSoftInputMode="adjustResize" />
+
         <activity-alias
             android:name=".InboxShare"
             android:exported="true"

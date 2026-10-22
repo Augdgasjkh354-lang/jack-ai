@@ -88,6 +88,7 @@ fun HistoryDrawer(
     onOpenApps: () -> Unit,
     onSettings: () -> Unit,
 ) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     var renaming by remember { mutableStateOf<Conversation?>(null) }
     var deleting by remember { mutableStateOf<Conversation?>(null) }
     var query by remember { mutableStateOf("") }
@@ -151,6 +152,7 @@ fun HistoryDrawer(
                         Tool(Icons.Default.Build, "技能", onClick = onOpenSkills),
                         Tool(Icons.Default.Notifications, "提醒和任务", badge = state.routines.count { it.enabled }.takeIf { it > 0 }?.toString(), onClick = onOpenRoutines),
                         Tool(AppIcons.Code, "小工具", onClick = onOpenApps),
+                        Tool(AppIcons.Globe, "浏览器", onClick = { ctx.startActivity(android.content.Intent(ctx, BrowserActivity::class.java)) }),
                     ))
                 }
                 if (pinned.isNotEmpty()) {
