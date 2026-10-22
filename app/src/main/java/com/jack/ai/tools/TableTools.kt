@@ -82,20 +82,42 @@ internal suspend fun ToolSession.queryTable(args: JsonObject): String {
     }
     val sumCols = (args["sum"] as? JsonArray).orEmpty().map { it.text() }.filter { it.isNotBlank() }
     val limit = (args["limit"].text().toIntOrNull() ?: 50).coerceIn(1, 500)
+    val orderBy = args["order_by"].text().trim()
+    val desc = args["desc"].text() == "true"
+    val groupBy = args["group_by"].text().trim()
+    val period = args["period"].text().trim()
     return runTool("查「$name」") {
         val t = withContext(Dispatchers.IO) { table(name) }
-        val bad = (where.map { it.column } + sumCols).filter { it !in t.columns }
+        val bad = (where.map { it.column } + sumCols + listOf(orderBy, groupBy).filter { it.isNotEmpty() }).filter { it !in t.columns }
         if (bad.isNotEmpty()) throw IllegalArgumentException("没有这些列：${bad.joinToString("、")}。现有列：${t.columns.joinToString("、")}")
         val hits = t.rows.withIndex().filter { (_, r) -> Tables.matches(t, r, where) }
         val text = buildString {
             append("「$name」符合条件的共 ${hits.size} 行")
-            if (hits.size > limit) append("，下面是最后 $limit 行")
-            append("。\n行号,").append(t.columns.joinToString(",")).append("\n")
-            hits.takeLast(limit).forEach { (i, r) -> append(i + 1).append(',').append(r.joinToString(",")).append("\n") }
+            if (groupBy.isNotEmpty()) {
+                // 分组汇总：按日期分组时按时间排，其他按第一个求和列从大到小（没有求和列就按行数）
+                val groups = Tables.group(t, hits.map { it.value }, groupBy, period, sumCols).let { gs ->
+                    when {
+                        orderBy == groupBy || period in setOf("day", "month", "year") ->
+                            gs.sortedWith { a, b -> Tables.compareCells(a.key, b.key) }.let { if (desc) it.reversed() else it }
+                        sumCols.isNotEmpty() -> gs.sortedByDescending { it.sums.getValue(sumCols.first()) }
+                        else -> gs.sortedByDescending { it.count }
+                    }
+                }
+                val by = groupBy + when (period) { "year" -> "（按年）"; "month" -> "（按月）"; "day" -> "（按天）"; else -> "" }
+                append("，按「$by」分成 ${groups.size} 组：\n$groupBy,行数").append(sumCols.joinToString("") { ",${it}合计" }).append("\n")
+                groups.take(limit).forEach { g -> append(g.key).append(',').append(g.count).append(sumCols.joinToString("") { ",${num(g.sums.getValue(it))}" }).append("\n") }
+                if (groups.size > limit) append("……还有 ${groups.size - limit} 组没列出\n")
+            } else {
+                // 指定了排序就给前 limit 行（「最贵的 5 笔」）；没指定就给最近的 limit 行
+                val rows = if (orderBy.isNotEmpty()) Tables.sortBy(t, hits, orderBy, desc).take(limit) else hits.takeLast(limit)
+                if (hits.size > limit) append(if (orderBy.isNotEmpty()) "，下面是按「$orderBy」${if (desc) "从大到小" else "从小到大"}的前 $limit 行" else "，下面是最后 $limit 行")
+                append("。\n行号,").append(t.columns.joinToString(",")).append("\n")
+                rows.forEach { (i, r) -> append(i + 1).append(',').append(r.joinToString(",")).append("\n") }
+            }
             sumCols.forEach { c ->
                 val ci = t.columns.indexOf(c)
-                val vals = hits.mapNotNull { it.value[ci].replace(",", "").replace("¥", "").replace("元", "").trim().toDoubleOrNull() }
-                append("\n「$c」合计 ${num(vals.sum())}（${vals.size} 个数字）")
+                val vals = hits.mapNotNull { Tables.number(it.value[ci]) }
+                append("\n「$c」总合计 ${num(vals.sum())}（${vals.size} 个数字）")
             }
         }
         text to SearchRecord("查「$name」：${hits.size} 行")

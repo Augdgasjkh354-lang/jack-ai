@@ -86,4 +86,31 @@ class TablesTest {
         assertTrue(csv.contains(",-12.5"))
         assertFalse(csv.contains("'-12.5"))
     }
+
+    @Test
+    fun sortAndGroup() {
+        val led = Table("记账", listOf("日期", "类别", "金额"), listOf(
+            listOf("2026-9-28", "餐饮", "30"),
+            listOf("2026-10-02", "交通", "1,200"),
+            listOf("2026-10-5", "餐饮", "25.5"),
+            listOf("2026-09-01", "餐饮", "100"),
+            listOf("", "其他", ""),
+        ))
+        val rows = led.rows.withIndex().toList()
+        // 金额从大到小，空的排最后，千分位逗号认得
+        assertEquals(listOf("1,200", "100", "30", "25.5", ""), Tables.sortBy(led, rows, "金额", true).map { it.value[2] })
+        // 日期写法不统一也按日期排，并保留原来的行号
+        val byDate = Tables.sortBy(led, rows, "日期", false)
+        assertEquals(listOf(4, 1, 2, 3, 5), byDate.map { it.index + 1 })
+        // 按月分组求和：上个月 130，这个月 1225.5
+        val months = Tables.group(led, led.rows.dropLast(1), "日期", "month", listOf("金额")).associate { it.key to it.sums["金额"] }
+        assertEquals(mapOf("2026-09" to 130.0, "2026-10" to 1225.5), months)
+        // 按类别：行数和合计
+        val cats = Tables.group(led, led.rows, "类别", "", listOf("金额")).associateBy { it.key }
+        assertEquals(3, cats["餐饮"]!!.count)
+        assertEquals(155.5, cats["餐饮"]!!.sums["金额"]!!, 0.001)
+        assertEquals(0.0, cats["其他"]!!.sums["金额"]!!, 0.0)
+        // 中文按拼音排
+        assertTrue(Tables.compareCells("餐饮", "交通") < 0)
+    }
 }

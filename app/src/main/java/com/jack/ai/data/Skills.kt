@@ -245,7 +245,7 @@ val BUILTIN_SKILLS = listOf(
 3. remind_minutes 是提前多少分钟提醒，默认 15；用户说了提前多久就按用户的来，不要提醒写 -1。
    每周例会、每年生日这种重复的事，用 repeat 一次加好，不要一次次地加。删除或修改重复日程会作用于整个系列。
 4. 用户问“我某天有什么安排”时，用 list_calendar_events 查，start_date 写 yyyy-MM-dd，days 写查几天。回答时按时间顺序简洁列出。
-5. 要删除或修改日程，先用 list_calendar_events 找到它的编号：删除用 delete_calendar_event；修改直接用 add_calendar_event 写新的，replace 填旧编号，一步完成。删除前如果有多个相似的，先问用户是哪一个。
+5. 要删除或修改日程，先用 list_calendar_events 找到它的编号：删除用 delete_calendar_event；修改用 add_calendar_event，replace 填它的编号，原地改（编号不变）：标题和开始时间写全，其他没变的（地点、备注、提醒、重复）可以不写。重复日程改的是整个系列。删除前如果有多个相似的，先问用户是哪一个。
 6. 工具返回“没有日历权限”时，告诉用户去左侧菜单「提醒和任务」页面点「允许读写日历」。添加日程时没有权限会打开日历 App 让用户自己点保存，照实告诉用户。
 7. 加好后用一句话确认：哪天几点、什么事。""",
     ),
@@ -273,7 +273,9 @@ val BUILTIN_SKILLS = listOf(
         instructions = """表格的做法：
 1. 现有的表和列名列在每条用户消息前面的【表格】里。已经有合适的表就往里记，不要另建一张差不多的。
 2. 记一笔用 add_rows，每行按列名填：日期统一写 yyyy-MM-dd，金额只写数字，不带单位；用户没说日期就用今天。表不存在会按列名自动新建，列名简短（比如 记账：日期、类别、金额、备注）。
-3. 查询和汇总用 query_table：where 筛选（比如 日期 >= 2026-10-01），sum 求和。数字一律以工具算出的为准，不要自己心算。
+3. 查询和汇总用 query_table：where 筛选（比如 日期 >= 2026-10-01 且 日期 <= 2026-10-31），sum 求和。数字一律以工具算出的为准，不要自己心算。
+   排序：order_by 填列名，desc=true 从大到小（「最贵的 5 笔」= order_by 金额、desc、limit 5）。
+   分组：group_by 填列名，配合 sum（「这个月各类别花了多少」= where 本月、group_by 类别、sum 金额）；按时间汇总时 group_by 填日期列、period 填 month（「最近几个月每月花多少」「上个月比上上个月多多少」一次查出来再比较）。
 4. 改和删用 edit_table：先 query_table 查到行号，再 action=update（set 写要改的列）或 delete_rows。删了之后行号会变，再操作前重新查。删整张表用 drop。
 5. 记好、改好后用一句话确认结果，比如“记好了：10月17日 午饭 25 元，这个月餐饮共 680 元”。""",
 
@@ -341,7 +343,7 @@ object SkillTools {
     val UPDATE_PLAN = schema("""{"type":"function","function":{"name":"update_plan","description":"写下或更新这次任务的步骤清单，会显示给用户看进度。每次都传完整的清单。","parameters":{"type":"object","properties":{"items":{"type":"array","items":{"type":"object","properties":{"text":{"type":"string","description":"这一步做什么，简短"},"status":{"type":"string","enum":["pending","doing","done"],"description":"pending 没开始，doing 正在做，done 做完了"}},"required":["text","status"]}}},"required":["items"]}}}""")
     val DELEGATE_TASKS = schema("""{"type":"function","function":{"name":"delegate_tasks","description":"把几件彼此独立的子任务（主要是查资料、读文件）同时派出去并行做，全部做完后返回各自的结果。最多 5 件。","parameters":{"type":"object","properties":{"tasks":{"type":"array","items":{"type":"object","properties":{"title":{"type":"string","description":"子任务名，简短"},"instructions":{"type":"string","description":"要查清楚什么、结果要包含什么"}},"required":["title","instructions"]}}},"required":["tasks"]}}}""")
     val ADD_ROWS = schema("""{"type":"function","function":{"name":"add_rows","description":"往表里记几行。每行是一个对象，键是列名；表不存在就按这些列名新建，没有的列会自动加上。","parameters":{"type":"object","properties":{"name":{"type":"string","description":"表名，比如 记账"},"rows":{"type":"array","items":{"type":"object"},"description":"比如 [{\"日期\":\"2026-10-17\",\"类别\":\"餐饮\",\"金额\":\"25\"}]"}},"required":["name","rows"]}}}""")
-    val QUERY_TABLE = schema("""{"type":"function","function":{"name":"query_table","description":"查表：按条件筛选行，可以对某些列求和。返回行号和内容。","parameters":{"type":"object","properties":{"name":{"type":"string"},"where":{"type":"array","items":{"type":"object","properties":{"column":{"type":"string"},"op":{"type":"string","enum":["=","!=","contains",">","<",">=","<="]},"value":{"type":"string"}},"required":["column","op","value"]},"description":"都满足才算，不填就是全部"},"sum":{"type":"array","items":{"type":"string"},"description":"要求和的列"},"limit":{"type":"integer","description":"最多返回几行，默认 50"}},"required":["name"]}}}""")
+    val QUERY_TABLE = schema("""{"type":"function","function":{"name":"query_table","description":"查表：按条件筛选行，可以排序、分组汇总（比如按月、按类别）、对某些列求和。返回行号和内容，或每组的行数和合计。","parameters":{"type":"object","properties":{"name":{"type":"string"},"where":{"type":"array","items":{"type":"object","properties":{"column":{"type":"string"},"op":{"type":"string","enum":["=","!=","contains",">","<",">=","<="]},"value":{"type":"string"}},"required":["column","op","value"]},"description":"都满足才算，不填就是全部"},"sum":{"type":"array","items":{"type":"string"},"description":"要求和的列"},"order_by":{"type":"string","description":"按哪一列排序（日期按日期、数字按数字）"},"desc":{"type":"boolean","description":"从大到小 / 从新到旧"},"group_by":{"type":"string","description":"按哪一列分组汇总，每组给出行数和 sum 各列的合计"},"period":{"type":"string","enum":["day","month","year"],"description":"group_by 是日期列时，按天、月或年分组"},"limit":{"type":"integer","description":"最多返回几行（或几组），默认 50"}},"required":["name"]}}}""")
     val USE_SKILL = schema("""{"type":"function","function":{"name":"use_skill","description":"读取某个 skill 的详细做法说明。使用一个 skill 之前必须先调用它。","parameters":{"type":"object","properties":{"name":{"type":"string","description":"skill 的名字"}},"required":["name"]}}}""")
 
     val WEB_SEARCH = schema("""{"type":"function","function":{"name":"web_search","description":"在互联网上搜索最新信息，返回若干网页的标题、链接和摘要。","parameters":{"type":"object","properties":{"query":{"type":"string","description":"搜索关键词，简洁明确"}},"required":["query"]}}}""")
@@ -370,7 +372,7 @@ object SkillTools {
 
     val SAVE_FLASHCARDS = schema("""{"type":"function","function":{"name":"save_flashcards","description":"把知识点保存成复习卡片，用户之后会按间隔重复复习。","parameters":{"type":"object","properties":{"deck":{"type":"string","description":"卡组名，一般是主题"},"cards":{"type":"array","items":{"type":"object","properties":{"front":{"type":"string","description":"问题"},"back":{"type":"string","description":"答案"}},"required":["front","back"]}}},"required":["deck","cards"]}}}""")
 
-    val ADD_EVENT = schema("""{"type":"function","function":{"name":"add_calendar_event","description":"在手机日历里添加一个日程。","parameters":{"type":"object","properties":{"title":{"type":"string","description":"日程标题"},"start":{"type":"string","description":"开始时间 yyyy-MM-dd HH:mm；全天的事只写 yyyy-MM-dd"},"end":{"type":"string","description":"结束时间，格式同 start，不填默认 1 小时"},"location":{"type":"string"},"notes":{"type":"string","description":"备注"},"remind_minutes":{"type":"integer","description":"提前多少分钟提醒，默认 15，不要提醒写 -1"},"repeat":{"type":"string","enum":["none","daily","weekdays","weekly","monthly","yearly"],"description":"重复：默认 none；weekly 是每周 start 那一天，yearly 适合生日纪念日"},"replace":{"type":"string","description":"改已有日程时填：旧日程的编号。新的写好后自动删掉旧的"}},"required":["title","start"]}}}""")
+    val ADD_EVENT = schema("""{"type":"function","function":{"name":"add_calendar_event","description":"在手机日历里添加一个日程。","parameters":{"type":"object","properties":{"title":{"type":"string","description":"日程标题"},"start":{"type":"string","description":"开始时间 yyyy-MM-dd HH:mm；全天的事只写 yyyy-MM-dd"},"end":{"type":"string","description":"结束时间，格式同 start，不填默认 1 小时"},"location":{"type":"string"},"notes":{"type":"string","description":"备注"},"remind_minutes":{"type":"integer","description":"提前多少分钟提醒，默认 15，不要提醒写 -1"},"repeat":{"type":"string","enum":["none","daily","weekdays","weekly","monthly","yearly"],"description":"重复：默认 none；weekly 是每周 start 那一天，yearly 适合生日纪念日"},"replace":{"type":"string","description":"改已有日程时填：它的编号。原地改，编号不变；标题和开始时间要写全，地点、备注、提醒、重复方式不写就沿用原来的"}},"required":["title","start"]}}}""")
 
     val LIST_EVENTS = schema("""{"type":"function","function":{"name":"list_calendar_events","description":"查看手机日历里一段时间内的日程。","parameters":{"type":"object","properties":{"start_date":{"type":"string","description":"从哪天开始，yyyy-MM-dd，默认今天"},"days":{"type":"integer","description":"查几天，默认 1，最多 62"}}}}}""")
 

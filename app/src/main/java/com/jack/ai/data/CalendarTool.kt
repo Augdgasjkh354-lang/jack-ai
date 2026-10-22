@@ -85,11 +85,63 @@ object CalendarTool {
         location: String, notes: String, remindMinutes: Int?, rrule: String? = null,
     ): Long? {
         val calId = writableCalendarId(ctx) ?: return null
-        val values = ContentValues().apply {
+        val values = timeValues(begin, end, allDay, rrule, update = false).apply {
             put(CalendarContract.Events.CALENDAR_ID, calId)
             put(CalendarContract.Events.TITLE, title)
             if (location.isNotBlank()) put(CalendarContract.Events.EVENT_LOCATION, location)
             if (notes.isNotBlank()) put(CalendarContract.Events.DESCRIPTION, notes)
+        }
+        val uri = ctx.contentResolver.insert(CalendarContract.Events.CONTENT_URI, values) ?: return null
+        val id = ContentUris.parseId(uri)
+        if (remindMinutes != null && remindMinutes >= 0) setReminder(ctx, id, remindMinutes)
+        return id
+    }
+
+    /**
+     * 原地改一个日程：编号不变，重复日程里单独改过、删过的那几次也保留。
+     * location / notes / remindMinutes / rrule 传 null 就不动原来的；rrule 传 "" 是改成不重复。
+     * 返回 false 表示日历里没有这个编号。
+     */
+    fun update(
+        ctx: Context, id: Long, title: String, begin: Long, end: Long, allDay: Boolean,
+        location: String?, notes: String?, remindMinutes: Int?, rrule: String?,
+    ): Boolean {
+        val uri = ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, id)
+        // 没说重复方式就沿用原来的（改时间不该把「每周一次」弄丢）
+        val keep = rrule ?: ctx.contentResolver.query(uri, arrayOf(CalendarContract.Events.RRULE), null, null, null)
+            ?.use { c -> if (c.moveToFirst()) c.getString(0).orEmpty() else null } ?: return false
+        val values = timeValues(begin, end, allDay, keep.ifBlank { null }, update = true).apply {
+            put(CalendarContract.Events.TITLE, title)
+            location?.let { put(CalendarContract.Events.EVENT_LOCATION, it) }
+            notes?.let { put(CalendarContract.Events.DESCRIPTION, it) }
+        }
+        if (ctx.contentResolver.update(uri, values, null, null) <= 0) return false
+        if (remindMinutes != null) {
+            runCatching {
+                ctx.contentResolver.delete(CalendarContract.Reminders.CONTENT_URI, "${CalendarContract.Reminders.EVENT_ID}=?", arrayOf(id.toString()))
+            }
+            if (remindMinutes >= 0) setReminder(ctx, id, remindMinutes)
+        }
+        return true
+    }
+
+    /** 这个日程现在是不是重复的。 */
+    fun isRecurring(ctx: Context, id: Long): Boolean =
+        ctx.contentResolver.query(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, id),
+            arrayOf(CalendarContract.Events.RRULE), null, null, null)?.use { c -> c.moveToFirst() && !c.getString(0).isNullOrBlank() } ?: false
+
+    private fun setReminder(ctx: Context, id: Long, minutes: Int) {
+        runCatching {
+            ctx.contentResolver.insert(CalendarContract.Reminders.CONTENT_URI, ContentValues().apply {
+                put(CalendarContract.Reminders.EVENT_ID, id)
+                put(CalendarContract.Reminders.MINUTES, minutes)
+                put(CalendarContract.Reminders.METHOD, CalendarContract.Reminders.METHOD_ALERT)
+            })
+        }
+    }
+
+    /** 时间相关的几列。改日程时把用不上的那一列清空（重复日程用时长、不用结束时间，反过来也一样）。 */
+    private fun timeValues(begin: Long, end: Long, allDay: Boolean, rrule: String?, update: Boolean) = ContentValues().apply {
             if (allDay) {
                 val start = utcMidnight(begin)
                 val days = ((utcMidnight(end) - start) / 86_400_000L).coerceAtLeast(1)
@@ -106,20 +158,12 @@ object CalendarTool {
                 put(CalendarContract.Events.EVENT_TIMEZONE, TimeZone.getDefault().id)
             }
             if (rrule != null) put(CalendarContract.Events.RRULE, rrule)
-        }
-        val uri = ctx.contentResolver.insert(CalendarContract.Events.CONTENT_URI, values) ?: return null
-        val id = ContentUris.parseId(uri)
-        if (remindMinutes != null && remindMinutes >= 0) {
-            runCatching {
-                ctx.contentResolver.insert(CalendarContract.Reminders.CONTENT_URI, ContentValues().apply {
-                    put(CalendarContract.Reminders.EVENT_ID, id)
-                    put(CalendarContract.Reminders.MINUTES, remindMinutes)
-                    put(CalendarContract.Reminders.METHOD, CalendarContract.Reminders.METHOD_ALERT)
-                })
+            if (update) {
+                if (!allDay) put(CalendarContract.Events.ALL_DAY, 0)
+                if (rrule == null) { putNull(CalendarContract.Events.RRULE); putNull(CalendarContract.Events.DURATION) }
+                else putNull(CalendarContract.Events.DTEND)
             }
         }
-        return id
-    }
 
     /** 没有写权限时，打开日历 App 的新建日程页面，内容都填好了。 */
     /** 重复方式 → 日历的 RRULE；不重复返回 null。 */

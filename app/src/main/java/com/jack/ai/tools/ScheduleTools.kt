@@ -103,7 +103,7 @@ internal suspend fun ToolSession.removeRoutine(id: String) = runTool("删除提�
 
 internal suspend fun ToolSession.addEvent(args: JsonObject): String {
     val title = args["title"].text().ifBlank { "日程" }
-    // 改日程：新的写进日历后再删旧的
+    // 改日程：原地改（编号不变，重复日程单独改过的那几次也保留）；旧的找不到再新建
     val oldId = args["replace"].text().trim().removePrefix("编号").trim().toLongOrNull()
     return runTool("添加日程：$title") {
         val (begin, dateOnly) = CalendarTool.parse(args["start"].text())
@@ -117,6 +117,32 @@ internal suspend fun ToolSession.addEvent(args: JsonObject): String {
         val rrule = CalendarTool.rrule(args["repeat"].text())
         val repeatText = REPEAT_NAMES[args["repeat"].text()]?.let { "，$it" }.orEmpty()
         val shown = SimpleDateFormat(if (allDay) "M月d日 EEE" else "M月d日 EEE HH:mm", Locale.CHINA).format(Date(begin))
+        if (oldId != null && CalendarTool.canWrite(app)) {
+            // 没写的就不动：地点、备注、提醒、重复方式都沿用原来的
+            val updated = withContext(Dispatchers.IO) {
+                CalendarTool.update(
+                    app, oldId, title, begin, end, allDay,
+                    location = args["location"]?.let { location }, notes = args["notes"]?.let { notes },
+                    remindMinutes = args["remind_minutes"]?.let { remind }, rrule = args["repeat"]?.let { rrule ?: "" },
+                )
+            }
+            if (updated) {
+                val back = withContext(Dispatchers.IO) { runCatching { CalendarTool.get(app, oldId) }.getOrNull() }
+                val check = Verify.note(listOfNotNull(
+                    when {
+                        back == null -> "改完后在日历里查不到这个日程"
+                        back.first != title -> "日历里的标题是「${back.first}」，和要改成的不一样"
+                        !allDay && back.second != begin -> "日历里的开始时间和要改成的不一样"
+                        else -> null
+                    },
+                ), "已在日历里查到改好的日程，标题和时间都对")
+                val series = withContext(Dispatchers.IO) { runCatching { CalendarTool.isRecurring(app, oldId) }.getOrDefault(false) }
+                host.refreshWidget()
+                return@runTool "已改好日程（编号还是 $oldId）：$shown「$title」" +
+                    (if (series) "。这是重复日程，改的是整个系列，之前单独改过或删掉的那几次保持不变" else "") + "。$check" to
+                    SearchRecord("改日程：$title")
+            }
+        }
         val id = if (CalendarTool.canWrite(app)) withContext(Dispatchers.IO) {
             CalendarTool.insert(app, title, begin, end, allDay, location, notes, remind.takeIf { it >= 0 }, rrule)
         } else null

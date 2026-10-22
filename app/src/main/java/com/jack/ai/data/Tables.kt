@@ -97,6 +97,51 @@ object Tables {
     /** 一个筛选条件：列、比较方式（= != contains > < >= <=）、值。数字按数字比，其他按文字比。 */
     data class Where(val column: String, val op: String, val value: String)
 
+    /** 单元格里的数字：去掉千分位逗号、¥、元。 */
+    fun number(s: String): Double? = s.replace(",", "").replace("¥", "").replace("元", "").trim().toDoubleOrNull()
+
+    /** 两个单元格比大小：都是日期按日期，都是数字按数字，否则按文字。空的永远排最后。 */
+    fun compareCells(a: String, b: String): Int {
+        if (a.isBlank() || b.isBlank()) return if (a.isBlank() && b.isBlank()) 0 else if (a.isBlank()) 1 else -1
+        val da = normDate(a); val db = normDate(b)
+        if (da != null && db != null) return da.compareTo(db)
+        val na = number(a); val nb = number(b)
+        if (na != null && nb != null) return na.compareTo(nb)
+        return java.text.Collator.getInstance(java.util.Locale.CHINA).compare(a, b)
+    }
+
+    /** 按某列排序（行带着原来的行号）。降序时空的仍在最后。 */
+    fun sortBy(t: Table, rows: List<IndexedValue<List<String>>>, column: String, desc: Boolean): List<IndexedValue<List<String>>> {
+        val i = t.columns.indexOf(column)
+        return rows.sortedWith { x, y ->
+            val a = x.value[i]; val b = y.value[i]
+            if (a.isBlank() || b.isBlank()) compareCells(a, b) else if (desc) compareCells(b, a) else compareCells(a, b)
+        }
+    }
+
+    data class Group(val key: String, val count: Int, val sums: Map<String, Double>)
+
+    /**
+     * 分组汇总：按某列的值分组；period 填 day / month / year 时按那一列的日期分（比如按月）。
+     * 每组给出行数和 sumCols 各列的合计。
+     */
+    fun group(t: Table, rows: List<List<String>>, column: String, period: String, sumCols: List<String>): List<Group> {
+        val i = t.columns.indexOf(column)
+        val keyOf: (String) -> String = { v ->
+            val d = normDate(v)
+            when (period) {
+                "year" -> d?.take(4) ?: "（不是日期）"
+                "month" -> d?.take(7) ?: "（不是日期）"
+                "day" -> d ?: "（不是日期）"
+                else -> v.trim().ifBlank { "（空）" }
+            }
+        }
+        val idx = sumCols.associateWith { t.columns.indexOf(it) }
+        return rows.groupBy { keyOf(it[i]) }.map { (k, rs) ->
+            Group(k, rs.size, idx.mapValues { (_, ci) -> rs.sumOf { r -> number(r[ci]) ?: 0.0 } })
+        }
+    }
+
     fun matches(t: Table, row: List<String>, where: List<Where>): Boolean = where.all { w ->
         val i = t.columns.indexOf(w.column)
         if (i < 0) return@all false
