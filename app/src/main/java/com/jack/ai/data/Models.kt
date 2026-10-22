@@ -213,6 +213,8 @@ data class Settings(
     val proxyNode: String = "",
     /** Notion 内部集成的密钥（ntn_…）。不进备份。 */
     val notionToken: String = "",
+    /** GitHub 令牌（只读权限就够）。不填也能看公开项目；不进备份。 */
+    val githubToken: String = "",
 )
 
 /** 完全授权现在是否有效（到点自动失效）。 */

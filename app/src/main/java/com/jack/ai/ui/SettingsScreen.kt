@@ -158,6 +158,10 @@ fun SettingsScreen(
                 ConnectorsSection(vm, settings.mcpServers)
             }
 
+            Section("GitHub") {
+                GitHubSection(vm, settings)
+            }
+
             Section("Notion") {
                 NotionSection(vm, settings)
             }

@@ -211,7 +211,7 @@ class Store(context: Context) {
         val obj = kotlinx.serialization.json.buildJsonObject {
             prefs.all.forEach { (k, v) ->
                 // 代理的订阅地址和节点里有密码，也不进备份
-                if (k == "apiKey" || k == "tavilyKey" || k == "proxySub" || k == "proxyNodes" || k == "notionToken") return@forEach
+                if (k == "apiKey" || k == "tavilyKey" || k == "proxySub" || k == "proxyNodes" || k == "notionToken" || k == "githubToken") return@forEach
                 // 其他服务的 Key 也不进备份
                 val v = if (k == "providers" && v is String) runCatching {
                     val list = json.decodeFromString(ListSerializer(Provider.serializer()), v).map { it.copy(apiKey = "") }
@@ -338,6 +338,7 @@ class Store(context: Context) {
             } ?: emptyList(),
             proxyNode = prefs.getString("proxyNode", "") ?: "",
             notionToken = prefs.getString("notionToken", "") ?: "",
+            githubToken = prefs.getString("githubToken", "") ?: "",
         ).also { com.jack.ai.api.Net.apply(it) }
     }
 
@@ -384,6 +385,7 @@ class Store(context: Context) {
             .putString("proxyNodes", json.encodeToString(ListSerializer(ProxyNode.serializer()), s.proxyNodes))
             .putString("proxyNode", s.proxyNode)
             .putString("notionToken", s.notionToken)
+            .putString("githubToken", s.githubToken)
             .apply()
         com.jack.ai.api.Net.apply(s)
     }

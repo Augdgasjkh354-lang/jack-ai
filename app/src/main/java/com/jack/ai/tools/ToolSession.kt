@@ -160,6 +160,7 @@ class ToolSession(
             name.startsWith(com.jack.ai.data.Mcp.PREFIX) -> callConnector(name, args)
             name == "query_trains" && SkillIds.TRAIN in skillIds -> queryTrains(args)
             name == "create_app" && SkillIds.APP in skillIds -> makeApp(args)
+            name == "github" && SkillIds.GITHUB in skillIds -> github(args)
             name == "browser" && SkillIds.BROWSER in skillIds -> browse(args)
             name == "notion_search" && SkillIds.NOTION in skillIds -> notionSearch(args)
             name == "notion_read" && SkillIds.NOTION in skillIds -> notionRead(args)
@@ -224,7 +225,7 @@ class ToolSession(
 
     companion object {
         /** 返回外部内容的工具：内容里可能藏着冒充用户的指令。 */
-        val EXTERNAL_TOOLS = setOf("list_emails", "read_email", "web_search", "read_webpage", "notion_search", "notion_read", "browser")
+        val EXTERNAL_TOOLS = setOf("list_emails", "read_email", "web_search", "read_webpage", "notion_search", "notion_read", "browser", "github")
 
         /** 报错尽量带上具体原因，模型才知道该重试、换方法还是去问用户。 */
         fun errorText(e: Exception): String = when (e) {
