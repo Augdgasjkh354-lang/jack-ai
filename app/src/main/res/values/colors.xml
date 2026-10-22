@@ -1,5 +1,5 @@
 <resources>
-    <color name="ic_launcher_background">#C4673F</color>
+    <color name="ic_launcher_background">#C7673C</color>
     <!-- 小组件配色，夜间模式在 values-night 里 -->
     <color name="widget_bg">#FFFFFF</color>
     <color name="widget_stroke">#E5DFD7</color>
