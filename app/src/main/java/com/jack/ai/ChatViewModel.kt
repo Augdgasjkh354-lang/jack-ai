@@ -612,7 +612,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 patchMessage(convId, reply.id) { it.copy(error = e.message) }
             } catch (e: IOException) {
                 flush()
-                patchMessage(convId, reply.id) { it.copy(error = "网络连接失败：${e.message ?: "请检查网络"}") }
+                patchMessage(convId, reply.id) { it.copy(error = "网络连接失败：${e.message ?: "请检查网络"}" + com.jack.ai.api.Net.hint()) }
             } catch (e: Exception) {
                 flush()
                 patchMessage(convId, reply.id) { it.copy(error = "出错了：${e.message}") }
@@ -791,6 +791,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun saveConnector(server: com.jack.ai.data.McpServer) = settingsFeature.saveConnector(server)
     fun setConnector(server: com.jack.ai.data.McpServer) = settingsFeature.setConnector(server)
     fun deleteConnector(id: String) = settingsFeature.deleteConnector(id)
+    suspend fun importProxy(input: String) = settingsFeature.importProxy(input)
+    suspend fun refreshProxy() = settingsFeature.refreshProxy()
+    suspend fun testProxy() = settingsFeature.testProxy()
+    fun clearProxy() = settingsFeature.clearProxy()
 
     // 压缩
     fun compress(convId: String? = _state.value.currentId, manual: Boolean = true) = compression.compress(convId, manual)

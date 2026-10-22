@@ -50,6 +50,8 @@ data class McpServer(
     /** 每次调用都先问用户。 */
     val askFirst: Boolean = false,
     val tools: List<McpTool> = emptyList(),
+    /** 网络路线：auto 按规则（国内直连、国外走 Jack 专用代理）、direct 直连、proxy 走代理。 */
+    val route: String = "auto",
 )
 
 class McpException(message: String) : Exception(message)
@@ -195,7 +197,10 @@ object Mcp {
          * 这个连接器专用的客户端（和 sharedHttp 共用连接池）。服务器把请求跳转到别的网站时，
          * 跳过去的那一跳去掉 Key 所在的请求头，不把 Key 带给别人。
          */
-        val http = com.jack.ai.api.sharedHttp.newBuilder().addNetworkInterceptor { chain ->
+        val http = com.jack.ai.api.sharedHttp.newBuilder()
+            // 这个连接器走哪条路：按规则、直连，还是 Jack 专用代理
+            .proxySelector(com.jack.ai.api.Net.selectorFor(server.route))
+            .addNetworkInterceptor { chain ->
             val req = chain.request()
             if (req.url.host.equals(server.url.trim().toHttpUrlOrNull()?.host, true)) chain.proceed(req)
             else chain.proceed(req.newBuilder().removeHeader("Authorization").apply { keyHeader()?.let { removeHeader(it) } }.build())

@@ -23,6 +23,10 @@ class Store(context: Context) {
     private val dir = context.filesDir
     private val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
 
+    init {
+        com.jack.ai.api.Net.init(app)
+    }
+
     private fun <T> load(name: String, ser: KSerializer<T>): List<T> = synchronized(LOCK) { loadUnlocked(name, ser) }
 
     /**
@@ -206,7 +210,8 @@ class Store(context: Context) {
     fun exportPrefs(): String {
         val obj = kotlinx.serialization.json.buildJsonObject {
             prefs.all.forEach { (k, v) ->
-                if (k == "apiKey" || k == "tavilyKey") return@forEach
+                // 代理的订阅地址和节点里有密码，也不进备份
+                if (k == "apiKey" || k == "tavilyKey" || k == "proxySub" || k == "proxyNodes") return@forEach
                 // 其他服务的 Key 也不进备份
                 val v = if (k == "providers" && v is String) runCatching {
                     val list = json.decodeFromString(ListSerializer(Provider.serializer()), v).map { it.copy(apiKey = "") }
@@ -326,7 +331,13 @@ class Store(context: Context) {
             mcpServers = prefs.getString("mcpServers", null)?.let {
                 runCatching { json.decodeFromString(ListSerializer(McpServer.serializer()), it) }.getOrNull()
             } ?: emptyList(),
-        )
+            proxyEnabled = prefs.getBoolean("proxyEnabled", false),
+            proxySub = prefs.getString("proxySub", "") ?: "",
+            proxyNodes = prefs.getString("proxyNodes", null)?.let {
+                runCatching { json.decodeFromString(ListSerializer(ProxyNode.serializer()), it) }.getOrNull()
+            } ?: emptyList(),
+            proxyNode = prefs.getString("proxyNode", "") ?: "",
+        ).also { com.jack.ai.api.Net.apply(it) }
     }
 
     fun saveSettings(s: Settings) {
@@ -367,6 +378,11 @@ class Store(context: Context) {
             .remove("mail")
             .putString("mails", json.encodeToString(ListSerializer(MailAccount.serializer()), s.mails))
             .putString("mcpServers", json.encodeToString(ListSerializer(McpServer.serializer()), s.mcpServers))
+            .putBoolean("proxyEnabled", s.proxyEnabled)
+            .putString("proxySub", s.proxySub)
+            .putString("proxyNodes", json.encodeToString(ListSerializer(ProxyNode.serializer()), s.proxyNodes))
+            .putString("proxyNode", s.proxyNode)
             .apply()
+        com.jack.ai.api.Net.apply(s)
     }
 }

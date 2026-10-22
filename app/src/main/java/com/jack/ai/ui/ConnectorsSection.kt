@@ -79,6 +79,7 @@ private fun ConnectorDialog(vm: ChatViewModel, server: McpServer, isNew: Boolean
     var url by remember { mutableStateOf(server.url) }
     var key by remember { mutableStateOf(server.key) }
     var askFirst by remember { mutableStateOf(server.askFirst) }
+    var route by remember { mutableStateOf(server.route) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -108,6 +109,13 @@ private fun ConnectorDialog(vm: ChatViewModel, server: McpServer, isNew: Boolean
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                // 网络路线：按规则（国内直连、国外走 Jack 专用代理）、直连、走代理
+                Text("网络", style = MaterialTheme.typography.bodyMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("auto" to "自动", "direct" to "直连", "proxy" to "走代理").forEach { (k, label) ->
+                        androidx.compose.material3.FilterChip(route == k, { route = k }, label = { Text(label) })
+                    }
+                }
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                 if (!isNew) {
                     TextButton(onClick = { confirmDelete = true }) { Text("删除这个连接器", color = MaterialTheme.colorScheme.error) }
@@ -121,7 +129,7 @@ private fun ConnectorDialog(vm: ChatViewModel, server: McpServer, isNew: Boolean
                     busy = true
                     error = null
                     scope.launch {
-                        val r = vm.saveConnector(server.copy(name = name.trim(), url = url.trim(), key = key.trim(), askFirst = askFirst))
+                        val r = vm.saveConnector(server.copy(name = name.trim(), url = url.trim(), key = key.trim(), askFirst = askFirst, route = route))
                         busy = false
                         r.onSuccess { onDone() }.onFailure { error = "连不上：" + (it.message ?: it.javaClass.simpleName) }
                     }

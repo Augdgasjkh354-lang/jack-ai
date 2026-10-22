@@ -219,12 +219,12 @@ class ToolSession(
         /** 报错尽量带上具体原因，模型才知道该重试、换方法还是去问用户。 */
         fun errorText(e: Exception): String = when (e) {
             is ApiException -> e.message ?: "接口出错"
-            is java.net.SocketTimeoutException -> "网络连接失败（连接超时，可以稍后重试）"
+            is java.net.SocketTimeoutException -> "网络连接失败（连接超时，可以稍后重试）" + com.jack.ai.api.Net.hint()
             is java.net.UnknownHostException -> "网络连接失败（找不到服务器 ${e.message.orEmpty()}，检查网络或地址）"
-            is java.net.ConnectException -> "网络连接失败（连接被拒绝：${e.message.orEmpty()}）"
+            is java.net.ConnectException -> "网络连接失败（连接被拒绝：${e.message.orEmpty()}）" + com.jack.ai.api.Net.hint()
             is javax.net.ssl.SSLException -> "网络连接失败（安全连接出错：${e.message.orEmpty()}）"
             is java.io.FileNotFoundException -> "找不到文件或没有权限（${e.message.orEmpty()}）"
-            is IOException -> "读写或网络出错（${e.message ?: e.javaClass.simpleName}）"
+            is IOException -> "读写或网络出错（${e.message ?: e.javaClass.simpleName}）" + com.jack.ai.api.Net.hint()
             else -> e.message ?: "出错了（${e.javaClass.simpleName}）"
         }
 

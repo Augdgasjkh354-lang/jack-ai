@@ -206,6 +206,11 @@ data class Settings(
     val fullAuthUntil: Long = 0,
     /** 连接器（MCP 服务）。 */
     val mcpServers: List<McpServer> = emptyList(),
+    /** Jack 专用代理：开没开、订阅地址、节点、选哪个（空 = 自动选最快）。订阅和节点不进备份。 */
+    val proxyEnabled: Boolean = false,
+    val proxySub: String = "",
+    val proxyNodes: List<ProxyNode> = emptyList(),
+    val proxyNode: String = "",
 )
 
 /** 完全授权现在是否有效（到点自动失效）。 */

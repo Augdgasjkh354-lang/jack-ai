@@ -75,6 +75,8 @@ class BackupFeature(core: AppCore, private val knowledge: KnowledgeFeature) : Fe
                     p.copy(apiKey = old.providers.firstOrNull { it.id == p.id }?.apiKey.orEmpty())
                 }, mails = loaded.mails.map { m -> m.copy(password = old.mails.firstOrNull { it.address == m.address }?.password.orEmpty()) },
                     mcpServers = loaded.mcpServers.map { m -> m.copy(key = old.mcpServers.firstOrNull { it.id == m.id }?.key.orEmpty()) },
+                    // 代理的订阅和节点不在备份里，沿用手机上现有的
+                    proxySub = old.proxySub, proxyNodes = old.proxyNodes,
                     // 完全授权不跟着备份走，沿用手机上现在的
                     fullAuthUntil = old.fullAuthUntil)
                 store.saveSettings(s)

@@ -56,6 +56,8 @@ android {
         unitTests.all { t -> System.getenv("ROBOLECTRIC_REPO")?.let { t.systemProperty("robolectric.dependency.repo.url", it) } }
     }
     packaging {
+        // 代理内核是个可执行程序，伪装成 .so 放进 jniLibs；要解压到安装目录才能运行
+        jniLibs.useLegacyPackaging = true
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
         resources.excludes += listOf("/META-INF/LICENSE.md", "/META-INF/NOTICE.md", "/META-INF/LICENSE.txt", "/META-INF/NOTICE.txt")
     }
@@ -116,4 +118,7 @@ dependencies {
     // 邮箱：IMAP 收信、SMTP 发信
     implementation("com.sun.mail:android-mail:1.6.7")
     implementation("com.sun.mail:android-activation:1.6.7")
+    // Jack 专用代理：读 Clash 订阅（YAML）、扫二维码（不依赖谷歌服务）
+    implementation("org.yaml:snakeyaml:2.3")
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
 }

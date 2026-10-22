@@ -158,6 +158,10 @@ fun SettingsScreen(
                 ConnectorsSection(vm, settings.mcpServers)
             }
 
+            Section("Jack 专用代理") {
+                ProxySection(vm, settings)
+            }
+
             // ---- Tavily ----
             Section("Tavily API Key") {
                 var tavilyInput by remember { mutableStateOf(settings.tavilyKey) }

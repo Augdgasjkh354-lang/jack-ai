@@ -77,6 +77,74 @@ class SettingsFeature(core: AppCore, private val client: DeepSeekClient) : Featu
 
     fun deleteConnector(id: String) = updateSettings { s -> s.copy(mcpServers = s.mcpServers.filterNot { it.id == id }) }
 
+    // ---------- Jack 专用代理 ----------
+
+    /** 拉订阅：先直连；连不上而代理正在跑，就借代理再试一次。不同的机场按客户端名字给不同格式，认不出就换个名字再要。 */
+    private suspend fun fetchSub(url: String): String = withContext(Dispatchers.IO) {
+        val direct = com.jack.ai.api.sharedHttp.newBuilder().proxySelector(com.jack.ai.api.Net.selectorFor("direct")).build()
+        val viaProxy = com.jack.ai.api.sharedHttp.newBuilder().proxySelector(com.jack.ai.api.Net.selectorFor("proxy")).build()
+        fun get(client: okhttp3.OkHttpClient, ua: String): String =
+            client.newCall(okhttp3.Request.Builder().url(url).header("User-Agent", ua).build()).execute().use { r ->
+                if (!r.isSuccessful) throw IOException("订阅地址返回 ${r.code}")
+                r.body?.string().orEmpty()
+            }
+        var last: Exception? = null
+        for (ua in listOf("v2rayN/6.42", "clash-verge/v2.0.0")) {
+            for (client in listOf(direct, viaProxy)) {
+                if (client === viaProxy && !ProxyCore.isRunning) continue
+                try {
+                    val text = get(client, ua)
+                    if (ProxyNodes.parse(text).isNotEmpty()) return@withContext text
+                    break
+                } catch (e: Exception) {
+                    last = e
+                }
+            }
+        }
+        last?.let { throw it }
+        throw IOException("订阅里没有认得出的节点")
+    }
+
+    /** 导入：订阅地址（https）、一个或几个节点链接、或者 base64 的一整段。返回节点数。 */
+    suspend fun importProxy(input: String): Result<Int> = runCatching {
+        val text = input.trim()
+        val isUrl = text.startsWith("http://") || text.startsWith("https://")
+        val nodes = ProxyNodes.parse(if (isUrl) fetchSub(text) else text)
+        if (nodes.isEmpty()) throw IOException("没认出节点。支持订阅地址，以及 ss、vmess、vless、trojan、hysteria2、tuic 链接")
+        updateSettings { s ->
+            s.copy(proxySub = if (isUrl) text else "", proxyNodes = nodes, proxyEnabled = true,
+                proxyNode = s.proxyNode.takeIf { n -> nodes.any { it.name == n } }.orEmpty())
+        }
+        nodes.size
+    }.onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
+
+    suspend fun refreshProxy(): Result<Int> {
+        val sub = state.value.settings.proxySub
+        if (sub.isBlank()) return Result.failure(IOException("这些节点不是从订阅导入的，重新扫码或粘贴就行"))
+        return importProxy(sub)
+    }
+
+    /** 测试：拉起内核，经代理访问一个国外的小页面，返回耗时；失败给出原因。 */
+    suspend fun testProxy(): String = withContext(Dispatchers.IO) {
+        if (!com.jack.ai.api.Net.config.enabled) return@withContext "代理没开"
+        if (!com.jack.ai.api.Net.ensureCore()) return@withContext "内核没起来：${ProxyCore.lastError}"
+        val client = com.jack.ai.api.sharedHttp.newBuilder().proxySelector(com.jack.ai.api.Net.selectorFor("proxy"))
+            .callTimeout(15, java.util.concurrent.TimeUnit.SECONDS).build()
+        val start = System.currentTimeMillis()
+        try {
+            client.newCall(okhttp3.Request.Builder().url("https://www.gstatic.com/generate_204").build()).execute().use { r ->
+                if (r.code == 204 || r.isSuccessful) "能用，${System.currentTimeMillis() - start} 毫秒" else "连上了但返回 ${r.code}"
+            }
+        } catch (e: Exception) {
+            "连不通：${e.message ?: e.javaClass.simpleName}" + ProxyCore.logTail().takeIf { it.isNotBlank() }?.let { "\n$it" }.orEmpty()
+        }
+    }
+
+    fun clearProxy() {
+        ProxyCore.stop()
+        updateSettings { it.copy(proxyEnabled = false, proxySub = "", proxyNodes = emptyList(), proxyNode = "") }
+    }
+
     /** 试着登录邮箱，返回给用户看的一句话。 */
     suspend fun testMail(acc: MailAccount): String = withContext(Dispatchers.IO) {
         try {
