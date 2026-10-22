@@ -32,12 +32,14 @@ import androidx.compose.runtime.setValue
 import androidx.webkit.ProxyConfig
 import androidx.webkit.ProxyController
 import androidx.webkit.WebViewFeature
+import com.jack.ai.api.BrowserDownload
 import com.jack.ai.api.BrowserNet
 import com.jack.ai.api.Net
 import com.jack.ai.data.ProxyCore
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -67,6 +69,18 @@ object JackBrowser {
     var notice by mutableStateOf<String?>(null)
     var route by mutableStateOf(BrowserNet.AUTO)
         private set
+    /** 网页要下载、还没决定下不下的文件。 */
+    var pending by mutableStateOf<BrowserDownload.Pending?>(null)
+    /** 正在下载的进度文字（null = 没在下）。 */
+    var downloading by mutableStateOf<String?>(null)
+    /** 刚存到手机「下载」文件夹的文件，浏览器页给个「打开」按钮。 */
+    var saved by mutableStateOf<Saved?>(null)
+
+    data class Saved(val name: String, val uri: android.net.Uri, val mime: String, val where: String)
+
+    /** 下载在后台跑，离开浏览器页也不停。 */
+    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
+
     /** Jack 最近一次操作网页的时刻；聊天页据此显示小窗。 */
     var agentAt by mutableLongStateOf(0L)
     /** 网页窗口换了地方（浏览器页 ↔ 聊天小窗）就加一，让原来的地方重新来要。 */
@@ -117,8 +131,10 @@ object JackBrowser {
             CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
             webViewClient = Client()
             webChromeClient = Chrome()
-            setDownloadListener { url, _, _, _, _ ->
-                notice = "Jack 浏览器暂时不能下载文件。可以用菜单里的「复制链接」，换别的方式下载：\n$url"
+            setDownloadListener { url, userAgent, disposition, mime, length ->
+                // 先记下来：用户看着就弹窗问，Jack 在操作就等它用 download 动作确认
+                pending = BrowserDownload.Pending(url, BrowserDownload.nameFor(url, disposition, mime), mime.orEmpty(),
+                    length, userAgent.orEmpty(), address, byUser = userViewing)
             }
             web = this
         }
@@ -309,6 +325,86 @@ object JackBrowser {
     /** Jack 操作时网页弹出的提示框内容（已自动关掉），下次读页面时告诉它。 */
     @Volatile private var lastDialog: String? = null
 
+    // ---------- 下载 ----------
+
+    private fun progressText(name: String, got: Long, total: Long) =
+        "正在下载「$name」：" + if (total > 0) "${got * 100 / total}%（${BrowserDownload.sizeText(got)} / ${BrowserDownload.sizeText(total)}）"
+        else BrowserDownload.sizeText(got)
+
+    /**
+     * 用户点了下载：存到手机的「下载/JackAI」文件夹（Android 10 以上，文件管理器里能找到）；
+     * 更老的系统存到 App 自己的下载目录。在后台下，进度和结果显示在浏览器页。
+     */
+    fun saveToPhone(ctx: Context, p: BrowserDownload.Pending) {
+        val app = ctx.applicationContext
+        pending = null
+        downloading = progressText(p.name, 0, p.size)
+        scope.launch {
+            val cookie = withContext(Dispatchers.Main) { CookieManager.getInstance().getCookie(p.url) }
+            val mime = p.mime.ifBlank { "application/octet-stream" }
+            try {
+                val result = if (android.os.Build.VERSION.SDK_INT >= 29) {
+                    val resolver = app.contentResolver
+                    val values = android.content.ContentValues().apply {
+                        put(android.provider.MediaStore.Downloads.DISPLAY_NAME, p.name)
+                        put(android.provider.MediaStore.Downloads.MIME_TYPE, mime)
+                        put(android.provider.MediaStore.Downloads.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS + "/JackAI")
+                        put(android.provider.MediaStore.Downloads.IS_PENDING, 1)
+                    }
+                    val uri = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                        ?: throw java.io.IOException("没能在「下载」文件夹里建文件")
+                    try {
+                        BrowserDownload.fetch(p, cookie, route, BrowserDownload.HARD_LIMIT,
+                            open = { resolver.openOutputStream(uri, "wt") ?: throw java.io.IOException("打不开要写的文件") }, reset = {},
+                            progress = { got, total -> downloading = progressText(p.name, got, total) })
+                        resolver.update(uri, android.content.ContentValues().apply { put(android.provider.MediaStore.Downloads.IS_PENDING, 0) }, null, null)
+                    } catch (e: Exception) {
+                        resolver.delete(uri, null, null); throw e
+                    }
+                    // 重名时系统会自动改名，以系统里的为准
+                    val name = resolver.query(uri, arrayOf(android.provider.MediaStore.Downloads.DISPLAY_NAME), null, null, null)
+                        ?.use { c -> if (c.moveToFirst()) c.getString(0) else null } ?: p.name
+                    Saved(name, uri, mime, "手机的「下载/JackAI」文件夹")
+                } else {
+                    val dir = java.io.File(app.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS), "")
+                    val f = com.jack.ai.data.Workspace.uniqueFile(dir, p.name)
+                    try {
+                        BrowserDownload.fetch(p, cookie, route, BrowserDownload.HARD_LIMIT, open = { f.outputStream() }, reset = {},
+                            progress = { got, total -> downloading = progressText(p.name, got, total) })
+                    } catch (e: Exception) {
+                        f.delete(); throw e
+                    }
+                    Saved(f.name, androidx.core.content.FileProvider.getUriForFile(app, app.packageName + ".files", f), mime,
+                        "Jack 的下载目录（Android/data/${app.packageName}/files/Download）")
+                }
+                saved = result
+                downloading = null
+            } catch (e: Exception) {
+                downloading = null
+                notice = "「${p.name}」没下载成功：" + (e.message ?: e.javaClass.simpleName) + Net.hint()
+            }
+        }
+    }
+
+    /** Jack 确认下载：存进对话文件夹（同名加编号），返回文件。 */
+    suspend fun saveTo(dir: java.io.File, p: BrowserDownload.Pending): java.io.File {
+        val cookie = withContext(Dispatchers.Main) { CookieManager.getInstance().getCookie(p.url) }
+        return withContext(Dispatchers.IO) {
+            val f = com.jack.ai.data.Workspace.uniqueFile(dir, p.name)
+            try {
+                downloading = progressText(p.name, 0, p.size)
+                BrowserDownload.fetch(p, cookie, route, BrowserDownload.HARD_LIMIT, open = { f.outputStream() }, reset = {},
+                    progress = { got, total -> downloading = progressText(p.name, got, total) })
+                f
+            } catch (e: Exception) {
+                f.delete(); throw e
+            } finally {
+                downloading = null
+                if (pending == p) pending = null
+            }
+        }
+    }
+
     // ---------- Jack 操作网页 ----------
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -320,7 +416,9 @@ object JackBrowser {
     data class Page(val url: String, val title: String, val items: List<Item>, val above: Int, val below: Int,
                     val scroll: Int, val height: Int, val vh: Int, val text: String,
                     /** 可视区在网页里的位置和宽度（CSS px），截图时把元素坐标换成屏幕像素。 */
-                    val vx: Float, val vy: Float, val vw: Float, val error: String?, val dialog: String?)
+                    val vx: Float, val vy: Float, val vw: Float, val error: String?, val dialog: String?,
+                    /** 网页要下载、等确认的文件。 */
+                    val download: BrowserDownload.Pending? = null)
 
     /** 没放进任何界面时，按手机屏幕大小排版，网页才有正常的宽高。 */
     private fun ensureLaidOut(w: WebView) {
@@ -360,7 +458,7 @@ object JackBrowser {
         val dialog = lastDialog.also { lastDialog = null }
         return Page(o.s("url"), o.s("title"), items, o.f("above").toInt(), o.f("below").toInt(), o.f("scroll").toInt(),
             o.f("height").toInt(), o.f("vh").toInt(), o.s("text"), o.f("vx"), o.f("vy"), o.f("vw"),
-            withContext(Dispatchers.Main) { error }, dialog)
+            withContext(Dispatchers.Main) { error }, dialog, pending)
     }
 
     /** 某个编号的元素是什么（决定要不要先问用户）。找不到返回 null。 */

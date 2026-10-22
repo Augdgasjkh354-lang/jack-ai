@@ -57,6 +57,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.lifecycleScope
+import com.jack.ai.api.BrowserDownload
 import com.jack.ai.api.BrowserNet
 import com.jack.ai.api.Net
 import com.jack.ai.data.Settings
@@ -217,6 +218,10 @@ class BrowserActivity : ComponentActivity() {
                 key(b.hostGen) { AndroidView(factory = { b.claim(this@BrowserActivity) }, modifier = Modifier.fillMaxSize()) }
                 if (b.address.isEmpty() && b.loading >= 100) StartPage()
             }
+            b.downloading?.let { msg ->
+                Text(msg, Modifier.fillMaxWidth().background(colors.secondaryContainer).padding(horizontal = 12.dp, vertical = 6.dp),
+                    style = MaterialTheme.typography.labelSmall, color = colors.onSecondaryContainer, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
             Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(enabled = b.canBack, onClick = { b.webView(this@BrowserActivity).goBack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "后退") }
                 IconButton(enabled = b.canForward, onClick = { b.webView(this@BrowserActivity).goForward() }) { Icon(Icons.AutoMirrored.Filled.ArrowForward, "前进") }
@@ -238,6 +243,38 @@ class BrowserActivity : ComponentActivity() {
                 text = { Text("网页想用别的 App 打开：\n${url.take(200)}") },
                 confirmButton = { TextButton(onClick = { b.external = null; openExternal(url) }) { Text("打开") } },
                 dismissButton = { TextButton(onClick = { b.external = null }) { Text("不了") } },
+            )
+        }
+        // Jack 在操作时网页要下载的，等 Jack 用 download 确认；用户自己点的才在这里问
+        b.pending?.takeIf { it.byUser }?.let { p ->
+            val big = p.size > BrowserDownload.ASK_ABOVE
+            AlertDialog(
+                onDismissRequest = { b.pending = null },
+                title = { Text("下载这个文件？") },
+                text = {
+                    Text("「${p.name}」" + (if (p.size > 0) "，${BrowserDownload.sizeText(p.size)}" else "（网站没说多大）") +
+                        "\n存到手机的「下载/JackAI」文件夹。" +
+                        (if (big) "\n文件比较大，会用掉相应的代理流量。" else "") +
+                        (if (p.name.endsWith(".apk", true)) "\n这是安卓安装包，只装信得过的来源。" else ""))
+                },
+                confirmButton = { TextButton(onClick = { b.saveToPhone(this@BrowserActivity, p) }) { Text("下载") } },
+                dismissButton = { TextButton(onClick = { b.pending = null }) { Text("取消") } },
+            )
+        }
+        b.saved?.let { f ->
+            AlertDialog(
+                onDismissRequest = { b.saved = null },
+                title = { Text("下载好了") },
+                text = { Text("「${f.name}」已存到${f.where}。") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        b.saved = null
+                        runCatching {
+                            startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(f.uri, f.mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+                        }.onFailure { b.notice = "手机上没有能打开它的 App，可以在文件管理器的「下载/JackAI」里找到它。" }
+                    }) { Text("打开") }
+                },
+                dismissButton = { TextButton(onClick = { b.saved = null }) { Text("好") } },
             )
         }
         b.notice?.let { msg ->

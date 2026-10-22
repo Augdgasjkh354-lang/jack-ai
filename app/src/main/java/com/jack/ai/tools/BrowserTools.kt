@@ -29,6 +29,7 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
         "scroll" -> "浏览器翻页"
         "back" -> "浏览器后退"
         "look" -> "浏览器截图"
+        "download" -> "浏览器下载 " + JackBrowser.pending?.name.orEmpty()
         else -> "浏览器读页面"
     }
     // 先把参数不全的挡在外面（不算一次成功的工具调用）
@@ -39,7 +40,8 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
         "select" -> if (n == null || text.isBlank()) return need("n 和 text（要选的选项）")
         "key" -> if (n == null || args["key"].text().isBlank()) return need("n 和 key")
         "read", "scroll", "back", "look", "" -> {}
-        else -> return "action 要填 open、read、click、type、delete、select、key、scroll、back 或 look"
+        "download" -> if (JackBrowser.pending == null) return "现在没有等着下载的文件。先点网页上的下载链接或按钮，读回来的页面里会写「网页要下载」。"
+        else -> return "action 要填 open、read、click、type、delete、select、key、scroll、back、look 或 download"
     }
     return runTool(label) {
         val note = StringBuilder()
@@ -83,6 +85,23 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
                     } else note.append("已输入，但用户没同意提交。\n")
                 }
             }
+            "download" -> {
+                val p = JackBrowser.pending!!
+                if (p.size > com.jack.ai.api.BrowserDownload.HARD_LIMIT) {
+                    JackBrowser.pending = null
+                    return@runTool "「${p.name}」有 ${com.jack.ai.api.BrowserDownload.sizeText(p.size)}，超过 2 GB 的上限，没有下载。" to SearchRecord("$label：太大")
+                }
+                if (p.size > com.jack.ai.api.BrowserDownload.ASK_ABOVE &&
+                    !approve("下载「${p.name}」？", "大约 ${com.jack.ai.api.BrowserDownload.sizeText(p.size)}，来自 ${p.url.take(200)}", "下载")) {
+                    JackBrowser.pending = null
+                    return@runTool "用户没有同意下载。" to SearchRecord("$label：已取消")
+                }
+                val f = JackBrowser.saveTo(wsDir, p)
+                ui.attach(f)
+                return@runTool "已下载「${f.name}」（${com.jack.ai.data.ToolSizes.text(f.length())}）到对话文件夹，聊天里能打开或分享，" +
+                    "需要的话用 read_file 或 run_python 处理它。" +
+                    (if (f.extension.equals("apk", true)) "这是安卓安装包：要不要装由用户决定，提醒他只装信得过的来源。" else "") to SearchRecord(label)
+            }
             "scroll" -> JackBrowser.scroll(ctx, if (args["direction"].text() == "up") -1 else 1)
             "back" -> if (!JackBrowser.back(ctx)) note.append("已经是第一页，不能再后退了。\n")
         }
@@ -119,6 +138,10 @@ internal fun describePage(p: JackBrowser.Page): String = buildString {
     }
     p.error?.let { append("⚠ $it\n") }
     p.dialog?.let { append("网页弹出过提示「${it.take(200)}」，已自动关掉。\n") }
+    p.download?.takeIf { !it.byUser }?.let {
+        append("网页要下载「${it.name}」" + (if (it.size > 0) "（${com.jack.ai.data.ToolSizes.text(it.size)}）" else "") +
+            "：用户要这个文件的话用 action=download 存进对话文件夹，不要就不用管。\n")
+    }
     if (p.items.isEmpty()) append("这一屏没有能操作的东西。\n") else {
         append("能操作的（用编号 click / type）：\n")
         p.items.forEach { i ->
