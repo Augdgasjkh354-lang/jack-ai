@@ -215,6 +215,9 @@ data class Settings(
     val notionToken: String = "",
     /** GitHub 令牌（只读权限就够）。不填也能看公开项目；不进备份。 */
     val githubToken: String = "",
+    /** 自动检查新版本（有就下载好、发通知）；只在 Wi-Fi 下检查和下载。 */
+    val autoUpdate: Boolean = true,
+    val updateWifiOnly: Boolean = false,
 )
 
 /** 完全授权现在是否有效（到点自动失效）。 */

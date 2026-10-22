@@ -134,6 +134,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         Dreamer.schedule(app, _state.value.settings.dreamEnabled)
         _state.update { it.copy(routines = store.loadRoutines(), library = store.loadLibrary(), cards = store.loadCards()) }
         Routines.scheduleAll(app)
+        runCatching { com.jack.ai.data.Updater.schedule(app, _state.value.settings) }
         mergeInbox()
         core.refreshWidget()
         // 数据文件坏了被自动恢复过，告诉用户一声

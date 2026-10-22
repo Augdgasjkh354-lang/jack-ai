@@ -339,6 +339,8 @@ class Store(context: Context) {
             proxyNode = prefs.getString("proxyNode", "") ?: "",
             notionToken = prefs.getString("notionToken", "") ?: "",
             githubToken = prefs.getString("githubToken", "") ?: "",
+            autoUpdate = prefs.getBoolean("autoUpdate", true),
+            updateWifiOnly = prefs.getBoolean("updateWifiOnly", false),
         ).also { com.jack.ai.api.Net.apply(it) }
     }
 
@@ -386,6 +388,8 @@ class Store(context: Context) {
             .putString("proxyNode", s.proxyNode)
             .putString("notionToken", s.notionToken)
             .putString("githubToken", s.githubToken)
+            .putBoolean("autoUpdate", s.autoUpdate)
+            .putBoolean("updateWifiOnly", s.updateWifiOnly)
             .apply()
         com.jack.ai.api.Net.apply(s)
     }

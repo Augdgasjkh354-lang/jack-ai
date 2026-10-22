@@ -5,5 +5,6 @@
     <files-path name="tables" path="tables/" />
     <cache-path name="exports" path="exports/" />
     <cache-path name="camera" path="camera/" />
+    <cache-path name="updates" path="updates/" />
     <external-files-path name="downloads" path="Download/" />
 </paths>

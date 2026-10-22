@@ -346,6 +346,10 @@ fun SettingsScreen(
             }
 
             // ---- 高级 ----
+            Section("版本更新") {
+                UpdateSection(vm, settings)
+            }
+
             Section("高级") {
                 var url by remember { mutableStateOf(settings.baseUrl) }
                 OutlinedTextField(
