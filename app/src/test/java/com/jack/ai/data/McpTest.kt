@@ -163,6 +163,24 @@ class McpTest {
     }
 
     @Test
+    fun keyInUrlAndNonMcpErrors() = runBlocking {
+        routes["/amap"] = { ex ->
+            // 高德的做法：Key 在网址里，不对时回一段不是 MCP 格式的 JSON
+            if (ex.query != "key=good%2Bkey") ex.send(200, """{"status":"0","info":"INVALID_USER_KEY","infocode":"10001"}""")
+            else {
+                assertEquals(null, ex.header("Authorization"))
+                val msg = parse(ex)
+                val id = msg["id"]?.jsonPrimitive?.int
+                if (id == null) ex.send(202, "") else ex.send(200, reply(id, msg["method"]!!.jsonPrimitive.content, msg["params"] as? JsonObject))
+            }
+        }
+        val good = McpServer(name = "高德", url = "$base/amap?key={key}", key = "good+key")
+        assertEquals(2, Mcp.listTools(good).size)
+        val err = runCatching { Mcp.listTools(good.copy(key = "bad")) }.exceptionOrNull()
+        assertTrue(err.toString(), err is McpException && "Key 不对" in err.message!!)
+    }
+
+    @Test
     fun resultTextHandlesErrorsAndNonText() {
         val r = Json.parseToJsonElement("""{"isError":true,"content":[{"type":"text","text":"城市不存在"},{"type":"image","data":"x","mimeType":"image/png"}]}""").jsonObject
         assertEquals("连接器返回错误：城市不存在\n[图片]", Mcp.resultText(r))

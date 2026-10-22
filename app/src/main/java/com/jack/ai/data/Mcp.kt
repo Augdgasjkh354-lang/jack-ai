@@ -59,6 +59,16 @@ class McpException(message: String) : Exception(message)
  */
 object Mcp {
     const val PREFIX = "mcp_"
+    /** 网址里的这个占位符会换成 Key（高德这类把 Key 放在网址里的服务）。 */
+    const val KEY_SLOT = "{key}"
+
+    /** 一键添加的常用连接器：名字、网址、去哪申请 Key。 */
+    data class Preset(val name: String, val url: String, val keyHelp: String)
+
+    val PRESETS = listOf(
+        Preset("高德地图", "https://mcp.amap.com/mcp?key={key}",
+            "到高德开放平台 lbs.amap.com 登录 → 控制台 → 应用管理 → 创建应用 → 添加 Key，服务平台选「Web 服务」，免费额度够个人用。"),
+    )
     private const val PROTOCOL = "2025-06-18"
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -186,6 +196,11 @@ object Mcp {
         private var sessionId: String? = null
         private var legacy: Legacy? = null
 
+        /** 网址里写了 {key} 的（比如高德），Key 填进网址；否则 Key 放请求头。 */
+        val url: String = server.url.trim().let { u ->
+            if (KEY_SLOT in u) u.replace(KEY_SLOT, java.net.URLEncoder.encode(server.key.trim(), "UTF-8")) else u
+        }
+
         init {
             if (!server.url.startsWith("http")) throw McpException("连接器地址要以 http:// 或 https:// 开头")
             val init = buildJsonObject {
@@ -208,7 +223,7 @@ object Mcp {
 
         fun auth(b: Request.Builder): Request.Builder {
             val k = server.key.trim()
-            if (k.isEmpty()) return b
+            if (k.isEmpty() || KEY_SLOT in server.url) return b
             val colon = k.indexOf(':')
             val name = if (colon > 0) k.substring(0, colon).trim() else ""
             return when {
@@ -240,12 +255,16 @@ object Mcp {
             (reply["error"] as? JsonObject)?.let { err ->
                 throw McpException("连接器出错：" + ((err["message"] as? JsonPrimitive)?.content ?: err.toString()))
             }
-            return reply["result"] as? JsonObject ?: JsonObject(emptyMap())
+            // 有的服务出错时不按 MCP 的格式回（比如高德 Key 不对时回 {"info":"INVALID_USER_KEY"}），别当成成功
+            return reply["result"] as? JsonObject ?: throw McpException(
+                if ("KEY" in reply.toString().uppercase()) "连接器拒绝了：Key 不对或没有权限（${reply.toString().take(120)}）"
+                else "连接器回的不是 MCP 格式：${reply.toString().take(160)}"
+            )
         }
 
         /** Streamable HTTP：POST 一条消息，回的可能是 JSON，也可能是一段 SSE。 */
         private fun post(body: String, expectId: Int?): JsonObject? {
-            val req = auth(Request.Builder().url(server.url))
+            val req = auth(Request.Builder().url(url))
                 .header("Accept", "application/json, text/event-stream")
                 .header("MCP-Protocol-Version", PROTOCOL)
                 .apply { sessionId?.let { header("Mcp-Session-Id", it) } }
@@ -276,7 +295,7 @@ object Mcp {
             // 告诉服务器这次会话结束了；失败也无所谓
             sessionId?.let { sid ->
                 runCatching {
-                    auth(Request.Builder().url(server.url)).header("Mcp-Session-Id", sid).delete().build()
+                    auth(Request.Builder().url(url)).header("Mcp-Session-Id", sid).delete().build()
                         .let { http.newCall(it).execute().close() }
                 }
             }
@@ -297,7 +316,7 @@ object Mcp {
         private val stream: Call
 
         init {
-            val req = session.auth(Request.Builder().url(server.url)).header("Accept", "text/event-stream").get().build()
+            val req = session.auth(Request.Builder().url(session.url)).header("Accept", "text/event-stream").get().build()
             stream = http.newCall(req)
             Thread {
                 try {
@@ -306,7 +325,7 @@ object Mcp {
                         val source = resp.body?.source() ?: throw McpException("连接器没有回应")
                         readEvents(source) { event, data ->
                             if (event == "endpoint") {
-                                endpoint.complete(server.url.toHttpUrl().resolve(data.trim())?.toString() ?: data.trim())
+                                endpoint.complete(session.url.toHttpUrl().resolve(data.trim())?.toString() ?: data.trim())
                             } else {
                                 runCatching { json.parseToJsonElement(data).jsonObject }.getOrNull()?.let { o ->
                                     idOf(o)?.let { waiting.remove(it)?.complete(o) }

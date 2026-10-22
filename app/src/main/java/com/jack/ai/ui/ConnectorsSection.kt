@@ -25,6 +25,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jack.ai.ChatViewModel
+import com.jack.ai.data.Mcp
 import com.jack.ai.data.McpServer
 import kotlinx.coroutines.launch
 
@@ -59,7 +60,13 @@ fun ConnectorsSection(vm: ChatViewModel, servers: List<McpServer>) {
             TextButton(onClick = { editing = s }) { Text("修改") }
         }
     }
-    OutlinedButton(onClick = { editing = McpServer(name = "", url = "") }) { Text("添加连接器") }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(onClick = { editing = McpServer(name = "", url = "") }) { Text("添加连接器") }
+        // 常用的一键添加：网址填好，只差 Key
+        Mcp.PRESETS.filter { p -> servers.none { it.url == p.url } }.forEach { p ->
+            OutlinedButton(onClick = { editing = McpServer(name = p.name, url = p.url) }) { Text("+ ${p.name}") }
+        }
+    }
 
     editing?.let { s ->
         ConnectorDialog(vm, s, isNew = servers.none { it.id == s.id }, onDone = { editing = null })
@@ -87,7 +94,8 @@ private fun ConnectorDialog(vm: ChatViewModel, server: McpServer, isNew: Boolean
                 OutlinedTextField(key, { key = it }, label = { Text("Key（没有就空着）") }, singleLine = true,
                     visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
                 Text(
-                    "Key 一般直接粘贴；服务要求特殊请求头时写成「名字: 值」。",
+                    Mcp.PRESETS.firstOrNull { it.url == url }?.keyHelp
+                        ?: "Key 一般直接粘贴；服务要求特殊请求头时写成「名字: 值」；要放进网址的，在网址里写 {key}。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -108,7 +116,7 @@ private fun ConnectorDialog(vm: ChatViewModel, server: McpServer, isNew: Boolean
         },
         confirmButton = {
             TextButton(
-                enabled = !busy && name.isNotBlank() && url.startsWith("http"),
+                enabled = !busy && name.isNotBlank() && url.startsWith("http") && (Mcp.KEY_SLOT !in url || key.isNotBlank()),
                 onClick = {
                     busy = true
                     error = null
