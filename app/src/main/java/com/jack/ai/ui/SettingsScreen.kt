@@ -331,6 +331,11 @@ fun SettingsScreen(
                         Text("恢复")
                     }
                 }
+                Text(
+                    "换手机时，系统自带的迁移不会带走 Jack 的设置。用这里的「备份」导出、在新手机上「恢复」，聊天和普通设置都会回来；Key、令牌、邮箱授权码不在备份里，要重新填。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
 
             // ---- 高级 ----

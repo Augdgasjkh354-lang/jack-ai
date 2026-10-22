@@ -3,4 +3,5 @@
 <full-backup-content>
     <exclude domain="sharedpref" path="settings.xml" />
     <exclude domain="root" path="app_webview/" />
+    <exclude domain="file" path="runlogs.json" />
 </full-backup-content>

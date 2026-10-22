@@ -101,8 +101,49 @@ AI 用工具实际做成的事：设了哪些提醒和日程（时间、编号�
     private const val MEMO_MAX = 60
 
     private val HAS_NUMBER = Regex("""\d""")
-    private val DECISION = Regex("记住|约定|说好|决定|以后|不要|别再|必须|一定要|改成|统一|先不|暂时不|不动|不用|不做|定了|就按|同意|拍板|优先")
+    private val DECISION = Regex("记住|约定|说好|决定|以后|不要|别再|必须|一定要|改成|改为|换成|统一|先不|暂时不|不动|不用|不做|定了|就按|同意|拍板|优先|撤销|作废|算了|还是做|还是用|还是要|还是按")
     private val DONE = Regex("编号|已设置|已改好|已写进|已新建|已加|已推送|提交 |PR #|issue #|已下载|已保存|已删除|id=")
+
+    /** 像秘密的句子不进备忘：验证码、密码、令牌这类词，key=…，令牌样子的长串。 */
+    private val SECRET_WORD = Regex("""验证码|校验码|动态码|密码|口令|密钥|令牌|授权码|(?i:\b(token|api ?key|secret|cookie|password|key)\s*[=:：])|(?i:\bbearer\s)""")
+    /** 用户原话里再排除连续 6 位以上的数字（手机号、验证码、卡号、订单号）。 */
+    private val LONG_DIGITS = Regex("""\d{6,}""")
+
+    internal fun secretish(line: String, user: Boolean): Boolean =
+        SECRET_WORD.containsMatchIn(line) || (user && LONG_DIGITS.containsMatchIn(line)) ||
+            Regex("""[A-Za-z0-9_\-]{20,}""").findAll(line).any { Redact.looksSecret(it.value) && !HEX_ID.matches(it.value) }
+
+    /** 纯十六进制的长串是提交号、Notion 页面 id 这类编号，不是令牌。 */
+    private val HEX_ID = Regex("""[0-9a-fA-F-]+""")
+
+    /** 改主意的说法：出现在新句子里、又和旧的某句说的是同一件事，旧的那句就作废。 */
+    private val REVOKE = Regex("撤销|取消|算了|作废|改成|改为|换成|还是|不算|重新定|不.{0,6}了|别.{0,4}了")
+
+    /** 两句话的字对（两个相邻的字），去掉改主意的词，用来粗判是不是在说同一件事。数字不算（「10 点」到处都有，改的往往正是数字）。 */
+    private fun pairs(s: String): Set<String> {
+        val t = s.removePrefix("用户：").replace(REVOKE, " ").map { if (it.isLetter()) it else ' ' }.joinToString("").lowercase()
+        return t.windowed(2).filter { ' ' !in it }.toSet()
+    }
+
+    /** new 是不是把 old 改掉了：new 里有改主意的说法，而且两句有足够多相同的字对。 */
+    internal fun supersedes(new: String, old: String): Boolean {
+        if (!REVOKE.containsMatchIn(new.removePrefix("用户："))) return false
+        val a = pairs(new); val b = pairs(old)
+        if (a.isEmpty() || b.isEmpty()) return false
+        val shared = a.intersect(b).size
+        return shared >= 2 && shared.toDouble() / minOf(a.size, b.size) >= 0.4
+    }
+
+    /** 按先后合并：用户后来改了主意的旧句子去掉，留新的。 */
+    internal fun mergeMemo(old: List<String>, new: List<String>): List<String> {
+        val out = mutableListOf<String>()
+        for (line in old + new) {
+            if (line.startsWith("用户：")) out.removeAll { it.startsWith("用户：") && it != line && supersedes(line, it) }
+            out.remove(line)
+            out += line
+        }
+        return out
+    }
 
     /** 从这批消息里摘出值得原样记住的句子：用户说的带数字或「约定、决定」的话；工具做成的事（带编号、时间）。 */
     internal fun memoLines(msgs: List<ChatMessage>): List<String> {
@@ -110,11 +151,11 @@ AI 用工具实际做成的事：设了哪些提醒和日程（时间、编号�
         for (m in msgs) {
             if (m.role == "user") {
                 m.content.split(Regex("[。！？!?\n]+")).map { it.trim() }
-                    .filter { it.length in 4..160 && (HAS_NUMBER.containsMatchIn(it) || DECISION.containsMatchIn(it)) }
+                    .filter { it.length in 4..160 && (HAS_NUMBER.containsMatchIn(it) || DECISION.containsMatchIn(it)) && !secretish(it, user = true) }
                     .forEach { out += "用户：" + it.take(120) }
             } else {
                 toolResults(m).flatMap { it.split('\n') }.map { it.trim() }
-                    .filter { it.length >= 6 && DONE.containsMatchIn(it) && !it.startsWith("【") }
+                    .filter { it.length >= 6 && DONE.containsMatchIn(it) && !it.startsWith("【") && !secretish(it, user = false) }
                     .forEach { out += "做了：" + it.take(140) }
             }
         }
@@ -145,10 +186,11 @@ AI 用工具实际做成的事：设了哪些提醒和日程（时间、编号�
     /** 提要去掉程序维护的那一栏（发给模型合并时用）。 */
     fun withoutMemo(summary: String): String = summary.substringBefore(MEMO).trimEnd()
 
-    /** 模型写好的提要 + 原话备忘（旧的接着新的，最多留最近 60 条）。 */
+    /** 模型写好的提要 + 原话备忘（旧的接着新的，改了主意的旧句子去掉，最多留最近 60 条；以前混进来的像秘密的句子也清掉）。 */
     fun withMemo(written: String, prevSummary: String, msgs: List<ChatMessage>): String {
-        val old = prevSummary.substringAfter(MEMO, "").lines().map { it.trim().removePrefix("- ") }.filter { it.isNotBlank() }
-        val lines = (old + memoLines(msgs)).distinct().takeLast(MEMO_MAX)
+        val old = prevSummary.substringAfter(MEMO, "").lines().map { it.trim().removePrefix("- ") }
+            .filter { it.isNotBlank() && !secretish(it, user = it.startsWith("用户：")) }
+        val lines = mergeMemo(old, memoLines(msgs)).takeLast(MEMO_MAX)
         val body = withoutMemo(written)
         return if (lines.isEmpty()) body else body + "\n\n" + MEMO + "\n" + lines.joinToString("\n") { "- $it" }
     }

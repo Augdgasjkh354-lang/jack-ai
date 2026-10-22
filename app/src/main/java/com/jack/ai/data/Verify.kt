@@ -9,10 +9,15 @@ import java.util.zip.ZipFile
  * 只做能用程序确定的检查（文件能不能打开、公式引用对不对、语法有没有错），不靠模型自己说“我检查过了”。
  */
 object Verify {
+    private const val FAILED = "\n【核实失败】"
+
+    /** 工具结果里有没有 note 写下的核实失败（这个标记是代码加的，不是模型写的）。 */
+    fun failed(result: String) = FAILED in result
+
     /** 附在工具结果后面的一行。problems 为空就是通过。 */
     fun note(problems: List<String>, ok: String, fix: String = "用 edit_file 改"): String =
         if (problems.isEmpty()) "\n【核实】✓ $ok"
-        else "\n【核实失败】" + problems.take(10).joinToString("；") + (if (problems.size > 10) "；……共 ${problems.size} 处" else "") +
+        else FAILED + problems.take(10).joinToString("；") + (if (problems.size > 10) "；……共 ${problems.size} 处" else "") +
             "。先修好再交付（$fix），修不好就如实告诉用户哪里有问题。"
 
     /** 生成的文件能不能打开：Office 是不是完整的 zip、PDF 文件头对不对、有没有内容。 */

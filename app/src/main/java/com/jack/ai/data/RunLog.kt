@@ -6,13 +6,24 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import java.io.File
 
-/** 一次运行里调用的一个工具：成没成，留下的编号或出错原因（不记正文、密码、网页内容）。 */
+/**
+ * 一次运行里调用的一个工具：成没成（代码判定，不看文字），留下的远端编号或脱敏后的出错原因。
+ * 不记正文、网页内容、邮件内容、令牌。
+ */
 @Serializable
-data class RunStep(val tool: String, val ok: Boolean, val note: String = "")
+data class RunStep(val tool: String, val ok: Boolean, val note: String = "", val rejected: Boolean = false)
 
 /**
  * 提醒、定时任务、监控的一次运行记录：什么时候跑的、跑到哪一步、结果如何、为什么失败。
- * status：running 正在跑（进程被杀就一直停在这里，显示成「中途被打断」）、ok 完成、not_met 查了但条件没满足、failed 失败。
+ * status：
+ * - running 正在跑（进程被杀就一直停在这里，显示成「中途被打断」）
+ * - ok 完成 / 监控条件满足
+ * - not_met 查到了，条件还没满足
+ * - unknown 这次没查成（工具出错、没拿到可靠数据），不能说条件没满足
+ * - partial 监控条件满足了，但后续步骤没做完
+ * - needs_setup 还没配置好（比如没有 API Key），没跑
+ * - failed 失败
+ * note 只放代码写的固定短句，不放模型的回答；error 存之前先脱敏。
  */
 @Serializable
 data class RunRecord(
@@ -24,8 +35,7 @@ data class RunRecord(
     val finishedAt: Long = 0,
     val status: String = "running",
     val steps: List<RunStep> = emptyList(),
-    /** 结果的开头（给人看一眼是什么）。 */
-    val result: String = "",
+    val note: String = "",
     val error: String = "",
     /** 失败后会不会自动再试。 */
     val retry: Boolean = false,
@@ -38,6 +48,9 @@ data class RunRecord(
         status == "running" -> "正在跑"
         status == "ok" -> if (kind == "watch") "条件满足了" else "完成"
         status == "not_met" -> "查过了，条件还没满足"
+        status == "unknown" -> "这次没查成，下次再查"
+        status == "partial" -> "条件满足了，但后续步骤没做完"
+        status == "needs_setup" -> "没跑：还没配置好"
         else -> "失败" + if (retry) "（会自动再试）" else ""
     }
 }
@@ -57,9 +70,8 @@ object RunLog {
     /** 某个提醒或任务的记录，最新的在前。 */
     fun of(ctx: Context, routineId: String): List<RunRecord> = newestFirst(all(ctx)).filter { it.routineId == routineId }
 
-    /** 最新的在前；同一毫秒开始的，后写进去的算新。文件里是按时间先后存的。 */
-    private fun newestFirst(list: List<RunRecord>): List<RunRecord> =
-        list.withIndex().sortedWith(compareByDescending<IndexedValue<RunRecord>> { it.value.startedAt }.thenByDescending { it.index }).map { it.value }
+    /** 最新的在前。文件里按开始的先后存（新的总是加在末尾），倒过来就是，不看时钟（时钟会被调、同一毫秒会撞）。 */
+    private fun newestFirst(list: List<RunRecord>): List<RunRecord> = list.asReversed()
 
     private fun update(ctx: Context, change: (List<RunRecord>) -> List<RunRecord>) = synchronized(lock) {
         val list = change(all(ctx))
@@ -83,29 +95,45 @@ object RunLog {
     fun step(ctx: Context, runId: String, step: RunStep) =
         update(ctx) { l -> l.map { if (it.id == runId) it.copy(steps = (it.steps + step).takeLast(40)) else it } }
 
-    fun finish(ctx: Context, runId: String, status: String, result: String = "", error: String = "", retry: Boolean = false) =
+    /** note 只传代码里写死的短句；error 会先脱敏。 */
+    fun finish(ctx: Context, runId: String, status: String, note: String = "", error: String = "", retry: Boolean = false) =
         update(ctx) { l ->
             l.map {
-                if (it.id == runId) it.copy(status = status, finishedAt = System.currentTimeMillis(), result = result.take(200),
-                    error = error.take(400), retry = retry) else it
+                if (it.id == runId) it.copy(status = status, finishedAt = System.currentTimeMillis(), note = note.take(80),
+                    error = Redact.text(error).take(300), retry = retry) else it
             }
         }
 
     /** 一次就结束的记录（提醒弹出、监控到期这类）。 */
-    fun once(ctx: Context, r: Routine, status: String, result: String = "", error: String = "") {
+    fun once(ctx: Context, r: Routine, status: String, note: String = "", error: String = "") {
         val id = start(ctx, r)
-        finish(ctx, id, status, result, error)
+        finish(ctx, id, status, note, error)
     }
 
-    /** 留下的东西：工具结果里带编号、提交号、「已…」的那几行（不留正文）。 */
-    private val KEY = Regex("编号|提交|PR #|issue #|已设置|已改好|已写进|已新建|已加|已推送|已下载|已保存|已发送|已删除|id=")
+    /** 成功的工具结果里只认这几种远端编号，别的一概不留。 */
+    private val IDS = listOf(
+        Regex("""编号(?:还是)?\s*([A-Za-z0-9-]{1,40})""") to "编号 ",
+        Regex("""提交\s*([0-9a-f]{7})""") to "提交 ",
+        Regex("""PR\s*#(\d{1,7})""") to "PR #",
+        Regex("""issue\s*#(\d{1,7})""", RegexOption.IGNORE_CASE) to "issue #",
+        Regex("""\bid[=：:]\s*([0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12})""") to "id ",
+    )
 
-    /** 把一次工具调用的结果变成一步记录。 */
-    fun stepOf(tool: String, result: String): RunStep {
-        val failed = result.startsWith("工具调用失败") || result.startsWith("这个工具") || result.startsWith("用户没有同意")
-        val note = if (failed) result.removePrefix("工具调用失败：").lineSequence().first().take(160)
-        else result.lineSequence().map { it.trim() }.filter { KEY.containsMatchIn(it) && !it.startsWith("【") }.take(2).joinToString("；").take(160)
-        return RunStep(tool, !failed, note)
+    /** 从工具结果里抽远端编号（提醒/日历/邮件编号、提交号、PR/issue 号、Notion 页面 id），最多 3 个。 */
+    fun idsOf(result: String): List<String> =
+        IDS.flatMap { (re, label) -> re.findAll(result).map { label + it.groupValues[1] }.toList() }
+            .filterNot { Redact.hasSecretPrefix(it.substringAfter(' ').substringAfter('#')) }
+            .distinct().take(3)
+
+    /** 把一次工具调用变成一步记录：成没成看 status；成功只留编号，失败留脱敏后的第一行原因。 */
+    fun stepOf(tool: String, status: com.jack.ai.tools.ToolStatus, result: String): RunStep = when (status) {
+        com.jack.ai.tools.ToolStatus.OK -> RunStep(tool, true, idsOf(result).joinToString("；"))
+        com.jack.ai.tools.ToolStatus.REJECTED -> RunStep(tool, false, "需要确认的操作，没被同意（后台不会自动同意）", rejected = true)
+        com.jack.ai.tools.ToolStatus.FAILED -> {
+            val why = if (Verify.failed(result)) "写完读回核实没通过"
+            else result.removePrefix("工具调用失败：").lineSequence().first()
+            RunStep(tool, false, Redact.text(why).take(120))
+        }
     }
 
     /** 给模型看的一句话：这条提醒上一次跑得怎么样。 */
@@ -114,4 +142,33 @@ object RunLog {
         val time = java.text.SimpleDateFormat("M月d日 HH:mm", java.util.Locale.CHINA).format(java.util.Date(last.startedAt))
         return "上次 $time：${last.statusText()}" + if (last.error.isNotBlank()) "（${last.error.take(60)}）" else ""
     }
+}
+
+/** 落盘、发通知之前把看起来像秘密或隐私的东西隐去：邮箱、链接的路径和参数、key=…、Bearer、长串数字、令牌样子的长串。 */
+object Redact {
+    private val EMAIL = Regex("""[\w.+-]+@[\w-]+(\.[\w-]+)+""")
+    private val URL = Regex("""(https?://[^/\s?#]+)[^\s)）」]*""")
+    private val PAIR = Regex("""(?i)\b(token|access_token|api[_-]?key|key|secret|password|passwd|pwd|code|auth|authorization|sig|signature|cookie|session)\s*[=:：]\s*\S+""")
+    private val BEARER = Regex("""(?i)\b(bearer|basic|token)\s+[A-Za-z0-9._~+/=-]{8,}""")
+    private val CN_SECRET = Regex("""(验证码|密码|口令|令牌|密钥)\s*(?:是|为|[:：])\s*\S+""")
+    private val DIGITS = Regex("""\d{6,}""")
+    private val LONG = Regex("""[A-Za-z0-9_\-]{20,}""")
+
+    private val PREFIXES = listOf("ghp_", "gho_", "ghs_", "github_pat_", "sk-", "ntn_", "secret_", "xox", "AKIA", "AIza")
+
+    /** 带常见令牌前缀。 */
+    fun hasSecretPrefix(s: String) = PREFIXES.any { s.startsWith(it) }
+
+    /** 令牌样子：常见前缀，或 20 位以上、字母数字混着的串。 */
+    fun looksSecret(s: String): Boolean =
+        hasSecretPrefix(s) || (s.length >= 20 && s.any { it.isLetter() } && s.any { it.isDigit() })
+
+    fun text(s: String): String = s
+        .replace(EMAIL, "[邮箱]")
+        .replace(URL) { it.groupValues[1] + if (it.value.length > it.groupValues[1].length) "/…" else "" }
+        .replace(BEARER) { it.groupValues[1] + " [已隐去]" }
+        .replace(PAIR) { it.groupValues[1] + "=[已隐去]" }
+        .replace(CN_SECRET) { it.groupValues[1] + "[已隐去]" }
+        .replace(LONG) { if (looksSecret(it.value)) "[已隐去]" else it.value }
+        .replace(DIGITS, "[数字]")
 }

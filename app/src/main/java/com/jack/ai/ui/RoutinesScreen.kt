@@ -269,9 +269,10 @@ private fun RunHistory(routineId: String) {
     val colors = MaterialTheme.colorScheme
     val fmt = remember { java.text.SimpleDateFormat("M月d日 HH:mm", java.util.Locale.CHINA) }
     fun mark(r: com.jack.ai.data.RunRecord) = when {
-        r.interrupted() || r.status == "failed" -> "✗"
+        r.interrupted() || r.status == "failed" || r.status == "needs_setup" -> "✗"
         r.status == "running" -> "…"
         r.status == "not_met" -> "○"
+        r.status == "unknown" || r.status == "partial" -> "△"
         else -> "✓"
     }
     val last = runs.first()
@@ -279,18 +280,18 @@ private fun RunHistory(routineId: String) {
         Text(
             "上次 ${fmt.format(java.util.Date(last.startedAt))} ${mark(last)} ${last.statusText()}" + if (runs.size > 1 || last.steps.isNotEmpty() || last.error.isNotBlank()) (if (open) "  收起" else "  查看记录") else "",
             style = MaterialTheme.typography.labelSmall,
-            color = if (mark(last) == "✗") colors.error else colors.onSurfaceVariant,
+            color = if (mark(last) == "✗" || mark(last) == "△") colors.error else colors.onSurfaceVariant,
             modifier = Modifier.clickable { open = !open },
         )
         if (open) runs.take(8).forEach { r ->
             Column(Modifier.padding(top = 6.dp)) {
                 Text("${mark(r)} ${fmt.format(java.util.Date(r.startedAt))} · ${r.statusText()}", style = MaterialTheme.typography.labelMedium)
                 r.steps.forEach { st ->
-                    Text("    ${if (st.ok) "·" else "✗"} ${st.tool}" + if (st.note.isNotBlank()) "：${st.note}" else "",
+                    Text("    ${if (st.ok) "·" else if (st.rejected) "⊘" else "✗"} ${st.tool}" + if (st.note.isNotBlank()) "：${st.note}" else "",
                         style = MaterialTheme.typography.labelSmall, color = if (st.ok) colors.onSurfaceVariant else colors.error)
                 }
                 if (r.error.isNotBlank()) Text("    原因：${r.error}", style = MaterialTheme.typography.labelSmall, color = colors.error)
-                else if (r.result.isNotBlank()) Text("    ${r.result.lineSequence().first().take(100)}", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+                else if (r.note.isNotBlank()) Text("    ${r.note}", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
             }
         }
     }

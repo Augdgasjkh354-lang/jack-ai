@@ -57,6 +57,11 @@ interface ToolHost {
     fun saveNote(projectId: String?, title: String, content: String)
 }
 
+/** 一次工具调用成没成：OK 做成了；FAILED 出错或读回核实没通过；REJECTED 要确认的操作没被同意（后台一律不同意）。 */
+enum class ToolStatus { OK, FAILED, REJECTED }
+
+data class ToolOutcome(val text: String, val status: ToolStatus)
+
 /** 工具执行过程要在聊天里显示的东西：进行中/完成的标签，生成的文件卡片。 */
 interface ToolUi {
     fun started(label: String)
@@ -102,7 +107,11 @@ class ToolSession(
      * strict 的操作（读过外部内容后发信给新地址）完全授权下也要问。
      */
     suspend fun approve(title: String, body: String, action: String, strict: Boolean = false): Boolean =
-        (!strict && withContext(Dispatchers.IO) { host.store.loadSettings().fullAuth }) || ui.confirm(title, body, action)
+        ((!strict && withContext(Dispatchers.IO) { host.store.loadSettings().fullAuth }) || ui.confirm(title, body, action))
+            .also { if (!it) rejected.incrementAndGet() }
+
+    /** 没被同意的次数；和 succeeded 一样，execute 前后比一比就知道这次是不是被拒了。 */
+    internal val rejected = java.util.concurrent.atomic.AtomicInteger()
 
     /** 成功跑完的工具次数；execute 前后比一比，就知道这次调用成没成（参数不对没进 runTool 的也算失败）。 */
     internal val succeeded = java.util.concurrent.atomic.AtomicInteger()
@@ -130,18 +139,26 @@ class ToolSession(
     @Volatile internal var sawExternal = false
 
     /** 按工具名执行，返回给模型看的结果，顺便记进工具统计。 */
-    suspend fun execute(name: String, argsText: String): String {
+    suspend fun execute(name: String, argsText: String): String = perform(name, argsText).text
+
+    /** 同 execute，另外带上这次成没成（由代码判定，不看结果文字怎么写）。 */
+    suspend fun perform(name: String, argsText: String): ToolOutcome {
         loop.check(name, argsText)?.let { msg ->
             withContext(Dispatchers.IO) { runCatching { host.store.addToolStat(name, failed = true) } }
-            return msg
+            return ToolOutcome(msg, ToolStatus.FAILED)
         }
         // 连接器返回的也是外部内容
         if (name in EXTERNAL_TOOLS || name.startsWith(com.jack.ai.data.Mcp.PREFIX)) sawExternal = true
         val before = succeeded.get()
+        val refusedBefore = rejected.get()
         val result = dispatch(name, argsText)
-        val failed = succeeded.get() == before
-        withContext(Dispatchers.IO) { runCatching { host.store.addToolStat(name, failed) } }
-        return result
+        val status = when {
+            rejected.get() != refusedBefore -> ToolStatus.REJECTED
+            succeeded.get() == before || com.jack.ai.data.Verify.failed(result) -> ToolStatus.FAILED
+            else -> ToolStatus.OK
+        }
+        withContext(Dispatchers.IO) { runCatching { host.store.addToolStat(name, status == ToolStatus.FAILED) } }
+        return ToolOutcome(result, status)
     }
 
     /** 按工具名分给各自的实现。没开对应技能的工具一律不可用。 */

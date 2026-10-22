@@ -1,16 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   Android 12 及以上：系统自动备份（云端）和换机迁移时排除的东西。
-  settings.xml 里有各种 Key、令牌、邮箱授权码、代理订阅；app_webview 里有 Jack 浏览器的登录 Cookie。
-  其余（聊天、文件、表格……）照常备份。换手机要带设置，用 App 里的「备份」（它本来就不含 Key）。
+  settings.xml 里有各种 Key、令牌、邮箱授权码、代理订阅；app_webview 里有 Jack 浏览器的登录 Cookie；
+  runlogs.json 是后台任务的运行记录（已脱敏，但没必要跟着走）。
+  其余（聊天、文件、表格……）照常备份。系统迁移不会带走设置：换手机时用 App 里的「备份」恢复普通设置，再重新填 Key 和令牌。
 -->
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="sharedpref" path="settings.xml" />
         <exclude domain="root" path="app_webview/" />
+        <exclude domain="file" path="runlogs.json" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="sharedpref" path="settings.xml" />
         <exclude domain="root" path="app_webview/" />
+        <exclude domain="file" path="runlogs.json" />
     </device-transfer>
 </data-extraction-rules>

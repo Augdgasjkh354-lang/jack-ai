@@ -67,8 +67,13 @@ class BackgroundToolHost(ctx: Context) : ToolHost {
     }
 }
 
-/** 定时 Work 的结果：文字和生成的文件。 */
-data class TaskResult(val text: String, val files: List<GeneratedFile> = emptyList())
+const val NO_KEY = "还没有填写 API Key，任务没法执行。到设置里填好以后，下次会按时再跑。"
+
+/** 后台任务跑得怎么样：OK 产出了结果；FAILED 没产出；NEEDS_SETUP 没配置好（没有 API Key），根本没跑。 */
+enum class TaskStatus { OK, FAILED, NEEDS_SETUP }
+
+/** 定时 Work 的结果：文字、生成的文件，以及成没成（由代码置位，不看文字）。 */
+data class TaskResult(val text: String, val files: List<GeneratedFile> = emptyList(), val status: TaskStatus = TaskStatus.OK)
 
 /**
  * 到点在后台跑一个 Work 任务：和聊天里的 Work 一样能用全部开着的技能（邮箱、文件、联网……），
@@ -80,7 +85,7 @@ suspend fun runBackgroundWork(ctx: Context, r: Routine, log: (com.jack.ai.data.R
     val store = host.store
     val s = store.loadSettings()
     val ep = s.endpoint(s.workModel)?.takeIf { it.apiKey.isNotBlank() } ?: s.backgroundEndpoint()
-        ?: return TaskResult("还没有填写 API Key，任务没法执行。")
+        ?: return TaskResult(NO_KEY, status = TaskStatus.NEEDS_SETUP)
     val conv = store.loadConversations().firstOrNull { it.id == r.convId }?.copy(work = true)
         ?: Conversation(id = r.convId, title = "⏰ " + r.title, work = true)
     val skills = s.activeSkills()
@@ -122,7 +127,7 @@ suspend fun runBackgroundWork(ctx: Context, r: Routine, log: (com.jack.ai.data.R
             if (s.workCostLimit > 0 && spent >= s.workCostLimit) {
                 session.maxRounds = 0
                 "花费到了上限，不要再调用工具，直接写出目前的结果，并说明还差什么。"
-            } else session.execute(name, args).also { log(com.jack.ai.data.RunLog.stepOf(name, it)) }
+            } else session.perform(name, args).also { log(com.jack.ai.data.RunLog.stepOf(name, it.status, it.text)) }.text
         },
         onUsage = { ev ->
             store.addUsage(ep, ev.promptTokens, ev.cacheHit, ev.completionTokens)
@@ -130,5 +135,6 @@ suspend fun runBackgroundWork(ctx: Context, r: Routine, log: (com.jack.ai.data.R
                 ?.let { Pricing.cost(it, ev.promptTokens, ev.cacheHit ?: 0, ev.completionTokens) } ?: 0.0
         },
     )
-    return TaskResult(agent.lastRound.trim().ifBlank { agent.content.toString().trim() }.ifBlank { "（这次没有生成内容）" }, files)
+    val text = agent.lastRound.trim().ifBlank { agent.content.toString().trim() }
+    return if (text.isBlank()) TaskResult("（这次没有生成内容）", files, TaskStatus.FAILED) else TaskResult(text, files)
 }

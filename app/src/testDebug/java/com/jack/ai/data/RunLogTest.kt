@@ -23,13 +23,15 @@ class RunLogTest {
     @Test
     fun aRunRecordsStepsAndOutcome() {
         val run = RunLog.start(ctx, task)
-        RunLog.step(ctx, run, RunLog.stepOf("web_search", "[1] 标题 …正文很长不该被记下来…"))
-        RunLog.step(ctx, run, RunLog.stepOf("github", "已推送到 me/app 的 main 分支（1 个文件，提交 abc1234）：https://…\n要看自动打包的结果用 runs"))
-        RunLog.step(ctx, run, RunLog.stepOf("send_email", "工具调用失败：连不上 Jack 专用代理。下一步：…"))
-        RunLog.finish(ctx, run, "ok", "今天的 5 条新闻……")
+        RunLog.step(ctx, run, RunLog.stepOf("web_search", OK, "[1] 标题 …正文很长不该被记下来…"))
+        RunLog.step(ctx, run, RunLog.stepOf("github", OK, "已推送到 me/app 的 main 分支（1 个文件，提交 abc1234）：https://…\n要看自动打包的结果用 runs"))
+        RunLog.step(ctx, run, RunLog.stepOf("send_email", FAILED, "工具调用失败：连不上 Jack 专用代理。下一步：…"))
+        RunLog.step(ctx, run, RunLog.stepOf("send_email", REJECTED, "用户没有同意"))
+        RunLog.finish(ctx, run, "ok")
         val r = RunLog.of(ctx, task.id).single()
         assertEquals("ok", r.status); assertEquals("完成", r.statusText())
-        assertEquals(listOf(true, true, false), r.steps.map { it.ok })
+        assertEquals(listOf(true, true, false, false), r.steps.map { it.ok })
+        assertTrue(r.steps[3].rejected)
         // 不记正文，只记编号、提交号这类，以及失败原因
         assertEquals("", r.steps[0].note)
         assertTrue(r.steps[1].note, r.steps[1].note.contains("提交 abc1234"))
@@ -55,6 +57,55 @@ class RunLogTest {
         repeat(25) { RunLog.once(ctx, task, "not_met", "第 $it 次") }
         val list = RunLog.of(ctx, task.id)
         assertEquals(20, list.size)
-        assertEquals("第 24 次", list.first().result)
+        assertEquals("第 24 次", list.first().note)
     }
+
+    @Test
+    fun okIsDecidedByStatusNotByWording() {
+        // 文字看着像失败，但代码说成了：算成功；反过来，文字看着正常，代码说失败：算失败
+        assertTrue(RunLog.stepOf("notion_write", OK, "权限不足这个词出现在页面标题里").ok)
+        assertFalse(RunLog.stepOf("notion_write", FAILED, "已写进 Notion").ok)
+        assertEquals("写完读回核实没通过", RunLog.stepOf("notion_write", FAILED, "已写好" + Verify.note(listOf("标题对不上"), "")).note)
+    }
+
+    @Test
+    fun newStatusesReadPlainly() {
+        fun text(status: String, kind: String = "watch") = RunRecord(routineId = "x", title = "t", kind = kind, status = status).statusText()
+        assertEquals("这次没查成，下次再查", text("unknown"))
+        assertEquals("条件满足了，但后续步骤没做完", text("partial"))
+        assertTrue(text("needs_setup", "task").contains("没配置好"))
+    }
+
+    @Test
+    fun nothingPrivateReachesTheFile() {
+        val token = "ghp_" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8"
+        val mail = "Hi 张三，你的体检报告显示血压偏高，请于周五前回电 13812345678。"
+        val link = "https://accounts.example.com/oauth/callback?code=4/0AbCdEf123456&state=xyz"
+        val run = RunLog.start(ctx, task)
+        // 成功的结果里有正文、令牌、链接：一样都不该留下，只留编号
+        RunLog.step(ctx, run, RunLog.stepOf("read_email", OK, "编号 4821｜$mail\n令牌：$token\n$link"))
+        // 失败原因里带着这些：脱敏后再存
+        RunLog.step(ctx, run, RunLog.stepOf("github", FAILED, "工具调用失败：401 Bad credentials token=$token 回调 $link 联系 me@example.com"))
+        RunLog.finish(ctx, run, "failed", error = "Authorization: Bearer $token；验证码：883412；回电 13812345678")
+        val saved = File(ctx.filesDir, "runlogs.json").readText()
+        listOf(token, "4/0AbCdEf123456", "code=4", "me@example.com", "体检报告", "13812345678", "883412", "血压").forEach {
+            assertFalse("记录里不该有：$it\n$saved", it in saved)
+        }
+        val r = RunLog.of(ctx, task.id).single()
+        assertEquals("编号 4821", r.steps[0].note)
+        assertTrue(r.steps[1].note, r.steps[1].note.contains("401"))
+        assertTrue(r.steps[1].note, r.steps[1].note.contains("https://accounts.example.com"))
+    }
+
+    @Test
+    fun redactKeepsUsefulBits() {
+        assertEquals("网络连接超时。下一步：稍后重试", Redact.text("网络连接超时。下一步：稍后重试"))
+        assertEquals("HTTP 404 找不到 https://api.github.com/…", Redact.text("HTTP 404 找不到 https://api.github.com/repos/me/x?access_token=abc"))
+        assertEquals("邮箱密码不对", Redact.text("邮箱密码不对"))
+        assertEquals("密码[已隐去]", Redact.text("密码：hunter2"))
+    }
+
+    private val OK = com.jack.ai.tools.ToolStatus.OK
+    private val FAILED = com.jack.ai.tools.ToolStatus.FAILED
+    private val REJECTED = com.jack.ai.tools.ToolStatus.REJECTED
 }
