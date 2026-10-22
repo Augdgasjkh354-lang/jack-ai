@@ -8,8 +8,10 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import java.io.File
 import java.io.IOException
@@ -18,7 +20,7 @@ import java.util.zip.ZipInputStream
 
 /**
  * GitHub：搜项目、看自己的项目（填了令牌连私有的也能看）、读目录和文件、下载整个项目或 Releases 里的文件。
- * 只读，不改 GitHub 上的任何东西。网络跟着 Jack 专用代理的分流走（GitHub 的网址都不在直连名单里）。
+ * 这里是读的部分；改代码、推送、PR、issue、自动打包在 GitHubWrite。网络跟着 Jack 专用代理的分流走（GitHub 的网址都不在直连名单里）。
  * 下载下来的项目放在对话文件夹的 .repos/作者__项目名/ 里，之后读目录、读文件、全文搜索都用本地的，又快又不占次数。
  */
 object GitHub {
@@ -168,6 +170,34 @@ object GitHub {
         return sb.toString()
     }
 
+    /** 发写请求（POST / PATCH / PUT），body 是 JSON。204 这类没内容的返回空对象。 */
+    fun send(token: String, method: String, path: String, body: JsonObject?): JsonElement {
+        if (token.isBlank()) throw GitHubException("这一步要改 GitHub 上的东西，先到 设置 → GitHub 填一个有写权限的令牌")
+        val rb = (body?.toString() ?: "").toRequestBody("application/json; charset=utf-8".toMediaType())
+        val req = request(token, path).newBuilder().method(method, rb).build()
+        http.newCall(req).execute().use { resp ->
+            val text = resp.body?.string().orEmpty()
+            if (!resp.isSuccessful) throw GitHubException(explainWrite(resp, text, token))
+            return if (text.isBlank()) JsonObject(emptyMap()) else json.parseToJsonElement(text)
+        }
+    }
+
+    /** 写操作的报错：403 多半是令牌没有写权限。 */
+    private fun explainWrite(resp: Response, text: String, token: String): String {
+        val msg = runCatching { (json.parseToJsonElement(text).jsonObject["message"] as? JsonPrimitive)?.content }.getOrNull().orEmpty()
+        return when {
+            resp.code == 403 && "rate limit" !in msg.lowercase() ->
+                "令牌没有这个权限（$msg）。到 GitHub 的令牌设置里给这个项目打开相应的读写权限（代码 Contents、PR Pull requests、Issues、打包 Actions）"
+            resp.code == 404 -> "GitHub 上找不到，或者令牌没有这个项目的写权限（$msg）"
+            resp.code == 409 -> "GitHub 说有冲突（$msg）"
+            resp.code == 422 -> "GitHub 不接受（$msg）"
+            else -> explain(resp, text, token)
+        }
+    }
+
+    /** 拿一段纯文字（比如 Actions 的日志，GitHub 会跳到存日志的地方，令牌不会跟过去）。 */
+    fun text(token: String, path: String): String = raw(token, path)
+
     /** 拿文件原文（README、某个文件）。 */
     private fun raw(token: String, path: String): String {
         http.newCall(request(token, path, "application/vnd.github.raw")).execute().use { resp ->
@@ -276,12 +306,20 @@ object GitHub {
     fun downloadRepo(token: String, repo: String, ref: String, wsDir: File, limit: Long = HARD_LIMIT): Downloaded {
         val dest = localDir(wsDir, repo)
         val zip = File(wsDir, ".repos/.${repo.replace("/", "__")}.zip")
-        val zipBytes = fetch(token, "/repos/$repo/zipball" + if (ref.isNotBlank()) "/${java.net.URLEncoder.encode(ref, "UTF-8")}" else "", "application/vnd.github+json", zip, limit)
+        // 先定下分支和提交：按提交下载，记下来，之后改了代码推回去时据此算改动、查冲突
+        val branch = ref.ifBlank { get(token, "/repos/$repo").jsonObject["default_branch"].s() }
+        val commit = get(token, "/repos/$repo/commits/${java.net.URLEncoder.encode(branch, "UTF-8")}").jsonObject["sha"].s()
+        val zipBytes = fetch(token, "/repos/$repo/zipball/" + commit.ifBlank { java.net.URLEncoder.encode(branch, "UTF-8") },
+            "application/vnd.github+json", zip, limit)
         val staging = File(dest.parentFile, ".${dest.name}.new")
+        val base = baseDir(wsDir, repo)
         staging.deleteRecursively()
         try {
             val (files, bytes) = unzip(zip, staging, limit * 3)
-            File(staging, ".jack-repo").writeText("$repo@${ref.ifBlank { "默认分支" }}\n${System.currentTimeMillis()}")
+            File(staging, META).writeText(Meta(repo, branch, commit).toJson())
+            // 原样留一份：本地改了什么、推回去时有没有和别人的改动撞上，都和它比
+            base.deleteRecursively()
+            staging.copyRecursively(base)
             dest.deleteRecursively()
             if (!staging.renameTo(dest)) throw IOException("没能放进对话文件夹")
             return Downloaded(dest, files, bytes, zipBytes)
@@ -290,6 +328,23 @@ object GitHub {
             staging.deleteRecursively()
         }
     }
+
+    /** 本地副本记着的：哪个项目、哪个分支、下载（或上次推送）时的提交。 */
+    data class Meta(val repo: String, val branch: String, val commit: String) {
+        fun toJson() = kotlinx.serialization.json.buildJsonObject {
+            put("repo", JsonPrimitive(repo)); put("branch", JsonPrimitive(branch)); put("commit", JsonPrimitive(commit))
+        }.toString()
+    }
+
+    const val META = ".jack-repo"
+
+    fun meta(dir: File): Meta? = runCatching {
+        val o = json.parseToJsonElement(File(dir, META).readText()).jsonObject
+        Meta(o["repo"].s(), o["branch"].s(), o["commit"].s())
+    }.getOrNull()
+
+    /** 下载时的原样副本：.repos/.base/作者__项目名 */
+    fun baseDir(wsDir: File, repo: String) = File(wsDir, ".repos/.base/" + repo.replace("/", "__"))
 
     /**
      * 解压 GitHub 的源码包：去掉包里最外层「作者-项目-提交号/」那一层；
@@ -335,7 +390,7 @@ object GitHub {
         val entries = dir.walkTopDown().onEnter { it == dir || it.name !in SKIP_DIRS }.filter { it != dir && !it.name.startsWith(".jack") }
             .map { f -> Triple(f.relativeTo(dir).path.replace(File.separatorChar, '/'), f.isDirectory, if (f.isFile) f.length() else 0L) }
             .filter { it.first.startsWith(prefix) }.toList()
-        val repo = File(dir, ".jack-repo").takeIf { it.exists() }?.readLines()?.firstOrNull() ?: dir.name
+        val repo = meta(dir)?.let { "${it.repo}@${it.branch}" } ?: dir.name
         return formatTree("$repo（本地）", prefix, entries)
     }
 

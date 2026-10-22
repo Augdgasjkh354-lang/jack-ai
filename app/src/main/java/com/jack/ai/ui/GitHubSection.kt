@@ -29,7 +29,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** 设置页的 GitHub：填令牌（只读就够），测一下通不通。 */
+/** 设置页的 GitHub：填令牌（只读或读写），测一下通不通。 */
 @Composable
 fun GitHubSection(vm: ChatViewModel, s: Settings) {
     val scope = rememberCoroutineScope()
@@ -44,8 +44,9 @@ fun GitHubSection(vm: ChatViewModel, s: Settings) {
         "不填也能搜和看公开项目（每小时 60 次）。要看你自己的私有项目、搜代码，填一个令牌：\n" +
             "1. 打开下面的链接，新建「Fine-grained token」，有效期自己定。\n" +
             "2. Repository access 选「All repositories」（或只选要给 Jack 看的项目）。\n" +
-            "3. Permissions 里把 Contents 设成「Read-only」（Metadata 会自动只读），别的不用开。\n" +
-            "4. 生成后复制（github_pat_ 开头）填到下面。Jack 只读，不会改你的项目。令牌只存在手机上，不进备份。",
+            "3. Permissions：只让 Jack 看，就把 Contents 设成「Read-only」；要让它改代码、推送、开 PR、处理 issue、看和重跑自动打包，" +
+            "就把 Contents、Pull requests、Issues、Actions 都设成「Read and write」（Metadata 会自动只读）。\n" +
+            "4. 生成后复制（github_pat_ 开头）填到下面。推送、合并、发评论之前 Jack 都会先问你。令牌只存在手机上，不进备份。",
         style = MaterialTheme.typography.bodySmall,
         color = colors.onSurfaceVariant,
     )

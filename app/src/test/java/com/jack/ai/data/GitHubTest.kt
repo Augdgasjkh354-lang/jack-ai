@@ -87,7 +87,8 @@ class GitHubTest {
             path == "/repos/me/jack-ai/git/trees/main" -> Triple(200, "application/json", """{"tree":[{"path":"README.md","type":"blob","size":30},{"path":"app","type":"tree"},{"path":"app/Main.kt","type":"blob","size":70}],"truncated":false}""".toByteArray())
             path == "/repos/me/jack-ai/contents/app/Main.kt" && "raw" in accept -> Triple(200, "text/plain", (1..1000).joinToString("\n") { "line $it" }.toByteArray())
             // 下载：api 跳到另一个主机（localhost），看令牌有没有被带过去
-            path == "/repos/me/jack-ai/zipball" -> { extra = "Location: http://localhost:$port/codeload/me/jack-ai.zip\r\n"; Triple(302, "text/plain", ByteArray(0)) }
+            path == "/repos/me/jack-ai/commits/main" -> Triple(200, "application/json", """{"sha":"abc123"}""".toByteArray())
+            path == "/repos/me/jack-ai/zipball/abc123" -> { extra = "Location: http://localhost:$port/codeload/me/jack-ai.zip\r\n"; Triple(302, "text/plain", ByteArray(0)) }
             path == "/codeload/me/jack-ai.zip" -> Triple(200, "application/zip", zip)
             path == "/repos/me/jack-ai/releases/assets/7" -> { extra = "Location: http://localhost:$port/objects/7\r\n"; Triple(302, "text/plain", ByteArray(0)) }
             path == "/objects/7" -> Triple(200, "application/octet-stream", "APK-CONTENT".toByteArray())
@@ -155,7 +156,7 @@ class GitHubTest {
         assertFalse(File(ws, ".repos/.me__jack-ai.zip").exists())
         assertEquals(d.dir, GitHub.local(ws, "me/jack-ai"))
         // api 那一跳带了令牌，跳到别的主机后没带
-        assertTrue(log.toString(), log.any { it.startsWith("GET /repos/me/jack-ai/zipball token") })
+        assertTrue(log.toString(), log.any { it.startsWith("GET /repos/me/jack-ai/zipball/abc123 token") })
         assertTrue(log.toString(), log.any { it.startsWith("GET /codeload/me/jack-ai.zip -") })
         // 本地的目录、读文件、grep（依赖目录不搜）
         val tree = GitHub.localTree(d.dir, "")
