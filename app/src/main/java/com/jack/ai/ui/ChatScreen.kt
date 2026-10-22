@@ -80,6 +80,9 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -471,45 +474,60 @@ private fun Pill(
 
 @Composable
 private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolean, bars: PaddingValues) {
-    val listState = rememberLazyListState()
-    val reversed = conv.messages.asReversed()
+    // 一打开就停在最后一条附近，不先闪一下最顶上
+    val listState = remember(conv.id) { androidx.compose.foundation.lazy.LazyListState(firstVisibleItemIndex = (conv.messages.size - 1).coerceAtLeast(0)) }
+    val scope = rememberCoroutineScope()
     val lastId = conv.messages.last().id
-    // 倒序排列：最新的消息在最下面，流式输出时自动贴底
-    LazyColumn(
-        state = listState,
-        reverseLayout = true,
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-            start = 16.dp, end = 16.dp,
-            top = bars.calculateTopPadding() + 12.dp, bottom = bars.calculateBottomPadding() + 12.dp,
-        ),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
-    ) {
-        reversed.forEach { msg ->
-            if (msg.id == conv.summaryUntilId) {
-                item(key = "summary-divider") { SummaryDivider(conv.summary) }
-            }
-            item(key = msg.id) {
-                Box(Modifier.animateItem()) {
-                    if (msg.role == "user") {
-                        UserBubble(msg, onDelete = { vm.deleteFrom(msg.id) }, onEdit = { vm.editMessage(msg.id, it) })
-                    } else {
-                        val isLast = msg.id == lastId
-                        AssistantMessage(
-                            msg = msg,
-                            streaming = streaming && isLast,
-                            isLast = isLast,
-                            onRegenerate = vm::regenerate,
-                            onDelete = { vm.deleteFrom(msg.id) },
-                            onReview = vm::reviewLast,
-                            onContinue = if (conv.work && isLast && !msg.truncated && vm.canContinue(msg)) vm::continueWork else null,
-                            onContinueWriting = vm::continueWriting,
-                            onReport = { note -> vm.reportIssue(msg.id, note) },
-                            onFixApp = { text -> vm.send(text) },
-                        )
+    val lastUserId = conv.messages.lastOrNull { it.role == "user" }?.id
+    val follow = rememberFollowBottom(listState, conv.id, lastUserId, moving = streaming || StreamReveal.pending)
+    Box(Modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize().nestedScroll(follow.connection),
+            contentPadding = PaddingValues(
+                start = 16.dp, end = 16.dp,
+                top = bars.calculateTopPadding() + 12.dp, bottom = bars.calculateBottomPadding() + 12.dp,
+            ),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
+        ) {
+            conv.messages.forEach { msg ->
+                item(key = msg.id) {
+                    Box(Modifier.animateItem()) {
+                        if (msg.role == "user") {
+                            UserBubble(msg, onDelete = { vm.deleteFrom(msg.id) }, onEdit = { vm.editMessage(msg.id, it) })
+                        } else {
+                            val isLast = msg.id == lastId
+                            AssistantMessage(
+                                msg = msg,
+                                streaming = streaming && isLast,
+                                isLast = isLast,
+                                onRegenerate = vm::regenerate,
+                                onDelete = { vm.deleteFrom(msg.id) },
+                                onReview = vm::reviewLast,
+                                onContinue = if (conv.work && isLast && !msg.truncated && vm.canContinue(msg)) vm::continueWork else null,
+                                onContinueWriting = vm::continueWriting,
+                                onReport = { note -> vm.reportIssue(msg.id, note) },
+                                onFixApp = { text -> vm.send(text) },
+                            )
+                        }
                     }
                 }
+                // 已压缩的分界线放在被压缩的最后一条下面
+                if (msg.id == conv.summaryUntilId) {
+                    item(key = "summary-divider") { SummaryDivider(conv.summary) }
+                }
             }
+        }
+        // 翻上去了：给一个回到底部的按钮
+        androidx.compose.animation.AnimatedVisibility(
+            visible = !follow.on && listState.canScrollForward,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = bars.calculateBottomPadding() + 12.dp),
+            enter = androidx.compose.animation.fadeIn(), exit = androidx.compose.animation.fadeOut(),
+        ) {
+            androidx.compose.material3.SmallFloatingActionButton(
+                onClick = { follow.on = true; scope.launch { val n = listState.layoutInfo.totalItemsCount; if (n > 0) listState.animateScrollToItem(n - 1, Int.MAX_VALUE) } },
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            ) { Icon(Icons.Default.KeyboardArrowDown, "回到底部") }
         }
     }
 }
@@ -966,4 +984,45 @@ private fun WorkTemplates(vm: ChatViewModel, templates: List<com.jack.ai.data.Pr
             },
         )
     }
+}
+
+/** 聊天列表的「跟着往下走」：on 为真时内容一长就贴到底；用户往上翻就关掉，回到底部再打开。 */
+internal class FollowBottom {
+    var on by mutableStateOf(true)
+    val connection = object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
+        override fun onPreScroll(available: androidx.compose.ui.geometry.Offset, source: androidx.compose.ui.input.nestedscroll.NestedScrollSource): androidx.compose.ui.geometry.Offset {
+            // 手指往下拖 = 往上翻看旧内容：不再拽着用户
+            if (source == androidx.compose.ui.input.nestedscroll.NestedScrollSource.UserInput && available.y > 0) on = false
+            return androidx.compose.ui.geometry.Offset.Zero
+        }
+    }
+}
+
+/**
+ * key 换了（换对话）或 newTurn 换了（用户发了新消息）就回到最底下并开始跟；
+ * moving（正在输出或字还没放完）时每一帧贴一下底，内容一点点长，画面就一点点平滑上移。
+ */
+@Composable
+internal fun rememberFollowBottom(listState: androidx.compose.foundation.lazy.LazyListState, key: Any, newTurn: Any?, moving: Boolean): FollowBottom {
+    val f = remember(key) { FollowBottom() }
+    suspend fun toEnd() {
+        val n = listState.layoutInfo.totalItemsCount
+        if (n > 0) listState.scrollToItem(n - 1, Int.MAX_VALUE)
+    }
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.canScrollForward }.collect { more -> if (!more) f.on = true }
+    }
+    LaunchedEffect(key, newTurn) {
+        f.on = true
+        withFrameNanos { }
+        toEnd()
+    }
+    LaunchedEffect(key, moving) {
+        if (!moving) return@LaunchedEffect
+        while (true) {
+            withFrameNanos { }
+            if (f.on && listState.canScrollForward && !listState.isScrollInProgress) toEnd()
+        }
+    }
+    return f
 }

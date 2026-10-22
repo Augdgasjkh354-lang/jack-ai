@@ -257,9 +257,11 @@ fun AssistantMessage(
             ThinkingBox(msg.reasoning, thinking = streaming && msg.content.isEmpty() && msg.searches.none { it.pending })
             Spacer(Modifier.height(8.dp))
         }
-        if (msg.content.isNotEmpty()) {
-            MarkdownText(
-                markdown = msg.content,
+        // 回答按打字的节奏柔和地放出来（思考框照原速）；按段渲染，写完的段落不再重排
+        val shown = rememberRevealedText(msg.id, msg.content, streaming)
+        if (shown.isNotEmpty()) {
+            MarkdownBlocks(
+                markdown = shown,
                 color = colors.onSurface,
                 codeBackground = colors.surfaceVariant,
                 modifier = Modifier.fillMaxWidth(),

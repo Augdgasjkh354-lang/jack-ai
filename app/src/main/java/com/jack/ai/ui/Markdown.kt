@@ -7,6 +7,8 @@ import android.widget.TextView
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
@@ -109,4 +111,45 @@ fun MarkdownText(
             markwon.setMarkdown(tv, normalizeLatex(markdown))
         },
     )
+}
+
+/**
+ * 长回答按段落分开渲染：每段一个 MarkdownText，写完的段落内容不变就不会重新排版，
+ * 流式输出时只有正在写的最后一段在刷新（不然每来几个字整条回答都要重排一遍，滑动会卡）。
+ */
+@Composable
+fun MarkdownBlocks(
+    markdown: String,
+    color: Color,
+    codeBackground: Color,
+    modifier: Modifier = Modifier,
+    textSizeSp: Float = 16f,
+) {
+    val blocks = remember(markdown) { splitBlocks(markdown) }
+    androidx.compose.foundation.layout.Column(modifier, verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
+        blocks.forEachIndexed { i, b ->
+            androidx.compose.runtime.key(i) {
+                MarkdownText(b, color, codeBackground, Modifier.fillMaxWidth(), textSizeSp)
+            }
+        }
+    }
+}
+
+/** 按空行切段；代码块（```）和公式块（$$）里的空行不切，列表、表格本身不含空行，不受影响。 */
+internal fun splitBlocks(md: String): List<String> {
+    val out = mutableListOf<String>()
+    val cur = StringBuilder()
+    var fence = false
+    var math = false
+    for (line in md.split('\n')) {
+        val t = line.trim()
+        if (t.startsWith("```") || t.startsWith("~~~")) fence = !fence
+        else if (!fence && t == "$$") math = !math
+        if (t.isEmpty() && !fence && !math) {
+            if (cur.isNotBlank()) out += cur.toString().trimEnd('\n')
+            cur.clear()
+        } else cur.append(line).append('\n')
+    }
+    if (cur.isNotBlank()) out += cur.toString().trimEnd('\n')
+    return out
 }
