@@ -170,6 +170,13 @@ object CalendarTool {
         return out
     }
 
+    /** 按编号重新读一个日程：(标题, 开始时间)，找不到返回 null。写入后核实用。 */
+    fun get(ctx: Context, id: Long): Pair<String, Long>? =
+        ctx.contentResolver.query(
+            ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, id),
+            arrayOf(CalendarContract.Events.TITLE, CalendarContract.Events.DTSTART, CalendarContract.Events.DELETED), null, null, null,
+        )?.use { c -> if (c.moveToFirst() && c.getInt(2) == 0) c.getString(0).orEmpty() to c.getLong(1) else null }
+
     fun delete(ctx: Context, id: Long): Boolean =
         ctx.contentResolver.delete(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, id), null, null) > 0
 

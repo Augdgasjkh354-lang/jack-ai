@@ -63,6 +63,10 @@ internal suspend fun ToolSession.addRows(args: JsonObject): String {
                 t = t2.copy(rows = t2.rows + listOf(row))
             }
             Tables.save(app, t)
+            // 存完重新读，行数对得上才算写进去了
+            val back = Tables.get(app, t.name)?.rows?.size
+            val expected = t.rows.count { r -> r.any { it.isNotBlank() } }
+            if (back != expected) throw IllegalStateException("写入后重新读表，行数对不上（应为 $expected，实际 ${back ?: 0}），可能没存成功")
             t.rows.size
         }
         (if (created) "新建了表「$name」，" else "") + "已加 ${items.size} 行，「$name」现在共 $total 行。" to

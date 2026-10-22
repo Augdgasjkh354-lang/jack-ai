@@ -659,6 +659,43 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * 万能收件箱：分享进来的东西直接发到「收件箱」对话，AI 自动判断类型、提炼重点、归档。
+     * 和「问 Jack」不同，不等用户再按发送。
+     */
+    fun inboxShare(text: String?, uris: List<Uri>, mime: String?) {
+        viewModelScope.launch {
+            val app = getApplication<Application>()
+            val atts = uris.mapNotNull { uri ->
+                try {
+                    val image = mime?.startsWith("image/") == true ||
+                        app.contentResolver.getType(uri)?.startsWith("image/") == true
+                    if (image) com.jack.ai.data.Attachments.importImage(app, uri)
+                    else com.jack.ai.data.Attachments.importFile(app, uri, keepOriginal = true)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    core.toast("有个文件读不了：${e.message ?: "读取失败"}")
+                    null
+                }
+            }
+            if (text.isNullOrBlank() && atts.isEmpty()) return@launch
+            val existing = _state.value.conversations.firstOrNull { it.id == com.jack.ai.data.INBOX_ID }
+            if (existing == null) {
+                val c = Conversation(id = com.jack.ai.data.INBOX_ID, title = "📥 收件箱", systemPrompt = com.jack.ai.data.INBOX_PROMPT, presetName = "收件箱")
+                _state.update { it.copy(conversations = listOf(c) + it.conversations) }
+            } else if (existing.systemPrompt != com.jack.ai.data.INBOX_PROMPT) {
+                // 收件箱的说明更新过，跟着换成最新的
+                updateConvQuiet(existing.id) { it.copy(systemPrompt = com.jack.ai.data.INBOX_PROMPT) }
+            }
+            select(com.jack.ai.data.INBOX_ID)
+            // 正在回答的先收尾，再发
+            job?.join()
+            _state.update { it.copy(pending = atts) }
+            send(text.orEmpty())
+        }
+    }
+
     suspend fun loadUsage(): List<UsageDay> = withContext(Dispatchers.IO) { store.loadUsage() }
     suspend fun loadToolStats(): List<com.jack.ai.data.ToolStat> = withContext(Dispatchers.IO) { store.loadToolStats() }
 
@@ -691,6 +728,15 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         override fun libraryIndex() = knowledge.index()
         override fun projectIndex(p: Project) = projects.projectIndex(p)
         override fun refreshWidget() = core.refreshWidget()
+        override fun saveNote(projectId: String?, title: String, content: String) {
+            val p = projectId?.let { id -> _state.value.project(id) }
+            if (p == null) knowledge.addNote(title, content)
+            else {
+                projects.saveProject(p.copy(files = p.files + Attachment(kind = "file", name = "$title.md", text = content)))
+                // 当场写一次，后面核实时读得到（平时的保存是稍后合并着写的）
+                store.saveProjects(_state.value.projects)
+            }
+        }
     }
 
     /** 一次请求的上下文大概由哪些部分组成（名字, 估算 token），统计页用。conv 为空时按新对话算。 */

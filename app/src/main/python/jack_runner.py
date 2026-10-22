@@ -90,3 +90,12 @@ def run(code, cwd, timeout):
     if len(text) > 20000:
         text = text[:20000] + "\n…（输出太长，后面省略）"
     return text
+
+
+def check(code):
+    """只编译不运行，返回语法错误；没错返回空字符串。"""
+    try:
+        compile(code, "<code>", "exec")
+        return ""
+    except SyntaxError as e:
+        return "第 %s 行：%s" % (e.lineno, e.msg)

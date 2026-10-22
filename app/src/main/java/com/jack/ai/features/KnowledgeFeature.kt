@@ -48,6 +48,16 @@ class KnowledgeFeature(core: AppCore) : Feature(core) {
         }
     }
 
+    /** 收件箱存进来的笔记：当场写进资料库（调用方马上要读回来核实）。 */
+    fun addNote(title: String, content: String) {
+        val doc = LibraryDoc(name = "$title.md", chars = content.length)
+        store.saveLibraryText(doc.id, content)
+        val list = store.loadLibrary() + doc
+        store.saveLibrary(list)
+        libraryIndex = null
+        state.update { it.copy(library = list) }
+    }
+
     fun deleteLibraryDoc(id: String) {
         scope.launch(ioSerial) {
             store.deleteLibraryText(id)

@@ -47,6 +47,23 @@
                 <data android:mimeType="image/*" />
             </intent-filter>
         </activity>
+        <!-- 万能收件箱：分享菜单里的「存进 Jack 收件箱」，进来后自动归档，不用再按发送 -->
+        <activity-alias
+            android:name=".InboxShare"
+            android:exported="true"
+            android:label="存进 Jack 收件箱"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+        </activity-alias>
         <!-- 定时 Work 长时间运行时，WorkManager 以前台服务跑 -->
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"

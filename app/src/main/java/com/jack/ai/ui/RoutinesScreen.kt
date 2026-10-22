@@ -137,7 +137,7 @@ fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                         Column(Modifier.weight(1f)) {
                             Text((when (r.kind) { "reminder" -> "⏰ "; "watch" -> "👀 "; else -> "🤖 " }) + r.title, style = MaterialTheme.typography.titleSmall)
                             Text(
-                                r.describe() + (if (r.work) " · Work" else "") + (if (r.offPeak) " · 避开高峰" else "") + if (r.enabled && r.nextAt() == null) "（已过期）" else if (!r.enabled && r.kind == "watch") "（已结束）"
+                                r.describe() + (if (r.then.isNotBlank()) " · 满足后接着做" else "") + (if (r.work) " · Work" else "") + (if (r.offPeak) " · 避开高峰" else "") + if (r.enabled && r.nextAt() == null) "（已过期）" else if (!r.enabled && r.kind == "watch") "（已结束）"
                                     else if (!r.enabled && r.repeat == "none") "（已完成）" else "",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,

@@ -417,4 +417,9 @@ class PromptBuilderTest {
         assertEquals("", PromptBuilder.updateNote(Conversation(messages = listOf(user("你好"))), appVersion = 46))
         assertEquals("", PromptBuilder.updateNote(old, appVersion = 0))
     }
+    @Test
+    fun saveNoteOnlyInInbox() {
+        assertFalse("save_note" in toolNames(Conversation()))
+        assertTrue("save_note" in toolNames(Conversation(id = com.jack.ai.data.INBOX_ID)))
+    }
 }

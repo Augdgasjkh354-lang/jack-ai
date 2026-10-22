@@ -53,6 +53,18 @@ class BackgroundToolHost(ctx: Context) : ToolHost {
     override fun projectIndex(p: Project) =
         LibraryIndex(p.files.filter { it.text.length > PromptBuilder.PROJECT_INLINE_CHARS }.map { it.name to it.text })
     override fun refreshWidget() = AskWidget.refresh(app)
+    override fun saveNote(projectId: String?, title: String, content: String) {
+        if (projectId == null) {
+            val doc = com.jack.ai.data.LibraryDoc(name = "$title.md", chars = content.length)
+            store.saveLibraryText(doc.id, content)
+            store.saveLibrary(store.loadLibrary() + doc)
+        } else {
+            store.saveProjects(store.loadProjects().map { p ->
+                if (p.id != projectId) p
+                else p.copy(files = p.files + com.jack.ai.data.Attachment(kind = "file", name = "$title.md", text = content), updatedAt = System.currentTimeMillis())
+            })
+        }
+    }
 }
 
 /** 定时 Work 的结果：文字和生成的文件。 */

@@ -104,6 +104,16 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
+        // 从分享菜单的「存进 Jack 收件箱」进来：直接交给收件箱自动归档
+        if (intent?.component?.className?.endsWith(".InboxShare") == true &&
+            (intent.action == Intent.ACTION_SEND || intent.action == Intent.ACTION_SEND_MULTIPLE)) {
+            stack.clear()
+            val text = listOfNotNull(intent.getStringExtra(Intent.EXTRA_SUBJECT), intent.getStringExtra(Intent.EXTRA_TEXT))
+                .joinToString("\n").takeIf { it.isNotBlank() }
+            val uris = if (intent.action == Intent.ACTION_SEND) listOfNotNull(streamExtra(intent)) else streamListExtra(intent)
+            vm.inboxShare(text, uris, intent.type)
+            return
+        }
         when (intent?.action) {
             ACTION_NEW_CHAT -> {
                 stack.clear(); vm.newChat(); vm.setWork(false)

@@ -27,5 +27,13 @@ object PyRunner {
         }
     }
 
+    /** 只编译不运行，返回语法错误（第几行、什么错）；没错返回 null。 */
+    suspend fun syntaxError(ctx: Context, code: String): String? = withContext(Dispatchers.IO) {
+        runCatching {
+            if (!Python.isStarted()) Python.start(AndroidPlatform(ctx.applicationContext))
+            Python.getInstance().getModule("jack_runner").callAttr("check", code).toString().ifBlank { null }
+        }.getOrNull()
+    }
+
     private fun snapshot(dir: File) = Workspace.files(dir).associate { it.name to (it.lastModified() to it.length()) }
 }

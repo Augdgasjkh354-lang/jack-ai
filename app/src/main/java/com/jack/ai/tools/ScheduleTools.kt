@@ -79,7 +79,7 @@ internal suspend fun ToolSession.makeRoutine(kind: String, args: JsonObject): St
         if (r.nextAt() == null) throw IllegalArgumentException("这个时间已经过去了")
         withContext(Dispatchers.Main) { host.saveRoutine(r) }
         val warn = if (!Routines.canNotify(app)) "（注意：App 还没有通知权限，用户需要打开左侧菜单「提醒和任务」页面授权）" else ""
-        "已设置：${r.describe()}，${if (kind == "reminder") "提醒" else "任务"}「${r.title}」。编号 ${r.id.take(8)}。$warn" to
+        "已设置：${r.describe()}，${if (kind == "reminder") "提醒" else "任务"}「${r.title}」。编号 ${r.id.take(8)}。$warn" + verifySaved(r.id) to
             SearchRecord("$label：${r.title}")
     }
 }
@@ -121,6 +121,16 @@ internal suspend fun ToolSession.addEvent(args: JsonObject): String {
             CalendarTool.insert(app, title, begin, end, allDay, location, notes, remind.takeIf { it >= 0 }, rrule)
         } else null
         if (id != null) {
+            // 写完重新查一遍：标题和开始时间对得上才算成了（全天日程存的是 UTC 零点，只比日期）
+            val back = withContext(Dispatchers.IO) { runCatching { CalendarTool.get(app, id) }.getOrNull() }
+            val check = Verify.note(listOfNotNull(
+                when {
+                    back == null -> "写入后在日历里查不到这个日程"
+                    back.first != title -> "日历里的标题是「${back.first}」，和要写的不一样"
+                    !allDay && back.second != begin -> "日历里的开始时间和要写的不一样"
+                    else -> null
+                },
+            ), "已在日历里查到这个日程，标题和时间都对")
             val removed = oldId != null && withContext(Dispatchers.IO) { CalendarTool.delete(app, oldId) }
             host.refreshWidget()
             val replaced = when {
@@ -128,7 +138,7 @@ internal suspend fun ToolSession.addEvent(args: JsonObject): String {
                 removed -> "旧日程 $oldId 已删掉。"
                 else -> "没找到旧日程 $oldId，没删。"
             }
-            "已写进手机日历：$shown「$title」$repeatText${if (remind >= 0) "，提前 $remind 分钟提醒" else ""}。编号 $id。$replaced" to
+            "已写进手机日历：$shown「$title」$repeatText${if (remind >= 0) "，提前 $remind 分钟提醒" else ""}。编号 $id。$replaced$check" to
                 SearchRecord(if (removed) "改日程：$title" else "添加日程：$title")
         } else {
             startClock(CalendarTool.insertIntent(title, begin, end, allDay, location, notes, rrule), "手机上没找到日历 App")
@@ -237,10 +247,12 @@ private suspend fun ToolSession.makeWatch(args: JsonObject, name: String): Strin
         val r = Routine(
             kind = "watch", title = name.ifBlank { prompt.take(20) }, prompt = prompt, hour = 0, minute = 0,
             everyMin = every, until = until.coerceAtMost(now + 30 * 86_400_000L),
+            then = args["then"].text().trim(),
         )
         withContext(Dispatchers.Main) { host.saveRoutine(r) }
         val warn = if (!Routines.canNotify(app)) "（注意：App 还没有通知权限，有结果也弹不出通知，用户需要打开左侧菜单「提醒和任务」页面授权）" else ""
-        "已开始监控「${r.title}」：${r.describe()}。有结果会通知用户并自动停止。编号 ${r.id.take(8)}。$warn" to
+        "已开始监控「${r.title}」：${r.describe()}。" +
+            (if (r.then.isNotBlank()) "满足后会接着做：${r.then.take(60)}，做完再通知用户。" else "有结果会通知用户并自动停止。") + "编号 ${r.id.take(8)}。$warn" + verifySaved(r.id) to
             SearchRecord("设置监控：${r.title}")
     }
 }
@@ -259,3 +271,15 @@ internal suspend fun ToolSession.cancelSchedule(args: JsonObject): String {
 }
 
 private val REPEAT_NAMES = mapOf("daily" to "每天重复", "weekdays" to "工作日重复", "weekly" to "每周重复", "monthly" to "每月重复", "yearly" to "每年重复")
+
+/** 存完重新读一遍：在不在、开没开、排没排上下一次。 */
+private suspend fun ToolSession.verifySaved(id: String): String {
+    val saved = withContext(Dispatchers.IO) { host.store.loadRoutines().firstOrNull { it.id == id } }
+    return Verify.note(listOfNotNull(
+        when {
+            saved == null -> "保存后查不到这条"
+            !saved.enabled || saved.nextAt() == null -> "保存了，但没有排上下一次（时间可能已经过了）"
+            else -> null
+        },
+    ), "已保存并排好下一次")
+}

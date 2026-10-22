@@ -53,6 +53,8 @@ interface ToolHost {
     fun libraryIndex(): LibraryIndex
     fun projectIndex(p: Project): LibraryIndex
     fun refreshWidget()
+    /** 存一份笔记：projectId 不为空就加进那个项目的资料，否则进资料库。 */
+    fun saveNote(projectId: String?, title: String, content: String)
 }
 
 /** 工具执行过程要在聊天里显示的东西：进行中/完成的标签，生成的文件卡片。 */
@@ -168,6 +170,7 @@ class ToolSession(
             name == "add_calendar_event" && SkillIds.CALENDAR in skillIds -> addEvent(args)
             name == "list_calendar_events" && SkillIds.CALENDAR in skillIds -> listEvents(args)
             name == "save_memory" -> remember(args)
+            name == "save_note" -> saveNote(args)
             name == "add_rows" && SkillIds.TABLES in skillIds -> addRows(args)
             name == "query_table" && SkillIds.TABLES in skillIds -> queryTable(args)
             name == "edit_table" && SkillIds.TABLES in skillIds -> editTable(args)

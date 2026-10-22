@@ -163,3 +163,25 @@ internal suspend fun ToolSession.useSkill(name: String) = runTool("使用技能�
         ?: ("没有这个技能。可用的技能：" + skills.joinToString("、") { it.name })
     text to SearchRecord("使用技能：${skill?.name ?: name}")
 }
+
+/** 收件箱用：把整理好的笔记存进项目或资料库，存完重新读一遍核实。 */
+internal suspend fun ToolSession.saveNote(args: JsonObject): String {
+    val title = args["title"].text().trim().ifBlank { "笔记" }.take(60)
+    val content = args["content"].text().trim()
+    if (content.isEmpty()) return "笔记内容是空的"
+    val want = args["project"].text().trim()
+    val projects = withContext(Dispatchers.IO) { host.store.loadProjects() }
+    val p = if (want.isEmpty()) null else projects.firstOrNull { it.name == want }
+        ?: projects.firstOrNull { it.name.contains(want, true) || want.contains(it.name, true) }
+        ?: return "没有「$want」这个项目。现有项目：" + projects.joinToString("、") { it.name }.ifEmpty { "（还没有）" } + "。不确定就不填 project，存进资料库。"
+    val where = p?.let { "项目「${it.name}」" } ?: "资料库"
+    return runTool("存进$where：$title") {
+        withContext(Dispatchers.Main) { host.saveNote(p?.id, title, content) }
+        val ok = withContext(Dispatchers.IO) {
+            if (p != null) host.store.loadProjects().firstOrNull { it.id == p.id }?.files?.any { it.name == "$title.md" } == true
+            else host.store.loadLibrary().any { it.name == "$title.md" }
+        }
+        "已存进$where：「$title」。" + Verify.note(listOfNotNull("存完后在$where 里查不到这份笔记".takeIf { !ok }), "已在${where}里查到") to
+            SearchRecord("存进$where：$title")
+    }
+}

@@ -189,6 +189,7 @@ object PromptBuilder {
             if (SkillIds.TRAIN in skillIds) add(SkillTools.QUERY_TRAINS)
             // 本对话记忆随时能存，所以记忆工具一直带着
             add(SkillTools.SAVE_MEMORY)
+            if (conv.id == com.jack.ai.data.INBOX_ID) add(SkillTools.SAVE_NOTE)
             // 连接器的工具放最后：增删连接器时前面那一大段工具说明不变，缓存照样命中
             com.jack.ai.data.Mcp.toolDefs(com.jack.ai.data.Mcp.active(settings)).forEach { add(it) }
         }.takeIf { it.isNotEmpty() }

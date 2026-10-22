@@ -18,6 +18,11 @@ object ContextNote {
 
     fun build(ctx: Context, store: Store, conv: Conversation, skillIds: Set<String>): String = buildString {
         append(files(Workspace.dir(ctx, Workspace.key(conv))))
+        // 收件箱要知道有哪些项目，才能归到对的项目里
+        if (conv.id == com.jack.ai.data.INBOX_ID) {
+            val names = store.loadProjects().map { it.name }
+            append("【项目】").append(if (names.isEmpty()) "还没有项目" else names.take(MAX_ITEMS).joinToString("、")).append("\n")
+        }
         if (SkillIds.TABLES in skillIds) {
             val tables = Tables.list(ctx)
             append("【表格】")

@@ -71,6 +71,8 @@ data class Routine(
     val everyMin: Int = 0,
     /** 监控盯到什么时候（毫秒）。 */
     val until: Long = 0,
+    /** 监控满足后接着做的事（任务链）：空着就只通知。 */
+    val then: String = "",
 )
 
 /** 后台任务的结果，等 App 打开时并入对应的对话。 */
@@ -383,11 +385,11 @@ class RoutineWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
     private suspend fun watch(store: Store, r: Routine): Result {
         val ctx = applicationContext
         val now = System.currentTimeMillis()
-        fun update(change: (Routine) -> Routine) {
+        fun update(cancel: Boolean = true, change: (Routine) -> Routine) {
             val list = store.loadRoutines().map { if (it.id == r.id) change(it) else it }
             store.saveRoutines(list)
-            // 停掉了就撤掉周期任务；还在盯的不动它（正在跑的这次不受影响）
-            if (list.firstOrNull { it.id == r.id }?.enabled != true) WorkManager.getInstance(ctx).cancelUniqueWork("watch:${r.id}")
+            // 停掉了就撤掉周期任务；还在盯的不动它。撤掉会连正在跑的这次一起停，所以有后续步骤时等做完再撤
+            if (cancel && list.firstOrNull { it.id == r.id }?.enabled != true) WorkManager.getInstance(ctx).cancelUniqueWork("watch:${r.id}")
             com.jack.ai.AskWidget.refresh(ctx)
         }
         if (!r.enabled) {
@@ -409,12 +411,37 @@ class RoutineWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
             false to "检查出错：${e.message}"
         }
         if (hit) {
-            store.addInbox(InboxItem(r.id, r.convId, r.title, r.prompt, "🔔 $text"))
-            Routines.notify(ctx, r.id, "🔔 ${r.title}", text.take(300), openChat = r.convId)
-            update { it.copy(enabled = false, lastRunAt = now) }
+            // 先标成停了，免得后续步骤跑得久、下一次检查又触发一遍；周期任务等做完再撤
+            update(cancel = false) { it.copy(enabled = false, lastRunAt = now) }
+            // 任务链：满足后按用户事先的安排接着做（Work，能用全部技能），做完再通知
+            val follow = if (r.then.isBlank()) null else try {
+                runCatching { setForeground(foregroundInfo("条件满足，正在接着做：${r.title}")) }
+                com.jack.ai.tools.runBackgroundWork(ctx, r.copy(work = true, prompt = followPrompt(r, text))) { label ->
+                    runCatching { setForegroundAsync(foregroundInfo("正在接着做：${r.title}", label)) }
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                com.jack.ai.tools.TaskResult("后续步骤没做完：${e.message ?: "出错了"}")
+            }
+            val body = "🔔 $text" + (follow?.let { "\n\n**接着做的事**\n${it.text}" } ?: "")
+            store.addInbox(InboxItem(r.id, r.convId, r.title, r.prompt, body, files = follow?.files.orEmpty(), work = follow != null))
+            Routines.notify(ctx, r.id, "🔔 ${r.title}", (follow?.text ?: text).take(300), openChat = r.convId)
+            WorkManager.getInstance(ctx).cancelUniqueWork("watch:${r.id}")
         } else {
             update { it.copy(lastRunAt = now) }
         }
         return Result.success()
     }
+    /** 条件满足后交给 Work 的指令：查到了什么 + 用户事先安排的后续步骤。 */
+    private fun followPrompt(r: Routine, found: String) = """监控「${r.title}」的条件满足了。
+监控的内容：${r.prompt}
+这次查到的结果：
+$found
+
+用户事先安排，满足后接着做这些事：
+${r.then}
+
+按顺序做完。需要用户拍板的事（比如买票、付钱、发消息给别人）不要替他做，留给他决定；在日历里建的行程，标题以【待确认】开头。
+最后写一段给用户看的结果：查到了什么、你做了哪些事（建了什么日程、存了什么文件）、还需要他决定什么。"""
 }

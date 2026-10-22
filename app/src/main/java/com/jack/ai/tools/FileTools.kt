@@ -27,7 +27,7 @@ internal suspend fun ToolSession.create(tool: String, args: JsonObject, base: St
         withContext(Dispatchers.IO) { Workspace.saveSource(file, tool, args) }
         ui.attach(file)
         val shown = if (ext == "png") "图已生成并显示在聊天里" else "已生成文件「${file.name}」，用户可以在聊天里打开或分享"
-        "$shown。文件保存在对话文件夹里，以后要修改就用 edit_file 改它的底稿，不要重新生成。" to
+        "$shown。文件保存在对话文件夹里，以后要修改就用 edit_file 改它的底稿，不要重新生成。" + verifyGenerated(tool, args, file) to
             SearchRecord("生成 $label：${file.name}")
     }
 
@@ -121,7 +121,7 @@ internal suspend fun ToolSession.writeFile(args: JsonObject): String {
             file.writeText(args["content"].text())
         }
         ui.attach(file)
-        "已写入「${file.name}」（${file.length()} 字节）。" to SearchRecord("写入 ${file.name}")
+        "已写入「${file.name}」（${file.length()} 字节）。" + verifyText(file) to SearchRecord("写入 ${file.name}")
     }
 }
 
@@ -133,12 +133,15 @@ internal suspend fun ToolSession.editFile(args: JsonObject): String {
         val new = args["new_text"].text()
         val all = args["replace_all"].text() == "true"
         val src = withContext(Dispatchers.IO) { Workspace.source(file) }
+        // 有底稿的文件重新生成后核实；纯文字文件改完检查格式和语法
+        var check: String? = null
         val n = if (src != null) {
             val (tool, a) = src
             val (edited, count) = TextEdit.replace(Workspace.sourceText(tool, a), old, new, all)
             val newArgs = Workspace.argsFromText(tool, a, edited)
             renderFile(tool, newArgs, file, wsCache)
             withContext(Dispatchers.IO) { Workspace.saveSource(file, tool, newArgs) }
+            check = verifyGenerated(tool, newArgs, file)
             count
         } else withContext(Dispatchers.IO) {
             when {
@@ -154,6 +157,28 @@ internal suspend fun ToolSession.editFile(args: JsonObject): String {
             }
         }
         ui.attach(file)
-        "已修改「${file.name}」，替换了 $n 处，其他内容没动。" to SearchRecord("修改 ${file.name}")
+        val verified = check ?: if (Workspace.isText(file)) verifyText(file)
+            else Verify.note(listOfNotNull(withContext(Dispatchers.IO) { Verify.fileOpens(file) }), "文件能正常打开")
+        "已修改「${file.name}」，替换了 $n 处，其他内容没动。$verified" to SearchRecord("修改 ${file.name}")
     }
+}
+
+/** 生成的文件核实：能不能打开；Excel 再查公式引用。 */
+internal suspend fun ToolSession.verifyGenerated(tool: String, args: JsonObject, file: File): String = withContext(Dispatchers.IO) {
+    val problems = listOfNotNull(Verify.fileOpens(file)) +
+        if (tool == "create_excel") runCatching { Verify.xlsxFormulas(parseSheets(args)) }.getOrDefault(emptyList()) else emptyList()
+    Verify.note(problems, if (tool == "create_excel") "文件能正常打开，公式引用都在数据范围内" else "文件能正常打开")
+}
+
+/** 文字文件核实：JSON、CSV 查格式，Python、JavaScript 查语法（不运行）。其他类型不查，返回空。 */
+internal suspend fun ToolSession.verifyText(file: File): String {
+    val text = withContext(Dispatchers.IO) { file.readText() }
+    val problems = Verify.textFile(file.name, text).toMutableList()
+    when (file.extension.lowercase()) {
+        "py" -> PyRunner.syntaxError(app, text)?.let { problems += "「${file.name}」有语法错误：$it" }
+        "js" -> JsRunner.syntaxError(text)?.let { problems += "「${file.name}」有语法错误：$it" }
+        "json", "csv" -> {}
+        else -> return ""
+    }
+    return Verify.note(problems, "格式检查通过")
 }

@@ -36,6 +36,21 @@ var console = { log: function () {
 console.info = console.log; console.warn = console.log; console.error = console.log;
 """
 
+    /** 只编译不运行，返回语法错误；没错返回 null。 */
+    fun syntaxError(code: String): String? {
+        val cx = Factory.enterContext()
+        return try {
+            cx.compileString(code, "code", 1, null)
+            null
+        } catch (e: org.mozilla.javascript.EvaluatorException) {
+            "第 ${e.lineNumber()} 行：${e.details()}"
+        } catch (e: Throwable) {
+            null
+        } finally {
+            Context.exit()
+        }
+    }
+
     fun run(code: String): String {
         val cx = Factory.enterContext()
         return try {
