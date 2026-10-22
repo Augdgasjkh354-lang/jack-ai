@@ -41,6 +41,21 @@ class GitHubWriteTest {
             "old.txt" to (sha("bye\n") to "100644"),
         ),
     )
+    /** 提交 → 文件内容（同步时 GitHub 给的新版本）。 */
+    private val contents = mutableMapOf<String, Map<String, String>>()
+    /** 推一个「别人的」提交到 main：改了这些文件（null = 删掉）。 */
+    private fun upstream(commit: String, changes: Map<String, String?>) {
+        val parent = refs["main"]!!
+        val files = trees[parent]!!.toMutableMap()
+        val texts = (contents[parent] ?: c1Texts).toMutableMap()
+        changes.forEach { (p, t) -> if (t == null) { files.remove(p); texts.remove(p) } else { files[p] = sha(t) to (files[p]?.second ?: "100644"); texts[p] = t } }
+        trees[commit] = files; contents[commit] = texts
+        compares["$parent...$commit"] = changes.keys.toList()
+        refs["main"] = commit
+    }
+    private val compares = mutableMapOf<String, List<String>>()
+    private val c1Texts = mapOf("README.md" to "# App\n", "gradlew" to "#!/bin/sh\necho hi\n",
+        "src/Main.kt" to "fun main() {\n    println(\"hi\")\n}\n", "old.txt" to "bye\n")
     private val writes = mutableListOf<Pair<String, JsonObject>>()
     private var blobN = 0
     private var commitN = 0
@@ -94,6 +109,15 @@ class GitHubWriteTest {
             method == "GET" && path.startsWith("/git/trees/t-") -> {
                 val c = path.removePrefix("/git/trees/t-")
                 200 to """{"tree":[${trees[c]!!.entries.joinToString(",") { (p, v) -> """{"path":"$p","type":"blob","sha":"${v.first}","mode":"${v.second}"}""" }}]}"""
+            }
+            method == "GET" && path.startsWith("/compare/") -> {
+                val key = path.removePrefix("/compare/")
+                val list = compares[key] ?: emptyList()
+                200 to """{"files":[${list.joinToString(",") { f -> val gone = contents[key.substringAfter("...")]?.containsKey(f) == false; """{"filename":"$f","status":"${if (gone) "removed" else "modified"}"}""" }}]}"""
+            }
+            method == "GET" && path.startsWith("/contents/") -> {
+                val ref = target.substringAfter("ref=", "")
+                contents[ref]?.get(java.net.URLDecoder.decode(path.removePrefix("/contents/"), "UTF-8"))?.let { 200 to it } ?: (404 to """{"message":"Not Found"}""")
             }
             method == "POST" && path == "/git/blobs" -> 201 to """{"sha":"blob${++blobN}"}"""
             method == "POST" && path == "/git/trees" -> 201 to """{"sha":"newtree"}"""
@@ -177,22 +201,62 @@ class GitHubWriteTest {
     }
 
     @Test
-    fun refusesToOverwriteSomeoneElsesChangeButKeepsUnrelatedOnes() {
+    fun syncPullsOthersWorkAndMergesItWithLocalEdits() {
         val (local, base) = download()
-        // 下载之后别人推了 c2：改了 src/Main.kt
-        trees["c2"] = trees["c1"]!! + ("src/Main.kt" to (sha("fun main() {}\n") to "100644"))
-        refs["main"] = "c2"
-        GitHubWrite.edit(local, "src/Main.kt", "hi", "yo", false)
-        val e = runCatching { GitHubWrite.commit(TOKEN, local, base, "x", "") }.exceptionOrNull()
-        assertTrue(e?.message.orEmpty(), e?.message.orEmpty().contains("src/Main.kt") && e!!.message!!.contains("新分支"))
-        assertFalse(writes.any { it.first.startsWith("PATCH") })
-        // 只改别的文件：可以推，以 c2 为父提交，c2 的改动保留
-        File(local, "src/Main.kt").writeText(File(base, "src/Main.kt").readText())
-        GitHubWrite.edit(local, "README.md", "# App", "# App 2", false)
-        GitHubWrite.commit(TOKEN, local, base, "改说明", "")
-        val commit = writes.first { it.first == "POST /git/commits" }.second
-        assertEquals("c2", commit["parents"]!!.jsonArray[0].jsonPrimitive.content)
+        // 本地改了 Main.kt 的第 2 行；别人推了 c2：改了 README、在 Main.kt 末尾加了一行、删了 old.txt
+        GitHubWrite.edit(local, "src/Main.kt", "println(\"hi\")", "println(\"hello\")", false)
+        upstream("c2", mapOf("README.md" to "# App v2\n", "src/Main.kt" to "fun main() {\n    println(\"hi\")\n}\n// end\n", "old.txt" to null))
+        val s = GitHubWrite.sync(TOKEN, local, base)
+        assertTrue(s.describe(), !s.upToDate && s.conflicts.isEmpty() && s.merged == listOf("src/Main.kt"))
+        assertEquals("# App v2\n", File(local, "README.md").readText())
+        assertFalse(File(local, "old.txt").exists())
+        assertEquals("fun main() {\n    println(\"hello\")\n}\n// end\n", File(local, "src/Main.kt").readText())
+        assertEquals("c2", GitHub.meta(local)!!.commit)
+        // 只剩自己的那一处改动；推送以 c2 为父提交
+        assertEquals(listOf("src/Main.kt"), GitHubWrite.changes(local, base).map { it.path })
+        GitHubWrite.commit(TOKEN, local, base, "改问候语", "")
+        assertEquals("c2", writes.first { it.first == "POST /git/commits" }.second["parents"]!!.jsonArray[0].jsonPrimitive.content)
         assertEquals("t-c2", writes.first { it.first == "POST /git/trees" }.second["base_tree"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun commitSyncsFirstAndStopsOnARealConflictUntilResolved() {
+        val (local, base) = download()
+        GitHubWrite.edit(local, "src/Main.kt", "println(\"hi\")", "println(\"hello\")", false)
+        upstream("c2", mapOf("src/Main.kt" to "fun main() {\n    println(\"你好\")\n}\n"))
+        val e = runCatching { GitHubWrite.commit(TOKEN, local, base, "x", "") }.exceptionOrNull()
+        assertTrue(e?.message.orEmpty(), e?.message.orEmpty().contains("有冲突") && e!!.message!!.contains("src/Main.kt"))
+        assertFalse(writes.any { it.first.startsWith("PATCH") || it.first == "POST /git/commits" })
+        val text = File(local, "src/Main.kt").readText()
+        assertTrue(text, text.contains(GitHubWrite.OURS) && text.contains("println(\"hello\")") && text.contains("println(\"你好\")"))
+        // 标记还在就不让推
+        assertTrue(runCatching { GitHubWrite.commit(TOKEN, local, base, "x", "") }.exceptionOrNull()!!.message!!.contains("冲突标记"))
+        // 合好（两边意思都要：中英文都打）再推
+        GitHubWrite.write(local, "src/Main.kt", "fun main() {\n    println(\"hello 你好\")\n}\n")
+        val p = GitHubWrite.commit(TOKEN, local, base, "合并问候语", "")
+        assertEquals("main", p.branch)
+        assertEquals("c2", writes.first { it.first == "POST /git/commits" }.second["parents"]!!.jsonArray[0].jsonPrimitive.content)
+    }
+
+    @Test
+    fun syncWhenNothingChanged() {
+        val (local, base) = download()
+        assertTrue(GitHubWrite.sync(TOKEN, local, base).upToDate)
+    }
+
+    @Test
+    fun threeWayMerge() {
+        val base = "a\nb\nc\nd\ne\n"
+        // 不挨着的两处：都保留
+        assertEquals(GitHubWrite.Merged("A\nb\nc\nd\nE\n", 0), GitHubWrite.merge3(base, "A\nb\nc\nd\ne\n", "a\nb\nc\nd\nE\n"))
+        // 两边改成一样：不算冲突
+        assertEquals(0, GitHubWrite.merge3(base, "a\nX\nc\nd\ne\n", "a\nX\nc\nd\ne\n").conflicts)
+        // 一边插入、一边删除别处
+        assertEquals("a\nnew\nb\nc\ne\n", GitHubWrite.merge3(base, "a\nnew\nb\nc\nd\ne\n", "a\nb\nc\ne\n").text)
+        // 同一行改得不一样：冲突，两边都留着
+        val m = GitHubWrite.merge3(base, "a\nB1\nc\nd\ne\n", "a\nB2\nc\nd\ne\n")
+        assertEquals(1, m.conflicts)
+        assertEquals("a\n${GitHubWrite.OURS}\nB1\n${GitHubWrite.SPLIT}\nB2\n${GitHubWrite.THEIRS}\nc\nd\ne\n", m.text)
     }
 
     @Test

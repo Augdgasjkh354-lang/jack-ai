@@ -195,6 +195,14 @@ object GitHub {
         }
     }
 
+    /** 拿原始字节（同步时取 GitHub 上的新版本文件，图片之类也不会坏）。 */
+    fun bytes(token: String, path: String): ByteArray {
+        download.newCall(request(token, path, "application/vnd.github.raw")).execute().use { resp ->
+            if (!resp.isSuccessful) throw GitHubException(explain(resp, resp.body?.string().orEmpty(), token))
+            return resp.body?.bytes() ?: ByteArray(0)
+        }
+    }
+
     /** 拿一段纯文字（比如 Actions 的日志，GitHub 会跳到存日志的地方，令牌不会跟过去）。 */
     fun text(token: String, path: String): String = raw(token, path)
 

@@ -35,7 +35,7 @@ internal suspend fun ToolSession.github(args: JsonObject): String {
         "asset" -> if (args["name"].text().isBlank()) return "asset 要填 name（附件名，先用 releases 看有哪些）"
         "mine", "repo", "tree", "releases", "download" -> {}
         else -> return "action 不认识：$action。读：search、mine、repo、tree、read、grep、releases、download、asset；" +
-            "改：write、edit、rm、diff、commit；PR：prs、pr、pr_create、merge；issue：issues、issue、issue_create、comment；打包：runs、run、rerun"
+            "改：write、edit、rm、diff、sync、commit；PR：prs、pr、pr_create、merge；issue：issues、issue、issue_create、comment；打包：runs、run、rerun"
     }
     val local = repo?.let { GitHub.local(wsDir, it) }?.takeIf { ref.isEmpty() }
     val label = "GitHub " + when (action) {
@@ -101,7 +101,7 @@ private suspend fun ToolSession.checkSpace(size: Long, what: String): String? {
 }
 
 private val WRITE_ACTIONS = setOf(
-    "write", "edit", "rm", "diff", "commit", "prs", "pr", "pr_create", "merge",
+    "write", "edit", "rm", "diff", "sync", "commit", "prs", "pr", "pr_create", "merge",
     "issues", "issue", "issue_create", "comment", "runs", "run", "rerun",
 )
 
@@ -128,10 +128,11 @@ private suspend fun ToolSession.githubWrite(action: String, args: JsonObject): S
         "issue_create" -> if (args["title"].text().isBlank()) return "issue_create 要填 title"
         "run", "rerun" -> if (args["run_id"].text().toLongOrNull() == null) return "$action 要填 run_id（用 runs 看）"
     }
-    if (action in setOf("write", "edit", "rm", "diff", "commit") && local == null) return needLocal()
+    if (action in setOf("write", "edit", "rm", "diff", "sync", "commit") && local == null) return needLocal()
     val label = "GitHub " + when (action) {
         "write", "edit", "rm" -> "本地改 $path"
         "diff" -> "看 $repo 的改动"
+        "sync" -> "同步 $repo 的最新提交"
         "commit" -> "推送到 $repo"
         "pr_create" -> "开 PR"
         "merge" -> "合并 PR #$n"
@@ -149,6 +150,7 @@ private suspend fun ToolSession.githubWrite(action: String, args: JsonObject): S
             "edit" -> withContext(io) { GitHubWrite.edit(local!!, path, args["old"].text(), args["new"].text(), args["all"].text() == "true") }
             "rm" -> withContext(io) { GitHubWrite.remove(local!!, path) }
             "diff" -> withContext(io) { GitHubWrite.diff(local!!, base) }
+            "sync" -> withContext(io) { GitHubWrite.sync(token, local!!, base).describe() }
             "commit" -> {
                 val meta = GitHub.meta(local!!)
                 val branch = args["branch"].text().trim().ifBlank { meta?.branch.orEmpty() }

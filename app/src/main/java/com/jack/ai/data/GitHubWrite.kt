@@ -17,7 +17,8 @@ import java.security.MessageDigest
 /**
  * GitHub 的写操作：在下载下来的本地副本里改文件 → 看改动 → 提交并推送；PR、issue、自动打包（Actions）。
  * 推送用 GitHub 的 Git 接口一次提交多个文件，不用 git 命令。
- * 推之前查冲突：要改的文件如果在 GitHub 上也被别人改过，就不推（不会覆盖别人的改动），建议推到新分支再开 PR。
+ * 别人（或 Claude）在 GitHub 上推了新提交：sync 把它们拉下来和本地改动合并（像 git pull），commit 推之前也会自动做一遍。
+ * 改的不是同一处就自动合；同一处两边改得不一样，就在文件里标出两边的版本，让模型看懂后自己合好再推，不丢任何一边。
  * 不做：删仓库、删分支、强制推送、改仓库设置。
  */
 object GitHubWrite {
@@ -127,6 +128,166 @@ object GitHubWrite {
         return md.digest(bytes).joinToString("") { "%02x".format(it) }
     }
 
+    // ---------- 三方合并 ----------
+
+    /** 一处改动：把原文第 s 到 e 行（不含 e）换成 lines。 */
+    internal class Edit(val s: Int, val e: Int, val lines: List<String>)
+
+    /** a → b 的改动。先去掉首尾相同的行，中间用最长公共子序列；中间太大就整段算一处改动。 */
+    internal fun edits(a: List<String>, b: List<String>): List<Edit> {
+        var head = 0
+        while (head < a.size && head < b.size && a[head] == b[head]) head++
+        var tail = 0
+        while (tail < a.size - head && tail < b.size - head && a[a.size - 1 - tail] == b[b.size - 1 - tail]) tail++
+        val ma = a.subList(head, a.size - tail)
+        val mb = b.subList(head, b.size - tail)
+        if (ma.isEmpty() && mb.isEmpty()) return emptyList()
+        if (ma.isEmpty() || mb.isEmpty() || ma.size.toLong() * mb.size > 4_000_000) return listOf(Edit(head, head + ma.size, mb))
+        // lcs[i][j]：ma[i..] 和 mb[j..] 的最长公共子序列长度
+        val w = mb.size + 1
+        val lcs = IntArray((ma.size + 1) * w)
+        for (i in ma.size - 1 downTo 0) for (j in mb.size - 1 downTo 0) {
+            lcs[i * w + j] = if (ma[i] == mb[j]) lcs[(i + 1) * w + j + 1] + 1 else maxOf(lcs[(i + 1) * w + j], lcs[i * w + j + 1])
+        }
+        val out = mutableListOf<Edit>()
+        var i = 0; var j = 0; var si = 0; var sj = 0
+        fun flush() { if (si < i || sj < j) out += Edit(head + si, head + i, mb.subList(sj, j)) }
+        while (i < ma.size && j < mb.size) {
+            when {
+                ma[i] == mb[j] -> { flush(); i++; j++; si = i; sj = j }
+                lcs[(i + 1) * w + j] >= lcs[i * w + j + 1] -> i++
+                else -> j++
+            }
+        }
+        i = ma.size; j = mb.size
+        flush()
+        return out
+    }
+
+    data class Merged(val text: String, val conflicts: Int)
+
+    const val OURS = "<<<<<<< Jack 的改动"
+    const val SPLIT = "======="
+    const val THEIRS = ">>>>>>> GitHub 上的新版本"
+
+    /**
+     * 三方合并：base 是下载时的原文，ours 是本地改过的，theirs 是 GitHub 上别人改过的。
+     * 改的地方不挨着就都保留；挨着或重叠、而且改得不一样，就标成冲突（两边的版本都留在文件里）。
+     */
+    fun merge3(base: String, ours: String, theirs: String): Merged {
+        if (ours == theirs) return Merged(ours, 0)
+        if (ours == base) return Merged(theirs, 0)
+        if (theirs == base) return Merged(ours, 0)
+        val b = base.split("\n")
+        val all = edits(b, ours.split("\n")).map { it to 0 } + edits(b, theirs.split("\n")).map { it to 1 }
+        val sorted = all.sortedWith(compareBy({ it.first.s }, { it.first.e }))
+        val out = mutableListOf<String>()
+        var pos = 0
+        var conflicts = 0
+        var k = 0
+        while (k < sorted.size) {
+            var cs = sorted[k].first.s
+            var ce = sorted[k].first.e
+            var m = k + 1
+            // 挨着的也算一处（和 git 一样，相邻的两处改动不敢自动合）
+            while (m < sorted.size && sorted[m].first.s <= ce) { ce = maxOf(ce, sorted[m].first.e); m++ }
+            val group = sorted.subList(k, m)
+            cs = minOf(cs, group.minOf { it.first.s })
+            fun version(side: Int): List<String> {
+                val r = mutableListOf<String>()
+                var cur = cs
+                group.filter { it.second == side }.forEach { (e, _) -> r += b.subList(cur, e.s); r += e.lines; cur = e.e }
+                r += b.subList(cur, ce)
+                return r
+            }
+            out += b.subList(pos, cs)
+            val sides = group.map { it.second }.toSet()
+            if (sides.size == 1) out += version(sides.first())
+            else {
+                val o = version(0); val t = version(1)
+                if (o == t) out += o
+                else { conflicts++; out += OURS; out += o; out += SPLIT; out += t; out += THEIRS }
+            }
+            pos = ce
+            k = m
+        }
+        out += b.subList(pos, b.size)
+        return Merged(out.joinToString("\n"), conflicts)
+    }
+
+    // ---------- 同步 GitHub 上的新提交 ----------
+
+    data class Synced(val upToDate: Boolean, val head: String, val updated: List<String>, val merged: List<String>,
+                      val conflicts: List<String>, val notes: List<String>) {
+        fun describe(): String = if (upToDate) "本地副本已经是最新的。" else buildString {
+            append("已同步到 GitHub 上的最新提交 ${head.take(7)}。")
+            if (updated.isNotEmpty()) append("\n更新了 ${updated.size} 个文件（本地没改过的直接换成新版本）：" + updated.take(30).joinToString("、") + if (updated.size > 30) "……" else "")
+            if (merged.isNotEmpty()) append("\n两边都改过、已自动合并：" + merged.joinToString("、"))
+            notes.forEach { append("\n$it") }
+            if (conflicts.isNotEmpty()) append("\n⚠ 这些文件同一处两边改得不一样，留下了冲突标记，要先合好再推：" + conflicts.joinToString("、") +
+                "\n文件里 $OURS 到 $SPLIT 之间是你本地的改动，$SPLIT 到 $THEIRS 之间是 GitHub 上的新版本。read 看懂两边，用 edit 换成合好的内容（标记行一起删掉），再 commit。")
+        }
+    }
+
+    private fun sameBytes(a: File, b: File): Boolean =
+        a.isFile == b.isFile && (!a.isFile || (a.length() == b.length() && a.readBytes().contentEquals(b.readBytes())))
+
+    /** 把分支上下载之后的新提交拉下来，和本地改动合并（像 git pull）。 */
+    fun sync(token: String, local: File, base: File): Synced {
+        val meta = GitHub.meta(local) ?: throw GitHub.GitHubException("这个本地副本没有下载记录，重新 download 一次")
+        val repo = meta.repo
+        val head = GitHub.get(token, "/repos/$repo/git/ref/heads/" + meta.branch.split('/').joinToString("/") { java.net.URLEncoder.encode(it, "UTF-8") })
+            .jsonObject["object"]?.jsonObject?.get("sha").s()
+        if (head.isBlank() || head == meta.commit) return Synced(true, meta.commit, emptyList(), emptyList(), emptyList(), emptyList())
+        val files = GitHub.get(token, "/repos/$repo/compare/${meta.commit}...$head").jsonObject["files"]?.jsonArray.orEmpty().map { it.jsonObject }
+        val updated = mutableListOf<String>(); val merged = mutableListOf<String>(); val conflicts = mutableListOf<String>(); val notes = mutableListOf<String>()
+        // 改名当成删旧的、加新的
+        val touched = files.flatMap { f ->
+            val p = f["filename"].s()
+            when (f["status"].s()) {
+                "removed" -> listOf(p to false)
+                "renamed" -> listOf(f["previous_filename"].s() to false, p to true)
+                else -> listOf(p to true)
+            }
+        }
+        for ((path, exists) in touched) {
+            val l = File(local, path); val b = File(base, path)
+            val theirs = if (exists) GitHub.bytes(token, "/repos/$repo/contents/" +
+                path.split('/').joinToString("/") { java.net.URLEncoder.encode(it, "UTF-8").replace("+", "%20") } + "?ref=$head") else null
+            val localChanged = !sameBytes(l, b)
+            when {
+                !localChanged -> {
+                    if (theirs == null) { l.delete(); b.delete() } else {
+                        l.parentFile?.mkdirs(); l.writeBytes(theirs); b.parentFile?.mkdirs(); b.writeBytes(theirs)
+                    }
+                    updated += path
+                }
+                theirs == null -> { b.delete(); notes += "GitHub 上删掉了 $path，但你本地改过它，先保留了本地的（推送时会重新加回去，不要的话用 rm 删掉）" }
+                !l.isFile -> { b.parentFile?.mkdirs(); b.writeBytes(theirs); notes += "你本地删了 $path，GitHub 上又改过它，先按你的删除处理（推送时会删掉）" }
+                else -> {
+                    val lt = l.readBytes(); val bt = if (b.isFile) b.readBytes() else ByteArray(0)
+                    if (lt.contains(0) || theirs.contains(0)) {
+                        b.parentFile?.mkdirs(); b.writeBytes(theirs)
+                        notes += "$path 不是文字文件，两边都改了，先保留了本地的版本"
+                    } else {
+                        val r = merge3(String(bt), String(lt), String(theirs))
+                        l.writeText(r.text); b.parentFile?.mkdirs(); b.writeBytes(theirs)
+                        if (r.conflicts > 0) conflicts += "$path（${r.conflicts} 处）" else merged += path
+                    }
+                }
+            }
+        }
+        File(local, GitHub.META).writeText(GitHub.Meta(repo, meta.branch, head).toJson())
+        return Synced(false, head, updated, merged, conflicts, notes)
+    }
+
+    private fun ByteArray.contains(b: Byte) = any { it == b }
+
+    /** 本地还留着冲突标记的文件。 */
+    fun unresolved(local: File, base: File): List<String> = changes(local, base).filter { c ->
+        c.kind != "deleted" && File(local, c.path).let { f -> f.isFile && f.length() < 5_000_000 && f.readText().let { OURS in it && THEIRS in it } }
+    }.map { it.path }
+
     // ---------- 提交并推送 ----------
 
     data class Pushed(val sha: String, val branch: String, val files: Int, val url: String)
@@ -141,24 +302,33 @@ object GitHubWrite {
         if (meta.commit.isBlank()) throw GitHub.GitHubException("不知道下载时的版本，重新 download 一次")
         val repo = meta.repo
         val target = branch.trim().ifBlank { meta.branch }
+        if (changes(local, base).isEmpty()) throw GitHub.GitHubException("没有改动可以提交")
+        unresolved(local, base).takeIf { it.isNotEmpty() }?.let {
+            throw GitHub.GitHubException("这些文件里还有没合好的冲突标记，先合好再推：" + it.joinToString("、"))
+        }
+        // 推回下载时的分支：GitHub 上有新提交就先同步合并，在最新的上面接着提交
+        if (target == meta.branch) {
+            val s = sync(token, local, base)
+            if (s.conflicts.isNotEmpty()) throw GitHub.GitHubException("推送前同步了 GitHub 上的新提交，但有冲突，这次没推。\n" + s.describe())
+        }
         val list = changes(local, base)
-        if (list.isEmpty()) throw GitHub.GitHubException("没有改动可以提交")
+        if (list.isEmpty()) throw GitHub.GitHubException("同步之后没有剩下要提交的改动（GitHub 上已经是一样的内容了）")
         val refPath = "/repos/$repo/git/ref/heads/" + target.split('/').joinToString("/") { java.net.URLEncoder.encode(it, "UTF-8") }
         val head = runCatching { GitHub.get(token, refPath).jsonObject["object"]?.jsonObject?.get("sha").s() }
             .getOrElse { e -> if (e.message.orEmpty().contains("找不到")) "" else throw e }
-        val parent = head.ifBlank { meta.commit }
+        val parent = head.ifBlank { GitHub.meta(local)!!.commit }
         val headTree = GitHub.get(token, "/repos/$repo/git/commits/$parent").jsonObject["tree"]?.jsonObject?.get("sha").s()
         val remote = GitHub.get(token, "/repos/$repo/git/trees/$headTree?recursive=1").jsonObject["tree"]?.jsonArray.orEmpty()
             .map { it.jsonObject }.filter { it["type"].s() == "blob" }.associate { it["path"].s() to (it["sha"].s() to it["mode"].s()) }
-        // 分支上有我们没见过的提交：要改的文件在那边变了就不推
-        if (head.isNotBlank() && head != meta.commit) {
+        // 推到另一个已有的分支：那边要改的文件如果和我们的底子不一样就不推（那个分支不归这个本地副本同步）
+        if (head.isNotBlank() && head != GitHub.meta(local)!!.commit) {
             val clash = list.filter { c ->
                 val was = File(base, c.path).takeIf { it.isFile }?.let { blobSha(it.readBytes()) }
                 remote[c.path]?.first != was
             }
             if (clash.isNotEmpty()) throw GitHub.GitHubException(
-                "${target} 分支在你下载之后又有了新提交，而且这些文件也被改过：" + clash.joinToString("、") { it.path } +
-                    "。为了不覆盖别人的改动，这次没推。可以推到一个新分支（branch 填新名字）再开 PR，或者重新 download 后再改。"
+                "$target 分支上这些文件和你本地副本的底子不一样：" + clash.joinToString("、") { it.path } +
+                    "。这次没推。可以推回下载时的分支（会自动同步合并），或者推到一个新分支再开 PR。"
             )
         }
         val entries = buildJsonArray {
@@ -195,6 +365,7 @@ object GitHubWrite {
             val dst = File(base, c.path)
             if (c.kind == "deleted") dst.delete() else { dst.parentFile?.mkdirs(); File(local, c.path).copyTo(dst, overwrite = true) }
         }
+        // 记下推到的分支和新提交：之后本地副本就跟着这个分支（推到新分支后接着改、再推，都在这个分支上）
         File(local, GitHub.META).writeText(GitHub.Meta(repo, target, newCommit).toJson())
         return Pushed(newCommit, target, list.size, "https://github.com/$repo/commit/$newCommit")
     }
