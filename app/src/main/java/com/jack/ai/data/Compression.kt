@@ -74,6 +74,12 @@ object Compression {
 ## 用户的要求与纠正
 用户提出的长期要求（格式、语气、篇幅、称呼等），以及纠正过 AI 的地方，必须准确记录。
 
+## 约定与决定
+双方说定的事，一条一条写，带上原话里的具体值（日期、时间、金额、数量、名字），不许合并成笼统的一句。比如「提醒设在 2026-11-18 10:00」「签名钥匙先不动，等要对外分发时再换」。
+
+## 已经做了的事
+AI 用工具实际做成的事：设了哪些提醒和日程（时间、编号）、生成或改了哪些文件、写了哪些表格和笔记、推送了什么（提交号、PR 编号）。照【工具记录】里的结果写，编号和时间原样保留。
+
 ## 图片与文件
 用户发过的图片画了什么、文件讲了什么，写出对后续有用的要点。
 
@@ -87,13 +93,71 @@ object Compression {
 - 只写记录里真实出现过的内容，不要推测或补充。
 - 宁可多写细节，也不要漏掉之后可能被问到的信息。
 - 如果给了“之前的提要”，把它和新记录合并成一份完整的新提要：仍然成立的保留，过时或被推翻的删除或更新，不要原样照抄。
-- 不要提到“压缩”“提要”这件事本身，直接输出各栏内容。"""
+- 不要提到“压缩”“提要”这件事本身，直接输出各栏内容。
+- 不要写「原话备忘」这一栏，那一栏由程序自己维护。"""
+
+    /** 提要末尾由程序维护的一栏：从原话和工具结果里原样摘出带数字、日期、编号的句子，模型改写时丢不掉。 */
+    const val MEMO = "## 原话备忘（自动摘录，原样保留）"
+    private const val MEMO_MAX = 60
+
+    private val HAS_NUMBER = Regex("""\d""")
+    private val DECISION = Regex("记住|约定|说好|决定|以后|不要|别再|必须|一定要|改成|统一|先不|暂时不|不动|不用|不做|定了|就按|同意|拍板|优先")
+    private val DONE = Regex("编号|已设置|已改好|已写进|已新建|已加|已推送|提交 |PR #|issue #|已下载|已保存|已删除|id=")
+
+    /** 从这批消息里摘出值得原样记住的句子：用户说的带数字或「约定、决定」的话；工具做成的事（带编号、时间）。 */
+    internal fun memoLines(msgs: List<ChatMessage>): List<String> {
+        val out = mutableListOf<String>()
+        for (m in msgs) {
+            if (m.role == "user") {
+                m.content.split(Regex("[。！？!?\n]+")).map { it.trim() }
+                    .filter { it.length in 4..160 && (HAS_NUMBER.containsMatchIn(it) || DECISION.containsMatchIn(it)) }
+                    .forEach { out += "用户：" + it.take(120) }
+            } else {
+                toolResults(m).flatMap { it.split('\n') }.map { it.trim() }
+                    .filter { it.length >= 6 && DONE.containsMatchIn(it) && !it.startsWith("【") }
+                    .forEach { out += "做了：" + it.take(140) }
+            }
+        }
+        return out.distinct()
+    }
+
+    /** 一条 AI 回答里各工具返回的结果文字（trail 里 role=tool 的那些）。 */
+    private fun toolResults(m: ChatMessage): List<String> = m.trail.mapNotNull { raw ->
+        runCatching {
+            val o = kotlinx.serialization.json.Json.parseToJsonElement(raw) as JsonObject
+            if ((o["role"] as? kotlinx.serialization.json.JsonPrimitive)?.content != "tool") null
+            else (o["content"] as? kotlinx.serialization.json.JsonPrimitive)?.content
+        }.getOrNull()
+    }
+
+    /** 一条 AI 回答里调了哪些工具、参数是什么（截短）。 */
+    private fun toolCalls(m: ChatMessage): List<String> = m.trail.flatMap { raw ->
+        runCatching {
+            val o = kotlinx.serialization.json.Json.parseToJsonElement(raw) as JsonObject
+            (o["tool_calls"] as? kotlinx.serialization.json.JsonArray).orEmpty().map { c ->
+                val f = (c as JsonObject)["function"] as JsonObject
+                (f["name"] as kotlinx.serialization.json.JsonPrimitive).content + " " +
+                    (f["arguments"] as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty().take(200)
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    /** 提要去掉程序维护的那一栏（发给模型合并时用）。 */
+    fun withoutMemo(summary: String): String = summary.substringBefore(MEMO).trimEnd()
+
+    /** 模型写好的提要 + 原话备忘（旧的接着新的，最多留最近 60 条）。 */
+    fun withMemo(written: String, prevSummary: String, msgs: List<ChatMessage>): String {
+        val old = prevSummary.substringAfter(MEMO, "").lines().map { it.trim().removePrefix("- ") }.filter { it.isNotBlank() }
+        val lines = (old + memoLines(msgs)).distinct().takeLast(MEMO_MAX)
+        val body = withoutMemo(written)
+        return if (lines.isEmpty()) body else body + "\n\n" + MEMO + "\n" + lines.joinToString("\n") { "- $it" }
+    }
 
     /** 生成压缩请求。图片原样发给模型（Flash 能看图），让它写成文字描述。 */
     fun buildRequest(prevSummary: String, msgs: List<ChatMessage>, imagesOk: Boolean): List<JsonObject> {
         val parts = buildJsonArray {
             fun text(t: String) = add(buildJsonObject { put("type", "text"); put("text", t) })
-            if (prevSummary.isNotBlank()) text("【之前的提要】\n$prevSummary\n\n【之后的新记录】\n")
+            if (prevSummary.isNotBlank()) text("【之前的提要】\n${withoutMemo(prevSummary)}\n\n【之后的新记录】\n")
             else text("【聊天记录】\n")
             val sb = StringBuilder()
             for (m in msgs) {
@@ -121,6 +185,14 @@ object Compression {
                 }
                 if (m.searches.isNotEmpty()) {
                     sb.append("\n[AI 联网查了：${m.searches.joinToString("；") { it.query }}]\n")
+                }
+                // 工具实际做了什么：提醒编号、文件名、提交号都在结果里，提要里的「已经做了的事」靠它
+                val calls = toolCalls(m)
+                val results = toolResults(m)
+                if (calls.isNotEmpty() || results.isNotEmpty()) {
+                    sb.append("\n[工具记录]\n")
+                    calls.forEach { sb.append("调用：").append(it).append('\n') }
+                    results.forEach { sb.append("结果：").append(it.take(400)).append('\n') }
                 }
                 sb.append(m.content).append('\n')
             }

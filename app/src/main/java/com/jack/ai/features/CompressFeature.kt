@@ -48,8 +48,10 @@ class CompressFeature(core: AppCore) : Feature(core) {
                     ep,
                     Compression.buildRequest(conv.summary, msgs, imagesOk = ep.vision),
                 )
+                // 程序再把原话里的数字、日期、编号原样摘一份接在末尾，模型改写时丢了也还在
+                val full = Compression.withMemo(summary.trim(), conv.summary, msgs)
                 updateConvQuiet(id) {
-                    it.copy(summary = summary.trim(), summaryUntilId = msgs.last().id, lastPromptTokens = 0)
+                    it.copy(summary = full, summaryUntilId = msgs.last().id, lastPromptTokens = 0)
                 }
                 persist()
                 if (manual) state.update { it.copy(toast = "已压缩 ${msgs.size} 条较早的消息") }
