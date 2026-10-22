@@ -205,7 +205,14 @@ internal suspend fun ToolSession.deleteEvent(id: String) = runTool("删除日程
 internal suspend fun ToolSession.schedule(args: JsonObject): String {
     val replace = args["replace"].text().trim()
     if (replace.isEmpty()) return createSchedule(args)
-    // 改时间：先设新的，设成功了再删旧的，免得新的没设上旧的也没了
+    // 提醒、任务、监控：原地改，编号不变，只动给了的字段
+    val target = replace.removePrefix("编号").trim()
+    val old = withContext(Dispatchers.IO) { host.store.loadRoutines() }.let { l ->
+        l.firstOrNull { target.length >= 4 && it.id.startsWith(target) } ?: l.firstOrNull { it.title == target }
+    }
+    if (old != null && args["kind"].text().ifBlank { old.kind } == old.kind) return updateRoutine(old, args)
+    // 闹钟（不归 Jack 管，只能删了重设），或者把提醒改成任务这种换了种类的：
+    // 先设新的，设成功了再删旧的，免得新的没设上旧的也没了
     val before = succeeded.get()
     val oldIds = withContext(Dispatchers.IO) { host.store.loadRoutines().map { it.id }.toSet() }
     val created = createSchedule(args)
@@ -213,6 +220,57 @@ internal suspend fun ToolSession.schedule(args: JsonObject): String {
     // 新建的那条不能算进“旧的”：新旧同名、用名字指定时，不然可能把刚建的删了
     val newIds = withContext(Dispatchers.IO) { host.store.loadRoutines().map { it.id }.filter { it !in oldIds }.toSet() }
     return created + "\n替换旧的：" + cancelSchedule(buildJsonObject { put("target", replace) }, exclude = newIds)
+}
+
+/** 原地改一条提醒 / 任务 / 监控，改完读回核实。 */
+private suspend fun ToolSession.updateRoutine(old: Routine, args: JsonObject): String {
+    val name = when (old.kind) { "reminder" -> "提醒"; "watch" -> "监控"; else -> "任务" }
+    return runTool("修改$name：${old.title}") {
+        val r = editedRoutine(old, args, System.currentTimeMillis())
+        if (r == old.copy(enabled = true) && old.enabled) return@runTool "没有要改的地方（给的内容和原来一样）。" to SearchRecord("修改$name：没变")
+        withContext(Dispatchers.Main) { host.saveRoutine(r) }
+        "已改好$name「${r.title}」：${r.describe()}。编号还是 ${r.id.take(8)}。" + verifySaved(r.id) to SearchRecord("修改$name：${r.title}")
+    }
+}
+
+/**
+ * 按 schedule 的参数改一条已有的提醒 / 任务 / 监控：只改给了的字段，其余照旧；关掉的会重新打开。
+ * 参数不对时抛 IllegalArgumentException，原因直接给模型看。
+ */
+internal fun editedRoutine(old: Routine, args: JsonObject, now: Long): Routine {
+    fun given(k: String) = args[k]?.text()?.trim()?.takeIf { it.isNotEmpty() }
+    var r = old.copy(enabled = true)
+    given("text")?.let { r = r.copy(title = it) }
+    if (old.kind != "reminder") given("prompt")?.let { r = r.copy(prompt = it) }
+    if (old.kind == "watch") {
+        given("every_minutes")?.let { r = r.copy(everyMin = (it.toIntOrNull() ?: throw IllegalArgumentException("every_minutes 要写数字")).coerceIn(15, 24 * 60)) }
+        given("until")?.let { r = r.copy(until = parseUntil(it, now, r.everyMin)) }
+        args["then"]?.let { r = r.copy(then = it.text().trim()) }
+        if (r.until <= now) throw IllegalArgumentException("这个监控已经到期了，要接着盯就写一个新的 until")
+        return r
+    }
+    given("when")?.let { w ->
+        val (date, h, m) = parseDateTime(w) ?: throw IllegalArgumentException("when 要写成 yyyy-MM-dd HH:mm")
+        r = r.copy(date = date, hour = h, minute = m, lastRunAt = 0)
+    }
+    given("repeat")?.let { rep ->
+        if (rep !in REPEAT_LABELS) throw IllegalArgumentException("提醒和任务的 repeat 只支持 none、daily、weekdays、weekly")
+        r = r.copy(repeat = rep)
+    }
+    if (old.kind == "task") {
+        args["off_peak"]?.let { r = r.copy(offPeak = it.text() == "true") }
+        args["work"]?.let { r = r.copy(work = it.text() == "true") }
+    }
+    if (r.nextAt() == null) throw IllegalArgumentException("改完的时间已经过去了，换一个以后的时间")
+    return r
+}
+
+/** 监控的截止时间：只写日期就盯到那天结束；至少要留出一次检查；最多 30 天。 */
+internal fun parseUntil(text: String, now: Long, everyMin: Int): Long {
+    val (ms, dateOnly) = CalendarTool.parse(text) ?: throw IllegalArgumentException("until 要写成 yyyy-MM-dd HH:mm")
+    val until = if (dateOnly) ms + 86_400_000L - 60_000L else ms
+    if (until <= now + everyMin * 60_000L) throw IllegalArgumentException("截止时间太近了，至少要留出一次检查的时间")
+    return until.coerceAtMost(now + 30 * 86_400_000L)
 }
 
 private suspend fun ToolSession.createSchedule(args: JsonObject): String {
@@ -267,12 +325,7 @@ private suspend fun ToolSession.makeWatch(args: JsonObject, name: String): Strin
         val now = System.currentTimeMillis()
         val every = (args["every_minutes"].text().toIntOrNull() ?: 30).coerceIn(15, 24 * 60)
         val untilText = args["until"].text().trim()
-        val until = if (untilText.isEmpty()) now + 3 * 86_400_000L else {
-            val (ms, dateOnly) = CalendarTool.parse(untilText) ?: throw IllegalArgumentException("until 要写成 yyyy-MM-dd HH:mm")
-            // 只写了日期就盯到那天结束
-            if (dateOnly) ms + 86_400_000L - 60_000L else ms
-        }
-        if (until <= now + every * 60_000L) throw IllegalArgumentException("截止时间太近了，至少要留出一次检查的时间")
+        val until = if (untilText.isEmpty()) now + 3 * 86_400_000L else parseUntil(untilText, now, every)
         val r = Routine(
             kind = "watch", title = name.ifBlank { prompt.take(20) }, prompt = prompt, hour = 0, minute = 0,
             everyMin = every, until = until.coerceAtMost(now + 30 * 86_400_000L),

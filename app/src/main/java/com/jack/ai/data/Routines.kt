@@ -123,7 +123,8 @@ fun Routine.nextAt(now: Long = System.currentTimeMillis()): Long? {
         val c = Calendar.getInstance().apply { if (anchor != null) time = anchor }
         return at(c).timeInMillis.takeIf { it > now }
     }
-    val c = at(Calendar.getInstance().apply { timeInMillis = now })
+    // 从今天和开始日期里较晚的那天往后找（开始日期在一周以后的重复提醒也排得上）
+    val c = at(Calendar.getInstance().apply { timeInMillis = maxOf(now, anchor?.time ?: now) })
     val anchorDow = Calendar.getInstance().apply { if (anchor != null) time = anchor }.get(Calendar.DAY_OF_WEEK)
     repeat(8) {
         val dow = c.get(Calendar.DAY_OF_WEEK)
