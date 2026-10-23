@@ -1025,13 +1025,17 @@ internal fun rememberFollowBottom(listState: androidx.compose.foundation.lazy.La
     }
     // 输出中往下跟：不一下子跳到底，而是每帧走剩下距离的五分之一。每写出新的一行，画面在零点二秒左右里滑上去，
     // 不再整屏一下一下地跳（每秒 100 字大约每秒新起 5 行，直接跳就是每秒整屏闪 5 下）
-    suspend fun glide() {
+    // 离最底下还差多少像素；最后一条还没露出来时返回 null（离得太远）
+    fun distToEnd(): Float? {
         val info = listState.layoutInfo
-        val last = info.visibleItemsInfo.lastOrNull() ?: return
-        if (last.index < info.totalItemsCount - 1) { toEnd(); return } // 离得太远（最后一条还没露出来）：直接到底
-        val bottom = info.viewportEndOffset - info.afterContentPadding
-        val dist = (last.offset + last.size - bottom).toFloat()
-        if (dist > 0.5f) listState.scrollBy(maxOf(1f, dist * 0.2f))
+        val last = info.visibleItemsInfo.lastOrNull() ?: return null
+        if (last.index < info.totalItemsCount - 1) return null
+        return (last.offset + last.size - (info.viewportEndOffset - info.afterContentPadding)).toFloat()
+    }
+    suspend fun glide(share: Float = 0.2f) {
+        val dist = distToEnd() ?: run { toEnd(); return } // 离得太远（最后一条还没露出来）：直接到底
+        // 最后一点点直接走完，不留几个像素的缝
+        if (dist > 0.5f) listState.scrollBy(if (dist <= 2f) dist else maxOf(1f, dist * share))
     }
     LaunchedEffect(listState) {
         snapshotFlow { listState.canScrollForward }.collect { more -> if (!more) f.on = true }
@@ -1042,7 +1046,17 @@ internal fun rememberFollowBottom(listState: androidx.compose.foundation.lazy.La
         toEnd()
     }
     LaunchedEffect(key, moving) {
-        if (!moving) return@LaunchedEffect
+        if (!moving) {
+            // 输出刚停：按同样的滑法把剩下那点距离走完，停在正好贴底的位置（用户在翻看、在拖动时不动）
+            repeat(60) {
+                withFrameNanos { }
+                if (!f.on || listState.isScrollInProgress) return@LaunchedEffect
+                val d = distToEnd() ?: return@LaunchedEffect
+                if (d <= 0.5f) return@LaunchedEffect
+                glide(share = 0.3f)
+            }
+            return@LaunchedEffect
+        }
         while (true) {
             withFrameNanos { }
             if (f.on && listState.canScrollForward && !listState.isScrollInProgress) glide()
