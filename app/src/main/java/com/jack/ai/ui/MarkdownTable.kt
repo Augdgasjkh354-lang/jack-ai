@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -140,7 +139,7 @@ internal fun MarkdownTable(t: Table, modifier: Modifier = Modifier) {
     val widths = t.header.indices.map { c -> columnWidth(listOf(t.header[c]) + t.rows.map { it.getOrElse(c) { "" } }) }
     BoxWithConstraints(modifier) {
         val w: List<Dp> = fitColumns(widths, maxWidth.value - 2).map { it.dp }
-        SelectionContainer {
+        run { // 选字由外面整段回答的选择区负责
             Column(
                 Modifier
                     .clip(shape)

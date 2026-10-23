@@ -143,12 +143,19 @@ fun MarkdownBlocks(
     textSizeSp: Float = 16f,
 ) {
     val blocks = remember(markdown) { splitBlocks(markdown).flatMap { splitTables(it) } }
-    androidx.compose.foundation.layout.Column(modifier, verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)) {
-        blocks.forEachIndexed { i, b ->
-            androidx.compose.runtime.key(i) {
-                val table = remember(b) { parseTable(b) }
-                if (table != null) MarkdownTable(table, Modifier.fillMaxWidth())
-                else MarkdownText(b, color, codeBackground, Modifier.fillMaxWidth(), textSizeSp)
+    // 能长按选字复制：整段回答一个选择区
+    androidx.compose.foundation.text.selection.SelectionContainer {
+        androidx.compose.foundation.layout.Column(modifier, verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)) {
+            blocks.forEachIndexed { i, b ->
+                androidx.compose.runtime.key(i) {
+                    val table = remember(b) { parseTable(b) }
+                    when {
+                        table != null -> MarkdownTable(table, Modifier.fillMaxWidth())
+                        // 公式只有 Markwon 画得了；其余都用 Compose 画，输出时字和框不会错位
+                        hasMath(b) -> MarkdownText(b, color, codeBackground, Modifier.fillMaxWidth(), textSizeSp)
+                        else -> ComposeMarkdown(b, color, codeBackground, Modifier.fillMaxWidth(), textSizeSp)
+                    }
+                }
             }
         }
     }
