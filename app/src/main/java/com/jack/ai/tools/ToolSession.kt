@@ -234,7 +234,7 @@ class ToolSession(
             name == "run_js" && SkillIds.CALC in skillIds -> runJs(arg)
             name == "run_python" && SkillIds.PYTHON in skillIds -> runPython(arg)
             name == "delete_calendar_event" && SkillIds.CALENDAR in skillIds -> deleteEvent(arg)
-            name == "web_search" && web -> search(arg)
+            name == "web_search" && web -> search(arg, args["engine"].text())
             name == "read_webpage" && web -> readPage(arg)
             name == "search_library" && SkillIds.LIBRARY in skillIds -> searchLibrary(arg)
             name == "delete_routine" && SkillIds.ROUTINE in skillIds -> removeRoutine(arg)

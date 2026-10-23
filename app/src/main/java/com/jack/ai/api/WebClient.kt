@@ -42,12 +42,29 @@ object KeyRest {
         }
     }
 
-    internal fun clear() = until.clear()
+    /** 默认轮着用：每三次搜索，两次 Exa 先上、一次 Tavily 先上；同一家的几个 Key 也一个接一个地轮。 */
+    private val turn = java.util.concurrent.atomic.AtomicInteger()
+    private val keyTurn = java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.atomic.AtomicInteger>()
+
+    internal fun exaFirst(): Boolean = turn.getAndIncrement() % 3 != 2
+
+    /** 这一家这次从第几个 Key 开始，后面的依次排上。 */
+    internal fun ordered(provider: String, keys: List<String>): List<String> {
+        if (keys.size < 2) return keys
+        val start = Math.floorMod(keyTurn.getOrPut(provider) { java.util.concurrent.atomic.AtomicInteger() }.getAndIncrement(), keys.size)
+        return keys.drop(start) + keys.take(start)
+    }
+
+    internal fun clear() { until.clear(); turn.set(0); keyTurn.clear() }
 }
 
+/** 这次搜索想先用哪家：一般 AUTO（轮着来）；英文资料、论文、技术文档、GitHub 先 Exa；最新新闻先 Tavily。 */
+enum class Prefer { AUTO, EXA, TAVILY }
+
 /**
- * 搜索和读网页，按顺序试：Exa → Tavily → DeepSeek。
- * Exa、Tavily 都可以填好几个 Key：一个额度用完、Key 不对或太频繁，就换同家的下一个；一家都不行（或没结果）再换下一家。
+ * 搜索和读网页。默认轮着用：每三次里两次 Exa 先上、一次 Tavily 先上，同一家的几个 Key 也轮着用，额度摊开；
+ * 有特别需要时可以指定先用哪家（[Prefer]）。
+ * 一个 Key 额度用完、Key 不对或太频繁，就换同家的下一个；一家都不行（或没结果）再换另一家。
  * 最后有 DeepSeek Key 就用 DeepSeek 的 Search / Fetch（每次成功 0.005 元，记进统计）。
  */
 class WebClient(
@@ -59,12 +76,12 @@ class WebClient(
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
-    suspend fun search(s: Settings, query: String): List<SearchResult> = chain(s, emptyList(),
+    suspend fun search(s: Settings, query: String, prefer: Prefer = Prefer.AUTO): List<SearchResult> = chain(s, emptyList(), prefer,
         exa = { k -> exa.search(k, query).takeIf { it.isNotEmpty() } },
         tavily = { k -> tavily.search(k, query).takeIf { it.isNotEmpty() } },
     ) { deepseekSearch(s.apiKey, query) }
 
-    suspend fun read(s: Settings, url: String): String = chain(s, NO_CONTENT,
+    suspend fun read(s: Settings, url: String): String = chain(s, NO_CONTENT, Prefer.AUTO,
         exa = { k -> exa.contents(k, url).takeUnless { it == NO_CONTENT } },
         tavily = { k -> tavily.extract(k, url).takeUnless { it == NO_CONTENT } },
     ) { deepseekFetch(s.apiKey, url) }
@@ -74,13 +91,22 @@ class WebClient(
      * 都用不了时：有 DeepSeek 就交给它，否则抛最后一个错，或者返回 empty。
      */
     internal suspend fun <T> chain(
-        s: Settings, empty: T,
+        s: Settings, empty: T, prefer: Prefer,
         exa: suspend (String) -> T?, tavily: suspend (String) -> T?,
         deepseek: suspend () -> T,
     ): T {
         var error: Exception? = null
-        for ((name, keys, call) in listOf(Triple(EXA_KEY, s.exaKeys, exa), Triple(TAVILY_KEY, s.tavilyKeys, tavily))) {
-            for (key in keys.filterNot { KeyRest.resting(it) }) {
+        val e = Triple(EXA_KEY, s.exaKeys, exa)
+        val t = Triple(TAVILY_KEY, s.tavilyKeys, tavily)
+        // 两家都有 Key 才谈得上轮换
+        val exaFirst = when {
+            prefer == Prefer.EXA -> true
+            prefer == Prefer.TAVILY -> false
+            s.exaKeys.isEmpty() || s.tavilyKeys.isEmpty() -> true
+            else -> KeyRest.exaFirst()
+        }
+        for ((name, keys, call) in if (exaFirst) listOf(e, t) else listOf(t, e)) {
+            for (key in KeyRest.ordered(name, keys.filterNot { KeyRest.resting(it) })) {
                 try {
                     val got = call(key)
                     if (got != null) { onFree(name); return got }

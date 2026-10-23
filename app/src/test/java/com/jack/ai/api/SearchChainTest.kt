@@ -17,8 +17,28 @@ class SearchChainTest {
 
     @Before fun clean() = KeyRest.clear()
 
-    private fun go(s: Settings, exa: (String) -> String?, tavily: (String) -> String? = { null }): String = runBlocking {
-        web.chain(s, "空", exa = { k -> tried += k; exa(k) }, tavily = { k -> tried += k; tavily(k) }) { tried += "deepseek"; "DeepSeek 的结果" }
+    private fun go(s: Settings, exa: (String) -> String?, tavily: (String) -> String? = { null }, prefer: Prefer = Prefer.EXA): String = runBlocking {
+        web.chain(s, "空", prefer, exa = { k -> tried += k; exa(k) }, tavily = { k -> tried += k; tavily(k) }) { tried += "deepseek"; "DeepSeek 的结果" }
+    }
+
+    @Test
+    fun byDefaultTwoExaThenOneTavilyAndKeysTakeTurns() {
+        val s = Settings(exaKey = "e1\ne2", tavilyKey = "t1\nt2")
+        repeat(6) { go(s, exa = { k -> "Exa:$k" }, tavily = { k -> "Tavily:$k" }, prefer = Prefer.AUTO) }
+        // 每三次：Exa、Exa、Tavily；同一家的 Key 一个接一个
+        assertEquals(listOf("e1", "e2", "t1", "e1", "e2", "t2"), tried)
+    }
+
+    @Test
+    fun aSpecialNeedPicksTheEngineFirst() {
+        val s = Settings(exaKey = "e1", tavilyKey = "t1")
+        go(s, exa = { "Exa" }, tavily = { "Tavily" }, prefer = Prefer.TAVILY)
+        go(s, exa = { "Exa" }, tavily = { "Tavily" }, prefer = Prefer.EXA)
+        assertEquals(listOf("t1", "e1"), tried)
+        // 只有一家有 Key：不轮换，就用它
+        tried.clear()
+        repeat(3) { go(Settings(tavilyKey = "t1"), exa = { "Exa" }, tavily = { "Tavily" }, prefer = Prefer.AUTO) }
+        assertEquals(listOf("t1", "t1", "t1"), tried)
     }
 
     @Test
@@ -43,9 +63,9 @@ class SearchChainTest {
         assertEquals("用 exa2 搜到的", r)
         assertTrue(KeyRest.resting("exa1"))
         tried.clear()
-        // 下一次直接跳过歇着的 exa1
+        // 下一次直接跳过歇着的 exa1，在剩下的里面轮（刚用过 exa2，这次轮到 exa3）
         go(s, exa = { k -> "用 $k 搜到的" })
-        assertEquals(listOf("exa2"), tried)
+        assertEquals(listOf("exa3"), tried)
     }
 
     @Test

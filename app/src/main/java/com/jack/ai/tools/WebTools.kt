@@ -16,8 +16,9 @@ import java.util.Locale
 
 /** 联网：搜索、读网页。 */
 
-internal suspend fun ToolSession.search(query: String) = runTool(query) {
-    val results = host.web.search(settings, query)
+internal suspend fun ToolSession.search(query: String, engine: String = "") = runTool(query) {
+    val prefer = when (engine.trim().lowercase()) { "exa" -> com.jack.ai.api.Prefer.EXA; "tavily" -> com.jack.ai.api.Prefer.TAVILY; else -> com.jack.ai.api.Prefer.AUTO }
+    val results = host.web.search(settings, query, prefer)
     val text = formatResultsForModel(results, sourceCount + 1)
     sourceCount += results.size
     text to SearchRecord(query, results.toSources())

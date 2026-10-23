@@ -339,7 +339,7 @@ object Routines {
                 fun unavailable(msg: String): String { status = com.jack.ai.tools.ToolStatus.FAILED; return msg }
                 (try {
                     when {
-                        name == "web_search" && web -> webClient.search(s, arg("query")).let {
+                        name == "web_search" && web -> webClient.search(s, arg("query"), when (arg("engine")) { "exa" -> com.jack.ai.api.Prefer.EXA; "tavily" -> com.jack.ai.api.Prefer.TAVILY; else -> com.jack.ai.api.Prefer.AUTO }).let {
                             formatResultsForModel(it, sources + 1).also { _ -> sources += it.size }
                         }
                         name == "read_webpage" && web -> webClient.read(s, arg("url"))
