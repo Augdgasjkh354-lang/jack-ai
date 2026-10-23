@@ -22,11 +22,11 @@ class SearchChainTest {
     }
 
     @Test
-    fun byDefaultTwoExaThenOneTavilyAndKeysTakeTurns() {
+    fun byDefaultTwoExaThenOneTavilyAndOneKeyIsUsedUpFirst() {
         val s = Settings(exaKey = "e1\ne2", tavilyKey = "t1\nt2")
         repeat(6) { go(s, exa = { k -> "Exa:$k" }, tavily = { k -> "Tavily:$k" }, prefer = Prefer.AUTO) }
-        // 每三次：Exa、Exa、Tavily；同一家的 Key 一个接一个
-        assertEquals(listOf("e1", "e2", "t1", "e1", "e2", "t2"), tried)
+        // 每三次：Exa、Exa、Tavily；同一家一直用第一个 Key，没用完不换
+        assertEquals(listOf("e1", "e1", "t1", "e1", "e1", "t1"), tried)
     }
 
     @Test
@@ -63,9 +63,9 @@ class SearchChainTest {
         assertEquals("用 exa2 搜到的", r)
         assertTrue(KeyRest.resting("exa1"))
         tried.clear()
-        // 下一次直接跳过歇着的 exa1，在剩下的里面轮（刚用过 exa2，这次轮到 exa3）
+        // 下一次直接跳过歇着的 exa1，接着用 exa2，直到它也用完
         go(s, exa = { k -> "用 $k 搜到的" })
-        assertEquals(listOf("exa3"), tried)
+        assertEquals(listOf("exa2"), tried)
     }
 
     @Test

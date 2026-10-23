@@ -42,27 +42,19 @@ object KeyRest {
         }
     }
 
-    /** 默认轮着用：每三次搜索，两次 Exa 先上、一次 Tavily 先上；同一家的几个 Key 也一个接一个地轮。 */
+    /** 默认两家轮着用：每三次搜索，两次 Exa 先上、一次 Tavily 先上。同一家的 Key 不轮：先把第一个用完，再用下一个。 */
     private val turn = java.util.concurrent.atomic.AtomicInteger()
-    private val keyTurn = java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.atomic.AtomicInteger>()
 
     internal fun exaFirst(): Boolean = turn.getAndIncrement() % 3 != 2
 
-    /** 这一家这次从第几个 Key 开始，后面的依次排上。 */
-    internal fun ordered(provider: String, keys: List<String>): List<String> {
-        if (keys.size < 2) return keys
-        val start = Math.floorMod(keyTurn.getOrPut(provider) { java.util.concurrent.atomic.AtomicInteger() }.getAndIncrement(), keys.size)
-        return keys.drop(start) + keys.take(start)
-    }
-
-    internal fun clear() { until.clear(); turn.set(0); keyTurn.clear() }
+    internal fun clear() { until.clear(); turn.set(0) }
 }
 
 /** 这次搜索想先用哪家：一般 AUTO（轮着来）；英文资料、论文、技术文档、GitHub 先 Exa；最新新闻先 Tavily。 */
 enum class Prefer { AUTO, EXA, TAVILY }
 
 /**
- * 搜索和读网页。默认轮着用：每三次里两次 Exa 先上、一次 Tavily 先上，同一家的几个 Key 也轮着用，额度摊开；
+ * 搜索和读网页。默认两家轮着用：每三次里两次 Exa 先上、一次 Tavily 先上；同一家的几个 Key 先用完第一个再用下一个；
  * 有特别需要时可以指定先用哪家（[Prefer]）。
  * 一个 Key 额度用完、Key 不对或太频繁，就换同家的下一个；一家都不行（或没结果）再换另一家。
  * 最后有 DeepSeek Key 就用 DeepSeek 的 Search / Fetch（每次成功 0.005 元，记进统计）。
@@ -106,7 +98,8 @@ class WebClient(
             else -> KeyRest.exaFirst()
         }
         for ((name, keys, call) in if (exaFirst) listOf(e, t) else listOf(t, e)) {
-            for (key in KeyRest.ordered(name, keys.filterNot { KeyRest.resting(it) })) {
+            // 同一家按填的顺序：前一个用完（歇着了）才轮到下一个
+            for (key in keys.filterNot { KeyRest.resting(it) }) {
                 try {
                     val got = call(key)
                     if (got != null) { onFree(name); return got }

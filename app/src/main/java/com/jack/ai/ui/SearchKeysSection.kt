@@ -30,11 +30,11 @@ import com.jack.ai.data.exaKeys
 import com.jack.ai.data.tavilyKeys
 import kotlinx.coroutines.launch
 
-/** 「连接 → 联网搜索」：Exa 和 Tavily 各能填好几个 Key，默认按 2:1 轮着用，一个额度用完自动换下一个，最后才用 DeepSeek。 */
+/** 「连接 → 联网搜索」：Exa 和 Tavily 各能填好几个 Key，两家默认按 2:1 轮着用，同一家先用完第一个 Key 再换下一个，最后才用 DeepSeek。 */
 @Composable
 fun SearchKeysSection(vm: ChatViewModel, s: Settings) {
     val colors = MaterialTheme.colorScheme
-    Text("默认轮着用：每三次搜索，两次先用 Exa、一次先用 Tavily，同一家的几个 Key 也轮着用；找英文资料、论文、GitHub 时 Kavi 会指定 Exa，查最新新闻时指定 Tavily。一个 Key 额度用完、Key 不对或太频繁，就自动换下一个；都不行再用 DeepSeek。",
+    Text("默认轮着用：每三次搜索，两次先用 Exa、一次先用 Tavily；同一家填了好几个 Key 时，先把第一个用完再用下一个；找英文资料、论文、GitHub 时 Kavi 会指定 Exa，查最新新闻时指定 Tavily。一个 Key 额度用完、Key 不对或太频繁，就自动换下一个；都不行再用 DeepSeek。",
         style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
     KeyList("Exa", "每月 1 号补满 10 美元免费额度，大约一两千次搜索。exa.ai 注册拿 Key", s.exaKeys,
         onChange = { keys -> vm.updateSettings { it.copy(exaKey = keys.joinToString("\n")) } },
