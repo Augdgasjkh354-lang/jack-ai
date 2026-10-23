@@ -192,7 +192,7 @@ data class Settings(
     val activeWork: Boolean = false,
     val chatModel: String = "",
     val chatThinking: ThinkLevel? = null,
-    val workModel: String = MODEL_PRO,
+    val workModel: String = MODEL_FLASH,
     val workThinking: ThinkLevel = ThinkLevel.HIGH,
     /** Work 模板：常做的任务，一点就填进输入框。 */
     val workTemplates: List<Preset> = DEFAULT_WORK_TEMPLATES,
@@ -238,6 +238,8 @@ data class Settings(
     val wechatWatch: Boolean = false,
     /** 不看的微信联系人（家人朋友），一行一个，按备注名或昵称。 */
     val wechatSkip: String = "",
+    /** 点网页链接用 Jack 浏览器打开；关掉用手机的系统浏览器。 */
+    val linksInApp: Boolean = true,
 )
 
 /** 完全授权现在是否有效（到点自动失效）。 */

@@ -34,6 +34,10 @@ private fun buildMarkwon(ctx: Context, textColor: Int, codeBg: Int, textSizePx: 
         .usePlugin(StrikethroughPlugin.create())
         .usePlugin(LinkifyPlugin.create())
         .usePlugin(object : AbstractMarkwonPlugin() {
+            override fun configureConfiguration(builder: io.noties.markwon.MarkwonConfiguration.Builder) {
+                builder.linkResolver { view, link -> Links.open(view.context, link) }
+            }
+
             override fun configureTheme(builder: MarkwonTheme.Builder) {
                 val dp = ctx.resources.displayMetrics.density
                 builder.codeBackgroundColor(codeBg)

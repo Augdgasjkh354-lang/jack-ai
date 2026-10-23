@@ -34,6 +34,7 @@ import androidx.webkit.ProxyController
 import androidx.webkit.WebViewFeature
 import com.jack.ai.api.BrowserDownload
 import com.jack.ai.api.BrowserNet
+import com.jack.ai.api.BrowserPages
 import com.jack.ai.api.Net
 import com.jack.ai.data.ProxyCore
 import kotlinx.coroutines.CompletableDeferred
@@ -77,6 +78,24 @@ object JackBrowser {
     var saved by mutableStateOf<Saved?>(null)
 
     data class Saved(val name: String, val uri: android.net.Uri, val mime: String, val where: String)
+
+    /** error 是不是「这一页没打开」：是就盖一层干净的出错页，否则（比如拦下了一次跳转）只在顶上提一句。 */
+    var pageFailed by mutableStateOf(false)
+    /** 网页里的视频要全屏：全屏的画面和退出用的回调。 */
+    var fullscreen by mutableStateOf<Pair<View, WebChromeClient.CustomViewCallback>?>(null)
+    /** 浏览器页开着时由它接手「网页要选文件」；返回 false 表示没接。 */
+    var chooser: ((android.webkit.ValueCallback<Array<android.net.Uri>>, WebChromeClient.FileChooserParams) -> Boolean)? = null
+    /** 页内查找：共几处、当前第几处（从 0 起）。 */
+    var findCount by mutableIntStateOf(0)
+    var findIndex by mutableIntStateOf(0)
+    /** 用户长按了链接或图片，等浏览器页弹菜单。 */
+    var pressed by mutableStateOf<Pressed?>(null)
+    data class Pressed(val link: String?, val image: String?)
+    /** 最近访问（只记用户自己看的）和书签，存在 browser 偏好里。 */
+    var visits by mutableStateOf(listOf<BrowserPages.Visit>())
+    var marks by mutableStateOf(listOf<BrowserPages.Visit>())
+    /** 网页跟着 App 变深色（浅色主题时不变）。 */
+    private var darkAllowed = true
 
     /** 下载在后台跑，离开浏览器页也不停。 */
     private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
@@ -127,8 +146,15 @@ object JackBrowser {
                 displayZoomControls = false
                 useWideViewPort = true
                 loadWithOverviewMode = true
+                userAgentString = BrowserPages.cleanUserAgent(userAgentString)
             }
-            CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
+                androidx.webkit.WebSettingsCompat.setAlgorithmicDarkeningAllowed(settings, darkAllowed)
+            }
+            // 第三方 Cookie 要开：「用 XX 账号登录」的跳转和内嵌登录靠它
+            CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+            setFindListener { active, count, done -> if (done) { findIndex = active; findCount = count } }
+            setOnLongClickListener { v -> longPress(v as WebView) }
             webViewClient = Client()
             webChromeClient = Chrome()
             setDownloadListener { url, userAgent, disposition, mime, length ->
@@ -137,7 +163,71 @@ object JackBrowser {
                     length, userAgent.orEmpty(), address, byUser = userViewing)
             }
             web = this
+        }.also { loadLists() }
+    }
+
+    private fun prefs() = app.getSharedPreferences("browser", Context.MODE_PRIVATE)
+    private val listJson = Json { ignoreUnknownKeys = true }
+    private val visitList = kotlinx.serialization.builtins.ListSerializer(BrowserPages.Visit.serializer())
+
+    private fun loadLists() {
+        fun read(k: String) = prefs().getString(k, null)?.let { runCatching { listJson.decodeFromString(visitList, it) }.getOrNull() }.orEmpty()
+        visits = read("visits"); marks = read("marks")
+    }
+
+    private fun saveLists() {
+        prefs().edit().putString("visits", listJson.encodeToString(visitList, visits)).putString("marks", listJson.encodeToString(visitList, marks)).apply()
+    }
+
+    /** 当前网页加进书签或从书签去掉。 */
+    fun toggleMark() {
+        marks = BrowserPages.toggle(marks, address, title, System.currentTimeMillis())
+        saveLists()
+    }
+
+    /** 网页跟着 App 的深浅色：浅色主题时不变暗。跟着系统深色走（网页组件看的是系统设置）。 */
+    fun setDark(allowed: Boolean) {
+        darkAllowed = allowed
+        val w = web ?: return
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
+            androidx.webkit.WebSettingsCompat.setAlgorithmicDarkeningAllowed(w.settings, allowed)
         }
+    }
+
+    /** 回到起始页（书签、最近访问）。能后退回刚才的网页。 */
+    fun home() {
+        val w = web ?: return
+        clearError()
+        w.loadUrl("about:blank")
+        address = ""; title = ""
+    }
+
+    /** 用户或 Jack 开始一次新的跳转：上一页的出错提示不再适用。 */
+    fun clearError() { error = null; pageFailed = false }
+
+    /** 长按链接或图片：记下来让浏览器页弹菜单；长按文字照旧选字。Jack 在操作时不弹。 */
+    private fun longPress(w: WebView): Boolean {
+        if (!userViewing) return false
+        val r = w.hitTestResult
+        return when (r.type) {
+            WebView.HitTestResult.SRC_ANCHOR_TYPE -> { pressed = Pressed(r.extra, null); true }
+            WebView.HitTestResult.IMAGE_TYPE -> { pressed = Pressed(null, r.extra); true }
+            WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE -> {
+                // 图片外面包着链接：链接地址要另外问网页
+                val img = r.extra
+                val h = android.os.Handler(android.os.Looper.getMainLooper()) { m -> pressed = Pressed(m.data.getString("url"), img); true }
+                w.requestFocusNodeHref(h.obtainMessage())
+                true
+            }
+            else -> false
+        }
+    }
+
+    /** 长按图片选了「下载」：和网页里点下载一样，先弹窗问。 */
+    fun downloadImage(url: String) {
+        if (!BrowserPages.isWeb(url)) { notice = "这张图片是网页内嵌的，没法单独下载。可以截屏保存。"; return }
+        pending = BrowserDownload.Pending(url, BrowserDownload.nameFor(url, null, "image/jpeg"), "", -1,
+            web?.settings?.userAgentString.orEmpty(), address, byUser = true)
     }
 
     /** 放进某个界面：先从原来的地方拿出来。ctx 是那个界面所在的页面。 */
@@ -204,13 +294,13 @@ object JackBrowser {
 
     /** 打开网址；等到加载完（最多 timeoutMs）。返回出错原因，成功返回 null。 */
     suspend fun load(ctx: Context, url: String, timeoutMs: Long = 25_000): String? {
-        withContext(Dispatchers.Main) { error = null }
+        withContext(Dispatchers.Main) { clearError() }
         when (BrowserNet.classify(url)) {
             BrowserNet.Kind.OPEN -> {}
             BrowserNet.Kind.EXTERNAL -> return "这是打开别的 App 的链接，浏览器里打不开：$url"
             BrowserNet.Kind.BLOCKED -> return "不能打开这个地址（本机、局域网和文件地址都不开）：$url"
         }
-        prepare(ctx)?.let { reason -> withContext(Dispatchers.Main) { error = reason }; return reason }
+        prepare(ctx)?.let { reason -> withContext(Dispatchers.Main) { error = reason; pageFailed = true }; return reason }
         val done = withContext(Dispatchers.Main) {
             CompletableDeferred<Unit>().also { pageDone = it; webView(ctx).loadUrl(url) }
         }
@@ -230,7 +320,8 @@ object JackBrowser {
         w.clearFormData()
         w.loadUrl("about:blank")
         address = ""; title = ""
-        notice = "已清除：Cookie（登录状态）、缓存、网页存储、浏览记录。"
+        visits = emptyList(); saveLists()
+        notice = "已清除：Cookie（登录状态）、缓存、网页存储、浏览记录和最近访问（书签留着）。"
     }
 
     private fun describe(code: Int, desc: String): String = when {
@@ -246,7 +337,7 @@ object JackBrowser {
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
             val url = request.url.toString()
             return when (BrowserNet.classify(url)) {
-                BrowserNet.Kind.OPEN -> false
+                BrowserNet.Kind.OPEN -> { if (request.isForMainFrame) clearError(); false }
                 BrowserNet.Kind.EXTERNAL -> { if (userViewing && request.hasGesture()) external = url; true }
                 BrowserNet.Kind.BLOCKED -> { if (request.isForMainFrame) error = "已拦下：网页想打开本机、局域网或文件地址（$url）"; true }
             }
@@ -276,11 +367,11 @@ object JackBrowser {
         override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, e: SslError) {
             // 证书不对一律不继续：可能是假网站或被劫持
             handler.cancel()
-            if (e.url == view.url || e.url == address) error = "这个网站的安全证书有问题，已停止打开（${e.url}）"
+            if (e.url == view.url || e.url == address) { error = "这个网站的安全证书有问题，已停止打开（${e.url}）"; pageFailed = true }
         }
 
         override fun onReceivedError(view: WebView, request: WebResourceRequest, e: WebResourceError) {
-            if (request.isForMainFrame) error = describe(e.errorCode, e.description?.toString().orEmpty())
+            if (request.isForMainFrame) { error = describe(e.errorCode, e.description?.toString().orEmpty()); pageFailed = true }
         }
 
         override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
@@ -292,6 +383,11 @@ object JackBrowser {
         override fun onPageFinished(view: WebView, url: String) {
             pageDone?.complete(Unit)
             if (url != "about:blank") address = url
+            // 最近访问只记用户自己看的、打开成功的
+            if (userViewing && !pageFailed && BrowserPages.isWeb(url)) {
+                visits = BrowserPages.visit(visits, url, view.title.orEmpty().takeUnless { it == url }.orEmpty(), System.currentTimeMillis())
+                saveLists()
+            }
             canBack = view.canGoBack(); canForward = view.canGoForward()
         }
 
@@ -303,7 +399,22 @@ object JackBrowser {
 
     private class Chrome : WebChromeClient() {
         override fun onProgressChanged(view: WebView, newProgress: Int) { loading = newProgress }
-        override fun onReceivedTitle(view: WebView, t: String?) { title = t.orEmpty() }
+        override fun onReceivedTitle(view: WebView, t: String?) {
+            title = t.orEmpty()
+            val url = view.url.orEmpty()
+            if (t != null && t != url) BrowserPages.retitle(visits, url, t).let { if (it !== visits) { visits = it; saveLists() } }
+        }
+        // 视频全屏：交给浏览器页盖满屏幕
+        override fun onShowCustomView(view: View, callback: CustomViewCallback) {
+            if (!userViewing) { callback.onCustomViewHidden(); return }
+            fullscreen = view to callback
+        }
+        override fun onHideCustomView() { fullscreen = null }
+        // 网页要选文件上传：只有用户开着浏览器页时才弹选择器（Jack 操作时不替用户选文件）
+        override fun onShowFileChooser(view: WebView, callback: android.webkit.ValueCallback<Array<android.net.Uri>>, params: FileChooserParams): Boolean {
+            val c = chooser
+            return if (userViewing && c != null) c(callback, params) else false
+        }
         // 不给网页任何手机权限（相机、麦克风、位置）
         override fun onPermissionRequest(request: PermissionRequest) = request.deny()
         override fun onGeolocationPermissionsShowPrompt(origin: String?, callback: GeolocationPermissions.Callback) = callback.invoke(origin, false, false)
@@ -488,7 +599,7 @@ object JackBrowser {
         agentAt = System.currentTimeMillis()
         val ok = withContext(Dispatchers.Main) {
             val w = webView(ctx)
-            if (w.canGoBack()) { pageDone = CompletableDeferred(); w.goBack(); true } else false
+            if (w.canGoBack()) { pageDone = CompletableDeferred(); clearError(); w.goBack(); true } else false
         }
         if (ok) settle()
         return ok

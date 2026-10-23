@@ -125,7 +125,12 @@ fun JackTheme(mode: ThemeMode, accent: String = "clay", fontScale: Float = 1f, c
         onPrimaryContainer = Color(on),
     )
     val density = LocalDensity.current
-    CompositionLocalProvider(LocalDensity provides Density(density.density, density.fontScale * fontScale)) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val links = androidx.compose.runtime.remember(ctx) { JackUriHandler(ctx) }
+    CompositionLocalProvider(
+        LocalDensity provides Density(density.density, density.fontScale * fontScale),
+        androidx.compose.ui.platform.LocalUriHandler provides links,
+    ) {
         MaterialTheme(
             colorScheme = colors,
             shapes = AppShapes,

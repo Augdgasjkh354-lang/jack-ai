@@ -41,7 +41,7 @@ import com.jack.ai.data.SearchRecord
 import com.jack.ai.data.Settings
 import com.jack.ai.data.Store
 import com.jack.ai.data.ThinkLevel
-import com.jack.ai.data.MODEL_PRO
+import com.jack.ai.data.MODEL_FLASH
 import com.jack.ai.data.endpoint
 import com.jack.ai.data.Provider
 import kotlinx.coroutines.CancellationException
@@ -414,7 +414,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     /** 有回答正在进行（停止后立刻就不算了，不用等收尾）。 */
     private fun busy() = job?.isActive == true
 
-    /** 让 Pro 复核最后一条回答，并给出改进版。 */
+    /** 让 V4.1 Flash 复核最后一条回答，并给出改进版。 */
     /** Work 的回答是不是被打断了：出错、没写出结论、或清单还有没做完的。 */
     fun canContinue(m: ChatMessage): Boolean =
         m.role == "assistant" && (m.error != null || m.content.isBlank() || m.plan.any { it.status != "done" })
@@ -441,8 +441,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val conv = _state.value.current ?: return
         if (busy()) return
         if (conv.messages.lastOrNull()?.let { it.role == "assistant" && it.content.isNotBlank() } != true) return
-        // 有 DeepSeek Key 时用 Pro 复核（Pro 发布前官方转给 Flash），否则用当前模型
-        val model = if (_state.value.settings.apiKey.isNotBlank()) MODEL_PRO else _state.value.settings.model
+        // 有 DeepSeek Key 时用 V4.1 Flash 复核（比现在的 Pro 强，也便宜），否则用当前模型
+        val model = if (_state.value.settings.apiKey.isNotBlank()) MODEL_FLASH else _state.value.settings.model
         startReply(conv.id, modelOverride = model, extraUser = REVIEW_PROMPT)
     }
 

@@ -9,8 +9,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.draw.clip
-import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -148,7 +146,7 @@ fun SettingsScreen(
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     OutlinedButton(onClick = {
-                        ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://platform.deepseek.com/api_keys")))
+                        Links.open(ctx, "https://platform.deepseek.com/api_keys")
                     }) { Text("去获取 Key") }
                     OutlinedButton(onClick = {
                         balance = "查询中…"
@@ -269,6 +267,17 @@ fun SettingsScreen(
                     valueRange = 0.85f..1.3f,
                     steps = 8,
                 )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("链接用 Jack 浏览器打开")
+                        Text(
+                            if (settings.linksInApp) "回答和设置里的网页链接在 Jack 浏览器里打开" else "网页链接交给手机的系统浏览器",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(checked = settings.linksInApp, onCheckedChange = { on -> vm.updateSettings { it.copy(linksInApp = on) } })
+                }
             }
 
             // ---- 隐私和数据 ----

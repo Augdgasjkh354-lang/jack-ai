@@ -1,7 +1,6 @@
 package com.jack.ai.ui
 
 import android.annotation.SuppressLint
-import android.content.Intent
 import android.os.Handler
 import android.os.Looper
 import android.view.MotionEvent
@@ -144,9 +143,7 @@ fun AppWebView(file: File, modifier: Modifier = Modifier, inline: Boolean = true
                     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                         val url = request.url
                         if (url.toString().startsWith(base) && url.fragment != null) return false
-                        if (url.scheme == "http" || url.scheme == "https") {
-                            runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, url).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-                        }
+                        if (url.scheme == "http" || url.scheme == "https") Links.open(ctx, url.toString())
                         return true
                     }
                 }

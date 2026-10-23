@@ -298,8 +298,12 @@ class Store(context: Context) {
         } ?: DEFAULT_PRESETS
         // 旧版用的 deepseek-chat / deepseek-reasoner 已经下线，自动换成新模型
         val oldModel = prefs.getString("model", MODEL_FLASH) ?: MODEL_FLASH
+        // Pro 还没发布、官方转给 Flash，却按 Pro 价记账：以前默认选的 Pro 一次性换成 Flash（之后用户再选 Pro 不动它）
+        val proToFlash = !prefs.getBoolean("proToFlash", false)
+        if (proToFlash) prefs.edit().putBoolean("proToFlash", true).apply()
         val model = when (oldModel) {
             "deepseek-chat", "deepseek-reasoner", "deepseek-v4-flash" -> MODEL_FLASH
+            MODEL_PRO -> if (proToFlash) MODEL_FLASH else oldModel
             else -> oldModel
         }
         val thinking = prefs.getString("thinking", null)
@@ -326,7 +330,7 @@ class Store(context: Context) {
             activeWork = prefs.getBoolean("activeWork", false),
             chatModel = prefs.getString("chatModel", "") ?: "",
             chatThinking = prefs.getString("chatThinking", null)?.let { runCatching { ThinkLevel.valueOf(it) }.getOrNull() },
-            workModel = prefs.getString("workModel", MODEL_PRO) ?: MODEL_PRO,
+            workModel = (prefs.getString("workModel", MODEL_FLASH) ?: MODEL_FLASH).let { if (proToFlash && it == MODEL_PRO) MODEL_FLASH else it },
             workThinking = prefs.getString("workThinking", null)?.let { runCatching { ThinkLevel.valueOf(it) }.getOrNull() } ?: ThinkLevel.HIGH,
             // 默认值从 1 元改成了 5 元，换个键名，旧的默认值不沿用
             workCostLimit = prefs.getFloat("workCostLimit5", 5f).toDouble(),
@@ -366,6 +370,7 @@ class Store(context: Context) {
             updateWifiOnly = prefs.getBoolean("updateWifiOnly", false),
             wechatWatch = prefs.getBoolean("wechatWatch", false),
             wechatSkip = prefs.getString("wechatSkip", "") ?: "",
+            linksInApp = prefs.getBoolean("linksInApp", true),
         ).also { com.jack.ai.api.Net.apply(it) }
     }
 
@@ -418,6 +423,7 @@ class Store(context: Context) {
             .putBoolean("updateWifiOnly", s.updateWifiOnly)
             .putBoolean("wechatWatch", s.wechatWatch)
             .putString("wechatSkip", s.wechatSkip)
+            .putBoolean("linksInApp", s.linksInApp)
             .apply()
         com.jack.ai.api.Net.apply(s)
     }

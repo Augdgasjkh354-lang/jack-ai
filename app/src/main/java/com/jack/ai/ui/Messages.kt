@@ -337,7 +337,7 @@ fun AssistantMessage(
                 if (isLast && onReview != null && msg.content.isNotEmpty()) {
                     TextButton(onClick = onReview, modifier = Modifier.height(32.dp),
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp)) {
-                        Text("Pro 复核", style = MaterialTheme.typography.labelMedium, color = colors.primary)
+                        Text("复核", style = MaterialTheme.typography.labelMedium, color = colors.primary)
                     }
                 }
                 // 不常用的收进「⋯」：朗读、这条有问题、删除（删除要确认，它会连带删掉后面的消息）

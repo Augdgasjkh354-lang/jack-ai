@@ -99,6 +99,8 @@ dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     // Jack 浏览器单独设代理（ProxyController）
     implementation("androidx.webkit:webkit:1.12.1")
+    // Jack 浏览器下拉刷新
+    implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
     implementation("androidx.biometric:biometric:1.1.0")
     // biometric 自带的 fragment 1.2.5 太旧：不支持新式 ActivityResult，拍照/选图/选文件会报 requestCode 错
     implementation("androidx.fragment:fragment-ktx:1.8.5")
