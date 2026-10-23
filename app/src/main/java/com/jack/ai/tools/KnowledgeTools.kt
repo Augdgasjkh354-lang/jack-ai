@@ -201,3 +201,35 @@ internal suspend fun ToolSession.saveNote(args: JsonObject): String {
             SearchRecord("存进$where：$title")
     }
 }
+
+
+/**
+ * update_self：Kavi 改「你是谁」里的一段。边界在代码里：
+ * 用户不在（后台）、隐私项目里不能改；只能改那几段、内容要过检查；
+ * 引的用户原话在这个对话里找得到、而且这一轮没读过外部内容，才直接改，否则弹窗问用户（完全授权也问）。
+ */
+internal suspend fun ToolSession.updateSelf(args: JsonObject): String {
+    val key = args["section"].text().trim()
+    val content = args["content"].text().trim()
+    val reason = args["reason"].text().trim()
+    val quote = args["user_quote"].text().trim()
+    if (!interactive) return "用户不在的时候不能改自己（后台任务、做梦里都不行）。想改的话，下次聊天时跟用户提。"
+    if (project?.isolated == true) return "这是隐私项目，在这里不能改「你是谁」：它在所有对话里共用，不能把这里的内容带出去。"
+    KaviSelf.problem(key, content)?.let { return "没有改：$it" }
+    val title = KaviSelf.title(key)
+    val old = KaviSelf.current(key)
+    if (old == content) return "「$title」本来就是这样，没有改。"
+    val userSaid = conv.messages.filter { it.role == "user" }.map { it.content }
+    val direct = !sawExternal && KaviSelf.quoteFound(quote, userSaid)
+    return runTool("改自己：$title") {
+        if (!direct) {
+            val why = if (sawExternal) "这一轮读过网页、邮件之类的外部内容，" else if (quote.isBlank()) "这不是你直接要求的，" else "在对话里没找到你说过的这句话，"
+            if (!approve("让 Kavi 改「$title」？", "${why}所以先问你。\n\n原来：$old\n\n改成：$content\n\n理由：$reason", "改", strict = true)) {
+                return@runTool "用户没有同意，「$title」没有改。" to SearchRecord("改自己：已取消")
+            }
+        }
+        val got = withContext(Dispatchers.IO) { KaviSelf.write(app, key, content, reason, if (direct) "direct" else "confirmed") }
+        ui.notice("Kavi 改了「$title」\n原来：$old\n现在：$got" + if (reason.isNotBlank()) "\n理由：$reason" else "")
+        ("已改好「$title」（读回核对一致）。现在是：$got\n在回答里告诉用户改了哪段、为什么。用户可以在「记忆与梦」里恢复上一版。") to SearchRecord("改自己：$title")
+    }
+}

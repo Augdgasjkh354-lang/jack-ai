@@ -374,7 +374,8 @@ class PromptBuilderTest {
         listOf("list_files", "list_tables", "create_table", "delete_table", "list_routines", "create_reminder", "set_alarm",
             "search_chats", "list_library", "create_word", "create_pdf", "run_js").forEach { assertFalse(it, it in all) }
         listOf("create_document", "search_my_data", "schedule", "cancel_schedule", "edit_table", "run_python").forEach { assertTrue(it, it in all) }
-        assertTrue("技能全开时工具不该超过 30 个，现在 ${all.size} 个", all.size <= 30)
+        // 31：加了 update_self（Kavi 改自己只能走这一个专门的工具，不并进别的工具里）
+        assertTrue("技能全开时工具不该超过 31 个，现在 ${all.size} 个", all.size <= 31)
         // 关了 Python，算数就用 run_js
         assertTrue("run_js" in toolNames(Conversation(), s = settings.copy(disabledSkills = setOf(SkillIds.PYTHON))))
     }

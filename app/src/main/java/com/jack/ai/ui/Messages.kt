@@ -282,6 +282,19 @@ fun AssistantMessage(
             // 只在什么都还没有的最开始转圈；有了工具框，转圈挪到工具框的标题上，不再一会儿出一会儿没
             CircularProgressIndicator(Modifier.size(20.dp).padding(2.dp), strokeWidth = 2.dp)
         }
+        msg.notices.forEach { n ->
+            Spacer(Modifier.height(8.dp))
+            Surface(color = colors.primaryContainer.copy(alpha = 0.55f), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                    val lines = n.lines()
+                    Text("✏️ " + lines.first(), style = MaterialTheme.typography.labelLarge, color = colors.onPrimaryContainer)
+                    if (lines.size > 1) Text(lines.drop(1).joinToString("\n"), style = MaterialTheme.typography.bodySmall,
+                        color = colors.onPrimaryContainer.copy(alpha = 0.85f), modifier = Modifier.padding(top = 4.dp))
+                    Text("可以在「记忆与梦」里恢复上一版", style = MaterialTheme.typography.labelSmall,
+                        color = colors.onPrimaryContainer.copy(alpha = 0.6f), modifier = Modifier.padding(top = 4.dp))
+                }
+            }
+        }
         msg.files.forEach { f ->
             Spacer(Modifier.height(8.dp))
             when {

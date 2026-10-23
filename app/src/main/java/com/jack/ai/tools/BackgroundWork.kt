@@ -82,6 +82,7 @@ data class TaskResult(val text: String, val files: List<GeneratedFile> = emptyLi
  * 花费到 Work 上限就收尾。
  */
 suspend fun runBackgroundWork(ctx: Context, r: Routine, log: (com.jack.ai.data.RunStep) -> Unit = {}, onProgress: (String) -> Unit = {}): TaskResult {
+    com.jack.ai.data.KaviSelf.ensure(ctx)
     val host = BackgroundToolHost(ctx)
     val store = host.store
     val s = store.loadSettings()
@@ -118,6 +119,7 @@ suspend fun runBackgroundWork(ctx: Context, r: Routine, log: (com.jack.ai.data.R
         }
         override suspend fun confirm(title: String, body: String, action: String) = false
     })
+    session.interactive = false
     val thinking = if (ep.reasoning && ep.deepseek) s.workThinking.resolve(r.prompt, work = true, hasFiles = false) else ThinkLevel.OFF
     val client = DeepSeekClient()
     val agent = Agent({ msgs, t -> client.stream(ep, msgs, thinking, s.temperature, t) }, sendReasoning = ep.deepseek && thinking.effort != null)

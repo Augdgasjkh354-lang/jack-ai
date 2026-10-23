@@ -66,7 +66,7 @@ object Dreamer {
         WorkManager.getInstance(ctx).enqueueUniqueWork(ONCE, ExistingWorkPolicy.KEEP, req)
     }
 
-    private const val INSTRUCTIONS = """你是用户的私人 AI 助手。现在是一天结束后你给自己写日记的时间：回看这段时间和用户的聊天，想清楚什么帮上了忙、什么没做好、下次该怎么做，并更新对用户的长期记忆。
+    private const val INSTRUCTIONS = """现在是一天结束后你给自己写日记的时间：回看这段时间和用户的聊天，想清楚什么帮上了忙、什么没做好、下次该怎么做，并更新对用户的长期记忆。
 
 你会收到：
 1. 当前的全部记忆（每条一行，可能为空）
@@ -78,6 +78,8 @@ object Dreamer {
    2. 眼下还在进行的事：每件写清进展到哪、卡在哪、下次怎么接上。用户明确拒绝或放弃的方向也写下来，以后别再提。
    3. 复盘：哪里做对了，哪里做错了或被用户纠正了，具体到事，说清以后怎么改。
    4. 下次怎么做：用户回来大概会聊什么、你可以提前想好什么；以及哪些事不该做，比如他没提就别主动提起、别说教、别重复系统已经会发的提醒。
+   5. 关于我自己：这段时间你学到了怎么和用户相处、形成或改变了哪些自己的看法、被纠正了什么。每一条都要能指到聊天里具体的哪件事，不形容自己的成长过程。
+      如果你觉得「你是谁」里有哪句该改，写成「我想改的地方：……」。这只是想法，不会自动生效；下次聊天时可以提出来，由用户决定。
    写得像真实的工作日记：具体、坦诚、有判断。不客套、不煽情、不写诗、不打比方。只写聊天里有依据的东西。
 
 二、更新“memories”：输出整理后的【完整】记忆列表。
@@ -138,7 +140,7 @@ object Dreamer {
         val raw = client.complete(
             ep,
             listOf(
-                buildJsonObject { put("role", "system"); put("content", INSTRUCTIONS) },
+                buildJsonObject { put("role", "system"); put("content", KaviSelf.also { it.ensure(ctx) }.text(editable = false) + "\n\n" + INSTRUCTIONS) },
                 buildJsonObject { put("role", "user"); put("content", input) },
             ),
             maxTokens = 16384,

@@ -102,6 +102,7 @@ fun MemoryScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                 }
             }
 
+            item { KaviSelfCard() }
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("记住的事（${state.memories.size}）", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)

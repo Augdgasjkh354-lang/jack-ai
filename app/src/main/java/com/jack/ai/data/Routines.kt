@@ -299,6 +299,9 @@ object Routines {
         val isolated = store.loadConversations().firstOrNull { it.id == r.convId }?.isolatedIn(store.loadProjects()) == true
         val memories = if (s.memoryEnabled && !isolated) store.loadMemories() else emptyList()
         val system = buildString {
+            // 后台任务也是 Kavi：同一份「你是谁」+ 做事原则
+            KaviSelf.ensure(ctx)
+            append(KaviSelf.text(editable = false)).append("\n\n")
             if (s.developerPrompt.isNotBlank()) append(s.developerPrompt.trim()).append("\n\n")
             append("现在是$today。\n")
             if (s.userName.isNotBlank()) append("用户希望被称呼为：${s.userName}\n")

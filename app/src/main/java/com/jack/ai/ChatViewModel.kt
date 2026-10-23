@@ -128,6 +128,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val compression = CompressFeature(core)
 
     init {
+        com.jack.ai.data.KaviSelf.ensure(getApplication())
         _state.value = UiState(
             conversations = store.loadConversations().sortedByDescending { it.updatedAt },
             projects = store.loadProjects().sortedByDescending { it.updatedAt },
@@ -513,6 +514,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     WorkService.progress(getApplication(), convId, workTitle,
                         "${items.count { it.status == "done" }}/${items.size}" + (doing?.let { " · $it" } ?: ""), work)
                 }
+
+                override fun notice(text: String) = patchMessage(convId, reply.id) { it.copy(notices = it.notices + text) }
 
                 override fun finished(label: String, record: SearchRecord) = patchMessage(convId, reply.id) { m ->
                     m.copy(searches = m.searches.map { if (it.query == label && it.pending) record else it })

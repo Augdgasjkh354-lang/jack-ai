@@ -71,6 +71,8 @@ interface ToolUi {
     suspend fun confirm(title: String, body: String, action: String): Boolean
     /** Work 模式的任务清单更新了。 */
     fun plan(items: List<PlanItem>) {}
+    /** 要让用户一眼看到的事（比如 Kavi 改了自己），在回答里显示成一张小卡片。 */
+    fun notice(text: String) {}
 }
 
 /**
@@ -93,6 +95,8 @@ class ToolSession(
 
     /** 最多几轮工具：Chat 20 轮（用了「深度研究」放宽到 25），Work 不限。 */
     var maxRounds = if (conv.work) Int.MAX_VALUE else CHAT_MAX_ROUNDS
+    /** 用户在不在（后台任务里是 false）：不在的时候 Kavi 不能改自己。 */
+    var interactive = true
     /** 当前模型能不能看图（浏览器截图要用）。 */
     var canSee = false
     /** 工具产生的图片（data URL），下一轮请求时作为一条用户消息补上，补完清空。 */
@@ -199,6 +203,7 @@ class ToolSession(
             name == "add_calendar_event" && SkillIds.CALENDAR in skillIds -> addEvent(args)
             name == "list_calendar_events" && SkillIds.CALENDAR in skillIds -> listEvents(args)
             name == "save_memory" -> remember(args)
+            name == "update_self" -> updateSelf(args)
             name == "save_note" -> saveNote(args)
             name == "add_rows" && SkillIds.TABLES in skillIds -> addRows(args)
             name == "query_table" && SkillIds.TABLES in skillIds -> queryTable(args)

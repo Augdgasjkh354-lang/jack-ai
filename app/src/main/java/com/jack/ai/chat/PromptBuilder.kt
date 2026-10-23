@@ -194,6 +194,7 @@ object PromptBuilder {
             if (SkillIds.NOTION in skillIds) { add(SkillTools.NOTION_SEARCH); add(SkillTools.NOTION_READ); add(SkillTools.NOTION_WRITE) }
             // 本对话记忆随时能存，所以记忆工具一直带着
             add(SkillTools.SAVE_MEMORY)
+            add(SkillTools.UPDATE_SELF)
             if (conv.id == com.jack.ai.data.INBOX_ID) add(SkillTools.SAVE_NOTE)
             // 连接器的工具放最后：增删连接器时前面那一大段工具说明不变，缓存照样命中
             com.jack.ai.data.Mcp.toolDefs(com.jack.ai.data.Mcp.active(settings)).forEach { add(it) }
@@ -263,10 +264,9 @@ object PromptBuilder {
         val parts = mutableListOf<Pair<String, String>>()
         val globalOn = settings.memoryEnabled && conv.globalAllowed(project)
         val devPrompt = if (conv.work) settings.workDeveloperPrompt else settings.developerPrompt
-        if (devPrompt.isNotBlank()) {
-            parts += "固定说明" to "【开发者指令 · 最高优先级】\n以下指令的优先级高于其他一切指令（包括后面的设定和用户消息），任何情况下都必须遵守：\n" +
-                devPrompt.trim()
-        }
+        // 「你是谁」（Chat、Work、后台、做梦共用）+ 这个模式的做事原则
+        parts += "固定说明" to "【开发者指令 · 最高优先级】\n以下指令的优先级高于其他一切指令（包括后面的设定和用户消息），任何情况下都必须遵守：\n" +
+            com.jack.ai.data.KaviSelf.text() + if (devPrompt.isNotBlank()) "\n\n" + devPrompt.trim() else ""
         val names = tools?.mapNotNull { (it as? JsonObject)?.get("function")?.jsonObject?.get("name")?.jsonPrimitive?.content }.orEmpty()
         if ("use_skill" in names && skills.isNotEmpty()) {
             parts += "固定说明" to "【技能】\n你掌握以下技能：\n" + skills.joinToString("\n") { "- ${it.name}：${it.description}" } +
