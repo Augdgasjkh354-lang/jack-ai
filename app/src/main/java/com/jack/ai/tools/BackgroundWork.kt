@@ -81,7 +81,16 @@ data class TaskResult(val text: String, val files: List<GeneratedFile> = emptyLi
  * 文件存进这个任务对话的文件夹。用户不在线，需要确认的操作（发邮件等）一律不做。
  * 花费到 Work 上限就收尾。
  */
-suspend fun runBackgroundWork(ctx: Context, r: Routine, log: (com.jack.ai.data.RunStep) -> Unit = {}, onProgress: (String) -> Unit = {}): TaskResult {
+suspend fun runBackgroundWork(
+    ctx: Context,
+    r: Routine,
+    log: (com.jack.ai.data.RunStep) -> Unit = {},
+    /** 只给哪些工具：args 为 null 时问「给不给这个工具」，不为 null 时问「这次调用放不放行」。 */
+    allow: (name: String, args: String?) -> Boolean = { _, _ -> true },
+    /** 换掉默认的「后台定时任务」说明。 */
+    brief: String? = null,
+    onProgress: (String) -> Unit = {},
+): TaskResult {
     com.jack.ai.data.KaviSelf.ensure(ctx)
     val host = BackgroundToolHost(ctx)
     val store = host.store
@@ -91,14 +100,19 @@ suspend fun runBackgroundWork(ctx: Context, r: Routine, log: (com.jack.ai.data.R
     val conv = store.loadConversations().firstOrNull { it.id == r.convId }?.copy(work = true)
         ?: Conversation(id = r.convId, title = "⏰ " + r.title, work = true)
     val skills = s.activeSkills()
-    val tools = PromptBuilder.toolSet(s, skills, conv, null)
+    val tools = PromptBuilder.toolSet(s, skills, conv, null)?.let { all ->
+        kotlinx.serialization.json.JsonArray(all.filter { t ->
+            val name = ((t as? kotlinx.serialization.json.JsonObject)?.get("function") as? kotlinx.serialization.json.JsonObject)?.get("name")
+            allow((name as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty(), null)
+        })
+    }
     // 隐私项目里的任务不带全局记忆和日记
     val project = conv.projectId?.let { id -> store.loadProjects().firstOrNull { it.id == id } }
     val memories = if (s.memoryEnabled && conv.globalAllowed(project)) store.loadMemories() else emptyList()
     val journal = store.loadDreams().firstOrNull { it.journal.isNotBlank() }?.journal.orEmpty()
     val now = SimpleDateFormat("yyyy年M月d日 EEEE HH:mm", Locale.CHINA).format(Date())
     val system = PromptBuilder.systemPrompt(s, conv, project, tools, memories, skills, journal = journal) +
-        "\n\n【后台定时任务】现在是$now。你在后台执行用户预先设定的定时任务「${r.title}」，用户此刻不在线，不能向他提问，直接把任务做完。" +
+        "\n\n" + (brief ?: "【后台定时任务】现在是$now。你在后台执行用户预先设定的定时任务「${r.title}」，用户此刻不在线，不能向他提问，直接把任务做完。") +
         (if (s.fullAuth) "用户开了完全授权，发邮件、删除这类操作不会弹窗确认、会直接执行，只做任务里明确要求的，拿不准的不要做。"
         else "发邮件、删除这类需要用户确认的操作会被拒绝，不要尝试。") +
         "需要交给用户的内容直接写在最后的结果里。结果就是用户稍后会看到的消息，简洁好读，不要开场白。"
@@ -132,7 +146,8 @@ suspend fun runBackgroundWork(ctx: Context, r: Routine, log: (com.jack.ai.data.R
             if (s.workCostLimit > 0 && spent >= s.workCostLimit) {
                 session.maxRounds = 0
                 "花费到了上限，不要再调用工具，直接写出目前的结果，并说明还差什么。"
-            } else session.perform(name, args).also { log(com.jack.ai.data.RunLog.stepOf(name, it.status, it.text)) }.text
+            } else if (!allow(name, args)) "这个工具这次不能用。"
+            else session.perform(name, args).also { log(com.jack.ai.data.RunLog.stepOf(name, it.status, it.text)) }.text
         },
         onUsage = { ev ->
             store.addUsage(ep, ev.promptTokens, ev.cacheHit, ev.completionTokens)

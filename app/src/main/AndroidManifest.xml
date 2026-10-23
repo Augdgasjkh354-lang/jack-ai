@@ -85,6 +85,16 @@
             android:name=".WorkService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+        <!-- 读微信通知：设置里打开「微信消息交给 Kavi」并给了通知使用权才会收到 -->
+        <service
+            android:name=".WeChatListener"
+            android:exported="true"
+            android:label="Jack AI 读微信消息"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
         <receiver
             android:name=".data.AlarmReceiver"
             android:exported="false">

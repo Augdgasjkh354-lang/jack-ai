@@ -117,6 +117,28 @@ class Store(context: Context) {
         list
     }
 
+    /** 攒着等 Kavi 看的微信消息。同一个人十分钟内的同一句话只留一条（微信会重发同一条通知）。返回是不是新的。 */
+    fun addWeChat(m: WeChatMsg): Boolean = synchronized(LOCK) {
+        val list = loadUnlocked("wechat_pending.json", WeChatMsg.serializer())
+        if (list.any { it.from == m.from && it.text == m.text && m.at - it.at < 10 * 60_000L }) return false
+        // 太久没处理（比如一直没网）也不无限攒：留最新的 300 条
+        atomicWrite("wechat_pending.json", json.encodeToString(ListSerializer(WeChatMsg.serializer()), (list + m).takeLast(300)))
+        true
+    }
+
+    /** 取出并清空攒着的微信消息。 */
+    fun takeWeChat(): List<WeChatMsg> = synchronized(LOCK) {
+        val list = loadUnlocked("wechat_pending.json", WeChatMsg.serializer())
+        if (list.isNotEmpty()) File(dir, "wechat_pending.json").delete()
+        list
+    }
+
+    /** 这批没处理成，放回去下次再看（排在新来的前面）。 */
+    fun putBackWeChat(batch: List<WeChatMsg>) = synchronized(LOCK) {
+        val list = batch + loadUnlocked("wechat_pending.json", WeChatMsg.serializer())
+        atomicWrite("wechat_pending.json", json.encodeToString(ListSerializer(WeChatMsg.serializer()), list.takeLast(300)))
+    }
+
     fun loadUsage() = load("usage.json", UsageDay.serializer())
 
     fun loadToolStats() = load("tool_stats.json", ToolStat.serializer())
@@ -342,6 +364,8 @@ class Store(context: Context) {
             githubToken = prefs.getString("githubToken", "") ?: "",
             autoUpdate = prefs.getBoolean("autoUpdate", true),
             updateWifiOnly = prefs.getBoolean("updateWifiOnly", false),
+            wechatWatch = prefs.getBoolean("wechatWatch", false),
+            wechatSkip = prefs.getString("wechatSkip", "") ?: "",
         ).also { com.jack.ai.api.Net.apply(it) }
     }
 
@@ -392,6 +416,8 @@ class Store(context: Context) {
             .putString("githubToken", s.githubToken)
             .putBoolean("autoUpdate", s.autoUpdate)
             .putBoolean("updateWifiOnly", s.updateWifiOnly)
+            .putBoolean("wechatWatch", s.wechatWatch)
+            .putString("wechatSkip", s.wechatSkip)
             .apply()
         com.jack.ai.api.Net.apply(s)
     }

@@ -234,6 +234,10 @@ data class Settings(
     /** 自动检查新版本（有就下载好、发通知）；只在 Wi-Fi 下检查和下载。 */
     val autoUpdate: Boolean = true,
     val updateWifiOnly: Boolean = false,
+    /** 微信私聊消息交给 Kavi 看：是客户就记进客户表、要紧的推到手机。要在系统里给「通知使用权」。 */
+    val wechatWatch: Boolean = false,
+    /** 不看的微信联系人（家人朋友），一行一个，按备注名或昵称。 */
+    val wechatSkip: String = "",
 )
 
 /** 完全授权现在是否有效（到点自动失效）。 */
