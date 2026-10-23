@@ -25,6 +25,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.jack.ai.ChatViewModel
 import com.jack.ai.data.Settings
+import com.jack.ai.data.exaKeys
+import com.jack.ai.data.tavilyKeys
 
 /**
  * 设置页的「连接」：邮箱、GitHub、Notion、MCP 连接器收成一行一个，只显示连没连上；
@@ -35,7 +37,11 @@ fun ConnectionsSection(vm: ChatViewModel, s: Settings) {
     var open by rememberSaveable { mutableStateOf<String?>(null) }
     val mails = s.mails.count { it.ready }
     val mcp = s.mcpServers.count { it.enabled }
+    val searchKeys = s.exaKeys.size + s.tavilyKeys.size
     val rows: List<Triple<String, Pair<String, Boolean>, @Composable () -> Unit>> = listOf(
+        Triple("联网搜索", (if (searchKeys > 0) listOfNotNull(
+            s.exaKeys.size.takeIf { it > 0 }?.let { "Exa $it 个" }, s.tavilyKeys.size.takeIf { it > 0 }?.let { "Tavily $it 个" },
+        ).joinToString(" · ") else if (s.apiKey.isNotBlank()) "只用 DeepSeek 搜索" else "未设置") to (searchKeys > 0)) { SearchKeysSection(vm, s) },
         Triple("邮箱", (if (mails > 0) "已连接 $mails 个" else "未设置") to (mails > 0)) { MailSection(vm, s.mails) },
         Triple("GitHub", (if (s.githubToken.isNotBlank()) "已连接" else "未填令牌，只能看公开项目") to s.githubToken.isNotBlank()) { GitHubSection(vm, s) },
         Triple("Notion", (if (s.notionToken.isNotBlank()) "已连接" else "未设置") to s.notionToken.isNotBlank()) { NotionSection(vm, s) },

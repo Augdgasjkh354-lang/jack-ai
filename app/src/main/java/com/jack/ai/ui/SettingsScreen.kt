@@ -166,34 +166,6 @@ fun SettingsScreen(
                 ConnectionsSection(vm, settings)
             }
 
-            // ---- Tavily ----
-            Section("联网搜索（Tavily）") {
-                var tavilyInput by remember { mutableStateOf(settings.tavilyKey) }
-                var showTavily by remember { mutableStateOf(false) }
-                OutlinedTextField(
-                    value = tavilyInput,
-                    onValueChange = {
-                        tavilyInput = it.trim()
-                        vm.updateSettings { s -> s.copy(tavilyKey = tavilyInput, webSearch = s.webSearch && (tavilyInput.isNotBlank() || s.apiKey.isNotBlank())) }
-                    },
-                    placeholder = { Text("tvly-...") },
-                    singleLine = true,
-                    visualTransformation = if (showTavily) VisualTransformation.None else PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    trailingIcon = {
-                        TextButton(onClick = { showTavily = !showTavily }) { Text(if (showTavily) "隐藏" else "显示") }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("联网搜索工具", Modifier.weight(1f))
-                    Switch(
-                        checked = settings.webSearch,
-                        onCheckedChange = { on -> vm.updateSettings { it.copy(webSearch = on) } },
-                    )
-                }
-            }
-
             Section("技能") {
                 OutlinedButton(onClick = onOpenSkills) { Text("管理技能") }
             }

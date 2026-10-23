@@ -174,7 +174,10 @@ enum class ThinkLevel(val label: String, val effort: String?) {
 
 data class Settings(
     val apiKey: String = "",
+    /** Tavily Key，可以填好几个，一行一个（额度用完自动换下一个）。 */
     val tavilyKey: String = "",
+    /** Exa Key，可以填好几个，一行一个。 */
+    val exaKey: String = "",
     val webSearch: Boolean = true,
     val baseUrl: String = DEFAULT_BASE_URL,
     val model: String = MODEL_FLASH,
@@ -235,6 +238,11 @@ data class Settings(
 
 /** 完全授权现在是否有效（到点自动失效）。 */
 val Settings.fullAuth: Boolean get() = fullAuthUntil > System.currentTimeMillis()
+
+/** 填了好几个 Key 时一行一个。 */
+private fun keyLines(s: String) = s.lines().map { it.trim() }.filter { it.isNotBlank() }.distinct()
+val Settings.exaKeys: List<String> get() = keyLines(exaKey)
+val Settings.tavilyKeys: List<String> get() = keyLines(tavilyKey)
 
 /** 邮箱账号。password 是邮箱的「授权码」，不是登录密码；不进备份。 */
 @Serializable
@@ -416,6 +424,8 @@ fun modelLabel(model: String): String = when {
     // V4.1-Pro 发布前，官方把 deepseek-v4-pro 的请求转给 V4.1 Flash
     model == MODEL_PRO -> "Pro（暂为 Flash）"
     model == com.jack.ai.api.WebClient.USAGE_KEY -> "DeepSeek 联网"
+    model == com.jack.ai.api.WebClient.EXA_KEY -> "Exa 搜索（免费额度）"
+    model == com.jack.ai.api.WebClient.TAVILY_KEY -> "Tavily 搜索（免费额度）"
     // 自定义模型只显示模型名；OpenRouter 这类 "厂商/模型" 去掉厂商前缀
     else -> (parseCustomKey(model)?.second ?: model).substringAfterLast('/')
 }

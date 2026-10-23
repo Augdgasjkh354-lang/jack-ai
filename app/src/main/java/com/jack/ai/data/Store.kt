@@ -211,7 +211,7 @@ class Store(context: Context) {
         val obj = kotlinx.serialization.json.buildJsonObject {
             prefs.all.forEach { (k, v) ->
                 // 代理的订阅地址和节点里有密码，也不进备份
-                if (k == "apiKey" || k == "tavilyKey" || k == "proxySub" || k == "proxyNodes" || k == "notionToken" || k == "githubToken") return@forEach
+                if (k == "apiKey" || k == "tavilyKey" || k == "exaKey" || k == "proxySub" || k == "proxyNodes" || k == "notionToken" || k == "githubToken") return@forEach
                 // 其他服务的 Key 也不进备份
                 val v = if (k == "providers" && v is String) runCatching {
                     val list = json.decodeFromString(ListSerializer(Provider.serializer()), v).map { it.copy(apiKey = "") }
@@ -286,6 +286,7 @@ class Store(context: Context) {
         return Settings(
             apiKey = prefs.getString("apiKey", "") ?: "",
             tavilyKey = prefs.getString("tavilyKey", "") ?: "",
+            exaKey = prefs.getString("exaKey", "") ?: "",
             webSearch = prefs.getBoolean("webSearch2", true),
             baseUrl = prefs.getString("baseUrl", DEFAULT_BASE_URL) ?: DEFAULT_BASE_URL,
             model = model,
@@ -348,6 +349,7 @@ class Store(context: Context) {
         prefs.edit()
             .putString("apiKey", s.apiKey)
             .putString("tavilyKey", s.tavilyKey)
+            .putString("exaKey", s.exaKey)
             .putBoolean("webSearch2", s.webSearch)
             .putString("baseUrl", s.baseUrl)
             .putString("model", s.model)

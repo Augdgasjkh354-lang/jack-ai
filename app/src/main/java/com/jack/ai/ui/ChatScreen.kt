@@ -1,5 +1,6 @@
 package com.jack.ai.ui
 
+import com.jack.ai.api.webReady
 import androidx.compose.foundation.border
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.foundation.combinedClickable
@@ -234,7 +235,7 @@ fun ChatScreen(
                     text = text,
                     onTextChange = { text = it },
                     onNeedTavily = {
-                        Toast.makeText(ctx, "请先在设置里填写 Tavily API Key", Toast.LENGTH_LONG).show()
+                        Toast.makeText(ctx, "请先在 设置 → 连接 → 联网搜索 里填 Exa 或 Tavily 的 Key", Toast.LENGTH_LONG).show()
                         onOpenSettings()
                     },
                 )
@@ -820,10 +821,10 @@ private fun InputBar(
                     }
                     Pill(
                         label = "联网",
-                        active = settings.webSearch && (settings.tavilyKey.isNotBlank() || settings.apiKey.isNotBlank()),
+                        active = settings.webSearch && (settings.webReady()),
                         icon = AppIcons.Globe,
                         onClick = {
-                            if (settings.tavilyKey.isBlank() && settings.apiKey.isBlank()) onNeedTavily()
+                            if (!settings.webReady()) onNeedTavily()
                             else vm.updateSettings { it.copy(webSearch = !it.webSearch) }
                         },
                     )

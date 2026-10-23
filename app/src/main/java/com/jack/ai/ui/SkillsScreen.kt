@@ -1,5 +1,6 @@
 package com.jack.ai.ui
 
+import com.jack.ai.api.webReady
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -82,8 +83,8 @@ fun SkillsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit) {
                         verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(s.name + if (s.builtin) "" else "（自定义）", style = MaterialTheme.typography.titleSmall)
-                            if (s.id == SkillIds.WEB && settings.tavilyKey.isBlank() && settings.apiKey.isBlank()) {
-                                Text("需要先在设置里填 Tavily 或 DeepSeek Key", style = MaterialTheme.typography.labelSmall,
+                            if (s.id == SkillIds.WEB && !settings.webReady()) {
+                                Text("需要先在 设置 → 连接 → 联网搜索 里填 Exa 或 Tavily 的 Key（或者填 DeepSeek Key）", style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.error)
                             }
                             if (s.id == SkillIds.NOTION && settings.notionToken.isBlank()) {

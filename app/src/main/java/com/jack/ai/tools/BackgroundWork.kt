@@ -37,7 +37,7 @@ class BackgroundToolHost(ctx: Context) : ToolHost {
     override val app: Application = ctx.applicationContext as Application
     override val store = Store(app)
     override val tavily = TavilyClient()
-    override val web = WebClient(tavily) { store.addPaidCall(WebClient.USAGE_KEY, WebClient.PRICE) }
+    override val web = WebClient(tavily, { store.addPaidCall(WebClient.USAGE_KEY, WebClient.PRICE) }, onFree = { store.addPaidCall(it, 0.0) })
     override fun conversations(): List<Conversation> = store.loadConversations()
     override fun setMemories(list: List<MemoryItem>) {}
     override fun editCards(transform: (List<Flashcard>) -> List<Flashcard>) = store.saveCards(transform(store.loadCards()))

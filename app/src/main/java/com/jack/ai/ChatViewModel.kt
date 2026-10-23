@@ -109,7 +109,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val client = DeepSeekClient(store::addUsage)
     private val tavily = TavilyClient()
     private val dsFiles = com.jack.ai.api.DeepSeekFiles(app.filesDir)
-    private val web = com.jack.ai.api.WebClient(tavily) { store.addPaidCall(com.jack.ai.api.WebClient.USAGE_KEY, com.jack.ai.api.WebClient.PRICE) }
+    private val web = com.jack.ai.api.WebClient(tavily, { store.addPaidCall(com.jack.ai.api.WebClient.USAGE_KEY, com.jack.ai.api.WebClient.PRICE) },
+            onFree = { store.addPaidCall(it, 0.0) })
     private val core = AppCore(app, store, viewModelScope).also {
         it.stop = { stop() }
         it.stopAndWait = { val j = job; stop(); j?.join() }

@@ -1,6 +1,8 @@
 package com.jack.ai.api
 
 import com.jack.ai.data.Settings
+import com.jack.ai.data.exaKeys
+import com.jack.ai.data.tavilyKeys
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -14,40 +16,90 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
-/** 能不能联网：Tavily 和 DeepSeek 有一个 Key 就行。 */
-fun Settings.webReady(): Boolean = tavilyKey.isNotBlank() || apiKey.isNotBlank()
+/** 能不能联网：Exa、Tavily、DeepSeek 有一个 Key 就行。 */
+fun Settings.webReady(): Boolean = exaKey.isNotBlank() || tavilyKey.isNotBlank() || apiKey.isNotBlank()
 
 /**
- * 搜索和读网页。先用 Tavily（有免费额度）；没填 Tavily、Tavily 报错或没结果时，
- * 有 DeepSeek Key 就换 DeepSeek 的 Search / Fetch（每次成功 0.005 元，记进统计）。
+ * 每个搜索 Key 的「歇一会儿」：额度用完的歇到下个月 1 号（Exa、Tavily 都是每月 1 号补额度），
+ * Key 不对的歇一天，请求太频繁的歇 10 分钟。歇着的 Key 先跳过，轮到下一个。只记在内存里，重启 App 会重新试一遍。
+ */
+object KeyRest {
+    private val until = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    fun resting(key: String, now: Long = System.currentTimeMillis()) = (until[key] ?: 0) > now
+
+    /** 这个错误值不值得换下一个 Key：Key 不对、额度用完、太频繁。断网这类换 Key 也没用。 */
+    fun rotates(code: Int) = code in setOf(401, 402, 403, 429, 432, 433)
+
+    fun rest(key: String, code: Int, now: Long = System.currentTimeMillis()) {
+        until[key] = when (code) {
+            402, 432, 433 -> java.util.Calendar.getInstance().apply {
+                timeInMillis = now; add(java.util.Calendar.MONTH, 1); set(java.util.Calendar.DAY_OF_MONTH, 1)
+                set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 5)
+            }.timeInMillis
+            401, 403 -> now + 24 * 3_600_000L
+            else -> now + 10 * 60_000L
+        }
+    }
+
+    internal fun clear() = until.clear()
+}
+
+/**
+ * 搜索和读网页，按顺序试：Exa → Tavily → DeepSeek。
+ * Exa、Tavily 都可以填好几个 Key：一个额度用完、Key 不对或太频繁，就换同家的下一个；一家都不行（或没结果）再换下一家。
+ * 最后有 DeepSeek Key 就用 DeepSeek 的 Search / Fetch（每次成功 0.005 元，记进统计）。
  */
 class WebClient(
     val tavily: TavilyClient = TavilyClient(),
     private val onPaid: () -> Unit = {},
+    val exa: ExaClient = ExaClient(),
+    /** Exa、Tavily 成功一次（免费额度），记进统计：参数是统计里的名字。 */
+    private val onFree: (String) -> Unit = {},
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
-    suspend fun search(s: Settings, query: String): List<SearchResult> =
-        withTavily(s, emptyList(), { tavily.search(s.tavilyKey, query).takeIf { it.isNotEmpty() } }) { deepseekSearch(s.apiKey, query) }
+    suspend fun search(s: Settings, query: String): List<SearchResult> = chain(s, emptyList(),
+        exa = { k -> exa.search(k, query).takeIf { it.isNotEmpty() } },
+        tavily = { k -> tavily.search(k, query).takeIf { it.isNotEmpty() } },
+    ) { deepseekSearch(s.apiKey, query) }
 
-    suspend fun read(s: Settings, url: String): String =
-        withTavily(s, NO_CONTENT, { tavily.extract(s.tavilyKey, url).takeUnless { it == NO_CONTENT } }) { deepseekFetch(s.apiKey, url) }
+    suspend fun read(s: Settings, url: String): String = chain(s, NO_CONTENT,
+        exa = { k -> exa.contents(k, url).takeUnless { it == NO_CONTENT } },
+        tavily = { k -> tavily.extract(k, url).takeUnless { it == NO_CONTENT } },
+    ) { deepseekFetch(s.apiKey, url) }
 
-    /** tavilyCall 返回 null 表示没拿到东西，该换 DeepSeek；两个都用不了时返回 empty 或抛 Tavily 的错。 */
-    private suspend fun <T> withTavily(s: Settings, empty: T, tavilyCall: suspend () -> T?, deepseek: suspend () -> T): T {
+    /**
+     * 一家一家、一个 Key 一个 Key 地试。返回 null 表示这家没拿到东西（换下一家，不换 Key）；
+     * 都用不了时：有 DeepSeek 就交给它，否则抛最后一个错，或者返回 empty。
+     */
+    internal suspend fun <T> chain(
+        s: Settings, empty: T,
+        exa: suspend (String) -> T?, tavily: suspend (String) -> T?,
+        deepseek: suspend () -> T,
+    ): T {
         var error: Exception? = null
-        if (s.tavilyKey.isNotBlank()) {
-            try {
-                tavilyCall()?.let { return it }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                error = e
+        for ((name, keys, call) in listOf(Triple(EXA_KEY, s.exaKeys, exa), Triple(TAVILY_KEY, s.tavilyKeys, tavily))) {
+            for (key in keys.filterNot { KeyRest.resting(it) }) {
+                try {
+                    val got = call(key)
+                    if (got != null) { onFree(name); return got }
+                    break
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: ApiException) {
+                    error = e
+                    if (KeyRest.rotates(e.code)) KeyRest.rest(key, e.code) else break
+                } catch (e: Exception) {
+                    // 断网、超时：同一家换 Key 也没用，直接换下一家
+                    error = e
+                    break
+                }
             }
         }
         if (s.apiKey.isBlank()) {
             error?.let { throw it }
-            if (s.tavilyKey.isBlank()) throw ApiException("没有可用的联网服务", 0)
+            if (s.exaKeys.isEmpty() && s.tavilyKeys.isEmpty()) throw ApiException("没有可用的联网服务", 0)
             return empty
         }
         return deepseek()
@@ -111,6 +163,8 @@ class WebClient(
         const val NO_CONTENT = "没能读取这个网页的内容。"
         /** 计入统计时用的“模型”名。 */
         const val USAGE_KEY = "deepseek-web"
+        const val EXA_KEY = "exa-web"
+        const val TAVILY_KEY = "tavily-web"
         const val PRICE = 0.005
     }
 }

@@ -94,8 +94,7 @@ internal fun ToolSession.parseSlides(args: JsonObject): List<OfficeWriter.Slide>
 
 /** 给写了 image_query 的正文页搜一张图，下载失败就不配图。最多 6 张。 */
 internal suspend fun ToolSession.withImages(slides: List<OfficeWriter.Slide>, args: JsonObject, cache: File): List<OfficeWriter.Slide> {
-    val key = settings.tavilyKey
-    if (key.isBlank()) return slides
+    val key = settings.tavilyKeys.firstOrNull { !com.jack.ai.api.KeyRest.resting(it) } ?: return slides
     val queries = (args["slides"] as? JsonArray).orEmpty().map { (it as? JsonObject)?.get("image_query").text() }
     var count = 0
     return slides.mapIndexed { i, s ->

@@ -419,7 +419,7 @@ object SkillTools {
 /** 当前开着的 skill：内置的看开关（联网还要有 Tavily 或 DeepSeek Key），自定义的看它自己的 enabled。 */
 fun Settings.activeSkills(): List<Skill> =
     allSkills().filter {
-        it.enabled && (it.id != SkillIds.WEB || tavilyKey.isNotBlank() || apiKey.isNotBlank()) && (it.id != SkillIds.MAIL || mails.any { it.ready }) && (it.id != SkillIds.NOTION || notionToken.isNotBlank())
+        it.enabled && (it.id != SkillIds.WEB || exaKey.isNotBlank() || tavilyKey.isNotBlank() || apiKey.isNotBlank()) && (it.id != SkillIds.MAIL || mails.any { it.ready }) && (it.id != SkillIds.NOTION || notionToken.isNotBlank())
     }
 
 /** 全部 skill（内置 + 自定义），enabled 反映当前开关状态。 */

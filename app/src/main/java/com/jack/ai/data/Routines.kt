@@ -283,8 +283,9 @@ object Routines {
         val ep = s.backgroundEndpoint() ?: return Outcome("needs_setup", com.jack.ai.tools.NO_KEY)
         val client = DeepSeekClient()
         val tavily = TavilyClient()
-        val webClient = com.jack.ai.api.WebClient(tavily) { store.addPaidCall(com.jack.ai.api.WebClient.USAGE_KEY, com.jack.ai.api.WebClient.PRICE) }
-        val web = s.tavilyKey.isNotBlank() || s.apiKey.isNotBlank()
+        val webClient = com.jack.ai.api.WebClient(tavily, { store.addPaidCall(com.jack.ai.api.WebClient.USAGE_KEY, com.jack.ai.api.WebClient.PRICE) },
+            onFree = { store.addPaidCall(it, 0.0) })
+        val web = s.exaKey.isNotBlank() || s.tavilyKey.isNotBlank() || s.apiKey.isNotBlank()
         val skillIds = s.activeSkills().map { it.id }.toSet()
         val train = SkillIds.TRAIN in skillIds
         // 用户不在，要确认的连接器工具不给
