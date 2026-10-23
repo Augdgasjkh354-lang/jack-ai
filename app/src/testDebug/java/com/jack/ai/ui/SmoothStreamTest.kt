@@ -42,14 +42,14 @@ class SmoothStreamTest {
         full = "字".repeat(600)
         rule.mainClock.advanceTimeByFrame()
         rule.mainClock.advanceTimeByFrame()
-        assertTrue("一帧就全出来了：${shown.length}", shown.length in 1..100)
-        // 大约零点几秒后追上，不会越拖越远
-        rule.mainClock.advanceTimeBy(1500)
-        assertEquals(600, shown.length)
-        // 回答结束：剩下的很快放完
+        assertTrue("一帧就全出来了：${shown.length}", shown.length in 1..10)
+        // 输出中每秒 100 字左右，一帧一两个字地流，不会一下子砸下来
+        rule.mainClock.advanceTimeBy(1000)
+        assertTrue("一秒放了 ${shown.length} 字", shown.length in 85..115)
+        // 回答结束：剩下的六百来字在两秒内放完
         full += "尾巴".repeat(50)
         streaming = false
-        rule.mainClock.advanceTimeBy(1000)
+        rule.mainClock.advanceTimeBy(2000)
         assertEquals(full.length, shown.length)
     }
 

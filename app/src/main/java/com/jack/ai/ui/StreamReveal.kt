@@ -12,7 +12,8 @@ import androidx.compose.runtime.withFrameNanos
 
 /**
  * 让回答柔和地流出来：模型一次吐一大段，屏幕上按打字的节奏一点点放出来。
- * 速度跟着积压走：积压越多放得越快（大约零点几秒追上），不会越拖越远；思考过程不经过这里，照原速。
+ * 输出中固定每秒 100 字（每帧一两个字，连续地流，看得清在写什么）；模型写得更快的部分先攒着，
+ * 模型写完后剩下的在一两秒内加速放完，不让人干等。思考过程不经过这里，照模型原速。
  */
 object StreamReveal {
     /** 每条消息已经放出来多少字。消息滑出屏幕再滑回来时接着放，不会从头重放。 */
@@ -23,8 +24,11 @@ object StreamReveal {
         internal set
 
     /** 这一帧放多少字。backlog 是还没放出来的字数，dt 是距上一帧的秒数，live 是模型是否还在输出。 */
+    internal const val LIVE_RATE = 100.0
+
+    /** 写完后：每秒放剩下的两倍，最少每秒 150 字。剩 600 字约一秒半放完，剩 3000 字约两秒半。 */
     internal fun charsPerSecond(backlog: Int, live: Boolean): Double =
-        if (live) maxOf(60.0, backlog * 4.0) else maxOf(150.0, backlog * 8.0)
+        if (live) LIVE_RATE else maxOf(150.0, backlog * 2.0)
 }
 
 /** 返回现在该显示的那一段文字。streaming=false 且以前没放过的消息（翻历史）直接整段显示。 */
