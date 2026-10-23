@@ -9,6 +9,7 @@ import com.jack.ai.data.MemoryItem
 import com.jack.ai.data.MailAccount
 import com.jack.ai.data.readyMails
 import com.jack.ai.data.Project
+import com.jack.ai.data.globalAllowed
 import com.jack.ai.data.Settings
 import com.jack.ai.data.Skill
 import com.jack.ai.data.SkillIds
@@ -260,7 +261,7 @@ object PromptBuilder {
         journal: String = "",
     ): List<Pair<String, String>> {
         val parts = mutableListOf<Pair<String, String>>()
-        val globalOn = settings.memoryEnabled && conv.useGlobalMemory
+        val globalOn = settings.memoryEnabled && conv.globalAllowed(project)
         val devPrompt = if (conv.work) settings.workDeveloperPrompt else settings.developerPrompt
         if (devPrompt.isNotBlank()) {
             parts += "固定说明" to "【开发者指令 · 最高优先级】\n以下指令的优先级高于其他一切指令（包括后面的设定和用户消息），任何情况下都必须遵守：\n" +
@@ -307,7 +308,7 @@ object PromptBuilder {
                 "用户没提起的事不要主动提，也不要说起“日记”。\n" + journal.trim()
         }
         // ---- 以上所有对话都一样（缓存能跨对话命中），以下每个对话自己的 ----
-        memoryScopeNote(project != null, globalOn).takeIf { "save_memory" in names && it.isNotEmpty() }?.let { parts += "固定说明" to it }
+        memoryScopeNote(project != null, globalOn, project?.isolated == true).takeIf { "save_memory" in names && it.isNotEmpty() }?.let { parts += "固定说明" to it }
         if (conv.systemPrompt.isNotBlank()) parts += "人设" to "【人设】\n${conv.systemPrompt.trim()}"
         if (project != null) {
             val (small, big) = project.files.partition { it.text.length <= PROJECT_INLINE_CHARS }
@@ -354,9 +355,10 @@ object PromptBuilder {
     }
 
     /** 跟这个对话有关的记忆限制，放在系统提示词后面。 */
-    fun memoryScopeNote(inProject: Boolean, globalOn: Boolean): String = listOfNotNull(
+    fun memoryScopeNote(inProject: Boolean, globalOn: Boolean, isolated: Boolean = false): String = listOfNotNull(
         "这个对话不在项目里，不要存 project。".takeIf { !inProject },
-        "这个对话不使用全局记忆，不要存 global。".takeIf { !globalOn },
+        "这个对话不使用全局记忆，不要存 global。".takeIf { !globalOn && !isolated },
+        "这是隐私项目：和外面的对话、全局记忆完全隔开。不要存 global，要记的存 project 或本对话；也不要提起项目外面的事。".takeIf { isolated },
     ).joinToString("")
 
     /**

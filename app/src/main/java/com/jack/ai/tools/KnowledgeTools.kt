@@ -23,7 +23,10 @@ internal suspend fun ToolSession.searchOld(query: String) = runTool("翻阅旧�
 private fun ToolSession.findOld(query: String) = Compression.searchHistory(Compression.compressedMessages(conv), query)
 
 private suspend fun ToolSession.findChats(query: String): String {
-    val all = host.conversations()
+    // 隐私项目和外面互不相通：在隐私项目里只翻这个项目的对话；在外面翻不到任何隐私项目的对话
+    val projects = host.store.loadProjects()
+    val all = if (project?.isolated == true) host.conversations().filter { it.projectId == project.id }
+        else host.conversations().filterNot { it.isolatedIn(projects) }
     return withContext(Dispatchers.Default) { Compression.searchAllChats(all, query, conv.id) }
 }
 
@@ -86,7 +89,7 @@ internal suspend fun ToolSession.searchMyData(args: JsonObject): String {
 internal suspend fun ToolSession.remember(args: JsonObject): String {
     val text = args["content"].text().trim()
     val old = args["replace"].text().trim()
-    val globalOn = settings.memoryEnabled && conv.useGlobalMemory
+    val globalOn = settings.memoryEnabled && conv.globalAllowed(project)
     val scope = when (val s = args["scope"].text()) {
         "global" -> if (globalOn) s else "chat"
         "project" -> if (project != null) s else "chat"

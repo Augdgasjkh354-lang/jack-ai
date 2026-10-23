@@ -101,7 +101,18 @@ data class Project(
     val instructions: String = "",
     val files: List<Attachment> = emptyList(),
     val updatedAt: Long = System.currentTimeMillis(),
+    /**
+     * 隐私项目：和项目外面完全隔开。里面的对话不读也不写全局记忆、不看日记、不参与做梦，
+     * 别的对话「翻以前的聊天」也翻不到它；只用它自己的项目记忆。
+     */
+    val isolated: Boolean = false,
 )
+
+/** 这个对话能不能用全局记忆和日记：自己关了，或者在隐私项目里，都不能。 */
+fun Conversation.globalAllowed(project: Project?): Boolean = useGlobalMemory && project?.isolated != true
+
+/** 这个对话在不在隐私项目里。 */
+fun Conversation.isolatedIn(projects: List<Project>): Boolean = projectId != null && projects.any { it.id == projectId && it.isolated }
 
 @Serializable
 data class MemoryItem(

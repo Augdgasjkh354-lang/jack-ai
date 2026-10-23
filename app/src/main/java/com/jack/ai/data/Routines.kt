@@ -290,7 +290,9 @@ object Routines {
         ) + mcpTools
         val tools = if (toolList.isEmpty()) null else JsonArray(toolList)
         val today = SimpleDateFormat("yyyy年M月d日 EEEE HH:mm", Locale.CHINA).format(Date())
-        val memories = if (s.memoryEnabled) store.loadMemories() else emptyList()
+        // 隐私项目里设的任务不带全局记忆
+        val isolated = store.loadConversations().firstOrNull { it.id == r.convId }?.isolatedIn(store.loadProjects()) == true
+        val memories = if (s.memoryEnabled && !isolated) store.loadMemories() else emptyList()
         val system = buildString {
             if (s.developerPrompt.isNotBlank()) append(s.developerPrompt.trim()).append("\n\n")
             append("现在是$today。\n")

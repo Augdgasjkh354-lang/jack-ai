@@ -106,9 +106,10 @@ object Dreamer {
         val fmt = SimpleDateFormat("M月d日 HH:mm", Locale.CHINA)
 
         val transcript = StringBuilder()
+        val projects = store.loadProjects()
         store.loadConversations()
-            // 关了「参与做梦」的对话不整理
-            .filter { c -> c.inDream && c.messages.any { it.createdAt > since } }
+            // 关了「参与做梦」的对话、隐私项目里的对话不整理
+            .filter { c -> c.inDream && !c.isolatedIn(projects) && c.messages.any { it.createdAt > since } }
             .sortedBy { c -> c.messages.first { it.createdAt > since }.createdAt }
             .forEach { c ->
                 transcript.append("\n\n### 对话「${c.title}」\n")

@@ -5,6 +5,7 @@ import com.jack.ai.data.ChatMessage
 import com.jack.ai.data.Conversation
 import com.jack.ai.data.MemoryItem
 import com.jack.ai.data.Project
+import com.jack.ai.data.isolatedIn
 import com.jack.ai.data.Settings
 import com.jack.ai.data.SkillIds
 import com.jack.ai.data.activeSkills
@@ -252,6 +253,26 @@ class PromptBuilderTest {
         assertTrue(sys.contains("玩笑裹着认真"))
         val off = PromptBuilder.systemPrompt(settings, conv.copy(useGlobalMemory = false), null, null, memories, settings.activeSkills(), journal = "他说话玩笑裹着认真")
         assertFalse(off.contains("玩笑裹着认真"))
+    }
+
+    @Test
+    fun privateProjectIsSealedOff() {
+        val open = Project(name = "开发")
+        val sealed = Project(name = "日记本", isolated = true)
+        val conv = Conversation(projectId = sealed.id)
+        val sys = PromptBuilder.systemPrompt(settings, conv, sealed, tools(conv, sealed), memories, settings.activeSkills(), journal = "他说话玩笑裹着认真")
+        // 不带全局记忆和日记，告诉模型这是隐私项目、别存全局
+        assertFalse(sys.contains("喜欢简短的回答"))
+        assertFalse(sys.contains("玩笑裹着认真"))
+        assertTrue(sys.contains("隐私项目"))
+        // 普通项目照旧
+        val conv2 = Conversation(projectId = open.id)
+        val sys2 = PromptBuilder.systemPrompt(settings, conv2, open, tools(conv2, open), memories, settings.activeSkills())
+        assertTrue(sys2.contains("喜欢简短的回答"))
+        // 做梦和翻聊天用的判断
+        assertTrue(conv.isolatedIn(listOf(open, sealed)))
+        assertFalse(conv2.isolatedIn(listOf(open, sealed)))
+        assertFalse(Conversation().isolatedIn(listOf(sealed)))
     }
 
     @Test

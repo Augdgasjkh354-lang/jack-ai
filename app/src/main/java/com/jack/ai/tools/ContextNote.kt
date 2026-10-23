@@ -20,7 +20,8 @@ object ContextNote {
         append(files(Workspace.dir(ctx, Workspace.key(conv))))
         // 收件箱要知道有哪些项目，才能归到对的项目里
         if (conv.id == com.jack.ai.data.INBOX_ID) {
-            val names = store.loadProjects().map { it.name }
+            // 隐私项目不列出来：收件箱是公共的入口，不往隐私项目里归档
+            val names = store.loadProjects().filterNot { it.isolated }.map { it.name }
             append("【项目】").append(if (names.isEmpty()) "还没有项目" else names.take(MAX_ITEMS).joinToString("、")).append("\n")
         }
         if (SkillIds.TABLES in skillIds) {

@@ -183,7 +183,7 @@ fun HistoryDrawer(
                     val count = state.conversations.count { it.projectId == p.id && it.messages.isNotEmpty() }
                     DrawerRow(
                         icon = AppIcons.Folder,
-                        label = p.name,
+                        label = p.name + if (p.isolated) " 🔒" else "",
                         selected = state.currentProjectId == p.id,
                         trailing = if (count > 0) "$count" else null,
                         onClick = { onOpenProject(p.id) },

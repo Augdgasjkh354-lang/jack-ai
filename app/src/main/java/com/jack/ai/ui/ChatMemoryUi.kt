@@ -73,19 +73,23 @@ fun ConversationMemoryDialog(vm: ChatViewModel, conv: Conversation, onDismiss: (
     var items by remember(conv.id) { mutableStateOf(vm.chatMemory(conv)) }
     var useGlobal by remember(conv.id) { mutableStateOf(conv.useGlobalMemory) }
     var inDream by remember(conv.id) { mutableStateOf(conv.inDream) }
-    val globalOn = useGlobal && vm.state.value.settings.memoryEnabled
+    // 隐私项目里的对话：两个开关都锁成关，说明原因
+    val isolated = vm.state.value.project(conv.projectId)?.isolated == true
+    val globalOn = useGlobal && !isolated && vm.state.value.settings.memoryEnabled
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("记忆") },
         text = {
             Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (isolated) Text("这个对话在隐私项目里，和全局记忆、做梦都隔开了。", style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("使用全局记忆", Modifier.weight(1f))
-                    Switch(useGlobal, { useGlobal = it; vm.setMemoryFlags(conv.id, it, inDream) })
+                    Switch(useGlobal && !isolated, { useGlobal = it; vm.setMemoryFlags(conv.id, it, inDream) }, enabled = !isolated)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("参与做梦", Modifier.weight(1f))
-                    Switch(inDream, { inDream = it; vm.setMemoryFlags(conv.id, useGlobal, it) })
+                    Switch(inDream && !isolated, { inDream = it; vm.setMemoryFlags(conv.id, useGlobal, it) }, enabled = !isolated)
                 }
                 Text("本对话记忆 · ${ChatMemory.chatFileName(conv)}", style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 8.dp))

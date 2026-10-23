@@ -23,6 +23,7 @@ import com.jack.ai.data.ThinkLevel
 import com.jack.ai.data.activeSkills
 import com.jack.ai.data.backgroundEndpoint
 import com.jack.ai.data.endpoint
+import com.jack.ai.data.globalAllowed
 import com.jack.ai.data.fullAuth
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -90,10 +91,12 @@ suspend fun runBackgroundWork(ctx: Context, r: Routine, log: (com.jack.ai.data.R
         ?: Conversation(id = r.convId, title = "⏰ " + r.title, work = true)
     val skills = s.activeSkills()
     val tools = PromptBuilder.toolSet(s, skills, conv, null)
-    val memories = if (s.memoryEnabled) store.loadMemories() else emptyList()
+    // 隐私项目里的任务不带全局记忆和日记
+    val project = conv.projectId?.let { id -> store.loadProjects().firstOrNull { it.id == id } }
+    val memories = if (s.memoryEnabled && conv.globalAllowed(project)) store.loadMemories() else emptyList()
     val journal = store.loadDreams().firstOrNull { it.journal.isNotBlank() }?.journal.orEmpty()
     val now = SimpleDateFormat("yyyy年M月d日 EEEE HH:mm", Locale.CHINA).format(Date())
-    val system = PromptBuilder.systemPrompt(s, conv, null, tools, memories, skills, journal = journal) +
+    val system = PromptBuilder.systemPrompt(s, conv, project, tools, memories, skills, journal = journal) +
         "\n\n【后台定时任务】现在是$now。你在后台执行用户预先设定的定时任务「${r.title}」，用户此刻不在线，不能向他提问，直接把任务做完。" +
         (if (s.fullAuth) "用户开了完全授权，发邮件、删除这类操作不会弹窗确认、会直接执行，只做任务里明确要求的，拿不准的不要做。"
         else "发邮件、删除这类需要用户确认的操作会被拒绝，不要尝试。") +

@@ -118,6 +118,29 @@ fun ProjectScreen(
                 }
             }
             item {
+                // 普通项目 / 隐私项目
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("隐私项目", style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+                            androidx.compose.material3.Switch(project.isolated, { on -> vm.saveProject(project.copy(isolated = on)) })
+                        }
+                        Text(
+                            if (project.isolated) "和外面完全隔开：这里的对话不用全局记忆和日记、不往全局记忆里存、不参与做梦，别的对话也翻不到这里的聊天。只用下面的项目记忆。"
+                            else "现在是普通项目：和平常的对话一样，会用全局记忆、参与做梦。打开后就和外面隔开。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (project.isolated) Text(
+                            "打开之前已经记进全局记忆、写进日记的内容不会自动删掉，需要的话到「记忆与梦」里删。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.outline,
+                        )
+                    }
+                }
+            }
+            item {
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp)) {
                         Text("项目记忆", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
