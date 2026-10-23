@@ -41,6 +41,25 @@ object BrowserPages {
     fun cleanUserAgent(ua: String): String =
         ua.replace("; wv)", ")").replace(Regex("""Version/\d+(\.\d+)* """), "")
 
+    /** 电脑版用的浏览器标识：Windows 上的 Chrome，版本号跟手机上的网页组件一致。 */
+    fun desktopUserAgent(mobileUa: String): String {
+        val v = Regex("""Chrome/([\d.]+)""").find(mobileUa)?.groupValues?.get(1) ?: "130.0.0.0"
+        return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/$v Safari/537.36"
+    }
+
+    /** 「电脑版」按网站记：网站名去掉 www.。 */
+    fun site(url: String): String = runCatching { java.net.URI(url).host }.getOrNull()?.lowercase()?.removePrefix("www.").orEmpty()
+
+    /** 这个网址在不在电脑版名单里（名单里的网站和它的子域名都算）。 */
+    fun isDesktop(sites: Set<String>, url: String): Boolean {
+        val h = site(url)
+        return h.isNotEmpty() && sites.any { h == it || h.endsWith(".$it") }
+    }
+
+    /** 「问 Kavi」带过去的文件名：网页标题，去掉文件名里不能用的字符。 */
+    fun fileName(title: String, url: String): String =
+        title.ifBlank { host(url) }.replace(Regex("""[\\/:*?"<>|\n\r\t]"""), "_").trim().take(40).ifBlank { "网页" } + ".txt"
+
     /**
      * 网页 <input accept> 要的类型 → 选文件时的 (type, 额外的 MIME 列表)。
      * 「.pdf」这种扩展名换成 MIME；只有一种就直接用，几种就用 * / * 加列表，看不懂的不限制。

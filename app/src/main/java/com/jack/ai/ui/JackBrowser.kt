@@ -96,6 +96,10 @@ object JackBrowser {
     var marks by mutableStateOf(listOf<BrowserPages.Visit>())
     /** 网页跟着 App 变深色（浅色主题时不变）。 */
     private var darkAllowed = true
+    /** 用电脑版打开的网站（网站名，不带 www.）。 */
+    var desktopSites by mutableStateOf(setOf<String>())
+    /** 手机版的浏览器标识（去掉了 App 内嵌标记）；电脑版的由它换算。 */
+    private var mobileUa = ""
 
     /** 下载在后台跑，离开浏览器页也不停。 */
     private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
@@ -147,6 +151,7 @@ object JackBrowser {
                 useWideViewPort = true
                 loadWithOverviewMode = true
                 userAgentString = BrowserPages.cleanUserAgent(userAgentString)
+                mobileUa = userAgentString
             }
             if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
                 androidx.webkit.WebSettingsCompat.setAlgorithmicDarkeningAllowed(settings, darkAllowed)
@@ -173,6 +178,61 @@ object JackBrowser {
     private fun loadLists() {
         fun read(k: String) = prefs().getString(k, null)?.let { runCatching { listJson.decodeFromString(visitList, it) }.getOrNull() }.orEmpty()
         visits = read("visits"); marks = read("marks")
+        desktopSites = prefs().getStringSet("desktop", emptySet()).orEmpty().toSet()
+    }
+
+    private fun uaFor(url: String) = if (BrowserPages.isDesktop(desktopSites, url)) BrowserPages.desktopUserAgent(mobileUa) else mobileUa
+
+    /** 换网页前按网站选手机版还是电脑版的标识。返回有没有换。 */
+    private fun applyUa(w: WebView, url: String): Boolean {
+        val ua = uaFor(url)
+        if (mobileUa.isEmpty() || w.settings.userAgentString == ua) return false
+        w.settings.userAgentString = ua
+        return true
+    }
+
+    /** 当前网站切换电脑版 / 手机版（按网站记住），然后重新打开。 */
+    fun toggleDesktop() {
+        val w = web ?: return
+        val site = BrowserPages.site(address).ifEmpty { return }
+        desktopSites = if (BrowserPages.isDesktop(desktopSites, address)) desktopSites.filterNot { site == it || site.endsWith(".$it") }.toSet()
+        else desktopSites + site
+        prefs().edit().putStringSet("desktop", desktopSites).apply()
+        applyUa(w, address)
+        clearError()
+        w.loadUrl(address)
+    }
+
+    /** 电脑版：自适应的网站会按手机宽度排，把可视宽度改成电脑的，再缩到屏幕上。 */
+    private fun widenIfDesktop(w: WebView, url: String) {
+        if (!BrowserPages.isDesktop(desktopSites, url)) return
+        w.evaluateJavascript(
+            "(function(){var m=document.querySelector('meta[name=viewport]');if(!m){m=document.createElement('meta');m.name='viewport';" +
+                "(document.head||document.documentElement).appendChild(m);}m.content='width=1200';})();", null,
+        )
+    }
+
+    /** 「问 Kavi」：当前网页的标题、网址和正文（最多 6 万字）。 */
+    suspend fun pageText(ctx: Context): String {
+        val raw = unwrap(eval(ctx, "(document.body ? document.body.innerText : '').slice(0, 60000)"))
+        return "网页：$title\n链接：$address\n\n" + raw.trim()
+    }
+
+    /** 长按图片「识别二维码」：带着网页的登录状态把图片取下来再读。读不出返回 null。 */
+    suspend fun scanQr(url: String): String? {
+        val bytes = if (url.startsWith("data:image", true)) {
+            runCatching { Base64.decode(url.substringAfter(","), Base64.DEFAULT) }.getOrNull() ?: return null
+        } else {
+            val cookie = withContext(Dispatchers.Main) { CookieManager.getInstance().getCookie(url) }
+            val ua = withContext(Dispatchers.Main) { web?.settings?.userAgentString.orEmpty() }
+            withContext(Dispatchers.IO) {
+                val out = ByteArrayOutputStream()
+                BrowserDownload.fetch(BrowserDownload.Pending(url, "qr", "", -1, ua, address), cookie, route, 10L * 1024 * 1024,
+                    open = { out.also { it.reset() } }, reset = { out.reset() })
+                out.toByteArray()
+            }
+        }
+        return withContext(Dispatchers.Default) { com.jack.ai.data.QrImage.decode(bytes) }
     }
 
     private fun saveLists() {
@@ -302,7 +362,7 @@ object JackBrowser {
         }
         prepare(ctx)?.let { reason -> withContext(Dispatchers.Main) { error = reason; pageFailed = true }; return reason }
         val done = withContext(Dispatchers.Main) {
-            CompletableDeferred<Unit>().also { pageDone = it; webView(ctx).loadUrl(url) }
+            CompletableDeferred<Unit>().also { pageDone = it; webView(ctx).let { w -> applyUa(w, url); w.loadUrl(url) } }
         }
         withTimeoutOrNull(timeoutMs) { done.await() }
         return withContext(Dispatchers.Main) { error }
@@ -337,7 +397,14 @@ object JackBrowser {
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
             val url = request.url.toString()
             return when (BrowserNet.classify(url)) {
-                BrowserNet.Kind.OPEN -> { if (request.isForMainFrame) clearError(); false }
+                BrowserNet.Kind.OPEN -> {
+                    if (!request.isForMainFrame) false
+                    else {
+                        clearError()
+                        // 从手机版网站跳到电脑版网站（或反过来）：换好标识重新打开这个网址
+                        if (applyUa(view, url)) { view.loadUrl(url); true } else false
+                    }
+                }
                 BrowserNet.Kind.EXTERNAL -> { if (userViewing && request.hasGesture()) external = url; true }
                 BrowserNet.Kind.BLOCKED -> { if (request.isForMainFrame) error = "已拦下：网页想打开本机、局域网或文件地址（$url）"; true }
             }
@@ -380,7 +447,10 @@ object JackBrowser {
             canBack = view.canGoBack(); canForward = view.canGoForward()
         }
 
+        override fun onPageCommitVisible(view: WebView, url: String) = widenIfDesktop(view, url)
+
         override fun onPageFinished(view: WebView, url: String) {
+            widenIfDesktop(view, url)
             pageDone?.complete(Unit)
             if (url != "about:blank") address = url
             // 最近访问只记用户自己看的、打开成功的

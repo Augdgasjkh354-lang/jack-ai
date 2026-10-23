@@ -88,6 +88,8 @@ import kotlinx.coroutines.launch
 class BrowserActivity : ComponentActivity() {
     private lateinit var settings: Settings
     private var editing by mutableStateOf("")
+    /** 识别出的二维码内容，等弹窗。 */
+    private var qr by mutableStateOf<String?>(null)
     /** 页内查找：null 没在找，否则是要找的字。 */
     private var finding by mutableStateOf<String?>(null)
 
@@ -243,7 +245,11 @@ class BrowserActivity : ComponentActivity() {
                     IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "更多") }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                         val has = b.address.isNotEmpty()
+                        DropdownMenuItem(text = { Text("问 Kavi") }, enabled = has, onClick = { menu = false; askKavi() })
+                        DropdownMenuItem(text = { Text((if (b.address.isNotEmpty() && BrowserPages.isDesktop(b.desktopSites, b.address)) "✓ " else "") + "电脑版") },
+                            enabled = has, onClick = { menu = false; b.toggleDesktop() })
                         DropdownMenuItem(text = { Text("分享") }, enabled = has, onClick = { menu = false; share(b.address, b.title) })
+                        DropdownMenuItem(text = { Text("存成 PDF") }, enabled = has, onClick = { menu = false; savePdf() })
                         DropdownMenuItem(text = { Text("页内查找") }, enabled = has, onClick = { menu = false; finding = "" })
                         DropdownMenuItem(text = { Text(if (b.marks.any { it.url == b.address }) "移出书签" else "加入书签") }, enabled = has, onClick = {
                             menu = false
@@ -340,6 +346,21 @@ class BrowserActivity : ComponentActivity() {
         }
         }
         b.pressed?.let { p -> PressMenu(p) }
+        qr?.let { text ->
+            AlertDialog(
+                onDismissRequest = { qr = null },
+                title = { Text("二维码") },
+                text = { Text(text.take(500), style = MaterialTheme.typography.bodyMedium) },
+                confirmButton = {
+                    Row {
+                        TextButton(onClick = { qr = null; copy(text); b.notice = "已复制" }) { Text("复制") }
+                        if (BrowserPages.isWeb(text)) TextButton(onClick = { qr = null; open(text) }) { Text("打开") }
+                        else if (BrowserNet.classify(text) == BrowserNet.Kind.EXTERNAL) TextButton(onClick = { qr = null; b.external = text }) { Text("打开") }
+                    }
+                },
+                dismissButton = { TextButton(onClick = { qr = null }) { Text("关闭") } },
+            )
+        }
         b.external?.let { url ->
             AlertDialog(
                 onDismissRequest = { b.external = null },
@@ -402,6 +423,41 @@ class BrowserActivity : ComponentActivity() {
         val mode = when (route) { BrowserNet.PROXY -> "全部走代理"; BrowserNet.DIRECT -> "全部直连"; else -> "自动" }
         return if (host == null) "线路：$mode" + if (route != BrowserNet.DIRECT && !Net.config.enabled) "（代理没开，现在都是直连）" else ""
         else "$mode · 这个网站" + if (proxied) "走代理" else "直连"
+    }
+
+    /** 把当前网页的内容带回聊天：新开一个对话，网页正文作为附件，用户接着问。 */
+    private fun askKavi() {
+        val b = JackBrowser
+        lifecycleScope.launch {
+            val text = runCatching { b.pageText(this@BrowserActivity) }.getOrNull()
+            if (text == null || text.substringAfter("\n\n").isBlank()) { b.notice = "读不到这个网页的文字（可能还没加载完，或者内容是图片）"; return@launch }
+            val f = java.io.File(java.io.File(cacheDir, "exports").apply { mkdirs() }, BrowserPages.fileName(b.title, b.address))
+            runCatching { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { f.writeText(text) } }
+                .onFailure { b.notice = "没存下网页内容：${it.message}"; return@launch }
+            val uri = androidx.core.content.FileProvider.getUriForFile(this@BrowserActivity, "$packageName.files", f)
+            startActivity(Intent(this@BrowserActivity, com.jack.ai.MainActivity::class.java).setAction(Intent.ACTION_SEND)
+                .setType("text/plain").putExtra(Intent.EXTRA_STREAM, uri)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                // 回到已经开着的聊天页（不另开一个），浏览器的网页留着，下次打开还在
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+        }
+    }
+
+    /** 存成 PDF：用系统的打印，选「另存为 PDF」，存在哪由用户定。 */
+    private fun savePdf() {
+        val b = JackBrowser
+        val name = b.title.ifBlank { BrowserPages.host(b.address) }.ifBlank { "网页" }
+        val pm = getSystemService(PRINT_SERVICE) as android.print.PrintManager
+        runCatching { pm.print(name, b.webView(this).createPrintDocumentAdapter(name), android.print.PrintAttributes.Builder().build()) }
+            .onFailure { b.notice = "这台手机打不开系统的打印（存 PDF 要用它）：${it.message}" }
+    }
+
+    private fun scanQr(img: String) {
+        val b = JackBrowser
+        lifecycleScope.launch {
+            val text = runCatching { b.scanQr(img) }.getOrElse { b.notice = "图片没取下来：${it.message}"; return@launch }
+            if (text.isNullOrBlank()) b.notice = "这张图里没识别出二维码。" else qr = text
+        }
     }
 
     private fun exitFullscreen() {
@@ -494,6 +550,7 @@ class BrowserActivity : ComponentActivity() {
                         item("用系统浏览器打开") { Links.system(this@BrowserActivity, link) }
                     }
                     p.image?.let { img ->
+                        item("识别二维码") { scanQr(img) }
                         item("下载图片") { b.downloadImage(img) }
                         if (BrowserPages.isWeb(img)) item("复制图片地址") { copy(img); b.notice = "已复制图片地址" }
                     }

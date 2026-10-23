@@ -62,4 +62,26 @@ class BrowserPagesTest {
         // 有看不懂的扩展名就不限制，免得选不到
         assertEquals("*/*" to emptyList<String>(), BrowserPages.pickTypes(arrayOf(".pdf", ".xyz")))
     }
+
+    @Test
+    fun desktopIsRememberedPerSiteIncludingSubdomains() {
+        val sites = setOf("taobao.com")
+        assertTrue(BrowserPages.isDesktop(sites, "https://www.taobao.com/"))
+        assertTrue(BrowserPages.isDesktop(sites, "https://item.taobao.com/item.htm?id=1"))
+        assertEquals(false, BrowserPages.isDesktop(sites, "https://nottaobao.com/"))
+        assertEquals(false, BrowserPages.isDesktop(emptySet(), "https://taobao.com/"))
+        assertEquals("taobao.com", BrowserPages.site("https://WWW.Taobao.com/x"))
+    }
+
+    @Test
+    fun desktopAgentKeepsChromeVersion() {
+        val ua = BrowserPages.desktopUserAgent("Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.6668.100 Mobile Safari/537.36")
+        assertTrue(ua, ua.contains("Windows NT 10.0") && ua.contains("Chrome/129.0.6668.100") && !ua.contains("Mobile"))
+    }
+
+    @Test
+    fun askKaviFileName() {
+        assertEquals("报价_方案.txt", BrowserPages.fileName("报价/方案", "https://a.com"))
+        assertEquals("a.com.txt", BrowserPages.fileName("", "https://www.a.com/x"))
+    }
 }
