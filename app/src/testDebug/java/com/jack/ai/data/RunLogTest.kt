@@ -61,6 +61,23 @@ class RunLogTest {
     }
 
     @Test
+    fun totalCapDropsTheOldestNotTheNewest() {
+        // 16 个提醒各跑 20 次 = 320 次，超过总上限 300
+        val routines = (1..16).map { Routine(kind = "task", title = "任务$it", hour = 8, minute = 0, repeat = "daily") }
+        for (round in 0 until 20) routines.forEach { RunLog.once(ctx, it, "ok", "第 $round 轮") }
+        // 最后再跑一次的，一定要留下
+        val last = Routine(kind = "task", title = "最新", hour = 9, minute = 0)
+        RunLog.once(ctx, last, "ok", "最新的一次")
+        val all = RunLog.all(ctx)
+        assertEquals(300, all.size)
+        assertEquals("最新的一次", RunLog.of(ctx, last.id).single().note)
+        assertTrue(all.groupBy { it.routineId }.values.all { it.size <= 20 })
+        // 丢掉的是最早那几轮：每个提醒最新的「第 19 轮」都在
+        routines.forEach { r -> assertEquals("第 19 轮", RunLog.of(ctx, r.id).first().note) }
+        assertTrue(all.none { it.note == "第 0 轮" && it.routineId == routines.first().id })
+    }
+
+    @Test
     fun okIsDecidedByStatusNotByWording() {
         // 文字看着像失败，但代码说成了：算成功；反过来，文字看着正常，代码说失败：算失败
         assertTrue(RunLog.stepOf("notion_write", OK, "权限不足这个词出现在页面标题里").ok)

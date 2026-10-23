@@ -75,11 +75,9 @@ object RunLog {
 
     private fun update(ctx: Context, change: (List<RunRecord>) -> List<RunRecord>) = synchronized(lock) {
         val list = change(all(ctx))
-        // 每个提醒最多留 20 次，总共最多 300 次，旧的先丢
-        val keep = newestFirst(list).groupBy { it.routineId }.values.flatMap { it.take(PER_ROUTINE) }
-            .let { newestFirst(it) }.take(TOTAL).toSet()
-        // 存的时候按时间先后（旧的在前），和读回来时的顺序约定一致
-        val kept = list.filter { it in keep }
+        // 每个提醒最多留最新的 20 次；再按全局先后只留最新的 300 次。list 本身按先后存（新的在末尾）
+        val perRoutine = newestFirst(list).groupBy { it.routineId }.values.flatMap { it.take(PER_ROUTINE) }.map { it.id }.toSet()
+        val kept = list.filter { it.id in perRoutine }.takeLast(TOTAL)
         val f = file(ctx)
         val tmp = File(f.parentFile, f.name + ".tmp")
         tmp.writeText(json.encodeToString(ListSerializer(RunRecord.serializer()), kept))

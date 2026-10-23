@@ -254,14 +254,19 @@ object Routines {
     private const val NOT_MET = "【不满足】"
     private const val UNKNOWN = "【没查成】"
 
-    /** 从监控回答判断结果：明确说没查成、没按格式答、或者工具全出错还说不满足，都算没查成。 */
-    internal fun judgeWatch(text: String, okCalls: Int, failedCalls: Int): Outcome {
+    /**
+     * 从监控回答判断结果：明确说没查成、没按格式答，都算没查成。
+     * 有工具可用时，满足和不满足都要有至少一次查成的工具调用做依据；一次都没查成（全出错或根本没查）
+     * 就算没查成——尤其不能凭空判「满足」，那会停掉监控、发通知、跑后续步骤。
+     */
+    internal fun judgeWatch(text: String, okCalls: Int, failedCalls: Int, needEvidence: Boolean = true): Outcome {
         val first = text.lineSequence().firstOrNull().orEmpty()
         val body = text.lines().drop(1).joinToString("\n").trim()
+        val noEvidence = needEvidence && okCalls == 0
         val status = when {
             UNKNOWN in first -> "unknown"
-            MET in first -> "ok"
-            NOT_MET in first -> if (failedCalls > 0 && okCalls == 0) "unknown" else "not_met"
+            MET in first -> if (noEvidence) "unknown" else "ok"
+            NOT_MET in first -> if (noEvidence) "unknown" else "not_met"
             else -> "unknown"
         }
         val marked = UNKNOWN in first || MET in first || NOT_MET in first
@@ -356,7 +361,7 @@ object Routines {
         )
         val text = agent.lastRound.trim()
         if (text.isBlank()) return Outcome(if (watch) "unknown" else "failed", "（这次没有生成内容）")
-        return if (watch) judgeWatch(text, okCalls, failedCalls) else Outcome("ok", text)
+        return if (watch) judgeWatch(text, okCalls, failedCalls, needEvidence = tools != null) else Outcome("ok", text)
     }
 
     /** 失败通知只说是哪一类原因，不带具体内容。 */
