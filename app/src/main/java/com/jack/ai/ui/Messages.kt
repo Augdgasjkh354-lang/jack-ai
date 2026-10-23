@@ -258,12 +258,15 @@ fun AssistantMessage(
             PlanCard(msg.plan)
             Spacer(Modifier.height(8.dp))
         }
+        // 回答正文出来之前都算「还在忙」：思考框、工具框在这段时间里保持同一个样子，
+        // 不随每次工具调用开始/结束来回切换（以前切一次高度就变一次，屏幕跟着一闪一闪）
+        val busy = streaming && msg.content.isEmpty()
         if (msg.searches.isNotEmpty()) {
-            SearchBox(msg.searches)
+            SearchBox(msg.searches, busy = busy)
             Spacer(Modifier.height(8.dp))
         }
         if (msg.reasoning.isNotEmpty()) {
-            ThinkingBox(msg.reasoning, thinking = streaming && msg.content.isEmpty() && msg.searches.none { it.pending })
+            ThinkingBox(msg.reasoning, thinking = busy)
             Spacer(Modifier.height(8.dp))
         }
         // 回答按打字的节奏柔和地放出来（思考框照原速）；按段渲染，写完的段落不再重排
@@ -275,7 +278,8 @@ fun AssistantMessage(
                 codeBackground = colors.surfaceVariant,
                 modifier = Modifier.fillMaxWidth(),
             )
-        } else if (streaming && msg.reasoning.isEmpty() && msg.searches.none { it.pending }) {
+        } else if (streaming && msg.reasoning.isEmpty() && msg.searches.isEmpty()) {
+            // 只在什么都还没有的最开始转圈；有了工具框，转圈挪到工具框的标题上，不再一会儿出一会儿没
             CircularProgressIndicator(Modifier.size(20.dp).padding(2.dp), strokeWidth = 2.dp)
         }
         msg.files.forEach { f ->
@@ -528,11 +532,12 @@ private fun ThinkingBox(reasoning: String, thinking: Boolean) {
 }
 
 @Composable
-private fun SearchBox(searches: List<SearchRecord>) {
+private fun SearchBox(searches: List<SearchRecord>, busy: Boolean = false) {
     var expanded by remember { mutableStateOf(false) }
     val colors = MaterialTheme.colorScheme
     val uriHandler = LocalUriHandler.current
     val searching = searches.any { it.pending }
+    val spinning = searching || busy
     val sources = searches.flatMap { it.sources }
     Surface(
         color = colors.surfaceContainer,
@@ -544,7 +549,7 @@ private fun SearchBox(searches: List<SearchRecord>) {
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded },
             ) {
-                if (searching) {
+                if (spinning) {
                     CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
                 } else {
                     Icon(AppIcons.Globe, null, Modifier.size(16.dp), tint = colors.primary)
@@ -552,6 +557,7 @@ private fun SearchBox(searches: List<SearchRecord>) {
                 Spacer(Modifier.size(6.dp))
                 Text(
                     if (searching) "正在${searches.last { it.pending }.query.let { if (isOther(it)) it else "搜索：$it" }}"
+                    else if (busy) "用了 ${searches.size} 次工具，接着想…"
                     else if (sources.isEmpty() || searches.all { isOther(it.query) }) "用了 ${searches.size} 次工具"
                     else "用了 ${searches.size} 次工具，参考 ${sources.size} 个网页",
                     style = MaterialTheme.typography.labelLarge,
