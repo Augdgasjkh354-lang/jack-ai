@@ -163,7 +163,7 @@ class WeChatWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx
         val brief = "【后台：微信客户消息】现在是$now。用户在设置里打开了「微信消息交给 Kavi」，你在后台看他刚收到的微信私聊，" +
             "把客户的情况记下来、要紧的推到他手机上。用户此刻不在线，不能向他提问。"
         val result = try {
-            com.jack.ai.tools.runBackgroundWork(ctx, r, allow = WeChat::allow, brief = brief)
+            com.jack.ai.tools.runBackgroundWork(ctx, r, allow = WeChat::allow, brief = brief, model = MODEL_FLASH)
         } catch (e: kotlinx.coroutines.CancellationException) {
             // 被系统停掉：消息放回去，WorkManager 会再排
             store.putBackWeChat(batch)

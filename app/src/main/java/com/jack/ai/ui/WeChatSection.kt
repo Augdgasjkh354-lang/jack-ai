@@ -42,7 +42,7 @@ fun WeChatSection(vm: ChatViewModel, s: Settings) {
             "在「微信客户」对话里列出来等你回一句确认；客户问价、约时间、等你回复这类要紧的，用连接器（比如 Bark）推到你的 iPhone。" +
             "家人朋友的闲聊不记也不推。\n" +
             "要求：这台手机登着微信、微信设置里打开「通知显示消息详情」；群聊不看。" +
-            "消息原文会发给模型分析（每批按 Work 模型计费）。",
+            "消息原文会发给 V4.1 Flash 分析，每批算一次花费。",
         style = MaterialTheme.typography.bodySmall,
         color = colors.onSurfaceVariant,
     )

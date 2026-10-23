@@ -89,13 +89,15 @@ suspend fun runBackgroundWork(
     allow: (name: String, args: String?) -> Boolean = { _, _ -> true },
     /** 换掉默认的「后台定时任务」说明。 */
     brief: String? = null,
+    /** 用哪个模型，不填用 Work 的模型。 */
+    model: String? = null,
     onProgress: (String) -> Unit = {},
 ): TaskResult {
     com.jack.ai.data.KaviSelf.ensure(ctx)
     val host = BackgroundToolHost(ctx)
     val store = host.store
     val s = store.loadSettings()
-    val ep = s.endpoint(s.workModel)?.takeIf { it.apiKey.isNotBlank() } ?: s.backgroundEndpoint()
+    val ep = s.endpoint(model ?: s.workModel)?.takeIf { it.apiKey.isNotBlank() } ?: s.backgroundEndpoint()
         ?: return TaskResult(NO_KEY, status = TaskStatus.NEEDS_SETUP)
     val conv = store.loadConversations().firstOrNull { it.id == r.convId }?.copy(work = true)
         ?: Conversation(id = r.convId, title = "⏰ " + r.title, work = true)
