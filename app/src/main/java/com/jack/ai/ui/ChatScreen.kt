@@ -67,6 +67,7 @@ import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -1013,7 +1014,7 @@ internal class FollowBottom {
 
 /**
  * key 换了（换对话）或 newTurn 换了（用户发了新消息）就回到最底下并开始跟；
- * moving（正在输出或字还没放完）时每一帧贴一下底，内容一点点长，画面就一点点平滑上移。
+ * moving（正在输出或字还没放完）时每一帧往底部滑一点（[glide]），新起一行时画面平滑上移，不跳。
  */
 @Composable
 internal fun rememberFollowBottom(listState: androidx.compose.foundation.lazy.LazyListState, key: Any, newTurn: Any?, moving: Boolean): FollowBottom {
@@ -1021,6 +1022,16 @@ internal fun rememberFollowBottom(listState: androidx.compose.foundation.lazy.La
     suspend fun toEnd() {
         val n = listState.layoutInfo.totalItemsCount
         if (n > 0) listState.scrollToItem(n - 1, Int.MAX_VALUE)
+    }
+    // 输出中往下跟：不一下子跳到底，而是每帧走剩下距离的五分之一。每写出新的一行，画面在零点二秒左右里滑上去，
+    // 不再整屏一下一下地跳（每秒 100 字大约每秒新起 5 行，直接跳就是每秒整屏闪 5 下）
+    suspend fun glide() {
+        val info = listState.layoutInfo
+        val last = info.visibleItemsInfo.lastOrNull() ?: return
+        if (last.index < info.totalItemsCount - 1) { toEnd(); return } // 离得太远（最后一条还没露出来）：直接到底
+        val bottom = info.viewportEndOffset - info.afterContentPadding
+        val dist = (last.offset + last.size - bottom).toFloat()
+        if (dist > 0.5f) listState.scrollBy(maxOf(1f, dist * 0.2f))
     }
     LaunchedEffect(listState) {
         snapshotFlow { listState.canScrollForward }.collect { more -> if (!more) f.on = true }
@@ -1034,7 +1045,7 @@ internal fun rememberFollowBottom(listState: androidx.compose.foundation.lazy.La
         if (!moving) return@LaunchedEffect
         while (true) {
             withFrameNanos { }
-            if (f.on && listState.canScrollForward && !listState.isScrollInProgress) toEnd()
+            if (f.on && listState.canScrollForward && !listState.isScrollInProgress) glide()
         }
     }
     return f
