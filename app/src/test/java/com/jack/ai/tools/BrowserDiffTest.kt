@@ -66,4 +66,15 @@ class BrowserDiffTest {
         assertFalse(looksLikeLogin(page(listOf(pwd), "修改设置")))
         assertFalse(looksLikeLogin(base))
     }
+
+    @Test
+    fun selfCheckFlagsThinOrHollowResults() {
+        val h = listOf("名称", "价格", "链接")
+        val good = (1..10).map { listOf("商品$it", "¥$it", "") }
+        assertEquals("", selfCheck(h, good, 1, 1))
+        val noPrice = (1..10).map { listOf("商品$it", if (it < 3) "¥1" else "", "x") }
+        assertTrue(selfCheck(h, noPrice, 1, 1).contains("「价格」列 8/10 行是空的"))
+        assertTrue(selfCheck(h, good.take(3), 1, 1).contains("只抓到 3 行"))
+        assertTrue(selfCheck(h, good, 3, 1).contains("要 3 页，只读到 1 页"))
+    }
 }

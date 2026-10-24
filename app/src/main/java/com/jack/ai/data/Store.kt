@@ -101,6 +101,8 @@ class Store(context: Context) {
     fun loadCards() = load("flashcards.json", Flashcard.serializer())
     fun saveCards(list: List<Flashcard>) = save("flashcards.json", Flashcard.serializer(), list)
 
+    fun loadSiteNotes() = load("browser_site_notes.json", SiteNote.serializer())
+    fun saveSiteNotes(list: List<SiteNote>) = save("browser_site_notes.json", SiteNote.serializer(), list)
     fun loadFlows() = load("browser_flows.json", BrowserFlow.serializer())
     fun saveFlows(list: List<BrowserFlow>) = save("browser_flows.json", BrowserFlow.serializer(), list)
 

@@ -54,7 +54,8 @@ fun FlowsDialog(vm: ChatViewModel, onDismiss: () -> Unit) {
     var flows by remember { mutableStateOf<List<BrowserFlow>>(emptyList()) }
     var editing by remember { mutableStateOf<BrowserFlow?>(null) }
     var deleting by remember { mutableStateOf<BrowserFlow?>(null) }
-    LaunchedEffect(Unit) { flows = vm.loadFlows() }
+    var notes by remember { mutableStateOf<List<com.jack.ai.data.SiteNote>>(emptyList()) }
+    LaunchedEffect(Unit) { flows = vm.loadFlows(); notes = vm.loadSiteNotes() }
     fun save(list: List<BrowserFlow>) { flows = list; scope.launch { vm.saveFlows(list) } }
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
@@ -74,6 +75,22 @@ fun FlowsDialog(vm: ChatViewModel, onDismiss: () -> Unit) {
                     )
                 }
                 if (flows.isEmpty()) item { Text("还没有流程。", Modifier.padding(top = 12.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                if (notes.isNotEmpty()) item {
+                    Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("网站备忘", style = MaterialTheme.typography.titleSmall)
+                        Text("Kavi 在网站上摸到的小窍门，下次去会提醒它。点 × 删掉。", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        notes.sortedBy { it.site }.forEach { nt ->
+                            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                Text("${nt.site}：${nt.text}", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                                IconButton(onClick = {
+                                    notes = notes.filterNot { it.id == nt.id }
+                                    scope.launch { vm.saveSiteNotes(notes) }
+                                }) { Icon(Icons.Default.Close, "删掉这条") }
+                            }
+                        }
+                    }
+                }
                 items(flows, key = { it.id }) { f ->
                     Card(Modifier.fillMaxWidth().clickable { editing = f }) {
                         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {

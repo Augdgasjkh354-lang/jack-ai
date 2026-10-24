@@ -51,4 +51,18 @@ class BrowserFlowsTest {
         // 步骤本身不进提醒（用到才读）
         assertTrue(!hint.contains("销量"))
     }
+
+    @Test
+    fun siteNotesAreDedupedCappedAndMatched() {
+        var notes = emptyList<SiteNote>()
+        notes = BrowserFlows.addNote(notes, "jd.com", "搜索结果要等 2 秒才出来", now = 1)
+        notes = BrowserFlows.addNote(notes, "jd.com", "搜索结果要等 2 秒才出来", now = 2)
+        assertEquals(1, notes.size)
+        repeat(10) { notes = BrowserFlows.addNote(notes, "1688.com", "窍门 $it", now = 10L + it) }
+        assertEquals(BrowserFlows.NOTES_PER_SITE, notes.count { it.site == "1688.com" })
+        assertTrue(notes.any { it.text == "窍门 9" } && notes.none { it.text == "窍门 0" })
+        assertEquals(listOf("搜索结果要等 2 秒才出来"), BrowserFlows.notesFor(notes, "https://search.jd.com/Search").map { it.text })
+        val hint = BrowserFlows.hint(emptyList(), BrowserFlows.notesFor(notes, "https://search.jd.com/x"))
+        assertTrue(hint, hint.startsWith("【这个网站的备忘】") && !hint.contains("流程"))
+    }
 }

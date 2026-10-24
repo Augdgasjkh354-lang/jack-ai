@@ -282,7 +282,7 @@ object JackBrowser {
      * 以后加「新标签」按钮时调它，再加切换和关闭（[switchTo]、[closeTab]）。
      */
     @SuppressLint("SetJavaScriptEnabled")
-    fun newTab(): Tab {
+    fun newTab(switch: Boolean = true): Tab {
         val t = Tab(nextTabId++)
         t.web = WebView(wrapper).apply {
             settings.apply {
@@ -318,7 +318,7 @@ object JackBrowser {
             }
         }
         tabs += t
-        switchTo(tabs.lastIndex)
+        if (switch) switchTo(tabs.lastIndex)
         return t
     }
 
@@ -525,18 +525,20 @@ object JackBrowser {
 
     /** 打开网址；等到加载完（最多 timeoutMs）。返回出错原因，成功返回 null。 */
     suspend fun load(ctx: Context, url: String, timeoutMs: Long = 25_000): String? {
-        withContext(Dispatchers.Main) { clearError() }
+        // 并行抓取时在指定的标签页里开，平时在当前页
+        val t = withContext(Dispatchers.Main) { pinned() ?: webView(ctx).let { tab } }
+        withContext(Dispatchers.Main) { t.clearError() }
         when (BrowserNet.classify(url)) {
             BrowserNet.Kind.OPEN -> {}
             BrowserNet.Kind.EXTERNAL -> return "这是打开别的 App 的链接，浏览器里打不开：$url"
             BrowserNet.Kind.BLOCKED -> return "不能打开这个地址（本机、局域网和文件地址都不开）：$url"
         }
-        prepare(ctx)?.let { reason -> withContext(Dispatchers.Main) { error = reason; pageFailed = true }; return reason }
+        prepare(ctx)?.let { reason -> withContext(Dispatchers.Main) { t.error = reason; t.pageFailed = true }; return reason }
         val done = withContext(Dispatchers.Main) {
-            CompletableDeferred<Unit>().also { pageDone = it; webView(ctx).let { w -> applyUa(w, url); w.loadUrl(url) } }
+            CompletableDeferred<Unit>().also { t.pageDone = it; t.web!!.let { w -> applyUa(w, url); w.loadUrl(url) } }
         }
         withTimeoutOrNull(timeoutMs) { done.await() }
-        return withContext(Dispatchers.Main) { error }
+        return withContext(Dispatchers.Main) { t.error }
     }
 
     fun clearData() {
@@ -804,7 +806,7 @@ object JackBrowser {
     }
 
     private suspend fun eval(ctx: Context, js: String): String = withContext(Dispatchers.Main) {
-        val w = webView(ctx)
+        val w = pinned()?.web ?: webView(ctx)
         ensureLaidOut(w)
         suspendCancellableCoroutine { cont -> w.evaluateJavascript(js) { r -> if (cont.isActive) cont.resume(r ?: "null") } }
     }
@@ -944,7 +946,7 @@ object JackBrowser {
         var same = 0
         while (System.currentTimeMillis() < end) {
             val sig = unwrap(eval(ctx, BrowserScripts.signature(ctx)))
-            val busy = withContext(Dispatchers.Main) { loading < 100 }
+            val busy = withContext(Dispatchers.Main) { (pinned() ?: tab).loading < 100 }
             if (!busy && sig == last) { if (++same >= 2) return true } else same = 0
             last = sig
             delay(400)
@@ -982,6 +984,16 @@ object JackBrowser {
             agentUpload = null
         }
     }
+
+    /** 把一段操作钉在某个标签页上（并行抓取时各干各的）：eval、load、等加载都用这个标签页。 */
+    class PinTab(val t: Tab) : kotlin.coroutines.AbstractCoroutineContextElement(PinTab) {
+        companion object Key : kotlin.coroutines.CoroutineContext.Key<PinTab>
+    }
+    fun pin(t: Tab) = PinTab(t)
+    private suspend fun pinned(): Tab? = kotlin.coroutines.coroutineContext[PinTab]?.t
+
+    /** 关掉某个标签页（按对象找，并行抓完收拾用）。 */
+    fun closeTab(t: Tab) { tabs.indexOf(t).takeIf { it >= 0 }?.let { closeTab(it) } }
 
     /** 标签页清单（给 Jack 看）：第几个、标题、网址、是不是当前。 */
     fun tabList(): String = tabs.mapIndexed { i, t ->

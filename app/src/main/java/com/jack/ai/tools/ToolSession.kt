@@ -146,6 +146,8 @@ class ToolSession(
     internal val flowHinted: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
     /** 这次回答里已经提醒过「到了登录页」的网站。 */
     internal val loginFlagged: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+    /** 这次回答里因为「读不到文字」自动截过几次图（有上限，截图贵）。 */
+    internal val autoShots = java.util.concurrent.atomic.AtomicInteger()
 
     private val loop = LoopGuard()
 

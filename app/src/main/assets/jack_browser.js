@@ -59,7 +59,8 @@
     if (tag === 'textarea' || role === 'textbox' || el.isContentEditable) return '输入框';
     if (tag === 'input') {
       return ({ checkbox: '勾选框', radio: '单选', submit: '按钮', button: '按钮', reset: '按钮', image: '按钮', file: '文件选择',
-        password: '密码框', search: '搜索框' })[el.type] || '输入框';
+        password: '密码框', search: '搜索框', date: '日期框', 'datetime-local': '日期时间框', time: '时间框', month: '月份框',
+        week: '周框', range: '滑条', color: '颜色框' })[el.type] || '输入框';
     }
     if (tag === 'button' || role === 'button') return '按钮';
     if (role === 'searchbox' || role === 'combobox') return '输入框';
@@ -128,6 +129,8 @@
       if (el.type === 'password') item.value = el.value ? '（已填）' : '';
       else if (el.type === 'checkbox' || el.type === 'radio') item.checked = el.checked;
       else if (el.type !== 'submit' && el.type !== 'button' && el.type !== 'file') item.value = (el.value || '').slice(0, 100);
+      if (el.type === 'range') item.value = (el.value || '') + '（' + (el.min || 0) + '–' + (el.max || 100) + '）';
+      if (SPECIAL[el.type] && el.type !== 'range') item.value = (el.value || '') + (el.value ? '' : '（格式 ' + SPECIAL[el.type] + '）');
       if (!clean(label(el))) item.label = (frame ? '[嵌入] ' : '') + clean(el.placeholder);
     } else if (el.isContentEditable) {
       item.value = clean(el.innerText).slice(0, 100);
@@ -455,6 +458,10 @@
     return '';
   }
 
+  /** 不能当普通文字输入的框，和它要的格式。 */
+  var SPECIAL = { date: 'yyyy-MM-dd', 'datetime-local': 'yyyy-MM-ddTHH:mm', time: 'HH:mm', month: 'yyyy-MM', week: 'yyyy-Www',
+    range: '数字', color: '#rrggbb' };
+
   function del(el, count) {
     if (el.isContentEditable) {
       el.focus();
@@ -475,6 +482,11 @@
         var init = { bubbles: true, cancelable: true, view: window, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, button: 0 };
         fire(el, 'pointerdown', init); fire(el, 'mousedown', init); fire(el, 'pointerup', init); fire(el, 'mouseup', init);
         el.click();
+      } else if (op === 'type' && el.tagName === 'INPUT' && SPECIAL[el.type]) {
+        // 日期、时间、滑条这类：直接设值（格式见 SPECIAL），网页照样收到 input / change
+        el.focus();
+        setValue(el, arg);
+        if (el.value === '' && arg) return JSON.stringify({ err: '「' + arg + '」不是这个框认的格式，要写成 ' + SPECIAL[el.type] });
       } else if (op === 'type') {
         if (!isText(el)) return JSON.stringify({ err: '编号 ' + n + ' 不是输入框（是' + kind(el) + '）' });
         el.focus();
@@ -498,6 +510,11 @@
         el.selectedIndex = idx;
         el.dispatchEvent(new Event('input', { bubbles: true }));
         el.dispatchEvent(new Event('change', { bubbles: true }));
+      } else if (op === 'hover') {
+        // 鼠标放上去：要悬停才展开的菜单用
+        var hr = el.getBoundingClientRect();
+        var hi = { bubbles: true, cancelable: true, view: window, clientX: hr.left + hr.width / 2, clientY: hr.top + hr.height / 2 };
+        ['pointerover', 'pointerenter', 'mouseover', 'mouseenter', 'pointermove', 'mousemove'].forEach(function (t) { fire(el, t, hi); });
       } else if (op === 'key') {
         if (el.focus) el.focus();
         var e = key(el, arg);

@@ -22,7 +22,34 @@ data class BrowserFlow(
     val uses: Int = 0,
 )
 
+/** 网站备忘：在这个网站上踩过的小坑（要先关弹窗、按钮要等一会才能点……），下次少走弯路。 */
+@Serializable
+data class SiteNote(
+    val id: String = newId(),
+    val site: String,
+    val text: String,
+    val at: Long = System.currentTimeMillis(),
+)
+
 object BrowserFlows {
+    /** 每个网站最多记几条备忘（新的挤掉旧的）。 */
+    const val NOTES_PER_SITE = 8
+
+    /** 这个网址上的备忘。 */
+    fun notesFor(notes: List<SiteNote>, url: String): List<SiteNote> {
+        val h = BrowserPages.site(url)
+        if (h.isEmpty()) return emptyList()
+        return notes.filter { n -> h == n.site || h.endsWith(".${n.site}") }
+    }
+
+    /** 记一条：同样的话不重复记，每个网站只留最新的几条。 */
+    fun addNote(notes: List<SiteNote>, site: String, text: String, now: Long = System.currentTimeMillis()): List<SiteNote> {
+        val t = text.trim().take(200)
+        if (t.isEmpty() || notes.any { it.site == site && it.text == t }) return notes
+        val mine = (notes.filter { it.site == site } + SiteNote(site = site, text = t, at = now)).sortedByDescending { it.at }.take(NOTES_PER_SITE)
+        return notes.filter { it.site != site } + mine
+    }
+
     /** 网址或网站名 → 网站名（小写、不带 www.）。 */
     fun siteOf(input: String): String {
         val t = input.trim()
@@ -53,8 +80,10 @@ object BrowserFlows {
             "- 「${f.name}」（${f.site}）" + f.whenToUse.takeIf { it.isNotBlank() }?.let { "：$it" }.orEmpty()
         }
 
-    /** 打开有流程的网站时，工具附在页面前面的一句提醒。 */
-    fun hint(flows: List<BrowserFlow>): String =
-        "【这个网站存了流程】" + flows.joinToString("；") { f -> "「${f.name}」" + f.whenToUse.takeIf { it.isNotBlank() }?.let { "（$it）" }.orEmpty() } +
-            "。和用户要做的事对得上，就先用 action=flow 填 name 读出步骤照着做；对不上就照常做。\n"
+    /** 打开有流程或备忘的网站时，工具附在页面前面的提醒。 */
+    fun hint(flows: List<BrowserFlow>, notes: List<SiteNote> = emptyList()): String = buildString {
+        if (flows.isNotEmpty()) append("【这个网站存了流程】" + flows.joinToString("；") { f -> "「${f.name}」" + f.whenToUse.takeIf { it.isNotBlank() }?.let { "（$it）" }.orEmpty() } +
+            "。和用户要做的事对得上，就先用 action=flow 填 name 读出步骤照着做；对不上就照常做。\n")
+        if (notes.isNotEmpty()) append("【这个网站的备忘】" + notes.joinToString("；") { it.text } + "\n")
+    }
 }

@@ -728,6 +728,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun loadFlows(): List<com.jack.ai.data.BrowserFlow> = withContext(Dispatchers.IO) { store.loadFlows() }
     suspend fun saveFlows(list: List<com.jack.ai.data.BrowserFlow>) = withContext(Dispatchers.IO) { store.saveFlows(list) }
+    suspend fun loadSiteNotes(): List<com.jack.ai.data.SiteNote> = withContext(Dispatchers.IO) { store.loadSiteNotes() }
+    suspend fun saveSiteNotes(list: List<com.jack.ai.data.SiteNote>) = withContext(Dispatchers.IO) { store.saveSiteNotes(list) }
 
     private fun msg(role: String, content: String) = buildJsonObject {
         put("role", role)
