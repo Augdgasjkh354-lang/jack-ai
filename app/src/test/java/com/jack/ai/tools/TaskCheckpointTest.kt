@@ -50,4 +50,18 @@ class TaskCheckpointTest {
         assertEquals("c", (last["tool_call_id"] as JsonPrimitive).content)
         assertEquals(msgs.take(4), TaskCheckpoint.repair(msgs.take(4)))
     }
+
+    @Test
+    fun findsSkillsOpenedBeforeTheInterruption() {
+        val use = buildJsonObject {
+            put("role", "assistant")
+            put("tool_calls", buildJsonArray {
+                add(buildJsonObject {
+                    put("id", "x"); put("type", "function")
+                    put("function", buildJsonObject { put("name", "use_skill"); put("arguments", "{\"name\":\"操作浏览器\"}") })
+                })
+            })
+        }
+        assertEquals(listOf("操作浏览器"), TaskCheckpoint.skillsUsed(listOf(msg("user", "u"), use, result("x"))))
+    }
 }

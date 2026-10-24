@@ -131,7 +131,9 @@ suspend fun runBackgroundWork(
     // 上次半路被打断了：从断点接着做（系统提示换成这次的，时间是新的）
     val checkpoint = TaskCheckpoint.file(ctx.filesDir, r.id)
     val cpKey = TaskCheckpoint.keyOf((brief ?: "") + r.prompt.ifBlank { r.title })
+    var resumed = false
     TaskCheckpoint.load(checkpoint, cpKey)?.let { saved ->
+        resumed = true
         val fresh = messages.first()
         messages.clear()
         messages += fresh
@@ -152,12 +154,19 @@ suspend fun runBackgroundWork(
     })
     session.interactive = false
     session.unlocked.addAll(conv.skillTools)
+    // 接着上次做：上次用 use_skill 打开过的技能，工具要接着带上
+    if (resumed) TaskCheckpoint.skillsUsed(messages).forEach { name ->
+        findSkill(skills, name)?.id?.takeIf { it in com.jack.ai.data.SkillIds.ON_DEMAND }?.let { id ->
+            session.unlocked.add(id)
+            if (id == com.jack.ai.data.SkillIds.FLOWS) session.unlocked.add(com.jack.ai.data.SkillIds.BROWSER)
+        }
+    }
     val thinking = if (ep.reasoning && ep.deepseek) s.workThinking.resolve(r.prompt, work = true, hasFiles = false) else ThinkLevel.OFF
     val client = DeepSeekClient()
     val agent = Agent({ msgs, t -> client.stream(ep, msgs, thinking, s.temperature, t) }, sendReasoning = ep.deepseek && thinking.effort != null)
     agent.run(
         messages = messages,
-        tools = tools,
+        tools = if (resumed) toolsFor(session.unlocked.toSet()) else tools,
         maxRounds = { session.maxRounds },
         execute = { name, args ->
             if (s.workCostLimit > 0 && spent >= s.workCostLimit) {

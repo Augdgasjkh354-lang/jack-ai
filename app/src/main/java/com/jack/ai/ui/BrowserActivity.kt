@@ -645,6 +645,7 @@ class BrowserActivity : ComponentActivity() {
     /** 演示教学做完：把记下的步骤交给浏览器里的 Kavi，让它整理成流程存下来。 */
     private fun finishTeach() {
         val b = JackBrowser
+        if (BrowserChat.busy) { b.notice = "浏览器里的 Kavi 还在忙，等它做完再点「做完了」（记下的步骤还留着）。"; BrowserChat.open = true; return }
         val steps = b.stopTeach()
         if (steps.size < 2) { b.notice = "没记到操作，流程没存。"; return }
         BrowserChat.open = true
@@ -714,6 +715,10 @@ class BrowserActivity : ComponentActivity() {
                                 color = colors.onSurfaceVariant, maxLines = 3, overflow = TextOverflow.Ellipsis)
                             if (l.text.isNotBlank()) MarkdownBlocks(l.text, colors.onSurface, colors.surface, Modifier.fillMaxWidth(), textSizeSp = 14f)
                             l.error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = colors.error) }
+                            l.files.forEach { f ->
+                                Text("打开「${f.name}」", Modifier.clickable { openFile(f) }.padding(vertical = 4.dp),
+                                    style = MaterialTheme.typography.bodySmall, color = colors.primary)
+                            }
                         }
                     }
                     if (chat.busy) item {
@@ -734,6 +739,14 @@ class BrowserActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    /** 用别的 App 打开浏览器里的 Kavi 存下的文件（表格、图片）。 */
+    private fun openFile(f: java.io.File) {
+        val uri = runCatching { androidx.core.content.FileProvider.getUriForFile(this, "$packageName.files", f) }.getOrNull()
+            ?: run { JackBrowser.notice = "文件打不开：${f.name}"; return }
+        val i = Intent(Intent.ACTION_VIEW).setDataAndType(uri, com.jack.ai.tools.ToolSession.mimeOf(f.name)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        runCatching { startActivity(Intent.createChooser(i, f.name)) }.onFailure { JackBrowser.notice = "没有能打开「${f.name}」的应用" }
     }
 
     /** 把文字带回主聊天的输入框。 */

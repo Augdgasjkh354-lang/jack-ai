@@ -55,6 +55,15 @@ object TaskCheckpoint {
 
     fun clear(f: File) { f.delete() }
 
+    /** 上次用 use_skill 打开过的技能名。 */
+    fun skillsUsed(msgs: List<JsonObject>): List<String> = msgs.flatMap { m ->
+        (m["tool_calls"] as? JsonArray).orEmpty().mapNotNull { c ->
+            val fn = (c as? JsonObject)?.get("function") as? JsonObject ?: return@mapNotNull null
+            if ((fn["name"] as? JsonPrimitive)?.content != "use_skill") return@mapNotNull null
+            runCatching { (Json.parseToJsonElement((fn["arguments"] as JsonPrimitive).content).jsonObject["name"] as JsonPrimitive).content }.getOrNull()
+        }
+    }.distinct()
+
     /** 一轮里好几个工具、做到一半断了：没做的那几个补一条「被打断，没做」，不然接口不收。 */
     internal fun repair(msgs: List<JsonObject>): List<JsonObject> {
         val i = msgs.indexOfLast { (it["role"] as? JsonPrimitive)?.content == "assistant" && it["tool_calls"] != null }

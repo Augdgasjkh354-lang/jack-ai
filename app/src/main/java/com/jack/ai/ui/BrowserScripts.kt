@@ -21,6 +21,7 @@ object BrowserScripts {
     fun center(ctx: Context, n: Int) = "${lib(ctx)}\nwindow.__jack.center($n)"
     fun dismiss(ctx: Context) = "${lib(ctx)}\nwindow.__jack.dismiss()"
     fun signature(ctx: Context) = "${lib(ctx)}\nwindow.__jack.signature()"
+    fun fingerprint(ctx: Context) = "${lib(ctx)}\nwindow.__jack.fingerprint()"
     fun hasText(ctx: Context, text: String) = "${lib(ctx)}\nwindow.__jack.hasText(${q(text)})"
     fun readable(ctx: Context) = "${lib(ctx)}\nwindow.__jack.readable()"
     fun subtitles(ctx: Context) = "${lib(ctx)}\nwindow.__jack.subtitles()"

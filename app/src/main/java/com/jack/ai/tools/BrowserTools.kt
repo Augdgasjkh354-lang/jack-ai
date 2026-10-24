@@ -110,7 +110,7 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
                     else -> ""
                 }
                 // 点按钮、链接：先记下页面的样子，点完没变就换真实触摸再点一次（有的网站不认脚本点的）
-                val retry = action == "click" && kind in RETAP_KINDS && BrowserNet.confirmReason("click", info["label"].text(), info["submit"].flag() == true,
+                val retry = action == "click" && kind in RETAP_KINDS && !NO_RETAP.containsMatchIn(info["label"].text()) && BrowserNet.confirmReason("click", info["label"].text(), info["submit"].flag() == true,
                     info["formPost"].flag() == true, info["formPassword"].flag() == true, info["formButtons"].text(), "") == null
                 val before = if (retry) JackBrowser.pageSignature(ctx) else ""
                 val mark = JackBrowser.tab.diag.mark()
@@ -276,6 +276,9 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
 
 /** 点了没反应时可以再用真实触摸点一次的：按钮、链接这类（勾选框、开关点两次会点回去，不重点）。 */
 private val RETAP_KINDS = setOf("按钮", "链接", "可点", "标签页", "菜单项", "选项")
+
+/** 点两次会出事的按钮（收藏点两次就取消了、加购点两次就是两件）：没反应也不重点。 */
+private val NO_RETAP = Regex("收藏|关注|点赞|喜欢|赞|加入|加购|购物车|订阅|投票|领取|抢|删除|移除|取消|退出|like|follow|subscribe|cart|vote|remove|delete|cancel|unfollow|star", RegexOption.IGNORE_CASE)
 
 /**
  * 脚本点了页面没变：在按钮位置用真实触摸再点一次；还不变，就从网页诊断记录里找出这期间的出错、被拦的请求，告诉模型换个办法。

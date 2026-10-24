@@ -329,6 +329,8 @@ object JackBrowser {
 
     /** Jack 最近一次操作网页的时刻；聊天页据此显示小窗。 */
     var agentAt by mutableLongStateOf(0L)
+    /** 用户最后一次碰网页的时间（弹窗是不是点出来的，要看它）。 */
+    @Volatile var touchedAt = 0L
     /** 网页窗口换了地方（浏览器页 ↔ 聊天小窗）就加一，让原来的地方重新来要。 */
     var hostGen by mutableIntStateOf(0)
     /** Jack 在等用户亲手做的事（登录、人机验证），回答里的网页画面上会写出来；null = 没在等。 */
@@ -412,6 +414,7 @@ object JackBrowser {
             // 手机自带的密码管理器（自动填充服务）能给网页里的账号密码框填密码：填的是用户自己的密码管理器，Kavi 不碰
             importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_YES
             setOnLongClickListener { v -> longPress(v as WebView) }
+            setOnTouchListener { _, e -> if (e.actionMasked == android.view.MotionEvent.ACTION_DOWN) touchedAt = System.currentTimeMillis(); false }
             webViewClient = Client(t)
             webChromeClient = Chrome(t)
             setDownloadListener { url, userAgent, disposition, mime, length ->
@@ -812,6 +815,9 @@ object JackBrowser {
         w.loadUrl("about:blank")
         address = ""; title = ""
         visits = emptyList(); saveLists()
+        // 长的浏览记录也清掉
+        historySave?.cancel()
+        scope.launch(historyIo) { historyList = emptyList(); com.jack.ai.data.Store(app).saveHistory(emptyList()) }
         notice = "已清除：Cookie（登录状态）、缓存、网页存储、浏览记录和最近访问（书签留着）。"
     }
 
@@ -918,6 +924,8 @@ object JackBrowser {
             t.pageDone?.complete(Unit)
             t.diag.add("加载完 ${url.take(160)}")
             applyBlocks(view, t.site)
+            // 选要屏蔽的东西时网页跳了：新页面上接着能选
+            if (picking && t === tab) { picked = null; view.evaluateJavascript(BrowserBlocks.PICK_JS, null) }
             if (teaching && t === tab && BrowserPages.isWeb(url)) teachSteps = BrowserTeach.append(teachSteps, "→ 到了「${view.title.orEmpty().take(40)}」$url")
             if (url != "about:blank") t.address = url
             // 最近访问只记用户自己看的、打开成功的
@@ -956,7 +964,9 @@ object JackBrowser {
         }
         /** 网页要弹新窗口：用户点的、或 Jack 刚点过（登录窗口）才开，开在新标签页并切过去；网页自己弹的（多半是广告）不开。 */
         override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: android.os.Message): Boolean {
-            if (!isUserGesture && System.currentTimeMillis() - agentAt > 5_000) { t.diag.add("网页要弹新窗口，不是点出来的，没开"); return false }
+            val now = System.currentTimeMillis()
+            // 登录窗口常是点完、等网页请求回来才弹，标记里就不算「点出来的」：刚碰过网页（用户或 Jack）也开
+            if (!isUserGesture && now - agentAt > 5_000 && now - touchedAt > 5_000) { t.diag.add("网页要弹新窗口，不是点出来的，没开"); return false }
             t.diag.add("网页弹新窗口，开成新标签页")
             if (tabs.size >= MAX_TABS) { notice = "标签页开满了，网页要弹的窗口没打开。先关掉几个标签页再试。"; return false }
             val nt = newTab(switch = true, incognito = t.incognito, account = t.account)
@@ -1240,7 +1250,7 @@ object JackBrowser {
     /** 页面有没有变：网址 + 文字长度 + 元素个数（点了以后比一比，看点没点上）。 */
     suspend fun pageSignature(ctx: Context): String {
         val url = withContext(Dispatchers.Main) { (pinned() ?: tab).address }
-        return url + "|" + unwrap(eval(ctx, BrowserScripts.signature(ctx)))
+        return url + "|" + unwrap(eval(ctx, BrowserScripts.fingerprint(ctx)))
     }
 
     /** 等网页里出现这段文字（最多 timeoutMs）；text 为空就等页面不再变化。返回等到没有。 */

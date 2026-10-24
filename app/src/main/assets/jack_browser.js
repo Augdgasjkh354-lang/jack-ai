@@ -327,6 +327,14 @@
     return (b ? b.innerText.length : 0) + ':' + document.getElementsByTagName('*').length;
   }
 
+  /** 比 signature 细：文字内容的哈希 + 元素个数 + 勾选和展开状态。点完对比，看点没点上（数字 1 变 2 也算变了）。 */
+  function fingerprint() {
+    var b = document.body, t = b ? b.innerText : '', h = 0;
+    for (var i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) | 0;
+    var states = document.querySelectorAll('[aria-expanded="true"],[aria-pressed="true"],[aria-selected="true"],[aria-checked="true"],:checked,[open]').length;
+    return h + ':' + document.getElementsByTagName('*').length + ':' + states;
+  }
+
   function hasText(t) {
     var want = clean(t), ds = docs();
     for (var i = 0; i < ds.length; i++) { var b = ds[i].doc.body; if (b && clean(b.innerText).indexOf(want) >= 0) return true; }
@@ -704,5 +712,5 @@
   }
 
   window.__jack = { snapshot: snapshot, inspect: inspect, act: act, markText: markText, center: center,
-    signature: signature, hasText: hasText, extract: extract, at: at, dismiss: dismiss, readable: readable, subtitles: subtitles };
+    signature: signature, fingerprint: fingerprint, hasText: hasText, extract: extract, at: at, dismiss: dismiss, readable: readable, subtitles: subtitles };
 })();

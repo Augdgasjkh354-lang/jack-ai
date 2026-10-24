@@ -40,7 +40,9 @@ import java.io.File
  */
 object BrowserChat {
     /** 一条消息：user 是用户说的，kavi 是回答；steps 是这次回答里做过的操作。 */
-    data class Line(val role: String, val text: String, val steps: List<String> = emptyList(), val error: String? = null)
+    data class Line(val role: String, val text: String, val steps: List<String> = emptyList(), val error: String? = null,
+                    /** 这次回答存下的文件（表格、走势图……），点了能打开。 */
+                    val files: List<File> = emptyList())
 
     /** 要用户确认的操作（下单、提交……）：界面弹窗，点了把结果交回来。 */
     class Ask(val title: String, val body: String, val action: String, val answer: CompletableDeferred<Boolean>)
@@ -91,15 +93,20 @@ object BrowserChat {
         lines += Line("user", q)
         lines += Line("kavi", "")
         busy = true
-        job = scope.launch {
+        lateinit var me: Job
+        me = scope.launch {
             try {
                 answer(ctx.applicationContext, q)
                 if (!JackBrowser.userViewing) notifyUser(ctx.applicationContext, "浏览器里的 Kavi 做完了", lines.lastOrNull()?.text.orEmpty().ifBlank { "回来看看结果" })
             }
             catch (e: CancellationException) { patchLast { it.copy(text = it.text.ifBlank { "（停下了）" }) }; throw e }
             catch (e: Exception) { patchLast { it.copy(error = ToolSession.errorText(e)) } }
-            finally { busy = false; progress = null; job = null }
+            finally {
+                // 停下后马上又发了一句：新的那次已经接手，别把它的状态清掉
+                if (job === me) { busy = false; progress = null; job = null }
+            }
         }
+        job = me
     }
 
     private fun patchLast(f: (Line) -> Line) {
@@ -143,7 +150,7 @@ object BrowserChat {
                 steps += label + (record.error?.let { "（出错）" } ?: "")
                 patchLast { it.copy(steps = steps.toList()) }
             }
-            override fun attach(file: File) { steps += "存了文件「${file.name}」"; patchLast { it.copy(steps = steps.toList()) } }
+            override fun attach(file: File) { patchLast { it.copy(files = it.files.filterNot { f -> f.path == file.path } + file) } }
             override suspend fun confirm(title: String, body: String, action: String): Boolean {
                 val d = CompletableDeferred<Boolean>()
                 if (!JackBrowser.userViewing) notifyUser(ctx, "Kavi 需要你确认", title)
@@ -171,7 +178,11 @@ object BrowserChat {
         patchLast { it.copy(text = agent.content.toString().trim().ifBlank { reply.ifBlank { "（没有回答）" } }) }
         // 留下这次的往来，太长就从头裁掉（只在用户消息那里裁，工具调用和结果不拆开）
         history.clear()
-        history += messages.drop(1)
+        // 截图（图片消息）不留着：每轮都重发太贵，换成一句话
+        history += messages.drop(1).map { m ->
+            if ((m["role"] as? JsonPrimitive)?.content == "user" && m["content"] is JsonArray)
+                buildJsonObject { put("role", "user"); put("content", "（这里原来是网页截图）") } else m
+        }
         while (history.size > MAX_HISTORY) {
             val next = history.drop(1).indexOfFirst { (it["role"] as? JsonPrimitive)?.content == "user" }
             if (next < 0) break
