@@ -671,6 +671,8 @@ object JackBrowser {
         override fun onHideCustomView() { fullscreen = null }
         // 网页要选文件上传：只有用户开着浏览器页时才弹选择器（Jack 操作时不替用户选文件）
         override fun onShowFileChooser(view: WebView, callback: android.webkit.ValueCallback<Array<android.net.Uri>>, params: FileChooserParams): Boolean {
+            // Jack 正在上传：直接把准备好的文件交给网页
+            agentUpload?.let { uri -> agentUpload = null; uploadTaken = true; callback.onReceiveValue(arrayOf(uri)); return true }
             val c = chooser
             return if (userViewing && c != null) c(callback, params) else false
         }
@@ -788,7 +790,9 @@ object JackBrowser {
                     /** 可视区在网页里的位置和宽度（CSS px），截图时把元素坐标换成屏幕像素。 */
                     val vx: Float, val vy: Float, val vw: Float, val error: String?, val dialog: String?,
                     /** 网页要下载、等确认的文件。 */
-                    val download: BrowserDownload.Pending? = null)
+                    val download: BrowserDownload.Pending? = null,
+                    /** 读不到里面的嵌入框（别的网站的登录、支付框）有几个。 */
+                    val frames: Int = 0)
 
     /** 没放进任何界面时，按手机屏幕大小排版，网页才有正常的宽高。 */
     private fun ensureLaidOut(w: WebView) {
@@ -828,7 +832,7 @@ object JackBrowser {
         val dialog = lastDialog.also { lastDialog = null }
         return Page(o.s("url"), o.s("title"), items, o.f("above").toInt(), o.f("below").toInt(), o.f("scroll").toInt(),
             o.f("height").toInt(), o.f("vh").toInt(), o.s("text"), o.f("vx"), o.f("vy"), o.f("vw"),
-            withContext(Dispatchers.Main) { error }, dialog, pending)
+            withContext(Dispatchers.Main) { error }, dialog, pending, o.f("frames").toInt())
     }
 
     /** 某个编号的元素是什么（决定要不要先问用户）。找不到返回 null。 */
@@ -846,6 +850,143 @@ object JackBrowser {
         settle()
         return err ?: withContext(Dispatchers.Main) { error }
     }
+
+    /** 按文字找元素，标成编号 0，返回它的情况（和 inspect 一样）；找不到返回 null。 */
+    suspend fun markText(ctx: Context, text: String): JsonObject? {
+        agentAt = System.currentTimeMillis()
+        val raw = unwrap(eval(ctx, BrowserScripts.markText(ctx, text)))
+        return runCatching { json.parseToJsonElement(raw).jsonObject }.getOrNull()?.takeIf { (it["found"] as? JsonPrimitive)?.content == "true" }
+    }
+
+    /**
+     * 像手指一样在网页窗口上点或划（真的触摸事件）：网页自己画的控件、嵌在里面的别的网站（登录框、支付框）、
+     * 要滑动的组件都认。坐标是截图（look）上的像素。网页窗口不在屏幕上时退回用脚本点那个位置。
+     */
+    suspend fun touch(ctx: Context, x1: Float, y1: Float, x2: Float = x1, y2: Float = y1, durationMs: Long = 60): String? {
+        agentAt = System.currentTimeMillis()
+        val w = withContext(Dispatchers.Main) { webView(ctx).also { ensureLaidOut(it) } }
+        val scale = withContext(Dispatchers.Main) { minOf(1f, 720f / w.width.coerceAtLeast(1)) }
+        val (ax, ay, bx, by) = listOf(x1 / scale, y1 / scale, x2 / scale, y2 / scale)
+        val inside = withContext(Dispatchers.Main) { listOf(ax, bx).all { it in 0f..w.width.toFloat() } && listOf(ay, by).all { it in 0f..w.height.toFloat() } }
+        if (!inside) return "坐标在网页窗口外面（截图大约 ${(w.width * scale).toInt()}×${(w.height * scale).toInt()}）"
+        withContext(Dispatchers.Main) { pageDone = CompletableDeferred(); clearError() }
+        if (withContext(Dispatchers.Main) { w.isAttachedToWindow }) {
+            withContext(Dispatchers.Main) { gesture(w, ax, ay, bx, by, durationMs) }
+        } else {
+            // 不在屏幕上：触摸事件不一定送得到，改用脚本点那个位置（只能点，不能划）
+            val k = withContext(Dispatchers.Main) { w.width.toFloat() } / unwrap(eval(ctx, "innerWidth")).toFloat().coerceAtLeast(1f)
+            eval(ctx, "(function(){var e=document.elementFromPoint(${ax / k},${ay / k});if(e){e.click();}})();1")
+        }
+        settle()
+        return withContext(Dispatchers.Main) { error }
+    }
+
+    /** 按下、（划过去）、抬起。在主线程调。 */
+    private suspend fun gesture(w: WebView, x1: Float, y1: Float, x2: Float, y2: Float, durationMs: Long) {
+        val steps = if (x1 == x2 && y1 == y2) 1 else 12
+        val t0 = android.os.SystemClock.uptimeMillis()
+        fun send(action: Int, x: Float, y: Float, at: Long) {
+            val e = android.view.MotionEvent.obtain(t0, at, action, x, y, 0)
+            e.source = android.view.InputDevice.SOURCE_TOUCHSCREEN
+            w.dispatchTouchEvent(e)
+            e.recycle()
+        }
+        send(android.view.MotionEvent.ACTION_DOWN, x1, y1, t0)
+        for (i in 1..steps) {
+            delay(durationMs / steps)
+            val f = i.toFloat() / steps
+            send(android.view.MotionEvent.ACTION_MOVE, x1 + (x2 - x1) * f, y1 + (y2 - y1) * f, android.os.SystemClock.uptimeMillis())
+        }
+        send(android.view.MotionEvent.ACTION_UP, x2, y2, android.os.SystemClock.uptimeMillis())
+    }
+
+    /** 截图上这个位置是什么（动手前看要不要问用户）：和 inspect 一样的信息，或 frame=true（读不到的嵌入框）。 */
+    suspend fun elementAt(ctx: Context, x: Float, y: Float): JsonObject? {
+        val (cx, cy) = withContext(Dispatchers.Main) {
+            val w = webView(ctx)
+            val scale = minOf(1f, 720f / w.width.coerceAtLeast(1))
+            x / scale to y / scale
+        }
+        val k = withContext(Dispatchers.Main) { webView(ctx).width.toFloat() } / unwrap(eval(ctx, "innerWidth")).toFloat().coerceAtLeast(1f)
+        return runCatching { json.parseToJsonElement(unwrap(eval(ctx, BrowserScripts.at(ctx, cx / k, cy / k)))).jsonObject }.getOrNull()
+    }
+
+    /** 编号 n 的元素中心换成截图上的像素（先滚到屏幕中间）。找不到返回 null。 */
+    suspend fun centerOf(ctx: Context, n: Int): Pair<Float, Float>? {
+        val o = runCatching { json.parseToJsonElement(unwrap(eval(ctx, BrowserScripts.center(ctx, n)))).jsonObject }.getOrNull() ?: return null
+        if ((o["found"] as? JsonPrimitive)?.content != "true") return null
+        fun f(k: String) = (o[k] as? JsonPrimitive)?.content?.toFloatOrNull() ?: 0f
+        delay(300)
+        return withContext(Dispatchers.Main) {
+            val w = webView(ctx)
+            val k = w.width / f("vw").coerceAtLeast(1f)
+            val scale = minOf(1f, 720f / w.width.coerceAtLeast(1))
+            f("x") * k * scale to f("y") * k * scale
+        }
+    }
+
+    /** 等网页里出现这段文字（最多 timeoutMs）；text 为空就等页面不再变化。返回等到没有。 */
+    suspend fun waitFor(ctx: Context, text: String, timeoutMs: Long): Boolean {
+        agentAt = System.currentTimeMillis()
+        if (text.isBlank()) return waitStable(ctx, timeoutMs)
+        val end = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < end) {
+            if (unwrap(eval(ctx, BrowserScripts.hasText(ctx, text))) == "true") return true
+            delay(500)
+        }
+        return false
+    }
+
+    /** 等页面加载完、内容不再变（连着两次一样）。返回在时限内稳没稳下来。 */
+    private suspend fun waitStable(ctx: Context, timeoutMs: Long): Boolean {
+        val end = System.currentTimeMillis() + timeoutMs
+        var last = ""
+        var same = 0
+        while (System.currentTimeMillis() < end) {
+            val sig = unwrap(eval(ctx, BrowserScripts.signature(ctx)))
+            val busy = withContext(Dispatchers.Main) { loading < 100 }
+            if (!busy && sig == last) { if (++same >= 2) return true } else same = 0
+            last = sig
+            delay(400)
+        }
+        return false
+    }
+
+    /** 读整页：what = text / links / table。返回网页给的 JSON。 */
+    suspend fun extract(ctx: Context, what: String, start: Int = 0, limit: Int = 12_000): JsonObject? {
+        agentAt = System.currentTimeMillis()
+        return runCatching { json.parseToJsonElement(unwrap(eval(ctx, BrowserScripts.extract(ctx, what, start, limit)))).jsonObject }.getOrNull()
+    }
+
+    /** Jack 要上传的文件：网页弹出选文件时直接交给它（不弹选择器）。uploadTaken 表示网页已经拿走了。 */
+    @Volatile var agentUpload: android.net.Uri? = null
+    @Volatile var uploadTaken = false
+
+    /**
+     * 上传对话文件夹里的文件：用手指点编号 n 的上传按钮（网页只认真的点击才肯弹选文件），
+     * 网页要文件时把这个文件交过去。返回出错原因，成功返回 null。
+     */
+    suspend fun upload(ctx: Context, n: Int, file: java.io.File): String? {
+        val (x, y) = centerOf(ctx, n) ?: return "找不到编号 $n，页面可能变了"
+        val uri = androidx.core.content.FileProvider.getUriForFile(app, app.packageName + ".files", file)
+        uploadTaken = false
+        agentUpload = uri
+        try {
+            touch(ctx, x, y)?.let { return it }
+            val end = System.currentTimeMillis() + 3000
+            while (!uploadTaken && System.currentTimeMillis() < end) delay(200)
+            if (!uploadTaken) return "点了编号 $n，但网页没有要文件（可能不是上传按钮，或者网页窗口不在屏幕上）。可以 look 看看上传按钮在哪，或者请用户自己传。"
+            settle()
+            return null
+        } finally {
+            agentUpload = null
+        }
+    }
+
+    /** 标签页清单（给 Jack 看）：第几个、标题、网址、是不是当前。 */
+    fun tabList(): String = tabs.mapIndexed { i, t ->
+        "${i + 1}. ${t.title.ifBlank { if (t.address.isEmpty()) "起始页" else BrowserPages.host(t.address) }} ${t.address}" + if (i == current) "（当前）" else ""
+    }.joinToString("\n")
 
     /** 翻页：dir = 1 往下，-1 往上。 */
     suspend fun scroll(ctx: Context, dir: Int) {
@@ -866,10 +1007,11 @@ object JackBrowser {
 
     /** 动作做完等一会儿：如果引起了跳转就等新页面加载完（最多 15 秒），再给脚本一点时间把内容画出来。 */
     private suspend fun settle() {
-        delay(700)
+        delay(500)
         val pending = withContext(Dispatchers.Main) { pageDone?.takeIf { loading < 100 } }
         if (pending != null) withTimeoutOrNull(15_000) { pending.await() }
-        delay(400)
+        // 很多网页加载完还在慢慢往里填内容：等它不再变（最多 4 秒）
+        runCatching { waitStable(app, 4_000) }
     }
 
     /**
