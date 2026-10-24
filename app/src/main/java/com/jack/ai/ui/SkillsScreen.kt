@@ -52,6 +52,7 @@ fun SkillsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit) {
     var viewing by remember { mutableStateOf<Skill?>(null) }
     var editing by remember { mutableStateOf<Skill?>(null) }
     var deleting by remember { mutableStateOf<Skill?>(null) }
+    var flows by remember { mutableStateOf(false) }
     val skills = settings.allSkills()
 
     fun toggle(s: Skill, on: Boolean) = vm.updateSettings { st ->
@@ -78,7 +79,7 @@ fun SkillsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit) {
             item {
             }
             items(skills, key = { it.id }) { s ->
-                Card(Modifier.fillMaxWidth().clickable { if (s.builtin) viewing = s else editing = s }) {
+                Card(Modifier.fillMaxWidth().clickable { if (s.id == SkillIds.FLOWS) flows = true else if (s.builtin) viewing = s else editing = s }) {
                     Row(Modifier.padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 12.dp),
                         verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
@@ -90,6 +91,11 @@ fun SkillsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit) {
                             if (s.id == SkillIds.NOTION && settings.notionToken.isBlank()) {
                                 Text("需要先在设置里填 Notion 密钥", style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.error)
+                            }
+                            if (s.id == SkillIds.FLOWS) {
+                                Text(if (SkillIds.BROWSER in settings.disabledSkills) "要先打开「操作浏览器」" else "点开查看、修改存好的流程",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (SkillIds.BROWSER in settings.disabledSkills) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             if (s.id == SkillIds.MAIL && settings.mails.none { it.ready }) {
                                 Text("需要先在设置里填邮箱", style = MaterialTheme.typography.labelSmall,
@@ -110,6 +116,8 @@ fun SkillsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit) {
             }
         }
     }
+
+    if (flows) FlowsDialog(vm) { flows = false }
 
     viewing?.let { s ->
         AlertDialog(

@@ -142,6 +142,8 @@ class ToolSession(
 
     /** 这次回答里每个标签页上一步看到的页面：浏览器下一步只告诉模型变了什么。 */
     internal val browserSeen = java.util.concurrent.ConcurrentHashMap<Int, com.jack.ai.ui.JackBrowser.Page>()
+    /** 这次回答里已经提醒过「这个网站存了流程」的网站，只提醒一次。 */
+    internal val flowHinted: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
 
     private val loop = LoopGuard()
 

@@ -41,6 +41,8 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
         "switch_tab" -> "浏览器切到标签页 ${args["index"].text()}"
         "close_tab" -> "浏览器关标签页 ${args["index"].text()}"
         "download" -> "浏览器下载 " + JackBrowser.pending?.name.orEmpty()
+        "flow" -> "读浏览器流程「${args["name"].text().take(30)}」"
+        "save_flow" -> "存浏览器流程「${args["name"].text().take(30)}」"
         else -> "浏览器读页面"
     }
     // 先把参数不全的挡在外面（不算一次成功的工具调用）
@@ -55,10 +57,13 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
         "swipe" -> if (listOf("x", "y", "x2", "y2").any { num(it) == null }) return need("x、y、x2、y2（截图上的像素，从 x,y 划到 x2,y2）")
         "upload" -> if (n == null || args["file"].text().isBlank()) return need("n（上传按钮的编号）和 file（对话文件夹里的文件名）")
         "switch_tab", "close_tab" -> if (args["index"].text().toIntOrNull() == null) return need("index（第几个标签页，从 1 起）")
+        "flow" -> if (args["name"].text().isBlank()) return need("name（流程名）")
+        "save_flow" -> if (listOf("name", "site", "steps").any { args[it].text().isBlank() }) return need("name、site、steps（when 也最好写上）")
         "read", "scroll", "back", "look", "wait", "extract", "tabs", "" -> {}
         "download" -> if (JackBrowser.pending == null) return "现在没有等着下载的文件。先点网页上的下载链接或按钮，读回来的页面里会写「网页要下载」。"
-        else -> return "action 要填 open、read、click、type、delete、select、key、scroll、back、look、tap、swipe、wait、extract、upload、tabs、new_tab、switch_tab、close_tab 或 download"
+        else -> return "action 要填 open、read、click、type、delete、select、key、scroll、back、look、tap、swipe、wait、extract、upload、tabs、new_tab、switch_tab、close_tab、download、flow 或 save_flow"
     }
+    if (action == "flow" || action == "save_flow") return runTool(label) { flowAction(action, args) to SearchRecord(label) }
     return runTool(label) {
         val note = StringBuilder()
         when (action) {
@@ -168,6 +173,9 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
             "scroll" -> JackBrowser.scroll(ctx, if (args["direction"].text() == "up") -1 else 1)
             "back" -> if (!JackBrowser.back(ctx)) note.append("已经是第一页，不能再后退了。\n")
         }
+        // 这个网站存了流程：提醒一次（平时不占上下文，到了对的网站才出现）
+        withContext(kotlinx.coroutines.Dispatchers.IO) { com.jack.ai.data.BrowserFlows.forUrl(host.store.loadFlows(), JackBrowser.address) }
+            .takeIf { it.isNotEmpty() && flowHinted.add(it.first().site) }?.let { note.append(com.jack.ai.data.BrowserFlows.hint(it)) }
         if (action in setOf("tabs", "new_tab", "switch_tab", "close_tab") || JackBrowser.tabs.size > 1) {
             note.append("【标签页】\n").append(JackBrowser.tabList()).append("\n")
         }
@@ -183,6 +191,42 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
         // 读页面、截图时发全部；其他动作只发变了的部分
         note.toString() + show(page, full = action == "read" || action == "look") to SearchRecord(label, shot = stepShot())
     }
+}
+
+/** 读一个流程的步骤（记一次使用），或者存 / 更新一个流程（先给用户看）。 */
+private suspend fun ToolSession.flowAction(action: String, args: JsonObject): String {
+    val store = host.store
+    val flows = withContext(kotlinx.coroutines.Dispatchers.IO) { store.loadFlows() }
+    val name = args["name"].text().trim()
+    if (action == "flow") {
+        val f = com.jack.ai.data.BrowserFlows.find(flows, name)
+            ?: return "没有叫「$name」的流程。现有流程：\n" + com.jack.ai.data.BrowserFlows.index(flows)
+        withContext(kotlinx.coroutines.Dispatchers.IO) {
+            store.saveFlows(store.loadFlows().map { if (it.id == f.id) it.copy(uses = it.uses + 1, usedAt = System.currentTimeMillis()) else it })
+        }
+        val blanks = com.jack.ai.data.BrowserFlows.blanks(f.steps)
+        return "【流程「${f.name}」】网站：${f.site}" + f.whenToUse.takeIf { it.isNotBlank() }?.let { "\n什么时候用：$it" }.orEmpty() +
+            (if (blanks.isNotEmpty()) "\n要填的空：" + blanks.joinToString("、") { "{$it}" } + "（换成这次用户给的值；必须有又没给的先问用户）" else "") +
+            "\n步骤：\n${f.steps}\n\n照着做；网页和步骤对不上就按意思灵活处理，做完告诉用户哪一步变了、问要不要更新流程。"
+    }
+    val site = com.jack.ai.data.BrowserFlows.siteOf(args["site"].text())
+    if (site.isEmpty()) return "site 要填网站名，比如 1688.com"
+    val steps = args["steps"].text().trim().take(6000)
+    val whenToUse = args["when"].text().trim().take(200)
+    val old = flows.firstOrNull { it.name == name }
+    val body = "名字：$name\n网站：$site" + (if (whenToUse.isNotEmpty()) "\n什么时候用：$whenToUse" else "") + "\n\n$steps"
+    if (!approve(if (old != null) "更新浏览器流程「$name」？" else "存成浏览器流程「$name」？", body, if (old != null) "更新" else "存下")) {
+        return "用户没有同意存这个流程。"
+    }
+    val saved = (old ?: com.jack.ai.data.BrowserFlow(name = name, site = site, steps = steps))
+        .copy(name = name, site = site, whenToUse = whenToUse, steps = steps)
+    withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val now = store.loadFlows()
+        store.saveFlows(if (now.any { it.id == saved.id }) now.map { if (it.id == saved.id) saved else it } else now + saved)
+    }
+    val ok = withContext(kotlinx.coroutines.Dispatchers.IO) { store.loadFlows().any { it.id == saved.id && it.steps == steps } }
+    return if (!ok) "存完后没查到这个流程，可能没存成。" else
+        (if (old != null) "已更新" else "已存下") + "流程「$name」（$site）。下次打开 $site 时会提醒，用 action=flow 读出步骤照着做；用户可以在 技能 → 浏览器流程 里查看、修改、删除。"
 }
 
 /** 写给模型的页面，并记下这一页（同一次回答里，下一步只发变了的部分）。 */
