@@ -211,7 +211,7 @@ data class Settings(
     val customSkills: List<Skill> = emptyList(),
     /** 字体缩放、主题色、应用锁。 */
     val fontScale: Float = 1f,
-    val accent: String = "clay",
+    val accent: String = "mono",
     val appLock: Boolean = false,
     /** 用户自己加的 OpenAI 兼容服务（Kimi、通义、OpenRouter 等）。 */
     val providers: List<Provider> = emptyList(),

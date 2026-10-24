@@ -445,7 +445,7 @@ internal fun GeneratedFileCard(f: GeneratedFile) {
         "xlsx" -> "X" to Color(0xFF217346)
         "pdf" -> "PDF" to Color(0xFFB3261E)
         "png", "jpg", "jpeg", "webp", "gif" -> "图" to Color(0xFF4BA3A8)
-        "txt", "md", "csv", "json" -> "TXT" to Color(0xFF8A8178)
+        "txt", "md", "csv", "json" -> "TXT" to Color(0xFF7A7A7A)
         "html", "htm", "js", "py", "kt", "java", "css", "ts" -> "</>" to Color(0xFF7B5BA6)
         else -> "F" to colors.primary
     }

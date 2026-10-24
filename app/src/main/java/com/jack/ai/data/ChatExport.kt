@@ -82,12 +82,13 @@ object ChatExport {
     private const val W = 1080
     private const val PAD = 56
     private const val MAX_H = 24_000 // 再长手机内存吃不消，只保留最近的部分
-    private const val BG = 0xFFFAF8F5.toInt()
-    private const val INK = 0xFF2B2722.toInt()
-    private const val MUTED = 0xFF8A8178.toInt()
-    private const val ACCENT = 0xFFC4673F.toInt()
-    private const val BUBBLE = 0xFFEFE9E1.toInt()
-    private const val CODE_BG = 0xFFF0EBE4.toInt()
+    // 和 App 的浅色主题一致：纯白底、黑字、灰阶
+    private const val BG = 0xFFFFFFFF.toInt()
+    private const val INK = 0xFF0A0A0A.toInt()
+    private const val MUTED = 0xFF6B6B6B.toInt()
+    private const val ACCENT = 0xFF0A0A0A.toInt()
+    private const val BUBBLE = 0xFFF1F1F1.toInt()
+    private const val CODE_BG = 0xFFF2F2F2.toInt()
 
     /** 一块内容：高度 + 画法（画在 y=0 开始的位置）。 */
     private class Block(val height: Int, val draw: (Canvas) -> Unit)

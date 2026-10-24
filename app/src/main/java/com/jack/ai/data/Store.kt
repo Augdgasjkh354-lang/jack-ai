@@ -345,7 +345,9 @@ class Store(context: Context) {
                 runCatching { json.decodeFromString(ListSerializer(Skill.serializer()), it) }.getOrNull()
             } ?: emptyList(),
             fontScale = prefs.getFloat("fontScale", 1f),
-            accent = prefs.getString("accent", "clay") ?: "clay",
+            // 换成纯黑白风格时，以前的强调色一次性换成「黑白」（之后用户再选别的不动它）
+            accent = if (!prefs.getBoolean("monoTheme", false)) { prefs.edit().putBoolean("monoTheme", true).apply(); "mono" }
+                else prefs.getString("accent", "mono") ?: "mono",
             appLock = prefs.getBoolean("appLock", false),
             monthlyBudget = prefs.getFloat("monthlyBudget", 0f).toDouble(),
             fullAuthUntil = prefs.getLong("fullAuthUntil", 0L),

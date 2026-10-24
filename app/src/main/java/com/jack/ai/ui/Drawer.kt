@@ -590,7 +590,7 @@ private fun DrawerRow(
 fun LogoMark(size: Dp) {
     // 和桌面图标同一张图：陶土底 + 圆润的 J。前景图四周留了安全边，放大一点再裁成圆角方块
     Box(
-        Modifier.size(size).clip(RoundedCornerShape(size * 0.3f)).background(Color(0xFFC7673C)),
+        Modifier.size(size).clip(RoundedCornerShape(size * 0.3f)).background(MaterialTheme.colorScheme.primary),
         contentAlignment = Alignment.Center,
     ) {
         androidx.compose.foundation.Image(
