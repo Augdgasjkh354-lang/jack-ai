@@ -12,6 +12,9 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.filled.Home
@@ -93,6 +96,8 @@ class BrowserActivity : ComponentActivity() {
     private var showTabs by mutableStateOf(false)
     /** 识别出的二维码内容，等弹窗。 */
     private var qr by mutableStateOf<String?>(null)
+    /** 网页诊断报告（null = 没打开）。 */
+    private var diag by mutableStateOf<String?>(null)
     /** 页内查找：null 没在找，否则是要找的字。 */
     private var finding by mutableStateOf<String?>(null)
 
@@ -302,6 +307,10 @@ class BrowserActivity : ComponentActivity() {
                             menu = false
                             Links.system(this@BrowserActivity, b.address)
                         })
+                        DropdownMenuItem(text = { Text((if (b.tab.diagOn) "● " else "") + "网页诊断") }, enabled = has, onClick = {
+                            menu = false
+                            lifecycleScope.launch { diag = b.diagnose(this@BrowserActivity) }
+                        })
                         HorizontalDivider()
                         Text("线路", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant,
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
@@ -399,6 +408,40 @@ class BrowserActivity : ComponentActivity() {
         }
         }
         b.pressed?.let { p -> PressMenu(p) }
+        diag?.let { report ->
+            AlertDialog(
+                onDismissRequest = { diag = null },
+                title = { Text("网页诊断") },
+                text = {
+                    Column {
+                        Text(
+                            if (b.tab.diagOn) "正在记录。照常操作出问题的地方（比如点登录），再回来点「刷新」看，点「复制」发给开发者。"
+                            else "网页点了没反应、打不开时用：点「开始记录」（网页会刷新），照常操作一遍出问题的地方，再打开这里点「复制」发给开发者。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.onSurfaceVariant,
+                        )
+                        androidx.compose.foundation.text.selection.SelectionContainer(
+                            Modifier.padding(top = 8.dp).heightIn(max = 420.dp).verticalScroll(rememberScrollState())
+                        ) {
+                            Text(report, style = MaterialTheme.typography.bodySmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace))
+                        }
+                    }
+                },
+                confirmButton = {
+                    Row {
+                        if (b.tab.diagOn) {
+                            TextButton(onClick = { lifecycleScope.launch { diag = b.diagnose(this@BrowserActivity) } }) { Text("刷新") }
+                            TextButton(onClick = { b.stopDiag(); diag = null }) { Text("停止记录") }
+                        } else TextButton(onClick = { b.startDiag(); diag = null }) { Text("开始记录") }
+                        TextButton(onClick = {
+                            (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("网页诊断", report))
+                            b.notice = "已复制诊断报告"
+                        }) { Text("复制") }
+                    }
+                },
+                dismissButton = { TextButton(onClick = { diag = null }) { Text("关闭") } },
+            )
+        }
         qr?.let { text ->
             AlertDialog(
                 onDismissRequest = { qr = null },

@@ -92,6 +92,10 @@ object JackBrowser {
         var pageDone: CompletableDeferred<Unit>? = null
         /** 网页弹出的窗口（登录窗口之类）：是哪个标签页弹的，关掉时回到它。 */
         var openedBy: Int? = null
+        /** 网页诊断：出错的平时就记；diagOn 时网页里加了钩子，点击、弹框、请求也记。 */
+        val diag = BrowserDiag.Log()
+        var diagOn by mutableStateOf(false)
+        var diagScript: androidx.webkit.ScriptHandler? = null
 
         fun clearError() { error = null; pageFailed = false }
     }
@@ -166,6 +170,47 @@ object JackBrowser {
         adAllowNow = adAllow
         prefs().edit().putStringSet("adallow", adAllow).apply()
         reloadCurrent()
+    }
+
+    /** 开始记录：往网页开头加钩子（记点击、弹框、请求），清掉旧记录，刷新。 */
+    fun startDiag() {
+        val t = tab
+        val w = t.web ?: return
+        t.diag.clear()
+        t.diagOn = true
+        if (t.diagScript == null && WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+            t.diagScript = androidx.webkit.WebViewCompat.addDocumentStartJavaScript(w, BrowserDiag.HOOK_JS, setOf("*"))
+        }
+        t.diag.add("开始记录")
+        w.reload()
+    }
+
+    /** 停止记录：去掉钩子（已经打开的这一页刷新后才干净）。 */
+    fun stopDiag() {
+        val t = tab
+        t.diagScript?.remove()
+        t.diagScript = null
+        t.diagOn = false
+        t.diag.add("停止记录")
+    }
+
+    /** 给开发者看的诊断报告。 */
+    suspend fun diagnose(ctx: Context): String {
+        val t = tab
+        val pkg = androidx.webkit.WebViewCompat.getCurrentWebViewPackage(ctx)
+        val ver = runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrNull().orEmpty()
+        val url = t.address
+        val header = listOf(
+            "App $ver，安卓 ${android.os.Build.VERSION.RELEASE}，${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}",
+            "网页组件 ${pkg?.packageName.orEmpty()} ${pkg?.versionName.orEmpty()}",
+            "线路 $route，代理" + (if (Net.config.enabled) "开" else "关") + "，电脑版" + (if (BrowserPages.isDesktop(desktopSites, url)) "开" else "关") +
+                "，去广告" + (if (blocksAds(BrowserPages.site(url))) "开（这页拦了 ${t.blocked} 个）" else "关") + "，标签页 ${tabs.size} 个",
+        )
+        val page = withContext(Dispatchers.Main) {
+            val w = t.web ?: return@withContext ""
+            suspendCancellableCoroutine<String> { cont -> w.evaluateJavascript(BrowserDiag.SNAPSHOT_JS) { r -> if (cont.isActive) cont.resume(r ?: "") } }
+        }
+        return BrowserDiag.report(header, unwrap(page), t.diag.lines(), t.diagOn)
     }
 
     fun adAllowedHere() = BrowserPages.site(address).let { s -> s.isNotEmpty() && adAllow.any { s == it || s.endsWith(".$it") } }
@@ -589,15 +634,15 @@ object JackBrowser {
                 BrowserNet.Kind.OPEN -> {
                     if (!request.isForMainFrame) false
                     // 网页没经过用户点击就自己跳到广告网站：不去
-                    else if (!request.hasGesture() && BrowserAds.isAd(request.url.host.orEmpty()) && blocksAds(t.site)) true
+                    else if (!request.hasGesture() && BrowserAds.isAd(request.url.host.orEmpty()) && blocksAds(t.site)) { t.diag.add("没让网页自己跳到广告网站 $url"); true }
                     else {
                         t.clearError()
                         // 从手机版网站跳到电脑版网站（或反过来）：换好标识重新打开这个网址
                         if (applyUa(view, url)) { view.loadUrl(url); true } else false
                     }
                 }
-                BrowserNet.Kind.EXTERNAL -> { if (userViewing && request.hasGesture()) external = url; true }
-                BrowserNet.Kind.BLOCKED -> { if (request.isForMainFrame) t.error = "已拦下：网页想打开本机、局域网或文件地址（$url）"; true }
+                BrowserNet.Kind.EXTERNAL -> { t.diag.add("网页要打开别的 App：${url.take(120)}"); if (userViewing && request.hasGesture()) external = url; true }
+                BrowserNet.Kind.BLOCKED -> { t.diag.add("拦下：本机或局域网地址 $url"); if (request.isForMainFrame) t.error = "已拦下：网页想打开本机、局域网或文件地址（$url）"; true }
             }
         }
 
@@ -605,10 +650,12 @@ object JackBrowser {
         override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
             val host = request.url.host ?: return null
             if (request.url.scheme in setOf("http", "https", "ws", "wss") && BrowserNet.isLocal(host)) {
+                t.diag.add("拦下请求：本机或局域网 $host")
                 return WebResourceResponse("text/plain", "utf-8", 403, "Forbidden", emptyMap(), java.io.ByteArrayInputStream(ByteArray(0)))
             }
             // 去广告：网页里的广告和跟踪请求直接不发（网页本身不拦）
             if (!request.isForMainFrame && BrowserAds.isAd(host) && blocksAds(t.site)) {
+                t.diag.add("去广告拦下请求 $host")
                 val n = t.blockedNow.incrementAndGet()
                 main.post { if (t.blockedNow.get() == n) t.blocked = n }
                 return WebResourceResponse("text/plain", "utf-8", 403, "Blocked", emptyMap(), java.io.ByteArrayInputStream(ByteArray(0)))
@@ -625,20 +672,33 @@ object JackBrowser {
                 t.error = "浏览器没能通过 Jack 专用代理的口令验证。把这个提示告诉开发者。"
             }
             // 网站自己要的账号密码（很少见）：不支持，取消
+            t.diag.add("要账号密码的请求，取消了：$host（$realm）")
             handler.cancel()
         }
 
         override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, e: SslError) {
             // 证书不对一律不继续：可能是假网站或被劫持
             handler.cancel()
+            t.diag.add("证书有问题，没打开：${e.url}（${e.primaryError}）")
             if (e.url == view.url || e.url == t.address) { t.error = "这个网站的安全证书有问题，已停止打开（${e.url}）"; t.pageFailed = true }
         }
 
         override fun onReceivedError(view: WebView, request: WebResourceRequest, e: WebResourceError) {
+            t.diag.add((if (request.isForMainFrame) "网页没打开" else "加载失败") + "（${e.errorCode} ${e.description}）${request.url.toString().take(160)}")
             if (request.isForMainFrame) { t.error = describe(e.errorCode, e.description?.toString().orEmpty()); t.pageFailed = true }
         }
 
+        override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, r: WebResourceResponse) {
+            t.diag.add((if (request.isForMainFrame) "网页 " else "请求 ") + "${r.statusCode} ${request.method} ${request.url.toString().take(160)}")
+        }
+
+        override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean {
+            t.diag.add("网页进程没了（" + (if (detail.didCrash()) "崩溃" else "被系统收回内存") + "）")
+            return super.onRenderProcessGone(view, detail)
+        }
+
         override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+            t.diag.add("开始打开 ${url.take(160)}")
             if (t.pageDone?.isCompleted != false) t.pageDone = CompletableDeferred()
             t.translated = false
             t.address = url
@@ -648,6 +708,8 @@ object JackBrowser {
         }
 
         override fun onPageCommitVisible(view: WebView, url: String) {
+            // 不支持开头注入的旧网页组件：页面露出来时补装钩子
+            if (t.diagOn && t.diagScript == null) view.evaluateJavascript(BrowserDiag.HOOK_JS, null)
             widenIfDesktop(view, url)
             if (blocksAds(t.site)) view.evaluateJavascript(BrowserAds.INJECT_JS, null)
         }
@@ -656,6 +718,7 @@ object JackBrowser {
             widenIfDesktop(view, url)
             if (blocksAds(t.site)) view.evaluateJavascript(BrowserAds.INJECT_JS, null)
             t.pageDone?.complete(Unit)
+            t.diag.add("加载完 ${url.take(160)}")
             if (url != "about:blank") t.address = url
             // 最近访问只记用户自己看的、打开成功的
             if (userViewing && !t.pageFailed && BrowserPages.isWeb(url)) {
@@ -673,6 +736,15 @@ object JackBrowser {
 
     private class Chrome(val t: Tab) : WebChromeClient() {
         override fun onProgressChanged(view: WebView, newProgress: Int) { t.loading = newProgress }
+        override fun onConsoleMessage(m: android.webkit.ConsoleMessage): Boolean {
+            val text = m.message().orEmpty()
+            when {
+                text.startsWith(BrowserDiag.PREFIX) -> t.diag.add(text.removePrefix(BrowserDiag.PREFIX))
+                m.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.ERROR ->
+                    t.diag.add("脚本出错：$text（${m.sourceId().orEmpty().substringAfterLast('/').take(60)}:${m.lineNumber()}）")
+            }
+            return false
+        }
         override fun onReceivedTitle(view: WebView, newTitle: String?) {
             t.title = newTitle.orEmpty()
             val url = view.url.orEmpty()
@@ -680,7 +752,8 @@ object JackBrowser {
         }
         /** 网页要弹新窗口：用户点的、或 Jack 刚点过（登录窗口）才开，开在新标签页并切过去；网页自己弹的（多半是广告）不开。 */
         override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: android.os.Message): Boolean {
-            if (!isUserGesture && System.currentTimeMillis() - agentAt > 5_000) return false
+            if (!isUserGesture && System.currentTimeMillis() - agentAt > 5_000) { t.diag.add("网页要弹新窗口，不是点出来的，没开"); return false }
+            t.diag.add("网页弹新窗口，开成新标签页")
             if (tabs.size >= MAX_TABS) { notice = "标签页开满了，网页要弹的窗口没打开。先关掉几个标签页再试。"; return false }
             val nt = newTab(switch = true)
             nt.openedBy = t.id
