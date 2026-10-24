@@ -246,6 +246,10 @@ class BrowserActivity : ComponentActivity() {
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                         val has = b.address.isNotEmpty()
                         DropdownMenuItem(text = { Text("问 Kavi") }, enabled = has, onClick = { menu = false; askKavi() })
+                        DropdownMenuItem(text = { Text(if (b.tab.translated) "显示原文" else "翻译成中文") }, enabled = has && b.tab.translating == null, onClick = {
+                            menu = false
+                            if (b.tab.translated) b.showOriginal() else lifecycleScope.launch { b.translate(this@BrowserActivity)?.let { b.notice = it } }
+                        })
                         DropdownMenuItem(text = { Text((if (b.address.isNotEmpty() && BrowserPages.isDesktop(b.desktopSites, b.address)) "✓ " else "") + "电脑版") },
                             enabled = has, onClick = { menu = false; b.toggleDesktop() })
                         DropdownMenuItem(text = { Text("分享") }, enabled = has, onClick = { menu = false; share(b.address, b.title) })
@@ -283,6 +287,10 @@ class BrowserActivity : ComponentActivity() {
                             })
                         }
                         HorizontalDivider()
+                        DropdownMenuItem(text = { Text((if (b.adBlock) "✓ " else "    ") + "去广告") }, onClick = { menu = false; b.changeAdBlock(!b.adBlock) })
+                        if (b.adBlock && has) DropdownMenuItem(text = { Text((if (b.adAllowedHere()) "✓ " else "    ") + "这个网站不去广告") },
+                            onClick = { menu = false; b.toggleAdAllow() })
+                        HorizontalDivider()
                         DropdownMenuItem(text = { Text("清除浏览数据", color = colors.error) }, onClick = { menu = false; b.clearData(); editing = "" })
                     }
                 }
@@ -293,6 +301,10 @@ class BrowserActivity : ComponentActivity() {
             }
             if (b.loading < 100) LinearProgressIndicator(progress = { b.loading / 100f }, Modifier.fillMaxWidth().height(2.dp))
             finding?.let { FindBar(it) }
+            b.tab.translating?.let { msg ->
+                Text(msg, Modifier.fillMaxWidth().background(colors.secondaryContainer).padding(horizontal = 12.dp, vertical = 6.dp),
+                    style = MaterialTheme.typography.labelSmall, color = colors.onSecondaryContainer)
+            }
             b.error?.takeIf { !b.pageFailed }?.let { msg ->
                 Row(Modifier.fillMaxWidth().background(colors.errorContainer).padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically) {
@@ -421,8 +433,9 @@ class BrowserActivity : ComponentActivity() {
             else -> host != null && Net.shouldProxy(host)
         }
         val mode = when (route) { BrowserNet.PROXY -> "全部走代理"; BrowserNet.DIRECT -> "全部直连"; else -> "自动" }
+        val ads = JackBrowser.tab.blocked.takeIf { it > 0 }?.let { " · 拦了 $it 个广告" }.orEmpty()
         return if (host == null) "线路：$mode" + if (route != BrowserNet.DIRECT && !Net.config.enabled) "（代理没开，现在都是直连）" else ""
-        else "$mode · 这个网站" + if (proxied) "走代理" else "直连"
+        else "$mode · 这个网站" + (if (proxied) "走代理" else "直连") + ads
     }
 
     /** 把当前网页的内容带回聊天：新开一个对话，网页正文作为附件，用户接着问。 */

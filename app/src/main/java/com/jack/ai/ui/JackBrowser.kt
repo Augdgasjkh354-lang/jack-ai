@@ -34,7 +34,11 @@ import androidx.webkit.ProxyController
 import androidx.webkit.WebViewFeature
 import com.jack.ai.api.BrowserDownload
 import com.jack.ai.api.BrowserNet
+import com.jack.ai.api.BrowserAds
 import com.jack.ai.api.BrowserPages
+import com.jack.ai.api.BrowserTranslate
+import com.jack.ai.data.backgroundEndpoint
+import kotlinx.serialization.json.put
 import com.jack.ai.api.Net
 import com.jack.ai.data.ProxyCore
 import kotlinx.coroutines.CompletableDeferred
@@ -59,12 +63,55 @@ import kotlin.coroutines.resume
  */
 object JackBrowser {
     // ---------- 界面看的状态 ----------
-    var address by mutableStateOf("")
-    var title by mutableStateOf("")
-    var loading by mutableIntStateOf(100)
-    var canBack by mutableStateOf(false)
-    var canForward by mutableStateOf(false)
-    var error by mutableStateOf<String?>(null)
+    /**
+     * 一个标签页：自己的网页窗口和这一页的状态。现在只开一个；多标签就是往 [tabs] 里加，
+     * 网页窗口的回调都写自己这一页（[Tab]），界面和 Jack 看的是当前这一页。
+     */
+    class Tab(val id: Int) {
+        var web: WebView? = null
+        var address by mutableStateOf("")
+        var title by mutableStateOf("")
+        var loading by mutableIntStateOf(100)
+        var canBack by mutableStateOf(false)
+        var canForward by mutableStateOf(false)
+        var error by mutableStateOf<String?>(null)
+        /** error 是不是「这一页没打开」：是就盖一层干净的出错页，否则（比如拦下了一次跳转）只在顶上提一句。 */
+        var pageFailed by mutableStateOf(false)
+        /** 页内查找：共几处、当前第几处（从 0 起）。 */
+        var findCount by mutableIntStateOf(0)
+        var findIndex by mutableIntStateOf(0)
+        /** 这一页拦下的广告请求数。拦截在后台线程，先累加在 blockedNow，再交给界面。 */
+        val blockedNow = java.util.concurrent.atomic.AtomicInteger(0)
+        var blocked by mutableIntStateOf(0)
+        /** 这一页现在显示的是译文；translating 是翻译进度（null = 没在翻）。 */
+        var translated by mutableStateOf(false)
+        var translating by mutableStateOf<String?>(null)
+        /** 当前网页的网站名，给后台线程的拦截判断用（不能在那里读网页窗口）。 */
+        @Volatile var site = ""
+        /** 正在加载的页面加载完时完成。 */
+        var pageDone: CompletableDeferred<Unit>? = null
+
+        fun clearError() { error = null; pageFailed = false }
+    }
+
+    val tabs = androidx.compose.runtime.mutableStateListOf<Tab>()
+    var current by mutableIntStateOf(0)
+        private set
+    private var nextTabId = 0
+    /** 还没建网页窗口时，界面读到的空白页。 */
+    private val blank = Tab(-1)
+    val tab: Tab get() = tabs.getOrNull(current) ?: blank
+
+    // 下面这些都是当前这一页的，界面和 browser 工具照旧这样读
+    var address: String get() = tab.address; set(v) { tab.address = v }
+    var title: String get() = tab.title; set(v) { tab.title = v }
+    val loading: Int get() = tab.loading
+    val canBack: Boolean get() = tab.canBack
+    val canForward: Boolean get() = tab.canForward
+    var error: String? get() = tab.error; set(v) { tab.error = v }
+    var pageFailed: Boolean get() = tab.pageFailed; set(v) { tab.pageFailed = v }
+    var findCount: Int get() = tab.findCount; set(v) { tab.findCount = v }
+    var findIndex: Int get() = tab.findIndex; set(v) { tab.findIndex = v }
     /** 网页想打开别的 App，等用户点头（只在用户自己看着浏览器时问）。 */
     var external by mutableStateOf<String?>(null)
     var notice by mutableStateOf<String?>(null)
@@ -79,15 +126,10 @@ object JackBrowser {
 
     data class Saved(val name: String, val uri: android.net.Uri, val mime: String, val where: String)
 
-    /** error 是不是「这一页没打开」：是就盖一层干净的出错页，否则（比如拦下了一次跳转）只在顶上提一句。 */
-    var pageFailed by mutableStateOf(false)
     /** 网页里的视频要全屏：全屏的画面和退出用的回调。 */
     var fullscreen by mutableStateOf<Pair<View, WebChromeClient.CustomViewCallback>?>(null)
     /** 浏览器页开着时由它接手「网页要选文件」；返回 false 表示没接。 */
     var chooser: ((android.webkit.ValueCallback<Array<android.net.Uri>>, WebChromeClient.FileChooserParams) -> Boolean)? = null
-    /** 页内查找：共几处、当前第几处（从 0 起）。 */
-    var findCount by mutableIntStateOf(0)
-    var findIndex by mutableIntStateOf(0)
     /** 用户长按了链接或图片，等浏览器页弹菜单。 */
     var pressed by mutableStateOf<Pressed?>(null)
     data class Pressed(val link: String?, val image: String?)
@@ -96,6 +138,101 @@ object JackBrowser {
     var marks by mutableStateOf(listOf<BrowserPages.Visit>())
     /** 网页跟着 App 变深色（浅色主题时不变）。 */
     private var darkAllowed = true
+    /** 去广告开没开、哪些网站不去（网站名）。拦截在后台线程读，所以另存一份。 */
+    var adBlock by mutableStateOf(true)
+        private set
+    var adAllow by mutableStateOf(setOf<String>())
+        private set
+    @Volatile private var adBlockNow = true
+    @Volatile private var adAllowNow = setOf<String>()
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+
+    /** 这个网站名下拦不拦广告。 */
+    private fun blocksAds(site: String) = adBlockNow && adAllowNow.none { site == it || site.endsWith(".$it") }
+
+    fun changeAdBlock(on: Boolean) {
+        adBlock = on; adBlockNow = on
+        prefs().edit().putBoolean("adblock", on).apply()
+        reloadCurrent()
+    }
+
+    /** 当前网站不去广告（有的网站拦了广告就不让看），再点一次恢复。 */
+    fun toggleAdAllow() {
+        val site = BrowserPages.site(address).ifEmpty { return }
+        adAllow = if (adAllow.any { site == it || site.endsWith(".$it") }) adAllow.filterNot { site == it || site.endsWith(".$it") }.toSet()
+        else adAllow + site
+        adAllowNow = adAllow
+        prefs().edit().putStringSet("adallow", adAllow).apply()
+        reloadCurrent()
+    }
+
+    fun adAllowedHere() = BrowserPages.site(address).let { s -> s.isNotEmpty() && adAllow.any { s == it || s.endsWith(".$it") } }
+
+    private fun reloadCurrent() {
+        val w = web ?: return
+        if (address.isNotEmpty()) { clearError(); w.reload() }
+    }
+
+    /**
+     * 把当前网页翻成中文：取出文字、分批交给模型（后台用的便宜模型），翻好一批换一批。
+     * 网页换了就停。返回出错原因，成功返回 null。
+     */
+    suspend fun translate(ctx: Context): String? {
+        val t = tab
+        val w = web ?: return "还没打开网页"
+        val url = t.address
+        val s = com.jack.ai.data.Store(ctx).let { it to it.loadSettings() }
+        val ep = s.second.backgroundEndpoint() ?: return "翻译要用模型：先到设置里填好 DeepSeek Key（或别的模型服务）"
+        val raw = withContext(Dispatchers.Main) { suspendCancellableCoroutine<String> { c -> w.evaluateJavascript(BrowserTranslate.COLLECT_JS) { r -> c.resume(r ?: "") } } }
+        val segs = BrowserTranslate.segments(raw)
+        if (segs.isEmpty()) return "这一页没有需要翻译的外文"
+        val batches = BrowserTranslate.batches(segs)
+        val client = com.jack.ai.api.DeepSeekClient(s.first::addUsage)
+        val gate = kotlinx.coroutines.sync.Semaphore(3)
+        var done = 0
+        var failed = 0
+        withContext(Dispatchers.Main) { t.translating = "正在翻译 0/${batches.size}"; t.translated = true }
+        try {
+            kotlinx.coroutines.coroutineScope {
+                batches.forEach { ids ->
+                    launch {
+                        gate.acquire()
+                        try {
+                            val out = runCatching {
+                                client.complete(ep, listOf(
+                                    kotlinx.serialization.json.buildJsonObject { put("role", "system"); put("content", BrowserTranslate.SYSTEM) },
+                                    kotlinx.serialization.json.buildJsonObject { put("role", "user"); put("content", BrowserTranslate.request(segs, ids)) },
+                                ), maxTokens = 8192, jsonMode = true)
+                            }.getOrNull()?.let { BrowserTranslate.parse(it, ids) }.orEmpty()
+                            withContext(Dispatchers.Main) {
+                                // 用户已经去了别的网页：不往新网页上写
+                                if (t.address == url && t.translated && out.isNotEmpty()) w.evaluateJavascript(BrowserTranslate.applyJs(out), null)
+                                if (out.isEmpty()) failed++
+                                done++
+                                t.translating = "正在翻译 $done/${batches.size}"
+                            }
+                        } finally { gate.release() }
+                    }
+                }
+            }
+        } finally {
+            withContext(kotlinx.coroutines.NonCancellable + Dispatchers.Main) { t.translating = null }
+        }
+        return when {
+            failed == batches.size -> "翻译没成功（模型没返回结果），可以再试一次"
+            failed > 0 -> "有 $failed 批没翻成，那部分还是原文"
+            segs.size >= BrowserTranslate.MAX_SEGMENTS -> "网页太长，只翻了前面一部分"
+            else -> null
+        }
+    }
+
+    /** 放回原文。 */
+    fun showOriginal() {
+        val w = web ?: return
+        tab.translated = false
+        w.evaluateJavascript(BrowserTranslate.RESTORE_JS, null)
+    }
+
     /** 用电脑版打开的网站（网站名，不带 www.）。 */
     var desktopSites by mutableStateOf(setOf<String>())
     /** 手机版的浏览器标识（去掉了 App 内嵌标记）；电脑版的由它换算。 */
@@ -111,15 +248,14 @@ object JackBrowser {
     /** 用户正开着浏览器页。 */
     var userViewing = false
 
-    private var web: WebView? = null
+    private val web: WebView? get() = tab.web
     private lateinit var wrapper: MutableContextWrapper
     private lateinit var app: Context
 
     /** 网页上次是按哪个代理端口设的（0 = 直连）；内核重启换了端口就要重设。 */
     private var appliedPort = -1
     private var appliedRoute = ""
-    /** 正在加载的页面加载完时完成。 */
-    private var pageDone: CompletableDeferred<Unit>? = null
+    private var pageDone: CompletableDeferred<Unit>? get() = tab.pageDone; set(v) { tab.pageDone = v }
     /** 最近给代理口令的时刻：10 秒内要了 30 次以上，说明口令没被接受。 */
     private val authTimes = ArrayDeque<Long>()
 
@@ -135,7 +271,18 @@ object JackBrowser {
         route = app.getSharedPreferences("browser", Context.MODE_PRIVATE).getString("route", BrowserNet.AUTO) ?: BrowserNet.AUTO
         // 用可换底的 Context：放进浏览器页时换成那个页面（下拉框、弹窗要它），离开后换回 App
         wrapper = MutableContextWrapper(app)
-        return WebView(wrapper).apply {
+        loadLists()
+        return newTab().web!!
+    }
+
+    /**
+     * 新开一个标签页并切过去。多标签的界面还没做，现在只在第一次用浏览器时开一个；
+     * 以后加「新标签」按钮时调它，再加切换和关闭（[switchTo]、[closeTab]）。
+     */
+    @SuppressLint("SetJavaScriptEnabled")
+    fun newTab(): Tab {
+        val t = Tab(nextTabId++)
+        t.web = WebView(wrapper).apply {
             settings.apply {
                 javaScriptEnabled = true
                 domStorageEnabled = true
@@ -158,17 +305,36 @@ object JackBrowser {
             }
             // 第三方 Cookie 要开：「用 XX 账号登录」的跳转和内嵌登录靠它
             CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
-            setFindListener { active, count, done -> if (done) { findIndex = active; findCount = count } }
+            setFindListener { active, count, done -> if (done) { t.findIndex = active; t.findCount = count } }
             setOnLongClickListener { v -> longPress(v as WebView) }
-            webViewClient = Client()
-            webChromeClient = Chrome()
+            webViewClient = Client(t)
+            webChromeClient = Chrome(t)
             setDownloadListener { url, userAgent, disposition, mime, length ->
                 // 先记下来：用户看着就弹窗问，Jack 在操作就等它用 download 动作确认
                 pending = BrowserDownload.Pending(url, BrowserDownload.nameFor(url, disposition, mime), mime.orEmpty(),
-                    length, userAgent.orEmpty(), address, byUser = userViewing)
+                    length, userAgent.orEmpty(), t.address, byUser = userViewing)
             }
-            web = this
-        }.also { loadLists() }
+        }
+        tabs += t
+        switchTo(tabs.lastIndex)
+        return t
+    }
+
+    /** 切到第 i 个标签页：网页窗口换了，让浏览器页重新来要。 */
+    fun switchTo(i: Int) {
+        if (i !in tabs.indices) return
+        current = i
+        hostGen++
+    }
+
+    /** 关掉一个标签页（最后一个不关，只回起始页）。 */
+    fun closeTab(i: Int) {
+        if (i !in tabs.indices) return
+        if (tabs.size == 1) { home(); return }
+        val t = tabs.removeAt(i)
+        (t.web?.parent as? ViewGroup)?.removeView(t.web)
+        t.web?.destroy()
+        switchTo(if (i < current) current - 1 else current.coerceAtMost(tabs.lastIndex))
     }
 
     private fun prefs() = app.getSharedPreferences("browser", Context.MODE_PRIVATE)
@@ -179,6 +345,8 @@ object JackBrowser {
         fun read(k: String) = prefs().getString(k, null)?.let { runCatching { listJson.decodeFromString(visitList, it) }.getOrNull() }.orEmpty()
         visits = read("visits"); marks = read("marks")
         desktopSites = prefs().getStringSet("desktop", emptySet()).orEmpty().toSet()
+        adBlock = prefs().getBoolean("adblock", true); adBlockNow = adBlock
+        adAllow = prefs().getStringSet("adallow", emptySet()).orEmpty().toSet(); adAllowNow = adAllow
     }
 
     private fun uaFor(url: String) = if (BrowserPages.isDesktop(desktopSites, url)) BrowserPages.desktopUserAgent(mobileUa) else mobileUa
@@ -393,20 +561,22 @@ object JackBrowser {
         else -> "打不开（$desc）"
     }
 
-    private class Client : WebViewClient() {
+    private class Client(val t: Tab) : WebViewClient() {
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
             val url = request.url.toString()
             return when (BrowserNet.classify(url)) {
                 BrowserNet.Kind.OPEN -> {
                     if (!request.isForMainFrame) false
+                    // 网页没经过用户点击就自己跳到广告网站：不去
+                    else if (!request.hasGesture() && BrowserAds.isAd(request.url.host.orEmpty()) && blocksAds(t.site)) true
                     else {
-                        clearError()
+                        t.clearError()
                         // 从手机版网站跳到电脑版网站（或反过来）：换好标识重新打开这个网址
                         if (applyUa(view, url)) { view.loadUrl(url); true } else false
                     }
                 }
                 BrowserNet.Kind.EXTERNAL -> { if (userViewing && request.hasGesture()) external = url; true }
-                BrowserNet.Kind.BLOCKED -> { if (request.isForMainFrame) error = "已拦下：网页想打开本机、局域网或文件地址（$url）"; true }
+                BrowserNet.Kind.BLOCKED -> { if (request.isForMainFrame) t.error = "已拦下：网页想打开本机、局域网或文件地址（$url）"; true }
             }
         }
 
@@ -415,6 +585,12 @@ object JackBrowser {
             val host = request.url.host ?: return null
             if (request.url.scheme in setOf("http", "https", "ws", "wss") && BrowserNet.isLocal(host)) {
                 return WebResourceResponse("text/plain", "utf-8", 403, "Forbidden", emptyMap(), java.io.ByteArrayInputStream(ByteArray(0)))
+            }
+            // 去广告：网页里的广告和跟踪请求直接不发（网页本身不拦）
+            if (!request.isForMainFrame && BrowserAds.isAd(host) && blocksAds(t.site)) {
+                val n = t.blockedNow.incrementAndGet()
+                main.post { if (t.blockedNow.get() == n) t.blocked = n }
+                return WebResourceResponse("text/plain", "utf-8", 403, "Blocked", emptyMap(), java.io.ByteArrayInputStream(ByteArray(0)))
             }
             return null
         }
@@ -425,7 +601,7 @@ object JackBrowser {
                 val now = System.currentTimeMillis()
                 while (authTimes.isNotEmpty() && now - authTimes.first() > 10_000) authTimes.removeFirst()
                 if (authTimes.size < 30) { authTimes.addLast(now); handler.proceed(ProxyCore.user, ProxyCore.pass); return }
-                error = "浏览器没能通过 Jack 专用代理的口令验证。把这个提示告诉开发者。"
+                t.error = "浏览器没能通过 Jack 专用代理的口令验证。把这个提示告诉开发者。"
             }
             // 网站自己要的账号密码（很少见）：不支持，取消
             handler.cancel()
@@ -434,45 +610,52 @@ object JackBrowser {
         override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, e: SslError) {
             // 证书不对一律不继续：可能是假网站或被劫持
             handler.cancel()
-            if (e.url == view.url || e.url == address) { error = "这个网站的安全证书有问题，已停止打开（${e.url}）"; pageFailed = true }
+            if (e.url == view.url || e.url == t.address) { t.error = "这个网站的安全证书有问题，已停止打开（${e.url}）"; t.pageFailed = true }
         }
 
         override fun onReceivedError(view: WebView, request: WebResourceRequest, e: WebResourceError) {
-            if (request.isForMainFrame) { error = describe(e.errorCode, e.description?.toString().orEmpty()); pageFailed = true }
+            if (request.isForMainFrame) { t.error = describe(e.errorCode, e.description?.toString().orEmpty()); t.pageFailed = true }
         }
 
         override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
-            if (pageDone?.isCompleted != false) pageDone = CompletableDeferred()
-            address = url
-            canBack = view.canGoBack(); canForward = view.canGoForward()
+            if (t.pageDone?.isCompleted != false) t.pageDone = CompletableDeferred()
+            t.translated = false
+            t.address = url
+            t.site = BrowserPages.site(url)
+            t.blockedNow.set(0); t.blocked = 0
+            t.canBack = view.canGoBack(); t.canForward = view.canGoForward()
         }
 
-        override fun onPageCommitVisible(view: WebView, url: String) = widenIfDesktop(view, url)
+        override fun onPageCommitVisible(view: WebView, url: String) {
+            widenIfDesktop(view, url)
+            if (blocksAds(t.site)) view.evaluateJavascript(BrowserAds.INJECT_JS, null)
+        }
 
         override fun onPageFinished(view: WebView, url: String) {
             widenIfDesktop(view, url)
-            pageDone?.complete(Unit)
-            if (url != "about:blank") address = url
+            if (blocksAds(t.site)) view.evaluateJavascript(BrowserAds.INJECT_JS, null)
+            t.pageDone?.complete(Unit)
+            if (url != "about:blank") t.address = url
             // 最近访问只记用户自己看的、打开成功的
-            if (userViewing && !pageFailed && BrowserPages.isWeb(url)) {
+            if (userViewing && !t.pageFailed && BrowserPages.isWeb(url)) {
                 visits = BrowserPages.visit(visits, url, view.title.orEmpty().takeUnless { it == url }.orEmpty(), System.currentTimeMillis())
                 saveLists()
             }
-            canBack = view.canGoBack(); canForward = view.canGoForward()
+            t.canBack = view.canGoBack(); t.canForward = view.canGoForward()
         }
 
         override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
-            if (url != "about:blank") address = url
-            canBack = view.canGoBack(); canForward = view.canGoForward()
+            if (url != "about:blank") t.address = url
+            t.canBack = view.canGoBack(); t.canForward = view.canGoForward()
         }
     }
 
-    private class Chrome : WebChromeClient() {
-        override fun onProgressChanged(view: WebView, newProgress: Int) { loading = newProgress }
-        override fun onReceivedTitle(view: WebView, t: String?) {
-            title = t.orEmpty()
+    private class Chrome(val t: Tab) : WebChromeClient() {
+        override fun onProgressChanged(view: WebView, newProgress: Int) { t.loading = newProgress }
+        override fun onReceivedTitle(view: WebView, newTitle: String?) {
+            t.title = newTitle.orEmpty()
             val url = view.url.orEmpty()
-            if (t != null && t != url) BrowserPages.retitle(visits, url, t).let { if (it !== visits) { visits = it; saveLists() } }
+            if (newTitle != null && newTitle != url) BrowserPages.retitle(visits, url, newTitle).let { if (it !== visits) { visits = it; saveLists() } }
         }
         // 视频全屏：交给浏览器页盖满屏幕
         override fun onShowCustomView(view: View, callback: CustomViewCallback) {
