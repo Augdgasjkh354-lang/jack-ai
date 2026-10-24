@@ -15,6 +15,8 @@ object BrowserDiag {
     /** 一个标签页的记录（拦截请求在后台线程，加锁）。 */
     class Log {
         private val lines = ArrayDeque<String>()
+        /** 一共记过几行（被挤掉的也算），用来取「某个时刻以后」记的。 */
+        private var total = 0
         private val fmt = SimpleDateFormat("HH:mm:ss", Locale.US)
 
         fun add(line: String, now: Long = System.currentTimeMillis()) = synchronized(this) {
@@ -22,10 +24,14 @@ object BrowserDiag {
             // 同一句连着出现（比如一页里几十个被拦的请求）只记一次
             if (lines.lastOrNull()?.substring(9) == l.substring(9)) return@synchronized
             lines.addLast(l)
+            total++
             while (lines.size > MAX_LINES) lines.removeFirst()
         }
 
         fun clear() = synchronized(this) { lines.clear() }
+        fun mark(): Int = synchronized(this) { total }
+        /** mark 之后记的那些行。 */
+        fun since(mark: Int): List<String> = synchronized(this) { lines.toList().takeLast((total - mark).coerceIn(0, lines.size)) }
         fun lines(): List<String> = synchronized(this) { lines.toList() }
     }
 
@@ -58,6 +64,12 @@ o.push('  '+x.tagName.toLowerCase()+(x.open?' 开着':(x.tagName==='DIALOG'?' �
 [0.2,0.5,0.85].forEach(function(f){var e=document.elementFromPoint(innerWidth/2,innerHeight*f);o.push('屏幕 '+Math.round(f*100)+'% 处是 '+(e?e.tagName.toLowerCase()+'.'+String(e.className).slice(0,50)+' 「'+(e.innerText||'').trim().replace(/\s+/g,' ').slice(0,20)+'」':'（空）'));});
 }catch(e){o.push('读网页出错 '+e)}return o.join('\n');})()
 """.trimIndent()
+
+    private val PROBLEM = Regex("出错|失败|拦下|没加载出来|没打开|进程没了|(请求|网页) [45]\\d\\d ")
+
+    /** 记录里像问题的那几行（脚本出错、请求失败、被拦），去掉时间，最多 n 行。 */
+    fun problems(lines: List<String>, n: Int = 6): List<String> =
+        lines.map { it.substringAfter(' ') }.filter { PROBLEM.containsMatchIn(it) }.distinct().takeLast(n)
 
     /** 拼成一份给开发者看的报告。 */
     fun report(header: List<String>, page: String, log: List<String>, recording: Boolean): String = buildString {

@@ -62,6 +62,8 @@ fun TextViewer(
     subtitle: String? = null,
     onShare: (() -> Unit)? = null,
     onOpenWith: (() -> Unit)? = null,
+    /** 菜单里另加的几项：(名字, 点了做什么)。 */
+    extra: List<Pair<String, () -> Unit>> = emptyList(),
 ) {
     val ctx = LocalContext.current
     val clipboard = LocalClipboardManager.current
@@ -99,6 +101,7 @@ fun TextViewer(
                                 })
                                 onShare?.let { DropdownMenuItem(text = { Text("分享") }, onClick = { menu = false; it() }) }
                                 onOpenWith?.let { DropdownMenuItem(text = { Text("用其他应用打开") }, onClick = { menu = false; it() }) }
+                                extra.forEach { (label, go) -> DropdownMenuItem(text = { Text(label) }, onClick = { menu = false; go() }) }
                             }
                         }
                     },

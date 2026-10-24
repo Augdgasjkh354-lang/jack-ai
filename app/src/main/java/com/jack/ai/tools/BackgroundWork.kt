@@ -127,6 +127,19 @@ suspend fun runBackgroundWork(
             put("content", runCatching { ContextNote.build(ctx, store, conv, skills.map { it.id }.toSet()) }.getOrDefault("") + r.prompt.ifBlank { r.title })
         },
     )
+    var spent = 0.0
+    // 上次半路被打断了：从断点接着做（系统提示换成这次的，时间是新的）
+    val checkpoint = TaskCheckpoint.file(ctx.filesDir, r.id)
+    val cpKey = TaskCheckpoint.keyOf((brief ?: "") + r.prompt.ifBlank { r.title })
+    TaskCheckpoint.load(checkpoint, cpKey)?.let { saved ->
+        val fresh = messages.first()
+        messages.clear()
+        messages += fresh
+        messages += saved.messages.drop(1)
+        messages += buildJsonObject { put("role", "user"); put("content", TaskCheckpoint.RESUME_NOTE) }
+        spent = saved.spent
+        onProgress("接着上次断掉的地方做")
+    }
     val files = mutableListOf<GeneratedFile>()
     val session = ToolSession(host, s, conv, null, skills, object : ToolUi {
         override fun started(label: String) = onProgress(label)
@@ -142,7 +155,6 @@ suspend fun runBackgroundWork(
     val thinking = if (ep.reasoning && ep.deepseek) s.workThinking.resolve(r.prompt, work = true, hasFiles = false) else ThinkLevel.OFF
     val client = DeepSeekClient()
     val agent = Agent({ msgs, t -> client.stream(ep, msgs, thinking, s.temperature, t) }, sendReasoning = ep.deepseek && thinking.effort != null)
-    var spent = 0.0
     agent.run(
         messages = messages,
         tools = tools,
@@ -155,12 +167,14 @@ suspend fun runBackgroundWork(
             else session.perform(name, args).also { log(com.jack.ai.data.RunLog.stepOf(name, it.status, it.text)) }.text
         },
         retool = { toolsFor(session.unlocked.toSet()) },
+        onTools = { TaskCheckpoint.save(checkpoint, cpKey, messages, spent) },
         onUsage = { ev ->
             store.addUsage(ep, ev.promptTokens, ev.cacheHit, ev.completionTokens)
             spent += Pricing.priceAt(ep, System.currentTimeMillis())
                 ?.let { Pricing.cost(it, ev.promptTokens, ev.cacheHit ?: 0, ev.completionTokens) } ?: 0.0
         },
     )
+    TaskCheckpoint.clear(checkpoint)
     val text = agent.lastRound.trim().ifBlank { agent.content.toString().trim() }
     return if (text.isBlank()) TaskResult("（这次没有生成内容）", files, TaskStatus.FAILED) else TaskResult(text, files)
 }

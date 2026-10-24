@@ -533,6 +533,176 @@
     return JSON.stringify({ ok: true });
   }
 
+  /**
+   * 阅读模式：找出正文那一块（文章、帖子），去掉导航、侧栏、评论、推荐，排成 Markdown。
+   * 返回 {title, md}。
+   */
+  var SKIP_TAGS = /^(NAV|ASIDE|FOOTER|FORM|SCRIPT|STYLE|NOSCRIPT|BUTTON|IFRAME|SVG|CANVAS|VIDEO|AUDIO|SELECT|TEXTAREA|INPUT|TEMPLATE)$/;
+  var SKIP_NAME = /comment|share|related|recommend|footer|sidebar|advert|banner|breadcrumb|toolbar|popup|modal|cookie|subscribe|editsection|navbox|\btoc\b|reflist|references|评论|推荐/i;
+  function skipName(el) { return SKIP_NAME.test((typeof el.className === 'string' ? el.className : '') + ' ' + (el.id || '')); }
+  /** 元素里的字（收起来的段落也算），跳过「编辑」链接、脚本这类。 */
+  function ownText(el) {
+    var parts = [], w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, { acceptNode: function (n) {
+      for (var e = n.parentElement; e && e !== el; e = e.parentElement) if (SKIP_TAGS.test(e.tagName) || skipName(e)) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    } }), t;
+    while ((t = w.nextNode())) parts.push(t.nodeValue);
+    return clean(parts.join(''));
+  }
+  var BLOCKS = 'div,p,ul,ol,li,h1,h2,h3,h4,h5,h6,table,section,article,pre,blockquote,figure,header,main,dl';
+  function mainRoot() {
+    var best = null, bestScore = 0, scores = new Map();
+    document.querySelectorAll('p,pre,blockquote,li').forEach(function (p) {
+      var len = clean(p.textContent).length;
+      if (len < 25) return;
+      // 列表项（目录、参考文献、导航）分量轻一些，正文主要看段落
+      if (p.tagName === 'LI') len *= 0.3;
+      var a = p.parentElement, b = a && a.parentElement;
+      if (a) scores.set(a, (scores.get(a) || 0) + len);
+      if (b) scores.set(b, (scores.get(b) || 0) + len / 2);
+    });
+    scores.forEach(function (v, el) { if (v > bestScore) { bestScore = v; best = el; } });
+    var art = document.querySelector('article,[itemprop=articleBody]');
+    if (art && clean(art.textContent).length > 200 && (!best || art.contains(best) || clean(art.textContent).length >= bestScore)) return art;
+    // 正文常拆成好几段平级的块：最好的那块太小，就往上找一层
+    if (best && bestScore < 600 && best.parentElement && best.parentElement !== document.body) best = best.parentElement;
+    return best || document.querySelector('main,[role=main]') || document.body;
+  }
+  function readable() {
+    var root = mainRoot(), out = [];
+    function push(t) { t = t.replace(/[ \t]+/g, ' ').trim(); if (t.length >= 2 && out[out.length - 1] !== t) out.push(t); }
+    function walk(el) {
+      if (el.nodeType !== 1 || SKIP_TAGS.test(el.tagName)) return;
+      if (el !== root) {
+        if (skipName(el) || el.getAttribute('aria-hidden') === 'true') return;
+        var st = styleOf(el);
+        if (st.display === 'none' || st.visibility === 'hidden' || st.position === 'fixed') return;
+      }
+      var tag = el.tagName, text = function () { return ownText(el); };
+      var h = /^H([1-6])$/.exec(tag);
+      if (h) return push(new Array(Math.min(+h[1] + 1, 4) + 1).join('#') + ' ' + text());
+      if (tag === 'PRE') return push('```\n' + (el.innerText || el.textContent || '').replace(/\n+$/, '') + '\n```');
+      if (tag === 'BLOCKQUOTE') return push('> ' + text());
+      if (tag === 'LI') return push('- ' + text());
+      if (tag === 'TABLE') {
+        var rows = Array.prototype.slice.call(el.rows || [], 0, 60).map(function (tr) {
+          return '| ' + Array.prototype.map.call(tr.cells, function (c) { return ownText(c).replace(/\|/g, '/'); }).join(' | ') + ' |';
+        });
+        if (rows.length) { rows.splice(1, 0, rows[0].replace(/[^|]+/g, ' --- ')); push(rows.join('\n')); }
+        return;
+      }
+      if (tag === 'P' || !el.querySelector(BLOCKS)) return push(text());
+      for (var c = el.firstChild; c; c = c.nextSibling) {
+        if (c.nodeType === 3) push(c.nodeValue); else walk(c);
+      }
+    }
+    walk(root);
+    var h1 = document.querySelector('h1');
+    var title = (h1 && ownText(h1)) || clean(document.title);
+    if (out.length && out[0].replace(/^#+ /, '') === title) out.shift();
+    return JSON.stringify({ title: title, md: out.join('\n\n') });
+  }
+
+  /**
+   * 视频字幕：YouTube、B 站各取一种字幕，别的网站读 <video> 上的字幕轨。要发请求，异步做：
+   * 结果放进 window.__jackSubs = {ok, text, lang, from} 或 {ok:false, why}。
+   */
+  /** 网页源码里 key 后面那个 JSON 数组（按括号配对截出来，字符串里的括号不算）。 */
+  function jsonArrayAfter(src, key) {
+    var i = src.indexOf(key);
+    if (i < 0) return null;
+    i += key.length;
+    if (src[i] !== '[') return null;
+    var depth = 0, inStr = false;
+    for (var j = i; j < src.length; j++) {
+      var ch = src[j];
+      if (inStr) { if (ch === '\\') j++; else if (ch === '"') inStr = false; continue; }
+      if (ch === '"') inStr = true;
+      else if (ch === '[' || ch === '{') depth++;
+      else if ((ch === ']' || ch === '}') && --depth === 0) return JSON.parse(src.slice(i, j + 1));
+    }
+    return null;
+  }
+
+  function subtitles() {
+    window.__jackSubs = null;
+    function done(o) { window.__jackSubs = o; }
+    function fail(why) { done({ ok: false, why: why }); }
+    function plain(lines) { return lines.map(function (l) { return clean(l); }).filter(Boolean).join('\n'); }
+    var host = location.hostname;
+    /** YouTube 的转写稿（视频简介里「显示转写稿」用的接口）。 */
+    function transcript(html, lang) {
+      var m = html.match(/"getTranscriptEndpoint":\{"params":"([^"]+)"/);
+      var cfg = window.ytcfg && window.ytcfg.get;
+      if (!m || !cfg) return fail('YouTube 没给字幕内容（可能要登录或换个视频）');
+      return fetch('/youtubei/v1/get_transcript?prettyPrint=false&key=' + (cfg('INNERTUBE_API_KEY') || ''), {
+        method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ context: cfg('INNERTUBE_CONTEXT'), params: m[1] })
+      }).then(function (r) { return r.json(); }).then(function (j) {
+        var lines = [];
+        (function find(o) {
+          if (!o || typeof o !== 'object') return;
+          if (o.transcriptSegmentRenderer) { lines.push(((o.transcriptSegmentRenderer.snippet || {}).runs || []).map(function (x) { return x.text; }).join('')); return; }
+          for (var k in o) find(o[k]);
+        })(j);
+        if (!lines.length) return fail('YouTube 没给字幕内容（可能要登录或换个视频）');
+        done({ ok: true, text: plain(lines), lang: lang, from: 'YouTube 转写稿' });
+      });
+    }
+    try {
+      if (/(^|\.)youtube\.com$/.test(host) || host === 'youtu.be') {
+        var id = new URLSearchParams(location.search).get('v') || (location.pathname.match(/\/(shorts|embed)\/([\w-]{11})/) || [])[2];
+        if (!id) return fail('不是视频页');
+        fetch('/watch?v=' + id, { credentials: 'include' }).then(function (r) { return r.text(); }).then(function (html) {
+          var tracks = jsonArrayAfter(html, '"captionTracks":');
+          if (!tracks || !tracks.length) return fail('这个视频没有字幕');
+          var pick = tracks.filter(function (t) { return /^zh/.test(t.languageCode); })[0] || tracks.filter(function (t) { return t.kind !== 'asr'; })[0] || tracks[0];
+          var lang = (pick.name && (pick.name.simpleText || (pick.name.runs || [{}])[0].text)) || pick.languageCode;
+          return fetch(pick.baseUrl + '&fmt=json3', { credentials: 'include' }).then(function (r) { return r.text(); }).then(function (body) {
+            // 字幕地址现在常要额外的验证，拿到空的：改用网页上「显示转写稿」那个接口
+            if (!body) return transcript(html, lang);
+            var j = JSON.parse(body);
+            var lines = (j.events || []).map(function (e) { return (e.segs || []).map(function (s) { return s.utf8; }).join(''); });
+            done({ ok: true, text: plain(lines), lang: lang, from: 'YouTube' });
+          });
+        }).catch(function (e) { fail('取 YouTube 字幕出错：' + e); });
+        return;
+      }
+      if (/(^|\.)bilibili\.com$/.test(host)) {
+        var bv = (location.pathname.match(/(BV[\w]{10})/) || [])[1];
+        if (!bv) return fail('不是视频页');
+        var p = +(new URLSearchParams(location.search).get('p') || 1);
+        fetch('https://api.bilibili.com/x/web-interface/view?bvid=' + bv, { credentials: 'include' }).then(function (r) { return r.json(); }).then(function (v) {
+          if (!v.data) return fail('B 站没返回视频信息：' + (v.message || v.code));
+          var cid = ((v.data.pages || [])[p - 1] || {}).cid || v.data.cid;
+          var q = '?aid=' + v.data.aid + '&cid=' + cid;
+          function subsOf(pl) { return (((pl.data || {}).subtitle || {}).subtitles || []); }
+          function player(path) { return fetch('https://api.bilibili.com/x/player/' + path + q, { credentials: 'include' }).then(function (r) { return r.json(); }).catch(function () { return {}; }); }
+          // 新接口要签名，不签有时也给；不给就退回旧接口
+          return player('wbi/v2').then(function (pl) { return subsOf(pl).length ? pl : player('v2'); }).then(function (pl) {
+            var subs = subsOf(pl);
+            if (!subs.length) return fail('这个视频没有字幕（B 站的 AI 字幕要登录才拿得到）');
+            var pick = subs.filter(function (s) { return /zh/.test(s.lan); })[0] || subs[0];
+            var url = pick.subtitle_url.replace(/^\/\//, 'https://');
+            return fetch(url).then(function (r) { return r.json(); }).then(function (j) {
+              done({ ok: true, text: plain((j.body || []).map(function (b) { return b.content; })), lang: pick.lan_doc || pick.lan, from: 'B 站' });
+            });
+          });
+        }).catch(function (e) { fail('取 B 站字幕出错：' + e); });
+        return;
+      }
+      var v = document.querySelector('video');
+      if (!v || !v.textTracks || !v.textTracks.length) return fail('这个网页上没找到带字幕的视频');
+      var t = v.textTracks[0];
+      t.mode = 'hidden';
+      setTimeout(function () {
+        var cues = t.cues ? Array.prototype.map.call(t.cues, function (c) { return c.text; }) : [];
+        if (cues.length) done({ ok: true, text: plain(cues), lang: t.label || t.language, from: '网页' }); else fail('字幕轨是空的');
+      }, 1500);
+    } catch (e) { fail('出错：' + e); }
+    return '1';
+  }
+
   window.__jack = { snapshot: snapshot, inspect: inspect, act: act, markText: markText, center: center,
-    signature: signature, hasText: hasText, extract: extract, at: at, dismiss: dismiss };
+    signature: signature, hasText: hasText, extract: extract, at: at, dismiss: dismiss, readable: readable, subtitles: subtitles };
 })();

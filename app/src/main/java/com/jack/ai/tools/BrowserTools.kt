@@ -102,8 +102,17 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
                     "key" -> key
                     else -> ""
                 }
-                JackBrowser.act(ctx, id, action, arg, clear = args["clear"].flag() == true)?.let { note.append("出错：$it\n") }
+                // 点按钮、链接：先记下页面的样子，点完没变就换真实触摸再点一次（有的网站不认脚本点的）
+                val retry = action == "click" && kind in RETAP_KINDS && BrowserNet.confirmReason("click", info["label"].text(), info["submit"].flag() == true,
+                    info["formPost"].flag() == true, info["formPassword"].flag() == true, info["formButtons"].text(), "") == null
+                val before = if (retry) JackBrowser.pageSignature(ctx) else ""
+                val mark = JackBrowser.tab.diag.mark()
+                val err = JackBrowser.act(ctx, id, action, arg, clear = args["clear"].flag() == true)
+                err?.let { note.append("出错：$it\n") }
                 if (n == null) note.append("点了$what。\n")
+                if (retry && err == null && JackBrowser.tab.id == fromTab && JackBrowser.pageSignature(ctx) == before) {
+                    note.append(retapNote(id, before, mark))
+                }
                 if (action == "type" && args["submit"].flag() == true) {
                     val why = BrowserNet.confirmReason("key", info["label"].text(), false, info["formPost"].flag() == true,
                         info["formPassword"].flag() == true, info["formButtons"].text(), "enter")
@@ -254,6 +263,23 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
         // 读页面、截图时发全部；其他动作只发变了的部分
         note.toString() + show(page, full = action == "read" || action == "look") to SearchRecord(label, shot = stepShot())
     }
+}
+
+/** 点了没反应时可以再用真实触摸点一次的：按钮、链接这类（勾选框、开关点两次会点回去，不重点）。 */
+private val RETAP_KINDS = setOf("按钮", "链接", "可点", "标签页", "菜单项", "选项")
+
+/**
+ * 脚本点了页面没变：在按钮位置用真实触摸再点一次；还不变，就从网页诊断记录里找出这期间的出错、被拦的请求，告诉模型换个办法。
+ */
+private suspend fun ToolSession.retapNote(id: Int, before: String, mark: Int): String {
+    val ctx = app
+    val at = JackBrowser.centerOf(ctx, id) ?: return "点了以后页面没变化（可能要等一会，或者没点上）。\n"
+    JackBrowser.touch(ctx, at.first, at.second)?.let { return "点了以后页面没变化；想用真实触摸再点一次没成：$it\n" }
+    if (JackBrowser.pageSignature(ctx) != before) return "脚本点了没反应（这个网站不认），已经用真实触摸重点了一次，页面变了。\n"
+    val problems = com.jack.ai.ui.BrowserDiag.problems(JackBrowser.tab.diag.since(mark))
+    return "点了两次（脚本点一次、真实触摸一次）页面都没变化。" +
+        (if (problems.isNotEmpty()) "这期间网页里：" + problems.joinToString("；") + "。" else "网页里没报错。") +
+        "可以：look 截图看是不是被别的东西挡着、按钮还不能点；wait 等一会再看；换别的入口（直接打开对应网址）；实在不行用 wait_user 请用户自己点。\n"
 }
 
 /** 一次能连着做的动作：不包括读整页、上传、下载、截图、标签页这些要单独看结果的。 */
@@ -457,6 +483,24 @@ private suspend fun ToolSession.extractPage(args: JsonObject): String {
     val ctx = app
     val what = args["what"].text().ifBlank { "text" }
     val saveAs = args["save_as"].text().trim().replace(Regex("""[\\/:*?"<>|]"""), "_")
+    if (what == "article" || what == "subtitles") {
+        val (body, info) = if (what == "article") {
+            val r = JackBrowser.readable(ctx) ?: return "这一页找不出正文（可能不是文章页，或者还没加载完），试试 what=text。"
+            r.second to "正文（去掉了导航、侧栏、评论）"
+        } else {
+            val (t, why) = JackBrowser.subtitles(ctx)
+            (t ?: return "没取到字幕：$why。可以用 what=text 读视频简介，或者告诉用户这个视频没有字幕。") to why
+        }
+        val head = "网页：${JackBrowser.title}\n链接：${JackBrowser.address}\n"
+        if (saveAs.isNotEmpty()) {
+            val f = java.io.File(wsDir, if (saveAs.contains('.')) saveAs else "$saveAs.${if (what == "article") "md" else "txt"}")
+            withContext(kotlinx.coroutines.Dispatchers.IO) { f.writeText(head + "\n" + body) }
+            ui.attach(f)
+        }
+        val cut = body.length > 20_000
+        return FENCE + head + "$info，共 ${body.length} 字" + (if (cut) "，下面是前 20000 字" else "") +
+            (if (saveAs.isNotEmpty()) "，全部已存进对话文件夹" else "") + "：\n\n" + body.take(20_000)
+    }
     if (what == "text") {
         val start = args["start"].text().toIntOrNull()?.coerceAtLeast(0) ?: 0
         val o = JackBrowser.extract(ctx, "text", start, 12_000) ?: return "读不到这个网页的文字（可能还没加载完）"

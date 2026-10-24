@@ -26,4 +26,21 @@ class BrowserDiagTest {
         assertTrue(r.contains("点击 button「登录」"))
         assertTrue(BrowserDiag.report(emptyList(), "", emptyList(), false).contains("（没有）"))
     }
+
+    @Test
+    fun sinceAndProblemsPickWhatHappenedAfterAClick() {
+        val log = BrowserDiag.Log()
+        log.add("加载完 https://a.com")
+        val mark = log.mark()
+        log.add("点击 button「登录」")
+        log.add("脚本出错：Uncaught TypeError: x is undefined（app.js:3）")
+        log.add("请求 403 POST https://a.com/api/login")
+        log.add("请求 200 GET https://a.com/x")
+        val after = log.since(mark)
+        assertEquals(4, after.size)
+        val p = BrowserDiag.problems(after)
+        assertEquals(2, p.size)
+        assertTrue(p[0].startsWith("脚本出错"))
+        assertTrue(p[1].startsWith("请求 403"))
+    }
 }

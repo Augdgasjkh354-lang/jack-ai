@@ -59,6 +59,8 @@ class Agent(
         images: () -> List<String> = { emptyList() },
         /** 每轮工具做完后重新算一次工具列表（use_skill 打开了新技能，它的工具下一轮就能用）。不给就一直用 tools。 */
         retool: (() -> JsonArray?)? = null,
+        /** 每个工具做完、结果放进 messages 以后调（后台任务在这里存断点）。 */
+        onTools: () -> Unit = {},
     ) {
         // 补过图片的消息位置：新图来了就把旧的换成一句话，免得每轮都重发
         val imageAt = mutableListOf<Int>()
@@ -135,6 +137,7 @@ class Agent(
                 }
                 messages += toolMsg
                 trail += toolMsg.toString()
+                onTools()
             }
             val shots = images()
             if (shots.isNotEmpty()) {

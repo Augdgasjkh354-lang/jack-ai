@@ -67,7 +67,8 @@ object JackBrowser {
      * 一个标签页：自己的网页窗口和这一页的状态。现在只开一个；多标签就是往 [tabs] 里加，
      * 网页窗口的回调都写自己这一页（[Tab]），界面和 Jack 看的是当前这一页。
      */
-    class Tab(val id: Int) {
+    /** incognito：隐身标签页，Cookie、登录状态、网页存储和别的标签页分开，关掉最后一个隐身页就全清掉，也不记最近访问。 */
+    class Tab(val id: Int, val incognito: Boolean = false) {
         var web: WebView? = null
         var address by mutableStateOf("")
         var title by mutableStateOf("")
@@ -101,6 +102,22 @@ object JackBrowser {
     }
 
     val tabs = androidx.compose.runtime.mutableStateListOf<Tab>()
+
+    /** 网页里选中文字点「问 Kavi」时调（浏览器页开着时才有）。 */
+    var askSelection: ((String) -> Unit)? = null
+
+    private const val INCOGNITO = "jack-incognito"
+
+    /** 网页组件支不支持隐身（分开的 Cookie 和存储，要较新的 WebView）。 */
+    fun incognitoSupported() = WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)
+
+    /** 隐身的 Cookie、网页存储全删掉（没有隐身页在用时整个删）。 */
+    private fun clearIncognito() {
+        if (!incognitoSupported()) return
+        val store = androidx.webkit.ProfileStore.getInstance()
+        if (runCatching { store.deleteProfile(INCOGNITO) }.getOrDefault(false)) return
+        store.getProfile(INCOGNITO)?.let { p -> p.cookieManager.removeAllCookies(null); p.webStorage.deleteAllData() }
+    }
     var current by mutableIntStateOf(0)
         private set
     private var nextTabId = 0
@@ -324,6 +341,8 @@ object JackBrowser {
         // 用可换底的 Context：放进浏览器页时换成那个页面（下拉框、弹窗要它），离开后换回 App
         wrapper = MutableContextWrapper(app)
         loadLists()
+        // 上次没关干净的隐身数据（App 被杀掉之类）
+        runCatching { clearIncognito() }
         // 系统 WebView 太旧：新式网页（ChatGPT 的登录框这类）会点了没反应，提醒用户去更新
         androidx.webkit.WebViewCompat.getCurrentWebViewPackage(app)?.versionName?.substringBefore('.')?.toIntOrNull()?.let { v ->
             if (v < OLD_WEBVIEW) notice = "手机的系统网页组件（Android System WebView）是 $v 版，比较旧，有些网站的弹窗、按钮会点了没反应。到应用商店搜「Android System WebView」或「Chrome」更新一下。"
@@ -335,13 +354,13 @@ object JackBrowser {
     private const val OLD_WEBVIEW = 120
 
     /**
-     * 新开一个标签页并切过去。多标签的界面还没做，现在只在第一次用浏览器时开一个；
-     * 以后加「新标签」按钮时调它，再加切换和关闭（[switchTo]、[closeTab]）。
+     * 新开一个标签页（switch 就切过去）；incognito 开隐身的（网页组件不支持时开普通的）。
      */
     @SuppressLint("SetJavaScriptEnabled")
-    fun newTab(switch: Boolean = true): Tab {
-        val t = Tab(nextTabId++)
-        t.web = WebView(wrapper).apply {
+    fun newTab(switch: Boolean = true, incognito: Boolean = false): Tab {
+        val t = Tab(nextTabId++, incognito && incognitoSupported())
+        // 换资料夹要在网页窗口做任何别的事之前
+        t.web = JackWebView(wrapper).also { if (t.incognito) androidx.webkit.WebViewCompat.setProfile(it, INCOGNITO) }.apply {
             settings.apply {
                 javaScriptEnabled = true
                 domStorageEnabled = true
@@ -397,6 +416,7 @@ object JackBrowser {
         val t = tabs.removeAt(i)
         (t.web?.parent as? ViewGroup)?.removeView(t.web)
         t.web?.destroy()
+        if (t.incognito && tabs.none { it.incognito }) runCatching { clearIncognito() }
         switchTo(if (i < current) current - 1 else current.coerceAtMost(tabs.lastIndex))
     }
 
@@ -445,8 +465,40 @@ object JackBrowser {
 
     /** 「问 Kavi」：当前网页的标题、网址和正文（最多 6 万字）。 */
     suspend fun pageText(ctx: Context): String {
-        val raw = unwrap(eval(ctx, "(document.body ? document.body.innerText : '').slice(0, 60000)"))
-        return "网页：$title\n链接：$address\n\n" + raw.trim()
+        // 先取正文（去掉导航、侧栏、评论），取不出多少再退回整页文字
+        val body = readable(ctx)?.second?.takeIf { it.length >= 200 }?.take(60_000)
+            ?: unwrap(eval(ctx, "(document.body ? document.body.innerText : '').slice(0, 60000)")).trim()
+        val subs = if (isVideoPage(address)) subtitles(ctx).first?.let { "\n\n【视频字幕】\n" + it.take(60_000) }.orEmpty() else ""
+        return "网页：$title\n链接：$address\n\n" + body + subs
+    }
+
+    /** 阅读模式：(标题, 正文 Markdown)；读不出返回 null。 */
+    suspend fun readable(ctx: Context): Pair<String, String>? {
+        val o = runCatching { json.parseToJsonElement(unwrap(eval(ctx, BrowserScripts.readable(ctx)))).jsonObject }.getOrNull() ?: return null
+        val md = (o["md"] as? JsonPrimitive)?.content.orEmpty().trim()
+        return if (md.isEmpty()) null else (o["title"] as? JsonPrimitive)?.content.orEmpty() to md
+    }
+
+    /** YouTube、B 站的视频页（能取字幕的）。 */
+    fun isVideoPage(url: String): Boolean {
+        val site = BrowserPages.site(url)
+        return (site.endsWith("youtube.com") && ("watch" in url || "/shorts/" in url)) || site == "youtu.be" ||
+            (site.endsWith("bilibili.com") && "/video/" in url)
+    }
+
+    /** 视频字幕（YouTube、B 站、网页里带字幕轨的视频），最多等 20 秒。返回 (字幕, 哪来的) 或 (null, 为什么没有)。 */
+    suspend fun subtitles(ctx: Context): Pair<String?, String> {
+        agentAt = System.currentTimeMillis()
+        eval(ctx, BrowserScripts.subtitles(ctx))
+        repeat(40) {
+            delay(500)
+            val o = runCatching { json.parseToJsonElement(unwrap(eval(ctx, "JSON.stringify(window.__jackSubs || null)"))) as? JsonObject }.getOrNull()
+            if (o != null) {
+                fun s(k: String) = (o[k] as? JsonPrimitive)?.content.orEmpty()
+                return if (s("ok") == "true" && s("text").isNotBlank()) s("text") to "${s("from")}字幕（${s("lang")}）" else null to s("why").ifBlank { "没取到字幕" }
+            }
+        }
+        return null to "等了 20 秒没取到字幕"
     }
 
     /** 长按图片「识别二维码」：带着网页的登录状态把图片取下来再读。读不出返回 null。 */
@@ -721,7 +773,7 @@ object JackBrowser {
             t.diag.add("加载完 ${url.take(160)}")
             if (url != "about:blank") t.address = url
             // 最近访问只记用户自己看的、打开成功的
-            if (userViewing && !t.pageFailed && BrowserPages.isWeb(url)) {
+            if (userViewing && !t.pageFailed && !t.incognito && BrowserPages.isWeb(url)) {
                 visits = BrowserPages.visit(visits, url, view.title.orEmpty().takeUnless { it == url }.orEmpty(), System.currentTimeMillis())
                 saveLists()
             }
@@ -755,7 +807,7 @@ object JackBrowser {
             if (!isUserGesture && System.currentTimeMillis() - agentAt > 5_000) { t.diag.add("网页要弹新窗口，不是点出来的，没开"); return false }
             t.diag.add("网页弹新窗口，开成新标签页")
             if (tabs.size >= MAX_TABS) { notice = "标签页开满了，网页要弹的窗口没打开。先关掉几个标签页再试。"; return false }
-            val nt = newTab(switch = true)
+            val nt = newTab(switch = true, incognito = t.incognito)
             nt.openedBy = t.id
             (resultMsg.obj as? WebView.WebViewTransport)?.webView = nt.web ?: return false
             resultMsg.sendToTarget()
@@ -1030,6 +1082,12 @@ object JackBrowser {
             val scale = minOf(1f, 720f / w.width.coerceAtLeast(1))
             f("x") * k * scale to f("y") * k * scale
         }
+    }
+
+    /** 页面有没有变：网址 + 文字长度 + 元素个数（点了以后比一比，看点没点上）。 */
+    suspend fun pageSignature(ctx: Context): String {
+        val url = withContext(Dispatchers.Main) { (pinned() ?: tab).address }
+        return url + "|" + unwrap(eval(ctx, BrowserScripts.signature(ctx)))
     }
 
     /** 等网页里出现这段文字（最多 timeoutMs）；text 为空就等页面不再变化。返回等到没有。 */

@@ -22,5 +22,7 @@ object BrowserScripts {
     fun dismiss(ctx: Context) = "${lib(ctx)}\nwindow.__jack.dismiss()"
     fun signature(ctx: Context) = "${lib(ctx)}\nwindow.__jack.signature()"
     fun hasText(ctx: Context, text: String) = "${lib(ctx)}\nwindow.__jack.hasText(${q(text)})"
+    fun readable(ctx: Context) = "${lib(ctx)}\nwindow.__jack.readable()"
+    fun subtitles(ctx: Context) = "${lib(ctx)}\nwindow.__jack.subtitles()"
     fun extract(ctx: Context, what: String, start: Int, limit: Int) = "${lib(ctx)}\nwindow.__jack.extract(${q(what)}, $start, $limit)"
 }

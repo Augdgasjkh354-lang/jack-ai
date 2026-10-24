@@ -96,6 +96,8 @@ class BrowserActivity : ComponentActivity() {
     private var showTabs by mutableStateOf(false)
     /** 识别出的二维码内容，等弹窗。 */
     private var qr by mutableStateOf<String?>(null)
+    /** 阅读模式：(标题, 正文 Markdown)。 */
+    private var reader by mutableStateOf<Pair<String, String>?>(null)
     /** 网页诊断报告（null = 没打开）。 */
     private var diag by mutableStateOf<String?>(null)
     /** 页内查找：null 没在找，否则是要找的字。 */
@@ -130,6 +132,7 @@ class BrowserActivity : ComponentActivity() {
         settings = Store(applicationContext).loadSettings()
         JackBrowser.userViewing = true
         JackBrowser.chooser = ::chooseFiles
+        JackBrowser.askSelection = ::askAboutSelection
         JackBrowser.setDark(settings.themeMode != ThemeMode.LIGHT)
         setContent {
             JackTheme(settings.themeMode, settings.accent, settings.fontScale) {
@@ -171,6 +174,7 @@ class BrowserActivity : ComponentActivity() {
     override fun onDestroy() {
         JackBrowser.userViewing = false
         if (JackBrowser.chooser == ::chooseFiles) JackBrowser.chooser = null
+        if (JackBrowser.askSelection == ::askAboutSelection) JackBrowser.askSelection = null
         fileCallback?.onReceiveValue(null); fileCallback = null
         JackBrowser.fullscreen?.second?.onCustomViewHidden(); JackBrowser.fullscreen = null
         JackBrowser.release(this)
@@ -189,12 +193,15 @@ class BrowserActivity : ComponentActivity() {
     }
 
     /** 新开一个标签页打开网址；开满了就在当前页打开。 */
-    private fun openInNewTab(url: String?) {
+    private fun openInNewTab(url: String?, incognito: Boolean = false) {
         val b = JackBrowser
         b.webView(this)
         finding = null
         if (b.tabs.size >= JackBrowser.MAX_TABS) b.notice = "最多开 ${JackBrowser.MAX_TABS} 个标签页，这次在当前页打开。可以点底栏的数字关掉几个。"
-        else b.newTab()
+        else {
+            b.newTab(incognito = incognito)
+            if (incognito) b.notice = "隐身标签页：不带登录状态，不记最近访问；关掉最后一个隐身页，它的 Cookie 和网页数据就全清掉。"
+        }
         editing = ""
         if (url != null) open(url)
     }
@@ -283,6 +290,10 @@ class BrowserActivity : ComponentActivity() {
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                         val has = b.address.isNotEmpty()
                         DropdownMenuItem(text = { Text("问 Kavi") }, enabled = has, onClick = { menu = false; askKavi() })
+                        DropdownMenuItem(text = { Text("阅读模式") }, enabled = has, onClick = {
+                            menu = false
+                            lifecycleScope.launch { b.readable(this@BrowserActivity)?.let { reader = it } ?: run { b.notice = "这一页找不出正文（可能不是文章页，或者还没加载完）" } }
+                        })
                         DropdownMenuItem(text = { Text(if (b.tab.translated) "显示原文" else "翻译成中文") }, enabled = has && b.tab.translating == null, onClick = {
                             menu = false
                             if (b.tab.translated) b.showOriginal() else lifecycleScope.launch { b.translate(this@BrowserActivity)?.let { b.notice = it } }
@@ -336,8 +347,8 @@ class BrowserActivity : ComponentActivity() {
                     }
                 }
             }
-            if (b.title.isNotBlank() && b.address.isNotEmpty()) {
-                Text(b.title, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
+            if (b.tab.incognito || (b.title.isNotBlank() && b.address.isNotEmpty())) {
+                Text((if (b.tab.incognito) "隐身 · " else "") + b.title, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
                     style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             if (b.loading < 100) LinearProgressIndicator(progress = { b.loading / 100f }, Modifier.fillMaxWidth().height(2.dp))
@@ -408,6 +419,16 @@ class BrowserActivity : ComponentActivity() {
         }
         }
         b.pressed?.let { p -> PressMenu(p) }
+        reader?.let { (title, md) ->
+            TextViewer(
+                name = title.ifBlank { "正文" } + ".md",
+                load = { md to false },
+                onDismiss = { reader = null },
+                subtitle = BrowserPages.host(b.address),
+                onShare = { share(md, title) },
+                extra = listOf("让 Kavi 总结" to { reader = null; askKavi("总结一下这篇") }),
+            )
+        }
         diag?.let { report ->
             AlertDialog(
                 onDismissRequest = { diag = null },
@@ -523,7 +544,17 @@ class BrowserActivity : ComponentActivity() {
     }
 
     /** 把当前网页的内容带回聊天：新开一个对话，网页正文作为附件，用户接着问。 */
-    private fun askKavi() {
+    /** 网页里选中一段字点「问 Kavi」：带着出处回到聊天，放进输入框，用户接着问。 */
+    private fun askAboutSelection(sel: String) {
+        val b = JackBrowser
+        val text = "「" + sel.trim().take(4000) + "」\n——摘自「" + b.title.ifBlank { BrowserPages.host(b.address) } + "」" + b.address + "\n\n"
+        startActivity(Intent(this, com.jack.ai.MainActivity::class.java).setAction(Intent.ACTION_SEND)
+            .setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
+            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+    }
+
+    /** 把网页正文（视频页带上字幕）存成文件带回聊天；prompt 给了就一起放进输入框。 */
+    private fun askKavi(prompt: String? = null) {
         val b = JackBrowser
         lifecycleScope.launch {
             val text = runCatching { b.pageText(this@BrowserActivity) }.getOrNull()
@@ -534,6 +565,7 @@ class BrowserActivity : ComponentActivity() {
             val uri = androidx.core.content.FileProvider.getUriForFile(this@BrowserActivity, "$packageName.files", f)
             startActivity(Intent(this@BrowserActivity, com.jack.ai.MainActivity::class.java).setAction(Intent.ACTION_SEND)
                 .setType("text/plain").putExtra(Intent.EXTRA_STREAM, uri)
+                .apply { if (prompt != null) putExtra(Intent.EXTRA_TEXT, prompt) }
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 // 回到已经开着的聊天页（不另开一个），浏览器的网页留着，下次打开还在
                 .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
@@ -619,6 +651,7 @@ class BrowserActivity : ComponentActivity() {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { showTabs = false }) { Icon(Icons.Default.Close, "收起") }
                     Text("标签页（${b.tabs.size}）", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                    if (b.incognitoSupported()) TextButton(enabled = b.tabs.size < JackBrowser.MAX_TABS, onClick = { showTabs = false; openInNewTab(null, incognito = true) }) { Text("隐身") }
                     TextButton(enabled = b.tabs.size < JackBrowser.MAX_TABS, onClick = { showTabs = false; openInNewTab(null) }) { Text("新标签页") }
                 }
                 HorizontalDivider()
@@ -632,7 +665,7 @@ class BrowserActivity : ComponentActivity() {
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Column(Modifier.weight(1f)) {
-                                Text(t.title.ifBlank { if (t.address.isEmpty()) "起始页" else BrowserPages.host(t.address) },
+                                Text((if (t.incognito) "隐身 · " else "") + t.title.ifBlank { if (t.address.isEmpty()) "起始页" else BrowserPages.host(t.address) },
                                     style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
                                     color = if (on) colors.onPrimaryContainer else colors.onSurface)
                                 if (t.address.isNotEmpty()) Text(BrowserPages.host(t.address), style = MaterialTheme.typography.labelSmall,
