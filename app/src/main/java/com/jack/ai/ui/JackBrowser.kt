@@ -988,6 +988,22 @@ object JackBrowser {
         "${i + 1}. ${t.title.ifBlank { if (t.address.isEmpty()) "起始页" else BrowserPages.host(t.address) }} ${t.address}" + if (i == current) "（当前）" else ""
     }.joinToString("\n")
 
+    /** 关掉挡着网页的弹窗（下 App、领券、Cookie 提示），返回关掉了什么。 */
+    suspend fun dismissPopups(ctx: Context): List<String> {
+        val raw = unwrap(eval(ctx, BrowserScripts.dismiss(ctx)))
+        val closed = runCatching { (json.parseToJsonElement(raw) as kotlinx.serialization.json.JsonArray).map { (it as JsonPrimitive).content } }.getOrDefault(emptyList())
+        if (closed.isNotEmpty()) delay(300)
+        return closed
+    }
+
+    /** 滚到页面最底下（往下划才加载更多的页面用），等新内容出来。 */
+    suspend fun scrollToBottom(ctx: Context) {
+        agentAt = System.currentTimeMillis()
+        eval(ctx, "window.scrollTo(0, Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0)); 1")
+        delay(600)
+        waitStable(ctx, 5_000)
+    }
+
     /** 翻页：dir = 1 往下，-1 往上。 */
     suspend fun scroll(ctx: Context, dir: Int) {
         agentAt = System.currentTimeMillis()

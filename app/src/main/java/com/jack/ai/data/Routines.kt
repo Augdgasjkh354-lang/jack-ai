@@ -368,6 +368,27 @@ object Routines {
         return if (watch) judgeWatch(text, okCalls, failedCalls, needEvidence = tools != null) else Outcome("ok", text)
     }
 
+    /**
+     * 要用浏览器（或别的技能）的监控：交给 Work 跑一次检查，回答第一行同样写【满足】【不满足】【没查成】，
+     * 再按工具成没成判定（一次都没查成就不能判「满足」）。
+     */
+    suspend fun runWatchWork(ctx: Context, r: Routine, log: (RunStep) -> Unit = {}, onProgress: (String) -> Unit = {}): Outcome {
+        var ok = 0
+        var failed = 0
+        val now = SimpleDateFormat("yyyy年M月d日 EEEE HH:mm", Locale.CHINA).format(Date())
+        val brief = "【后台监控】现在是$now。你在后台替用户盯着一件事（监控「${r.title}」），这是其中一次检查。用户此刻不在线，不能向他提问。" +
+            "要用浏览器就先 use_skill 打开「操作浏览器」；网站存了浏览器流程就照着做。查完回复的第一行只写【满足】【不满足】或【没查成】；" +
+            "满足时第二行起写清用户需要的具体信息（价格、状态、链接等）；不满足时第二行用一句话说现在的情况；" +
+            "打不开、要登录、读不到可靠数据时第一行写【没查成】并说明原因——这种情况不能写【不满足】。"
+        val res = com.jack.ai.tools.runBackgroundWork(ctx, r.copy(work = true), log = { step ->
+            if (step.ok) ok++ else failed++
+            log(step)
+        }, brief = brief, onProgress = onProgress)
+        if (res.status == com.jack.ai.tools.TaskStatus.NEEDS_SETUP) return Outcome("needs_setup", res.text)
+        if (res.status == com.jack.ai.tools.TaskStatus.FAILED) return Outcome("unknown", res.text)
+        return judgeWatch(res.text, ok, failed, needEvidence = true)
+    }
+
     /** 失败通知只说是哪一类原因，不带具体内容。 */
     fun reasonKind(why: String): String = when {
         Regex("代理|网络|超时|连接|找不到服务器").containsMatchIn(why) -> "网络或代理问题"
@@ -493,7 +514,11 @@ class RoutineWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
         val run = RunLog.start(ctx, r)
         val log: (RunStep) -> Unit = { RunLog.step(ctx, run, it) }
         val outcome = try {
-            Routines.runTask(ctx, r, watch = true, log = log)
+            // 要用浏览器等技能的监控走 Work（可能跑得久，以前台方式运行）；只是搜一搜的走轻量的
+            if (r.work) {
+                runCatching { setForeground(foregroundInfo("正在检查：${r.title}")) }
+                Routines.runWatchWork(ctx, r, log = log) { label -> runCatching { setForegroundAsync(foregroundInfo("正在检查：${r.title}", label)) } }
+            } else Routines.runTask(ctx, r, watch = true, log = log)
         } catch (e: kotlinx.coroutines.CancellationException) {
             RunLog.finish(ctx, run, "failed", error = "被系统中途停掉了", retry = true)
             throw e

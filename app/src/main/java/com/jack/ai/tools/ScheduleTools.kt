@@ -330,6 +330,8 @@ private suspend fun ToolSession.makeWatch(args: JsonObject, name: String): Strin
             kind = "watch", title = name.ifBlank { prompt.take(20) }, prompt = prompt, hour = 0, minute = 0,
             everyMin = every, until = until.coerceAtMost(now + 30 * 86_400_000L),
             then = args["then"].text().trim(),
+            // 要在网站上看（登录后的页面、要点几下才看得到的）就用浏览器，走 Work
+            work = args["work"].text() == "true",
         )
         withContext(Dispatchers.Main) { host.saveRoutine(r) }
         val warn = if (!Routines.canNotify(app)) "（注意：App 还没有通知权限，有结果也弹不出通知，用户需要打开左侧菜单「提醒和任务」页面授权）" else ""

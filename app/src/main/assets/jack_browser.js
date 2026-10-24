@@ -276,6 +276,43 @@
     return JSON.stringify({ found: true, x: o.x + r.left + r.width / 2, y: o.y + r.top + r.height / 2, vw: innerWidth });
   }
 
+  /**
+   * 关掉挡在网页上的弹窗：「打开 App」「下载 App」「领优惠券」、Cookie 提示这类。
+   * 只点写着关闭、跳过、以后再说之类的按钮（Cookie 提示可以点同意）；有密码框的（登录框）不碰。
+   * 找不到关闭按钮、又明显是让下 App 的横幅，就直接藏起来。返回关掉了什么。
+   */
+  var CLOSE = /^(×|✕|✖|x|X|关闭|关掉|跳过|取消|不了|暂不|暂不需要|以后再说|下次再说|我知道了|知道了|残忍拒绝|不用了|close|dismiss|no thanks|not now|skip|reject all|decline|仅必要|拒绝)$/i;
+  var NAG = /(打开.{0,8}app|打开.{0,6}客户端|下载\s*app|app\s*内打开|app\s*打开|立即下载|领取.{0,6}券|优惠券|新人.{0,4}礼|cookie|隐私政策|使用条款)/i;
+  function dismiss() {
+    var closed = [];
+    var vw = innerWidth, vh = innerHeight;
+    var all = document.querySelectorAll('body *');
+    for (var i = 0; i < all.length && closed.length < 5; i++) {
+      var el = all[i], st = styleOf(el);
+      if (st.position !== 'fixed' && st.position !== 'sticky') continue;
+      var r = el.getBoundingClientRect();
+      if (r.width < vw * 0.5 || r.height < 40 || r.bottom < 0 || r.top > vh) continue;
+      if (el.querySelector('input[type=password]')) continue;
+      var text = clean(el.innerText).slice(0, 300);
+      if (!NAG.test(text) && r.width * r.height < vw * vh * 0.4) continue;
+      var btn = null;
+      el.querySelectorAll('button,a,[role=button],span,i,div,img,svg').forEach(function (b) {
+        if (btn) return;
+        var t = clean(b.innerText || b.getAttribute('aria-label') || b.getAttribute('title') || b.getAttribute('alt') || '');
+        var cls = (typeof b.className === 'string' ? b.className : '') + ' ' + (b.id || '');
+        if ((t && t.length <= 8 && CLOSE.test(t)) || (!t && /close|guanbi|cancel/i.test(cls))) {
+          if (visibleRect(b)) btn = b;
+        }
+      });
+      if (!btn && /cookie/i.test(text)) {
+        el.querySelectorAll('button,a,[role=button]').forEach(function (b) { if (!btn && /^(同意|接受|accept|accept all|ok|got it)$/i.test(clean(b.innerText))) btn = b; });
+      }
+      if (btn) { btn.click(); closed.push(text.slice(0, 30) || '弹窗'); continue; }
+      if (NAG.test(text) && r.height < vh * 0.5) { el.style.setProperty('display', 'none', 'important'); closed.push(text.slice(0, 30)); }
+    }
+    return JSON.stringify(closed);
+  }
+
   /** 页面在不在变：文字长度 + 元素个数，连着几次一样就算加载完了。 */
   function signature() {
     var b = document.body;
@@ -475,5 +512,5 @@
   }
 
   window.__jack = { snapshot: snapshot, inspect: inspect, act: act, markText: markText, center: center,
-    signature: signature, hasText: hasText, extract: extract, at: at };
+    signature: signature, hasText: hasText, extract: extract, at: at, dismiss: dismiss };
 })();
