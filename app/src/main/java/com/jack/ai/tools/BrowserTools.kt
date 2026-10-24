@@ -214,7 +214,7 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
         run {
             val url = JackBrowser.address
             val (flows, notes) = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                com.jack.ai.data.BrowserFlows.forUrl(host.store.loadFlows(), url) to com.jack.ai.data.BrowserFlows.notesFor(host.store.loadSiteNotes(), url)
+                com.jack.ai.data.BrowserFlows.forUrl(host.store.loadFlows(), url) to com.jack.ai.data.BrowserFlows.notesFor(host.store.loadSiteNotes(), url) + com.jack.ai.data.BrowserFlows.builtinNotesFor(url)
             }
             val site = com.jack.ai.api.BrowserPages.site(url)
             if ((flows.isNotEmpty() || notes.isNotEmpty()) && flowHinted.add(site)) note.append(com.jack.ai.data.BrowserFlows.hint(flows, notes))

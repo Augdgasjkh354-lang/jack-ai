@@ -65,4 +65,11 @@ class BrowserFlowsTest {
         val hint = BrowserFlows.hint(emptyList(), BrowserFlows.notesFor(notes, "https://search.jd.com/x"))
         assertTrue(hint, hint.startsWith("【这个网站的备忘】") && !hint.contains("流程"))
     }
+
+    @Test
+    fun builtinNotesMatchSiteAndSubdomains() {
+        assertTrue(BrowserFlows.builtinNotesFor("https://chatgpt.com/").single().text.contains("auth/login"))
+        assertTrue(BrowserFlows.builtinNotesFor("https://www.chatgpt.com/c/1").isNotEmpty())
+        assertTrue(BrowserFlows.builtinNotesFor("https://notchatgpt.com/").isEmpty())
+    }
 }

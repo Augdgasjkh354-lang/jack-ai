@@ -35,6 +35,18 @@ object BrowserFlows {
     /** 每个网站最多记几条备忘（新的挤掉旧的）。 */
     const val NOTES_PER_SITE = 8
 
+    /** 自带的网站备忘：已知的坑，不用等踩过再记（不在用户的备忘列表里显示）。 */
+    private val BUILTIN_NOTES = mapOf(
+        "chatgpt.com" to "要登录就直接打开 https://chatgpt.com/auth/login（整页的登录表单）；首页右上角「登录」弹出的框在有些手机上出不来",
+    )
+
+    /** 这个网址上自带的备忘。 */
+    fun builtinNotesFor(url: String): List<SiteNote> {
+        val h = BrowserPages.site(url)
+        if (h.isEmpty()) return emptyList()
+        return BUILTIN_NOTES.filter { (site, _) -> h == site || h.endsWith(".$site") }.map { (site, text) -> SiteNote(id = "builtin-$site", site = site, text = text, at = 0) }
+    }
+
     /** 这个网址上的备忘。 */
     fun notesFor(notes: List<SiteNote>, url: String): List<SiteNote> {
         val h = BrowserPages.site(url)

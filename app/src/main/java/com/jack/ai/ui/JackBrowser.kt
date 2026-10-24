@@ -279,8 +279,15 @@ object JackBrowser {
         // 用可换底的 Context：放进浏览器页时换成那个页面（下拉框、弹窗要它），离开后换回 App
         wrapper = MutableContextWrapper(app)
         loadLists()
+        // 系统 WebView 太旧：新式网页（ChatGPT 的登录框这类）会点了没反应，提醒用户去更新
+        androidx.webkit.WebViewCompat.getCurrentWebViewPackage(app)?.versionName?.substringBefore('.')?.toIntOrNull()?.let { v ->
+            if (v < OLD_WEBVIEW) notice = "手机的系统网页组件（Android System WebView）是 $v 版，比较旧，有些网站的弹窗、按钮会点了没反应。到应用商店搜「Android System WebView」或「Chrome」更新一下。"
+        }
         return newTab().web!!
     }
+
+    /** 低于这个版本的系统 WebView 算旧。 */
+    private const val OLD_WEBVIEW = 120
 
     /**
      * 新开一个标签页并切过去。多标签的界面还没做，现在只在第一次用浏览器时开一个；
