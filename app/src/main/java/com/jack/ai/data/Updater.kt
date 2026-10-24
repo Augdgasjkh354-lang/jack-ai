@@ -28,7 +28,7 @@ import java.util.concurrent.TimeUnit
 /**
  * 自己更新自己：查 GitHub 上 jack-ai 的最新版本，比手上的新就下载（校验 SHA-256），下好了发通知，
  * 用户点通知打开系统安装界面，自己确认覆盖安装（聊天记录不会丢）。
- * 版本号就是 CI 的构建号：装的是 versionCode N，发布的标签是 v1.0.N。
+ * 版本号就是 CI 的构建号：装的是 versionCode N；发布的标签 N < 100 时是 v1.0.N，从 100 起是 v1.1.(N-100)。
  */
 object Updater {
     const val REPO = "Augdgasjkh354-lang/jack-ai"
@@ -48,8 +48,22 @@ object Updater {
 
     fun installedName(ctx: Context): String = ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName.orEmpty()
 
-    /** 「v1.0.69」→ 69。 */
-    internal fun codeOf(tag: String): Long? = tag.trim().substringAfterLast('.').toLongOrNull()
+    /** v1.1.0 对应第几次打包（和 app/build.gradle.kts、打包流程里的 100 一致）。 */
+    private const val V11_FROM = 100L
+
+    /** 「v1.0.69」→ 69；「v1.1.3」→ 103。看不懂返回 null。 */
+    internal fun codeOf(tag: String): Long? {
+        val parts = tag.trim().removePrefix("v").split('.')
+        val patch = parts.getOrNull(2)?.toLongOrNull() ?: return null
+        return when (parts.take(2)) {
+            listOf("1", "0") -> patch
+            listOf("1", "1") -> V11_FROM + patch
+            else -> null
+        }
+    }
+
+    /** codeOf 反过来：打包次数 → 发布的标签。 */
+    internal fun tagOf(code: Long): String = if (code >= V11_FROM) "v1.1.${code - V11_FROM}" else "v1.0.$code"
 
     /** GitHub 上最新发布的版本。 */
     fun latest(token: String): Latest {
@@ -64,7 +78,7 @@ object Updater {
 
     /** 从手上的版本到最新版之间改了什么：每个提交的第一行，最多 15 条。 */
     fun notes(token: String, from: Long, to: Latest): String = runCatching {
-        val commits = GitHub.get(token, "/repos/$REPO/compare/v1.0.$from...${to.tag}").jsonObject["commits"]?.jsonArray.orEmpty()
+        val commits = GitHub.get(token, "/repos/$REPO/compare/${tagOf(from)}...${to.tag}").jsonObject["commits"]?.jsonArray.orEmpty()
         commits.map { it.jsonObject["commit"]?.jsonObject?.get("message").s().lineSequence().first().trim() }
             .filter { it.isNotBlank() }.reversed().take(15).joinToString("\n") { "· $it" }
     }.getOrDefault("")

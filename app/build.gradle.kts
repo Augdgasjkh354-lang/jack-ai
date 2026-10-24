@@ -17,7 +17,8 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = buildNumber
-        versionName = "1.0.$buildNumber"
+        // 版本名：v1.0.N 用到第 99 次打包；从第 100 次起是 v1.1.0、v1.1.1……（versionCode 仍是打包次数，自动更新靠它）
+        versionName = if (buildNumber >= 100) "1.1.${buildNumber - 100}" else "1.0.$buildNumber"
         // Python 只打包 64 位 ARM，现在的安卓手机基本都是
         ndk { abiFilters += listOf("arm64-v8a") }
     }

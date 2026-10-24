@@ -27,6 +27,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -88,6 +89,8 @@ import kotlinx.coroutines.launch
 class BrowserActivity : ComponentActivity() {
     private lateinit var settings: Settings
     private var editing by mutableStateOf("")
+    /** 标签页列表开着。 */
+    private var showTabs by mutableStateOf(false)
     /** 识别出的二维码内容，等弹窗。 */
     private var qr by mutableStateOf<String?>(null)
     /** 页内查找：null 没在找，否则是要找的字。 */
@@ -137,7 +140,10 @@ class BrowserActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        intent.getStringExtra(EXTRA_URL)?.let { finding = null; open(it) }
+        // 浏览器已经开着网页时，从聊天里点来的链接开在新标签页，原来的网页留着
+        intent.getStringExtra(EXTRA_URL)?.let { url ->
+            if (JackBrowser.address.isNotEmpty()) openInNewTab(url) else { finding = null; open(url) }
+        }
     }
 
     override fun onResume() {
@@ -175,6 +181,23 @@ class BrowserActivity : ComponentActivity() {
             BrowserNet.Kind.EXTERNAL -> JackBrowser.external = url
             else -> lifecycleScope.launch { JackBrowser.load(this@BrowserActivity, url) }
         }
+    }
+
+    /** 新开一个标签页打开网址；开满了就在当前页打开。 */
+    private fun openInNewTab(url: String?) {
+        val b = JackBrowser
+        b.webView(this)
+        finding = null
+        if (b.tabs.size >= JackBrowser.MAX_TABS) b.notice = "最多开 ${JackBrowser.MAX_TABS} 个标签页，这次在当前页打开。可以点底栏的数字关掉几个。"
+        else b.newTab()
+        editing = ""
+        if (url != null) open(url)
+    }
+
+    private fun switchTab(i: Int) {
+        if (finding != null) closeFind()
+        JackBrowser.switchTo(i)
+        showTabs = false
     }
 
     private fun reload() {
@@ -224,7 +247,16 @@ class BrowserActivity : ComponentActivity() {
             when {
                 b.fullscreen != null -> exitFullscreen()
                 finding != null -> closeFind()
-                else -> { val w = b.webView(this); if (w.canGoBack()) { b.clearError(); w.goBack() } else finish() }
+                showTabs -> showTabs = false
+                else -> {
+                    val w = b.webView(this)
+                    when {
+                        w.canGoBack() -> { b.clearError(); w.goBack() }
+                        // 退到这个标签页的头了：关掉它，回到别的标签页
+                        b.tabs.size > 1 -> b.closeTab(b.current)
+                        else -> finish()
+                    }
+                }
             }
         }
         Box(Modifier.fillMaxSize()) {
@@ -340,6 +372,14 @@ class BrowserActivity : ComponentActivity() {
                 IconButton(enabled = b.canForward, onClick = { b.clearError(); b.webView(this@BrowserActivity).goForward() }) { Icon(Icons.AutoMirrored.Filled.ArrowForward, "前进") }
                 IconButton(onClick = { reload() }) { Icon(Icons.Default.Refresh, "刷新") }
                 IconButton(enabled = b.address.isNotEmpty(), onClick = { finding = null; b.home(); editing = "" }) { Icon(Icons.Default.Home, "起始页") }
+                IconButton(onClick = { showTabs = true }) {
+                    Text(
+                        b.tabs.size.coerceAtLeast(1).toString(),
+                        Modifier.border(1.5.dp, colors.onSurface, androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
+                            .padding(horizontal = 6.dp, vertical = 1.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
                 Text(
                     routeLabel(),
                     Modifier.weight(1f).padding(end = 12.dp),
@@ -350,6 +390,7 @@ class BrowserActivity : ComponentActivity() {
                 )
             }
         }
+        if (showTabs) Box(Modifier.fillMaxSize().safeDrawingPadding()) { TabsPanel() }
         // 视频全屏：盖满整个屏幕
         full?.let { (view, _) ->
             Box(Modifier.fillMaxSize().background(Color.Black)) {
@@ -525,6 +566,43 @@ class BrowserActivity : ComponentActivity() {
         }
     }
 
+    /** 标签页列表：点一个切过去，× 关掉，顶上新开一个。 */
+    @Composable
+    private fun TabsPanel() {
+        val b = JackBrowser
+        val colors = MaterialTheme.colorScheme
+        Surface(Modifier.fillMaxSize(), color = colors.background) {
+            Column(Modifier.fillMaxSize()) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { showTabs = false }) { Icon(Icons.Default.Close, "收起") }
+                    Text("标签页（${b.tabs.size}）", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                    TextButton(enabled = b.tabs.size < JackBrowser.MAX_TABS, onClick = { showTabs = false; openInNewTab(null) }) { Text("新标签页") }
+                }
+                HorizontalDivider()
+                LazyColumn(Modifier.fillMaxSize()) {
+                    items(b.tabs.size, key = { b.tabs[it].id }) { i ->
+                        val t = b.tabs[i]
+                        val on = i == b.current
+                        Row(
+                            Modifier.fillMaxWidth().background(if (on) colors.primaryContainer else Color.Transparent)
+                                .clickable { switchTab(i) }.padding(start = 16.dp, top = 6.dp, bottom = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(t.title.ifBlank { if (t.address.isEmpty()) "起始页" else BrowserPages.host(t.address) },
+                                    style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                    color = if (on) colors.onPrimaryContainer else colors.onSurface)
+                                if (t.address.isNotEmpty()) Text(BrowserPages.host(t.address), style = MaterialTheme.typography.labelSmall,
+                                    color = colors.onSurfaceVariant, maxLines = 1)
+                            }
+                            IconButton(onClick = { b.closeTab(i); if (b.tabs.isEmpty()) showTabs = false }) { Icon(Icons.Default.Close, "关闭这个标签页") }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     /** 网页没打开：盖一层干净的说明，不露出网页组件自带的英文出错页。 */
     @Composable
     private fun ErrorPage(msg: String) {
@@ -558,6 +636,7 @@ class BrowserActivity : ComponentActivity() {
                     fun item(label: String, action: () -> Unit) = Text(label, Modifier.fillMaxWidth().clickable { close(); action() }.padding(vertical = 12.dp))
                     p.link?.let { link ->
                         item("打开") { open(link) }
+                        item("在新标签页打开") { openInNewTab(link) }
                         item("复制链接") { copy(link); b.notice = "已复制链接" }
                         item("分享链接") { share(link, "") }
                         item("用系统浏览器打开") { Links.system(this@BrowserActivity, link) }

@@ -86,6 +86,18 @@ class UpdaterTest {
     }
 
     @Test
+    fun versionTagsMapToBuildNumbers() {
+        assertEquals(99L, Updater.codeOf("v1.0.99"))
+        assertEquals(100L, Updater.codeOf("v1.1.0"))
+        assertEquals(103L, Updater.codeOf(" v1.1.3 "))
+        assertNull(Updater.codeOf("v2.0.1"))
+        assertNull(Updater.codeOf("latest"))
+        assertEquals("v1.0.99", Updater.tagOf(99))
+        assertEquals("v1.1.0", Updater.tagOf(100))
+        assertEquals("v1.1.5", Updater.tagOf(105))
+    }
+
+    @Test
     fun notNewerMeansUpToDate() {
         tag = "v1.0.0"
         assertTrue(Updater.checkAndDownload(ctx, "") is Updater.Result.UpToDate)

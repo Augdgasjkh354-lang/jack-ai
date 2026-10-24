@@ -320,6 +320,9 @@ object JackBrowser {
         return t
     }
 
+    /** 最多开几个标签页（每个都是一个网页窗口，占内存）。 */
+    const val MAX_TABS = 10
+
     /** 切到第 i 个标签页：网页窗口换了，让浏览器页重新来要。 */
     fun switchTo(i: Int) {
         if (i !in tabs.indices) return
@@ -416,10 +419,8 @@ object JackBrowser {
     /** 网页跟着 App 的深浅色：浅色主题时不变暗。跟着系统深色走（网页组件看的是系统设置）。 */
     fun setDark(allowed: Boolean) {
         darkAllowed = allowed
-        val w = web ?: return
-        if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
-            androidx.webkit.WebSettingsCompat.setAlgorithmicDarkeningAllowed(w.settings, allowed)
-        }
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) return
+        tabs.forEach { t -> t.web?.let { androidx.webkit.WebSettingsCompat.setAlgorithmicDarkeningAllowed(it.settings, allowed) } }
     }
 
     /** 回到起始页（书签、最近访问）。能后退回刚才的网页。 */
@@ -537,6 +538,9 @@ object JackBrowser {
     }
 
     fun clearData() {
+        web ?: return
+        // 别的标签页也关掉：它们的网页和记录同样要清
+        for (i in tabs.indices.reversed()) if (i != current) closeTab(i)
         val w = web ?: return
         CookieManager.getInstance().removeAllCookies(null)
         CookieManager.getInstance().flush()
