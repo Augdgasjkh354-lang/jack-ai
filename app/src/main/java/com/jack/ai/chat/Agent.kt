@@ -67,6 +67,7 @@ class Agent(
         var currentTools = tools
         var round = 0
         var attempts = 0
+        var hiccups = 0
         while (true) {
             val calls = sortedMapOf<Int, Call>()
             val roundReasoning = StringBuilder()
@@ -91,7 +92,14 @@ class Agent(
                         }
                     }
                 }
-            } catch (e: ApiException) {
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                // 服务一时忙不过来、网断了一下：这一轮还什么都没收到，就等几秒重发（最多两次），长任务不至于半路断掉
+                if (isHiccup(e) && hiccups < RETRY_DELAYS.size && roundContent.isEmpty() && roundReasoning.isEmpty() && calls.isEmpty()) {
+                    kotlinx.coroutines.delay(RETRY_DELAYS[hiccups++])
+                    continue
+                }
+                if (e !is ApiException) throw e
                 if (recovery != null && round == 0 && e.code == 400 && roundContent.isEmpty()) {
                     val fix = recovery.recover(++attempts)
                     if (fix != null) {
@@ -165,5 +173,14 @@ class Agent(
             retool?.let { currentTools = it() }
             if (round >= maxRounds()) currentTools = null
         }
+    }
+
+    companion object {
+        /** 一时的故障重发前等多久：第一次 3 秒，第二次 8 秒。 */
+        internal var RETRY_DELAYS = longArrayOf(3_000, 8_000)
+
+        /** 值得重发的：限流、服务器一时出错、网络断了一下。参数错、Key 不对这类重发也没用。 */
+        internal fun isHiccup(e: Exception): Boolean =
+            (e is ApiException && e.code in setOf(429, 500, 502, 503, 504)) || e is java.io.IOException
     }
 }

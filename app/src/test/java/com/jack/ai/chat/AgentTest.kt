@@ -141,6 +141,23 @@ class AgentTest {
     }
 
     @Test
+    fun transientFailuresAreRetriedBeforeAnythingArrives() = runBlocking {
+        Agent.RETRY_DELAYS = longArrayOf(1, 1)
+        val busy = { flow<StreamEvent> { throw ApiException("服务器繁忙", 503) } }
+        val netDrop = { flow<StreamEvent> { throw java.io.IOException("reset") } }
+        val api = FakeApi(busy, netDrop, text("好了"))
+        val agent = Agent(api::stream)
+        agent.run(mutableListOf(userMsg("x")), someTools, { 5 }, { _, _ -> "" })
+        assertEquals("好了", agent.content.toString())
+        assertEquals(3, api.sizes.size)
+        // 参数错（400）不重发；连着三次忙也不再试
+        val api2 = FakeApi(busy, busy, busy)
+        try { Agent(api2::stream).run(mutableListOf(userMsg("x")), someTools, { 5 }, { _, _ -> "" }); fail("应该报错") }
+        catch (e: ApiException) { assertEquals(503, e.code) }
+        assertEquals(3, api2.sizes.size)
+    }
+
+    @Test
     fun giveUpWhenRecoveryReturnsNull() = runBlocking {
         val api = FakeApi(reject())
         try {

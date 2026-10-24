@@ -122,7 +122,7 @@ class Store(context: Context) {
     /** 取出并清空收件箱。 */
     fun takeInbox(): List<InboxItem> = synchronized(LOCK) {
         val list = loadUnlocked("inbox.json", InboxItem.serializer())
-        if (list.isNotEmpty()) File(dir, "inbox.json").delete()
+        if (list.isNotEmpty()) AtomicFile(File(dir, "inbox.json")).delete()
         list
     }
 
@@ -138,7 +138,7 @@ class Store(context: Context) {
     /** 取出并清空攒着的微信消息。 */
     fun takeWeChat(): List<WeChatMsg> = synchronized(LOCK) {
         val list = loadUnlocked("wechat_pending.json", WeChatMsg.serializer())
-        if (list.isNotEmpty()) File(dir, "wechat_pending.json").delete()
+        if (list.isNotEmpty()) AtomicFile(File(dir, "wechat_pending.json")).delete()
         list
     }
 
@@ -167,7 +167,7 @@ class Store(context: Context) {
         atomicWrite("feedback.json", json.encodeToString(ListSerializer(Feedback.serializer()), list.takeLast(100)))
     }
 
-    fun clearFeedback() = synchronized(LOCK) { File(dir, "feedback.json").delete(); Unit }
+    fun clearFeedback() = synchronized(LOCK) { AtomicFile(File(dir, "feedback.json")).delete(); Unit }
 
     /** 记一次工具调用。 */
     fun addToolStat(name: String, failed: Boolean) = synchronized(LOCK) {
