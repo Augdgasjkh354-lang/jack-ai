@@ -68,6 +68,19 @@ class BrowserDiffTest {
     }
 
     @Test
+    fun authHostsAndChallengesAreRecognised() {
+        // 登录跳到单独的认证域名（ChatGPT 的 auth.openai.com）：中间的邮箱验证页也算还在登录
+        assertTrue(looksLikeLogin(page(emptyList(), "", url = "https://auth.openai.com/email-verification")))
+        assertTrue(looksLikeLogin(page(emptyList(), "", url = "https://accounts.google.com/v3/signin")))
+        assertFalse(looksLikeLogin(page(emptyList(), "", url = "https://chatgpt.com/")))
+        assertTrue(looksLikeChallenge(page(emptyList(), "chatgpt.com\n确认您是真人\n需要先检查您的连接的安全性")))
+        assertTrue(looksLikeChallenge(page(emptyList(), "Verify you are human by completing the action below.")))
+        // 正文很长的普通页面提到「请稍候」不算
+        assertFalse(looksLikeChallenge(page(emptyList(), "请稍候\n" + "正文".repeat(1000))))
+        assertFalse(looksLikeChallenge(base))
+    }
+
+    @Test
     fun selfCheckFlagsThinOrHollowResults() {
         val h = listOf("名称", "价格", "链接")
         val good = (1..10).map { listOf("商品$it", "¥$it", "") }

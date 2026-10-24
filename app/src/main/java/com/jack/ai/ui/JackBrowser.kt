@@ -90,6 +90,8 @@ object JackBrowser {
         @Volatile var site = ""
         /** 正在加载的页面加载完时完成。 */
         var pageDone: CompletableDeferred<Unit>? = null
+        /** 网页弹出的窗口（登录窗口之类）：是哪个标签页弹的，关掉时回到它。 */
+        var openedBy: Int? = null
 
         fun clearError() { error = null; pageFailed = false }
     }
@@ -245,6 +247,9 @@ object JackBrowser {
     var agentAt by mutableLongStateOf(0L)
     /** 网页窗口换了地方（浏览器页 ↔ 聊天小窗）就加一，让原来的地方重新来要。 */
     var hostGen by mutableIntStateOf(0)
+    /** Jack 在等用户亲手做的事（登录、人机验证），回答里的网页画面上会写出来；null = 没在等。 */
+    var waitingUser by mutableStateOf<String?>(null)
+
     /** 对话里正显示着 Jack 操作网页的实时画面（这时聊天页右上角的小窗就不出来）。 */
     var inlineHosts by mutableIntStateOf(0)
     /** 用户正开着浏览器页。 */
@@ -290,8 +295,9 @@ object JackBrowser {
                 domStorageEnabled = true
                 allowFileAccess = false
                 allowContentAccess = false
-                javaScriptCanOpenWindowsAutomatically = false
-                setSupportMultipleWindows(false)
+                // 允许网页弹新窗口（「用 Google / 微软 / Apple 登录」这类），开在新标签页里；网页自己乱弹的在 onCreateWindow 里拦掉
+                javaScriptCanOpenWindowsAutomatically = true
+                setSupportMultipleWindows(true)
                 setGeolocationEnabled(false)
                 mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
                 mediaPlaybackRequiresUserGesture = true
@@ -665,6 +671,25 @@ object JackBrowser {
             val url = view.url.orEmpty()
             if (newTitle != null && newTitle != url) BrowserPages.retitle(visits, url, newTitle).let { if (it !== visits) { visits = it; saveLists() } }
         }
+        /** 网页要弹新窗口：用户点的、或 Jack 刚点过（登录窗口）才开，开在新标签页并切过去；网页自己弹的（多半是广告）不开。 */
+        override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: android.os.Message): Boolean {
+            if (!isUserGesture && System.currentTimeMillis() - agentAt > 5_000) return false
+            if (tabs.size >= MAX_TABS) { notice = "标签页开满了，网页要弹的窗口没打开。先关掉几个标签页再试。"; return false }
+            val nt = newTab(switch = true)
+            nt.openedBy = t.id
+            (resultMsg.obj as? WebView.WebViewTransport)?.webView = nt.web ?: return false
+            resultMsg.sendToTarget()
+            return true
+        }
+
+        /** 弹出的窗口自己关了（登录完常这样）：关掉那个标签页，回到弹它的那一页。 */
+        override fun onCloseWindow(window: WebView) {
+            val closed = tabs.firstOrNull { it.web === window } ?: return
+            val back = tabs.firstOrNull { it.id == closed.openedBy }
+            closeTab(closed)
+            back?.let { b -> tabs.indexOf(b).takeIf { it >= 0 }?.let { switchTo(it) } }
+        }
+
         // 视频全屏：交给浏览器页盖满屏幕
         override fun onShowCustomView(view: View, callback: CustomViewCallback) {
             if (!userViewing) { callback.onCustomViewHidden(); return }

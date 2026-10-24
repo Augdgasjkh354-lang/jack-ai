@@ -294,9 +294,11 @@
       var el = all[i], st = styleOf(el);
       if (st.position !== 'fixed' && st.position !== 'sticky') continue;
       var r = el.getBoundingClientRect();
-      if (r.width < vw * 0.5 || r.height < 40 || r.bottom < 0 || r.top > vh) continue;
+      if (r.height < 40 || r.bottom < 0 || r.top > vh) continue;
       if (el.querySelector('input[type=password]')) continue;
       var text = clean(el.innerText).slice(0, 300);
+      // 窄的只管 Cookie、隐私偏好这种角落小卡片；别的窄条（客服按钮、悬浮购物车）不碰
+      if (r.width < vw * 0.5 && !(r.width >= vw * 0.3 && /cookie|隐私|偏好设置|privacy/i.test(text))) continue;
       if (!NAG.test(text) && r.width * r.height < vw * vh * 0.4) continue;
       var btn = null;
       el.querySelectorAll('button,a,[role=button],span,i,div,img,svg').forEach(function (b) {
@@ -307,8 +309,8 @@
           if (visibleRect(b)) btn = b;
         }
       });
-      if (!btn && /cookie/i.test(text)) {
-        el.querySelectorAll('button,a,[role=button]').forEach(function (b) { if (!btn && /^(同意|接受|accept|accept all|ok|got it)$/i.test(clean(b.innerText))) btn = b; });
+      if (!btn && /cookie|隐私|偏好设置|privacy/i.test(text)) {
+        el.querySelectorAll('button,a,[role=button]').forEach(function (b) { if (!btn && /^(拒绝非必要|仅限必要|仅必要|reject non-essential|reject all|同意|接受|全部接受|accept|accept all|ok|got it)$/i.test(clean(b.innerText))) btn = b; });
       }
       if (btn) { btn.click(); closed.push(text.slice(0, 30) || '弹窗'); continue; }
       if (NAG.test(text) && r.height < vh * 0.5) { el.style.setProperty('display', 'none', 'important'); closed.push(text.slice(0, 30)); }

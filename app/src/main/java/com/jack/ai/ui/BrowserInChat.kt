@@ -86,7 +86,7 @@ fun BrowserLive() {
                 // 盖一层：这里不让点网页，点了进完整浏览器
                 Box(Modifier.fillMaxSize().clickable { ctx.startActivity(Intent(ctx, BrowserActivity::class.java)) })
                 Text(
-                    "Kavi 正在操作网页 · 点这里接手",
+                    b.waitingUser?.let { "Kavi 在等你：$it · 点这里去做，做完它会自己接着来" } ?: "Kavi 正在操作网页 · 点这里接手",
                     Modifier.align(Alignment.BottomStart).fillMaxWidth()
                         .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.92f)).padding(horizontal = 10.dp, vertical = 4.dp),
                     style = MaterialTheme.typography.labelSmall,

@@ -52,6 +52,7 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
         "hover" -> "浏览器悬停 $n"
         "flow" -> "读浏览器流程「${args["name"].text().take(30)}」"
         "save_flow" -> "存浏览器流程「${args["name"].text().take(30)}」"
+        "wait_user" -> "等用户：" + text.ifBlank { "在网页上操作" }.take(30)
         else -> "浏览器读页面"
     }
     // 先把参数不全的挡在外面（不算一次成功的工具调用）
@@ -69,13 +70,14 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
         "flow" -> if (args["name"].text().isBlank()) return need("name（流程名）")
         "fill" -> if ((args["fields"] as? JsonObject).isNullOrEmpty()) return need("fields（{编号: 要填的值}）")
         "save_flow" -> if (listOf("name", "site", "steps").any { args[it].text().isBlank() }) return need("name、site、steps（when 也最好写上）")
-        "read", "scroll", "back", "look", "wait", "extract", "tabs", "" -> {}
+        "read", "scroll", "back", "look", "wait", "extract", "tabs", "wait_user", "" -> {}
         "download" -> if (JackBrowser.pending == null) return "现在没有等着下载的文件。先点网页上的下载链接或按钮，读回来的页面里会写「网页要下载」。"
-        else -> return "action 要填 open、read、click、type、delete、select、key、scroll、back、look、tap、swipe、wait、extract、upload、tabs、new_tab、switch_tab、close_tab、download、fill、hover、flow、save_flow、steps、parallel 或 note_site"
+        else -> return "action 要填 open、read、click、type、delete、select、key、scroll、back、look、tap、swipe、wait、extract、upload、tabs、new_tab、switch_tab、close_tab、download、fill、hover、flow、save_flow、wait_user、steps、parallel 或 note_site"
     }
     if (action == "flow" || action == "save_flow") return runTool(label) { flowAction(action, args) to SearchRecord(label) }
     return runTool(label) {
         val note = StringBuilder()
+        val fromTab = JackBrowser.tab.id
         when (action) {
             "open" -> JackBrowser.load(ctx, normalizeUrl(args["url"].text()))?.let { note.append("打开出错：$it\n") }
             "click", "type", "delete", "select", "key", "hover" -> {
@@ -173,6 +175,7 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
                 JackBrowser.upload(ctx, n!!, f)?.let { note.append("没传上：$it\n") } ?: note.append("已把「${f.name}」交给网页（有的网站还要再点「确定/上传」才算传完）。\n")
             }
             "tabs" -> {}
+            "wait_user" -> note.append(waitUser(text.ifBlank { "在网页上操作" }))
             "new_tab" -> {
                 withContext(kotlinx.coroutines.Dispatchers.Main) { JackBrowser.webView(ctx) }
                 if (JackBrowser.tabs.size >= JackBrowser.MAX_TABS) note.append("已经开了 ${JackBrowser.MAX_TABS} 个标签页，先关掉用不着的（close_tab）。\n")
@@ -223,7 +226,16 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
         if (action !in setOf("read", "look", "tabs")) JackBrowser.dismissPopups(ctx).takeIf { it.isNotEmpty() }?.let {
             note.append("自动关掉了弹窗：" + it.joinToString("；") { t -> "「$t」" } + "\n")
         }
-        val page = JackBrowser.read(ctx)
+        // 点登录这类按钮，网页常弹一个新窗口：已经开成新标签页并切过去了
+        JackBrowser.tab.takeIf { it.id != fromTab && it.openedBy == fromTab }?.let { note.append("网页打开了新窗口（登录窗口之类），已经切过去了；关掉后会回到原来那页。\n") }
+        var page = JackBrowser.read(ctx)
+        // 人机验证（Cloudflare「请稍候」之类）：多数等几秒自己就过了；过不去要用户点一下
+        if (action != "wait_user" && looksLikeChallenge(page)) {
+            val cleared = waitUntil(15_000, 1_500) { !looksLikeChallenge(it) }
+            if (cleared != null) { page = cleared; note.append("网站做了一下人机验证，等了几秒自己过了。\n") }
+            else note.append(if (interactive) "⚠ 网站要人机验证（「确认您是真人」之类），等了 15 秒没过。不要自己去点或滑：用 action=wait_user，text 写「点一下网页上的验证」，用户做完会自动接着来。\n"
+                else "⚠ 网站要人机验证，后台过不去。任务到这里停下，结果里写明「网站要人机验证，请在 Jack 浏览器里打开 ${com.jack.ai.api.BrowserPages.site(page.url)} 过一次」。\n")
+        }
         // 跳到了登录页：可能还没登录或登录过期了，停下来请用户登录（后台任务就推送通知）
         loginNote(page)?.let { note.append(it) }
         // 读不到多少文字（图片、画出来的页面）：自动截一张图给模型看，一次回答最多两次
@@ -342,7 +354,7 @@ private suspend fun ToolSession.flowAction(action: String, args: JsonObject): St
         (if (old != null) "已更新" else "已存下") + "流程「$name」（$site）。下次打开 $site 时会提醒，用 action=flow 读出步骤照着做；用户可以在 技能 → 浏览器流程 里查看、修改、删除。"
 }
 
-private val LOGIN_URL = Regex("(login|signin|sign-in|sign_in|passport|logon|/auth/|account/sign)")
+private val LOGIN_URL = Regex("(login|signin|sign-in|sign_in|passport|logon|/auth/|account/sign|://(auth|accounts|sso|id)\\.)")
 private val LOGIN_WORDS = Regex("登录|登入|Sign in|Log in", RegexOption.IGNORE_CASE)
 
 /** 像不像登录页：网址里有 login / passport 之类，或者有密码框、验证码，又写着登录。 */
@@ -363,7 +375,58 @@ private suspend fun ToolSession.loginNote(p: JackBrowser.Page): String? {
             "后台任务做到一半，网站要求登录。打开 Jack 浏览器登录一次，下次就能照常跑。")
         return "⚠ 这一页是 $site 的登录页，说明还没登录或登录过期了。用户不在，不要尝试登录；任务到这里停下，结果里写明「需要先在 Jack 浏览器里登录 $site」（已经推送通知提醒用户）。\n"
     }
-    return "⚠ 这一页是 $site 的登录页，可能还没登录或登录过期了。Jack 不替用户填密码：停下来请用户点开浏览器（点回答里的网页画面，或侧边栏 → 浏览器）自己登录，登好了再接着做。只有用户明确让你帮忙填手机号、收验证码时才那样做。\n"
+    return "⚠ 这一页是 $site 的登录页，可能还没登录或登录过期了。Jack 不替用户填密码：用 action=wait_user，text 写「登录 $site」，用户登好了会自动接着做（不用等用户回话）。" +
+        "账号、邮箱这种不是密码的，用户让你填才填。有「用 Google 登录」的别点（Google 不让在 App 内嵌的网页里登录），请用户用邮箱或别的方式。\n"
+}
+
+private val CHALLENGE = Regex("Just a moment|请稍候|Verify you are human|确认您是真人|验证您是否是真人|Checking your browser|Checking if the site connection is secure|" +
+    "Attention Required|needs to review the security of your connection|检查.{0,8}连接.{0,4}安全|Performing security verification|正在进行安全验证", RegexOption.IGNORE_CASE)
+
+/** 像不像人机验证页（Cloudflare 那种「请稍候 / 确认您是真人」）：只看标题和不多的文字，正常网页正文里提一句不算。 */
+internal fun looksLikeChallenge(p: JackBrowser.Page): Boolean =
+    p.text.length < 1500 && CHALLENGE.containsMatchIn(p.title + "\n" + p.text)
+
+/** 每隔 every 毫秒读一次页面，满足 ok 就返回那一页；到时间还不满足返回 null。 */
+private suspend fun ToolSession.waitUntil(ms: Long, every: Long, ok: (JackBrowser.Page) -> Boolean): JackBrowser.Page? {
+    val end = System.currentTimeMillis() + ms
+    while (System.currentTimeMillis() < end) {
+        kotlinx.coroutines.delay(every)
+        JackBrowser.read(app).takeIf(ok)?.let { return it }
+    }
+    return null
+}
+
+/** 等用户最多这么久。 */
+private const val WAIT_USER_MS = 5 * 60_000L
+
+/**
+ * 交给用户做一步（登录、过人机验证），做完自动接着来：回答里的网页画面会写「Kavi 在等你」，App 不在前台就推通知。
+ * 登录页、验证页没了（或用户本来要做的那页换了网址）就算做完。
+ */
+private suspend fun ToolSession.waitUser(what: String): String {
+    if (!interactive) return "后台任务里用户不在，等不了。任务到这里停下，结果里写明要用户自己做的事：$what。\n"
+    val ctx = app
+    val start = JackBrowser.read(ctx)
+    val blocked = looksLikeLogin(start) || looksLikeChallenge(start)
+    withContext(kotlinx.coroutines.Dispatchers.Main) { JackBrowser.waitingUser = what }
+    try {
+        if (!appVisible(ctx)) com.jack.ai.data.Routines.notify(ctx, "wait-user", "Kavi 在等你", "$what。打开 Jack，在网页上做完它会自己接着来。")
+        val done = waitUntil(WAIT_USER_MS, 2_000) { p ->
+            if (blocked) !looksLikeLogin(p) && !looksLikeChallenge(p) else p.url != start.url
+        } ?: return "等了 5 分钟，用户还没做完「$what」。先停下，问问用户要不要接着等。\n"
+        // 刚跳过来的页面可能还在加载
+        JackBrowser.waitFor(ctx, "", 5_000)
+        return "用户做完了「$what」，现在在 ${com.jack.ai.api.BrowserPages.site(done.url)}，接着做原来的事。\n"
+    } finally {
+        withContext(kotlinx.coroutines.NonCancellable + kotlinx.coroutines.Dispatchers.Main) { JackBrowser.waitingUser = null }
+    }
+}
+
+/** App 在不在前台（不在就推通知叫用户回来）。 */
+private fun appVisible(ctx: android.content.Context): Boolean {
+    val info = android.app.ActivityManager.RunningAppProcessInfo()
+    android.app.ActivityManager.getMyMemoryState(info)
+    return info.importance <= android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
 }
 
 /** 写给模型的页面，并记下这一页（同一次回答里，下一步只发变了的部分）。 */
