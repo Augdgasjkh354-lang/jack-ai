@@ -281,11 +281,12 @@
 
   /**
    * 关掉挡在网页上的弹窗：「打开 App」「下载 App」「领优惠券」、Cookie 提示这类。
-   * 只点写着关闭、跳过、以后再说之类的按钮（Cookie 提示可以点同意）；有密码框的（登录框）不碰。
+   * 只点写着关闭、跳过、以后再说之类的按钮（Cookie 提示可以点同意）；登录、注册框不碰。
    * 找不到关闭按钮、又明显是让下 App 的横幅，就直接藏起来。返回关掉了什么。
    */
   var CLOSE = /^(×|✕|✖|x|X|关闭|关掉|跳过|取消|不了|暂不|暂不需要|以后再说|下次再说|我知道了|知道了|残忍拒绝|不用了|close|dismiss|no thanks|not now|skip|reject all|decline|仅必要|拒绝)$/i;
   var NAG = /(打开.{0,8}app|打开.{0,6}客户端|下载\s*app|app\s*内打开|app\s*打开|立即下载|领取.{0,6}券|优惠券|新人.{0,4}礼|cookie|隐私政策|使用条款)/i;
+  var LOGIN_BOX = /登录|登入|注册|sign in|log in|sign up|continue with|使用.{0,10}(账户|账号)继续/i;
   function dismiss() {
     var closed = [];
     var vw = innerWidth, vh = innerHeight;
@@ -295,8 +296,10 @@
       if (st.position !== 'fixed' && st.position !== 'sticky') continue;
       var r = el.getBoundingClientRect();
       if (r.height < 40 || r.bottom < 0 || r.top > vh) continue;
-      if (el.querySelector('input[type=password]')) continue;
+      // 登录、注册框（ChatGPT 那种先填邮箱的也算）不碰：是用户要用的，不是广告
+      if (el.querySelector('input[type=password],input[type=email],input[type=tel],input[autocomplete*=username]')) continue;
       var text = clean(el.innerText).slice(0, 300);
+      if (LOGIN_BOX.test(text)) continue;
       // 窄的只管 Cookie、隐私偏好这种角落小卡片；别的窄条（客服按钮、悬浮购物车）不碰
       if (r.width < vw * 0.5 && !(r.width >= vw * 0.3 && /cookie|隐私|偏好设置|privacy/i.test(text))) continue;
       if (!NAG.test(text) && r.width * r.height < vw * vh * 0.4) continue;
