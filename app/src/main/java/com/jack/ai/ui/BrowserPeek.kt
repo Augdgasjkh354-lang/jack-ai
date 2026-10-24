@@ -46,7 +46,7 @@ fun BrowserPeek(modifier: Modifier = Modifier) {
     LaunchedEffect(b.agentAt) {
         while (true) { now = System.currentTimeMillis(); delay(5_000) }
     }
-    if (!b.agentActive(now)) return
+    if (!b.agentActive(now) || b.inlineHosts > 0) return
     val dm = ctx.resources.displayMetrics
     val density = LocalDensity.current
     val fullW = with(density) { dm.widthPixels.toDp() }

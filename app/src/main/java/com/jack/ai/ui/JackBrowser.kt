@@ -245,6 +245,8 @@ object JackBrowser {
     var agentAt by mutableLongStateOf(0L)
     /** 网页窗口换了地方（浏览器页 ↔ 聊天小窗）就加一，让原来的地方重新来要。 */
     var hostGen by mutableIntStateOf(0)
+    /** 对话里正显示着 Jack 操作网页的实时画面（这时聊天页右上角的小窗就不出来）。 */
+    var inlineHosts by mutableIntStateOf(0)
     /** 用户正开着浏览器页。 */
     var userViewing = false
 
@@ -868,6 +870,36 @@ object JackBrowser {
         val pending = withContext(Dispatchers.Main) { pageDone?.takeIf { loading < 100 } }
         if (pending != null) withTimeoutOrNull(15_000) { pending.await() }
         delay(400)
+    }
+
+    /**
+     * 这一步做完的网页截个小图（不画编号框），存成 JPEG，对话里按步骤显示。网页没画出来就不存，返回 false。
+     */
+    suspend fun snapshot(ctx: Context, out: java.io.File, maxWidth: Int = 480): Boolean {
+        val bmp = withContext(Dispatchers.Main) {
+            val w = webView(ctx)
+            ensureLaidOut(w)
+            if (w.width <= 0 || w.height <= 0) return@withContext null
+            val scale = minOf(1f, maxWidth.toFloat() / w.width)
+            val b = Bitmap.createBitmap((w.width * scale).toInt(), (w.height * scale).toInt(), Bitmap.Config.RGB_565)
+            val c = Canvas(b)
+            c.scale(scale, scale)
+            c.translate(-w.scrollX.toFloat(), -w.scrollY.toFloat())
+            w.draw(c)
+            val sample = IntArray(16) { i -> b.getPixel((b.width * (i % 4 + 1) / 5).coerceAtMost(b.width - 1), (b.height * (i / 4 + 1) / 5).coerceAtMost(b.height - 1)) }
+            if (sample.distinct().size == 1) { b.recycle(); null } else b
+        } ?: return false
+        return withContext(Dispatchers.IO) {
+            try {
+                out.parentFile?.mkdirs()
+                out.outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 70, it) }
+                true
+            } catch (e: Exception) {
+                false
+            } finally {
+                bmp.recycle()
+            }
+        }
     }
 
     /**

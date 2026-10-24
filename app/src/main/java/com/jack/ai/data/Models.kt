@@ -61,6 +61,8 @@ data class SearchRecord(
     val sources: List<SearchSource> = emptyList(),
     val pending: Boolean = false,
     val error: String? = null,
+    /** 浏览器这一步做完时网页的截图（小图），对话里按步骤显示。 */
+    val shot: String = "",
 )
 
 @Serializable

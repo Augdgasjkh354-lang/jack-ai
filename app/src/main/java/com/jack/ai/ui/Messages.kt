@@ -101,7 +101,7 @@ fun Thumbnail(path: String, size: Dp, onClick: (() -> Unit)? = null) {
 }
 
 @Composable
-private fun ImageViewer(path: String, onDismiss: () -> Unit) {
+internal fun ImageViewer(path: String, onDismiss: () -> Unit) {
     val bmp by produceState<Bitmap?>(null, path) {
         value = withContext(Dispatchers.IO) { Attachments.thumbnail(path, 2000) }
     }
@@ -134,11 +134,20 @@ fun UserBubble(msg: ChatMessage, onDelete: () -> Unit, onEdit: ((String) -> Unit
             }
             Spacer(Modifier.height(6.dp))
         }
+        var reading by remember { mutableStateOf<com.jack.ai.data.Attachment?>(null) }
+        reading?.let { a ->
+            // 文本文件读原文件；PDF、Word 这类看的是提取出来、交给 AI 的那份文字
+            val file = File(a.path)
+            val raw = com.jack.ai.data.TextPreview.isText(a.name) && a.path.isNotEmpty() && file.exists()
+            TextViewer(a.name, load = { if (raw) com.jack.ai.data.TextPreview.read(file) else a.text to false },
+                onDismiss = { reading = null }, subtitle = if (raw) null else "提取出的文字")
+        }
         files.forEach { f ->
             Surface(
                 shape = RoundedCornerShape(10.dp),
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                modifier = Modifier.widthIn(max = 280.dp).padding(bottom = 6.dp),
+                modifier = Modifier.widthIn(max = 280.dp).padding(bottom = 6.dp)
+                    .clip(RoundedCornerShape(10.dp)).clickable { reading = f },
             ) {
                 Row(Modifier.padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(AppIcons.File, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
@@ -263,6 +272,17 @@ fun AssistantMessage(
         val busy = streaming && msg.content.isEmpty()
         if (msg.searches.isNotEmpty()) {
             SearchBox(msg.searches, busy = busy)
+            Spacer(Modifier.height(8.dp))
+        }
+        // Jack 在操作网页：回答写完之前，实时画面就放在这条回答里；每一步的截图排成一行
+        val browsing = msg.searches.any { it.query.startsWith("浏览器") }
+        if (browsing && busy) {
+            BrowserLive()
+            Spacer(Modifier.height(8.dp))
+        }
+        val shots = msg.searches.filter { it.shot.isNotEmpty() }
+        if (shots.isNotEmpty()) {
+            BrowserSteps(shots)
             Spacer(Modifier.height(8.dp))
         }
         if (msg.reasoning.isNotEmpty()) {
@@ -408,7 +428,17 @@ internal fun GeneratedFileCard(f: GeneratedFile) {
     var viewingApp by remember { mutableStateOf(false) }
     val isApp = f.name.endsWith(".html", true)
     if (viewingApp) AppViewer(File(f.path)) { viewingApp = false }
-    val open = { if (isApp && File(f.path).exists()) viewingApp = true else openFile(ctx, f) }
+    // txt、md、json、代码这类直接在 App 里看（手机上多半没有能打开它们的 App）
+    var viewingText by remember { mutableStateOf(false) }
+    if (viewingText) TextViewer(f.name, load = { com.jack.ai.data.TextPreview.read(File(f.path)) }, onDismiss = { viewingText = false },
+        onShare = { shareFile(ctx, f) }, onOpenWith = { openFile(ctx, f) })
+    val open = {
+        when {
+            isApp && File(f.path).exists() -> viewingApp = true
+            com.jack.ai.data.TextPreview.isText(f.name) && File(f.path).exists() -> viewingText = true
+            else -> openFile(ctx, f)
+        }
+    }
     val (tag, tagColor) = when (f.name.substringAfterLast('.').lowercase()) {
         "docx" -> "W" to Color(0xFF2B579A)
         "pptx" -> "P" to Color(0xFFD24726)

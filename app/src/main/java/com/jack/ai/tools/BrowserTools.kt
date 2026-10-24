@@ -58,7 +58,7 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
                 val kind = info["kind"].text()
                 val what = "$kind「${info["label"].text()}」"
                 if (action == "type" && info["password"].flag() == true) {
-                    return@runTool "这是密码框，Jack 不替用户填密码。请用户点开浏览器自己输入（聊天页右上角的小窗，或侧边栏 → 浏览器），填好后告诉你再继续。" to SearchRecord(label)
+                    return@runTool "这是密码框，Jack 不替用户填密码。请用户点开浏览器自己输入（点回答里的网页画面，或侧边栏 → 浏览器），填好后告诉你再继续。" to SearchRecord(label)
                 }
                 if (info["file"].flag() == true) return@runTool "这是选文件的按钮，Jack 不能替用户选手机里的文件。" to SearchRecord(label)
                 val key = args["key"].text().trim().lowercase()
@@ -114,9 +114,15 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
                 else { images += shot; note.append("截图在下一条消息里，红框上的数字就是下面清单的编号。\n") }
             }
         }
-        note.toString() + describePage(page) to SearchRecord(label)
+        note.toString() + describePage(page) to SearchRecord(label, shot = stepShot())
     }
 }
+
+/** 这一步做完的网页截个小图，存在对话文件夹的缓存里（删对话时一起删）。截不到返回空。 */
+private suspend fun ToolSession.stepShot(): String = runCatching {
+    val f = java.io.File(java.io.File(wsCache, "steps"), "${System.currentTimeMillis()}.jpg")
+    if (JackBrowser.snapshot(app, f)) f.absolutePath else ""
+}.getOrDefault("")
 
 private fun actionName(action: String, key: String) = when (action) {
     "click" -> "点击"
