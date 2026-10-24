@@ -144,6 +144,8 @@ class ToolSession(
     internal val browserSeen = java.util.concurrent.ConcurrentHashMap<Int, com.jack.ai.ui.JackBrowser.Page>()
     /** 这次回答里已经提醒过「这个网站存了流程」的网站，只提醒一次。 */
     internal val flowHinted: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+    /** 这次回答里已经提醒过「到了登录页」的网站。 */
+    internal val loginFlagged: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
 
     private val loop = LoopGuard()
 

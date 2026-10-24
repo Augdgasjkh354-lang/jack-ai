@@ -52,4 +52,18 @@ class BrowserDiffTest {
         assertNull(BrowserDiff.of(base, newText))
         assertTrue(describePage(mostlyNew, base).contains("能操作的（用编号 click / type）"))
     }
+
+    @Test
+    fun loginPagesAreRecognised() {
+        assertTrue(looksLikeLogin(page(emptyList(), "", url = "https://passport.jd.com/new/login.aspx?ReturnUrl=x")))
+        assertTrue(looksLikeLogin(page(emptyList(), "", url = "https://login.1688.com/member/signin.htm")))
+        val pwd = JackBrowser.Item(1, "密码框", "密码", "", null, emptyList(), null, 0f, 0f, 10f, 10f)
+        assertTrue(looksLikeLogin(page(listOf(pwd), "账号登录\n忘记密码")))
+        val sms = JackBrowser.Item(2, "输入框", "请输入验证码", "", null, emptyList(), null, 0f, 0f, 10f, 10f)
+        assertTrue(looksLikeLogin(page(listOf(sms), "手机号快捷登录")))
+        // 普通页面：网址里带 login 字样的参数不算，只有密码框没有「登录」字样也不算
+        assertFalse(looksLikeLogin(page(emptyList(), "商品列表", url = "https://s.1688.com/search?from=login")))
+        assertFalse(looksLikeLogin(page(listOf(pwd), "修改设置")))
+        assertFalse(looksLikeLogin(base))
+    }
 }

@@ -41,6 +41,7 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
         "switch_tab" -> "浏览器切到标签页 ${args["index"].text()}"
         "close_tab" -> "浏览器关标签页 ${args["index"].text()}"
         "download" -> "浏览器下载 " + JackBrowser.pending?.name.orEmpty()
+        "fill" -> "浏览器填表"
         "flow" -> "读浏览器流程「${args["name"].text().take(30)}」"
         "save_flow" -> "存浏览器流程「${args["name"].text().take(30)}」"
         else -> "浏览器读页面"
@@ -58,10 +59,11 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
         "upload" -> if (n == null || args["file"].text().isBlank()) return need("n（上传按钮的编号）和 file（对话文件夹里的文件名）")
         "switch_tab", "close_tab" -> if (args["index"].text().toIntOrNull() == null) return need("index（第几个标签页，从 1 起）")
         "flow" -> if (args["name"].text().isBlank()) return need("name（流程名）")
+        "fill" -> if ((args["fields"] as? JsonObject).isNullOrEmpty()) return need("fields（{编号: 要填的值}）")
         "save_flow" -> if (listOf("name", "site", "steps").any { args[it].text().isBlank() }) return need("name、site、steps（when 也最好写上）")
         "read", "scroll", "back", "look", "wait", "extract", "tabs", "" -> {}
         "download" -> if (JackBrowser.pending == null) return "现在没有等着下载的文件。先点网页上的下载链接或按钮，读回来的页面里会写「网页要下载」。"
-        else -> return "action 要填 open、read、click、type、delete、select、key、scroll、back、look、tap、swipe、wait、extract、upload、tabs、new_tab、switch_tab、close_tab、download、flow 或 save_flow"
+        else -> return "action 要填 open、read、click、type、delete、select、key、scroll、back、look、tap、swipe、wait、extract、upload、tabs、new_tab、switch_tab、close_tab、download、fill、flow 或 save_flow"
     }
     if (action == "flow" || action == "save_flow") return runTool(label) { flowAction(action, args) to SearchRecord(label) }
     return runTool(label) {
@@ -99,6 +101,30 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
                         JackBrowser.act(ctx, id, "key", "enter")?.let { note.append("提交出错：$it\n") }
                     } else note.append("已输入，但用户没同意提交。\n")
                 }
+            }
+            "fill" -> {
+                // 一次填好几个：输入框整格换成新值，下拉框选，勾选框按「是/否」勾；不提交（提交另外点按钮，会照常先问用户）
+                (args["fields"] as JsonObject).forEach { (k, v) ->
+                    val id = k.trim().removePrefix("[").removeSuffix("]").toIntOrNull()
+                    val value = (v as? JsonPrimitive)?.content.orEmpty()
+                    val info = id?.let { JackBrowser.inspect(ctx, it) }
+                    if (id == null || info == null || info["found"].flag() != true) { note.append("[$k] 找不到，跳过\n"); return@forEach }
+                    val what = "[$id] ${info["kind"].text()}「${info["label"].text()}」"
+                    when {
+                        info["password"].flag() == true -> note.append("$what 是密码框，不替用户填\n")
+                        info["file"].flag() == true -> note.append("$what 是选文件的，用 upload\n")
+                        info["tag"].text() == "select" -> note.append(JackBrowser.act(ctx, id, "select", value)?.let { "$what 没选上：$it\n" } ?: "$what 选了「$value」\n")
+                        info["type"].text() == "checkbox" || info["type"].text() == "radio" || info["kind"].text() in setOf("勾选框", "单选", "开关") -> {
+                            val want = value.trim().lowercase() in setOf("是", "勾", "选", "true", "1", "yes", "on", "✓")
+                            val now = JackBrowser.read(ctx).items.firstOrNull { it.n == id }?.checked
+                            if (now != want) JackBrowser.act(ctx, id, "click", "")?.let { note.append("$what 没点上：$it\n") }
+                            note.append("$what ${if (want) "勾上" else "不勾"}\n")
+                        }
+                        info["text"].flag() == true -> note.append(JackBrowser.act(ctx, id, "type", value, clear = true)?.let { "$what 没填上：$it\n" } ?: "$what 填了「${value.take(40)}」\n")
+                        else -> note.append("$what 不是能填的东西，跳过\n")
+                    }
+                }
+                note.append("填完了，还没提交；核对一下再点提交按钮。\n")
             }
             "tap", "swipe" -> {
                 val x = num("x")!!; val y = num("y")!!
@@ -180,6 +206,8 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
             note.append("【标签页】\n").append(JackBrowser.tabList()).append("\n")
         }
         val page = JackBrowser.read(ctx)
+        // 跳到了登录页：可能还没登录或登录过期了，停下来请用户登录（后台任务就推送通知）
+        loginNote(page)?.let { note.append(it) }
         if (action == "look") {
             if (!canSee) note.append("当前模型看不了图，只能用下面的文字清单。\n")
             else {
@@ -225,6 +253,30 @@ private suspend fun ToolSession.flowAction(action: String, args: JsonObject): St
     if (ok) ui.notice((if (old != null) "已更新" else "已存成") + "浏览器流程「$name」，在 技能 → 浏览器流程 里能改、能删")
     return if (!ok) "存完后没查到这个流程，可能没存成。" else
         (if (old != null) "已更新" else "已存下") + "流程「$name」（$site）。下次打开 $site 时会提醒，用 action=flow 读出步骤照着做；用户可以在 技能 → 浏览器流程 里查看、修改、删除。"
+}
+
+private val LOGIN_URL = Regex("(login|signin|sign-in|sign_in|passport|logon|/auth/|account/sign)")
+private val LOGIN_WORDS = Regex("登录|登入|Sign in|Log in", RegexOption.IGNORE_CASE)
+
+/** 像不像登录页：网址里有 login / passport 之类，或者有密码框、验证码，又写着登录。 */
+internal fun looksLikeLogin(p: JackBrowser.Page): Boolean {
+    if (LOGIN_URL.containsMatchIn(p.url.lowercase().substringBefore('?'))) return true
+    val pwd = p.items.any { it.kind == "密码框" }
+    val sms = p.items.any { it.label.contains("验证码") }
+    return (pwd || sms) && LOGIN_WORDS.containsMatchIn(p.title + "\n" + p.text.take(800))
+}
+
+/** 第一次碰到某个网站的登录页时写给模型的话；后台任务另外推通知给用户。 */
+private suspend fun ToolSession.loginNote(p: JackBrowser.Page): String? {
+    if (!looksLikeLogin(p)) return null
+    val site = com.jack.ai.api.BrowserPages.site(p.url)
+    if (!loginFlagged.add(site)) return null
+    if (!interactive) {
+        com.jack.ai.data.Routines.notify(app, "login-$site", "Kavi 需要你登录 $site",
+            "后台任务做到一半，网站要求登录。打开 Jack 浏览器登录一次，下次就能照常跑。")
+        return "⚠ 这一页是 $site 的登录页，说明还没登录或登录过期了。用户不在，不要尝试登录；任务到这里停下，结果里写明「需要先在 Jack 浏览器里登录 $site」（已经推送通知提醒用户）。\n"
+    }
+    return "⚠ 这一页是 $site 的登录页，可能还没登录或登录过期了。Jack 不替用户填密码：停下来请用户点开浏览器（点回答里的网页画面，或侧边栏 → 浏览器）自己登录，登好了再接着做。只有用户明确让你帮忙填手机号、收验证码时才那样做。\n"
 }
 
 /** 写给模型的页面，并记下这一页（同一次回答里，下一步只发变了的部分）。 */
