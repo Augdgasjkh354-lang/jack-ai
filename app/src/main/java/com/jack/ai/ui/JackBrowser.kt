@@ -1,5 +1,6 @@
 package com.jack.ai.ui
 
+import kotlinx.serialization.builtins.serializer
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.MutableContextWrapper
@@ -68,7 +69,8 @@ object JackBrowser {
      * 网页窗口的回调都写自己这一页（[Tab]），界面和 Jack 看的是当前这一页。
      */
     /** incognito：隐身标签页，Cookie、登录状态、网页存储和别的标签页分开，关掉最后一个隐身页就全清掉，也不记最近访问。 */
-    class Tab(val id: Int, val incognito: Boolean = false) {
+    /** account：分身（1 到 [ACCOUNTS]），和主账号、别的分身的登录状态分开，同一个网站能登不同的账号；0 是平常的。 */
+    class Tab(val id: Int, val incognito: Boolean = false, val account: Int = 0) {
         var web: WebView? = null
         var address by mutableStateOf("")
         var title by mutableStateOf("")
@@ -97,6 +99,9 @@ object JackBrowser {
         val diag = BrowserDiag.Log()
         var diagOn by mutableStateOf(false)
         var diagScript: androidx.webkit.ScriptHandler? = null
+        var teachScript: androidx.webkit.ScriptHandler? = null
+        /** 标签页名字前面的标记：隐身、分身几。 */
+        val badge get() = if (incognito) "隐身 · " else if (account > 0) "分身$account · " else ""
 
         fun clearError() { error = null; pageFailed = false }
     }
@@ -108,8 +113,25 @@ object JackBrowser {
 
     private const val INCOGNITO = "jack-incognito"
 
-    /** 网页组件支不支持隐身（分开的 Cookie 和存储，要较新的 WebView）。 */
+    /** 网页组件支不支持隐身和分身（分开的 Cookie 和存储，要较新的 WebView）。 */
     fun incognitoSupported() = WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)
+
+    /** 最多几个分身。 */
+    const val ACCOUNTS = 3
+    private fun accountProfile(n: Int) = "jack-account-$n"
+
+    /** 这个标签页用的 Cookie（分身、隐身各有各的）。 */
+    fun cookiesOf(t: Tab): CookieManager {
+        val name = if (t.incognito) INCOGNITO else if (t.account > 0) accountProfile(t.account) else null
+        return name?.takeIf { incognitoSupported() }?.let { androidx.webkit.ProfileStore.getInstance().getProfile(it)?.cookieManager } ?: CookieManager.getInstance()
+    }
+
+    /** 离开浏览器时把各个分身的 Cookie 也写到磁盘。 */
+    fun flushCookies() {
+        CookieManager.getInstance().flush()
+        if (!incognitoSupported()) return
+        (1..ACCOUNTS).forEach { n -> androidx.webkit.ProfileStore.getInstance().getProfile(accountProfile(n))?.cookieManager?.flush() }
+    }
 
     /** 隐身的 Cookie、网页存储全删掉（没有隐身页在用时整个删）。 */
     private fun clearIncognito() {
@@ -357,10 +379,12 @@ object JackBrowser {
      * 新开一个标签页（switch 就切过去）；incognito 开隐身的（网页组件不支持时开普通的）。
      */
     @SuppressLint("SetJavaScriptEnabled")
-    fun newTab(switch: Boolean = true, incognito: Boolean = false): Tab {
-        val t = Tab(nextTabId++, incognito && incognitoSupported())
+    fun newTab(switch: Boolean = true, incognito: Boolean = false, account: Int = 0): Tab {
+        val ok = incognitoSupported()
+        val t = Tab(nextTabId++, incognito && ok, if (ok && !incognito) account.coerceIn(0, ACCOUNTS) else 0)
+        val profile = if (t.incognito) INCOGNITO else if (t.account > 0) accountProfile(t.account) else null
         // 换资料夹要在网页窗口做任何别的事之前
-        t.web = JackWebView(wrapper).also { if (t.incognito) androidx.webkit.WebViewCompat.setProfile(it, INCOGNITO) }.apply {
+        t.web = JackWebView(wrapper).also { w -> profile?.let { androidx.webkit.WebViewCompat.setProfile(w, it) } }.apply {
             settings.apply {
                 javaScriptEnabled = true
                 domStorageEnabled = true
@@ -430,6 +454,7 @@ object JackBrowser {
         desktopSites = prefs().getStringSet("desktop", emptySet()).orEmpty().toSet()
         adBlock = prefs().getBoolean("adblock", true); adBlockNow = adBlock
         adAllow = prefs().getStringSet("adallow", emptySet()).orEmpty().toSet(); adAllowNow = adAllow
+        blocks = prefs().getString("blocks", null)?.let { runCatching { listJson.decodeFromString(blockMap, it) }.getOrNull() }.orEmpty()
     }
 
     private fun uaFor(url: String) = if (BrowserPages.isDesktop(desktopSites, url)) BrowserPages.desktopUserAgent(mobileUa) else mobileUa
@@ -506,7 +531,7 @@ object JackBrowser {
         val bytes = if (url.startsWith("data:image", true)) {
             runCatching { Base64.decode(url.substringAfter(","), Base64.DEFAULT) }.getOrNull() ?: return null
         } else {
-            val cookie = withContext(Dispatchers.Main) { CookieManager.getInstance().getCookie(url) }
+            val cookie = withContext(Dispatchers.Main) { cookiesOf(tab).getCookie(url) }
             val ua = withContext(Dispatchers.Main) { web?.settings?.userAgentString.orEmpty() }
             withContext(Dispatchers.IO) {
                 val out = ByteArrayOutputStream()
@@ -516,6 +541,103 @@ object JackBrowser {
             }
         }
         return withContext(Dispatchers.Default) { com.jack.ai.data.QrImage.decode(bytes) }
+    }
+
+    // ---- 屏蔽网页上的某一块 ----
+    private val blockMap = kotlinx.serialization.builtins.MapSerializer(String.serializer(), kotlinx.serialization.builtins.ListSerializer(String.serializer()))
+    /** 网站 → 要藏起来的选择器。 */
+    var blocks by mutableStateOf(mapOf<String, List<String>>())
+    /** 正在选要屏蔽的那块；picked 是点中的。 */
+    var picking by mutableStateOf(false)
+    var picked by mutableStateOf<BrowserBlocks.Picked?>(null)
+
+    private fun applyBlocks(view: WebView, site: String) {
+        val sels = BrowserBlocks.forSite(blocks, site)
+        if (sels.isNotEmpty() || blocks.isNotEmpty()) view.evaluateJavascript(BrowserBlocks.injectJs(sels), null)
+    }
+
+    /** 当前网站屏蔽了哪些。 */
+    fun blocksHere(): List<String> = blocks[BrowserPages.site(address)].orEmpty()
+
+    fun startPick() {
+        val w = web ?: return
+        picked = null
+        picking = true
+        w.evaluateJavascript(BrowserBlocks.PICK_JS, null)
+    }
+
+    /** 选中的范围往外扩一层（点到的是里面的小字、图标时）。 */
+    fun pickWider() { web?.evaluateJavascript("window.__jackPickUp&&window.__jackPickUp()", null) }
+
+    fun stopPick() {
+        picking = false
+        picked = null
+        web?.evaluateJavascript("window.__jackPickStop&&window.__jackPickStop()", null)
+    }
+
+    /** 把选中的那块存成这个网站的屏蔽规则，马上藏起来。 */
+    fun confirmPick() {
+        val p = picked ?: return
+        val site = BrowserPages.site(address)
+        stopPick()
+        if (site.isEmpty()) return
+        blocks = BrowserBlocks.add(blocks, site, p.selector)
+        saveBlocks()
+        web?.let { applyBlocks(it, site) }
+        notice = "已屏蔽" + (if (p.count > 1) "（这一页有 ${p.count} 处一样的，都藏了）" else "") + "。在菜单 → 屏蔽网页上的东西 里能恢复。"
+    }
+
+    fun unblock(selector: String) {
+        val site = BrowserPages.site(address)
+        blocks = BrowserBlocks.remove(blocks, site, selector)
+        saveBlocks()
+        web?.let { applyBlocks(it, site) }
+    }
+
+    private fun saveBlocks() { prefs().edit().putString("blocks", listJson.encodeToString(blockMap, blocks)).apply() }
+
+    // ---- 演示教学 ----
+    /** 正在记用户的操作；teachSteps 是记下的步骤。 */
+    var teaching by mutableStateOf(false)
+    var teachSteps by mutableStateOf(listOf<String>())
+
+    private fun installTeach(t: Tab) {
+        val w = t.web ?: return
+        if (t.teachScript == null && WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+            t.teachScript = androidx.webkit.WebViewCompat.addDocumentStartJavaScript(w, BrowserTeach.RECORD_JS, setOf("*"))
+        }
+        // 已经打开的这一页也装上
+        w.evaluateJavascript(BrowserTeach.RECORD_JS, null)
+    }
+
+    fun startTeach() {
+        teaching = true
+        teachSteps = if (BrowserPages.isWeb(address)) listOf("打开 $address") else emptyList()
+        installTeach(tab)
+    }
+
+    /** 停止记录，返回记下的步骤。 */
+    fun stopTeach(): List<String> {
+        teaching = false
+        tabs.forEach { t -> t.teachScript?.remove(); t.teachScript = null }
+        // 页面里的监听刷新后才没（只往 console 打，不碍事）
+        return teachSteps.also { teachSteps = emptyList() }
+    }
+
+    // ---- 存进资料库 ----
+    /** 把当前网页的正文存进资料库（Kavi 以后能搜到）。返回给用户看的话。 */
+    suspend fun saveToLibrary(ctx: Context): String {
+        val (t, md) = readable(ctx) ?: (title to unwrap(eval(ctx, "(document.body ? document.body.innerText : '').slice(0, 200000)")).trim())
+        if (md.length < 50) return "这一页读不到多少文字，没存。"
+        val name = t.ifBlank { title }.ifBlank { BrowserPages.host(address) }.replace(Regex("""[\\/:*?"<>|]"""), "_").take(60)
+        val body = "# $name\n\n原网页：$address\n存于：" + java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.CHINA).format(java.util.Date()) + "\n\n" + md
+        withContext(Dispatchers.IO) {
+            val store = com.jack.ai.data.Store(app)
+            val doc = com.jack.ai.data.LibraryDoc(name = "$name.md", chars = body.length)
+            store.saveLibraryText(doc.id, body)
+            store.saveLibrary(store.loadLibrary() + doc)
+        }
+        return "已存进资料库：「$name」。以后问 Kavi 相关的事，它能搜到这篇。"
     }
 
     private fun saveLists() {
@@ -659,6 +781,10 @@ object JackBrowser {
         CookieManager.getInstance().removeAllCookies(null)
         CookieManager.getInstance().flush()
         WebStorage.getInstance().deleteAllData()
+        // 分身的登录也一起清
+        if (incognitoSupported()) (1..ACCOUNTS).forEach { n ->
+            androidx.webkit.ProfileStore.getInstance().getProfile(accountProfile(n))?.let { p -> p.cookieManager.removeAllCookies(null); p.webStorage.deleteAllData() }
+        }
         @Suppress("DEPRECATION")
         WebViewDatabase.getInstance(app).apply { clearHttpAuthUsernamePassword(); clearFormData() }
         w.clearCache(true)
@@ -764,6 +890,7 @@ object JackBrowser {
             if (t.diagOn && t.diagScript == null) view.evaluateJavascript(BrowserDiag.HOOK_JS, null)
             widenIfDesktop(view, url)
             if (blocksAds(t.site)) view.evaluateJavascript(BrowserAds.INJECT_JS, null)
+            applyBlocks(view, t.site)
         }
 
         override fun onPageFinished(view: WebView, url: String) {
@@ -771,6 +898,8 @@ object JackBrowser {
             if (blocksAds(t.site)) view.evaluateJavascript(BrowserAds.INJECT_JS, null)
             t.pageDone?.complete(Unit)
             t.diag.add("加载完 ${url.take(160)}")
+            applyBlocks(view, t.site)
+            if (teaching && t === tab && BrowserPages.isWeb(url)) teachSteps = BrowserTeach.append(teachSteps, "→ 到了「${view.title.orEmpty().take(40)}」$url")
             if (url != "about:blank") t.address = url
             // 最近访问只记用户自己看的、打开成功的
             if (userViewing && !t.pageFailed && !t.incognito && BrowserPages.isWeb(url)) {
@@ -792,6 +921,8 @@ object JackBrowser {
             val text = m.message().orEmpty()
             when {
                 text.startsWith(BrowserDiag.PREFIX) -> t.diag.add(text.removePrefix(BrowserDiag.PREFIX))
+                text.startsWith(BrowserBlocks.PREFIX) -> if (picking && t === tab) BrowserBlocks.parsePick(text)?.let { picked = it }
+                text.startsWith(BrowserTeach.PREFIX) -> if (teaching) BrowserTeach.stepOf(text)?.let { teachSteps = BrowserTeach.append(teachSteps, it) }
                 m.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.ERROR ->
                     t.diag.add("脚本出错：$text（${m.sourceId().orEmpty().substringAfterLast('/').take(60)}:${m.lineNumber()}）")
             }
@@ -807,7 +938,8 @@ object JackBrowser {
             if (!isUserGesture && System.currentTimeMillis() - agentAt > 5_000) { t.diag.add("网页要弹新窗口，不是点出来的，没开"); return false }
             t.diag.add("网页弹新窗口，开成新标签页")
             if (tabs.size >= MAX_TABS) { notice = "标签页开满了，网页要弹的窗口没打开。先关掉几个标签页再试。"; return false }
-            val nt = newTab(switch = true, incognito = t.incognito)
+            val nt = newTab(switch = true, incognito = t.incognito, account = t.account)
+            if (teaching) installTeach(nt)
             nt.openedBy = t.id
             (resultMsg.obj as? WebView.WebViewTransport)?.webView = nt.web ?: return false
             resultMsg.sendToTarget()
@@ -871,7 +1003,7 @@ object JackBrowser {
         pending = null
         downloading = progressText(p.name, 0, p.size)
         scope.launch {
-            val cookie = withContext(Dispatchers.Main) { CookieManager.getInstance().getCookie(p.url) }
+            val cookie = withContext(Dispatchers.Main) { cookiesOf(tab).getCookie(p.url) }
             val mime = p.mime.ifBlank { "application/octet-stream" }
             try {
                 val result = if (android.os.Build.VERSION.SDK_INT >= 29) {
@@ -919,7 +1051,7 @@ object JackBrowser {
 
     /** Jack 确认下载：存进对话文件夹（同名加编号），返回文件。 */
     suspend fun saveTo(dir: java.io.File, p: BrowserDownload.Pending): java.io.File {
-        val cookie = withContext(Dispatchers.Main) { CookieManager.getInstance().getCookie(p.url) }
+        val cookie = withContext(Dispatchers.Main) { cookiesOf(tab).getCookie(p.url) }
         return withContext(Dispatchers.IO) {
             val f = com.jack.ai.data.Workspace.uniqueFile(dir, p.name)
             try {
@@ -1160,7 +1292,7 @@ object JackBrowser {
 
     /** 标签页清单（给 Jack 看）：第几个、标题、网址、是不是当前。 */
     fun tabList(): String = tabs.mapIndexed { i, t ->
-        "${i + 1}. ${t.title.ifBlank { if (t.address.isEmpty()) "起始页" else BrowserPages.host(t.address) }} ${t.address}" + if (i == current) "（当前）" else ""
+        "${i + 1}. ${t.badge}${t.title.ifBlank { if (t.address.isEmpty()) "起始页" else BrowserPages.host(t.address) }} ${t.address}" + if (i == current) "（当前）" else ""
     }.joinToString("\n")
 
     /** 关掉挡着网页的弹窗（下 App、领券、Cookie 提示），返回关掉了什么。 */

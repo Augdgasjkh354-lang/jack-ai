@@ -12,6 +12,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.filled.Face
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.heightIn
@@ -96,6 +97,12 @@ class BrowserActivity : ComponentActivity() {
     private var showTabs by mutableStateOf(false)
     /** 识别出的二维码内容，等弹窗。 */
     private var qr by mutableStateOf<String?>(null)
+    /** 浏览器里的 Kavi 聊天框开着没有。 */
+    private var chatOpen by mutableStateOf(false)
+    /** 管理这个网站屏蔽的东西。 */
+    private var blockList by mutableStateOf(false)
+    /** 选开哪个分身。 */
+    private var accountPick by mutableStateOf(false)
     /** 阅读模式：(标题, 正文 Markdown)。 */
     private var reader by mutableStateOf<Pair<String, String>?>(null)
     /** 网页诊断报告（null = 没打开）。 */
@@ -163,7 +170,7 @@ class BrowserActivity : ComponentActivity() {
         super.onPause()
         JackBrowser.userViewing = false
         // 刚登录完 App 就被系统杀掉也不丢登录：离开浏览器时把 Cookie 写到磁盘
-        CookieManager.getInstance().flush()
+        JackBrowser.flushCookies()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -193,13 +200,14 @@ class BrowserActivity : ComponentActivity() {
     }
 
     /** 新开一个标签页打开网址；开满了就在当前页打开。 */
-    private fun openInNewTab(url: String?, incognito: Boolean = false) {
+    private fun openInNewTab(url: String?, incognito: Boolean = false, account: Int = 0) {
         val b = JackBrowser
         b.webView(this)
         finding = null
         if (b.tabs.size >= JackBrowser.MAX_TABS) b.notice = "最多开 ${JackBrowser.MAX_TABS} 个标签页，这次在当前页打开。可以点底栏的数字关掉几个。"
         else {
-            b.newTab(incognito = incognito)
+            b.newTab(incognito = incognito, account = account)
+            if (account > 0) b.notice = "分身 $account：这里登录的账号和别的标签页分开。"
             if (incognito) b.notice = "隐身标签页：不带登录状态，不记最近访问；关掉最后一个隐身页，它的 Cookie 和网页数据就全清掉。"
         }
         editing = ""
@@ -290,6 +298,21 @@ class BrowserActivity : ComponentActivity() {
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                         val has = b.address.isNotEmpty()
                         DropdownMenuItem(text = { Text("问 Kavi") }, enabled = has, onClick = { menu = false; askKavi() })
+                        DropdownMenuItem(text = { Text("存进资料库") }, enabled = has, onClick = {
+                            menu = false
+                            lifecycleScope.launch { b.notice = runCatching { b.saveToLibrary(this@BrowserActivity) }.getOrElse { "没存成：${it.message}" } }
+                        })
+                        DropdownMenuItem(text = { Text(if (b.teaching) "停止教学" else "教 Kavi 一个流程") }, enabled = has || b.teaching, onClick = {
+                            menu = false
+                            if (b.teaching) finishTeach() else {
+                                b.startTeach()
+                                b.notice = "开始记录：照常在网页上操作一遍，做完点底下的「做完了」。密码只记「这里要填密码」，不记内容。"
+                            }
+                        })
+                        DropdownMenuItem(text = { Text("屏蔽网页上的东西" + b.blocksHere().size.takeIf { it > 0 }?.let { "（$it）" }.orEmpty()) }, enabled = has, onClick = {
+                            menu = false
+                            if (b.blocksHere().isNotEmpty()) blockList = true else b.startPick()
+                        })
                         DropdownMenuItem(text = { Text("阅读模式") }, enabled = has, onClick = {
                             menu = false
                             lifecycleScope.launch { b.readable(this@BrowserActivity)?.let { reader = it } ?: run { b.notice = "这一页找不出正文（可能不是文章页，或者还没加载完）" } }
@@ -347,8 +370,8 @@ class BrowserActivity : ComponentActivity() {
                     }
                 }
             }
-            if (b.tab.incognito || (b.title.isNotBlank() && b.address.isNotEmpty())) {
-                Text((if (b.tab.incognito) "隐身 · " else "") + b.title, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
+            if (b.tab.badge.isNotEmpty() || (b.title.isNotBlank() && b.address.isNotEmpty())) {
+                Text(b.tab.badge + b.title, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
                     style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             if (b.loading < 100) LinearProgressIndicator(progress = { b.loading / 100f }, Modifier.fillMaxWidth().height(2.dp))
@@ -387,6 +410,9 @@ class BrowserActivity : ComponentActivity() {
                 Text(msg, Modifier.fillMaxWidth().background(colors.secondaryContainer).padding(horizontal = 12.dp, vertical = 6.dp),
                     style = MaterialTheme.typography.labelSmall, color = colors.onSecondaryContainer, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
+            if (b.picking) PickBar()
+            if (b.teaching) TeachBar()
+            if (chatOpen) ChatPanel()
             Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(enabled = b.canBack, onClick = { b.clearError(); b.webView(this@BrowserActivity).goBack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "后退") }
                 IconButton(enabled = b.canForward, onClick = { b.clearError(); b.webView(this@BrowserActivity).goForward() }) { Icon(Icons.AutoMirrored.Filled.ArrowForward, "前进") }
@@ -399,6 +425,9 @@ class BrowserActivity : ComponentActivity() {
                             .padding(horizontal = 6.dp, vertical = 1.dp),
                         style = MaterialTheme.typography.labelMedium,
                     )
+                }
+                IconButton(onClick = { chatOpen = !chatOpen }) {
+                    Icon(Icons.Default.Face, "问 Kavi 这一页", tint = if (chatOpen || BrowserChat.busy) colors.primary else colors.onSurface)
                 }
                 Text(
                     routeLabel(),
@@ -419,6 +448,52 @@ class BrowserActivity : ComponentActivity() {
         }
         }
         b.pressed?.let { p -> PressMenu(p) }
+        BrowserChat.asking?.let { a ->
+            AlertDialog(
+                onDismissRequest = { a.answer.complete(false) },
+                title = { Text(a.title) },
+                text = { Text(a.body.take(1500), style = MaterialTheme.typography.bodyMedium) },
+                confirmButton = { TextButton(onClick = { a.answer.complete(true) }) { Text(a.action) } },
+                dismissButton = { TextButton(onClick = { a.answer.complete(false) }) { Text("不要") } },
+            )
+        }
+        if (blockList) {
+            val here = b.blocksHere()
+            AlertDialog(
+                onDismissRequest = { blockList = false },
+                title = { Text("这个网站屏蔽的东西") },
+                text = {
+                    Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
+                        if (here.isEmpty()) Text("没有了。", style = MaterialTheme.typography.bodyMedium)
+                        here.forEach { sel ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(sel, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                TextButton(onClick = { b.unblock(sel) }) { Text("恢复") }
+                            }
+                        }
+                    }
+                },
+                confirmButton = { TextButton(onClick = { blockList = false; b.startPick() }) { Text("再屏蔽一块") } },
+                dismissButton = { TextButton(onClick = { blockList = false }) { Text("关闭") } },
+            )
+        }
+        if (accountPick) {
+            AlertDialog(
+                onDismissRequest = { accountPick = false },
+                title = { Text("开一个分身") },
+                text = {
+                    Column {
+                        Text("每个分身的登录状态各管各的：同一个网站能在不同分身里登不同的账号。关掉标签页登录还在。",
+                            style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                        (1..JackBrowser.ACCOUNTS).forEach { n ->
+                            Text("分身 $n" + b.tabs.count { it.account == n }.takeIf { it > 0 }?.let { "（开着 $it 个）" }.orEmpty(),
+                                Modifier.fillMaxWidth().clickable { accountPick = false; showTabs = false; openInNewTab(null, account = n) }.padding(vertical = 12.dp))
+                        }
+                    }
+                },
+                confirmButton = { TextButton(onClick = { accountPick = false }) { Text("取消") } },
+            )
+        }
         reader?.let { (title, md) ->
             TextViewer(
                 name = title.ifBlank { "正文" } + ".md",
@@ -544,6 +619,107 @@ class BrowserActivity : ComponentActivity() {
     }
 
     /** 把当前网页的内容带回聊天：新开一个对话，网页正文作为附件，用户接着问。 */
+    /** 演示教学做完：把记下的步骤交给浏览器里的 Kavi，让它整理成流程存下来。 */
+    private fun finishTeach() {
+        val b = JackBrowser
+        val steps = b.stopTeach()
+        if (steps.size < 2) { b.notice = "没记到操作，流程没存。"; return }
+        chatOpen = true
+        BrowserChat.send(this, lifecycleScope, BrowserTeach.request(BrowserPages.site(steps.first().removePrefix("打开 ")).ifBlank { BrowserPages.site(b.address) }, steps))
+    }
+
+    /** 选要屏蔽的那块时底下的条：选中了什么、扩大一层、屏蔽、取消。 */
+    @Composable
+    private fun PickBar() {
+        val b = JackBrowser
+        val colors = MaterialTheme.colorScheme
+        Column(Modifier.fillMaxWidth().background(colors.secondaryContainer).padding(horizontal = 12.dp, vertical = 6.dp)) {
+            val p = b.picked
+            Text(if (p == null) "点一下网页上要屏蔽的地方（这时点了不会打开）" else "选中：${p.label}" + (if (p.count > 1) "，这一页一共 ${p.count} 处一样的" else ""),
+                style = MaterialTheme.typography.labelMedium, color = colors.onSecondaryContainer, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Row {
+                TextButton(enabled = p != null, onClick = { b.pickWider() }) { Text("选大一点") }
+                TextButton(enabled = p != null, onClick = { b.confirmPick() }) { Text("屏蔽") }
+                TextButton(onClick = { b.stopPick() }) { Text("取消") }
+            }
+        }
+    }
+
+    /** 演示教学进行中：记了几步、做完了、不记了。 */
+    @Composable
+    private fun TeachBar() {
+        val b = JackBrowser
+        val colors = MaterialTheme.colorScheme
+        Row(Modifier.fillMaxWidth().background(colors.tertiaryContainer).padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("正在记你的操作 · ${b.teachSteps.size} 步" + (b.teachSteps.lastOrNull()?.let { " · $it" } ?: ""), Modifier.weight(1f),
+                style = MaterialTheme.typography.labelMedium, color = colors.onTertiaryContainer, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            TextButton(onClick = { finishTeach() }) { Text("做完了") }
+            TextButton(onClick = { b.stopTeach(); b.notice = "不记了。" }) { Text("放弃") }
+        }
+    }
+
+    /** 浏览器里的 Kavi：问这一页、让它在这一页上做事。 */
+    @Composable
+    private fun ChatPanel() {
+        val chat = BrowserChat
+        val colors = MaterialTheme.colorScheme
+        var input by remember { mutableStateOf("") }
+        val list = androidx.compose.foundation.lazy.rememberLazyListState()
+        LaunchedEffect(chat.lines.size, chat.lines.lastOrNull()?.text?.length) { if (chat.lines.isNotEmpty()) list.scrollToItem(chat.lines.lastIndex) }
+        val h = (resources.displayMetrics.heightPixels / resources.displayMetrics.density * 0.42f).dp
+        Surface(Modifier.fillMaxWidth().height(h), color = colors.surfaceVariant) {
+            Column(Modifier.fillMaxSize()) {
+                Row(Modifier.fillMaxWidth().padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Kavi · 问这一页", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                    if (chat.lines.isNotEmpty()) {
+                        TextButton(onClick = { toChat(chat.transcript()) }) { Text("转到聊天") }
+                        TextButton(onClick = { chat.clear() }) { Text("清空") }
+                    }
+                    IconButton(onClick = { chatOpen = false }) { Icon(Icons.Default.KeyboardArrowDown, "收起") }
+                }
+                LazyColumn(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp), state = list) {
+                    if (chat.lines.isEmpty()) item {
+                        Text("问问这一页讲了什么，或者让 Kavi 在这页上做事：比价、填表、找东西、把操作存成流程。",
+                            style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                    }
+                    items(chat.lines.size) { i ->
+                        val l = chat.lines[i]
+                        if (l.role == "user") Text(l.text, Modifier.fillMaxWidth().padding(vertical = 4.dp), style = MaterialTheme.typography.bodyMedium,
+                            color = colors.primary, maxLines = 6, overflow = TextOverflow.Ellipsis)
+                        else Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                            if (l.steps.isNotEmpty()) Text(l.steps.joinToString(" → "), style = MaterialTheme.typography.labelSmall,
+                                color = colors.onSurfaceVariant, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                            if (l.text.isNotBlank()) MarkdownBlocks(l.text, colors.onSurface, colors.surface, Modifier.fillMaxWidth(), textSizeSp = 14f)
+                            l.error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = colors.error) }
+                        }
+                    }
+                    if (chat.busy) item {
+                        Text(chat.progress ?: "想一想…", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+                    }
+                }
+                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = input,
+                        onValueChange = { input = it },
+                        placeholder = { Text("问这一页，或者让它做事") },
+                        maxLines = 3,
+                        textStyle = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (chat.busy) TextButton(onClick = { chat.stop() }) { Text("停") }
+                    else TextButton(enabled = input.isNotBlank(), onClick = { chat.send(this@BrowserActivity, lifecycleScope, input); input = "" }) { Text("发送") }
+                }
+            }
+        }
+    }
+
+    /** 把文字带回主聊天的输入框。 */
+    private fun toChat(text: String) {
+        startActivity(Intent(this, com.jack.ai.MainActivity::class.java).setAction(Intent.ACTION_SEND)
+            .setType("text/plain").putExtra(Intent.EXTRA_TEXT, text.take(20_000))
+            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+    }
+
     /** 网页里选中一段字点「问 Kavi」：带着出处回到聊天，放进输入框，用户接着问。 */
     private fun askAboutSelection(sel: String) {
         val b = JackBrowser
@@ -651,7 +827,10 @@ class BrowserActivity : ComponentActivity() {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { showTabs = false }) { Icon(Icons.Default.Close, "收起") }
                     Text("标签页（${b.tabs.size}）", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-                    if (b.incognitoSupported()) TextButton(enabled = b.tabs.size < JackBrowser.MAX_TABS, onClick = { showTabs = false; openInNewTab(null, incognito = true) }) { Text("隐身") }
+                    if (b.incognitoSupported()) {
+                        TextButton(enabled = b.tabs.size < JackBrowser.MAX_TABS, onClick = { accountPick = true }) { Text("分身") }
+                        TextButton(enabled = b.tabs.size < JackBrowser.MAX_TABS, onClick = { showTabs = false; openInNewTab(null, incognito = true) }) { Text("隐身") }
+                    }
                     TextButton(enabled = b.tabs.size < JackBrowser.MAX_TABS, onClick = { showTabs = false; openInNewTab(null) }) { Text("新标签页") }
                 }
                 HorizontalDivider()
@@ -665,7 +844,7 @@ class BrowserActivity : ComponentActivity() {
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Column(Modifier.weight(1f)) {
-                                Text((if (t.incognito) "隐身 · " else "") + t.title.ifBlank { if (t.address.isEmpty()) "起始页" else BrowserPages.host(t.address) },
+                                Text(t.badge + t.title.ifBlank { if (t.address.isEmpty()) "起始页" else BrowserPages.host(t.address) },
                                     style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
                                     color = if (on) colors.onPrimaryContainer else colors.onSurface)
                                 if (t.address.isNotEmpty()) Text(BrowserPages.host(t.address), style = MaterialTheme.typography.labelSmall,

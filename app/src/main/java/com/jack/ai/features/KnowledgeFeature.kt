@@ -58,6 +58,17 @@ class KnowledgeFeature(core: AppCore) : Feature(core) {
         state.update { it.copy(library = list) }
     }
 
+    /** 别处（浏览器「存进资料库」）往资料库里加了东西：回到 App 时重新读一遍。 */
+    fun reloadLibrary() {
+        scope.launch(ioSerial) {
+            val list = store.loadLibrary()
+            if (list.map { it.id } != state.value.library.map { it.id }) {
+                libraryIndex = null
+                state.update { it.copy(library = list) }
+            }
+        }
+    }
+
     fun deleteLibraryDoc(id: String) {
         scope.launch(ioSerial) {
             store.deleteLibraryText(id)

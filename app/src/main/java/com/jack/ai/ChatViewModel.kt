@@ -844,6 +844,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteCard(id: String) = knowledge.deleteCard(id)
     fun deleteDeck(deck: String) = knowledge.deleteDeck(deck)
     fun reloadMemory() = knowledge.reloadMemory()
+    fun reloadLibrary() = knowledge.reloadLibrary()
     fun addMemory(text: String) = knowledge.addMemory(text)
     fun updateMemory(id: String, text: String) = knowledge.updateMemory(id, text)
     fun deleteMemory(id: String) = knowledge.deleteMemory(id)

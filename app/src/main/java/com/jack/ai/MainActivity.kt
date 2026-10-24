@@ -94,6 +94,7 @@ class MainActivity : FragmentActivity() {
         Widgets.refreshAll(applicationContext)
         // 后台做梦可能更新了记忆
         vm.reloadMemory()
+        vm.reloadLibrary()
         vm.reloadRoutines()
         vm.mergeInbox()
         if (locked) unlock()

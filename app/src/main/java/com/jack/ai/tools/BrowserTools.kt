@@ -189,7 +189,9 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
                 withContext(kotlinx.coroutines.Dispatchers.Main) { JackBrowser.webView(ctx) }
                 if (JackBrowser.tabs.size >= JackBrowser.MAX_TABS) note.append("已经开了 ${JackBrowser.MAX_TABS} 个标签页，先关掉用不着的（close_tab）。\n")
                 else {
-                    withContext(kotlinx.coroutines.Dispatchers.Main) { JackBrowser.newTab() }
+                    val account = args["account"].text().toIntOrNull()?.coerceIn(0, JackBrowser.ACCOUNTS) ?: 0
+                    if (account > 0 && !JackBrowser.incognitoSupported()) note.append("这台手机的网页组件不支持分身，开的是普通标签页。\n")
+                    withContext(kotlinx.coroutines.Dispatchers.Main) { JackBrowser.newTab(account = account) }
                     val url = args["url"].text()
                     if (url.isNotBlank()) JackBrowser.load(ctx, normalizeUrl(url))?.let { note.append("打开出错：$it\n") }
                 }
