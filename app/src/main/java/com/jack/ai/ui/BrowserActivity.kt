@@ -97,10 +97,10 @@ class BrowserActivity : ComponentActivity() {
     private var showTabs by mutableStateOf(false)
     /** 识别出的二维码内容，等弹窗。 */
     private var qr by mutableStateOf<String?>(null)
-    /** 浏览器里的 Kavi 聊天框开着没有。 */
-    private var chatOpen by mutableStateOf(false)
     /** 管理这个网站屏蔽的东西。 */
     private var blockList by mutableStateOf(false)
+    /** 自动填密码的说明。 */
+    private var autofillInfo by mutableStateOf(false)
     /** 选开哪个分身。 */
     private var accountPick by mutableStateOf(false)
     /** 阅读模式：(标题, 正文 Markdown)。 */
@@ -309,6 +309,7 @@ class BrowserActivity : ComponentActivity() {
                                 b.notice = "开始记录：照常在网页上操作一遍，做完点底下的「做完了」。密码只记「这里要填密码」，不记内容。"
                             }
                         })
+                        DropdownMenuItem(text = { Text("自动填密码") }, onClick = { menu = false; autofillInfo = true })
                         DropdownMenuItem(text = { Text("屏蔽网页上的东西" + b.blocksHere().size.takeIf { it > 0 }?.let { "（$it）" }.orEmpty()) }, enabled = has, onClick = {
                             menu = false
                             if (b.blocksHere().isNotEmpty()) blockList = true else b.startPick()
@@ -412,7 +413,7 @@ class BrowserActivity : ComponentActivity() {
             }
             if (b.picking) PickBar()
             if (b.teaching) TeachBar()
-            if (chatOpen) ChatPanel()
+            if (BrowserChat.open) ChatPanel()
             Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(enabled = b.canBack, onClick = { b.clearError(); b.webView(this@BrowserActivity).goBack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "后退") }
                 IconButton(enabled = b.canForward, onClick = { b.clearError(); b.webView(this@BrowserActivity).goForward() }) { Icon(Icons.AutoMirrored.Filled.ArrowForward, "前进") }
@@ -426,8 +427,8 @@ class BrowserActivity : ComponentActivity() {
                         style = MaterialTheme.typography.labelMedium,
                     )
                 }
-                IconButton(onClick = { chatOpen = !chatOpen }) {
-                    Icon(Icons.Default.Face, "问 Kavi 这一页", tint = if (chatOpen || BrowserChat.busy) colors.primary else colors.onSurface)
+                IconButton(onClick = { BrowserChat.open = !BrowserChat.open }) {
+                    Icon(Icons.Default.Face, "问 Kavi 这一页", tint = if (BrowserChat.open || BrowserChat.busy) colors.primary else colors.onSurface)
                 }
                 Text(
                     routeLabel(),
@@ -475,6 +476,28 @@ class BrowserActivity : ComponentActivity() {
                 },
                 confirmButton = { TextButton(onClick = { blockList = false; b.startPick() }) { Text("再屏蔽一块") } },
                 dismissButton = { TextButton(onClick = { blockList = false }) { Text("关闭") } },
+            )
+        }
+        if (autofillInfo) {
+            val on = remember { runCatching { getSystemService(android.view.autofill.AutofillManager::class.java)?.isEnabled == true }.getOrDefault(false) }
+            AlertDialog(
+                onDismissRequest = { autofillInfo = false },
+                title = { Text("自动填密码") },
+                text = {
+                    Text(
+                        (if (on) "手机的自动填充已经开着。在网页的账号、密码框上点一下，键盘上方或框下面会出现保存过的账号，点它就填好了；第一次登录后系统会问要不要存密码。"
+                        else "手机还没开自动填充。到 设置 里搜「自动填充」（常在「密码与安全」「密码保险箱」里），选一个密码管理器（手机自带的或 Google 密码管理工具）打开。") +
+                            "\n\n密码由你手机的密码管理器保存和填写，Kavi 看不到、也不替你填。",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                },
+                confirmButton = {
+                    if (!on) TextButton(onClick = {
+                        autofillInfo = false
+                        runCatching { startActivity(Intent(android.provider.Settings.ACTION_SETTINGS)) }
+                    }) { Text("去设置") }
+                },
+                dismissButton = { TextButton(onClick = { autofillInfo = false }) { Text("知道了") } },
             )
         }
         if (accountPick) {
@@ -624,8 +647,8 @@ class BrowserActivity : ComponentActivity() {
         val b = JackBrowser
         val steps = b.stopTeach()
         if (steps.size < 2) { b.notice = "没记到操作，流程没存。"; return }
-        chatOpen = true
-        BrowserChat.send(this, lifecycleScope, BrowserTeach.request(BrowserPages.site(steps.first().removePrefix("打开 ")).ifBlank { BrowserPages.site(b.address) }, steps))
+        BrowserChat.open = true
+        BrowserChat.send(this, BrowserTeach.request(BrowserPages.site(steps.first().removePrefix("打开 ")).ifBlank { BrowserPages.site(b.address) }, steps))
     }
 
     /** 选要屏蔽的那块时底下的条：选中了什么、扩大一层、屏蔽、取消。 */
@@ -675,7 +698,7 @@ class BrowserActivity : ComponentActivity() {
                         TextButton(onClick = { toChat(chat.transcript()) }) { Text("转到聊天") }
                         TextButton(onClick = { chat.clear() }) { Text("清空") }
                     }
-                    IconButton(onClick = { chatOpen = false }) { Icon(Icons.Default.KeyboardArrowDown, "收起") }
+                    IconButton(onClick = { BrowserChat.open = false }) { Icon(Icons.Default.KeyboardArrowDown, "收起") }
                 }
                 LazyColumn(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp), state = list) {
                     if (chat.lines.isEmpty()) item {
@@ -707,7 +730,7 @@ class BrowserActivity : ComponentActivity() {
                         modifier = Modifier.weight(1f),
                     )
                     if (chat.busy) TextButton(onClick = { chat.stop() }) { Text("停") }
-                    else TextButton(enabled = input.isNotBlank(), onClick = { chat.send(this@BrowserActivity, lifecycleScope, input); input = "" }) { Text("发送") }
+                    else TextButton(enabled = input.isNotBlank(), onClick = { chat.send(this@BrowserActivity, input); input = "" }) { Text("发送") }
                 }
             }
         }

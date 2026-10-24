@@ -23,6 +23,13 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
     if (action == "steps") return runSteps(args)
     if (action == "parallel") return runTool("浏览器同时抓 ${(args["urls"] as? kotlinx.serialization.json.JsonArray)?.size ?: 0} 个网页") { parallel(args) to SearchRecord("浏览器同时抓网页") }
     if (action == "note_site") return runTool("记网站备忘") { noteSite(args) to SearchRecord("记网站备忘") }
+    if (action == "history") return runTool("翻浏览记录" + args["text"].text().takeIf { it.isNotBlank() }?.let { "「${it.take(20)}」" }.orEmpty()) {
+        browseHistory(args) to SearchRecord("翻浏览记录")
+    }
+    if (action == "record_price" || action == "prices") {
+        val label = if (action == "record_price") "记价格「${args["name"].text().take(20)}」" else "看价格走势" + args["name"].text().takeIf { it.isNotBlank() }?.let { "「${it.take(20)}」" }.orEmpty()
+        return runTool(label) { priceAction(action, args) to SearchRecord(label) }
+    }
     val n = args["n"].text().trim().toIntOrNull()
     val text = args["text"].text()
     val ctx = app
@@ -282,6 +289,51 @@ private suspend fun ToolSession.retapNote(id: Int, before: String, mark: Int): S
     return "点了两次（脚本点一次、真实触摸一次）页面都没变化。" +
         (if (problems.isNotEmpty()) "这期间网页里：" + problems.joinToString("；") + "。" else "网页里没报错。") +
         "可以：look 截图看是不是被别的东西挡着、按钮还不能点；wait 等一会再看；换别的入口（直接打开对应网址）；实在不行用 wait_user 请用户自己点。\n"
+}
+
+/** 按关键词、时间翻以前看过的网页（Jack 浏览器里打开过的，隐身页不算）。 */
+private suspend fun ToolSession.browseHistory(args: JsonObject): String {
+    val q = args["text"].text().trim()
+    val days = args["days"].text().toIntOrNull()
+    val now = System.currentTimeMillis()
+    val all = withContext(kotlinx.coroutines.Dispatchers.IO) { host.store.loadHistory() }
+    if (all.isEmpty()) return "浏览记录是空的（Jack 浏览器里还没打开过网页，或者记录刚被清掉）。"
+    val found = com.jack.ai.data.BrowserHistory.search(all, q, now, days)
+    if (found.isEmpty()) return "浏览记录里没找到" + (if (q.isNotEmpty()) "和「$q」有关的" else "") + (days?.let { "（最近 $it 天）" } ?: "") +
+        "网页。可以换个说法（网站名、商品名）再找，或者把 days 放宽。"
+    return FENCE + "浏览记录里" + (if (q.isNotEmpty()) "和「$q」有关的" else "最近看的") + (days?.let { "（最近 $it 天）" } ?: "") + "：\n" +
+        com.jack.ai.data.BrowserHistory.describe(found, now) + "\n要打开哪个就用 open 填它的网址。"
+}
+
+/** 记价格、看价格走势（盯价格、比价时用）：每查一次记一条，看的时候给几句总结和一张走势图。 */
+private suspend fun ToolSession.priceAction(action: String, args: JsonObject): String {
+    val name = args["name"].text().trim()
+    val store = host.store
+    if (action == "record_price") {
+        val price = args["price"].text().replace(Regex("[^0-9.]"), "").toDoubleOrNull()
+        if (name.isEmpty() || price == null || price <= 0) return "record_price 要填 name（东西的名字，每次用同一个）和 price（数字）"
+        val url = args["url"].text().ifBlank { JackBrowser.address }
+        val list = withContext(kotlinx.coroutines.Dispatchers.IO) {
+            com.jack.ai.data.PriceLog.add(store.loadPrices(), com.jack.ai.data.PricePoint(name, price, System.currentTimeMillis(), url)).also { store.savePrices(it) }
+        }
+        return "记下了。" + com.jack.ai.data.PriceLog.summary(com.jack.ai.data.PriceLog.series(list, name))
+    }
+    val list = withContext(kotlinx.coroutines.Dispatchers.IO) { store.loadPrices() }
+    if (name.isEmpty()) {
+        val items = com.jack.ai.data.PriceLog.items(list)
+        return if (items.isEmpty()) "还没有记过价格。盯价格、比价时用 record_price 每次记一条，以后就能看走势。"
+        else "记过价格的东西：" + items.joinToString("；") { (n, c) -> "「$n」$c 次" } + "。看哪个的走势就用 prices 填 name。"
+    }
+    val s = com.jack.ai.data.PriceLog.series(list, name)
+    if (s.isEmpty()) return "没有「$name」的价格记录。记过的：" + com.jack.ai.data.PriceLog.items(list).joinToString("、") { it.first }.ifEmpty { "（没有）" }
+    val chart = withContext(kotlinx.coroutines.Dispatchers.IO) {
+        runCatching { PriceChart.draw(s, java.io.File(wsDir, "价格走势-" + s.last().item.replace(Regex("""[\\/:*?"<>|\s]"""), "_").take(30) + ".png")) }.getOrNull()
+    }
+    chart?.let { ui.attach(it) }
+    return com.jack.ai.data.PriceLog.summary(s) + (if (chart != null) "走势图「${chart.name}」已经放进回答里了。" else "") +
+        "\n每次记录：" + s.takeLast(20).joinToString("；") { p ->
+            java.text.SimpleDateFormat("M/d HH:mm", java.util.Locale.CHINA).format(java.util.Date(p.at)) + " ¥" + p.price
+        }
 }
 
 /** 一次能连着做的动作：不包括读整页、上传、下载、截图、标签页这些要单独看结果的。 */

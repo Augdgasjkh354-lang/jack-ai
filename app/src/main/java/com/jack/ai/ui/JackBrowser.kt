@@ -409,6 +409,8 @@ object JackBrowser {
             // 第三方 Cookie 要开：「用 XX 账号登录」的跳转和内嵌登录靠它
             CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
             setFindListener { active, count, done -> if (done) { t.findIndex = active; t.findCount = count } }
+            // 手机自带的密码管理器（自动填充服务）能给网页里的账号密码框填密码：填的是用户自己的密码管理器，Kavi 不碰
+            importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_YES
             setOnLongClickListener { v -> longPress(v as WebView) }
             webViewClient = Client(t)
             webChromeClient = Chrome(t)
@@ -541,6 +543,23 @@ object JackBrowser {
             }
         }
         return withContext(Dispatchers.Default) { com.jack.ai.data.QrImage.decode(bytes) }
+    }
+
+    // ---- 长的浏览记录 ----
+    private val historyIo = Dispatchers.IO.limitedParallelism(1)
+    private var historyList: List<com.jack.ai.data.HistoryEntry>? = null
+    private var historySave: kotlinx.coroutines.Job? = null
+
+    private fun recordHistory(url: String, title: String) {
+        val now = System.currentTimeMillis()
+        scope.launch(historyIo) {
+            val store = com.jack.ai.data.Store(app)
+            val list = historyList ?: store.loadHistory()
+            historyList = com.jack.ai.data.BrowserHistory.record(list, url, title, now)
+            // 连着跳好几页只写一次
+            historySave?.cancel()
+            historySave = scope.launch(historyIo) { delay(2_000); historyList?.let { store.saveHistory(it) } }
+        }
     }
 
     // ---- 屏蔽网页上的某一块 ----
@@ -906,6 +925,8 @@ object JackBrowser {
                 visits = BrowserPages.visit(visits, url, view.title.orEmpty().takeUnless { it == url }.orEmpty(), System.currentTimeMillis())
                 saveLists()
             }
+            // 长的浏览记录：用户和 Kavi 打开的都记（隐身不记），Kavi 能按关键词翻
+            if (!t.pageFailed && !t.incognito && BrowserPages.isWeb(url)) recordHistory(url, view.title.orEmpty().takeUnless { it == url }.orEmpty())
             t.canBack = view.canGoBack(); t.canForward = view.canGoForward()
         }
 

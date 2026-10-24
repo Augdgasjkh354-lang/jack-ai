@@ -46,6 +46,10 @@ object BrowserChat {
     class Ask(val title: String, val body: String, val action: String, val answer: CompletableDeferred<Boolean>)
 
     val lines = mutableStateListOf<Line>()
+    /** 聊天框开着没有（放这里，离开浏览器再回来还开着）。 */
+    var open by mutableStateOf(false)
+    /** 不跟着浏览器页走：离开浏览器（切到别的 App）它接着做，做完发通知。 */
+    private val scope = CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.Main)
     var busy by mutableStateOf(false)
     var progress by mutableStateOf<String?>(null)
     var asking by mutableStateOf<Ask?>(null)
@@ -58,6 +62,14 @@ object BrowserChat {
 
     /** 历史最多留几条（太长了贵，也慢）。 */
     private const val MAX_HISTORY = 40
+
+    /** App 不在眼前时发通知，点开回到浏览器、聊天框开着。 */
+    private fun notifyUser(ctx: Context, title: String, text: String) {
+        val i = android.content.Intent(ctx, BrowserActivity::class.java)
+            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        open = true
+        com.jack.ai.data.Routines.notify(ctx, "browser-chat", title, text.take(300), open = i)
+    }
 
     fun clear() {
         stop()
@@ -73,14 +85,17 @@ object BrowserChat {
     /** 整段聊天转成文字（转到主聊天用）。 */
     fun transcript(): String = lines.joinToString("\n\n") { (if (it.role == "user") "我：" else "Kavi：") + it.text }
 
-    fun send(ctx: Context, scope: CoroutineScope, text: String) {
+    fun send(ctx: Context, text: String) {
         val q = text.trim()
         if (q.isEmpty() || busy) return
         lines += Line("user", q)
         lines += Line("kavi", "")
         busy = true
         job = scope.launch {
-            try { answer(ctx.applicationContext, q) }
+            try {
+                answer(ctx.applicationContext, q)
+                if (!JackBrowser.userViewing) notifyUser(ctx.applicationContext, "浏览器里的 Kavi 做完了", lines.lastOrNull()?.text.orEmpty().ifBlank { "回来看看结果" })
+            }
             catch (e: CancellationException) { patchLast { it.copy(text = it.text.ifBlank { "（停下了）" }) }; throw e }
             catch (e: Exception) { patchLast { it.copy(error = ToolSession.errorText(e)) } }
             finally { busy = false; progress = null; job = null }
@@ -131,6 +146,7 @@ object BrowserChat {
             override fun attach(file: File) { steps += "存了文件「${file.name}」"; patchLast { it.copy(steps = steps.toList()) } }
             override suspend fun confirm(title: String, body: String, action: String): Boolean {
                 val d = CompletableDeferred<Boolean>()
+                if (!JackBrowser.userViewing) notifyUser(ctx, "Kavi 需要你确认", title)
                 withContext(Dispatchers.Main) { asking = Ask(title, body, action, d) }
                 return try { d.await() } finally { withContext(Dispatchers.Main) { asking = null } }
             }

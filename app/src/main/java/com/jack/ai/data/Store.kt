@@ -103,6 +103,10 @@ class Store(context: Context) {
 
     fun loadSiteNotes() = load("browser_site_notes.json", SiteNote.serializer())
     fun saveSiteNotes(list: List<SiteNote>) = save("browser_site_notes.json", SiteNote.serializer(), list)
+    fun loadHistory() = load("browser_history.json", HistoryEntry.serializer())
+    fun saveHistory(list: List<HistoryEntry>) = save("browser_history.json", HistoryEntry.serializer(), list)
+    fun loadPrices() = load("price_log.json", PricePoint.serializer())
+    fun savePrices(list: List<PricePoint>) = save("price_log.json", PricePoint.serializer(), list)
     fun loadFlows() = load("browser_flows.json", BrowserFlow.serializer())
     fun saveFlows(list: List<BrowserFlow>) = save("browser_flows.json", BrowserFlow.serializer(), list)
 

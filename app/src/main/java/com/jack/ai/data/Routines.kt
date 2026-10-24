@@ -189,7 +189,7 @@ object Routines {
     fun canNotify(ctx: Context) = Build.VERSION.SDK_INT < 33 ||
         ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
-    fun notify(ctx: Context, id: String, title: String, text: String, openChat: String? = null) {
+    fun notify(ctx: Context, id: String, title: String, text: String, openChat: String? = null, open: Intent? = null) {
         val nm = ctx.getSystemService(NotificationManager::class.java)
         if (nm.getNotificationChannel(CHANNEL) == null) {
             nm.createNotificationChannel(NotificationChannel(CHANNEL, "提醒和定时任务", NotificationManager.IMPORTANCE_HIGH))
@@ -197,7 +197,7 @@ object Routines {
         if (!canNotify(ctx)) return
         val open = PendingIntent.getActivity(
             ctx, id.hashCode(),
-            Intent(ctx, MainActivity::class.java).setAction(MainActivity.ACTION_OPEN_CHAT)
+            open ?: Intent(ctx, MainActivity::class.java).setAction(MainActivity.ACTION_OPEN_CHAT)
                 .putExtra("convId", openChat).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
