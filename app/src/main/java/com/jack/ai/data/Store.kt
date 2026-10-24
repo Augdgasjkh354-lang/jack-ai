@@ -308,8 +308,13 @@ class Store(context: Context) {
         // 旧版用的 deepseek-chat / deepseek-reasoner 已经下线，自动换成新模型
         val oldModel = prefs.getString("model", MODEL_FLASH) ?: MODEL_FLASH
         // Pro 还没发布、官方转给 Flash，却按 Pro 价记账：以前默认选的 Pro 一次性换成 Flash（之后用户再选 Pro 不动它）
-        val proToFlash = !prefs.getBoolean("proToFlash", false)
-        if (proToFlash) prefs.edit().putBoolean("proToFlash", true).apply()
+        // 换完马上写回去：只记「换过了」不写新值的话，下次启动又读回 Pro（以前就是这样，所以换了个键再换一次）
+        val proToFlash = !prefs.getBoolean("proToFlash2", false)
+        if (proToFlash) prefs.edit().putBoolean("proToFlash2", true).apply {
+            if (oldModel == MODEL_PRO) putString("model", MODEL_FLASH)
+            if (prefs.getString("workModel", null) == MODEL_PRO) putString("workModel", MODEL_FLASH)
+            if (prefs.getString("chatModel", null) == MODEL_PRO) putString("chatModel", MODEL_FLASH)
+        }.apply()
         val model = when (oldModel) {
             "deepseek-chat", "deepseek-reasoner", "deepseek-v4-flash" -> MODEL_FLASH
             MODEL_PRO -> if (proToFlash) MODEL_FLASH else oldModel
@@ -337,7 +342,7 @@ class Store(context: Context) {
                 list.filterNot { it.id == SELF_CHECK.id } + SELF_CHECK
             },
             activeWork = prefs.getBoolean("activeWork", false),
-            chatModel = prefs.getString("chatModel", "") ?: "",
+            chatModel = (prefs.getString("chatModel", "") ?: "").let { if (proToFlash && it == MODEL_PRO) MODEL_FLASH else it },
             chatThinking = prefs.getString("chatThinking", null)?.let { runCatching { ThinkLevel.valueOf(it) }.getOrNull() },
             workModel = (prefs.getString("workModel", MODEL_FLASH) ?: MODEL_FLASH).let { if (proToFlash && it == MODEL_PRO) MODEL_FLASH else it },
             workThinking = prefs.getString("workThinking", null)?.let { runCatching { ThinkLevel.valueOf(it) }.getOrNull() } ?: ThinkLevel.HIGH,
@@ -355,7 +360,7 @@ class Store(context: Context) {
             } ?: emptyList(),
             fontScale = prefs.getFloat("fontScale", 1f),
             // 换成纯黑白风格时，以前的强调色一次性换成「黑白」（之后用户再选别的不动它）
-            accent = if (!prefs.getBoolean("monoTheme", false)) { prefs.edit().putBoolean("monoTheme", true).apply(); "mono" }
+            accent = if (!prefs.getBoolean("monoTheme", false)) { prefs.edit().putBoolean("monoTheme", true).putString("accent", "mono").apply(); "mono" }
                 else prefs.getString("accent", "mono") ?: "mono",
             appLock = prefs.getBoolean("appLock", false),
             monthlyBudget = prefs.getFloat("monthlyBudget", 0f).toDouble(),
