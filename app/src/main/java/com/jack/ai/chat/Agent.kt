@@ -57,6 +57,8 @@ class Agent(
         interjections: () -> List<String> = { emptyList() },
         /** 工具这一轮产生的图片（浏览器截图，data URL）：作为一条用户消息补在工具结果后面。 */
         images: () -> List<String> = { emptyList() },
+        /** 每轮工具做完后重新算一次工具列表（use_skill 打开了新技能，它的工具下一轮就能用）。不给就一直用 tools。 */
+        retool: (() -> JsonArray?)? = null,
     ) {
         // 补过图片的消息位置：新图来了就把旧的换成一句话，免得每轮都重发
         val imageAt = mutableListOf<Int>()
@@ -157,6 +159,7 @@ class Agent(
                 trail += m.toString()
             }
             onRound()
+            retool?.let { currentTools = it() }
             if (round >= maxRounds()) currentTools = null
         }
     }

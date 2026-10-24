@@ -137,6 +137,9 @@ class ToolSession(
         }
     }
 
+    /** 这次回答里用 use_skill 打开的技能（工具按需出现的那些），调用方据此更新工具列表、记进对话。 */
+    val unlocked: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
     private val loop = LoopGuard()
 
     /** 这次回答里读过外部内容（邮件、网页）没有；读过之后发信给新地址，完全授权下也要确认。 */

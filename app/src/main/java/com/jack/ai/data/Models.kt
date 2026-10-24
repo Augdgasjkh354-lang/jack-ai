@@ -82,6 +82,8 @@ data class Conversation(
     /** 压缩后的前情提要，以及它覆盖到哪条消息（含）为止。 */
     val summary: String = "",
     val summaryUntilId: String? = null,
+    /** 这个对话里已经用 use_skill 打开、工具一直带着的技能（见 SkillIds.ON_DEMAND）。 */
+    val skillTools: Set<String> = emptySet(),
     /** 最近一次请求实际用掉的上下文 token 数（接口返回）。 */
     val lastPromptTokens: Int = 0,
     /** 这个对话累计用掉的 token。 */

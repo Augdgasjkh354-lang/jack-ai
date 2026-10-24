@@ -175,7 +175,9 @@ internal suspend fun ToolSession.saveCards(args: JsonObject) = runTool("生成�
 internal suspend fun ToolSession.useSkill(name: String) = runTool("使用技能：$name") {
     val skill = findSkill(skills, name)
     if (skill?.id == SkillIds.RESEARCH) maxRounds = maxOf(maxRounds, 25)
-    val text = skill?.let { "【${it.name}】\n${it.instructions}" }
+    // 工具按需出现的技能：读了做法就把它的工具加上（下一步就能用，本对话之后一直带着）
+    val opened = skill?.id?.takeIf { it in SkillIds.ON_DEMAND }?.let { unlocked.add(it) } == true
+    val text = skill?.let { "【${it.name}】\n${it.instructions}" + if (opened) "\n\n（这个技能的工具已经加上了，下一步就能用。）" else "" }
         ?: ("没有这个技能。可用的技能：" + skills.joinToString("、") { it.name })
     text to SearchRecord("使用技能：${skill?.name ?: name}")
 }

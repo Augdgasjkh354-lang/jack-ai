@@ -471,7 +471,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val thinkingOn = ep.deepseek && thinking.effort != null
         val images = ep.vision
         val memories = if (settings.memoryEnabled) store.loadMemories() else emptyList()
-        val toolSet = PromptBuilder.toolSet(settings, skills, conv, project)
+        // 工具按需出现的技能：这个对话以前打开过的，加上这条消息里 @ 到的，开场就带着它们的工具
+        val asked = lastUser?.content.orEmpty()
+        val unlockedStart = conv.skillTools + skills.filter { it.id in com.jack.ai.data.SkillIds.ON_DEMAND && "@${it.name}" in asked }.map { it.id }
+        val toolSet = PromptBuilder.toolSet(settings, skills, conv, project, unlockedStart)
 
         val (chatMemory, projectMemory) = knowledge.memoryTexts(conv)
         var promptInput = PromptBuilder.Input(settings, conv, project, memories, skills, vision = images, sendReasoning = thinkingOn,
@@ -531,6 +534,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 }
             })
             session.canSee = ep.vision
+            session.unlocked.addAll(unlockedStart)
             val agent = Agent({ msgs, t -> client.stream(ep, msgs, thinking, settings.temperature, t) }, sendReasoning = thinkingOn)
             interjections.clear()
             running = convId to reply.id
@@ -587,6 +591,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     // 还不行就不用工具，改成“先搜再答”
                     interjections = { generateSequence { interjections.poll() }.toList() },
                     images = { session.takeImages() },
+                    // use_skill 打开了新技能：下一轮把它的工具加上
+                    retool = { PromptBuilder.toolSet(settings, skills, conv, project, session.unlocked.toSet()) },
                     recovery = Agent.Recovery { tried ->
                         // 先怀疑图片编号失效（过期或被删）：清掉记录，改回内联图片再试一次
                         if (!filesDropped && promptInput.fileIds.isNotEmpty()) {
@@ -638,6 +644,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     m.copy(content = m.content.trimEnd(), searches = m.searches.map { if (it.pending) it.copy(pending = false) else it })
                 }
                 running = null
+                // 这次打开的技能记进对话：之后每轮都带着它的工具，工具列表不再变，缓存照样命中
+                if (session.unlocked.any { it !in conv.skillTools }) {
+                    val opened = session.unlocked.toSet()
+                    updateConvQuiet(convId) { it.copy(skillTools = it.skillTools + opened) }
+                }
                 _state.update { it.copy(streaming = false, streamingId = null) }
                 persist()
                 // 插的话没来得及用上（回答已经收尾了）：等这次结束后当成新消息发出去
@@ -756,6 +767,12 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** 一次请求的上下文大概由哪些部分组成（名字, 估算 token），统计页用。conv 为空时按新对话算。 */
+    /** 这个对话里用 use_skill 打开过的技能名（工具按需出现的那些）。 */
+    fun openedSkillNames(conv: Conversation?): List<String> {
+        val ids = conv?.skillTools.orEmpty()
+        return _state.value.settings.activeSkills().filter { it.id in ids }.map { it.name }
+    }
+
     fun contextBreakdown(conv: Conversation?): List<Pair<String, Int>> {
         val st = _state.value
         val c = conv ?: Conversation()

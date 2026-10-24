@@ -279,7 +279,7 @@ fun UsageScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
 @Composable
 private fun ContextCard(vm: ChatViewModel, conv: Conversation?) {
     val colors = MaterialTheme.colorScheme
-    val parts = remember(conv?.id, conv?.messages?.size, conv?.summary) { vm.contextBreakdown(conv) }
+    val parts = remember(conv?.id, conv?.messages?.size, conv?.summary, conv?.skillTools) { vm.contextBreakdown(conv) }
     val total = parts.sumOf { it.second }.coerceAtLeast(1)
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -300,7 +300,14 @@ private fun ContextCard(vm: ChatViewModel, conv: Conversation?) {
             }
             val real = conv?.lastPromptTokens ?: 0
             Text(
-                "合计约 ${tokens(total.toLong())}" + if (real > 0) "，上次实际 ${tokens(real.toLong())}" else "",
+                "合计约 ${tokens(total.toLong())}" + if (real > 0) "，上次请求实际 ${tokens(real.toLong())}（接口返回，含当时的清单和工具过程）" else "",
+                style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
+            )
+            // 工具按需出现：不常用技能的工具读了做法才加进来，这里说一声这个对话打开了哪些
+            val opened = remember(conv?.skillTools) { vm.openedSkillNames(conv) }
+            Text(
+                if (opened.isEmpty()) "GitHub、Notion、日历、邮箱、浏览器、文档生成这些不常用技能的工具，用到时才加进来。"
+                else "这个对话里打开过：${opened.joinToString("、")}（之后一直带着它们的工具）",
                 style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
             )
         }

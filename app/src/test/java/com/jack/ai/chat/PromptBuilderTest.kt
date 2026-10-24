@@ -207,7 +207,8 @@ class PromptBuilderTest {
 
     @Test
     fun toolsFollowSettingsAndState() {
-        val conv = Conversation()
+        // 日历是按需出现的技能：这个对话打开过它才带它的工具
+        val conv = Conversation(skillTools = SkillIds.ON_DEMAND)
         val names = toolNames(conv)
         assertTrue("save_memory" in names)
         assertTrue("web_search" in names) // 没有 Tavily Key，但有 DeepSeek Key 也能联网
@@ -359,7 +360,7 @@ class PromptBuilderTest {
 
     @Test
     fun mailToolsOnlyWhenAccountIsReady() {
-        val conv = Conversation()
+        val conv = Conversation(skillTools = SkillIds.ON_DEMAND)
         assertFalse("send_email" in toolNames(conv))
         val half = settings.copy(mails = listOfNotNull(com.jack.ai.data.mailPresetFor("jack@163.com")))
         assertFalse("send_email" in toolNames(conv, s = half))
@@ -369,7 +370,7 @@ class PromptBuilderTest {
 
     @Test
     fun toolsAreConsolidated() {
-        val all = toolNames(Conversation(work = true))
+        val all = toolNames(Conversation(work = true, skillTools = SkillIds.ON_DEMAND))
         // 合并掉的旧工具一个都不发
         listOf("list_files", "list_tables", "create_table", "delete_table", "list_routines", "create_reminder", "set_alarm",
             "search_chats", "list_library", "create_word", "create_pdf", "run_js").forEach { assertFalse(it, it in all) }
@@ -382,11 +383,33 @@ class PromptBuilderTest {
 
     @Test
     fun documentFormatFollowsSkills() {
-        fun formats(s: Settings) = tool(Conversation(), "create_document", s)!!["parameters"]!!.jsonObject["properties"]!!
+        fun formats(s: Settings) = tool(Conversation(skillTools = SkillIds.ON_DEMAND), "create_document", s)!!["parameters"]!!.jsonObject["properties"]!!
             .jsonObject["format"]!!.jsonObject["enum"]!!.jsonArray.map { it.jsonPrimitive.content }
         assertEquals(listOf("word", "pdf"), formats(settings))
         assertEquals(listOf("pdf"), formats(settings.copy(disabledSkills = setOf(SkillIds.WORD))))
-        assertNull(tool(Conversation(), "create_document", settings.copy(disabledSkills = setOf(SkillIds.WORD, SkillIds.PDF))))
+        assertNull(tool(Conversation(skillTools = SkillIds.ON_DEMAND), "create_document", settings.copy(disabledSkills = setOf(SkillIds.WORD, SkillIds.PDF))))
+    }
+
+    @Test
+    fun rarelyUsedSkillToolsComeOnlyAfterUseSkill() {
+        val fresh = toolNames(Conversation())
+        // 开场只带常用的：文件、联网、记忆、提醒、表格、算数、use_skill
+        listOf("read_file", "edit_file", "web_search", "save_memory", "schedule", "add_rows", "query_table", "run_python", "use_skill")
+            .forEach { assertTrue(it, it in fresh) }
+        listOf("github", "browser", "notion_write", "add_calendar_event", "create_ppt", "create_excel", "create_document",
+            "create_chart", "create_diagram", "query_trains", "create_app", "save_flashcards").forEach { assertFalse(it, it in fresh) }
+        // 打开了 GitHub 只多它一个，别的还是不带
+        val withGit = toolNames(Conversation(skillTools = setOf(SkillIds.GITHUB)))
+        assertTrue("github" in withGit)
+        assertFalse("browser" in withGit)
+        assertEquals(fresh.size + 1, withGit.size)
+        // 系统提示词告诉模型这些技能要先 use_skill，免得它以为做不到
+        val sys = PromptBuilder.systemPrompt(settings, Conversation(), null, tools(Conversation()), memories, settings.activeSkills())
+        assertTrue(sys.contains("要先 use_skill 读了做法才会出现"))
+        // 开场的工具说明比全部打开时少一半以上
+        val small = tools(Conversation()).toString().length
+        val big = tools(Conversation(skillTools = SkillIds.ON_DEMAND)).toString().length
+        assertTrue("$small vs $big", small * 2 < big)
     }
 
     @Test

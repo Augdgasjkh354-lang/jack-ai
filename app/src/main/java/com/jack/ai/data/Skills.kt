@@ -52,6 +52,13 @@ object SkillIds {
     const val SALES_LOG = "builtin-sales-log"
     const val SALES_ADVISOR = "builtin-sales-advisor"
     const val SALES_REVIEW = "builtin-sales-review"
+
+    /**
+     * 这些技能的工具不在开场就给，等模型用 use_skill 读了做法才加进来（本对话之后一直带着）：
+     * 平时用得少、工具说明又长，每次都摆在面前既占上下文，也让模型更容易选错工具。
+     * 计算与图表只有画图（create_chart / create_diagram）算在这里，算数一直能用。
+     */
+    val ON_DEMAND = setOf(WORD, PDF, PPT, EXCEL, CALENDAR, MAIL, TRAIN, APP, GITHUB, BROWSER, NOTION, LEARN, CALC)
 }
 
 private fun schema(s: String): JsonObject = Json.parseToJsonElement(s).jsonObject
@@ -443,7 +450,7 @@ object SkillTools {
     val SEARCH_MY_DATA = schema("""{"type":"function","function":{"name":"search_my_data","description":"在用户自己的东西里按关键词找原文：以前所有的聊天、本对话较早的原话、资料库、项目资料。返回最相关的段落和出处。","parameters":{"type":"object","properties":{"query":{"type":"string","description":"关键词，2 到 5 个，用空格隔开；不填就列出资料库或项目里有哪些文档"},"where":{"type":"string","enum":["all","chats","history","library","project"],"description":"在哪找：chats 以前的聊天，history 本对话较早的原话（只有对话很长、被压缩过才有），library 资料库，project 项目资料（只在项目里有）；默认 all，能找的地方都找"}}}}}""")
 
 
-    val SCHEDULE = schema("""{"type":"function","function":{"name":"schedule","description":"到点做事：reminder 到点弹通知；task 到点你在后台自动执行 prompt 并把结果发给用户；alarm 在手机时钟里设真正的闹钟（一直响到用户按掉）；watch 监控：每隔一段时间在后台查一次，满足条件才通知用户。","parameters":{"type":"object","properties":{"kind":{"type":"string","enum":["reminder","task","alarm","watch"]},"when":{"type":"string","description":"第一次的时间 yyyy-MM-dd HH:mm；闹钟可以只写 HH:mm；watch 不用填"},"text":{"type":"string","description":"提醒：通知里显示的话；任务、监控：名字；闹钟：标签，可以不填"},"prompt":{"type":"string","description":"task：到时候要执行的完整、独立的指令；watch：每次要查什么、怎么查、满足什么条件算有结果"},"every_minutes":{"type":"integer","description":"只有 watch 用：隔多少分钟查一次，最短 15，默认 30"},"until":{"type":"string","description":"只有 watch 用：盯到什么时候 yyyy-MM-dd HH:mm，默认 3 天后，最多 30 天"},"then":{"type":"string","description":"只有 watch 用：条件满足后接着做的事（查天气、建日历、整理对比……），写成完整的指令；不填就只通知"},"repeat":{"type":"string","enum":["none","daily","weekdays","weekly"],"description":"默认 none；weekly 是每周 when 那一天"},"work":{"type":"boolean","description":"只有 task 用：要用邮箱、生成文件等多种技能、步骤多时设 true"},"off_peak":{"type":"boolean","description":"只有 task 用：碰上高峰时段就顺延到空闲时段，省一半钱；不急的任务可以开"},"replace":{"type":"string","description":"改已有的提醒、任务或监控时填它的编号：原地改，编号不变，只填要改的字段（比如只给 when 就只改时间）。闹钟填旧的时间 HH:mm（闹钟是删了重设）"}},"required":["kind"]}}}""")
+    val SCHEDULE = schema("""{"type":"function","function":{"name":"schedule","description":"到点做事：reminder 弹通知；task 到点你在后台执行 prompt，结果发给用户；alarm 在手机时钟设真闹钟；watch 每隔一段时间在后台查一次，满足条件才通知。","parameters":{"type":"object","properties":{"kind":{"type":"string","enum":["reminder","task","alarm","watch"]},"when":{"type":"string","description":"第一次的时间 yyyy-MM-dd HH:mm（闹钟可只写 HH:mm；watch 不填）"},"text":{"type":"string","description":"提醒的通知文字；任务、监控的名字；闹钟的标签（可不填）"},"prompt":{"type":"string","description":"task：到点执行的完整独立指令；watch：查什么、怎么查、满足什么算有结果"},"every_minutes":{"type":"integer","description":"watch：隔几分钟查一次，最短 15，默认 30"},"until":{"type":"string","description":"watch：盯到 yyyy-MM-dd HH:mm，默认 3 天后，最多 30 天"},"then":{"type":"string","description":"watch：满足后接着做的事，写成完整指令；不填只通知"},"repeat":{"type":"string","enum":["none","daily","weekdays","weekly"],"description":"默认 none；weekly 是每周 when 那天"},"work":{"type":"boolean","description":"task：要用邮箱、生成文件等多种技能时设 true"},"off_peak":{"type":"boolean","description":"task：碰上高峰就顺延到空闲时段，省一半钱"},"replace":{"type":"string","description":"改已有的提醒、任务、监控：填它的编号，只填要改的字段；闹钟填旧时间 HH:mm"}},"required":["kind"]}}}""")
 
     val CANCEL_SCHEDULE = schema("""{"type":"function","function":{"name":"cancel_schedule","description":"取消一个提醒、定时任务或闹钟。","parameters":{"type":"object","properties":{"target":{"type":"string","description":"提醒和任务填编号（每条用户消息前面的【提醒和任务】里有）；闹钟填时间 HH:mm 或标签"}},"required":["target"]}}}""")
 

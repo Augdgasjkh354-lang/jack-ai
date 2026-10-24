@@ -102,12 +102,14 @@ suspend fun runBackgroundWork(
     val conv = store.loadConversations().firstOrNull { it.id == r.convId }?.copy(work = true)
         ?: Conversation(id = r.convId, title = "⏰ " + r.title, work = true)
     val skills = s.activeSkills()
-    val tools = PromptBuilder.toolSet(s, skills, conv, null)?.let { all ->
+    // allow 筛过的工具列表；use_skill 打开了新技能时重算（见下面 retool）
+    fun toolsFor(unlocked: Set<String>) = PromptBuilder.toolSet(s, skills, conv, null, unlocked)?.let { all ->
         kotlinx.serialization.json.JsonArray(all.filter { t ->
             val name = ((t as? kotlinx.serialization.json.JsonObject)?.get("function") as? kotlinx.serialization.json.JsonObject)?.get("name")
             allow((name as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty(), null)
         })
     }
+    val tools = toolsFor(conv.skillTools)
     // 隐私项目里的任务不带全局记忆和日记
     val project = conv.projectId?.let { id -> store.loadProjects().firstOrNull { it.id == id } }
     val memories = if (s.memoryEnabled && conv.globalAllowed(project)) store.loadMemories() else emptyList()
@@ -136,6 +138,7 @@ suspend fun runBackgroundWork(
         override suspend fun confirm(title: String, body: String, action: String) = false
     })
     session.interactive = false
+    session.unlocked.addAll(conv.skillTools)
     val thinking = if (ep.reasoning && ep.deepseek) s.workThinking.resolve(r.prompt, work = true, hasFiles = false) else ThinkLevel.OFF
     val client = DeepSeekClient()
     val agent = Agent({ msgs, t -> client.stream(ep, msgs, thinking, s.temperature, t) }, sendReasoning = ep.deepseek && thinking.effort != null)
@@ -151,6 +154,7 @@ suspend fun runBackgroundWork(
             } else if (!allow(name, args)) "这个工具这次不能用。"
             else session.perform(name, args).also { log(com.jack.ai.data.RunLog.stepOf(name, it.status, it.text)) }.text
         },
+        retool = { toolsFor(session.unlocked.toSet()) },
         onUsage = { ev ->
             store.addUsage(ep, ev.promptTokens, ev.cacheHit, ev.completionTokens)
             spent += Pricing.priceAt(ep, System.currentTimeMillis())

@@ -157,9 +157,12 @@ object PromptBuilder {
         }
     }
 
-    /** 这次请求带哪些工具：跟着开着的技能走。 */
-    fun toolSet(settings: Settings, skills: List<Skill>, conv: Conversation, project: Project?): JsonArray? {
-        val skillIds = skills.map { it.id }.toSet()
+    /**
+     * 这次请求带哪些工具：跟着开着的技能走。SkillIds.ON_DEMAND 里的技能要在 unlocked 里（读过做法）才带它的工具。
+     */
+    fun toolSet(settings: Settings, skills: List<Skill>, conv: Conversation, project: Project?, unlocked: Set<String> = conv.skillTools): JsonArray? {
+        val all = skills.map { it.id }.toSet()
+        val skillIds = all.filter { it !in SkillIds.ON_DEMAND || it in unlocked }.toSet()
         val web = SkillIds.WEB in skillIds
         return buildJsonArray {
             // 文件、表格、提醒的清单直接写在最后一条用户消息前面（见 Input.contextNote），不用专门调工具去列
@@ -174,11 +177,9 @@ object PromptBuilder {
             if (SkillIds.EXCEL in skillIds) add(SkillTools.CREATE_EXCEL)
             // 一直带着、选项写全：工具说明不随对话变，缓存才能跨对话命中；眼下搜不了的地方由工具自己回话
             add(SkillTools.SEARCH_MY_DATA)
-            if (SkillIds.CALC in skillIds) {
-                // 开着 Python 就只留 run_python，两个都给模型会犹豫用哪个
-                if (SkillIds.PYTHON !in skillIds) add(SkillTools.RUN_JS)
-                add(SkillTools.CREATE_CHART); add(SkillTools.CREATE_DIAGRAM)
-            }
+            // 开着 Python 就只留 run_python，两个都给模型会犹豫用哪个；算数一直能用，画图要先读「计算与图表」
+            if (SkillIds.CALC in all && SkillIds.PYTHON !in all) add(SkillTools.RUN_JS)
+            if (SkillIds.CALC in skillIds) { add(SkillTools.CREATE_CHART); add(SkillTools.CREATE_DIAGRAM) }
             if (SkillIds.LEARN in skillIds) add(SkillTools.SAVE_FLASHCARDS)
             if (SkillIds.PYTHON in skillIds) add(SkillTools.RUN_PYTHON)
             if (SkillIds.ROUTINE in skillIds) { add(SkillTools.SCHEDULE); add(SkillTools.CANCEL_SCHEDULE) }
@@ -249,6 +250,16 @@ object PromptBuilder {
         journal: String = "",
     ): String = systemParts(settings, conv, project, tools, memories, skills, chatMemory, projectMemory, journal).joinToString("\n\n") { it.second }
 
+    /**
+     * 有些技能的工具要读过做法才出现，先告诉模型，免得它以为没有这个能力。
+     * 只列技能名、不随打开了哪些而变（这段在前面，变了缓存就断了）。
+     */
+    private fun onDemandNote(skills: List<Skill>): String {
+        val lazy = skills.filter { it.id in SkillIds.ON_DEMAND }.map { it.name }
+        if (lazy.isEmpty()) return ""
+        return "「${lazy.joinToString("、")}」这几个技能的工具，要先 use_skill 读了做法才会出现，读完下一步就能用；不要因为现在看不到工具就说做不到。"
+    }
+
     /** 系统提示词的各个部分（名字, 内容），统计页用它算上下文构成。 */
     fun systemParts(
         settings: Settings,
@@ -271,6 +282,7 @@ object PromptBuilder {
         if ("use_skill" in names && skills.isNotEmpty()) {
             parts += "固定说明" to "【技能】\n你掌握以下技能：\n" + skills.joinToString("\n") { "- ${it.name}：${it.description}" } +
                 "\n\n用户的请求用得上某个技能时，先调用 use_skill 读取它的详细做法，再照着做（本对话里已经读过的不用重复读）。" +
+                onDemandNote(skills) +
                 "用不上就直接回答。只有用户想要文件时才生成文件，不要主动生成。"
         }
         if ("web_search" in names) {

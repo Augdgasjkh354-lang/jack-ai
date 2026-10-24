@@ -65,6 +65,17 @@ class AgentTest {
     }
 
     @Test
+    fun toolsAreRecomputedAfterEachToolRound() = runBlocking {
+        // use_skill 打开了新技能：下一轮请求带上新的工具列表
+        val more = JsonArray(someTools + JsonObject(mapOf("type" to JsonPrimitive("function"), "x" to JsonPrimitive(1))))
+        val api = FakeApi(toolCall("use_skill"), text("好了"))
+        var opened = false
+        Agent(api::stream).run(mutableListOf(userMsg("用 GitHub")), someTools, { 5 }, { _, _ -> opened = true; "做法…" },
+            retool = { if (opened) more else someTools })
+        assertEquals(listOf<JsonArray?>(someTools, more), api.toolsSeen)
+    }
+
+    @Test
     fun toolCallIsAssembledExecutedAndRecorded() = runBlocking {
         val api = FakeApi(toolCall("web_search", say = "我查一下"), text("今天晴"))
         val agent = Agent(api::stream)
