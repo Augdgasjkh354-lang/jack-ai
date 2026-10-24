@@ -213,11 +213,8 @@ private suspend fun ToolSession.flowAction(action: String, args: JsonObject): St
     if (site.isEmpty()) return "site 要填网站名，比如 1688.com"
     val steps = args["steps"].text().trim().take(6000)
     val whenToUse = args["when"].text().trim().take(200)
+    // 流程只是笔记（照着做时付款、发送照样要用户确认），Kavi 自己判断就存，不弹窗；存了在对话里说一声
     val old = flows.firstOrNull { it.name == name }
-    val body = "名字：$name\n网站：$site" + (if (whenToUse.isNotEmpty()) "\n什么时候用：$whenToUse" else "") + "\n\n$steps"
-    if (!approve(if (old != null) "更新浏览器流程「$name」？" else "存成浏览器流程「$name」？", body, if (old != null) "更新" else "存下")) {
-        return "用户没有同意存这个流程。"
-    }
     val saved = (old ?: com.jack.ai.data.BrowserFlow(name = name, site = site, steps = steps))
         .copy(name = name, site = site, whenToUse = whenToUse, steps = steps)
     withContext(kotlinx.coroutines.Dispatchers.IO) {
@@ -225,6 +222,7 @@ private suspend fun ToolSession.flowAction(action: String, args: JsonObject): St
         store.saveFlows(if (now.any { it.id == saved.id }) now.map { if (it.id == saved.id) saved else it } else now + saved)
     }
     val ok = withContext(kotlinx.coroutines.Dispatchers.IO) { store.loadFlows().any { it.id == saved.id && it.steps == steps } }
+    if (ok) ui.notice((if (old != null) "已更新" else "已存成") + "浏览器流程「$name」，在 技能 → 浏览器流程 里能改、能删")
     return if (!ok) "存完后没查到这个流程，可能没存成。" else
         (if (old != null) "已更新" else "已存下") + "流程「$name」（$site）。下次打开 $site 时会提醒，用 action=flow 读出步骤照着做；用户可以在 技能 → 浏览器流程 里查看、修改、删除。"
 }
