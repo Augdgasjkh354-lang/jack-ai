@@ -69,7 +69,7 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
                 val id = n ?: info?.get("n").text().toIntOrNull() ?: 0
                 if (info == null || info["found"].flag() != true) {
                     val miss = if (n != null) "找不到编号 $n，页面可能变了" else "页面上没找到写着「$text」的东西（可能还没加载出来，可以先 wait）"
-                    return@runTool "$miss。下面是最新的页面：\n" + describePage(JackBrowser.read(ctx)) to SearchRecord(label)
+                    return@runTool "$miss。下面是最新的页面：\n" + show(JackBrowser.read(ctx), full = true) to SearchRecord(label)
                 }
                 val kind = info["kind"].text()
                 val what = "$kind「${info["label"].text()}」"
@@ -180,8 +180,17 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
                 else { images += shot; note.append("截图在下一条消息里，红框上的数字就是下面清单的编号；tap、swipe 的坐标用截图上的像素。\n") }
             }
         }
-        note.toString() + describePage(page) to SearchRecord(label, shot = stepShot())
+        // 读页面、截图时发全部；其他动作只发变了的部分
+        note.toString() + show(page, full = action == "read" || action == "look") to SearchRecord(label, shot = stepShot())
     }
+}
+
+/** 写给模型的页面，并记下这一页（同一次回答里，下一步只发变了的部分）。 */
+private fun ToolSession.show(page: JackBrowser.Page, full: Boolean = false): String {
+    val key = JackBrowser.tab.id
+    val prev = if (full) null else browserSeen[key]
+    browserSeen[key] = page
+    return describePage(page, prev)
 }
 
 private fun normalizeUrl(input: String) =
@@ -298,7 +307,12 @@ private fun actionName(action: String, key: String) = when (action) {
 private fun kotlinx.serialization.json.JsonElement?.flag(): Boolean? = (this as? JsonPrimitive)?.let { it.booleanOrNull ?: (it.content == "true") }
 
 /** 页面写成给模型看的文字：标题网址、位置、能操作的元素清单、当前屏附近的文字。 */
-internal fun describePage(p: JackBrowser.Page): String = buildString {
+/**
+ * 页面写成给模型看的文字：标题网址、位置、能操作的元素清单、当前屏附近的文字。
+ * 给了 prev（这次回答里上一步看到的同一个页面）并且页面没跳转、变化不大时，只写变了的部分：
+ * 编号在同一页里不变，没列出的照样能用，省得每一步都把整页再发一遍。
+ */
+internal fun describePage(p: JackBrowser.Page, prev: JackBrowser.Page? = null): String = buildString {
     append(FENCE)
     append("【网页】${p.title.ifBlank { "（无标题）" }}\n${p.url}\n")
     if (p.vh > 0 && p.height > p.vh) {
@@ -312,17 +326,56 @@ internal fun describePage(p: JackBrowser.Page): String = buildString {
         append("网页要下载「${it.name}」" + (if (it.size > 0) "（${com.jack.ai.data.ToolSizes.text(it.size)}）" else "") +
             "：用户要这个文件的话用 action=download 存进对话文件夹，不要就不用管。\n")
     }
+    val diff = BrowserDiff.of(prev, p)
+    if (diff != null) {
+        append("（页面没跳转，下面只列有变化的；没列出的按钮编号不变、照样能用；要看全部用 read）\n")
+        if (diff.changed.isEmpty()) append("能操作的没有变化（这一屏共 ${p.items.size} 个）。\n")
+        else {
+            append("新出现或有变化的（这一屏共 ${p.items.size} 个）：\n")
+            diff.changed.forEach { append(itemLine(it)).append("\n") }
+        }
+        if (diff.gone.isNotEmpty()) append("不见了：" + diff.gone.take(30).joinToString(" ") { "[$it]" } + "\n")
+        if (p.above > 0 || p.below > 0) append("上面还有 ${p.above} 个、下面还有 ${p.below} 个能操作的（scroll 翻页后再看）\n")
+        append(if (diff.newText.isEmpty()) "\n文字没有变化。" else "\n新出现的文字：\n" + diff.newText.joinToString("\n"))
+        return@buildString
+    }
     if (p.items.isEmpty()) append("这一屏没有能操作的东西。\n") else {
         append("能操作的（用编号 click / type）：\n")
-        p.items.forEach { i ->
-            append("[${i.n}] ${i.kind}")
-            if (i.label.isNotBlank()) append("「${i.label}」")
-            i.value?.let { if (i.kind == "下拉框") append(" 当前：$it") else append(" 内容：「$it」") }
-            if (i.options.isNotEmpty()) append(" 可选：" + i.options.joinToString(" / "))
-            i.checked?.let { append(if (it) " ☑" else " ☐") }
-            append("\n")
-        }
+        p.items.forEach { append(itemLine(it)).append("\n") }
     }
     if (p.above > 0 || p.below > 0) append("上面还有 ${p.above} 个、下面还有 ${p.below} 个能操作的（scroll 翻页后再看）\n")
     if (p.text.isNotBlank()) append("\n当前屏附近的文字：\n${p.text}")
+}
+
+private fun itemLine(i: JackBrowser.Item) = buildString {
+    append("[${i.n}] ${i.kind}")
+    if (i.label.isNotBlank()) append("「${i.label}」")
+    i.value?.let { if (i.kind == "下拉框") append(" 当前：$it") else append(" 内容：「$it」") }
+    if (i.options.isNotEmpty()) append(" 可选：" + i.options.joinToString(" / "))
+    i.checked?.let { append(if (it) " ☑" else " ☐") }
+}
+
+/** 同一个页面这一步和上一步比，变了什么。 */
+internal object BrowserDiff {
+    data class Diff(val changed: List<JackBrowser.Item>, val gone: List<Int>, val newText: List<String>)
+
+    /** 跳到了别的网址、或者变化太大（新的超过一半），返回 null：发整页。 */
+    fun of(prev: JackBrowser.Page?, p: JackBrowser.Page): Diff? {
+        if (prev == null || prev.url != p.url) return null
+        val old = prev.items.associateBy { it.n }
+        val changed = p.items.filter { i ->
+            val o = old[i.n]
+            o == null || o.label != i.label || o.value != i.value || o.checked != i.checked || o.options != i.options
+        }
+        val now = p.items.map { it.n }.toSet()
+        val gone = prev.items.map { it.n }.filter { it !in now }
+        val oldLines = lines(prev.text).toHashSet()
+        val newText = lines(p.text).filter { it !in oldLines }
+        val newChars = newText.sumOf { it.length }
+        if (changed.size > 5 && changed.size * 2 > p.items.size) return null
+        if (newChars > 800 && newChars * 2 > p.text.length) return null
+        return Diff(changed, gone, newText)
+    }
+
+    private fun lines(t: String) = t.lines().map { it.trim() }.filter { it.isNotEmpty() }
 }

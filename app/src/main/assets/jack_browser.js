@@ -109,7 +109,8 @@
     var out = [], all = d.querySelectorAll('div,span,li,img,i,svg,label,p,td,em,strong');
     for (var i = 0; i < all.length && out.length < 60; i++) {
       var el = all[i];
-      if (el.closest('[data-jack]') || el.querySelector('[data-jack]')) continue;
+      // 自己上次编过号的照样算；在别的已编号元素里面或包着已编号元素的不算（会重复）
+      if ((el.parentElement && el.parentElement.closest('[data-jack]')) || el.querySelector('[data-jack]')) continue;
       var r = el.getBoundingClientRect();
       if (r.width < 8 || r.height < 8 || r.bottom < 0 || r.top > vh * 1.5) continue;
       var st = styleOf(el);
@@ -141,10 +142,15 @@
     return item;
   }
 
+  /**
+   * 编号在同一个页面里不变：上次编过号的元素还用原来的号，新出现的接着往后编（跳到新页面才从 1 重来）。
+   * 这样页面没跳转时只要告诉模型哪些是新的，旧的编号照样能用。
+   */
   function snapshot() {
     var ds = docs();
-    ds.forEach(function (d) { d.doc.querySelectorAll('[data-jack]').forEach(function (e) { e.removeAttribute('data-jack'); }); });
+    ds.forEach(function (d) { d.doc.querySelectorAll('[data-jack="0"]').forEach(function (e) { e.removeAttribute('data-jack'); }); });
     var vh = innerHeight, items = [], above = 0, below = 0, n = 0;
+    if (!window.__jackNext) window.__jackNext = 1;
     ds.forEach(function (d) {
       var all = Array.prototype.slice.call(d.doc.querySelectorAll(SELECTOR));
       for (var pass = 0; pass < 2; pass++) {
@@ -163,8 +169,9 @@
           if (pass === 1 && !lb && !el.querySelector('img,svg')) continue;
           if (n >= MAX) { below++; continue; }
           n++;
-          el.setAttribute('data-jack', n);
-          items.push(describe(el, n, r, d.frame));
+          var id = parseInt(el.getAttribute('data-jack'), 10);
+          if (!(id > 0)) { id = window.__jackNext++; el.setAttribute('data-jack', id); }
+          items.push(describe(el, id, r, d.frame));
         }
         // 第二遍：标准元素之外、鼠标是手指形状的
         all = pass === 0 ? pointerItems(d.doc, vh) : [];
