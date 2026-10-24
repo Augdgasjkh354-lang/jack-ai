@@ -249,7 +249,8 @@ fun ChatScreen(
                 } else {
                     MessageList(vm, conv, state.streamingHere, padding)
                 }
-                BrowserPeek(Modifier.align(Alignment.TopEnd).padding(top = padding.calculateTopPadding() + 4.dp, end = 12.dp))
+                // 只在 Jack 还在回答时出来；答完就收起，免得盖住回答
+                BrowserPeek(Modifier.align(Alignment.TopEnd).padding(top = padding.calculateTopPadding() + 4.dp, end = 12.dp), working = state.streaming)
             }
         }
     }

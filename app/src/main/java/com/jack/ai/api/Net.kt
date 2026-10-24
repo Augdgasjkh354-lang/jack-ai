@@ -27,6 +27,20 @@ object Net {
         "xfyun.cn", "bigmodel.cn", "zhipuai.cn", "minimaxi.com", "stepfun.com",
         "jd.com", "taobao.com", "tmall.com", "weibo.com", "bilibili.com", "zhihu.com", "douyin.com", "xiaohongshu.com",
         "sina.com", "sohu.com", "ifeng.com", "dianping.com", "meituan.com", "ctrip.com", "12306.cn",
+        // 电商和它们的图片、风控、支付域名：页面直连、这些却走代理的话，网站看到两个 IP，会断开或要求登录验证
+        "1688.com", "alibaba.com", "alibaba-inc.com", "alipay.com", "alipayobjects.com", "mmstat.com", "tbcdn.cn",
+        "taobaocdn.com", "alikunlun.com", "aliapp.org", "fliggy.com", "ele.me", "alipan.com", "aliyundrive.com",
+        "360buyimg.com", "jd.hk", "jdpay.com", "jdcloud.com", "jdcloud-openapi.com", "pinduoduo.com", "yangkeduo.com",
+        "pddpic.com", "vip.com", "suning.com", "dangdang.com", "poizon.com", "dewu.com",
+        // 手机厂商、腾讯、字节、快手等的主站和图片
+        "mi.com", "xiaomi.com", "huawei.com", "vmall.com", "hicloud.com", "dbankcloud.com", "honor.com", "oppo.com", "vivo.com",
+        "tencent.com", "gtimg.com", "myqcloud.com", "tenpay.com", "wechat.com", "toutiao.com", "snssdk.com", "byteimg.com",
+        "pstatp.com", "douyinpic.com", "douyinstatic.com", "ixigua.com", "kuaishou.com", "yximgs.com", "hdslb.com",
+        "zhimg.com", "xhscdn.com", "youku.com", "iqiyi.com", "qiyipic.com", "douban.com", "doubanio.com",
+        // 常用的资讯、工具、招聘、出行
+        "csdn.net", "cnblogs.com", "jianshu.com", "360.com", "so.com", "sogou.com", "36kr.com", "huxiu.com", "eastmoney.com",
+        "xueqiu.com", "cnki.net", "dingtalk.com", "yuque.com", "zhipin.com", "58.com", "ke.com", "lianjia.com", "anjuke.com",
+        "qunar.com", "didiglobal.com", "unionpay.com", "95516.com", "hupu.com",
     )
 
     data class Config(

@@ -39,14 +39,14 @@ import kotlinx.coroutines.delay
  * 网页窗口放在这里也让截图能画出来（没放进任何界面的网页窗口截不出图）。
  */
 @Composable
-fun BrowserPeek(modifier: Modifier = Modifier) {
+fun BrowserPeek(modifier: Modifier = Modifier, working: Boolean = true) {
     val ctx = LocalContext.current
     val b = JackBrowser
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(b.agentAt) {
         while (true) { now = System.currentTimeMillis(); delay(5_000) }
     }
-    if (!b.agentActive(now) || b.inlineHosts > 0) return
+    if (!working || !b.agentActive(now) || b.inlineHosts > 0) return
     val dm = ctx.resources.displayMetrics
     val density = LocalDensity.current
     val fullW = with(density) { dm.widthPixels.toDp() }
