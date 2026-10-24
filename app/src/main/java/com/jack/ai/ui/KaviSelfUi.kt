@@ -45,7 +45,7 @@ fun KaviSelfCard() {
             Text(KaviSelf.FIXED + "（这句改不了）", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
             if (showAll) KaviSelf.SECTIONS.forEach { s ->
                 Text(
-                    "${s.title}${if (KaviSelf.isEdited(s.key)) "（Kavi 改过）" else ""}：${KaviSelf.current(s.key)}",
+                    "${s.title}${if (KaviSelf.isEdited(s.key)) "（Kavi 改过）" else ""}：${KaviSelf.current(s.key).ifBlank { "（没定，按它自己的样子说；你想让它怎么说，跟它说一声就行）" }}",
                     style = MaterialTheme.typography.bodySmall,
                     color = if (KaviSelf.isEdited(s.key)) colors.primary else colors.onSurface,
                 )
@@ -61,7 +61,7 @@ fun KaviSelfCard() {
                     if (e.reason.isNotBlank()) Text("理由：${e.reason}", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                     Text("原来：${e.old}", style = MaterialTheme.typography.bodySmall, color = colors.outline)
                     Text("改成：${e.new}", style = MaterialTheme.typography.bodySmall)
-                    TextButton(onClick = { restoring = e }, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) {
+                    if (KaviSelf.SECTIONS.any { it.key == e.section }) TextButton(onClick = { restoring = e }, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) {
                         Text("恢复到这次之前", style = MaterialTheme.typography.labelMedium)
                     }
                 }
@@ -76,7 +76,7 @@ fun KaviSelfCard() {
             onDismissRequest = { restoring = null },
             title = { Text("恢复「${KaviSelf.title(e.section)}」？") },
             text = { Text("现在：${KaviSelf.current(e.section)}\n\n恢复成：${e.old}") },
-            confirmButton = { TextButton(onClick = { KaviSelf.restore(ctx, e); restoring = null; version++ }) { Text("恢复") } },
+            confirmButton = { TextButton(onClick = { runCatching { KaviSelf.restore(ctx, e) }; restoring = null; version++ }) { Text("恢复") } },
             dismissButton = { TextButton(onClick = { restoring = null }) { Text("取消") } },
         )
     }

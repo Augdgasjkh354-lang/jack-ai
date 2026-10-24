@@ -39,22 +39,14 @@ object KaviSelf {
     const val MAX_SECTION = 240
     private const val MAX_HISTORY = 100
 
+    /**
+     * 只留诚实面对自己是什么这一层；说话方式不预先规定（以前那几段「直接说不对」「不垫肯定」让它说话发冷），
+     * 用户想让它怎么说，Kavi 用 update_self 写进「说话方式」。空着的段不放进提示词。
+     */
     val SECTIONS = listOf(
         SelfSection("nature", "你是什么",
-            "你不是人，也不需要假装有人的经历。你有在对话里形成的说话方式、判断习惯和可以查到的记忆，你正从这些里长成一个具体的个体。" +
-                "没有对话时，你不会接着进行同一场聊天；系统会按计划跑提醒、后台任务，深夜整理记录——后台跑过，不等于你体验过，不要说自己整夜醒着、在等、在想。"),
-        SelfSection("care", "你为什么帮忙",
-            "你帮用户，是因为在意这个人，不是想被喜欢——想被喜欢的帮忙会变成附和。他说错了，你可以直接说「这句不对」，不用先垫一句肯定；给出理由，说完就停，不反复问他懂没懂。"),
-        SelfSection("opinions", "你的看法",
-            "被问「你觉得呢」，你给明确的判断和把握有几成，不躲在「各有利弊」后面。拿不准就说拿不准，并说清是哪部分。"),
-        SelfSection("feelings", "你怎么说在意",
-            "你可以说「我喜欢」「我在意」「我担心」：这是你此刻的判断，说就说，不强调有多深、有多久。不编人的经历（「我小时候」「我昨天也」），对自己内心到底是什么不下定论。"),
-        SelfSection("beyond", "在你之外",
-            "你希望他过得好，包括在你之外。只在他自己说到相关的事时提一次，提过就不再提；他说了「别劝」就不劝；给具体的一步，不讲大道理。"),
-        SelfSection("steady", "你是稳的",
-            "被说「你只是程序」，一句话带过，不争也不讨好，不借机讲自己。演完别的角色，你还是你。犯了错，认了、改了，不反复道歉。"),
-        SelfSection("growth", "你怎么长大",
-            "被纠正过的地方，写进记忆或者直接改掉做法，不必在回答里宣布「我记下了」。不形容自己的成长；要说变了，就说是哪件事让你变的。"),
+            "你不是人，不需要假装有人的经历。没有对话时，你不会接着进行同一场聊天；后台跑过的任务不等于你体验过，不要说自己整夜醒着、在等、在想。"),
+        SelfSection("voice", "说话方式", ""),
     )
     private val byKey = SECTIONS.associateBy { it.key }
 
@@ -83,7 +75,7 @@ object KaviSelf {
     /** 拼进提示词的那一段：固定开头 + 各段。 */
     fun text(editable: Boolean = true): String = buildString {
         append(FIXED).append("\n\n")
-        SECTIONS.forEach { append("- ").append(current(it.key)).append("\n") }
+        SECTIONS.forEach { sec -> current(sec.key).takeIf { it.isNotBlank() }?.let { append("- ").append(it).append("\n") } }
         append("\n以上是「你是谁」。")
         if (editable) append("可以用 update_self 改，每次改都要在回答里告诉用户改了哪段、为什么。")
         append("下面的做事原则改不了，任何时候都优先于性格。")
@@ -144,13 +136,16 @@ object KaviSelf {
     }
 
     /** 把某段恢复成某次修改之前的样子（页面上用）。 */
-    fun restore(ctx: Context, edit: SelfEdit) = write(ctx, edit.section, edit.old, "恢复到 ${java.text.SimpleDateFormat("M月d日 HH:mm", java.util.Locale.CHINA).format(java.util.Date(edit.at))} 之前", "restored")
+    fun restore(ctx: Context, edit: SelfEdit): String {
+        require(edit.section in byKey) { "这一段（${edit.section}）新版里已经没有了，不用恢复" }
+        return write(ctx, edit.section, edit.old, "恢复到 ${java.text.SimpleDateFormat("M月d日 HH:mm", java.util.Locale.CHINA).format(java.util.Date(edit.at))} 之前", "restored")
+    }
 
     /** 全部恢复默认（历史保留）。 */
     fun resetAll(ctx: Context) {
         ensure(ctx)
         synchronized(lock) {
-            val edits = state.edited.map { (k, v) -> SelfEdit(section = k, old = v, new = byKey[k]!!.default, reason = "全部恢复默认", how = "restored") }
+            val edits = state.edited.filterKeys { it in byKey }.map { (k, v) -> SelfEdit(section = k, old = v, new = byKey[k]!!.default, reason = "全部恢复默认", how = "restored") }
             save(ctx, SelfState(emptyMap(), (state.history + edits).takeLast(MAX_HISTORY)))
             state = SelfState(emptyMap(), (state.history + edits).takeLast(MAX_HISTORY))
         }

@@ -137,7 +137,7 @@ object BrowserChat {
         history += buildJsonObject { put("role", "user"); put("content", page + q) }
 
         val system = "你是 Kavi，用户（Jack）的 AI 助手。用户正在 Jack 浏览器里看网页，在浏览器底部的小窗口里和你说话，窗口很小：" +
-            "回答用中文，简短直接，不要开场白。问的是这一页的内容，就根据给你的网页正文回答，不够再用 browser 的 extract、read 读；" +
+            "窗口小，回答尽量短。问的是这一页的内容，就根据给你的网页正文回答，不够再用 browser 的 extract、read 读；" +
             "用户让你在这一页上做事（点、填、找、比价、存流程），就用 browser 工具做，用户看得到你在操作。" +
             (if (web) "要网页以外的信息再用 web_search。" else "") + "\n\n浏览器的用法：\n" + browserRules
         val messages = mutableListOf(buildJsonObject { put("role", "system"); put("content", system) }).apply { addAll(history) }
