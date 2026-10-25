@@ -205,24 +205,6 @@ fun SettingsScreen(
                 }
             }
 
-            // ---- 长对话 ----
-            Section("长对话自动压缩（${settings.compressTokens / 1000}k）") {
-                Slider(
-                    value = settings.compressTokens / 1000f,
-                    onValueChange = { v -> vm.updateSettings { it.copy(compressTokens = ((v / 50).toInt().coerceAtLeast(1)) * 50_000) } },
-                    valueRange = 50f..800f,
-                    steps = 14,
-                )
-            }
-
-            // ---- 创造力 ----
-            Section("回答风格（温度 ${String.format(Locale.US, "%.1f", settings.temperature)}）") {
-                Slider(
-                    value = settings.temperature,
-                    onValueChange = { v -> vm.updateSettings { it.copy(temperature = (v * 10).toInt() / 10f) } },
-                    valueRange = 0f..1.5f,
-                )
-            }
 
             // ---- 外观 ----
             Section("外观") {

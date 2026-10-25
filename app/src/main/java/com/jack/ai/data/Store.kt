@@ -331,7 +331,8 @@ class Store(context: Context) {
             baseUrl = prefs.getString("baseUrl", DEFAULT_BASE_URL) ?: DEFAULT_BASE_URL,
             model = model,
             thinking = thinking,
-            temperature = prefs.getFloat("temperature", 1.0f),
+            // 温度和压缩门槛不再给调（滑条容易误碰，压缩被拖到 50k 都没发现）：固定用默认值，以前存的不读
+            temperature = 1.0f,
             themeMode = runCatching { ThemeMode.valueOf(prefs.getString("themeMode", "SYSTEM")!!) }
                 .getOrDefault(ThemeMode.SYSTEM),
             presets = presets,
@@ -348,7 +349,7 @@ class Store(context: Context) {
             workThinking = prefs.getString("workThinking", null)?.let { runCatching { ThinkLevel.valueOf(it) }.getOrNull() } ?: ThinkLevel.HIGH,
             // 默认值从 1 元改成了 5 元，换个键名，旧的默认值不沿用
             workCostLimit = prefs.getFloat("workCostLimit5", 5f).toDouble(),
-            compressTokens = prefs.getInt("compressTokens", 200_000),
+            compressTokens = 200_000,
             memoryEnabled = prefs.getBoolean("memoryEnabled", true),
             dreamEnabled = prefs.getBoolean("dreamEnabled", true),
             userName = prefs.getString("userName", "") ?: "",
