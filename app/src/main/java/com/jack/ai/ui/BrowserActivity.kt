@@ -362,6 +362,15 @@ class BrowserActivity : ComponentActivity() {
                                 }
                             })
                         }
+                        if (has && b.route == BrowserNet.AUTO) DropdownMenuItem(text = { Text((if (b.proxyForcedHere()) "✓ " else "    ") + "这个网站总走代理") }, onClick = {
+                            menu = false
+                            lifecycleScope.launch { b.notice = b.toggleProxySite(this@BrowserActivity) }
+                        })
+                        DropdownMenuItem(text = { Text((if (b.webrtcAllowed) "✓ " else "    ") + "允许网页视频通话（会暴露真实 IP）") }, onClick = {
+                            menu = false
+                            b.changeWebrtc(!b.webrtcAllowed)
+                            b.notice = if (b.webrtcAllowed) "已允许 WebRTC：网页能视频通话，但也能查到你的真实 IP" else "已关掉 WebRTC 查 IP：网页查不到你的真实 IP，视频通话可能用不了"
+                        })
                         HorizontalDivider()
                         DropdownMenuItem(text = { Text((if (b.adBlock) "✓ " else "    ") + "去广告") }, onClick = { menu = false; b.changeAdBlock(!b.adBlock) })
                         if (b.adBlock && has) DropdownMenuItem(text = { Text((if (b.adAllowedHere()) "✓ " else "    ") + "这个网站不去广告") },
@@ -430,11 +439,17 @@ class BrowserActivity : ComponentActivity() {
                 IconButton(onClick = { BrowserChat.open = !BrowserChat.open }) {
                     Icon(Icons.Default.Face, "问 Kavi 这一页", tint = if (BrowserChat.open || BrowserChat.busy) colors.primary else colors.onSurface)
                 }
+                // 点一下在「自动」和「全部走代理」之间切换（全部直连在菜单里）
                 Text(
                     routeLabel(),
-                    Modifier.weight(1f).padding(end = 12.dp),
+                    Modifier.weight(1f).padding(end = 12.dp).clickable {
+                        val next = if (b.route == BrowserNet.PROXY) BrowserNet.AUTO else BrowserNet.PROXY
+                        b.changeRoute(next)
+                        b.notice = if (next == BrowserNet.PROXY) "全部走代理：网站都看不到你的真实 IP（国内网站可能慢一点）" else "自动：国内直连，国外走代理"
+                        if (b.address.isNotEmpty()) reload()
+                    }.padding(vertical = 8.dp),
                     style = MaterialTheme.typography.labelSmall,
-                    color = colors.onSurfaceVariant,
+                    color = if (proxiedNow() && (b.route == BrowserNet.PROXY || b.proxyForcedHere())) colors.primary else colors.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -633,12 +648,12 @@ class BrowserActivity : ComponentActivity() {
         val proxied = when (route) {
             BrowserNet.DIRECT -> false
             BrowserNet.PROXY -> true
-            else -> host != null && Net.shouldProxy(host)
+            else -> host != null && (Net.shouldProxy(host) || (Net.config.enabled && JackBrowser.proxyForcedHere()))
         }
-        val mode = when (route) { BrowserNet.PROXY -> "全部走代理"; BrowserNet.DIRECT -> "全部直连"; else -> "自动" }
+        val mode = when (route) { BrowserNet.PROXY -> "🛡 全部走代理"; BrowserNet.DIRECT -> "全部直连"; else -> "自动" }
         val ads = JackBrowser.tab.blocked.takeIf { it > 0 }?.let { " · 拦了 $it 个广告" }.orEmpty()
         return if (host == null) "线路：$mode" + if (route != BrowserNet.DIRECT && !Net.config.enabled) "（代理没开，现在都是直连）" else ""
-        else "$mode · 这个网站" + (if (proxied) "走代理" else "直连") + ads
+        else "$mode · 这个网站" + (if (proxied) "走代理" else "直连（看得到你的 IP）") + ads
     }
 
     /** 把当前网页的内容带回聊天：新开一个对话，网页正文作为附件，用户接着问。 */

@@ -23,19 +23,29 @@ object BrowserNet {
     }
 
     /** 按线路和代理设置算出怎么上网；要走代理时顺手把内核拉起来。 */
-    fun plan(mode: String, c: Net.Config = Net.config, ensure: (Net.Config) -> Boolean = { Net.ensureCore(it) }): Plan {
+    /** always：用户设了「总走代理」的网站，自动模式下也不直连。 */
+    fun plan(mode: String, c: Net.Config = Net.config, always: Set<String> = emptySet(), ensure: (Net.Config) -> Boolean = { Net.ensureCore(it) }): Plan {
         if (mode == DIRECT) return Plan.Direct
         if (!c.enabled) {
             return if (mode == PROXY) Plan.Blocked("Kavi 专用代理没开（设置 → Kavi 专用代理），选了「全部走代理」就不会直连")
             else Plan.Direct
         }
         if (!ensure(c)) return Plan.Blocked("代理没能启动：" + (ProxyCore.lastError ?: "原因不明"))
-        return Plan.Proxy(ProxyCore.port, if (mode == PROXY) emptyList() else bypassRules())
+        return Plan.Proxy(ProxyCore.port, if (mode == PROXY) emptyList() else bypassRules(always))
     }
 
-    /** Net.DOMESTIC 换成 WebView 认的直连规则：".cn" → "*.cn"，"qq.com" → "qq.com" 和 "*.qq.com"。 */
-    fun bypassRules(): List<String> = Net.DOMESTIC.flatMap { d ->
-        if (d.startsWith(".")) listOf("*$d") else listOf(d, "*.$d")
+    /**
+     * Net.DOMESTIC 换成 WebView 认的直连规则：".cn" → "*.cn"，"qq.com" → "qq.com" 和 "*.qq.com"。
+     * always 里的网站（总走代理）从直连名单里拿掉：它属于哪条名单，那条就不直连了。
+     */
+    fun bypassRules(always: Set<String> = emptySet()): List<String> = Net.DOMESTIC
+        .filterNot { d -> !d.startsWith(".") && always.any { it == d || it.endsWith(".$d") } }
+        .flatMap { d -> if (d.startsWith(".")) listOf("*$d") else listOf(d, "*.$d") }
+
+    /** 这个网站能不能单独设成总走代理：只靠后缀（比如 .cn）直连的不行，拿掉会让整个后缀都走代理。 */
+    fun canForceProxy(site: String): Boolean {
+        val h = site.lowercase()
+        return Net.DOMESTIC.none { d -> d.startsWith(".") && h.endsWith(d) }
     }
 
     /** 地址栏的输入 → 要打开的网址。像网址就补上 https://，不像就去搜。 */

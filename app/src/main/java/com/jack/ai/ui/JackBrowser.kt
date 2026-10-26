@@ -102,6 +102,8 @@ object JackBrowser {
         var diagOn by mutableStateOf(false)
         var diagScript: androidx.webkit.ScriptHandler? = null
         var teachScript: androidx.webkit.ScriptHandler? = null
+        /** 防 IP 泄漏的脚本（关着 WebRTC 时装上）。 */
+        var rtcScript: androidx.webkit.ScriptHandler? = null
         /** 这一页里播放器拉过的视频、音频地址（拦截请求时记下，最新的在后面），存视频时从这里挑。 */
         val media = java.util.concurrent.ConcurrentLinkedDeque<MediaGrab.Hit>()
         /** 标签页名字前面的标记：隐身、分身几。 */
@@ -254,6 +256,44 @@ object JackBrowser {
         return BrowserDiag.report(header, unwrap(page), t.diag.lines(), t.diagOn)
     }
 
+    /** 当前网站是不是设了「总走代理」。 */
+    fun proxyForcedHere() = BrowserPages.site(address).let { s -> s.isNotEmpty() && proxySites.any { s == it || s.endsWith(".$it") } }
+
+    /** 当前网站「总走代理」开 / 关；设好后重新打开这一页。返回给用户看的一句话。 */
+    suspend fun toggleProxySite(ctx: Context): String {
+        val site = BrowserPages.site(address).ifEmpty { return "先打开一个网页" }
+        val on = !proxyForcedHere()
+        if (on && !BrowserNet.canForceProxy(site)) return "$site 是按后缀直连的（比如 .cn），没法单独让它走代理；要的话把线路换成「全部走代理」"
+        proxySites = if (on) proxySites + site else proxySites.filterNot { site == it || site.endsWith(".$it") }.toSet()
+        prefs().edit().putStringSet("proxysites", proxySites).apply()
+        prepare(ctx)?.let { return it }
+        withContext(Dispatchers.Main) { reloadCurrent() }
+        return if (on) "$site 以后总走代理，它看不到你的真实 IP（购物、支付网站这样可能要重新登录或验证）" else "$site 恢复按规则走"
+    }
+
+    /** 允许 / 不许网页用 WebRTC：每个标签页装上或拆掉防泄漏脚本，再重新打开当前页。 */
+    fun changeWebrtc(allowed: Boolean) {
+        webrtcAllowed = allowed
+        prefs().edit().putBoolean("webrtc", allowed).apply()
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) tabs.forEach { t ->
+            if (allowed) { t.rtcScript?.remove(); t.rtcScript = null }
+            else if (t.rtcScript == null) t.web?.let { w -> t.rtcScript = runCatching { androidx.webkit.WebViewCompat.addDocumentStartJavaScript(w, RTC_JS, setOf("*")) }.getOrNull() }
+        }
+        reloadCurrent()
+    }
+
+    /**
+     * 防 WebRTC 泄漏 IP：网页建的连接一律只走中继（iceTransportPolicy=relay），不收集本机和公网地址，
+     * 所以查不到真实 IP；网页照样能用 WebRTC 的其他功能，只是没有中继服务器时连不上（视频通话会失败）。
+     */
+    internal const val RTC_JS = """(function(){if(window.__kaviRtc)return;window.__kaviRtc=1;
+function relay(c){var o={};if(c)for(var k in c)o[k]=c[k];o.iceTransportPolicy='relay';return o;}
+['RTCPeerConnection','webkitRTCPeerConnection'].forEach(function(n){var O=window[n];if(!O)return;
+var W=function(c,x){return new O(relay(c),x);};W.prototype=O.prototype;
+if(O.generateCertificate)W.generateCertificate=O.generateCertificate.bind(O);
+var sc=O.prototype.setConfiguration;if(sc)O.prototype.setConfiguration=function(c){return sc.call(this,relay(c));};
+try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}catch(e){window[n]=W;}});})();"""
+
     fun adAllowedHere() = BrowserPages.site(address).let { s -> s.isNotEmpty() && adAllow.any { s == it || s.endsWith(".$it") } }
 
     private fun reloadCurrent() {
@@ -323,6 +363,12 @@ object JackBrowser {
 
     /** 用电脑版打开的网站（网站名，不带 www.）。 */
     var desktopSites by mutableStateOf(setOf<String>())
+    /** 用户设了「总走代理」的网站（自动线路下也不直连，真实 IP 不暴露给它）。 */
+    var proxySites by mutableStateOf(setOf<String>())
+        private set
+    /** 允不允许网页用 WebRTC（视频通话要它，但它能绕过代理查到真实 IP）；默认不许。 */
+    var webrtcAllowed by mutableStateOf(false)
+        private set
     /** 手机版的浏览器标识（去掉了 App 内嵌标记）；电脑版的由它换算。 */
     private var mobileUa = ""
 
@@ -350,6 +396,7 @@ object JackBrowser {
     /** 网页上次是按哪个代理端口设的（0 = 直连）；内核重启换了端口就要重设。 */
     private var appliedPort = -1
     private var appliedRoute = ""
+    private var appliedBypass = emptyList<String>()
     private var pageDone: CompletableDeferred<Unit>? get() = tab.pageDone; set(v) { tab.pageDone = v }
     /** 最近给代理口令的时刻：10 秒内要了 30 次以上，说明口令没被接受。 */
     private val authTimes = ArrayDeque<Long>()
@@ -436,6 +483,8 @@ object JackBrowser {
             // 网页生成文件后马上收回（revokeObjectURL）的话就存不下来了：晚两分钟再收；顺便记下链接上写的文件名
             if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
                 runCatching { androidx.webkit.WebViewCompat.addDocumentStartJavaScript(this, KEEP_BLOB_JS, setOf("*")) }
+                // 不让网页靠 WebRTC 查到真实 IP（每个嵌入框也装）
+                if (!webrtcAllowed) t.rtcScript = runCatching { androidx.webkit.WebViewCompat.addDocumentStartJavaScript(this, RTC_JS, setOf("*")) }.getOrNull()
             }
         }
         tabs += t
@@ -472,6 +521,8 @@ object JackBrowser {
         fun read(k: String) = prefs().getString(k, null)?.let { runCatching { listJson.decodeFromString(visitList, it) }.getOrNull() }.orEmpty()
         visits = read("visits"); marks = read("marks")
         desktopSites = prefs().getStringSet("desktop", emptySet()).orEmpty().toSet()
+        proxySites = prefs().getStringSet("proxysites", emptySet()).orEmpty().toSet()
+        webrtcAllowed = prefs().getBoolean("webrtc", false)
         adBlock = prefs().getBoolean("adblock", true); adBlockNow = adBlock
         adAllow = prefs().getStringSet("adallow", emptySet()).orEmpty().toSet(); adAllowNow = adAllow
         blocks = prefs().getString("blocks", null)?.let { runCatching { listJson.decodeFromString(blockMap, it) }.getOrNull() }.orEmpty()
@@ -754,7 +805,7 @@ object JackBrowser {
     /** 按线路设好代理再执行 then；走代理但代理起不来就不执行，返回原因。 */
     suspend fun prepare(ctx: Context): String? {
         withContext(Dispatchers.Main) { webView(ctx) }
-        val plan = withContext(Dispatchers.IO) { BrowserNet.plan(route) }
+        val plan = withContext(Dispatchers.IO) { BrowserNet.plan(route, always = proxySites) }
         return withContext(Dispatchers.Main) {
             when (plan) {
                 is BrowserNet.Plan.Blocked -> plan.reason
@@ -765,7 +816,7 @@ object JackBrowser {
     }
 
     private suspend fun apply(port: Int, bypass: List<String>): String? {
-        if (port == appliedPort && route == appliedRoute) return null
+        if (port == appliedPort && route == appliedRoute && bypass == appliedBypass) return null
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE)) {
             if (port == 0) { appliedPort = 0; appliedRoute = route; return null }
             return "这台手机的网页组件版本太旧，不能单独给浏览器设代理。到应用商店更新「Android System WebView」后再试。"
@@ -779,7 +830,7 @@ object JackBrowser {
                 { it.run() }, done,
             )
         }
-        appliedPort = port; appliedRoute = route
+        appliedPort = port; appliedRoute = route; appliedBypass = bypass
         return null
     }
 
@@ -935,6 +986,8 @@ object JackBrowser {
         }
 
         override fun onPageCommitVisible(view: WebView, url: String) {
+            // 不支持开头注入的旧网页组件：页面露出来时补上防泄漏（晚了一点，聊胜于无）
+            if (!webrtcAllowed && t.rtcScript == null) view.evaluateJavascript(RTC_JS, null)
             // 不支持开头注入的旧网页组件：页面露出来时补装钩子
             if (t.diagOn && t.diagScript == null) view.evaluateJavascript(BrowserDiag.HOOK_JS, null)
             widenIfDesktop(view, url)
