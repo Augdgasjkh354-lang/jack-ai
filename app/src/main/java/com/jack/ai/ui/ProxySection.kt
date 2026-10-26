@@ -77,8 +77,8 @@ fun ProxySection(vm: ChatViewModel, s: Settings) {
     }
 
     Text(
-        "只给 Kavi 用，不影响手机上别的 App，也不用开系统 VPN。DeepSeek、12306、高德等国内服务始终直连，国外的走代理；" +
-            "连接器可以在它的设置里单独指定。",
+        "默认只给 Kavi 用，不影响手机上别的 App。DeepSeek、12306、高德等国内服务始终直连，国外的走代理；" +
+            "连接器可以在它的设置里单独指定。也可以在下面选几个 App 一起走代理。",
         style = MaterialTheme.typography.bodySmall,
         color = colors.onSurfaceVariant,
     )
@@ -108,6 +108,7 @@ fun ProxySection(vm: ChatViewModel, s: Settings) {
             }
         }
     }
+    if (s.proxyNodes.isNotEmpty()) ProxyAppsSection(vm, s)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedButton(enabled = !busy, onClick = {
             scan.launch(ScanOptions().setPrompt("扫订阅或节点的二维码").setBeepEnabled(false).setOrientationLocked(false)

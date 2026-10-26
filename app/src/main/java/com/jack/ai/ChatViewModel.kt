@@ -141,6 +141,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         )
         Dreamer.schedule(app, _state.value.settings.dreamEnabled)
         com.jack.ai.data.Proactive.schedule(app, _state.value.settings.proactive)
+        // 上次开着按 App 分流、进程被收掉了：授权还在就接着开
+        if (_state.value.settings.proxyAppsOn && !com.jack.ai.vpn.KaviVpnService.running && com.jack.ai.vpn.TProxyService.available &&
+            runCatching { com.jack.ai.vpn.KaviVpnService.consent(app) == null }.getOrDefault(false)) com.jack.ai.vpn.KaviVpnService.start(app)
         _state.update { it.copy(routines = store.loadRoutines(), library = store.loadLibrary(), cards = store.loadCards()) }
         Routines.scheduleAll(app)
         runCatching { com.jack.ai.data.Updater.schedule(app, _state.value.settings) }

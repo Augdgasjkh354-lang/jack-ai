@@ -235,6 +235,9 @@ data class Settings(
     val proxySub: String = "",
     val proxyNodes: List<ProxyNode> = emptyList(),
     val proxyNode: String = "",
+    /** 按 App 分流：这些 App 也走 Kavi 专用代理（系统 VPN，只管它们）；proxyAppsOn 是开关。 */
+    val proxyApps: List<String> = emptyList(),
+    val proxyAppsOn: Boolean = false,
     /** Notion 内部集成的密钥（ntn_…）。不进备份。 */
     val notionToken: String = "",
     /** GitHub 令牌（只读权限就够）。不填也能看公开项目；不进备份。 */

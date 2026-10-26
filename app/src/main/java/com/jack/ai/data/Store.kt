@@ -396,6 +396,8 @@ class Store(context: Context) {
                 runCatching { json.decodeFromString(ListSerializer(ProxyNode.serializer()), it) }.getOrNull()
             } ?: emptyList(),
             proxyNode = prefs.getString("proxyNode", "") ?: "",
+            proxyApps = prefs.getString("proxyApps", null)?.let { runCatching { json.decodeFromString(ListSerializer(String.serializer()), it) }.getOrNull() }.orEmpty(),
+            proxyAppsOn = prefs.getBoolean("proxyAppsOn", false),
             notionToken = prefs.getString("notionToken", "") ?: "",
             githubToken = prefs.getString("githubToken", "") ?: "",
             autoUpdate = prefs.getBoolean("autoUpdate", true),
@@ -453,6 +455,8 @@ class Store(context: Context) {
             .putString("proxySub", s.proxySub)
             .putString("proxyNodes", json.encodeToString(ListSerializer(ProxyNode.serializer()), s.proxyNodes))
             .putString("proxyNode", s.proxyNode)
+            .putString("proxyApps", json.encodeToString(ListSerializer(String.serializer()), s.proxyApps))
+            .putBoolean("proxyAppsOn", s.proxyAppsOn)
             .putString("notionToken", s.notionToken)
             .putString("githubToken", s.githubToken)
             .putBoolean("autoUpdate", s.autoUpdate)
