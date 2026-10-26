@@ -177,6 +177,8 @@ object PromptBuilder {
             if (SkillIds.EXCEL in skillIds) add(SkillTools.CREATE_EXCEL)
             // 一直带着、选项写全：工具说明不随对话变，缓存才能跨对话命中；眼下搜不了的地方由工具自己回话
             add(SkillTools.SEARCH_MY_DATA)
+            add(SkillTools.CONVERT_FILE)
+            if (settings.phoneFolders.isNotEmpty()) add(SkillTools.PHONE_FILES)
             // 开着 Python 就只留 run_python，两个都给模型会犹豫用哪个；算数一直能用，画图要先读「计算与图表」
             if (SkillIds.CALC in all && SkillIds.PYTHON !in all) add(SkillTools.RUN_JS)
             if (SkillIds.CALC in skillIds) { add(SkillTools.CREATE_CHART); add(SkillTools.CREATE_DIAGRAM) }
@@ -299,6 +301,13 @@ object PromptBuilder {
             parts += "固定说明" to "【对话文件夹】本对话有一个文件夹，用户发来的文件和你生成的文件都存在里面，现有文件列在最后一条用户消息前面。" +
                 "用户要改已有的文件时，用 edit_file 只替换要改的那一段，不要整份重新生成；不确定原文时先用 read_file 看。" +
                 "用户发来的文件内容已经在消息里的，不用再读。"
+        }
+        if ("convert_file" in names) {
+            parts += "固定说明" to "【处理文件】图片转 PDF、合并拆分 PDF、压缩图片、剪视频压视频、录音和视频转文字，用 convert_file，比自己写 Python 快、稳。" +
+                "用户发来语音、录音、会议视频要内容或总结时，先 transcribe 转成文字再处理。"
+        }
+        if ("phone_files" in names) {
+            parts += "固定说明" to "【手机文件夹】用户授权了几个手机文件夹，用 phone_files 找文件（先 list 或 search），要读要处理先 import 拷进对话文件夹；做好的文件用户要放回手机就 export。"
         }
         if ("save_memory" in names) {
             // 这段每个对话都一样；跟对话有关的那句（在不在项目里、开没开全局记忆）放到后面

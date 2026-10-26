@@ -128,6 +128,7 @@ fun ChatScreen(
     onOpenTables: () -> Unit,
     onOpenReview: () -> Unit,
     onOpenApps: () -> Unit,
+    onOpenDownloads: () -> Unit = {},
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -180,6 +181,7 @@ fun ChatScreen(
                 onOpenTables = { scope.launch { drawerState.close() }; onOpenTables() },
                 onOpenReview = { scope.launch { drawerState.close() }; onOpenReview() },
                 onOpenApps = { scope.launch { drawerState.close() }; onOpenApps() },
+                onOpenDownloads = { scope.launch { drawerState.close() }; onOpenDownloads() },
                 onSettings = { scope.launch { drawerState.close() }; onOpenSettings() },
             )
         },

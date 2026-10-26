@@ -1147,7 +1147,7 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
                     progress = { got, total -> progress(progressText(p.name, got, total)) })
             }
         }
-        return withContext(Dispatchers.IO) { finish!!() }
+        return withContext(Dispatchers.IO) { finish!!().also { s -> if (::app.isInitialized) Downloads.log(app, s, p.url) } }
     }
 
     /**

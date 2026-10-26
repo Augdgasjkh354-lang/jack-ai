@@ -11,6 +11,12 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.OutputStream
+import kotlinx.serialization.Serializable
+
+/** 下载记录里的一条：下载记录页列出来，能打开、分享、重下。uri 是 content:// 或 file://；path 是存在对话文件夹里时的路径。 */
+@Serializable
+data class DownloadRecord(val name: String, val uri: String, val path: String? = null, val where: String, val url: String = "",
+                          val size: Long = 0, val mime: String = "", val at: Long = System.currentTimeMillis())
 
 /**
  * 下载的东西存到哪：对话文件夹（Kavi 之后能读、能处理，聊天里显示成卡片），
@@ -71,6 +77,20 @@ object Downloads {
                 ?.use { c -> if (c.moveToFirst()) c.getString(0) else null } ?: name
             Saved(shown, uri, mime, "手机的「下载/$folder」文件夹")
         }
+    }
+
+    /** 「用 Jack 下载」分享进来时替用户发的那句话。 */
+    fun shareRequest(text: String): String {
+        val link = Regex("""https?://[^\s，。、"'<>]+""").find(text)?.value
+        return "帮我把这个分享里的视频或文件下载下来，存到手机（to=phone）。" +
+            (if (link != null) "链接：$link\n" else "") +
+            "是视频页面就用浏览器打开后 download_media；直接是文件就用 download_file。下好了告诉我存在哪。\n\n分享的原文：\n" + text.take(2000)
+    }
+
+    /** 记进下载记录（网址是 blob: / data: 的不记网址，重下不了）。 */
+    fun log(ctx: Context, saved: Saved, url: String) = runCatching {
+        Store(ctx.applicationContext).addDownloads(listOf(DownloadRecord(saved.name, saved.uri.toString(), saved.file?.absolutePath, saved.where,
+            url.takeIf { it.startsWith("http", true) }.orEmpty(), saved.file?.length() ?: 0, saved.mime)))
     }
 
     /** 已经在手边的文件（拼好的视频之类）拷到手机「下载/JackAI」。 */

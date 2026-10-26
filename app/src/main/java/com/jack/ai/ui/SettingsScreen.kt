@@ -168,6 +168,10 @@ fun SettingsScreen(
                 OutlinedButton(onClick = onOpenSkills) { Text("管理技能") }
             }
 
+            Section("手机文件夹", hint = "授权给 Kavi 的文件夹：它能在里面找文件、拷进对话处理、把做好的文件存回去，搬和删之前先问你。别的地方它碰不到。") {
+                PhoneFoldersSection(vm, settings)
+            }
+
             // ---- 模型 ----
             Section("模型和思考") {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

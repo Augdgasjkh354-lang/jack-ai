@@ -244,7 +244,13 @@ data class Settings(
     val wechatSkip: String = "",
     /** 点网页链接用 Jack 浏览器打开；关掉用手机的系统浏览器。 */
     val linksInApp: Boolean = true,
+    /** 用户授权 Kavi 读写的手机文件夹（系统文件选择器给的地址）。 */
+    val phoneFolders: List<PhoneFolder> = emptyList(),
 )
+
+/** 一个授权过的手机文件夹：uri 是系统给的树形地址，name 是给 Kavi 和用户看的名字。 */
+@Serializable
+data class PhoneFolder(val uri: String, val name: String)
 
 /** 完全授权现在是否有效（到点自动失效）。 */
 val Settings.fullAuth: Boolean get() = fullAuthUntil > System.currentTimeMillis()

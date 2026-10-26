@@ -198,6 +198,8 @@ class ToolSession(
             name == "github" && SkillIds.GITHUB in skillIds -> github(args)
             name == "browser" && SkillIds.BROWSER in skillIds -> browse(args)
             name == "download_file" && web -> downloadFile(args)
+            name == "convert_file" -> convertFile(args)
+            name == "phone_files" -> phoneFiles(args)
             name == "notion_search" && SkillIds.NOTION in skillIds -> notionSearch(args)
             name == "notion_read" && SkillIds.NOTION in skillIds -> notionRead(args)
             name == "notion_write" && SkillIds.NOTION in skillIds -> notionWrite(args)

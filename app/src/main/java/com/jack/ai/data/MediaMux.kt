@@ -74,4 +74,75 @@ object MediaMux {
             opened.forEach { runCatching { it.release() } }
         }
     }
+
+    /**
+     * 解码第一条音轨，换成 16 kHz 单声道，按 chunkSec 秒一段写成 WAV，放进 dir。返回 (各段文件, 总秒数)。
+     * progress(已解到第几微秒, 总微秒或 -1)。
+     */
+    fun toWav(input: File, dir: File, chunkSec: Int, maxSec: Long, progress: (Long, Long) -> Unit = { _, _ -> }): Pair<List<File>, Long> {
+        val ex = MediaExtractor()
+        var codec: MediaCodec? = null
+        val chunks = AudioPcm.WavChunks(dir.apply { mkdirs() }, chunkSec)
+        try {
+            ex.setDataSource(input.absolutePath)
+            val track = (0 until ex.trackCount).firstOrNull { ex.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true }
+                ?: throw IllegalStateException("里面没有声音")
+            val fmt = ex.getTrackFormat(track)
+            ex.selectTrack(track)
+            val total = if (fmt.containsKey(MediaFormat.KEY_DURATION)) fmt.getLong(MediaFormat.KEY_DURATION) else -1L
+            if (total > maxSec * 1_000_000) throw IllegalStateException("有 ${AudioPcm.stamp(total / 1_000_000)} 长，超过了 ${AudioPcm.stamp(maxSec)} 的上限")
+            val c = MediaCodec.createDecoderByType(fmt.getString(MediaFormat.KEY_MIME)!!).also { codec = it }
+            c.configure(fmt, null, null, 0)
+            c.start()
+            var channels = fmt.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+            val resampler = AudioPcm.Resampler(fmt.getInteger(MediaFormat.KEY_SAMPLE_RATE))
+            val info = MediaCodec.BufferInfo()
+            var inputDone = false
+            var shorts = ShortArray(0)
+            var mono = FloatArray(0)
+            var written = 0L
+            while (true) {
+                if (!inputDone) {
+                    val i = c.dequeueInputBuffer(10_000)
+                    if (i >= 0) {
+                        val b = c.getInputBuffer(i)!!
+                        val n = ex.readSampleData(b, 0)
+                        if (n < 0) { c.queueInputBuffer(i, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM); inputDone = true }
+                        else { c.queueInputBuffer(i, 0, n, ex.sampleTime, 0); ex.advance() }
+                    }
+                }
+                val o = c.dequeueOutputBuffer(info, 10_000)
+                if (o == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                    val f = c.outputFormat
+                    channels = f.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+                    resampler.changeRate(f.getInteger(MediaFormat.KEY_SAMPLE_RATE))
+                } else if (o >= 0) {
+                    if (info.size > 0) {
+                        val b = c.getOutputBuffer(o)!!.order(java.nio.ByteOrder.nativeOrder())
+                        b.position(info.offset); b.limit(info.offset + info.size)
+                        val sb = b.asShortBuffer()
+                        val len = sb.remaining()
+                        if (shorts.size < len) { shorts = ShortArray(len); mono = FloatArray(len) }
+                        sb.get(shorts, 0, len)
+                        val frames = AudioPcm.mono(shorts, len, channels, mono)
+                        resampler.push(mono, frames) { chunks.write(it); written++ }
+                        progress(info.presentationTimeUs, total)
+                    }
+                    c.releaseOutputBuffer(o, false)
+                    if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) break
+                }
+            }
+            chunks.close()
+            if (written == 0L) throw IllegalStateException("没解出声音")
+            return chunks.files to written / AudioPcm.RATE
+        } catch (e: Exception) {
+            chunks.close()
+            chunks.files.forEach { it.delete() }
+            throw e
+        } finally {
+            runCatching { codec?.stop() }
+            runCatching { codec?.release() }
+            ex.release()
+        }
+    }
 }

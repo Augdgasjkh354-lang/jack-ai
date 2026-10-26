@@ -106,6 +106,12 @@ dependencies {
     // biometric 自带的 fragment 1.2.5 太旧：不支持新式 ActivityResult，拍照/选图/选文件会报 requestCode 错
     implementation("androidx.fragment:fragment-ktx:1.8.5")
     implementation("org.mozilla:rhino:1.7.15")
+    // 剪视频、压缩视频（手机自带的编解码器，硬件加速）
+    implementation("androidx.media3:media3-transformer:1.4.1")
+    implementation("androidx.media3:media3-effect:1.4.1")
+    implementation("androidx.media3:media3-common:1.4.1")
+    // 读写用户授权的手机文件夹（系统的文件选择器给的树形地址）
+    implementation("androidx.documentfile:documentfile:1.0.1")
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")

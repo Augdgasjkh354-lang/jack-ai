@@ -96,7 +96,7 @@ internal suspend fun ToolSession.downloadFile(args: JsonObject): String {
                     }, rejectPage = true, progress = { got, total -> ui.progress(progressLine(p.name.ifBlank { url.substringAfterLast('/') }, got, total)) })
                     t!!
                 }
-                saved += withContext(Dispatchers.IO) { target.finish() }
+                saved += withContext(Dispatchers.IO) { target.finish().also { Downloads.log(app, it, url) } }
             } catch (e: BrowserDownload.PageException) {
                 pages += url
             } catch (e: kotlinx.coroutines.CancellationException) {
@@ -212,6 +212,8 @@ private suspend fun ToolSession.grabMedia(req: MediaGrab.Req, pick: Pick, title:
                 if (!out.renameTo(dst)) { out.copyTo(dst, overwrite = true) }
                 Downloads.Saved(dst.name, android.net.Uri.fromFile(dst), mime, "对话文件夹", dst)
             }
+            // 网页里的视频重下要重新打开网页，记录里不留网址
+            Downloads.log(app, saved, "")
             saved to notes.joinToString("；")
         } finally {
             work.deleteRecursively()

@@ -76,6 +76,18 @@
                 <data android:mimeType="*/*" />
             </intent-filter>
         </activity-alias>
+        <!-- 分享菜单里的「用 Jack 下载」：抖音、B 站、小红书分享出来的链接，Kavi 直接把视频或文件存到手机 -->
+        <activity-alias
+            android:name=".DownloadShare"
+            android:exported="true"
+            android:label="用 Jack 下载"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/*" />
+            </intent-filter>
+        </activity-alias>
         <!-- 定时 Work 长时间运行时，WorkManager 以前台服务跑 -->
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"

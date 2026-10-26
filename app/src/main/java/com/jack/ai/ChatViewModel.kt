@@ -689,6 +689,19 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
+     * 分享菜单的「用 Jack 下载」：开个新对话直接发出去，Kavi 认出链接，把视频或文件存到手机「下载/JackAI」。
+     * 分享的文字常带着一大段口令（「复制打开抖音……」），原样交给它，它自己找链接。
+     */
+    fun downloadShare(text: String) {
+        viewModelScope.launch {
+            if (busy()) stop()
+            job?.join()
+            newChat()
+            send(com.jack.ai.data.Downloads.shareRequest(text))
+        }
+    }
+
+    /**
      * 万能收件箱：分享进来的东西直接发到「收件箱」对话，AI 自动判断类型、提炼重点、归档。
      * 和「问 Jack」不同，不等用户再按发送。
      */

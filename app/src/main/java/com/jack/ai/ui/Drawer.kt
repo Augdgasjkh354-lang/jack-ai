@@ -87,6 +87,7 @@ fun HistoryDrawer(
     onOpenTables: () -> Unit,
     onOpenReview: () -> Unit,
     onOpenApps: () -> Unit,
+    onOpenDownloads: () -> Unit,
     onSettings: () -> Unit,
 ) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
@@ -158,6 +159,7 @@ fun HistoryDrawer(
                         Tool(Icons.Default.Star, "复习卡片", badge = due.takeIf { it > 0 }?.toString(), onClick = onOpenReview),
                         Tool(Icons.Default.Build, "技能", onClick = onOpenSkills),
                         Tool(AppIcons.Code, "小工具", onClick = onOpenApps),
+                        Tool(AppIcons.Download, "下载", onClick = onOpenDownloads),
                     )
                     ToolGrid(if (showMoreTools) main + more else main)
                     Row(

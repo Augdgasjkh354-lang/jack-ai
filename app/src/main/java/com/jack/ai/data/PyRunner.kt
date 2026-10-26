@@ -27,6 +27,14 @@ object PyRunner {
         }
     }
 
+    /** 调一个现成的 Python 函数（比如 jack_files 里的），参数都是字符串或数字，返回它的字符串结果。 */
+    suspend fun call(ctx: Context, module: String, fn: String, vararg args: Any): String = lock.withLock {
+        withContext(Dispatchers.IO) {
+            if (!Python.isStarted()) Python.start(AndroidPlatform(ctx.applicationContext))
+            Python.getInstance().getModule(module).callAttr(fn, *args).toString()
+        }
+    }
+
     /** 只编译不运行，返回语法错误（第几行、什么错）；没错返回 null。 */
     suspend fun syntaxError(ctx: Context, code: String): String? = withContext(Dispatchers.IO) {
         runCatching {

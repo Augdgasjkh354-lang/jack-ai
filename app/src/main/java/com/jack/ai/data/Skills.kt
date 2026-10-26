@@ -53,6 +53,7 @@ object SkillIds {
     const val SALES_ADVISOR = "builtin-sales-advisor"
     const val SALES_REVIEW = "builtin-sales-review"
     const val FLOWS = "builtin-browser-flows"
+    const val RECEIPTS = "builtin-receipts"
 
     /**
      * 这些技能的工具不在开场就给，等模型用 use_skill 读了做法才加进来（本对话之后一直带着）：
@@ -404,6 +405,21 @@ val BUILTIN_SKILLS = listOf(
 第一次用（还没有「客户」表）时，只问一句：卖的是什么、主要卖给谁。在项目里就存进项目记忆（save_memory，scope 填 project），否则存本对话记忆。一单多少钱、多久成交、竞争对手、公司规矩这些，不要一开始就问，以后遇到了再记。""",
     ),
     Skill(
+        id = SkillIds.RECEIPTS, builtin = true, name = "拍票据记账",
+        description = "从照片、截图里认出发票、小票、付款截图、快递单、名片，整理好记进表格（「把这张小票记一下」「这张名片存一下」「这几张发票汇总一下」）。",
+        instructions = """拍票据记账的做法（看图片，用表格的 add_rows / query_table 记）：
+1. 先认是什么：发票、购物小票、付款截图（微信、支付宝、银行）、快递单、名片，还是别的。一次发了好几张就一张张认，最后一起记。
+2. 只抄图上看得清的：日期、金额、商家、内容都照图上写；看不清、被挡住、拿不准的字段留空，并在回答里说哪一项没看清，不要猜。金额以「实付」「合计」「价税合计」为准，只写数字。
+3. 记到哪张表：
+   - 发票、小票、付款截图 → 「记账」：日期、类别、金额、备注（商家和买了什么）；发票再加 发票号码、开票方、税号（有的话）。类别按用途归（餐饮、交通、办公、采购……），用户以前用过的类别优先。
+   - 快递单 → 「快递」：日期、快递公司、单号、寄件人或收件人、物品、状态。
+   - 名片 → 「客户」（销售那套表，编号从 K001 往上排，先用 query_table 按名字和公司找，有了就更新那一行）：称呼、别名（全名、职位）、来源（名片）、做什么（公司和业务）、备注（电话、微信、邮箱、地址照抄）。
+4. 记之前查重：同一张票据再发一次（同日期、同金额、同商家，或者同发票号码、同快递单号），先用 query_table 查，已经记过就不再记，告诉用户。
+5. 记完用一两句话说清：记进了哪张表、几行、合计多少钱；有没看清的列出来让用户补。
+6. 报销、对账：用户要汇总时用 query_table 按日期、类别算，要文件就做成 Excel。
+7. 身份证、银行卡、病历这类图片里的号码，用户没明确要记就不往表里写。""",
+    ),
+    Skill(
         id = SkillIds.SALES_ADVISOR, builtin = true, name = "销售：参谋",
         description = "帮用户判断客户、想下一步、报价谈判、出新点子（「这个客户怎么看」「这单怎么推」「他这话什么意思」「怎么报价」「有没有别的办法」）。",
         instructions = """当销售参谋的做法：
@@ -441,6 +457,10 @@ object SkillTools {
     val WEB_SEARCH = schema("""{"type":"function","function":{"name":"web_search","description":"在互联网上搜索最新信息，返回若干网页的标题、链接和摘要。","parameters":{"type":"object","properties":{"query":{"type":"string","description":"搜索关键词，简洁明确"},"engine":{"type":"string","enum":["auto","exa","tavily"],"description":"一般不填（轮着用）。找英文资料、论文、技术文档、GitHub 项目时填 exa；要今天、这几天的新闻时填 tavily"}},"required":["query"]}}}""")
 
     val DOWNLOAD_FILE = schema("""{"type":"function","function":{"name":"download_file","description":"按网址下载文件（PDF、文档、压缩包、图片、安装包、音视频直链，也能下 .m3u8 视频并转成 mp4），存进对话文件夹或手机「下载/JackAI」。登录过的网站照样能下，断了会接着下。网址打开是网页（不是文件）时会告诉你改用浏览器。","parameters":{"type":"object","properties":{"url":{"type":"string","description":"文件的下载地址，http 开头"},"urls":{"type":"array","items":{"type":"string"},"description":"一次下好几个时填（最多 50 个），不用填 url"},"name":{"type":"string","description":"存成什么文件名（只下一个时有用），不填按网站给的"},"to":{"type":"string","enum":["chat","phone"],"description":"chat（默认）存进对话文件夹，之后能读、能处理；phone 存到手机的「下载/JackAI」文件夹，用户说存到手机里时用"}}}}}""")
+
+    val CONVERT_FILE = schema("""{"type":"function","function":{"name":"convert_file","description":"处理对话文件夹里的文件，结果另存一份（原文件不动）：images_to_pdf 几张图片合成 PDF；merge_pdf 合并 PDF；split_pdf 按页拆 PDF；pdf_to_images PDF 每页存成图片；compress_image 压缩图片；convert_image 换图片格式；cut_video 剪一段视频；compress_video 压小视频；extract_audio 把视频里的声音存成 m4a；transcribe 录音或视频转文字（存成 txt，文字也会给你）。","parameters":{"type":"object","properties":{"action":{"type":"string","enum":["images_to_pdf","merge_pdf","split_pdf","pdf_to_images","compress_image","convert_image","cut_video","compress_video","extract_audio","transcribe"]},"file":{"type":"string","description":"对话文件夹里的文件名（子文件夹里的写成 文件夹/文件名）"},"files":{"type":"array","items":{"type":"string"},"description":"images_to_pdf、merge_pdf、compress_image、convert_image 用：几个文件，按这个顺序；也可以填一个文件夹（里面的按文件名排）"},"out":{"type":"string","description":"结果的文件名，不填自动起"},"pages":{"type":"string","description":"split_pdf、pdf_to_images 用：页码，比如 1-3,5,8-（split_pdf 每段存一个文件，不填就每页一个）"},"max_side":{"type":"integer","description":"compress_image 用：长边最多多少像素，默认 1920；0 = 不缩，只降质量"},"quality":{"type":"integer","description":"compress_image 用：JPEG 质量 10 到 95，默认 80"},"format":{"type":"string","enum":["jpg","png","webp","pdf","bmp","gif"],"description":"convert_image 用"},"start":{"type":"string","description":"cut_video 用：从哪开始，写成 1:23 或秒数，不填从头"},"end":{"type":"string","description":"cut_video 用：到哪结束，不填到尾"},"height":{"type":"integer","description":"compress_video 用：清晰度（短边像素）480、720、1080，默认 720"},"size_mb":{"type":"number","description":"compress_video 用：想压到大约多少 MB（比如微信发送限制），会按时长算码率"},"mute":{"type":"boolean","description":"compress_video 用：去掉声音"}},"required":["action"]}}}""")
+
+    val PHONE_FILES = schema("""{"type":"function","function":{"name":"phone_files","description":"操作用户授权给你的手机文件夹（只能在这些文件夹里）：list 列出、search 按名字搜、import 拷进对话文件夹（之后才能读、处理）、export 把对话文件夹里的文件存过去、rename 改名、move 搬到别的文件夹、mkdir 建文件夹、delete 删除（搬和删会先问用户）。路径写成「文件夹名/子文件夹/文件名」，先 list 看有什么。","parameters":{"type":"object","properties":{"action":{"type":"string","enum":["list","search","import","export","rename","move","mkdir","delete"]},"path":{"type":"string","description":"手机里的路径；list 不填就列出授权了哪些文件夹"},"paths":{"type":"array","items":{"type":"string"},"description":"import、move、delete 一次好几个时用"},"query":{"type":"string","description":"search 用：文件名里的字"},"name":{"type":"string","description":"export：对话文件夹里的文件名；rename：新名字；mkdir：新文件夹名"},"names":{"type":"array","items":{"type":"string"},"description":"export 一次存好几个时用"},"to":{"type":"string","description":"export、move 用：存到 / 搬到哪个文件夹（手机里的路径）"}},"required":["action"]}}}""")
 
     val READ_WEBPAGE = schema("""{"type":"function","function":{"name":"read_webpage","description":"读取一个网页的正文内容。","parameters":{"type":"object","properties":{"url":{"type":"string","description":"完整网址，以 http 开头"}},"required":["url"]}}}""")
 

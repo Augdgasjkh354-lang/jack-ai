@@ -107,6 +107,10 @@ class Store(context: Context) {
     fun saveHistory(list: List<HistoryEntry>) = save("browser_history.json", HistoryEntry.serializer(), list)
     fun loadPrices() = load("price_log.json", PricePoint.serializer())
     fun savePrices(list: List<PricePoint>) = save("price_log.json", PricePoint.serializer(), list)
+    fun loadDownloads() = load("downloads.json", DownloadRecord.serializer())
+    fun saveDownloads(list: List<DownloadRecord>) = save("downloads.json", DownloadRecord.serializer(), list.takeLast(500))
+    /** 记下载过的文件（最多留 500 条）。 */
+    fun addDownloads(items: List<DownloadRecord>) = synchronized(LOCK) { saveDownloads(loadDownloads() + items) }
     fun loadFlows() = load("browser_flows.json", BrowserFlow.serializer())
     fun saveFlows(list: List<BrowserFlow>) = save("browser_flows.json", BrowserFlow.serializer(), list)
 
