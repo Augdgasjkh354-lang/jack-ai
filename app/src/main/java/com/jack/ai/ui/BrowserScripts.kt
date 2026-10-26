@@ -25,5 +25,12 @@ object BrowserScripts {
     fun hasText(ctx: Context, text: String) = "${lib(ctx)}\nwindow.__jack.hasText(${q(text)})"
     fun readable(ctx: Context) = "${lib(ctx)}\nwindow.__jack.readable()"
     fun subtitles(ctx: Context) = "${lib(ctx)}\nwindow.__jack.subtitles()"
+    @Volatile private var dl: String? = null
+    private fun dl(ctx: Context): String =
+        dl ?: ctx.assets.open("jack_download.js").bufferedReader().use { it.readText() }.also { dl = it }
+
+    /** 批量下载要的清单（assets/jack_download.js）。 */
+    fun downloads(ctx: Context, kind: String, filter: String, max: Int) = "${dl(ctx)}\nwindow.__jackDl.collect(${q(kind)}, ${q(filter)}, $max)"
+    fun media(ctx: Context) = "${dl(ctx)}\nwindow.__jackDl.media()"
     fun extract(ctx: Context, what: String, start: Int, limit: Int) = "${lib(ctx)}\nwindow.__jack.extract(${q(what)}, $start, $limit)"
 }

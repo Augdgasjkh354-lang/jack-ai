@@ -521,6 +521,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
                 override fun notice(text: String) = patchMessage(convId, reply.id) { it.copy(notices = it.notices + text) }
 
+                override fun progress(text: String) = WorkService.progress(getApplication(), convId, workTitle, text, work)
+
                 override fun finished(label: String, record: SearchRecord) = patchMessage(convId, reply.id) { m ->
                     m.copy(searches = m.searches.map { if (it.query == label && it.pending) record else it })
                 }

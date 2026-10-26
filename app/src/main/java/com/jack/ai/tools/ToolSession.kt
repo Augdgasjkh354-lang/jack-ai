@@ -73,6 +73,8 @@ interface ToolUi {
     fun plan(items: List<PlanItem>) {}
     /** 要让用户一眼看到的事（比如 Kavi 改了自己），在回答里显示成一张小卡片。 */
     fun notice(text: String) {}
+    /** 慢的工具（下载大文件）的进度，显示在通知栏上。 */
+    fun progress(text: String) {}
 }
 
 /**
@@ -195,6 +197,7 @@ class ToolSession(
             name == "create_app" && SkillIds.APP in skillIds -> makeApp(args)
             name == "github" && SkillIds.GITHUB in skillIds -> github(args)
             name == "browser" && SkillIds.BROWSER in skillIds -> browse(args)
+            name == "download_file" && web -> downloadFile(args)
             name == "notion_search" && SkillIds.NOTION in skillIds -> notionSearch(args)
             name == "notion_read" && SkillIds.NOTION in skillIds -> notionRead(args)
             name == "notion_write" && SkillIds.NOTION in skillIds -> notionWrite(args)
@@ -259,7 +262,7 @@ class ToolSession(
 
     companion object {
         /** 返回外部内容的工具：内容里可能藏着冒充用户的指令。 */
-        val EXTERNAL_TOOLS = setOf("list_emails", "read_email", "web_search", "read_webpage", "notion_search", "notion_read", "browser", "github")
+        val EXTERNAL_TOOLS = setOf("list_emails", "read_email", "web_search", "read_webpage", "notion_search", "notion_read", "browser", "github", "download_file")
 
         /** 报错尽量带上具体原因，模型才知道该重试、换方法还是去问用户。 */
         /** 报错说清两件事：为什么失败，下一步该做什么（模型照着做，不用瞎试）。 */

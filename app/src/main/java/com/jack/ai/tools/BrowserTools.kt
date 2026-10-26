@@ -26,6 +26,8 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
     if (action == "history") return runTool("翻浏览记录" + args["text"].text().takeIf { it.isNotBlank() }?.let { "「${it.take(20)}」" }.orEmpty()) {
         browseHistory(args) to SearchRecord("翻浏览记录")
     }
+    if (action == "download_all") return runTool("存网页上的" + when (args["kind"].text()) { "images" -> "图片"; "files" -> "附件"; else -> "图片和附件" }) { downloadAll(args) }
+    if (action == "download_media") return runTool(if (args["audio_only"].text() == "true") "存网页里的音频" else "存网页里的视频") { downloadMedia(args) }
     if (action == "record_price" || action == "prices") {
         val label = if (action == "record_price") "记价格「${args["name"].text().take(20)}」" else "看价格走势" + args["name"].text().takeIf { it.isNotBlank() }?.let { "「${it.take(20)}」" }.orEmpty()
         return runTool(label) { priceAction(action, args) to SearchRecord(label) }
@@ -79,7 +81,7 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
         "save_flow" -> if (listOf("name", "site", "steps").any { args[it].text().isBlank() }) return need("name、site、steps（when 也最好写上）")
         "read", "scroll", "back", "look", "wait", "extract", "tabs", "wait_user", "" -> {}
         "download" -> if (JackBrowser.pending == null) return "现在没有等着下载的文件。先点网页上的下载链接或按钮，读回来的页面里会写「网页要下载」。"
-        else -> return "action 要填 open、read、click、type、delete、select、key、scroll、back、look、tap、swipe、wait、extract、upload、tabs、new_tab、switch_tab、close_tab、download、fill、hover、flow、save_flow、wait_user、steps、parallel 或 note_site"
+        else -> return "action 要填 open、read、click、type、delete、select、key、scroll、back、look、tap、swipe、wait、extract、upload、tabs、new_tab、switch_tab、close_tab、download、download_all、download_media、fill、hover、flow、save_flow、wait_user、steps、parallel 或 note_site"
     }
     if (action == "flow" || action == "save_flow") return runTool(label) { flowAction(action, args) to SearchRecord(label) }
     return runTool(label) {
@@ -219,11 +221,13 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
                     JackBrowser.pending = null
                     return@runTool "用户没有同意下载。" to SearchRecord("$label：已取消")
                 }
-                val f = JackBrowser.saveTo(wsDir, p)
-                ui.attach(f)
-                return@runTool "已下载「${f.name}」（${com.jack.ai.data.ToolSizes.text(f.length())}）到对话文件夹，聊天里能打开或分享，" +
-                    "需要的话用 read_file 或 run_python 处理它。" +
-                    (if (f.extension.equals("apk", true)) "这是安卓安装包：要不要装由用户决定，提醒他只装信得过的来源。" else "") to SearchRecord(label)
+                val phone = args["to"].text() == "phone"
+                val s = JackBrowser.saveTo(ctx, if (phone) null else wsDir, p) { ui.progress(it) }
+                val f = s.file
+                if (f != null) ui.attach(f)
+                return@runTool (if (f != null) "已下载「${s.name}」（${com.jack.ai.data.ToolSizes.text(f.length())}）到对话文件夹，聊天里能打开或分享，需要的话用 read_file 或 run_python 处理它。"
+                    else "已下载「${s.name}」到${s.where}，用户在文件管理器里能找到。") +
+                    (if (s.name.endsWith(".apk", true)) "这是安卓安装包：要不要装由用户决定，提醒他只装信得过的来源。" else "") to SearchRecord(label)
             }
             "scroll" -> JackBrowser.scroll(ctx, if (args["direction"].text() == "up") -1 else 1)
             "back" -> if (!JackBrowser.back(ctx)) note.append("已经是第一页，不能再后退了。\n")

@@ -38,6 +38,8 @@ import com.jack.ai.api.BrowserNet
 import com.jack.ai.api.BrowserAds
 import com.jack.ai.api.BrowserPages
 import com.jack.ai.api.BrowserTranslate
+import com.jack.ai.api.MediaGrab
+import com.jack.ai.data.Downloads
 import com.jack.ai.data.backgroundEndpoint
 import kotlinx.serialization.json.put
 import com.jack.ai.api.Net
@@ -100,6 +102,8 @@ object JackBrowser {
         var diagOn by mutableStateOf(false)
         var diagScript: androidx.webkit.ScriptHandler? = null
         var teachScript: androidx.webkit.ScriptHandler? = null
+        /** 这一页里播放器拉过的视频、音频地址（拦截请求时记下，最新的在后面），存视频时从这里挑。 */
+        val media = java.util.concurrent.ConcurrentLinkedDeque<MediaGrab.Hit>()
         /** 标签页名字前面的标记：隐身、分身几。 */
         val badge get() = if (incognito) "隐身 · " else if (account > 0) "分身$account · " else ""
 
@@ -167,9 +171,7 @@ object JackBrowser {
     /** 正在下载的进度文字（null = 没在下）。 */
     var downloading by mutableStateOf<String?>(null)
     /** 刚存到手机「下载」文件夹的文件，浏览器页给个「打开」按钮。 */
-    var saved by mutableStateOf<Saved?>(null)
-
-    data class Saved(val name: String, val uri: android.net.Uri, val mime: String, val where: String)
+    var saved by mutableStateOf<Downloads.Saved?>(null)
 
     /** 网页里的视频要全屏：全屏的画面和退出用的回调。 */
     var fullscreen by mutableStateOf<Pair<View, WebChromeClient.CustomViewCallback>?>(null)
@@ -419,8 +421,21 @@ object JackBrowser {
             webChromeClient = Chrome(t)
             setDownloadListener { url, userAgent, disposition, mime, length ->
                 // 先记下来：用户看着就弹窗问，Jack 在操作就等它用 download 动作确认
-                pending = BrowserDownload.Pending(url, BrowserDownload.nameFor(url, disposition, mime), mime.orEmpty(),
-                    length, userAgent.orEmpty(), t.address, byUser = userViewing)
+                val p = BrowserDownload.Pending(url, BrowserDownload.nameFor(url, disposition, mime), mime.orEmpty(),
+                    length, userAgent.orEmpty(), t.address, byUser = userViewing, tab = t.id)
+                pending = p
+                // 网页自己生成的文件（blob: / data:）：网址里没有名字，用网页给链接写的 download 名字
+                if (!BrowserPages.isWeb(url)) evaluateJavascript("JSON.stringify(window.__jackLastDl || null)") { r ->
+                    val o = runCatching { json.parseToJsonElement(unwrap(r)) as? JsonObject }.getOrNull() ?: return@evaluateJavascript
+                    val name = (o["name"] as? JsonPrimitive)?.content.orEmpty()
+                    if ((o["href"] as? JsonPrimitive)?.content == url.take(200) && name.isNotBlank() && pending == p) {
+                        pending = p.copy(name = BrowserDownload.nameFor("", "attachment; filename=\"${name.replace("\"", "")}\"", mime))
+                    }
+                }
+            }
+            // 网页生成文件后马上收回（revokeObjectURL）的话就存不下来了：晚两分钟再收；顺便记下链接上写的文件名
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+                runCatching { androidx.webkit.WebViewCompat.addDocumentStartJavaScript(this, KEEP_BLOB_JS, setOf("*")) }
             }
         }
         tabs += t
@@ -856,6 +871,14 @@ object JackBrowser {
                 t.diag.add("拦下请求：本机或局域网 $host")
                 return WebResourceResponse("text/plain", "utf-8", 403, "Forbidden", emptyMap(), java.io.ByteArrayInputStream(ByteArray(0)))
             }
+            // 播放器拉的视频、音频记下来（存视频时用），最多记 40 条
+            if (!request.isForMainFrame) MediaGrab.kindOf(request.url.toString(), request.requestHeaders["Range"] ?: request.requestHeaders["range"])?.let { kind ->
+                val url = request.url.toString()
+                val key = MediaGrab.keyOf(url)
+                t.media.removeIf { MediaGrab.keyOf(it.url) == key }
+                t.media.addLast(MediaGrab.Hit(url, kind, System.currentTimeMillis()))
+                while (t.media.size > 40) t.media.pollFirst()
+            }
             // 去广告：网页里的广告和跟踪请求直接不发（网页本身不拦）
             if (!request.isForMainFrame && BrowserAds.isAd(host) && blocksAds(t.site)) {
                 t.diag.add("去广告拦下请求 $host")
@@ -904,6 +927,7 @@ object JackBrowser {
             t.diag.add("开始打开 ${url.take(160)}")
             if (t.pageDone?.isCompleted != false) t.pageDone = CompletableDeferred()
             t.translated = false
+            t.media.clear()
             t.address = url
             t.site = BrowserPages.site(url)
             t.blockedNow.set(0); t.blocked = 0
@@ -1025,6 +1049,107 @@ object JackBrowser {
         "正在下载「$name」：" + if (total > 0) "${got * 100 / total}%（${BrowserDownload.sizeText(got)} / ${BrowserDownload.sizeText(total)}）"
         else BrowserDownload.sizeText(got)
 
+    /** 在网页里装好：晚两分钟再收回网页生成的文件；记下链接上写的下载文件名（blob: 网址里没有名字）。 */
+    private const val KEEP_BLOB_JS = """(function(){if(window.__jackKeep)return;window.__jackKeep=1;
+try{var rv=URL.revokeObjectURL;URL.revokeObjectURL=function(u){setTimeout(function(){try{rv.call(URL,u);}catch(e){}},120000);};}catch(e){}
+function note(a){try{var h=a&&a.href;if(h&&(h.indexOf('blob:')===0||h.indexOf('data:')===0))window.__jackLastDl={href:h.slice(0,200),name:a.getAttribute('download')||''};}catch(e){}}
+try{var ck=HTMLAnchorElement.prototype.click;HTMLAnchorElement.prototype.click=function(){note(this);return ck.apply(this,arguments);};
+var de=EventTarget.prototype.dispatchEvent;EventTarget.prototype.dispatchEvent=function(e){if(this instanceof HTMLAnchorElement&&e&&e.type==='click')note(this);return de.apply(this,arguments);};}catch(e){}
+document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&e.target.closest('a[href]');if(a)note(a);},true);})();"""
+
+    /** 网页生成的文件最多读多大（要整个经过网页的内存，太大会卡死网页）。 */
+    const val BLOB_LIMIT = 200L * 1024 * 1024
+
+    /** 浏览器的线路设置（没打开过浏览器也能读）。 */
+    fun routeFor(ctx: Context): String = if (::app.isInitialized) route
+        else ctx.getSharedPreferences("browser", Context.MODE_PRIVATE).getString("route", BrowserNet.AUTO) ?: BrowserNet.AUTO
+
+    /** 下载时报的浏览器标识（和网页里用的一样，网站才认）。 */
+    fun userAgent(): String = mobileUa.ifBlank { "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36" }
+
+    /** 某个网址在这个标签页里的 Cookie（登录过的网站下载要带上）。 */
+    suspend fun cookieFor(url: String, t: Tab? = null): String? = withContext(Dispatchers.Main) {
+        runCatching { (t?.let { cookiesOf(it) } ?: CookieManager.getInstance()).getCookie(url) }.getOrNull()
+    }
+
+    private fun tabById(id: Int): Tab? = tabs.firstOrNull { it.id == id }
+
+    /** 在某个标签页里跑脚本（不一定是当前这个）。 */
+    private suspend fun evalOn(t: Tab, js: String): String = withContext(Dispatchers.Main) {
+        val w = t.web ?: throw java.io.IOException("那个标签页已经关了")
+        ensureLaidOut(w)
+        suspendCancellableCoroutine { cont -> w.evaluateJavascript(js) { r -> if (cont.isActive) cont.resume(r ?: "null") } }
+    }
+
+    /**
+     * 把网页自己生成的文件（blob:）从网页里读出来：(类型, 内容)。要在生成它的那个标签页里读。
+     * 一段段搬（每次 1 MB 的 base64），太大的不读。
+     */
+    suspend fun blobBytes(p: BrowserDownload.Pending, progress: (Long, Long) -> Unit = { _, _ -> }): Pair<String, ByteArray> {
+        val t = tabById(p.tab) ?: tab
+        val js = "(function(u,l){window.__jackBlob={state:'loading'};fetch(u).then(function(r){return r.blob();}).then(function(b){" +
+            "if(b.size>l){window.__jackBlob={state:'big',size:b.size};return;}var f=new FileReader();" +
+            "f.onload=function(){var s=String(f.result);window.__jackBlob={state:'ok',mime:b.type,size:b.size,data:s.slice(s.indexOf(',')+1)};};" +
+            "f.onerror=function(){window.__jackBlob={state:'error',why:String(f.error)};};f.readAsDataURL(b);})" +
+            ".catch(function(e){window.__jackBlob={state:'error',why:String(e)};});return 1;})(${JsonPrimitive(p.url)},$BLOB_LIMIT)"
+        evalOn(t, js)
+        var info: JsonObject? = null
+        for (i in 0 until 240) {
+            delay(250)
+            info = runCatching { json.parseToJsonElement(unwrap(evalOn(t, "JSON.stringify(window.__jackBlob?{state:__jackBlob.state,mime:__jackBlob.mime,size:__jackBlob.size,len:(__jackBlob.data||'').length,why:__jackBlob.why}:null)"))) as? JsonObject }.getOrNull()
+            if (info != null && (info["state"] as? JsonPrimitive)?.content != "loading") break
+        }
+        fun s(k: String) = (info?.get(k) as? JsonPrimitive)?.content.orEmpty()
+        when (s("state")) {
+            "ok" -> {}
+            "big" -> throw BrowserDownload.DownloadException("网页生成的文件有 ${BrowserDownload.sizeText(s("size").toLongOrNull() ?: 0)}，超过 ${BrowserDownload.sizeText(BLOB_LIMIT)}，存不下来")
+            "loading" -> throw BrowserDownload.DownloadException("等了一分钟，网页还没把文件交出来")
+            else -> throw BrowserDownload.DownloadException("网页生成的文件读不出来（" + s("why").ifBlank { "可能已经被网页收回了，再点一次下载试试" } + "）")
+        }
+        val len = s("len").toIntOrNull() ?: 0
+        val size = s("size").toLongOrNull() ?: 0
+        val out = ByteArrayOutputStream(size.toInt().coerceAtLeast(0))
+        val chunk = 1024 * 1024
+        try {
+            var i = 0
+            while (i < len) {
+                val part = unwrap(evalOn(t, "window.__jackBlob.data.substr($i,$chunk)"))
+                out.write(Base64.decode(part, Base64.DEFAULT))
+                i += chunk
+                progress(out.size().toLong(), size)
+            }
+        } finally {
+            runCatching { evalOn(t, "window.__jackBlob=null;0") }
+        }
+        return s("mime") to out.toByteArray()
+    }
+
+    /**
+     * 存一个网页要下载的文件到 target（对话文件夹或手机「下载」）：普通网址带 Cookie 下（能断点续传），
+     * 网页生成的（blob:）从网页里读，data: 直接解。progress 报进度文字。
+     */
+    suspend fun store(p: BrowserDownload.Pending, target: (String, String) -> Downloads.Target, progress: (String) -> Unit = {}): Downloads.Saved {
+        var finish: (() -> Downloads.Saved)? = null
+        fun sink(name: String, mime: String) = target(name, mime).also { finish = it.finish }.sink
+        if (p.url.startsWith("blob:", true)) {
+            val (mime0, bytes) = blobBytes(p) { got, total -> progress(progressText(p.name, got, total)) }
+            val mime = mime0.ifBlank { p.mime }.ifBlank { "application/octet-stream" }
+            val name = p.name.ifBlank { "下载" }.let { n -> if ('.' !in n) BrowserDownload.extFor(mime)?.let { "$n.$it" } ?: n else n }
+            withContext(Dispatchers.IO) {
+                val s = sink(name, mime)
+                try { s.open(false).use { it.write(bytes) } } catch (e: Exception) { s.discard(); throw e }
+            }
+        } else {
+            val t = tabById(p.tab) ?: tab
+            val cookie = if (BrowserPages.isWeb(p.url)) cookieFor(p.url, t) else null
+            withContext(Dispatchers.IO) {
+                BrowserDownload.download(p, cookie, route, BrowserDownload.HARD_LIMIT, ::sink,
+                    progress = { got, total -> progress(progressText(p.name, got, total)) })
+            }
+        }
+        return withContext(Dispatchers.IO) { finish!!() }
+    }
+
     /**
      * 用户点了下载：存到手机的「下载/JackAI」文件夹（Android 10 以上，文件管理器里能找到）；
      * 更老的系统存到 App 自己的下载目录。在后台下，进度和结果显示在浏览器页。
@@ -1034,69 +1159,52 @@ object JackBrowser {
         pending = null
         downloading = progressText(p.name, 0, p.size)
         scope.launch {
-            val cookie = withContext(Dispatchers.Main) { cookiesOf(tab).getCookie(p.url) }
-            val mime = p.mime.ifBlank { "application/octet-stream" }
             try {
-                val result = if (android.os.Build.VERSION.SDK_INT >= 29) {
-                    val resolver = app.contentResolver
-                    val values = android.content.ContentValues().apply {
-                        put(android.provider.MediaStore.Downloads.DISPLAY_NAME, p.name)
-                        put(android.provider.MediaStore.Downloads.MIME_TYPE, mime)
-                        put(android.provider.MediaStore.Downloads.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS + "/JackAI")
-                        put(android.provider.MediaStore.Downloads.IS_PENDING, 1)
-                    }
-                    val uri = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-                        ?: throw java.io.IOException("没能在「下载」文件夹里建文件")
-                    try {
-                        BrowserDownload.fetch(p, cookie, route, BrowserDownload.HARD_LIMIT,
-                            open = { resolver.openOutputStream(uri, "wt") ?: throw java.io.IOException("打不开要写的文件") }, reset = {},
-                            progress = { got, total -> downloading = progressText(p.name, got, total) })
-                        resolver.update(uri, android.content.ContentValues().apply { put(android.provider.MediaStore.Downloads.IS_PENDING, 0) }, null, null)
-                    } catch (e: Exception) {
-                        resolver.delete(uri, null, null); throw e
-                    }
-                    // 重名时系统会自动改名，以系统里的为准
-                    val name = resolver.query(uri, arrayOf(android.provider.MediaStore.Downloads.DISPLAY_NAME), null, null, null)
-                        ?.use { c -> if (c.moveToFirst()) c.getString(0) else null } ?: p.name
-                    Saved(name, uri, mime, "手机的「下载/JackAI」文件夹")
-                } else {
-                    val dir = java.io.File(app.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS), "")
-                    val f = com.jack.ai.data.Workspace.uniqueFile(dir, p.name)
-                    try {
-                        BrowserDownload.fetch(p, cookie, route, BrowserDownload.HARD_LIMIT, open = { f.outputStream() }, reset = {},
-                            progress = { got, total -> downloading = progressText(p.name, got, total) })
-                    } catch (e: Exception) {
-                        f.delete(); throw e
-                    }
-                    Saved(f.name, androidx.core.content.FileProvider.getUriForFile(app, app.packageName + ".files", f), mime,
-                        "Jack 的下载目录（Android/data/${app.packageName}/files/Download）")
-                }
-                saved = result
-                downloading = null
+                saved = store(p, { name, mime -> Downloads.toPhone(app, name, mime) }) { downloading = it }
             } catch (e: Exception) {
-                downloading = null
                 notice = "「${p.name}」没下载成功：" + (e.message ?: e.javaClass.simpleName) + Net.hint()
+            } finally {
+                downloading = null
             }
         }
     }
 
-    /** Jack 确认下载：存进对话文件夹（同名加编号），返回文件。 */
-    suspend fun saveTo(dir: java.io.File, p: BrowserDownload.Pending): java.io.File {
-        val cookie = withContext(Dispatchers.Main) { cookiesOf(tab).getCookie(p.url) }
-        return withContext(Dispatchers.IO) {
-            val f = com.jack.ai.data.Workspace.uniqueFile(dir, p.name)
-            try {
-                downloading = progressText(p.name, 0, p.size)
-                BrowserDownload.fetch(p, cookie, route, BrowserDownload.HARD_LIMIT, open = { f.outputStream() }, reset = {},
-                    progress = { got, total -> downloading = progressText(p.name, got, total) })
-                f
-            } catch (e: Exception) {
-                f.delete(); throw e
-            } finally {
-                downloading = null
-                if (pending == p) pending = null
+    /** Jack 确认下载：存进对话文件夹（同名加编号）或手机「下载/JackAI」，返回存好的文件。 */
+    suspend fun saveTo(ctx: Context, dir: java.io.File?, p: BrowserDownload.Pending, progress: (String) -> Unit = {}): Downloads.Saved {
+        try {
+            downloading = progressText(p.name, 0, p.size)
+            return store(p, { name, mime -> if (dir != null) Downloads.toDir(ctx, dir, name, mime) else Downloads.toPhone(ctx, name, mime) }) {
+                downloading = it; progress(it)
             }
+        } finally {
+            downloading = null
+            if (pending == p) pending = null
         }
+    }
+
+    /** 当前页面上能批量下的东西：images 图片、files 附件链接（PDF、文档、压缩包……）、all 都要。返回 (共几个, 前 max 个的 (网址, 名字))。 */
+    suspend fun collectDownloads(ctx: Context, kind: String, filter: String, max: Int): Pair<Int, List<Pair<String, String>>> {
+        agentAt = System.currentTimeMillis()
+        val raw = unwrap(eval(ctx, BrowserScripts.downloads(ctx, kind, filter, max)))
+        val o = runCatching { json.parseToJsonElement(raw).jsonObject }.getOrNull() ?: return 0 to emptyList()
+        val items = (o["items"] as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { e ->
+            val x = e as? JsonObject ?: return@mapNotNull null
+            val url = (x["url"] as? JsonPrimitive)?.content ?: return@mapNotNull null
+            url to (x["name"] as? JsonPrimitive)?.content.orEmpty()
+        }
+        return ((o["total"] as? JsonPrimitive)?.content?.toIntOrNull() ?: items.size) to items
+    }
+
+    /** 当前页面上的视频、音频：网页里的播放器（地址、时长、大小、在不在放）、B 站的播放信息，加上拦截到的媒体请求。 */
+    data class MediaPage(val title: String, val url: String, val elements: List<JsonObject>, val playinfo: String?, val hits: List<MediaGrab.Hit>, val tab: Tab)
+
+    suspend fun mediaPage(ctx: Context): MediaPage {
+        agentAt = System.currentTimeMillis()
+        val t = pinned() ?: tab
+        val o = runCatching { json.parseToJsonElement(unwrap(eval(ctx, BrowserScripts.media(ctx)))).jsonObject }.getOrNull()
+        val els = (o?.get("media") as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { it as? JsonObject }
+        val pi = (o?.get("playinfo") as? JsonPrimitive)?.content?.takeIf { it.isNotBlank() && it != "null" }
+        return MediaPage((o?.get("title") as? JsonPrimitive)?.content ?: title, address, els, pi, t.media.toList(), t)
     }
 
     // ---------- Jack 操作网页 ----------
