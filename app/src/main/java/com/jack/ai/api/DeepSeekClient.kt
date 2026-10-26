@@ -57,6 +57,8 @@ internal val sharedHttp: OkHttpClient = OkHttpClient.Builder()
     // 开了 Kavi 专用代理时按规则分流；没开时和原来一样跟随系统
     .proxySelector(Net.selector)
     .proxyAuthenticator(Net.authenticator)
+    // 直连时查域名走加密 DNS；走代理的由节点解析
+    .dns(SecureDns)
     .build()
 
 class DeepSeekClient(

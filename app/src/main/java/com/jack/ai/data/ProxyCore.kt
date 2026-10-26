@@ -40,13 +40,17 @@ object ProxyCore {
 
     /**
      * 生成 sing-box 配置：本机一个带口令的 mixed 入口（HTTP 和 SOCKS 都认），出口是用户的节点；
-     * 多个节点时加一个「自动选最快」。节点的服务器域名用阿里 DNS 解析（安卓上内核读不到系统 DNS）。
+     * 多个节点时加一个「自动选最快」（只挑加密强的）。节点的服务器域名用阿里的加密 DNS 解析（安卓上内核读不到系统 DNS）。
      */
     fun config(nodes: List<ProxyNode>, selected: String, port: Int, user: String, pass: String): String = buildJsonObject {
         put("log", buildJsonObject { put("level", "warn") })
         put("dns", buildJsonObject {
             put("servers", buildJsonArray {
-                add(buildJsonObject { put("type", "udp"); put("tag", "dns"); put("server", "223.5.5.5") })
+                // 解析节点的域名用加密 DNS（阿里 DoH）：公共 Wi-Fi、运营商看不到连的是哪个节点
+                add(buildJsonObject {
+                    put("type", "https"); put("tag", "dns"); put("server", "223.5.5.5")
+                    put("tls", buildJsonObject { put("enabled", true); put("server_name", "dns.alidns.com") })
+                })
             })
         })
         put("inbounds", buildJsonArray {
@@ -58,7 +62,8 @@ object ProxyCore {
         put("outbounds", buildJsonArray {
             if (nodes.size > 1) add(buildJsonObject {
                 put("type", "urltest"); put("tag", "auto")
-                put("outbounds", JsonArray(nodes.indices.map { JsonPrimitive("n$it") }))
+                // 只在加密够强的节点里挑（不加密、弱加密的手动选才用）
+                put("outbounds", JsonArray(NodeSecurity.autoPool(nodes).map { JsonPrimitive("n$it") }))
                 put("url", "https://www.gstatic.com/generate_204"); put("interval", "10m")
             })
             nodes.forEachIndexed { i, n -> add(ProxyNodes.outbound(n, "n$i")) }

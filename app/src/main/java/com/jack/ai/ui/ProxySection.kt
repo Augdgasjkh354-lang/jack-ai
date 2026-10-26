@@ -38,6 +38,7 @@ import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import com.jack.ai.data.NodeSecurity
 import kotlinx.coroutines.withContext
 
 /**
@@ -54,6 +55,8 @@ fun ProxySection(vm: ChatViewModel, s: Settings) {
     var status by remember { mutableStateOf<String?>(null) }
     var pasting by remember { mutableStateOf(false) }
     var picking by remember { mutableStateOf(false) }
+    // 每个节点的加密强弱（节点列表变了才重算）
+    val ratings = remember(s.proxyNodes) { s.proxyNodes.map { com.jack.ai.data.NodeSecurity.of(it) } }
 
     fun run(block: suspend () -> String) {
         busy = true
@@ -87,7 +90,10 @@ fun ProxySection(vm: ChatViewModel, s: Settings) {
             Column(Modifier.weight(1f)) {
                 Text(if (s.proxyEnabled) "已开启" else "已关闭", style = MaterialTheme.typography.bodyMedium)
                 Text(
-                    "${s.proxyNodes.size} 个节点" + if (s.proxySub.isNotBlank()) " · 来自订阅" else "",
+                    "${s.proxyNodes.size} 个节点" + (if (s.proxySub.isNotBlank()) " · 来自订阅" else "") +
+                        (ratings.count { it.level != NodeSecurity.Level.STRONG }.takeIf { it > 0 }?.let { n ->
+                            if (n == s.proxyNodes.size) " · 全都加密弱或不加密" else " · $n 个加密弱或不加密，自动选时跳过"
+                        } ?: " · 都是加密强的"),
                     style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
                 )
             }
@@ -99,8 +105,12 @@ fun ProxySection(vm: ChatViewModel, s: Settings) {
             }
             DropdownMenu(expanded = picking, onDismissRequest = { picking = false }) {
                 DropdownMenuItem(text = { Text("自动选最快的") }, onClick = { picking = false; vm.updateSettings { it.copy(proxyNode = "") } })
-                s.proxyNodes.forEach { n ->
-                    DropdownMenuItem(text = { Text(n.name + "  ·  " + n.type) }, onClick = {
+                s.proxyNodes.forEachIndexed { i, n ->
+                    val r = ratings[i]
+                    DropdownMenuItem(text = {
+                        Text(n.name + "  ·  " + n.type + if (r.level != NodeSecurity.Level.STRONG) "  ·  ⚠ ${r.level.label}" else "",
+                            color = if (r.level == NodeSecurity.Level.STRONG) colors.onSurface else colors.error)
+                    }, onClick = {
                         picking = false
                         vm.updateSettings { it.copy(proxyNode = n.name) }
                     })
@@ -108,6 +118,13 @@ fun ProxySection(vm: ChatViewModel, s: Settings) {
             }
         }
     }
+    // 手动选了加密弱、不加密的节点：说清楚风险
+    s.proxyNodes.indexOfFirst { it.name == s.proxyNode }.takeIf { it >= 0 }?.let { ratings[it] }?.takeIf { it.level != NodeSecurity.Level.STRONG }?.let { r ->
+        Text("⚠ 这个节点${r.level.label}：${r.why}。在公共 Wi-Fi 上别人可能看到或篡改经过它的内容，能换就换个加密强的。",
+            style = MaterialTheme.typography.bodySmall, color = colors.error)
+    }
+    Text("查域名用的是加密 DNS（阿里 DoH）：连的 Wi-Fi 和运营商看不到 Kavi 访问了哪些网站。",
+        style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
     if (s.proxyNodes.isNotEmpty()) ProxyAppsSection(vm, s)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedButton(enabled = !busy, onClick = {
