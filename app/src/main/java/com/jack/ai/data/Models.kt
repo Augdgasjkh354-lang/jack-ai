@@ -406,6 +406,10 @@ data class Feedback(
 @Serializable
 data class ToolStat(val name: String, val calls: Int = 0, val failures: Int = 0)
 
+/** 最近一次没做成的工具调用：自查时给 Kavi 看完整原因。 */
+@Serializable
+data class ToolError(val at: Long, val name: String, val args: String, val result: String, val rejected: Boolean = false)
+
 /** 每天每个模型用了多少 token。 */
 @Serializable
 data class UsageDay(

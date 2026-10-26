@@ -174,6 +174,12 @@ class Store(context: Context) {
     fun clearFeedback() = synchronized(LOCK) { AtomicFile(File(dir, "feedback.json")).delete(); Unit }
 
     /** 记一次工具调用。 */
+    fun loadToolErrors() = load("tool_errors.json", ToolError.serializer())
+    /** 记下没做成的工具调用（只留最近 30 条）。 */
+    fun addToolError(e: ToolError) = synchronized(LOCK) {
+        atomicWrite("tool_errors.json", json.encodeToString(ListSerializer(ToolError.serializer()), (loadUnlocked("tool_errors.json", ToolError.serializer()) + e).takeLast(30)))
+    }
+
     fun addToolStat(name: String, failed: Boolean) = synchronized(LOCK) {
         val list = loadUnlocked("tool_stats.json", ToolStat.serializer()).toMutableList()
         val i = list.indexOfFirst { it.name == name }

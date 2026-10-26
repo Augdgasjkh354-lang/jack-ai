@@ -20,6 +20,8 @@ class CapabilitiesTest {
         // 没开的不写；没配语音服务就说清去哪配；没授权文件夹就告诉它入口
         assertFalse(t.contains("phone_files")); assertFalse(t.contains("run_python")); assertFalse(t.contains("拍票据"))
         assertTrue(t.contains("添加硅基流动")); assertTrue(t.contains("设置 → 手机文件夹"))
+        assertFalse(t.contains("self_check"))
+        assertTrue(Capabilities.text(Settings(), skills, listOf("self_check")).contains("先 self_check"))
     }
 
     @Test

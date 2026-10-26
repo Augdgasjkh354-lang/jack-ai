@@ -29,6 +29,7 @@ object Capabilities {
         // App 里用户自己点的入口：用得上时告诉用户
         lines += "用户那边的入口：输入框「+ → 录音纪要」（录完你会收到录音，转文字出纪要）；别的 App 里「分享 → 用 Jack 下载 / 用 Jack 总结」；侧边栏「下载」看下过的文件" +
             if ("phone_files" !in tools) "；设置 → 手机文件夹（授权后你才能读写手机里的文件）" else ""
+        if ("self_check" in tools) lines += "拿不准自己能不能做、工具为什么报错：先 self_check 看真实状态，再说「做不到」"
         return "【能力清单】\n" + lines.joinToString("\n") { "- $it" }
     }
 }

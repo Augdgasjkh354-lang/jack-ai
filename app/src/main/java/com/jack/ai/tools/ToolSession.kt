@@ -101,6 +101,8 @@ class ToolSession(
     var interactive = true
     /** 当前模型能不能看图（浏览器截图要用）。 */
     var canSee = false
+    /** 这次回答用的模型（显示名），自查时报给 Kavi。 */
+    var modelName = ""
     /** 工具产生的图片（data URL），下一轮请求时作为一条用户消息补上，补完清空。 */
     val images = java.util.concurrent.CopyOnWriteArrayList<String>()
     fun takeImages(): List<String> = images.toList().also { images.clear() }
@@ -175,7 +177,13 @@ class ToolSession(
             succeeded.get() == before || com.jack.ai.data.Verify.failed(result) -> ToolStatus.FAILED
             else -> ToolStatus.OK
         }
-        withContext(Dispatchers.IO) { runCatching { host.store.addToolStat(name, status == ToolStatus.FAILED) } }
+        withContext(Dispatchers.IO) {
+            runCatching { host.store.addToolStat(name, status == ToolStatus.FAILED) }
+            // 没做成的连同完整结果记下来，self_check 能翻
+            if (status != ToolStatus.OK) runCatching {
+                host.store.addToolError(com.jack.ai.data.ToolError(System.currentTimeMillis(), name, argsText.take(300), result.take(800), status == ToolStatus.REJECTED))
+            }
+        }
         return ToolOutcome(result, status)
     }
 
@@ -199,6 +207,7 @@ class ToolSession(
             name == "browser" && SkillIds.BROWSER in skillIds -> browse(args)
             name == "download_file" && web -> downloadFile(args)
             name == "convert_file" -> convertFile(args)
+            name == "self_check" -> selfCheck(args)
             name == "phone_files" -> phoneFiles(args)
             name == "notion_search" && SkillIds.NOTION in skillIds -> notionSearch(args)
             name == "notion_read" && SkillIds.NOTION in skillIds -> notionRead(args)

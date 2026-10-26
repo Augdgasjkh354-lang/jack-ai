@@ -39,8 +39,38 @@ internal suspend fun ToolSession.setAlarm(args: JsonObject): String {
         startClock(intent)
         val hm = String.format(Locale.US, "%02d:%02d", h, min)
         val repeat = if (days.isEmpty()) "一次性" else "每周" + days.sorted().joinToString("、") { "一二三四五六日"[it - 1].toString() } + "重复"
-        "已在手机时钟里设好 $hm 的闹钟（$repeat${if (label.isNotBlank()) "，标签「$label」" else ""}）。" to
+        // 回读：系统只告诉「下一个要响的闹钟」是几点，拿它和这个闹钟下一次该响的时间对一对
+        kotlinx.coroutines.delay(1500)
+        val next = runCatching { app.getSystemService(android.app.AlarmManager::class.java).nextAlarmClock?.triggerTime }.getOrNull()
+        val check = alarmCheck(nextAlarmAt(System.currentTimeMillis(), h, min, days), next)
+        "已交给手机时钟设 $hm 的闹钟（$repeat${if (label.isNotBlank()) "，标签「$label」" else ""}）。$check" to
             SearchRecord("设闹钟 $hm")
+    }
+}
+
+/** 这个闹钟下一次该在什么时候响（days：1=周一 … 7=周日，空 = 一次性）。 */
+internal fun nextAlarmAt(now: Long, h: Int, min: Int, days: List<Int>): Long {
+    val c = java.util.Calendar.getInstance().apply {
+        timeInMillis = now; set(java.util.Calendar.HOUR_OF_DAY, h); set(java.util.Calendar.MINUTE, min)
+        set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
+    }
+    repeat(8) {
+        // Calendar：周日 1 … 周六 7 → 1=周一 … 7=周日
+        val dow = (c.get(java.util.Calendar.DAY_OF_WEEK) + 5) % 7 + 1
+        if (c.timeInMillis > now && (days.isEmpty() || dow in days)) return c.timeInMillis
+        c.add(java.util.Calendar.DAY_OF_YEAR, 1)
+    }
+    return c.timeInMillis
+}
+
+/** 拿系统的「下一个闹钟」核对：对得上 ✓；系统里有更早的闹钟就没法确认（不算失败）；没有或更晚算没设上。 */
+internal fun alarmCheck(expected: Long, next: Long?): String {
+    val f = SimpleDateFormat("M月d日 HH:mm", Locale.CHINA)
+    return when {
+        next != null && kotlin.math.abs(next - expected) < 60_000 -> Verify.note(emptyList(), "系统的下一个闹钟就是 ${f.format(Date(expected))}，设上了")
+        next != null && next < expected -> "\n【核实】系统里还有一个更早的闹钟（${f.format(Date(next))}），这个没法直接确认；要确认就请用户打开时钟看一眼。"
+        else -> Verify.note(listOf("系统里查不到 ${f.format(Date(expected))} 要响的闹钟" + (next?.let { "（下一个闹钟是 ${f.format(Date(it))}）" } ?: "（现在一个闹钟都没有）") +
+            "，可能时钟 App 没接住"), "", "请用户打开时钟看一眼，没有就手动设，或者改用 schedule 设 Jack 自己的提醒")
     }
 }
 

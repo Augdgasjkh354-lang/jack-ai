@@ -538,6 +538,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 }
             })
             session.canSee = ep.vision
+            session.modelName = com.jack.ai.data.modelLabel(model)
             session.unlocked.addAll(unlockedStart)
             val agent = Agent({ msgs, t -> client.stream(ep, msgs, thinking, settings.temperature, t) }, sendReasoning = thinkingOn)
             interjections.clear()

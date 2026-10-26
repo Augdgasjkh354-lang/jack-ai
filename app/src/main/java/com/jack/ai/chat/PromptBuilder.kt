@@ -135,6 +135,8 @@ object PromptBuilder {
             append(m.content)
         }.trim()
         if (!imagesOk || imgs.isEmpty()) return msg("user", text.ifEmpty { "（空消息）" })
+        // 图片文件找不到（被删了、没存好）：不悄悄跳过，告诉模型少了哪几张
+        val missing = mutableListOf<String>()
         return buildJsonObject {
             put("role", "user")
             put("content", buildJsonArray {
@@ -143,15 +145,16 @@ object PromptBuilder {
                         add(buildJsonObject { put("type", "file"); put("file_id", id) })
                         return@forEach
                     }
-                    val url = imageUrl(img.path) ?: return@forEach
+                    val url = imageUrl(img.path) ?: run { missing.add(img.name); return@forEach }
                     add(buildJsonObject {
                         put("type", "image_url")
                         put("image_url", buildJsonObject { put("url", url) })
                     })
                 }
+                val lost = if (missing.isEmpty()) "" else "（用户发的图片「${missing.joinToString("、")}」的文件找不到了，没能给你；需要的话请用户重发）\n\n"
                 add(buildJsonObject {
                     put("type", "text")
-                    put("text", text.ifEmpty { "请看图片。" })
+                    put("text", (lost + text).ifEmpty { "请看图片。" })
                 })
             })
         }
@@ -178,6 +181,7 @@ object PromptBuilder {
             // 一直带着、选项写全：工具说明不随对话变，缓存才能跨对话命中；眼下搜不了的地方由工具自己回话
             add(SkillTools.SEARCH_MY_DATA)
             add(SkillTools.CONVERT_FILE)
+            add(SkillTools.SELF_CHECK)
             if (settings.phoneFolders.isNotEmpty()) add(SkillTools.PHONE_FILES)
             // 开着 Python 就只留 run_python，两个都给模型会犹豫用哪个；算数一直能用，画图要先读「计算与图表」
             if (SkillIds.CALC in all && SkillIds.PYTHON !in all) add(SkillTools.RUN_JS)
