@@ -128,6 +128,10 @@
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+        <!-- Kavi 主动找你的通知上的「有用」「别为这种事找我」 -->
+        <receiver
+            android:name=".data.NudgeFeedback"
+            android:exported="false" />
         <receiver
             android:name=".data.AlarmReceiver"
             android:exported="false">

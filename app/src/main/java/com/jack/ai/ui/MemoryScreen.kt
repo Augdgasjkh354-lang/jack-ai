@@ -102,6 +102,7 @@ fun MemoryScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                 }
             }
 
+            item { NudgeCard(vm, settings) }
             item { KaviSelfCard() }
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {

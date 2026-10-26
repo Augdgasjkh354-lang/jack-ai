@@ -208,6 +208,15 @@ object PromptBuilder {
         }.takeIf { it.isNotEmpty() }
     }
 
+    /** 提要盖住了哪一段：几条消息、从哪天到哪天。 */
+    fun compressedScope(conv: Conversation): String {
+        val old = com.jack.ai.data.Compression.compressedMessages(conv)
+        if (old.isEmpty()) return ""
+        val f = java.text.SimpleDateFormat("M月d日 HH:mm", java.util.Locale.CHINA)
+        return "下面概括了本对话较早的 ${old.size} 条消息（${f.format(java.util.Date(old.first().createdAt))} 到 ${f.format(java.util.Date(old.last().createdAt))}），" +
+            "原话已经不在你眼前。"
+    }
+
     /** search_my_data 这次能搜哪些地方：聊天记录、本对话被压缩的旧记录、资料库、项目里的大份资料。 */
     fun searchSources(skillIds: Set<String>, conv: Conversation, project: Project?): List<String> = listOfNotNull(
         "chats".takeIf { SkillIds.CHATS in skillIds },
@@ -353,8 +362,13 @@ object PromptBuilder {
             parts += "对话记忆" to "【本对话记忆】（对话文件夹里的「${ChatMemory.chatFileName(conv)}」，只属于这个对话，不会被压缩）\n" + chatMemory.trim()
         }
         if (conv.summary.isNotBlank()) {
-            parts += "前情提要" to "【较早对话的提要】\n这是你和用户在本对话中较早部分的提要，当作你自己的记忆，直接接着聊，不要提起“提要”或“压缩”。" +
-                "如果需要提要里没有的原话或细节，用 search_my_data（where 填 history）查原始记录。\n<compacted-summary>\n${conv.summary}\n</compacted-summary>"
+            parts += "前情提要" to "【较早对话的提要】\n" + compressedScope(conv) +
+                "这是概括，具体的数字、原话、谁定了什么很可能被省掉了：要引用这些细节，先用 search_my_data（where 填 history）查原话再说；" +
+                "查不到就直说记不清，不要凭提要补细节。平时当作你自己的记忆直接接着聊，不用提起「提要」「压缩」。" +
+                "\n<compacted-summary>\n${conv.summary}\n</compacted-summary>"
+        }
+        if (conv.recap.isNotBlank()) {
+            parts += "最近的对话" to "【这个对话开始时，你和用户最近的几场对话】（开场时记下的，不会再变；要细节用 search_my_data 查）\n" + conv.recap
         }
         return parts
     }

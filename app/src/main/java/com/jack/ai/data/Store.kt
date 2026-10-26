@@ -107,6 +107,9 @@ class Store(context: Context) {
     fun saveHistory(list: List<HistoryEntry>) = save("browser_history.json", HistoryEntry.serializer(), list)
     fun loadPrices() = load("price_log.json", PricePoint.serializer())
     fun savePrices(list: List<PricePoint>) = save("price_log.json", PricePoint.serializer(), list)
+    fun loadNudges() = load("nudges.json", Nudge.serializer())
+    fun saveNudges(list: List<Nudge>) = save("nudges.json", Nudge.serializer(), list.takeLast(200))
+    fun addNudge(n: Nudge) = synchronized(LOCK) { saveNudges(loadUnlocked("nudges.json", Nudge.serializer()) + n) }
     fun loadDownloads() = load("downloads.json", DownloadRecord.serializer())
     fun saveDownloads(list: List<DownloadRecord>) = save("downloads.json", DownloadRecord.serializer(), list.takeLast(500))
     /** 记下载过的文件（最多留 500 条）。 */
@@ -362,6 +365,7 @@ class Store(context: Context) {
             compressTokens = 200_000,
             memoryEnabled = prefs.getBoolean("memoryEnabled", true),
             dreamEnabled = prefs.getBoolean("dreamEnabled", true),
+            proactive = prefs.getBoolean("proactive", true),
             userName = prefs.getString("userName", "") ?: "",
             aboutMe = prefs.getString("aboutMe", "") ?: "",
             replyStyle = prefs.getString("replyStyle", "") ?: "",
@@ -429,6 +433,7 @@ class Store(context: Context) {
             .putInt("compressTokens", s.compressTokens)
             .putBoolean("memoryEnabled", s.memoryEnabled)
             .putBoolean("dreamEnabled", s.dreamEnabled)
+            .putBoolean("proactive", s.proactive)
             .putString("userName", s.userName)
             .putString("aboutMe", s.aboutMe)
             .putString("replyStyle", s.replyStyle)

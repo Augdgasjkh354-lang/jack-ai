@@ -25,6 +25,7 @@ class SettingsFeature(core: AppCore, private val client: DeepSeekClient) : Featu
         val after = state.value.settings
         store.saveSettings(after)
         if (before.dreamEnabled != after.dreamEnabled) Dreamer.schedule(app, after.dreamEnabled)
+        if (before.proactive != after.proactive) com.jack.ai.data.Proactive.schedule(app, after.proactive)
     }
 
     /** 获取某个服务的模型列表，返回 (可用的地址, [模型 id 和价格])。 */

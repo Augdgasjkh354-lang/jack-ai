@@ -480,4 +480,12 @@ class PromptBuilderTest {
         val ok = PromptBuilder.userMessage(m, imagesOk = true, imageUrl = { "data:image/jpeg;base64,AAAA" }).toString()
         assertTrue(ok.contains("image_url")); assertFalse(ok.contains("找不到"))
     }
+
+    @Test
+    fun compressedPartSaysWhatIsMissing() {
+        val msgs = (1..6).map { com.jack.ai.data.ChatMessage(id = "m$it", role = if (it % 2 == 1) "user" else "assistant", content = "第 $it 条", createdAt = 1_700_000_000_000L + it * 60_000L) }
+        val conv = Conversation(messages = msgs, summary = "聊了报价", summaryUntilId = "m4")
+        assertTrue(PromptBuilder.compressedScope(conv).contains("较早的 4 条消息"))
+        assertEquals("", PromptBuilder.compressedScope(Conversation(messages = msgs)))
+    }
 }

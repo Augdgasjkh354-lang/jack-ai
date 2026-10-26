@@ -140,6 +140,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             dreams = store.loadDreams(),
         )
         Dreamer.schedule(app, _state.value.settings.dreamEnabled)
+        com.jack.ai.data.Proactive.schedule(app, _state.value.settings.proactive)
         _state.update { it.copy(routines = store.loadRoutines(), library = store.loadLibrary(), cards = store.loadCards()) }
         Routines.scheduleAll(app)
         runCatching { com.jack.ai.data.Updater.schedule(app, _state.value.settings) }
@@ -269,10 +270,14 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val id = conv.id
         val title = trimmed.ifEmpty { atts.first().name }.take(20).replace('\n', ' ')
         val moved = files.moveToWorkspace(conv, atts)
+        // 第一条消息：记下最近几场对话，这个对话之后一直带着（不再变，缓存才稳）
+        val recap = if (conv.messages.isEmpty() && conv.recap.isBlank() && _state.value.settings.memoryEnabled)
+            com.jack.ai.data.Recap.build(conv, _state.value.conversations, _state.value.projects) else conv.recap
         updateConv(id) { c ->
             c.copy(
                 title = if (c.messages.isEmpty()) title else c.title,
                 messages = c.messages + ChatMessage(role = "user", content = trimmed, attachments = moved),
+                recap = recap,
             )
         }
         _state.update { it.copy(pending = emptyList()) }

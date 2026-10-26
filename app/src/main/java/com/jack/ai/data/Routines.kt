@@ -87,6 +87,8 @@ data class InboxItem(
     /** 定时 Work 生成的文件。 */
     val files: List<GeneratedFile> = emptyList(),
     val work: Boolean = false,
+    /** 只有 Kavi 的一句话（主动找用户），前面不放「⏰ 任务」那条。 */
+    val aside: Boolean = false,
 )
 
 val REPEAT_LABELS = linkedMapOf("none" to "只一次", "daily" to "每天", "weekdays" to "工作日", "weekly" to "每周")

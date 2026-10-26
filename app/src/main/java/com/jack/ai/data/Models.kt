@@ -97,6 +97,8 @@ data class Conversation(
     /** 有没有请求的价格不知道（自定义模型没填价）。 */
     val unpriced: Boolean = false,
     val updatedAt: Long = System.currentTimeMillis(),
+    /** 开场时记下的「最近几场对话」（第一条消息发出时定下，之后不变，缓存才稳）。 */
+    val recap: String = "",
 )
 
 /** 项目：一组对话共享同一份说明和资料。 */
@@ -205,6 +207,8 @@ data class Settings(
     val compressTokens: Int = 200_000,
     val memoryEnabled: Boolean = true,
     val dreamEnabled: Boolean = true,
+    /** Kavi 主动找你：每天早上、傍晚回看一次，有值得打扰的事才推送（一天最多两次，深夜不找）。 */
+    val proactive: Boolean = true,
     val userName: String = "",
     val aboutMe: String = "",
     val replyStyle: String = "",
