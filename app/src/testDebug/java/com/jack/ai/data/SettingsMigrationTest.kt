@@ -29,4 +29,11 @@ class SettingsMigrationTest {
         ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).edit().putString("model", MODEL_PRO).commit()
         assertEquals(MODEL_PRO, Store(ctx).loadSettings().model)
     }
+
+    @Test
+    fun phoneFoldersSurviveRestart() {
+        val s = Store(ctx).loadSettings().copy(phoneFolders = listOf(PhoneFolder("content://tree/a", "Download"), PhoneFolder("content://tree/b", "工作")))
+        Store(ctx).saveSettings(s)
+        assertEquals(s.phoneFolders, Store(ctx).loadSettings().phoneFolders)
+    }
 }

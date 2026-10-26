@@ -392,6 +392,9 @@ class Store(context: Context) {
             wechatWatch = prefs.getBoolean("wechatWatch", false),
             wechatSkip = prefs.getString("wechatSkip", "") ?: "",
             linksInApp = prefs.getBoolean("linksInApp", true),
+            phoneFolders = prefs.getString("phoneFolders", null)?.let {
+                runCatching { json.decodeFromString(ListSerializer(PhoneFolder.serializer()), it) }.getOrNull()
+            }.orEmpty(),
         ).also { com.jack.ai.api.Net.apply(it) }
     }
 
@@ -445,6 +448,7 @@ class Store(context: Context) {
             .putBoolean("wechatWatch", s.wechatWatch)
             .putString("wechatSkip", s.wechatSkip)
             .putBoolean("linksInApp", s.linksInApp)
+            .putString("phoneFolders", json.encodeToString(ListSerializer(PhoneFolder.serializer()), s.phoneFolders))
             .apply()
         com.jack.ai.api.Net.apply(s)
     }
