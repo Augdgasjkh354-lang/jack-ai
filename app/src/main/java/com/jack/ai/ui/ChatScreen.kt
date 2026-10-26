@@ -198,7 +198,7 @@ fun ChatScreen(
                     title = {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                conv?.takeIf { it.messages.isNotEmpty() }?.title ?: "Jack AI",
+                                conv?.takeIf { it.messages.isNotEmpty() }?.title ?: "Kavi",
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 style = MaterialTheme.typography.titleMedium,
@@ -251,7 +251,7 @@ fun ChatScreen(
                 } else {
                     MessageList(vm, conv, state.streamingHere, padding)
                 }
-                // 只在 Jack 还在回答时出来；答完就收起，免得盖住回答
+                // 只在 Kavi 还在回答时出来；答完就收起，免得盖住回答
                 BrowserPeek(Modifier.align(Alignment.TopEnd).padding(top = padding.calculateTopPadding() + 4.dp, end = 12.dp), working = state.streaming)
             }
         }
@@ -695,7 +695,7 @@ private fun InputBar(
     fun startVoice() = startVoiceIntent(ctx, speech)
     // 录音纪要：先要麦克风权限，再开录（录在前台服务里）
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
-        if (ok) com.jack.ai.RecordService.start(ctx) else Toast.makeText(ctx, "没有麦克风权限，录不了音。可以在系统设置里给 Jack 打开", Toast.LENGTH_LONG).show()
+        if (ok) com.jack.ai.RecordService.start(ctx) else Toast.makeText(ctx, "没有麦克风权限，录不了音。可以在系统设置里给 Kavi 打开", Toast.LENGTH_LONG).show()
     }
     fun startRecord() {
         if (androidx.core.content.ContextCompat.checkSelfPermission(ctx, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {

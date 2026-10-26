@@ -24,8 +24,8 @@ import java.io.File
 
 /**
  * 下载：download_file 给网址直接下（文件、m3u8 视频），browser 的 download_all（整页的图片、附件）、
- * download_media（网页里的视频、音乐）。存进对话文件夹，或用户要的话存到手机「下载/JackAI」。
- * 登录过的网站照样能下（带 Jack 浏览器的 Cookie），线路和浏览器一样（国外网站走 Jack 专用代理）。
+ * download_media（网页里的视频、音乐）。存进对话文件夹，或用户要的话存到手机「下载/Kavi」。
+ * 登录过的网站照样能下（带 Kavi 浏览器的 Cookie），线路和浏览器一样（国外网站走 Kavi 专用代理）。
  */
 
 /** 一次最多给几个网址。 */
@@ -39,7 +39,7 @@ private val APK_NOTE = "这是安卓安装包：要不要装由用户自己决�
 
 private fun hostOf(url: String) = url.substringAfter("://").substringBefore('/').substringBefore('?')
 
-/** 存到哪：phone 是手机「下载/JackAI」，别的都是对话文件夹。 */
+/** 存到哪：phone 是手机「下载/Kavi」，别的都是对话文件夹。 */
 private fun JsonObject.toPhone() = this["to"].text().trim() == "phone"
 
 /** 进度写成一句话，显示在通知栏。 */
@@ -63,7 +63,7 @@ internal suspend fun ToolSession.downloadFile(args: JsonObject): String {
     if (urls.size > MAX_URLS) return "一次最多下 $MAX_URLS 个，分几次来"
     urls.firstOrNull { !it.startsWith("http://", true) && !it.startsWith("https://", true) && !it.startsWith("data:", true) }?.let {
         return "「${it.take(80)}」不是下载地址：要以 http:// 或 https:// 开头" +
-            if (it.startsWith("blob:", true)) "。blob: 是网页自己生成的文件，要在 Jack 浏览器里点下载，再用 browser 的 download 存" else ""
+            if (it.startsWith("blob:", true)) "。blob: 是网页自己生成的文件，要在 Kavi 浏览器里点下载，再用 browser 的 download 存" else ""
     }
     val phone = args.toPhone()
     val name = args["name"].text().trim().takeIf { urls.size == 1 }.orEmpty()
@@ -112,7 +112,7 @@ internal suspend fun ToolSession.downloadFile(args: JsonObject): String {
                 append(saved.joinToString("、") { told(it, attach) })
                 append("。")
                 if (!phone) append((if (attach) "聊天里能打开或分享，" else "文件多，聊天里没一个个挂出来；") + "需要的话用 read_file 或 run_python 处理。")
-                else append("用户在文件管理器的「下载/JackAI」里能找到。")
+                else append("用户在文件管理器的「下载/Kavi」里能找到。")
                 if (saved.any { it.name.endsWith(".apk", true) }) append(APK_NOTE)
             }
             if (pages.isNotEmpty()) {
@@ -233,7 +233,7 @@ private fun remux(inputs: List<File>, out: File, audioOnly: Boolean, notes: Muta
 private fun choose(p: JackBrowser.MediaPage, req: MediaGrab.Req): Pair<Pick?, String> {
     val site = BrowserPages.site(p.url)
     if (site.endsWith("youtube.com") || site == "youtu.be") return null to
-        "YouTube 的视频是加密分段传的，Jack 存不下来。要内容的话可以用 extract what=subtitles 取字幕。"
+        "YouTube 的视频是加密分段传的，Kavi 存不下来。要内容的话可以用 extract what=subtitles 取字幕。"
     p.playinfo?.let { MediaGrab.bilibili(it, MAX_HEIGHT) }?.let { pi ->
         if (pi.direct != null) return Pick.File(pi.direct) to "B 站"
         if (pi.video != null || pi.audio != null) return Pick.Dash(pi.video, pi.audio) to "B 站 ${pi.quality}"

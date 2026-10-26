@@ -8,11 +8,11 @@ import androidx.compose.ui.platform.UriHandler
 import com.jack.ai.api.BrowserPages
 
 /**
- * App 里点链接都走这里：网页按设置用 Jack 浏览器（默认）或手机的系统浏览器打开；
+ * App 里点链接都走这里：网页按设置用 Kavi 浏览器（默认）或手机的系统浏览器打开；
  * 电话、邮件这类别的链接照旧交给手机。
  */
 object Links {
-    /** 设置里「链接用 Jack 浏览器打开」，直接读存储（点一下读一次，不用跟着设置刷新）。 */
+    /** 设置里「链接用 Kavi 浏览器打开」，直接读存储（点一下读一次，不用跟着设置刷新）。 */
     fun inApp(ctx: Context) = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).getBoolean("linksInApp", true)
 
     fun open(ctx: Context, url: String) {

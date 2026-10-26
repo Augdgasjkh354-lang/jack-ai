@@ -50,7 +50,7 @@ data class McpServer(
     /** 每次调用都先问用户。 */
     val askFirst: Boolean = false,
     val tools: List<McpTool> = emptyList(),
-    /** 网络路线：auto 按规则（国内直连、国外走 Jack 专用代理）、direct 直连、proxy 走代理。 */
+    /** 网络路线：auto 按规则（国内直连、国外走 Kavi 专用代理）、direct 直连、proxy 走代理。 */
     val route: String = "auto",
 )
 
@@ -198,7 +198,7 @@ object Mcp {
          * 跳过去的那一跳去掉 Key 所在的请求头，不把 Key 带给别人。
          */
         val http = com.jack.ai.api.sharedHttp.newBuilder()
-            // 这个连接器走哪条路：按规则、直连，还是 Jack 专用代理
+            // 这个连接器走哪条路：按规则、直连，还是 Kavi 专用代理
             .proxySelector(com.jack.ai.api.Net.selectorFor(server.route))
             .addNetworkInterceptor { chain ->
             val req = chain.request()
@@ -220,7 +220,7 @@ object Mcp {
             val init = buildJsonObject {
                 put("protocolVersion", PROTOCOL)
                 put("capabilities", JsonObject(emptyMap()))
-                put("clientInfo", buildJsonObject { put("name", "JackAI"); put("version", "1.0") })
+                put("clientInfo", buildJsonObject { put("name", "KaviAI"); put("version", "1.0") })
             }
             try {
                 request("initialize", init)

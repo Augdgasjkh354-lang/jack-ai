@@ -82,6 +82,6 @@ fun UpdateSection(vm: ChatViewModel, s: Settings) {
     }
     status?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = if (it.startsWith("检查失败")) colors.error else colors.onSurfaceVariant) }
     ready?.notes?.takeIf { it.isNotBlank() }?.let { Text("这次更新：\n$it", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant) }
-    if (ready != null) Text("第一次安装时，系统会让你允许 Jack「安装未知应用」，打开一次就行。覆盖安装，聊天记录不会丢。",
+    if (ready != null) Text("第一次安装时，系统会让你允许 Kavi「安装未知应用」，打开一次就行。覆盖安装，聊天记录不会丢。",
         style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
 }

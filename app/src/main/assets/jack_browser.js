@@ -1,4 +1,4 @@
-// Jack 操作网页用的脚本：给能点、能填的元素编号，读当前屏的文字，按编号点击、输入、删字、选择、按键。
+// Kavi 操作网页用的脚本：给能点、能填的元素编号，读当前屏的文字，按编号点击、输入、删字、选择、按键。
 // 每次调用前注入（页面跳转后会丢），定义在 window.__jack 上。
 (function () {
   if (window.__jack) return;
@@ -420,7 +420,7 @@
     return JSON.stringify({ total: all.length, start: start, text: all.slice(start, start + limit) });
   }
 
-  /** 元素的情况：Jack 动手前先看要不要问用户。 */
+  /** 元素的情况：Kavi 动手前先看要不要问用户。 */
   function inspect(n) {
     var el = find(n);
     if (!el) return JSON.stringify({ found: false });

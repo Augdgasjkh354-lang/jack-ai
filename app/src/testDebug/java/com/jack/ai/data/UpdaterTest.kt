@@ -62,7 +62,7 @@ class UpdaterTest {
         assertNull(Updater.ready(ctx))
         val r = Updater.checkAndDownload(ctx, "") as Updater.Result.Downloaded
         assertEquals(900L, r.ready.code)
-        assertTrue(r.ready.file.name == "JackAI-v1.0.900.apk" && r.ready.file.readBytes().contentEquals(apk))
+        assertTrue(r.ready.file.name == "Kavi-v1.0.900.apk" && r.ready.file.readBytes().contentEquals(apk))
         // 最新的提交在前
         assertEquals("· Updater: self-update\n· Add GitHub sync", r.ready.notes)
         assertEquals(r.ready.file, Updater.ready(ctx)!!.file)

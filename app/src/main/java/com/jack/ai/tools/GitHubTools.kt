@@ -94,7 +94,7 @@ private suspend fun ToolSession.checkSpace(size: Long, what: String): String? {
     val free = withContext(Dispatchers.IO) { wsDir.apply { mkdirs() }.usableSpace }
     // 项目要先下压缩包再解压，留出两倍半的空间
     if (free < size * 5 / 2 + 50L * 1024 * 1024) return "手机剩余空间只有 ${ToolSizes.text(free)}，放不下 $what（约 ${ToolSizes.text(size)}），没有下载。"
-    if (size > GitHub.ASK_ABOVE && !approve("下载 $what？", "大约 ${ToolSizes.text(size)}，会走 Jack 专用代理（如果开着），用掉相应的节点流量。", "下载")) {
+    if (size > GitHub.ASK_ABOVE && !approve("下载 $what？", "大约 ${ToolSizes.text(size)}，会走 Kavi 专用代理（如果开着），用掉相应的节点流量。", "下载")) {
         return "用户没有同意下载（$what 约 ${ToolSizes.text(size)}）。"
     }
     return null

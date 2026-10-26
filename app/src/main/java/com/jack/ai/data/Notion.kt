@@ -52,7 +52,7 @@ object Notion {
                 when {
                     resp.code == 401 || code == "unauthorized" -> "Notion 密钥不对或已失效，到 设置 → Notion 重新填"
                     resp.code == 404 || code == "object_not_found" ->
-                        "Notion 里找不到它。可能 ID 不对，或者这个页面还没连接给 Jack 的集成（在 Notion 里打开页面 → 右上角 ··· → 连接 → 选你的集成）"
+                        "Notion 里找不到它。可能 ID 不对，或者这个页面还没连接给 Kavi 的集成（在 Notion 里打开页面 → 右上角 ··· → 连接 → 选你的集成）"
                     code == "restricted_resource" -> "这个集成没有权限做这件事（在 Notion 的集成设置里打开读取/更新/插入内容的权限）"
                     resp.code == 429 -> "Notion 说请求太频繁，过几秒再试"
                     code == "validation_error" -> "Notion 不接受这个写法：$msg"
@@ -93,7 +93,7 @@ object Notion {
         val results = call(token, "POST", "/search", body)["results"]?.jsonArray.orEmpty()
         if (results.isEmpty()) {
             return "没找到" + (if (query.isNotBlank()) "标题含「$query」的" else "") + "页面或数据库。" +
-                "Jack 只能看到连接给集成的页面：在 Notion 里打开页面 → 右上角 ··· → 连接 → 选你的集成（连上父页面，下面的子页面也都能看到）。"
+                "Kavi 只能看到连接给集成的页面：在 Notion 里打开页面 → 右上角 ··· → 连接 → 选你的集成（连上父页面，下面的子页面也都能看到）。"
         }
         return "找到 ${results.size} 个（按最近编辑排序）：\n" + results.joinToString("\n") { r ->
             val o = r.jsonObject
@@ -430,7 +430,7 @@ object Notion {
                 "url", "email", "phone_number" -> if (s.isEmpty()) JsonNull else JsonPrimitive(s)
                 "date" -> date(v) ?: JsonNull
                 "relation" -> JsonArray(list.map { r -> buildJsonObject { put("id", idOf(r) ?: throw NotionException("「$name」要填关联页面的 ID")) } })
-                else -> throw NotionException("「$name」是${TYPE_NAMES[type] ?: type}字段，Jack 不能写")
+                else -> throw NotionException("「$name」是${TYPE_NAMES[type] ?: type}字段，Kavi 不能写")
             }
             out[name] = buildJsonObject { put(type, value) }
         }

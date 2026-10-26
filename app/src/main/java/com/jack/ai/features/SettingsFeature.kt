@@ -78,7 +78,7 @@ class SettingsFeature(core: AppCore, private val client: DeepSeekClient) : Featu
 
     fun deleteConnector(id: String) = updateSettings { s -> s.copy(mcpServers = s.mcpServers.filterNot { it.id == id }) }
 
-    // ---------- Jack 专用代理 ----------
+    // ---------- Kavi 专用代理 ----------
 
     /** 拉订阅：先直连；连不上而代理正在跑，就借代理再试一次。不同的机场按客户端名字给不同格式，认不出就换个名字再要。 */
     private suspend fun fetchSub(url: String): String = withContext(Dispatchers.IO) {

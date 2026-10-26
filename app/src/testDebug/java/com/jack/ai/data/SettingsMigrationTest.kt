@@ -36,4 +36,15 @@ class SettingsMigrationTest {
         Store(ctx).saveSettings(s)
         assertEquals(s.phoneFolders, Store(ctx).loadSettings().phoneFolders)
     }
+
+    @Test
+    fun compressThresholdIsKeptWithinRange() {
+        // 以前误拖到 50k 存下的旧键不再读
+        ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).edit().putInt("compressTokens", 50_000).commit()
+        assertEquals(COMPRESS_MIN, Store(ctx).loadSettings().compressTokens)
+        Store(ctx).saveSettings(Store(ctx).loadSettings().copy(compressTokens = 600_000))
+        assertEquals(600_000, Store(ctx).loadSettings().compressTokens)
+        Store(ctx).saveSettings(Store(ctx).loadSettings().copy(compressTokens = 5_000_000))
+        assertEquals(COMPRESS_MAX, Store(ctx).loadSettings().compressTokens)
+    }
 }

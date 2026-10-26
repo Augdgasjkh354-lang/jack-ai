@@ -2,7 +2,7 @@ package com.jack.ai.api
 
 import kotlinx.serialization.Serializable
 
-/** Jack 浏览器的小规则（纯逻辑）：最近访问、书签、浏览器标识、选文件的类型。 */
+/** Kavi 浏览器的小规则（纯逻辑）：最近访问、书签、浏览器标识、选文件的类型。 */
 object BrowserPages {
     /** 一个网页：最近访问和书签都用它。 */
     @Serializable

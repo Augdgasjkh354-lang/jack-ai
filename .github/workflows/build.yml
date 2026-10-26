@@ -25,7 +25,7 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      # Jack 专用代理的内核：从 sing-box 源码只编译需要的协议（官方安卓版 80MB，这样 40MB），放进 jniLibs
+      # Kavi 专用代理的内核：从 sing-box 源码只编译需要的协议（官方安卓版 80MB，这样 40MB），放进 jniLibs
       - uses: actions/setup-go@v5
         with:
           go-version: "1.25.5"
@@ -61,7 +61,7 @@ jobs:
             grep -E "^e: |What went wrong|error:" -A3 build.log | head -40 | while IFS= read -r l; do echo "::error::$l"; done
             exit 1
           }
-          cp app/build/outputs/apk/release/app-release.apk JackAI-v${{ env.VERSION }}.apk
+          cp app/build/outputs/apk/release/app-release.apk Kavi-v${{ env.VERSION }}.apk
 
       - name: Check Office files
         run: |
@@ -80,16 +80,16 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: JackAI-apk
-          path: JackAI-*.apk
+          name: Kavi-apk
+          path: Kavi-*.apk
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.VERSION }}
-          name: Jack AI v${{ env.VERSION }}
+          name: Kavi v${{ env.VERSION }}
           make_latest: true
           body: |
-            在手机上点下面的 JackAI-v${{ env.VERSION }}.apk 下载并安装。
+            在手机上点下面的 Kavi-v${{ env.VERSION }}.apk 下载并安装。
             以后有新版本直接覆盖安装，聊天记录不会丢。
-          files: JackAI-*.apk
+          files: Kavi-*.apk

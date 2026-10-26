@@ -41,10 +41,10 @@ fun NotionSection(vm: ChatViewModel, s: Settings) {
     var busy by remember { mutableStateOf(false) }
 
     Text(
-        "让 Jack 在你的 Notion 里记笔记、管任务。\n" +
+        "让 Kavi 在你的 Notion 里记笔记、管任务。\n" +
             "1. 打开 Notion 集成页 → 新建「内部集成」，复制密钥（ntn_ 开头）填到下面。\n" +
-            "2. 在 Notion 里打开要给 Jack 用的页面或数据库 → 右上角 ··· → 连接 → 选这个集成。连父页面，下面的子页面也都能用。\n" +
-            "Jack 只能看到连接过的页面。密钥只存在手机上，不进备份。",
+            "2. 在 Notion 里打开要给 Kavi 用的页面或数据库 → 右上角 ··· → 连接 → 选这个集成。连父页面，下面的子页面也都能用。\n" +
+            "Kavi 只能看到连接过的页面。密钥只存在手机上，不进备份。",
         style = MaterialTheme.typography.bodySmall,
         color = colors.onSurfaceVariant,
     )

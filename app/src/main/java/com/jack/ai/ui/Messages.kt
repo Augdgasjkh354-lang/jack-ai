@@ -234,7 +234,7 @@ fun AssistantMessage(
     onContinueWriting: (() -> Unit)? = null,
     /** 「这条有问题」：把这一轮的现场存下来，之后导出。 */
     onReport: ((String) -> Unit)? = null,
-    /** 小工具出错时「让 Jack 修」：发一条消息给 AI。 */
+    /** 小工具出错时「让 Kavi 修」：发一条消息给 AI。 */
     onFixApp: ((String) -> Unit)? = null,
     /** 删除这条会连带删掉后面几条（删除前确认时告诉用户）。 */
     laterCount: Int = 0,
@@ -274,7 +274,7 @@ fun AssistantMessage(
             SearchBox(msg.searches, busy = busy)
             Spacer(Modifier.height(8.dp))
         }
-        // Jack 在操作网页：回答写完之前，实时画面就放在这条回答里；每一步的截图排成一行
+        // Kavi 在操作网页：回答写完之前，实时画面就放在这条回答里；每一步的截图排成一行
         val browsing = msg.searches.any { it.query.startsWith("浏览器") }
         if (browsing && busy) {
             BrowserLive()

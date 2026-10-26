@@ -107,7 +107,7 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
-        // 从分享菜单的「存进 Jack 收件箱」进来：直接交给收件箱自动归档
+        // 从分享菜单的「存进 Kavi 收件箱」进来：直接交给收件箱自动归档
         if (intent?.component?.className?.endsWith(".InboxShare") == true &&
             (intent.action == Intent.ACTION_SEND || intent.action == Intent.ACTION_SEND_MULTIPLE)) {
             stack.clear()
@@ -117,7 +117,7 @@ class MainActivity : FragmentActivity() {
             vm.inboxShare(text, uris, intent.type)
             return
         }
-        // 从分享菜单的「用 Jack 总结」进来：链接、视频或录音文件，Kavi 转文字再总结
+        // 从分享菜单的「用 Kavi 总结」进来：链接、视频或录音文件，Kavi 转文字再总结
         if (intent?.component?.className?.endsWith(".SummarizeShare") == true && intent.action == Intent.ACTION_SEND) {
             stack.clear()
             val text = listOfNotNull(intent.getStringExtra(Intent.EXTRA_SUBJECT), intent.getStringExtra(Intent.EXTRA_TEXT))
@@ -125,7 +125,7 @@ class MainActivity : FragmentActivity() {
             vm.summarizeShare(text, listOfNotNull(streamExtra(intent)))
             return
         }
-        // 从分享菜单的「用 Jack 下载」进来：开个新对话，让 Kavi 把链接里的视频或文件存到手机
+        // 从分享菜单的「用 Kavi 下载」进来：开个新对话，让 Kavi 把链接里的视频或文件存到手机
         if (intent?.component?.className?.endsWith(".DownloadShare") == true && intent.action == Intent.ACTION_SEND) {
             stack.clear()
             val text = listOfNotNull(intent.getStringExtra(Intent.EXTRA_SUBJECT), intent.getStringExtra(Intent.EXTRA_TEXT))
@@ -194,7 +194,7 @@ class MainActivity : FragmentActivity() {
         })
         prompt.authenticate(
             BiometricPrompt.PromptInfo.Builder()
-                .setTitle("解锁 Jack AI")
+                .setTitle("解锁 Kavi")
                 .setAllowedAuthenticators(BIOMETRIC_WEAK or DEVICE_CREDENTIAL)
                 .build(),
         )

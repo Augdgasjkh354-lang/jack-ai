@@ -24,7 +24,7 @@ fun LockScreen(onUnlock: () -> Unit) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             LogoMark(56.dp)
             Spacer(Modifier.height(16.dp))
-            Text("Jack AI 已上锁", style = MaterialTheme.typography.titleLarge, fontFamily = FontFamily.Serif)
+            Text("Kavi 已上锁", style = MaterialTheme.typography.titleLarge, fontFamily = FontFamily.Serif)
             Spacer(Modifier.height(24.dp))
             Button(onClick = onUnlock) {
                 Icon(AppIcons.Lock, null, Modifier.size(18.dp))

@@ -8,7 +8,7 @@ import java.net.URLDecoder
 import java.util.concurrent.TimeUnit
 
 /**
- * Jack 浏览器里点下载链接：用网页的 Cookie（登录过的网站照样能下）和浏览器同一条线路（自动 / 走代理 / 直连）去下。
+ * Kavi 浏览器里点下载链接：用网页的 Cookie（登录过的网站照样能下）和浏览器同一条线路（自动 / 走代理 / 直连）去下。
  * 这里只管网络和起名字；存到哪（手机的「下载」文件夹或对话文件夹）由调用方决定。
  */
 object BrowserDownload {
@@ -18,7 +18,7 @@ object BrowserDownload {
 
     class DownloadException(message: String) : Exception(message)
 
-    /** 网页要下载的一个文件（还没开始下）。size < 0 表示网站没说多大。byUser：用户开着浏览器时点的（弹窗问用户），否则等 Jack 确认。 */
+    /** 网页要下载的一个文件（还没开始下）。size < 0 表示网站没说多大。byUser：用户开着浏览器时点的（弹窗问用户），否则等 Kavi 确认。 */
     /** tab：哪个标签页里点的（网页自己生成的 blob: 文件只能在那一页里读出来），-1 = 不知道。 */
     data class Pending(val url: String, val name: String, val mime: String, val size: Long, val userAgent: String, val referer: String,
                        val byUser: Boolean = false, val tab: Int = -1)
@@ -142,7 +142,7 @@ object BrowserDownload {
         }
         val scheme = req.url.substringBefore(':').lowercase()
         if (scheme != "http" && scheme != "https") throw DownloadException(
-            if (scheme == "blob") "这是网页自己生成的文件（blob:），要在 Jack 浏览器里存" else "不支持这种下载地址（$scheme:）")
+            if (scheme == "blob") "这是网页自己生成的文件（blob:），要在 Kavi 浏览器里存" else "不支持这种下载地址（$scheme:）")
         var out: Sink? = null
         var name = ""
         var mime = ""

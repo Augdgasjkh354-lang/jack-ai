@@ -120,7 +120,7 @@ fun HistoryDrawer(
             ) {
                 LogoMark(32.dp)
                 Spacer(Modifier.size(10.dp))
-                Text("Jack AI", style = MaterialTheme.typography.titleLarge, fontFamily = FontFamily.Serif)
+                Text("Kavi", style = MaterialTheme.typography.titleLarge, fontFamily = FontFamily.Serif)
             }
             Surface(
                 onClick = onNew,

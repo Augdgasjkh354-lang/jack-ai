@@ -109,7 +109,7 @@ private fun ConnectorDialog(vm: ChatViewModel, server: McpServer, isNew: Boolean
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                // 网络路线：按规则（国内直连、国外走 Jack 专用代理）、直连、走代理
+                // 网络路线：按规则（国内直连、国外走 Kavi 专用代理）、直连、走代理
                 Text("网络", style = MaterialTheme.typography.bodyMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf("auto" to "自动", "direct" to "直连", "proxy" to "走代理").forEach { (k, label) ->

@@ -28,7 +28,7 @@ object GitHubWrite {
 
     // ---------- 本地副本里改文件 ----------
 
-    /** 本地副本里的文件；不许跑出副本目录，也不许碰 Jack 自己的记录文件。 */
+    /** 本地副本里的文件；不许跑出副本目录，也不许碰 Kavi 自己的记录文件。 */
     private fun fileIn(dir: File, path: String): File {
         val p = path.trim().trimStart('/')
         val f = File(dir, p).canonicalFile
@@ -166,7 +166,7 @@ object GitHubWrite {
 
     data class Merged(val text: String, val conflicts: Int)
 
-    const val OURS = "<<<<<<< Jack 的改动"
+    const val OURS = "<<<<<<< Kavi 的改动"
     const val SPLIT = "======="
     const val THEIRS = ">>>>>>> GitHub 上的新版本"
 

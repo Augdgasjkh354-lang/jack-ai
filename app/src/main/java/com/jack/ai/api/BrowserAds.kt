@@ -1,7 +1,7 @@
 package com.jack.ai.api
 
 /**
- * Jack 浏览器去广告：按网站名拦掉常见的广告和跟踪请求，再用一小段样式藏起常见的广告位。
+ * Kavi 浏览器去广告：按网站名拦掉常见的广告和跟踪请求，再用一小段样式藏起常见的广告位。
  * 名单故意保守：登录、付款、淘宝客跳转这类会被连累的（alimama、mmstat、umeng、googletagmanager）不拦。
  */
 object BrowserAds {

@@ -70,7 +70,7 @@ internal fun alarmCheck(expected: Long, next: Long?): String {
         next != null && kotlin.math.abs(next - expected) < 60_000 -> Verify.note(emptyList(), "系统的下一个闹钟就是 ${f.format(Date(expected))}，设上了")
         next != null && next < expected -> "\n【核实】系统里还有一个更早的闹钟（${f.format(Date(next))}），这个没法直接确认；要确认就请用户打开时钟看一眼。"
         else -> Verify.note(listOf("系统里查不到 ${f.format(Date(expected))} 要响的闹钟" + (next?.let { "（下一个闹钟是 ${f.format(Date(it))}）" } ?: "（现在一个闹钟都没有）") +
-            "，可能时钟 App 没接住"), "", "请用户打开时钟看一眼，没有就手动设，或者改用 schedule 设 Jack 自己的提醒")
+            "，可能时钟 App 没接住"), "", "请用户打开时钟看一眼，没有就手动设，或者改用 schedule 设 Kavi 自己的提醒")
     }
 }
 
@@ -241,7 +241,7 @@ internal suspend fun ToolSession.schedule(args: JsonObject): String {
         l.firstOrNull { target.length >= 4 && it.id.startsWith(target) } ?: l.firstOrNull { it.title == target }
     }
     if (old != null && args["kind"].text().ifBlank { old.kind } == old.kind) return updateRoutine(old, args)
-    // 闹钟（不归 Jack 管，只能删了重设），或者把提醒改成任务这种换了种类的：
+    // 闹钟（不归 Kavi 管，只能删了重设），或者把提醒改成任务这种换了种类的：
     // 先设新的，设成功了再删旧的，免得新的没设上旧的也没了
     val before = succeeded.get()
     val oldIds = withContext(Dispatchers.IO) { host.store.loadRoutines().map { it.id }.toSet() }

@@ -59,8 +59,8 @@ import java.io.ByteArrayOutputStream
 import kotlin.coroutines.resume
 
 /**
- * Jack 浏览器：用户自己翻网页（BrowserActivity）和 Jack 替用户操作网页（browser 工具）用的是同一个网页窗口，
- * 登录状态共用，用户随时能接手。可以走 Jack 专用代理（见 BrowserNet）。
+ * Kavi 浏览器：用户自己翻网页（BrowserActivity）和 Kavi 替用户操作网页（browser 工具）用的是同一个网页窗口，
+ * 登录状态共用，用户随时能接手。可以走 Kavi 专用代理（见 BrowserNet）。
  * 和小工具的网页窗口完全分开：没有 JackBridge，不能读手机文件，不碰本机和局域网地址。
  * 网页窗口只能在主线程用；下面的挂起函数自己切到主线程。
  */
@@ -68,7 +68,7 @@ object JackBrowser {
     // ---------- 界面看的状态 ----------
     /**
      * 一个标签页：自己的网页窗口和这一页的状态。现在只开一个；多标签就是往 [tabs] 里加，
-     * 网页窗口的回调都写自己这一页（[Tab]），界面和 Jack 看的是当前这一页。
+     * 网页窗口的回调都写自己这一页（[Tab]），界面和 Kavi 看的是当前这一页。
      */
     /** incognito：隐身标签页，Cookie、登录状态、网页存储和别的标签页分开，关掉最后一个隐身页就全清掉，也不记最近访问。 */
     /** account：分身（1 到 [ACCOUNTS]），和主账号、别的分身的登录状态分开，同一个网站能登不同的账号；0 是平常的。 */
@@ -329,16 +329,16 @@ object JackBrowser {
     /** 下载在后台跑，离开浏览器页也不停。 */
     private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
 
-    /** Jack 最近一次操作网页的时刻；聊天页据此显示小窗。 */
+    /** Kavi 最近一次操作网页的时刻；聊天页据此显示小窗。 */
     var agentAt by mutableLongStateOf(0L)
     /** 用户最后一次碰网页的时间（弹窗是不是点出来的，要看它）。 */
     @Volatile var touchedAt = 0L
     /** 网页窗口换了地方（浏览器页 ↔ 聊天小窗）就加一，让原来的地方重新来要。 */
     var hostGen by mutableIntStateOf(0)
-    /** Jack 在等用户亲手做的事（登录、人机验证），回答里的网页画面上会写出来；null = 没在等。 */
+    /** Kavi 在等用户亲手做的事（登录、人机验证），回答里的网页画面上会写出来；null = 没在等。 */
     var waitingUser by mutableStateOf<String?>(null)
 
-    /** 对话里正显示着 Jack 操作网页的实时画面（这时聊天页右上角的小窗就不出来）。 */
+    /** 对话里正显示着 Kavi 操作网页的实时画面（这时聊天页右上角的小窗就不出来）。 */
     var inlineHosts by mutableIntStateOf(0)
     /** 用户正开着浏览器页。 */
     var userViewing = false
@@ -420,7 +420,7 @@ object JackBrowser {
             webViewClient = Client(t)
             webChromeClient = Chrome(t)
             setDownloadListener { url, userAgent, disposition, mime, length ->
-                // 先记下来：用户看着就弹窗问，Jack 在操作就等它用 download 动作确认
+                // 先记下来：用户看着就弹窗问，Kavi 在操作就等它用 download 动作确认
                 val p = BrowserDownload.Pending(url, BrowserDownload.nameFor(url, disposition, mime), mime.orEmpty(),
                     length, userAgent.orEmpty(), t.address, byUser = userViewing, tab = t.id)
                 pending = p
@@ -702,10 +702,10 @@ object JackBrowser {
         address = ""; title = ""
     }
 
-    /** 用户或 Jack 开始一次新的跳转：上一页的出错提示不再适用。 */
+    /** 用户或 Kavi 开始一次新的跳转：上一页的出错提示不再适用。 */
     fun clearError() { error = null; pageFailed = false }
 
-    /** 长按链接或图片：记下来让浏览器页弹菜单；长按文字照旧选字。Jack 在操作时不弹。 */
+    /** 长按链接或图片：记下来让浏览器页弹菜单；长按文字照旧选字。Kavi 在操作时不弹。 */
     private fun longPress(w: WebView): Boolean {
         if (!userViewing) return false
         val r = w.hitTestResult
@@ -749,7 +749,7 @@ object JackBrowser {
         if (::app.isInitialized) app.getSharedPreferences("browser", Context.MODE_PRIVATE).edit().putString("route", r).apply()
     }
 
-    // ---------- 打开网页（用户和 Jack 共用） ----------
+    // ---------- 打开网页（用户和 Kavi 共用） ----------
 
     /** 按线路设好代理再执行 then；走代理但代理起不来就不执行，返回原因。 */
     suspend fun prepare(ctx: Context): String? {
@@ -783,7 +783,7 @@ object JackBrowser {
         return null
     }
 
-    /** 浏览器关了、Jack 也有一阵没用：撤掉代理设置，小工具的网页窗口照旧直连。 */
+    /** 浏览器关了、Kavi 也有一阵没用：撤掉代理设置，小工具的网页窗口照旧直连。 */
     fun clearProxyIfIdle() {
         if (userViewing || agentActive()) return
         if (appliedPort > 0 && WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE)) {
@@ -838,10 +838,10 @@ object JackBrowser {
 
     private fun describe(code: Int, desc: String): String = when {
         "PROXY" in desc && "AUTH" in desc -> "代理不接受浏览器给的口令（$desc）。把这个提示告诉开发者。"
-        "PROXY" in desc || "TUNNEL" in desc -> "连不上 Jack 专用代理（$desc）。" + (ProxyCore.lastError?.let { "代理：$it" } ?: "可以点刷新重试，或到设置里测试代理。")
+        "PROXY" in desc || "TUNNEL" in desc -> "连不上 Kavi 专用代理（$desc）。" + (ProxyCore.lastError?.let { "代理：$it" } ?: "可以点刷新重试，或到设置里测试代理。")
         code == WebViewClient.ERROR_HOST_LOOKUP -> "找不到这个网站（$desc）。" + if (route == BrowserNet.DIRECT) "国外网站可以把线路换成「自动」或「全部走代理」。" else ""
         code == WebViewClient.ERROR_TIMEOUT || code == WebViewClient.ERROR_CONNECT ->
-            "连接失败（$desc）。" + if (route == BrowserNet.DIRECT || !Net.config.enabled) "国外网站需要开 Jack 专用代理。" else "节点可能不通，到设置里测试一下代理。"
+            "连接失败（$desc）。" + if (route == BrowserNet.DIRECT || !Net.config.enabled) "国外网站需要开 Kavi 专用代理。" else "节点可能不通，到设置里测试一下代理。"
         else -> "打不开（$desc）"
     }
 
@@ -895,7 +895,7 @@ object JackBrowser {
                 val now = System.currentTimeMillis()
                 while (authTimes.isNotEmpty() && now - authTimes.first() > 10_000) authTimes.removeFirst()
                 if (authTimes.size < 30) { authTimes.addLast(now); handler.proceed(ProxyCore.user, ProxyCore.pass); return }
-                t.error = "浏览器没能通过 Jack 专用代理的口令验证。把这个提示告诉开发者。"
+                t.error = "浏览器没能通过 Kavi 专用代理的口令验证。把这个提示告诉开发者。"
             }
             // 网站自己要的账号密码（很少见）：不支持，取消
             t.diag.add("要账号密码的请求，取消了：$host（$realm）")
@@ -986,10 +986,10 @@ object JackBrowser {
             val url = view.url.orEmpty()
             if (newTitle != null && newTitle != url) BrowserPages.retitle(visits, url, newTitle).let { if (it !== visits) { visits = it; saveLists() } }
         }
-        /** 网页要弹新窗口：用户点的、或 Jack 刚点过（登录窗口）才开，开在新标签页并切过去；网页自己弹的（多半是广告）不开。 */
+        /** 网页要弹新窗口：用户点的、或 Kavi 刚点过（登录窗口）才开，开在新标签页并切过去；网页自己弹的（多半是广告）不开。 */
         override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: android.os.Message): Boolean {
             val now = System.currentTimeMillis()
-            // 登录窗口常是点完、等网页请求回来才弹，标记里就不算「点出来的」：刚碰过网页（用户或 Jack）也开
+            // 登录窗口常是点完、等网页请求回来才弹，标记里就不算「点出来的」：刚碰过网页（用户或 Kavi）也开
             if (!isUserGesture && now - agentAt > 5_000 && now - touchedAt > 5_000) { t.diag.add("网页要弹新窗口，不是点出来的，没开"); return false }
             t.diag.add("网页弹新窗口，开成新标签页")
             if (tabs.size >= MAX_TABS) { notice = "标签页开满了，网页要弹的窗口没打开。先关掉几个标签页再试。"; return false }
@@ -1015,9 +1015,9 @@ object JackBrowser {
             fullscreen = view to callback
         }
         override fun onHideCustomView() { fullscreen = null }
-        // 网页要选文件上传：只有用户开着浏览器页时才弹选择器（Jack 操作时不替用户选文件）
+        // 网页要选文件上传：只有用户开着浏览器页时才弹选择器（Kavi 操作时不替用户选文件）
         override fun onShowFileChooser(view: WebView, callback: android.webkit.ValueCallback<Array<android.net.Uri>>, params: FileChooserParams): Boolean {
-            // Jack 正在上传：直接把准备好的文件交给网页
+            // Kavi 正在上传：直接把准备好的文件交给网页
             agentUpload?.let { uri -> agentUpload = null; uploadTaken = true; callback.onReceiveValue(arrayOf(uri)); return true }
             val c = chooser
             return if (userViewing && c != null) c(callback, params) else false
@@ -1025,7 +1025,7 @@ object JackBrowser {
         // 不给网页任何手机权限（相机、麦克风、位置）
         override fun onPermissionRequest(request: PermissionRequest) = request.deny()
         override fun onGeolocationPermissionsShowPrompt(origin: String?, callback: GeolocationPermissions.Callback) = callback.invoke(origin, false, false)
-        // 网页弹的 alert/confirm：Jack 操作时没人点，直接按「确定」的默认处理会卡住页面，所以都按取消
+        // 网页弹的 alert/confirm：Kavi 操作时没人点，直接按「确定」的默认处理会卡住页面，所以都按取消
         override fun onJsAlert(view: WebView, url: String?, message: String?, result: android.webkit.JsResult): Boolean {
             if (!userViewing) { lastDialog = message; result.confirm(); return true }
             return false
@@ -1040,7 +1040,7 @@ object JackBrowser {
         }
     }
 
-    /** Jack 操作时网页弹出的提示框内容（已自动关掉），下次读页面时告诉它。 */
+    /** Kavi 操作时网页弹出的提示框内容（已自动关掉），下次读页面时告诉它。 */
     @Volatile private var lastDialog: String? = null
 
     // ---------- 下载 ----------
@@ -1151,7 +1151,7 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
     }
 
     /**
-     * 用户点了下载：存到手机的「下载/JackAI」文件夹（Android 10 以上，文件管理器里能找到）；
+     * 用户点了下载：存到手机的「下载/Kavi」文件夹（Android 10 以上，文件管理器里能找到）；
      * 更老的系统存到 App 自己的下载目录。在后台下，进度和结果显示在浏览器页。
      */
     fun saveToPhone(ctx: Context, p: BrowserDownload.Pending) {
@@ -1169,7 +1169,7 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
         }
     }
 
-    /** Jack 确认下载：存进对话文件夹（同名加编号）或手机「下载/JackAI」，返回存好的文件。 */
+    /** Kavi 确认下载：存进对话文件夹（同名加编号）或手机「下载/Kavi」，返回存好的文件。 */
     suspend fun saveTo(ctx: Context, dir: java.io.File?, p: BrowserDownload.Pending, progress: (String) -> Unit = {}): Downloads.Saved {
         try {
             downloading = progressText(p.name, 0, p.size)
@@ -1207,7 +1207,7 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
         return MediaPage((o?.get("title") as? JsonPrimitive)?.content ?: title, address, els, pi, t.media.toList(), t)
     }
 
-    // ---------- Jack 操作网页 ----------
+    // ---------- Kavi 操作网页 ----------
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -1394,7 +1394,7 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
         return runCatching { json.parseToJsonElement(unwrap(eval(ctx, BrowserScripts.extract(ctx, what, start, limit)))).jsonObject }.getOrNull()
     }
 
-    /** Jack 要上传的文件：网页弹出选文件时直接交给它（不弹选择器）。uploadTaken 表示网页已经拿走了。 */
+    /** Kavi 要上传的文件：网页弹出选文件时直接交给它（不弹选择器）。uploadTaken 表示网页已经拿走了。 */
     @Volatile var agentUpload: android.net.Uri? = null
     @Volatile var uploadTaken = false
 
@@ -1429,7 +1429,7 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
     /** 关掉某个标签页（按对象找，并行抓完收拾用）。 */
     fun closeTab(t: Tab) { tabs.indexOf(t).takeIf { it >= 0 }?.let { closeTab(it) } }
 
-    /** 标签页清单（给 Jack 看）：第几个、标题、网址、是不是当前。 */
+    /** 标签页清单（给 Kavi 看）：第几个、标题、网址、是不是当前。 */
     fun tabList(): String = tabs.mapIndexed { i, t ->
         "${i + 1}. ${t.badge}${t.title.ifBlank { if (t.address.isEmpty()) "起始页" else BrowserPages.host(t.address) }} ${t.address}" + if (i == current) "（当前）" else ""
     }.joinToString("\n")

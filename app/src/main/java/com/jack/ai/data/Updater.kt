@@ -109,7 +109,7 @@ object Updater {
 
     /**
      * 查一次：有新版就下载、校验、记下来。已经下好同一个版本就不再下。
-     * 网络跟着 Jack 专用代理的分流走（GitHub 不在直连名单里）。
+     * 网络跟着 Kavi 专用代理的分流走（GitHub 不在直连名单里）。
      */
     fun checkAndDownload(ctx: Context, token: String): Result {
         val installed = installedCode(ctx)
@@ -125,7 +125,7 @@ object Updater {
             f.delete()
             throw GitHub.GitHubException("下载的安装包校验不对（可能下坏了），已删掉，下次再试")
         }
-        val target = File(d, "JackAI-${l.tag}.apk")
+        val target = File(d, "Kavi-${l.tag}.apk")
         if (f != target) f.renameTo(target)
         val notes = notes(token, installed, l)
         prefs(ctx).edit().putLong("code", l.code).putString("tag", l.tag).putString("path", target.path).putString("notes", notes).apply()
@@ -160,7 +160,7 @@ object Updater {
         val text = "点这里安装（覆盖安装，聊天记录不会丢）" + if (r.notes.isNotBlank()) "\n这次更新：\n${r.notes}" else ""
         val n = NotificationCompat.Builder(ctx, CHANNEL)
             .setSmallIcon(com.jack.ai.R.drawable.ic_widget_chat)
-            .setContentTitle("Jack 新版本 ${r.tag} 已下载好")
+            .setContentTitle("Kavi 新版本 ${r.tag} 已下载好")
             .setContentText("点这里安装（覆盖安装，聊天记录不会丢）")
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setAutoCancel(true)

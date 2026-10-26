@@ -87,7 +87,7 @@ object Backup {
                     zip.closeEntry()
                 }
             }
-            require(sawData) { "这不是 Jack AI 的备份文件" }
+            require(sawData) { "这不是 Kavi 的备份文件" }
             // 被覆盖的旧文件留一份，只保留最近一次恢复前的
             val rollback = File(ctx.filesDir, "last-restore-rollback").apply { deleteRecursively(); mkdirs() }
             staging.walkTopDown().filter { it.isFile }.forEach { incoming ->

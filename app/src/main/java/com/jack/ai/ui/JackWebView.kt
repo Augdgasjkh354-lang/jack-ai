@@ -10,7 +10,7 @@ import android.webkit.WebView
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 
-/** Jack 浏览器的网页窗口：长按选中文字时，系统弹出的「复制、全选……」那排里多一个「问 Kavi」。 */
+/** Kavi 浏览器的网页窗口：长按选中文字时，系统弹出的「复制、全选……」那排里多一个「问 Kavi」。 */
 class JackWebView(ctx: Context) : WebView(ctx) {
     override fun startActionMode(callback: ActionMode.Callback, type: Int): ActionMode? = super.startActionMode(Ask(callback), type)
     override fun startActionMode(callback: ActionMode.Callback): ActionMode? = super.startActionMode(Ask(callback))

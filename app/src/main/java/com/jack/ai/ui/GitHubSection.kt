@@ -43,10 +43,10 @@ fun GitHubSection(vm: ChatViewModel, s: Settings) {
     Text(
         "不填也能搜和看公开项目（每小时 60 次）。要看你自己的私有项目、搜代码，填一个令牌：\n" +
             "1. 打开下面的链接，新建「Fine-grained token」，有效期自己定。\n" +
-            "2. Repository access 选「All repositories」（或只选要给 Jack 看的项目）。\n" +
-            "3. Permissions：只让 Jack 看，就把 Contents 设成「Read-only」；要让它改代码、推送、开 PR、处理 issue、看和重跑自动打包，" +
+            "2. Repository access 选「All repositories」（或只选要给 Kavi 看的项目）。\n" +
+            "3. Permissions：只让 Kavi 看，就把 Contents 设成「Read-only」；要让它改代码、推送、开 PR、处理 issue、看和重跑自动打包，" +
             "就把 Contents、Pull requests、Issues、Actions 都设成「Read and write」（Metadata 会自动只读）。\n" +
-            "4. 生成后复制（github_pat_ 开头）填到下面。推送、合并、发评论之前 Jack 都会先问你。令牌只存在手机上，不进备份。",
+            "4. 生成后复制（github_pat_ 开头）填到下面。推送、合并、发评论之前 Kavi 都会先问你。令牌只存在手机上，不进备份。",
         style = MaterialTheme.typography.bodySmall,
         color = colors.onSurfaceVariant,
     )

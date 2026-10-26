@@ -14,16 +14,16 @@ class ErrorTextTest {
     fun foreignServiceWithoutProxySaysTurnItOn() {
         Net.setConfig(Net.Config())
         val t = ToolSession.errorText(java.net.UnknownHostException("api.notion.com"))
-        assertTrue(t, t.contains("找不到服务器 api.notion.com") && t.contains("打开 Jack 专用代理"))
+        assertTrue(t, t.contains("找不到服务器 api.notion.com") && t.contains("打开 Kavi 专用代理"))
         val d = ToolSession.errorText(java.net.UnknownHostException("api.deepseek.com"))
-        assertTrue(d, d.contains("检查手机网络") && !d.contains("打开 Jack 专用代理"))
+        assertTrue(d, d.contains("检查手机网络") && !d.contains("打开 Kavi 专用代理"))
     }
 
     @Test
     fun deadProxyPortIsNamed() {
         Net.setConfig(Net.Config(enabled = true, nodes = listOf(ProxyNode("a", "ss", "{}"))))
         val t = ToolSession.errorText(java.net.ConnectException("Failed to connect to /127.0.0.1:9"))
-        assertTrue(t, t.contains("连不上 Jack 专用代理") && t.contains("点「测试」"))
+        assertTrue(t, t.contains("连不上 Kavi 专用代理") && t.contains("点「测试」"))
         val timeout = ToolSession.errorText(java.net.SocketTimeoutException("timeout"))
         assertTrue(timeout, timeout.contains("超时") && timeout.contains("换节点"))
     }

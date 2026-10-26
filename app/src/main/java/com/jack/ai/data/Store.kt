@@ -362,7 +362,8 @@ class Store(context: Context) {
             workThinking = prefs.getString("workThinking", null)?.let { runCatching { ThinkLevel.valueOf(it) }.getOrNull() } ?: ThinkLevel.HIGH,
             // 默认值从 1 元改成了 5 元，换个键名，旧的默认值不沿用
             workCostLimit = prefs.getFloat("workCostLimit5", 5f).toDouble(),
-            compressTokens = 200_000,
+            // 压缩门槛：200k 到 1M（换了个键，以前误拖到 50k 存下的旧值不再读）
+            compressTokens = prefs.getInt("compressTokens2", COMPRESS_MIN).coerceIn(COMPRESS_MIN, COMPRESS_MAX),
             memoryEnabled = prefs.getBoolean("memoryEnabled", true),
             dreamEnabled = prefs.getBoolean("dreamEnabled", true),
             proactive = prefs.getBoolean("proactive", true),
@@ -430,7 +431,7 @@ class Store(context: Context) {
             .putString("workModel", s.workModel)
             .putString("workThinking", s.workThinking.name)
             .putFloat("workCostLimit5", s.workCostLimit.toFloat())
-            .putInt("compressTokens", s.compressTokens)
+            .putInt("compressTokens2", s.compressTokens.coerceIn(COMPRESS_MIN, COMPRESS_MAX))
             .putBoolean("memoryEnabled", s.memoryEnabled)
             .putBoolean("dreamEnabled", s.dreamEnabled)
             .putBoolean("proactive", s.proactive)

@@ -288,12 +288,12 @@ class ToolSession(
                 is java.net.SocketTimeoutException -> "网络连接超时" to net.nextStep(host)
                 is java.net.UnknownHostException -> "网络连接失败（找不到服务器 ${host ?: msg}）" to net.nextStep(host)
                 is java.net.ConnectException ->
-                    if ("127.0.0.1" in msg) "连不上 Jack 专用代理" to "下一步：请用户到 设置 → Jack 专用代理 点「测试」；不通就换个节点或更新订阅，再重试。"
+                    if ("127.0.0.1" in msg) "连不上 Kavi 专用代理" to "下一步：请用户到 设置 → Kavi 专用代理 点「测试」；不通就换个节点或更新订阅，再重试。"
                     else "网络连接失败（连接被拒绝：$msg）" to net.nextStep(host)
                 is javax.net.ssl.SSLException -> "网络连接失败（安全连接出错：$msg）" to
                     "下一步：请用户确认手机时间是否准确；走代理的话换个节点再试。不要改成不校验证书。"
                 is SecurityException -> "没有权限（$msg）" to
-                    "下一步：请用户在系统设置里给 Jack 打开相应权限（日历权限可以在左侧菜单「提醒和任务」里授权），然后再试。"
+                    "下一步：请用户在系统设置里给 Kavi 打开相应权限（日历权限可以在左侧菜单「提醒和任务」里授权），然后再试。"
                 is java.io.FileNotFoundException -> "找不到文件或没有权限（$msg）" to
                     "下一步：对照【对话文件夹】清单确认文件名，再重试。"
                 is IOException -> "读写或网络出错（${msg.ifBlank { e.javaClass.simpleName }}）" to net.nextStep(host)

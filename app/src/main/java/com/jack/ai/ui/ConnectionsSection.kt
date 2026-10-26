@@ -47,7 +47,7 @@ fun ConnectionsSection(vm: ChatViewModel, s: Settings) {
         Triple("Notion", (if (s.notionToken.isNotBlank()) "已连接" else "未设置") to s.notionToken.isNotBlank()) { NotionSection(vm, s) },
         Triple("微信消息", (if (s.wechatWatch) "交给 Kavi" else "关着") to s.wechatWatch) { WeChatSection(vm, s) },
         Triple("MCP 连接器", (if (mcp > 0) "$mcp 个开着" else "没有") to (mcp > 0)) { ConnectorsSection(vm, s.mcpServers) },
-        Triple("Jack 专用代理（VPN）", (if (s.proxyEnabled) "开着" + s.proxyNode.takeIf { it.isNotBlank() }?.let { "：$it" }.orEmpty()
+        Triple("Kavi 专用代理（VPN）", (if (s.proxyEnabled) "开着" + s.proxyNode.takeIf { it.isNotBlank() }?.let { "：$it" }.orEmpty()
             else if (s.proxyNodes.isNotEmpty()) "关着" else "未设置") to s.proxyEnabled) { ProxySection(vm, s) },
     )
     val colors = MaterialTheme.colorScheme

@@ -41,7 +41,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * 设置页的「Jack 专用代理」：扫码 / 选二维码图片 / 粘贴订阅或节点链接导入，开关、选节点、测试、更新订阅。
+ * 设置页的「Kavi 专用代理」：扫码 / 选二维码图片 / 粘贴订阅或节点链接导入，开关、选节点、测试、更新订阅。
  * 订阅地址和节点只存在手机上，这里也不显示完整地址。
  */
 @OptIn(ExperimentalLayoutApi::class)
@@ -77,7 +77,7 @@ fun ProxySection(vm: ChatViewModel, s: Settings) {
     }
 
     Text(
-        "只给 Jack 用，不影响手机上别的 App，也不用开系统 VPN。DeepSeek、12306、高德等国内服务始终直连，国外的走代理；" +
+        "只给 Kavi 用，不影响手机上别的 App，也不用开系统 VPN。DeepSeek、12306、高德等国内服务始终直连，国外的走代理；" +
             "连接器可以在它的设置里单独指定。",
         style = MaterialTheme.typography.bodySmall,
         color = colors.onSurfaceVariant,

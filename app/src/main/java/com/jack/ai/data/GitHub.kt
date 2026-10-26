@@ -20,7 +20,7 @@ import java.util.zip.ZipInputStream
 
 /**
  * GitHub：搜项目、看自己的项目（填了令牌连私有的也能看）、读目录和文件、下载整个项目或 Releases 里的文件。
- * 这里是读的部分；改代码、推送、PR、issue、自动打包在 GitHubWrite。网络跟着 Jack 专用代理的分流走（GitHub 的网址都不在直连名单里）。
+ * 这里是读的部分；改代码、推送、PR、issue、自动打包在 GitHubWrite。网络跟着 Kavi 专用代理的分流走（GitHub 的网址都不在直连名单里）。
  * 下载下来的项目放在对话文件夹的 .repos/作者__项目名/ 里，之后读目录、读文件、全文搜索都用本地的，又快又不占次数。
  */
 object GitHub {
@@ -47,7 +47,7 @@ object GitHub {
         Request.Builder().url(if (path.startsWith("http")) path else api + path)
             .header("Accept", accept)
             .header("X-GitHub-Api-Version", "2022-11-28")
-            .header("User-Agent", "JackAI")
+            .header("User-Agent", "KaviAI")
             .apply { if (token.isNotBlank()) header("Authorization", "Bearer ${token.trim()}") }
             .build()
 

@@ -32,7 +32,7 @@ internal suspend fun ToolSession.selfCheck(args: JsonObject): String = runTool("
     val text = withContext(Dispatchers.IO) {
         buildString {
             val ver = runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrNull().orEmpty()
-            append("【版本】Jack AI $ver；模型 ${modelName.ifBlank { "（未知）" }}，${if (canSee) "能看图（用户发的图片会随消息一起给你）" else "看不了图片"}\n")
+            append("【版本】Kavi $ver；模型 ${modelName.ifBlank { "（未知）" }}，${if (canSee) "能看图（用户发的图片会随消息一起给你）" else "看不了图片"}\n")
 
             // 这次的工具：按现在的设置和已经读过的技能重算一遍
             val tools = PromptBuilder.toolSet(settings, skills, conv, project, unlocked.toSet() + conv.skillTools)

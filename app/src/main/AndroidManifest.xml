@@ -40,7 +40,7 @@
             </intent-filter>
             <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
             <!-- 从别的 App 分享文字、图片、文件进来 -->
-            <intent-filter android:label="问 Jack AI">
+            <intent-filter android:label="问 Kavi">
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/*" />
@@ -48,14 +48,14 @@
                 <data android:mimeType="application/pdf" />
                 <data android:mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
             </intent-filter>
-            <intent-filter android:label="问 Jack AI">
+            <intent-filter android:label="问 Kavi">
                 <action android:name="android.intent.action.SEND_MULTIPLE" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="image/*" />
             </intent-filter>
         </activity>
-        <!-- 万能收件箱：分享菜单里的「存进 Jack 收件箱」，进来后自动归档，不用再按发送 -->
-        <!-- Jack 浏览器：自己翻网页，可以走 Jack 专用代理 -->
+        <!-- 万能收件箱：分享菜单里的「存进 Kavi 收件箱」，进来后自动归档，不用再按发送 -->
+        <!-- Kavi 浏览器：自己翻网页，可以走 Kavi 专用代理 -->
         <activity
             android:name=".ui.BrowserActivity"
             android:exported="false"
@@ -66,7 +66,7 @@
         <activity-alias
             android:name=".InboxShare"
             android:exported="true"
-            android:label="存进 Jack 收件箱"
+            android:label="存进 Kavi 收件箱"
             android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
@@ -79,11 +79,11 @@
                 <data android:mimeType="*/*" />
             </intent-filter>
         </activity-alias>
-        <!-- 分享菜单里的「用 Jack 下载」：抖音、B 站、小红书分享出来的链接，Kavi 直接把视频或文件存到手机 -->
+        <!-- 分享菜单里的「用 Kavi 下载」：抖音、B 站、小红书分享出来的链接，Kavi 直接把视频或文件存到手机 -->
         <activity-alias
             android:name=".DownloadShare"
             android:exported="true"
-            android:label="用 Jack 下载"
+            android:label="用 Kavi 下载"
             android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
@@ -91,11 +91,11 @@
                 <data android:mimeType="text/*" />
             </intent-filter>
         </activity-alias>
-        <!-- 分享菜单里的「用 Jack 总结」：视频链接、录音、视频文件，Kavi 转成文字再总结 -->
+        <!-- 分享菜单里的「用 Kavi 总结」：视频链接、录音、视频文件，Kavi 转成文字再总结 -->
         <activity-alias
             android:name=".SummarizeShare"
             android:exported="true"
-            android:label="用 Jack 总结"
+            android:label="用 Kavi 总结"
             android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
@@ -122,7 +122,7 @@
         <service
             android:name=".WeChatListener"
             android:exported="true"
-            android:label="Jack AI 读微信消息"
+            android:label="Kavi 读微信消息"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />
@@ -143,7 +143,7 @@
         <receiver
             android:name=".AskWidget"
             android:exported="false"
-            android:label="Jack AI 提问">
+            android:label="Kavi 提问">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
@@ -154,7 +154,7 @@
         <receiver
             android:name=".QuickWidget"
             android:exported="false"
-            android:label="Jack AI 快捷按钮">
+            android:label="Kavi 快捷按钮">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
@@ -165,7 +165,7 @@
         <receiver
             android:name=".TodayWidget"
             android:exported="false"
-            android:label="Jack AI 今日概览">
+            android:label="Kavi 今日概览">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
@@ -176,7 +176,7 @@
         <receiver
             android:name=".RecentWidget"
             android:exported="false"
-            android:label="Jack AI 最近对话">
+            android:label="Kavi 最近对话">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
@@ -187,7 +187,7 @@
         <receiver
             android:name=".LedgerWidget"
             android:exported="false"
-            android:label="Jack AI 记账">
+            android:label="Kavi 记账">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>

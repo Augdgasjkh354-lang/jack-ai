@@ -45,7 +45,7 @@ class WeChatListener : NotificationListenerService() {
     }
 
     companion object {
-        /** 用户有没有给 Jack「通知使用权」。 */
+        /** 用户有没有给 Kavi「通知使用权」。 */
         fun granted(ctx: Context) = ctx.packageName in NotificationManagerCompat.getEnabledListenerPackages(ctx)
 
         /** 系统重新绑定监听（有的手机改完设置不会自己连上）。 */

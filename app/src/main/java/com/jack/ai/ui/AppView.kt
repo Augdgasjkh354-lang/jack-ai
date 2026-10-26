@@ -162,7 +162,7 @@ fun AppWebView(file: File, modifier: Modifier = Modifier, inline: Boolean = true
     )
 }
 
-/** 聊天里的小工具卡片：标题、全屏、分享，下面就是能直接操作的网页；出错时显示错误和「让 Jack 修」。 */
+/** 聊天里的小工具卡片：标题、全屏、分享，下面就是能直接操作的网页；出错时显示错误和「让 Kavi 修」。 */
 @Composable
 fun AppCard(f: GeneratedFile, onFix: ((String) -> Unit)?) {
     val ctx = LocalContext.current
@@ -199,7 +199,7 @@ fun AppCard(f: GeneratedFile, onFix: ((String) -> Unit)?) {
                     if (onFix != null) TextButton(onClick = {
                         onFix("小工具「${f.name}」运行时出错：$e\n请用 edit_file 修好它的底稿。")
                         error = null
-                    }) { Text("让 Jack 修") }
+                    }) { Text("让 Kavi 修") }
                 }
             }
             Spacer(Modifier.size(6.dp))

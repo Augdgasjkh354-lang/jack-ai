@@ -1,6 +1,6 @@
 <resources>
-    <string name="app_name">Jack AI</string>
-    <string name="widget_desc">桌面上直接问 Jack AI</string>
+    <string name="app_name">Kavi</string>
+    <string name="widget_desc">桌面上直接问 Kavi</string>
     <string name="widget_quick_desc">Chat、Work、语音、拍照四个按钮</string>
     <string name="widget_today_desc">下一个提醒、今天的日程、待复习、本月花费</string>
     <string name="widget_recent_desc">最近的几个对话，点一下直接进去</string>

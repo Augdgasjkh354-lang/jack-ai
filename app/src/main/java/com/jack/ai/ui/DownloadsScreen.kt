@@ -55,7 +55,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** 下载过的文件：最新的在上面，点开、分享、重下（从网址再下一份到手机「下载/JackAI」）、从记录里删掉。 */
+/** 下载过的文件：最新的在上面，点开、分享、重下（从网址再下一份到手机「下载/Kavi」）、从记录里删掉。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DownloadsScreen(onBack: () -> Unit) {

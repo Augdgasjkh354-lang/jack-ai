@@ -54,7 +54,7 @@ internal val sharedHttp: OkHttpClient = OkHttpClient.Builder()
     .connectTimeout(30, TimeUnit.SECONDS)
     .readTimeout(5, TimeUnit.MINUTES) // 深度思考模型可能很久才出第一个字
     .writeTimeout(30, TimeUnit.SECONDS)
-    // 开了 Jack 专用代理时按规则分流；没开时和原来一样跟随系统
+    // 开了 Kavi 专用代理时按规则分流；没开时和原来一样跟随系统
     .proxySelector(Net.selector)
     .proxyAuthenticator(Net.authenticator)
     .build()

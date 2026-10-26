@@ -4,8 +4,8 @@ import com.jack.ai.data.ProxyCore
 import java.net.URI
 
 /**
- * Jack 浏览器的网络规则（纯逻辑，界面在 ui/BrowserActivity）。
- * 线路：auto 跟 Jack 专用代理的分流走（国内直连、国外走代理；代理没开就全部直连）；
+ * Kavi 浏览器的网络规则（纯逻辑，界面在 ui/BrowserActivity）。
+ * 线路：auto 跟 Kavi 专用代理的分流走（国内直连、国外走代理；代理没开就全部直连）；
  * proxy 全部走代理；direct 全部直连。走代理时代理起不来就不打开，不偷偷直连。
  */
 object BrowserNet {
@@ -26,7 +26,7 @@ object BrowserNet {
     fun plan(mode: String, c: Net.Config = Net.config, ensure: (Net.Config) -> Boolean = { Net.ensureCore(it) }): Plan {
         if (mode == DIRECT) return Plan.Direct
         if (!c.enabled) {
-            return if (mode == PROXY) Plan.Blocked("Jack 专用代理没开（设置 → Jack 专用代理），选了「全部走代理」就不会直连")
+            return if (mode == PROXY) Plan.Blocked("Kavi 专用代理没开（设置 → Kavi 专用代理），选了「全部走代理」就不会直连")
             else Plan.Direct
         }
         if (!ensure(c)) return Plan.Blocked("代理没能启动：" + (ProxyCore.lastError ?: "原因不明"))
@@ -84,7 +84,7 @@ object BrowserNet {
     )
 
     /**
-     * Jack 在网页上做这一步之前要不要先问用户；要问就返回原因。
+     * Kavi 在网页上做这一步之前要不要先问用户；要问就返回原因。
      * 点到上面那类按钮要问；点提交按钮、在输入框里回车，提交的是 POST 表单（登录除外）也要问。
      * 输入、删字、选择本身不会提交，不问（密码框另外拦）。
      */
@@ -100,7 +100,7 @@ object BrowserNet {
     }
 
     /**
-     * 代理要密码时，只把口令交给 Jack 自己的代理（本机地址 + sing-box 的 realm）。
+     * 代理要密码时，只把口令交给 Kavi 自己的代理（本机地址 + sing-box 的 realm）。
      * sing-box 的响应头写成 `Basic realm="sing-box" charset="UTF-8"`，Chromium 读出来的 realm 是
      * `sing-box" charset="UTF-8`（实测），所以按开头比。
      */

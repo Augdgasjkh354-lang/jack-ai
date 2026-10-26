@@ -59,6 +59,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jack.ai.ChatViewModel
 import com.jack.ai.data.DEFAULT_BASE_URL
+import com.jack.ai.data.COMPRESS_MAX
+import com.jack.ai.data.COMPRESS_MIN
+import kotlin.math.roundToInt
 import com.jack.ai.data.ThinkLevel
 import com.jack.ai.data.modelChoices
 import com.jack.ai.data.costYuan
@@ -195,6 +198,20 @@ fun SettingsScreen(
             }
 
             // ---- 统计 ----
+            // ---- 长对话 ----
+            Section("长对话自动压缩", hint = "对话用到这么多上下文时，较早的部分自动压缩成提要。越高记得越全、每次越贵；模型本身的上限比它低时，以模型为准。") {
+                // 松手才生效：在设置页里上下翻时误碰一下不会改掉
+                var draft by remember(settings.compressTokens) { mutableStateOf(settings.compressTokens / 1000f) }
+                Text("${draft.toInt()}k", style = MaterialTheme.typography.titleMedium)
+                Slider(
+                    value = draft,
+                    onValueChange = { draft = (it / 50).roundToInt() * 50f },
+                    onValueChangeFinished = { vm.updateSettings { s -> s.copy(compressTokens = draft.toInt() * 1000) } },
+                    valueRange = COMPRESS_MIN / 1000f..COMPRESS_MAX / 1000f,
+                    steps = (COMPRESS_MAX - COMPRESS_MIN) / 50_000 - 1,
+                )
+            }
+
             Section("统计") {
                 val monthSpent by produceState<Double?>(null) {
                     val month = java.text.SimpleDateFormat("yyyy-MM", Locale.US).format(java.util.Date())
@@ -255,9 +272,9 @@ fun SettingsScreen(
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("链接用 Jack 浏览器打开")
+                        Text("链接用 Kavi 浏览器打开")
                         Text(
-                            if (settings.linksInApp) "回答和设置里的网页链接在 Jack 浏览器里打开" else "网页链接交给手机的系统浏览器",
+                            if (settings.linksInApp) "回答和设置里的网页链接在 Kavi 浏览器里打开" else "网页链接交给手机的系统浏览器",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -287,14 +304,14 @@ fun SettingsScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = {
                         val date = java.text.SimpleDateFormat("yyyyMMdd", Locale.US).format(java.util.Date())
-                        exportLauncher.launch("JackAI备份-$date.zip")
+                        exportLauncher.launch("Kavi备份-$date.zip")
                     }) { Text("备份") }
                     OutlinedButton(onClick = { importLauncher.launch(arrayOf("application/zip", "application/octet-stream")) }) {
                         Text("恢复")
                     }
                 }
                 Text(
-                    "换手机时，系统自带的迁移不会带走 Jack 的设置。用这里的「备份」导出、在新手机上「恢复」，聊天和普通设置都会回来；Key、令牌、邮箱授权码不在备份里，要重新填。",
+                    "换手机时，系统自带的迁移不会带走 Kavi 的设置。用这里的「备份」导出、在新手机上「恢复」，聊天和普通设置都会回来；Key、令牌、邮箱授权码不在备份里，要重新填。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

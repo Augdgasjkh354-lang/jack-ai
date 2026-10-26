@@ -16,7 +16,7 @@
         android:background="@drawable/widget_logo_bg"
         android:padding="8dp"
         android:src="@drawable/ic_widget_chat"
-        android:contentDescription="Jack AI" />
+        android:contentDescription="Kavi" />
 
     <LinearLayout
         android:layout_width="0dp"

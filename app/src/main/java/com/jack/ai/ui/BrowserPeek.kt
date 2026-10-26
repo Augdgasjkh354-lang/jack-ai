@@ -35,7 +35,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import kotlinx.coroutines.delay
 
 /**
- * Jack 在操作浏览器时，聊天页右上角的小窗：按整屏大小排版、缩小显示，能实时看到它在干什么，点一下进完整浏览器接手。
+ * Kavi 在操作浏览器时，聊天页右上角的小窗：按整屏大小排版、缩小显示，能实时看到它在干什么，点一下进完整浏览器接手。
  * 网页窗口放在这里也让截图能画出来（没放进任何界面的网页窗口截不出图）。
  */
 @Composable
@@ -70,7 +70,7 @@ fun BrowserPeek(modifier: Modifier = Modifier, working: Boolean = true) {
             // 盖一层：小窗里不让点网页，点了就进完整浏览器
             Box(Modifier.matchParentSize().clickable { ctx.startActivity(Intent(ctx, BrowserActivity::class.java)) })
             Text(
-                "Jack 在用浏览器",
+                "Kavi 在用浏览器",
                 Modifier.align(Alignment.BottomStart).fillMaxWidth()
                     .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.9f)).padding(horizontal = 6.dp, vertical = 2.dp),
                 style = MaterialTheme.typography.labelSmall,

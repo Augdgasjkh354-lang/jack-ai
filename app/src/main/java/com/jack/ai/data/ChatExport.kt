@@ -47,7 +47,7 @@ object ChatExport {
                 )
                 if (extra.isNotEmpty()) append("（附件：").append(extra.joinToString("，")).append("）\n\n")
             } else {
-                append("**Jack AI**")
+                append("**Kavi**")
                 if (m.model.isNotEmpty()) append(" · ").append(modelLabel(m.model))
                 append("\n\n")
                 when {
@@ -172,7 +172,7 @@ object ChatExport {
                 }
             }
         } else {
-            val label = layout("Jack AI" + if (m.model.isNotEmpty()) " · " + modelLabel(m.model) else "", paint(30f, ACCENT, bold = true), W - PAD * 2)
+            val label = layout("Kavi" + if (m.model.isNotEmpty()) " · " + modelLabel(m.model) else "", paint(30f, ACCENT, bold = true), W - PAD * 2)
             blocks += Block(label.height + 14) { c -> c.save(); c.translate(PAD.toFloat(), 0f); label.draw(c); c.restore() }
             val md = m.content.trim().ifEmpty { m.error?.let { "（出错：$it）" } ?: "" }
             if (md.isNotEmpty()) {
@@ -214,7 +214,7 @@ object ChatExport {
             "导出于 " + TIME.format(Date()) + if (skipped > 0) " · 只包含最近 ${perMsg.size} 条消息" else "",
             paint(30f, MUTED), W - PAD * 2,
         )
-        val footer = layout("由 Jack AI 导出", paint(28f, MUTED), W - PAD * 2)
+        val footer = layout("由 Kavi 导出", paint(28f, MUTED), W - PAD * 2)
         val headerH = PAD + title.height + 12 + sub.height + 40
         val height = (headerH + total + 24 + footer.height + PAD).coerceAtMost(MAX_H + 400)
 

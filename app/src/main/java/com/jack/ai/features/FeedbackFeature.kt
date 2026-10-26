@@ -48,7 +48,7 @@ class FeedbackFeature(core: AppCore) : Feature(core) {
             }
             val file = withContext(Dispatchers.IO) {
                 val dir = File(app.cacheDir, "exports").apply { mkdirs() }
-                File(dir, "JackAI反馈-${SimpleDateFormat("MMdd-HHmm", Locale.US).format(Date())}.md").apply { writeText(render(list)) }
+                File(dir, "Kavi反馈-${SimpleDateFormat("MMdd-HHmm", Locale.US).format(Date())}.md").apply { writeText(render(list)) }
             }
             onReady(file)
         }
@@ -64,7 +64,7 @@ class FeedbackFeature(core: AppCore) : Feature(core) {
     companion object {
         fun render(list: List<Feedback>): String = buildString {
             val time = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA)
-            append("# Jack AI 问题反馈（${list.size} 条）\n")
+            append("# Kavi 问题反馈（${list.size} 条）\n")
             list.forEachIndexed { n, f ->
                 append("\n---\n\n## ${n + 1}. ${time.format(Date(f.at))}｜${f.convTitle}\n\n")
                 append("- 模型：${f.model}｜App 版本：${f.appVersion}\n")

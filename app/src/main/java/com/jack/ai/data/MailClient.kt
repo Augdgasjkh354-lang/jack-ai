@@ -71,7 +71,7 @@ object MailClient {
         try {
             // 网易邮箱（163/126）要求登录后先报客户端身份，不然会报 Unsafe Login
             runCatching {
-                store.id(mapOf("name" to "JackAI", "version" to "1.0", "vendor" to "JackAI", "support-email" to acc.address))
+                store.id(mapOf("name" to "KaviAI", "version" to "1.0", "vendor" to "KaviAI", "support-email" to acc.address))
             }
             block(store)
         } finally {

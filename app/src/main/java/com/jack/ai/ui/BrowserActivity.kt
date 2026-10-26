@@ -87,7 +87,7 @@ import com.jack.ai.data.Store
 import kotlinx.coroutines.launch
 
 /**
- * Jack 浏览器的完整页面：用户自己翻网页，或者看着 Jack 操作、随时接手。网页窗口和 Jack 用的是同一个（JackBrowser）。
+ * Kavi 浏览器的完整页面：用户自己翻网页，或者看着 Kavi 操作、随时接手。网页窗口和 Kavi 用的是同一个（JackBrowser）。
  * 不能用来登录 Google（Google 不许在 App 内嵌的网页里登录）。
  */
 class BrowserActivity : ComponentActivity() {
@@ -389,7 +389,7 @@ class BrowserActivity : ComponentActivity() {
                 }
             }
             if (b.agentActive()) {
-                Text("Jack 正在用这个浏览器。你可以直接接手操作，比如自己登录。",
+                Text("Kavi 正在用这个浏览器。你可以直接接手操作，比如自己登录。",
                     Modifier.fillMaxWidth().background(colors.secondaryContainer).padding(horizontal = 12.dp, vertical = 6.dp),
                     style = MaterialTheme.typography.labelSmall, color = colors.onSecondaryContainer)
             }
@@ -585,7 +585,7 @@ class BrowserActivity : ComponentActivity() {
                 dismissButton = { TextButton(onClick = { b.external = null }) { Text("不了") } },
             )
         }
-        // Jack 在操作时网页要下载的，等 Jack 用 download 确认；用户自己点的才在这里问
+        // Kavi 在操作时网页要下载的，等 Kavi 用 download 确认；用户自己点的才在这里问
         b.pending?.takeIf { it.byUser }?.let { p ->
             val big = p.size > BrowserDownload.ASK_ABOVE
             AlertDialog(
@@ -593,7 +593,7 @@ class BrowserActivity : ComponentActivity() {
                 title = { Text("下载这个文件？") },
                 text = {
                     Text("「${p.name}」" + (if (p.size > 0) "，${BrowserDownload.sizeText(p.size)}" else "（网站没说多大）") +
-                        "\n存到手机的「下载/JackAI」文件夹。" +
+                        "\n存到手机的「下载/Kavi」文件夹。" +
                         (if (big) "\n文件比较大，会用掉相应的代理流量。" else "") +
                         (if (p.name.endsWith(".apk", true)) "\n这是安卓安装包，只装信得过的来源。" else ""))
                 },
@@ -611,7 +611,7 @@ class BrowserActivity : ComponentActivity() {
                         b.saved = null
                         runCatching {
                             startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(f.uri, f.mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
-                        }.onFailure { b.notice = "手机上没有能打开它的 App，可以在文件管理器的「下载/JackAI」里找到它。" }
+                        }.onFailure { b.notice = "手机上没有能打开它的 App，可以在文件管理器的「下载/Kavi」里找到它。" }
                     }) { Text("打开") }
                 },
                 dismissButton = { TextButton(onClick = { b.saved = null }) { Text("好") } },
@@ -952,10 +952,10 @@ class BrowserActivity : ComponentActivity() {
             verticalArrangement = Arrangement.spacedBy(4.dp)) {
             item {
                 Column(Modifier.padding(top = 24.dp, bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Jack 浏览器", style = MaterialTheme.typography.titleLarge)
+                    Text("Kavi 浏览器", style = MaterialTheme.typography.titleLarge)
                     Text(
-                        "开着 Jack 专用代理时，国外网站自动走代理，不用开系统 VPN，也不影响别的 App。" +
-                            "Jack 也能用这个浏览器替你操作网页，你在这里登录过的网站它也能用。" +
+                        "开着 Kavi 专用代理时，国外网站自动走代理，不用开系统 VPN，也不影响别的 App。" +
+                            "Kavi 也能用这个浏览器替你操作网页，你在这里登录过的网站它也能用。" +
                             "这里的登录状态和手机浏览器不共用。不能用来登录 Google 账号（Google 不允许）。",
                         style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
                     )

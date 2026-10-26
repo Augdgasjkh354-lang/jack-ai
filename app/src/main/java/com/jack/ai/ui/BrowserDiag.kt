@@ -73,7 +73,7 @@ o.push('  '+x.tagName.toLowerCase()+(x.open?' 开着':(x.tagName==='DIALOG'?' �
 
     /** 拼成一份给开发者看的报告。 */
     fun report(header: List<String>, page: String, log: List<String>, recording: Boolean): String = buildString {
-        append("【Jack 浏览器诊断】\n")
+        append("【Kavi 浏览器诊断】\n")
         header.forEach { append(it).append('\n') }
         append("\n【网页现在】\n").append(page.ifBlank { "（读不到）" }).append('\n')
         append("\n【记录】" + if (recording) "（正在记录点击、弹框、请求）\n" else "（只记了出错的；要更细就点「开始记录」，网页会刷新，再照常操作一遍）\n")

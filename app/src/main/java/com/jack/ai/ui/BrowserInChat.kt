@@ -51,7 +51,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Jack 正在操作网页时，回答里显示的实时画面：网页按整屏排版、缩到回答的宽度，能看到它点了哪、输了什么。
+ * Kavi 正在操作网页时，回答里显示的实时画面：网页按整屏排版、缩到回答的宽度，能看到它点了哪、输了什么。
  * 点一下进完整浏览器接手（比如自己登录）。它在的时候，聊天页右上角的小窗就不出来。
  */
 @Composable
@@ -99,7 +99,7 @@ fun BrowserLive() {
     }
 }
 
-/** 这次回答里 Jack 操作网页的每一步：小截图 + 做了什么，横着排，点开看大图。 */
+/** 这次回答里 Kavi 操作网页的每一步：小截图 + 做了什么，横着排，点开看大图。 */
 @Composable
 fun BrowserSteps(steps: List<SearchRecord>) {
     var viewing by remember { mutableStateOf<String?>(null) }

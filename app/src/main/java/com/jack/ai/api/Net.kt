@@ -15,7 +15,7 @@ import java.net.SocketAddress
 import java.net.URI
 
 /**
- * Jack 的网络分流：开了「Jack 专用代理」时，国外的服务走 App 里的代理内核，国内的直连；
+ * Kavi 的网络分流：开了「Kavi 专用代理」时，国外的服务走 App 里的代理内核，国内的直连；
  * 每个连接器也可以单独指定。没开时完全是原来的样子（跟随系统）。
  * 只管走 OkHttp 的请求（模型、联网、连接器、12306……）；邮箱、小工具网页、Python 不在内。
  */
@@ -87,8 +87,8 @@ object Net {
 
     /** 网络出错时告诉模型下一步怎么办：看代理开没开、是不是国外服务。host 不知道就填 null。 */
     fun nextStep(host: String?): String = when {
-        config.enabled -> "下一步：稍后重试一次；还不行就请用户到 设置 → Jack 专用代理 点「测试」看节点通不通，必要时换节点或更新订阅。"
-        host != null && foreign(host) -> "下一步：$host 是国外服务，需要先打开 Jack 专用代理（设置 → Jack 专用代理），再重试。"
+        config.enabled -> "下一步：稍后重试一次；还不行就请用户到 设置 → Kavi 专用代理 点「测试」看节点通不通，必要时换节点或更新订阅。"
+        host != null && foreign(host) -> "下一步：$host 是国外服务，需要先打开 Kavi 专用代理（设置 → Kavi 专用代理），再重试。"
         else -> "下一步：检查手机网络后重试一次；连续失败就如实告诉用户网络有问题，不要反复重试。"
     }
 
@@ -106,7 +106,7 @@ object Net {
     val selector: ProxySelector = selectorFor("auto")
 
     /**
-     * route = auto：按规则；direct：直连（跟随系统）；proxy：走 Jack 专用代理（没开或没节点时请求会失败，不偷偷直连）。
+     * route = auto：按规则；direct：直连（跟随系统）；proxy：走 Kavi 专用代理（没开或没节点时请求会失败，不偷偷直连）。
      */
     fun selectorFor(route: String): ProxySelector = object : ProxySelector() {
         override fun select(uri: URI): List<Proxy> {
@@ -135,6 +135,6 @@ object Net {
     /** 报错时补一句：这个请求是不是走的代理、代理为什么没起来。 */
     fun hint(): String = when {
         !config.enabled -> ""
-        else -> ProxyCore.lastError?.let { "（Jack 专用代理：$it）" } ?: ""
+        else -> ProxyCore.lastError?.let { "（Kavi 专用代理：$it）" } ?: ""
     }
 }

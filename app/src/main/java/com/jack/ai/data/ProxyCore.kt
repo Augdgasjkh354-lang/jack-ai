@@ -12,7 +12,7 @@ import java.net.Socket
 import java.security.SecureRandom
 
 /**
- * Jack 自己用的代理：App 里带一个 sing-box 内核，作为后台小进程跑，只在本机开一个代理端口给 Jack 的请求用。
+ * Kavi 自己用的代理：App 里带一个 sing-box 内核，作为后台小进程跑，只在本机开一个代理端口给 Kavi 的请求用。
  * 不是系统 VPN，手机上别的 App 不受影响。端口要用户名密码，别的 App 蹭不了。
  */
 object ProxyCore {
