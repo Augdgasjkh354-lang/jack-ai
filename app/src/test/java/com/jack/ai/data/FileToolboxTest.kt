@@ -104,4 +104,14 @@ class FileToolboxTest {
         assertTrue(r, r.contains("链接：https://v.douyin.com/iABCdEf/\n"))
         assertTrue(r.contains("to=phone"))
     }
+
+    @Test
+    fun minutesAndSummaryRequests() {
+        val r = Minutes.recording("录音 10月26日 15.30.m4a", 1830)
+        assertTrue(r.contains("「录音 10月26日 15.30.m4a」，约 30:30") && r.contains("transcribe") && r.contains("客户表"))
+        val v = Minutes.summary("【B站】讲清楚复利 https://b23.tv/AbC12 快来看", hasFile = false)
+        assertTrue(v, v.contains("链接：https://b23.tv/AbC12\n") && v.contains("subtitles") && v.contains("audio_only=true"))
+        val f = Minutes.summary(null, hasFile = true)
+        assertTrue(f.contains("transcribe") && !f.contains("链接"))
+    }
 }

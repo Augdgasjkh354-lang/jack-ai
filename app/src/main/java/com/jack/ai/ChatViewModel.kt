@@ -83,6 +83,8 @@ data class UiState(
     val incomingText: String? = null,
     /** 桌面小组件点了话筒，等输入框打开语音识别。 */
     val voiceRequest: Boolean = false,
+    /** 要开始录音纪要（长按图标的「录音纪要」）。 */
+    val recordRequest: Boolean = false,
     /** 从桌面快捷方式进来，要直接打开相机。 */
     val cameraRequest: Boolean = false,
     val routines: List<Routine> = emptyList(),
@@ -675,6 +677,41 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun consumeIncomingText() = _state.update { it.copy(incomingText = null) }
     fun requestVoice() = _state.update { it.copy(voiceRequest = true) }
     fun consumeVoiceRequest() = _state.update { it.copy(voiceRequest = false) }
+    fun requestRecord() = _state.update { it.copy(recordRequest = true) }
+    fun consumeRecordRequest() = _state.update { it.copy(recordRequest = false) }
+
+    /** 录音纪要录完：录音挂在当前对话上发出去，Kavi 转文字、出纪要。正在回答的等它答完。 */
+    fun recordingDone(file: java.io.File, seconds: Long) {
+        viewModelScope.launch {
+            job?.join()
+            val att = Attachment(kind = "file", name = file.name, path = file.absolutePath)
+            _state.update { it.copy(pending = it.pending + att) }
+            send(com.jack.ai.data.Minutes.recording(file.name, seconds))
+        }
+    }
+
+    /** 分享菜单的「用 Jack 总结」：链接或视频、录音文件，开个新对话直接发出去。 */
+    fun summarizeShare(text: String?, uris: List<Uri>) {
+        viewModelScope.launch {
+            if (busy()) stop()
+            job?.join()
+            newChat()
+            val app = getApplication<Application>()
+            val atts = uris.mapNotNull { uri ->
+                try {
+                    com.jack.ai.data.Attachments.importFile(app, uri, keepOriginal = true)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    core.toast("文件读不了：${e.message ?: "读取失败"}")
+                    null
+                }
+            }
+            if (atts.isEmpty() && text.isNullOrBlank()) return@launch
+            _state.update { it.copy(pending = atts) }
+            send(com.jack.ai.data.Minutes.summary(text, atts.isNotEmpty()))
+        }
+    }
     fun requestCamera() = _state.update { it.copy(cameraRequest = true) }
     fun consumeCameraRequest() = _state.update { it.copy(cameraRequest = false) }
 

@@ -117,6 +117,14 @@ class MainActivity : FragmentActivity() {
             vm.inboxShare(text, uris, intent.type)
             return
         }
+        // 从分享菜单的「用 Jack 总结」进来：链接、视频或录音文件，Kavi 转文字再总结
+        if (intent?.component?.className?.endsWith(".SummarizeShare") == true && intent.action == Intent.ACTION_SEND) {
+            stack.clear()
+            val text = listOfNotNull(intent.getStringExtra(Intent.EXTRA_SUBJECT), intent.getStringExtra(Intent.EXTRA_TEXT))
+                .joinToString("\n").takeIf { it.isNotBlank() }
+            vm.summarizeShare(text, listOfNotNull(streamExtra(intent)))
+            return
+        }
         // 从分享菜单的「用 Jack 下载」进来：开个新对话，让 Kavi 把链接里的视频或文件存到手机
         if (intent?.component?.className?.endsWith(".DownloadShare") == true && intent.action == Intent.ACTION_SEND) {
             stack.clear()
@@ -134,6 +142,9 @@ class MainActivity : FragmentActivity() {
             ACTION_CAMERA -> { stack.clear(); vm.newChat(); vm.requestCamera() }
             ACTION_OPEN_CHAT -> { stack.clear(); vm.mergeInbox(intent.getStringExtra("convId")) }
             ACTION_VOICE -> { stack.clear(); vm.newChat(); vm.requestVoice() }
+            ACTION_RECORD -> { stack.clear(); if (RecordService.current == null) { vm.newChat(); vm.requestRecord() } }
+            // 通知栏点了「停止并整理」：停下，录好的由聊天页交给 Kavi
+            ACTION_RECORD_STOP -> { stack.clear(); RecordService.stop(this) }
             Intent.ACTION_SEND -> {
                 stack.clear()
                 val uri = streamExtra(intent)
@@ -309,6 +320,8 @@ class MainActivity : FragmentActivity() {
 
         const val ACTION_NEW_CHAT = "com.jack.ai.NEW_CHAT"
         const val ACTION_VOICE = "com.jack.ai.VOICE"
+        const val ACTION_RECORD = "com.jack.ai.RECORD"
+        const val ACTION_RECORD_STOP = "com.jack.ai.RECORD_STOP"
         const val ACTION_NEW_WORK = "com.jack.ai.NEW_WORK"
         const val ACTION_CAMERA = "com.jack.ai.CAMERA"
         const val ACTION_OPEN_CHAT = "com.jack.ai.OPEN_CHAT"

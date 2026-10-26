@@ -8,5 +8,6 @@
     <string name="sc_chat">新 Chat</string>
     <string name="sc_work">新 Work</string>
     <string name="sc_voice">语音提问</string>
+    <string name="sc_record">录音纪要</string>
     <string name="sc_camera">拍照提问</string>
 </resources>

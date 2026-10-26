@@ -591,6 +591,48 @@ private fun startVoiceIntent(ctx: android.content.Context, launcher: androidx.ac
     }
 }
 
+/** 正在录音时输入框上面的一条：时长、声音大小，暂停 / 继续、停止并整理、放弃。 */
+@Composable
+private fun RecordBar(session: com.jack.ai.RecordService.Session) {
+    val ctx = LocalContext.current
+    val colors = MaterialTheme.colorScheme
+    var now by remember { mutableStateOf(android.os.SystemClock.elapsedRealtime()) }
+    var level by remember { mutableStateOf(0f) }
+    var confirmCancel by remember { mutableStateOf(false) }
+    LaunchedEffect(session) {
+        while (true) {
+            now = android.os.SystemClock.elapsedRealtime()
+            // 声音大小：慢慢落下，看着不闪
+            level = maxOf(com.jack.ai.RecordService.level(), level * 0.7f)
+            kotlinx.coroutines.delay(150)
+        }
+    }
+    val paused = session.pausedAt != null
+    Surface(shape = RoundedCornerShape(18.dp), color = colors.errorContainer, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp)) {
+            Box(Modifier.size(10.dp).background(if (paused) colors.outline else colors.error, CircleShape))
+            Spacer(Modifier.size(8.dp))
+            Column(Modifier.weight(1f)) {
+                Text((if (paused) "暂停 " else "录音 ") + com.jack.ai.data.AudioPcm.stamp(session.elapsed(now) / 1000),
+                    style = MaterialTheme.typography.titleSmall, color = colors.onErrorContainer)
+                Box(Modifier.padding(top = 4.dp).fillMaxWidth(0.8f).height(3.dp).background(colors.onErrorContainer.copy(alpha = 0.15f), CircleShape)) {
+                    Box(Modifier.fillMaxWidth(if (paused) 0f else level.coerceIn(0.02f, 1f)).height(3.dp).background(colors.onErrorContainer, CircleShape))
+                }
+            }
+            TextButton(onClick = { com.jack.ai.RecordService.pause(ctx) }) { Text(if (paused) "继续" else "暂停") }
+            TextButton(onClick = { com.jack.ai.RecordService.stop(ctx) }) { Text("停止并整理") }
+            IconButton(onClick = { confirmCancel = true }) { Icon(Icons.Default.Close, "放弃") }
+        }
+    }
+    if (confirmCancel) AlertDialog(
+        onDismissRequest = { confirmCancel = false },
+        title = { Text("放弃这段录音？") },
+        text = { Text("录到的会删掉，不会交给 Kavi。") },
+        confirmButton = { TextButton(onClick = { confirmCancel = false; com.jack.ai.RecordService.cancel(ctx) }) { Text("放弃") } },
+        dismissButton = { TextButton(onClick = { confirmCancel = false }) { Text("接着录") } },
+    )
+}
+
 @Composable
 private fun InputBar(
     vm: ChatViewModel,
@@ -651,6 +693,36 @@ private fun InputBar(
         }
     }
     fun startVoice() = startVoiceIntent(ctx, speech)
+    // 录音纪要：先要麦克风权限，再开录（录在前台服务里）
+    val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+        if (ok) com.jack.ai.RecordService.start(ctx) else Toast.makeText(ctx, "没有麦克风权限，录不了音。可以在系统设置里给 Jack 打开", Toast.LENGTH_LONG).show()
+    }
+    fun startRecord() {
+        if (androidx.core.content.ContextCompat.checkSelfPermission(ctx, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            com.jack.ai.RecordService.start(ctx)
+        } else runCatching { micPermission.launch(android.Manifest.permission.RECORD_AUDIO) }
+    }
+    LaunchedEffect(state.recordRequest) {
+        if (state.recordRequest) {
+            vm.consumeRecordRequest()
+            startRecord()
+        }
+    }
+    // 录完（在这里点停、或在通知栏点「停止并整理」）：交给 Kavi
+    val recorded = com.jack.ai.RecordService.done
+    LaunchedEffect(recorded) {
+        if (recorded != null) {
+            com.jack.ai.RecordService.done = null
+            vm.recordingDone(recorded.file, recorded.seconds)
+        }
+    }
+    val recordError = com.jack.ai.RecordService.error
+    LaunchedEffect(recordError) {
+        if (recordError != null) {
+            com.jack.ai.RecordService.error = null
+            Toast.makeText(ctx, recordError, Toast.LENGTH_LONG).show()
+        }
+    }
     mentionPick?.let { options ->
         AlertDialog(
             onDismissRequest = { mentionPick = null },
@@ -685,6 +757,7 @@ private fun InputBar(
                 Text("正在压缩较早的对话…", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
             }
         }
+        com.jack.ai.RecordService.current?.let { RecordBar(it) }
         Surface(
             shape = RoundedCornerShape(26.dp),
             // 输入框半透明，能隐约看到后面的消息
@@ -743,6 +816,15 @@ private fun InputBar(
                                 onClick = {
                                     attachMenu = false
                                     startCamera()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("录音纪要") },
+                                leadingIcon = { Icon(AppIcons.Mic, null) },
+                                enabled = com.jack.ai.RecordService.current == null,
+                                onClick = {
+                                    attachMenu = false
+                                    startRecord()
                                 },
                             )
                             DropdownMenuItem(

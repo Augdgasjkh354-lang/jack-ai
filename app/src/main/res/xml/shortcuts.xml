@@ -17,4 +17,8 @@
         android:shortcutShortLabel="@string/sc_camera" android:shortcutLongLabel="@string/sc_camera">
         <intent android:action="com.jack.ai.CAMERA" android:targetPackage="com.jack.ai" android:targetClass="com.jack.ai.MainActivity" />
     </shortcut>
+    <shortcut android:shortcutId="record" android:enabled="true" android:icon="@drawable/ic_sc_mic"
+        android:shortcutShortLabel="@string/sc_record" android:shortcutLongLabel="@string/sc_record">
+        <intent android:action="com.jack.ai.RECORD" android:targetPackage="com.jack.ai" android:targetClass="com.jack.ai.MainActivity" />
+    </shortcut>
 </shortcuts>

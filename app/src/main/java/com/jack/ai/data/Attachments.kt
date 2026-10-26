@@ -19,6 +19,9 @@ import java.util.zip.ZipInputStream
 /** 单个文件最多保留的文字数，避免一次塞爆上下文。 */
 private const val MAX_FILE_CHARS = 200_000
 private const val MAX_ORIGINAL_BYTES = 30L * 1024 * 1024
+/** 录音、视频原文件最大多少（转文字最长 3 小时，够用）。 */
+private const val MAX_MEDIA_BYTES = 1024L * 1024 * 1024
+private val MEDIA_EXT = setOf("mp3", "m4a", "aac", "wav", "amr", "ogg", "opus", "flac", "mp4", "mov", "3gp", "mkv", "webm")
 /** 当文字读的文件最多这么大；再大的只放进对话文件夹，不读内容。 */
 private const val MAX_TEXT_BYTES = 8 * 1024 * 1024
 
@@ -79,8 +82,11 @@ object Attachments {
         val name = displayName(ctx, uri)
         val lower = name.lowercase()
         val mime = ctx.contentResolver.getType(uri).orEmpty()
+        // 录音、视频：不读文字，原文件放进对话文件夹，之后转文字用（可以比别的文件大很多）
+        val media = mime.startsWith("audio/") || mime.startsWith("video/") || lower.substringAfterLast('.', "") in MEDIA_EXT
         val read = runCatching {
             when {
+                media -> throw IllegalArgumentException("音视频不读文字")
                 lower.endsWith(".pdf") || mime == "application/pdf" -> readPdf(ctx, uri)
                 lower.endsWith(".docx") -> readDocx(ctx, uri)
                 lower.endsWith(".doc") || lower.endsWith(".xls") || lower.endsWith(".ppt") ->
@@ -96,8 +102,8 @@ object Attachments {
         val att = Attachment(kind = "file", name = name)
         val path = if (keepOriginal) {
             val size = ctx.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L
-            if (size > MAX_ORIGINAL_BYTES) {
-                if (text.isEmpty()) throw IllegalArgumentException("「$name」太大了（超过 30 MB）")
+            if (size > (if (media) MAX_MEDIA_BYTES else MAX_ORIGINAL_BYTES)) {
+                if (text.isEmpty()) throw IllegalArgumentException("「$name」太大了（超过 ${if (media) "1 GB" else "30 MB"}）")
                 ""
             } else {
                 val dir = File(ctx.filesDir, "staging/${att.id}").apply { mkdirs() }
