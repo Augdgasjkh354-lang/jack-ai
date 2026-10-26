@@ -123,7 +123,9 @@ internal suspend fun ToolSession.listRoutines() = runTool("查看提醒和任务
 }
 
 internal suspend fun ToolSession.removeRoutine(id: String) = runTool("删除提醒或任务") {
-    val r = host.store.loadRoutines().firstOrNull { it.id.startsWith(id.trim()) }
+    // 编号前缀至少 4 位（和 cancel_schedule 一样）：太短的前缀会删到不相干的那条
+    val key = id.trim().removePrefix("编号").trim()
+    val r = host.store.loadRoutines().firstOrNull { key.length >= 4 && it.id.startsWith(key) }
     if (r == null) "没有找到这个编号。" to SearchRecord("删除提醒或任务", error = "没找到")
     else {
         withContext(Dispatchers.Main) { host.deleteRoutine(r.id) }

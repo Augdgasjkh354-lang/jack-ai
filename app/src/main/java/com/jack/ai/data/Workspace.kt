@@ -87,6 +87,9 @@ object Workspace {
 
     fun hasSource(file: File) = sourceFile(file).exists()
 
+    /** 文件被整份重写了：旧底稿作废，不然读到、改到的还是旧底稿。 */
+    fun dropSource(file: File) { sourceFile(file).delete() }
+
     /** 底稿就是一整段文字的工具：Word/PDF 是 Markdown，小工具是 HTML。其他的底稿是 JSON。 */
     private val TEXT_FIELD = mapOf("create_word" to "markdown", "create_pdf" to "markdown", "create_app" to "html")
     private val MARKDOWN_TOOLS = TEXT_FIELD.keys

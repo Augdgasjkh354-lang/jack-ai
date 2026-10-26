@@ -151,8 +151,9 @@ object Tables {
         val db = normDate(w.value)
         val v = if (da != null && db != null && w.op != "contains") da else raw
         val wv = if (da != null && db != null && w.op != "contains") db else w.value
-        val a = v.toDoubleOrNull()
-        val b = wv.toDoubleOrNull()
+        // 「1,200」「¥50」「30元」也按数字比（和排序、合计一样），不然 > < 会按文字比错
+        val a = number(v)
+        val b = number(wv)
         val cmp = if (a != null && b != null) a.compareTo(b) else v.compareTo(wv)
         when (w.op) {
             "=", "==" -> if (a != null && b != null) a == b else v == wv

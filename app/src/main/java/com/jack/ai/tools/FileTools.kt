@@ -131,6 +131,8 @@ internal suspend fun ToolSession.writeFile(args: JsonObject): String {
         withContext(Dispatchers.IO) {
             wsDir.mkdirs()
             file.writeText(args["content"].text())
+            // 覆盖了生成过的文件（比如小工具的 html）：旧底稿作废，免得 edit_file 拿旧底稿重新生成、把这次写的冲掉
+            Workspace.dropSource(file)
         }
         ui.attach(file)
         "已写入「${file.name}」（${file.length()} 字节）。" + verifyText(file) to SearchRecord("写入 ${file.name}")

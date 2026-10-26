@@ -297,7 +297,8 @@ object JackBrowser {
         if (tabs.isEmpty()) return
         applyRtc()
         appliedBypass = listOf("-")
-        reloadCurrent()
+        // 先按新规则重设代理（「总走代理」的网站进出直连名单），再重新打开；只 reload 的话这一页还按旧规则走
+        scope.launch { if (prepare(app) == null) withContext(Dispatchers.Main) { reloadCurrent() } }
     }
 
     /**

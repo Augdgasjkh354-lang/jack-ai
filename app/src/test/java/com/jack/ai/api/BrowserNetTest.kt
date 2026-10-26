@@ -49,6 +49,12 @@ class BrowserNetTest {
         assertEquals(Kind.EXTERNAL, BrowserNet.classify("intent://scan/#Intent;scheme=zxing;end"))
         assertFalse(BrowserNet.isLocal("172.32.0.1"))
         assertFalse(BrowserNet.isLocal("github.com"))
+        // 以 fc / fd 开头的网站不是 IPv6 局域网地址
+        assertEquals(Kind.OPEN, BrowserNet.classify("https://fc2.com/"))
+        assertEquals(Kind.OPEN, BrowserNet.classify("https://f-droid.org/"))
+        assertFalse(BrowserNet.isLocal("fdroid.org"))
+        assertTrue(BrowserNet.isLocal("fd12:3456::1"))
+        assertTrue(BrowserNet.isLocal("[fc00::1]"))
     }
 
     @Test

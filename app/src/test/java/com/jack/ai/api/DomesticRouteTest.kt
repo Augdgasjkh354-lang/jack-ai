@@ -18,4 +18,11 @@ class DomesticRouteTest {
         listOf("www.google.com", "tinypng.com", "github.com", "en.wikipedia.org", "notmi.com.evil.io")
             .forEach { assertTrue(it, Net.foreign(it)) }
     }
+
+    @Test
+    fun localNetworkGoesDirect() {
+        listOf("localhost", "127.0.0.1", "192.168.1.5", "10.0.0.2", "172.20.1.1", "169.254.1.1", "[::1]", "nas.local")
+            .forEach { assertFalse(it, Net.foreign(it)) }
+        assertTrue(Net.foreign("fc2.com"))
+    }
 }

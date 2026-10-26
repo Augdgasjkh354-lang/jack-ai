@@ -30,6 +30,10 @@ class TablesTest {
         // 9 < 10 按数字比，不按文字比
         val n = Table("n", listOf("x"), listOf(listOf("9"), listOf("10")))
         assertTrue(Tables.matches(n, listOf("9"), listOf(Tables.Where("x", "<", "10"))))
+        // 带千分位、¥、元的金额也按数字比
+        val m = Table("m", listOf("金额"), listOf(listOf("1,200"), listOf("¥50"), listOf("300元")))
+        assertEquals(2, m.rows.count { Tables.matches(m, it, listOf(Tables.Where("金额", ">", "100"))) })
+        assertTrue(Tables.matches(m, m.rows[0], listOf(Tables.Where("金额", "=", "1200"))))
         assertFalse(Tables.matches(t, t.rows[0], listOf(Tables.Where("不存在", "=", "1"))))
     }
 

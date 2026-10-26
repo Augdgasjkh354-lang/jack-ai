@@ -79,7 +79,8 @@ object BrowserNet {
     fun isLocal(host: String): Boolean {
         val h = host.lowercase().trim('[', ']').trimEnd('.')
         if (h.isEmpty() || h == "localhost" || h.endsWith(".localhost") || h.endsWith(".local")) return true
-        if (h == "::1" || h.startsWith("fe80:") || h.startsWith("fc") || h.startsWith("fd") || h == "::") return true
+        // fc00::/7、fe80:: 只认 IPv6 地址（带冒号），fc2.com、fdroid.org 这类网站不算
+        if (':' in h && (h == "::1" || h == "::" || h.startsWith("fe80:") || h.startsWith("fc") || h.startsWith("fd"))) return true
         val p = h.split('.').mapNotNull { it.toIntOrNull() }
         if (p.size != 4 || h.count { it == '.' } != 3) return false
         return p[0] == 127 || p[0] == 10 || p[0] == 0 || (p[0] == 169 && p[1] == 254) ||

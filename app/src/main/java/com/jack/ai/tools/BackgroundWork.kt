@@ -102,8 +102,10 @@ suspend fun runBackgroundWork(
     val conv = store.loadConversations().firstOrNull { it.id == r.convId }?.copy(work = true)
         ?: Conversation(id = r.convId, title = "⏰ " + r.title, work = true)
     val skills = s.activeSkills()
+    // 项目里设的任务：工具也要知道在哪个项目（隐私项目的隔离、项目资料的检索都靠它）
+    val project = conv.projectId?.let { id -> store.loadProjects().firstOrNull { it.id == id } }
     // allow 筛过的工具列表；use_skill 打开了新技能时重算（见下面 retool）
-    fun toolsFor(unlocked: Set<String>) = PromptBuilder.toolSet(s, skills, conv, null, unlocked)?.let { all ->
+    fun toolsFor(unlocked: Set<String>) = PromptBuilder.toolSet(s, skills, conv, project, unlocked)?.let { all ->
         kotlinx.serialization.json.JsonArray(all.filter { t ->
             val name = ((t as? kotlinx.serialization.json.JsonObject)?.get("function") as? kotlinx.serialization.json.JsonObject)?.get("name")
             allow((name as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty(), null)
@@ -111,7 +113,6 @@ suspend fun runBackgroundWork(
     }
     val tools = toolsFor(conv.skillTools)
     // 隐私项目里的任务不带全局记忆和日记
-    val project = conv.projectId?.let { id -> store.loadProjects().firstOrNull { it.id == id } }
     val memories = if (s.memoryEnabled && conv.globalAllowed(project)) store.loadMemories() else emptyList()
     val journal = store.loadDreams().firstOrNull { it.journal.isNotBlank() }?.journal.orEmpty()
     val now = SimpleDateFormat("yyyy年M月d日 EEEE HH:mm", Locale.CHINA).format(Date())
@@ -143,7 +144,7 @@ suspend fun runBackgroundWork(
         onProgress("接着上次断掉的地方做")
     }
     val files = mutableListOf<GeneratedFile>()
-    val session = ToolSession(host, s, conv, null, skills, object : ToolUi {
+    val session = ToolSession(host, s, conv, project, skills, object : ToolUi {
         override fun started(label: String) = onProgress(label)
         override fun finished(label: String, record: SearchRecord) {}
         override fun attach(file: File) {

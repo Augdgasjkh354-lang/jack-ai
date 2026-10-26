@@ -83,7 +83,8 @@ object Net {
     /** 国外服务（不在直连名单里，也不是本机、局域网）。 */
     fun foreign(host: String): Boolean {
         val h = host.lowercase().trimEnd('.')
-        if (h.isEmpty() || h == "localhost" || h.startsWith("127.") || h == "::1" || h.startsWith("10.") || h.startsWith("192.168.")) return false
+        // 本机和局域网（172.16–31、169.254、[::1] 这类也算）直连，交给代理只会连不上
+        if (h.isEmpty() || BrowserNet.isLocal(h)) return false
         return DOMESTIC.none { d -> if (d.startsWith(".")) h.endsWith(d) else h == d || h.endsWith(".$d") }
     }
 

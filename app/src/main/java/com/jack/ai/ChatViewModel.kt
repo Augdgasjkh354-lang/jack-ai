@@ -390,7 +390,14 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val old = conv.messages[idx]
         val trimmed = text.trim()
         if (trimmed.isEmpty() && old.attachments.isEmpty()) return
-        // 正在回答时先停下，等旧的收尾（它会把 streaming 置回 false）再开始
+        // 别的对话正在回答：不替用户停掉它（和发消息一样，先说一声）
+        val sid = _state.value.streamingId
+        if (busy() && sid != null && sid != conv.id) {
+            val other = _state.value.conversations.firstOrNull { it.id == sid }?.title ?: "另一个对话"
+            _state.update { it.copy(toast = "「$other」还在回答，等它写完再改，或者回去点停止") }
+            return
+        }
+        // 这个对话正在回答时先停下，等旧的收尾（它会把 streaming 置回 false）再开始
         val running = job
         stop()
         viewModelScope.launch {
