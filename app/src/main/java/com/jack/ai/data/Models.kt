@@ -238,6 +238,8 @@ data class Settings(
     /** 按 App 分流：这些 App 也走 Kavi 专用代理（系统 VPN，只管它们）；proxyAppsOn 是开关。 */
     val proxyApps: List<String> = emptyList(),
     val proxyAppsOn: Boolean = false,
+    /** 代理的加强保护（只挑加密强的节点自动选、加密 DNS、浏览器防 WebRTC 泄漏、按网站总走代理）；关掉回到原来的做法。 */
+    val proxyHardened: Boolean = true,
     /** Notion 内部集成的密钥（ntn_…）。不进备份。 */
     val notionToken: String = "",
     /** GitHub 令牌（只读权限就够）。不填也能看公开项目；不进备份。 */

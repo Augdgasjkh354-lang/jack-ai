@@ -92,7 +92,8 @@ fun ProxySection(vm: ChatViewModel, s: Settings) {
                 Text(
                     "${s.proxyNodes.size} 个节点" + (if (s.proxySub.isNotBlank()) " · 来自订阅" else "") +
                         (ratings.count { it.level != NodeSecurity.Level.STRONG }.takeIf { it > 0 }?.let { n ->
-                            if (n == s.proxyNodes.size) " · 全都加密弱或不加密" else " · $n 个加密弱或不加密，自动选时跳过"
+                            if (n == s.proxyNodes.size) " · 全都加密弱或不加密"
+                            else " · $n 个加密弱或不加密" + if (s.proxyHardened) "，自动选时跳过" else ""
                         } ?: " · 都是加密强的"),
                     style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
                 )
@@ -123,8 +124,18 @@ fun ProxySection(vm: ChatViewModel, s: Settings) {
         Text("⚠ 这个节点${r.level.label}：${r.why}。在公共 Wi-Fi 上别人可能看到或篡改经过它的内容，能换就换个加密强的。",
             style = MaterialTheme.typography.bodySmall, color = colors.error)
     }
-    Text("查域名用的是加密 DNS（阿里 DoH）：连的 Wi-Fi 和运营商看不到 Kavi 访问了哪些网站。",
-        style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+    if (s.proxyNodes.isNotEmpty()) Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text("加强保护", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                if (s.proxyHardened) "开着：自动选节点只挑加密强的；查域名用加密 DNS（阿里 DoH），Wi-Fi 和运营商看不到访问了哪些网站；" +
+                    "Kavi 浏览器不让网页靠 WebRTC 查到真实 IP；「这个网站总走代理」生效。"
+                else "关着：和原来一样，自动选节点用全部节点，用手机自带的 DNS，浏览器不拦 WebRTC，按网站总走代理先不生效（记录留着）。",
+                style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
+            )
+        }
+        Switch(s.proxyHardened, { on -> vm.updateSettings { it.copy(proxyHardened = on) } })
+    }
     if (s.proxyNodes.isNotEmpty()) ProxyAppsSection(vm, s)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedButton(enabled = !busy, onClick = {

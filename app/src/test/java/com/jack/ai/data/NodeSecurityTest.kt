@@ -53,4 +53,14 @@ class NodeSecurityTest {
         listOf("localhost", "127.0.0.1", "192.168.1.5", "::1", "nas", "printer.local", "router.lan").forEach { assertTrue(it, SecureDns.skip(it)) }
         listOf("api.deepseek.com", "github.com").forEach { assertFalse(it, SecureDns.skip(it)) }
     }
+
+    @Test
+    fun switchedOffMeansTheOriginalBehaviour() {
+        val strong = ProxyNodes.parseUri("trojan://pw@x.com:443?sni=x.com#strong")!!
+        val plain = ProxyNodes.parseUri("vless://11111111-2222-3333-4444-555555555555@y.com:80#plain")!!
+        val cfg = Json.parseToJsonElement(ProxyCore.config(listOf(plain, strong), "", 1080, "u", "p", hardened = false)).jsonObject
+        val auto = cfg["outbounds"]!!.jsonArray.first { it.jsonObject["tag"]!!.jsonPrimitive.content == "auto" }.jsonObject
+        assertEquals(listOf("n0", "n1"), auto["outbounds"]!!.jsonArray.map { it.jsonPrimitive.content })
+        assertEquals("udp", cfg["dns"]!!.jsonObject["servers"]!!.jsonArray[0].jsonObject["type"]!!.jsonPrimitive.content)
+    }
 }

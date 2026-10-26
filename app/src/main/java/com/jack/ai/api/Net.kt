@@ -47,6 +47,8 @@ object Net {
         val enabled: Boolean = false,
         val nodes: List<ProxyNode> = emptyList(),
         val selected: String = "",
+        /** 加强保护：只挑加密强的节点自动选、加密 DNS、浏览器防 WebRTC 泄漏、按网站总走代理。关掉回到原来的做法。 */
+        val hardened: Boolean = true,
     )
 
     @Volatile var config = Config()
@@ -70,7 +72,7 @@ object Net {
 
     /** 设置变了（读出或保存设置时）就更新；关掉代理时顺手停掉内核。 */
     fun apply(s: Settings) {
-        val c = Config(s.proxyEnabled && s.proxyNodes.isNotEmpty(), s.proxyNodes, s.proxyNode)
+        val c = Config(s.proxyEnabled && s.proxyNodes.isNotEmpty(), s.proxyNodes, s.proxyNode, s.proxyHardened)
         config = c
         if (!c.enabled && ProxyCore.isRunning) ProxyCore.stop()
     }
@@ -96,7 +98,7 @@ object Net {
     fun ensureCore(c: Config = config): Boolean {
         val bin = binary ?: return false
         val dir = appDir ?: return false
-        return ProxyCore.ensure(bin, dir, c.nodes, c.selected)
+        return ProxyCore.ensure(bin, dir, c.nodes, c.selected, c.hardened)
     }
 
     /** 本机一个没人听的端口：内核起不来时把请求指到这里，宁可失败也不偷偷直连。 */

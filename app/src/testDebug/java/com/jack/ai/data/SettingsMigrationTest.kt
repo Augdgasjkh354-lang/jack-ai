@@ -47,4 +47,14 @@ class SettingsMigrationTest {
         Store(ctx).saveSettings(Store(ctx).loadSettings().copy(compressTokens = 5_000_000))
         assertEquals(COMPRESS_MAX, Store(ctx).loadSettings().compressTokens)
     }
+
+    @Test
+    fun hardenedSwitchSticksAndReachesTheNetwork() {
+        assertEquals(true, Store(ctx).loadSettings().proxyHardened)
+        Store(ctx).saveSettings(Store(ctx).loadSettings().copy(proxyHardened = false))
+        assertEquals(false, Store(ctx).loadSettings().proxyHardened)
+        assertEquals(false, com.jack.ai.api.Net.config.hardened)
+        Store(ctx).saveSettings(Store(ctx).loadSettings().copy(proxyHardened = true))
+        assertEquals(true, com.jack.ai.api.Net.config.hardened)
+    }
 }

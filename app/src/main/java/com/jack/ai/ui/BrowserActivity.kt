@@ -362,11 +362,12 @@ class BrowserActivity : ComponentActivity() {
                                 }
                             })
                         }
-                        if (has && b.route == BrowserNet.AUTO) DropdownMenuItem(text = { Text((if (b.proxyForcedHere()) "✓ " else "    ") + "这个网站总走代理") }, onClick = {
+                        // 这两项属于设置里的「加强保护」，关着时不出来
+                        if (has && b.route == BrowserNet.AUTO && Net.config.hardened) DropdownMenuItem(text = { Text((if (b.proxyForcedHere()) "✓ " else "    ") + "这个网站总走代理") }, onClick = {
                             menu = false
                             lifecycleScope.launch { b.notice = b.toggleProxySite(this@BrowserActivity) }
                         })
-                        DropdownMenuItem(text = { Text((if (b.webrtcAllowed) "✓ " else "    ") + "允许网页视频通话（会暴露真实 IP）") }, onClick = {
+                        if (Net.config.hardened) DropdownMenuItem(text = { Text((if (b.webrtcAllowed) "✓ " else "    ") + "允许网页视频通话（会暴露真实 IP）") }, onClick = {
                             menu = false
                             b.changeWebrtc(!b.webrtcAllowed)
                             b.notice = if (b.webrtcAllowed) "已允许 WebRTC：网页能视频通话，但也能查到你的真实 IP" else "已关掉 WebRTC 查 IP：网页查不到你的真实 IP，视频通话可能用不了"

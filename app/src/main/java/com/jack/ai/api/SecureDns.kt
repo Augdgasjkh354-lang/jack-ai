@@ -36,7 +36,8 @@ object SecureDns : Dns {
     }
 
     override fun lookup(hostname: String): List<InetAddress> {
-        if (skip(hostname)) return Dns.SYSTEM.lookup(hostname)
+        // 加强保护关着：和原来一样用手机自带的 DNS
+        if (skip(hostname) || !Net.config.hardened) return Dns.SYSTEM.lookup(hostname)
         val now = System.currentTimeMillis()
         cache[hostname]?.let { (at, list) -> if (now - at < TTL) return list }
         val list = runCatching { doh.lookup(hostname) }.getOrNull()?.takeIf { it.isNotEmpty() }

@@ -257,7 +257,10 @@ object JackBrowser {
     }
 
     /** 当前网站是不是设了「总走代理」。 */
-    fun proxyForcedHere() = BrowserPages.site(address).let { s -> s.isNotEmpty() && proxySites.any { s == it || s.endsWith(".$it") } }
+    fun proxyForcedHere() = Net.config.hardened && BrowserPages.site(address).let { s -> s.isNotEmpty() && proxySites.any { s == it || s.endsWith(".$it") } }
+
+    /** 要不要拦 WebRTC 查 IP：加强保护开着、用户也没放开视频通话。 */
+    fun rtcBlocked() = !webrtcAllowed && Net.config.hardened
 
     /** 当前网站「总走代理」开 / 关；设好后重新打开这一页。返回给用户看的一句话。 */
     suspend fun toggleProxySite(ctx: Context): String {
@@ -275,10 +278,25 @@ object JackBrowser {
     fun changeWebrtc(allowed: Boolean) {
         webrtcAllowed = allowed
         prefs().edit().putBoolean("webrtc", allowed).apply()
-        if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) tabs.forEach { t ->
-            if (allowed) { t.rtcScript?.remove(); t.rtcScript = null }
+        applyRtc()
+        reloadCurrent()
+    }
+
+    /** 每个标签页按现在的设置装上或拆掉防泄漏脚本。 */
+    private fun applyRtc() {
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return
+        val block = rtcBlocked()
+        tabs.forEach { t ->
+            if (!block) { t.rtcScript?.remove(); t.rtcScript = null }
             else if (t.rtcScript == null) t.web?.let { w -> t.rtcScript = runCatching { androidx.webkit.WebViewCompat.addDocumentStartJavaScript(w, RTC_JS, setOf("*")) }.getOrNull() }
         }
+    }
+
+    /** 设置里的「加强保护」开关变了：防泄漏脚本跟着装拆，当前页按新规则重新打开。在主线程调。 */
+    fun protectionChanged() {
+        if (tabs.isEmpty()) return
+        applyRtc()
+        appliedBypass = listOf("-")
         reloadCurrent()
     }
 
@@ -484,7 +502,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
             if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
                 runCatching { androidx.webkit.WebViewCompat.addDocumentStartJavaScript(this, KEEP_BLOB_JS, setOf("*")) }
                 // 不让网页靠 WebRTC 查到真实 IP（每个嵌入框也装）
-                if (!webrtcAllowed) t.rtcScript = runCatching { androidx.webkit.WebViewCompat.addDocumentStartJavaScript(this, RTC_JS, setOf("*")) }.getOrNull()
+                if (rtcBlocked()) t.rtcScript = runCatching { androidx.webkit.WebViewCompat.addDocumentStartJavaScript(this, RTC_JS, setOf("*")) }.getOrNull()
             }
         }
         tabs += t
@@ -805,7 +823,8 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
     /** 按线路设好代理再执行 then；走代理但代理起不来就不执行，返回原因。 */
     suspend fun prepare(ctx: Context): String? {
         withContext(Dispatchers.Main) { webView(ctx) }
-        val plan = withContext(Dispatchers.IO) { BrowserNet.plan(route, always = proxySites) }
+        // 「总走代理」的网站是加强保护的一部分：关着时照原来的规则走
+        val plan = withContext(Dispatchers.IO) { BrowserNet.plan(route, always = if (Net.config.hardened) proxySites else emptySet()) }
         return withContext(Dispatchers.Main) {
             when (plan) {
                 is BrowserNet.Plan.Blocked -> plan.reason
@@ -987,7 +1006,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
 
         override fun onPageCommitVisible(view: WebView, url: String) {
             // 不支持开头注入的旧网页组件：页面露出来时补上防泄漏（晚了一点，聊胜于无）
-            if (!webrtcAllowed && t.rtcScript == null) view.evaluateJavascript(RTC_JS, null)
+            if (rtcBlocked() && t.rtcScript == null) view.evaluateJavascript(RTC_JS, null)
             // 不支持开头注入的旧网页组件：页面露出来时补装钩子
             if (t.diagOn && t.diagScript == null) view.evaluateJavascript(BrowserDiag.HOOK_JS, null)
             widenIfDesktop(view, url)

@@ -42,15 +42,16 @@ object ProxyCore {
      * 生成 sing-box 配置：本机一个带口令的 mixed 入口（HTTP 和 SOCKS 都认），出口是用户的节点；
      * 多个节点时加一个「自动选最快」（只挑加密强的）。节点的服务器域名用阿里的加密 DNS 解析（安卓上内核读不到系统 DNS）。
      */
-    fun config(nodes: List<ProxyNode>, selected: String, port: Int, user: String, pass: String): String = buildJsonObject {
+    fun config(nodes: List<ProxyNode>, selected: String, port: Int, user: String, pass: String, hardened: Boolean = true): String = buildJsonObject {
         put("log", buildJsonObject { put("level", "warn") })
         put("dns", buildJsonObject {
             put("servers", buildJsonArray {
                 // 解析节点的域名用加密 DNS（阿里 DoH）：公共 Wi-Fi、运营商看不到连的是哪个节点
-                add(buildJsonObject {
+                if (hardened) add(buildJsonObject {
                     put("type", "https"); put("tag", "dns"); put("server", "223.5.5.5")
                     put("tls", buildJsonObject { put("enabled", true); put("server_name", "dns.alidns.com") })
                 })
+                else add(buildJsonObject { put("type", "udp"); put("tag", "dns"); put("server", "223.5.5.5") })
             })
         })
         put("inbounds", buildJsonArray {
@@ -63,7 +64,7 @@ object ProxyCore {
             if (nodes.size > 1) add(buildJsonObject {
                 put("type", "urltest"); put("tag", "auto")
                 // 只在加密够强的节点里挑（不加密、弱加密的手动选才用）
-                put("outbounds", JsonArray(NodeSecurity.autoPool(nodes).map { JsonPrimitive("n$it") }))
+                put("outbounds", JsonArray((if (hardened) NodeSecurity.autoPool(nodes) else nodes.indices.toList()).map { JsonPrimitive("n$it") }))
                 put("url", "https://www.gstatic.com/generate_204"); put("interval", "10m")
             })
             nodes.forEachIndexed { i, n -> add(ProxyNodes.outbound(n, "n$i")) }
@@ -90,9 +91,9 @@ object ProxyCore {
      * 确保内核在跑、而且用的是现在的节点设置；没在跑或设置变了就（重新）启动。成功返回 true。
      * binary 是内核程序，workDir 放配置文件。会阻塞最多几秒，不要在主线程调。
      */
-    fun ensure(binary: File, workDir: File, nodes: List<ProxyNode>, selected: String): Boolean = synchronized(lock) {
+    fun ensure(binary: File, workDir: File, nodes: List<ProxyNode>, selected: String, hardened: Boolean = true): Boolean = synchronized(lock) {
         if (nodes.isEmpty()) { lastError = "还没有导入节点"; return false }
-        val key = nodes.joinToString("|") { it.outbound } + "#" + selected
+        val key = nodes.joinToString("|") { it.outbound } + "#" + selected + "#" + hardened
         if (running?.isAlive == true && key == runningKey) return true
         stopLocked()
         if (!binary.exists()) { lastError = "这个安装包里没有代理内核"; return false }
@@ -100,7 +101,7 @@ object ProxyCore {
         val p = freePort()
         val u = token()
         val pw = token()
-        val cfg = File(workDir, "config.json").apply { writeText(config(nodes, selected, p, u, pw)) }
+        val cfg = File(workDir, "config.json").apply { writeText(config(nodes, selected, p, u, pw, hardened)) }
         synchronized(log) { log.clear() }
         val proc = try {
             ProcessBuilder(binary.absolutePath, "run", "-c", cfg.absolutePath, "-D", workDir.absolutePath, "--disable-color")
