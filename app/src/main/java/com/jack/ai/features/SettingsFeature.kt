@@ -26,7 +26,12 @@ class SettingsFeature(core: AppCore, private val client: DeepSeekClient) : Featu
         store.saveSettings(after)
         if (before.dreamEnabled != after.dreamEnabled) Dreamer.schedule(app, after.dreamEnabled)
         if (before.proactive != after.proactive) com.jack.ai.data.Proactive.schedule(app, after.proactive)
-        if (before.proxyHardened != after.proxyHardened) com.jack.ai.ui.JackBrowser.protectionChanged()
+        if (before.proxyHardened != after.proxyHardened) {
+            com.jack.ai.ui.JackBrowser.protectionChanged()
+            // 关掉：回到只给 Kavi 自己用（分流停掉，选的 App 留着）；再打开：之前开着分流就接着开
+            if (!after.proxyHardened) com.jack.ai.vpn.KaviVpnService.stop(app)
+            else if (after.proxyAppsOn && com.jack.ai.vpn.TProxyService.available && com.jack.ai.vpn.KaviVpnService.consent(app) == null) com.jack.ai.vpn.KaviVpnService.start(app)
+        }
     }
 
     /** 获取某个服务的模型列表，返回 (可用的地址, [模型 id 和价格])。 */

@@ -38,6 +38,7 @@ class KaviVpnService : VpnService() {
         Net.apply(s)
         if (!TProxyService.available) throw IllegalStateException("这一版没带上分流组件（或系统低于 Android 10）")
         if (!Net.config.enabled) throw IllegalStateException("先打开 Kavi 专用代理并导入节点")
+        if (!Net.config.hardened) throw IllegalStateException("「加强保护和分流」关着，代理只给 Kavi 自己用")
         val apps = installed(this, s.proxyApps)
         if (apps.isEmpty()) throw IllegalStateException("还没选要走代理的 App")
         if (!Net.ensureCore()) throw IllegalStateException("代理内核没起来：" + (ProxyCore.lastError ?: "原因不明"))
@@ -72,6 +73,7 @@ class KaviVpnService : VpnService() {
                 runCatching {
                     Net.apply(Store(this).loadSettings())
                     if (!Net.config.enabled) { shutdown("Kavi 专用代理关了，分流也停了"); stopSelf(); return@Thread }
+                    if (!Net.config.hardened) { shutdown("「加强保护和分流」关了，代理只给 Kavi 自己用"); stopSelf(); return@Thread }
                     if (!ProxyCore.isRunning) Net.ensureCore()
                     val fd = tun
                     if (fd != null && ProxyCore.isRunning && ProxyCore.port != port) {

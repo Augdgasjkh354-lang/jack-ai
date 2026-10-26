@@ -47,7 +47,7 @@ object Net {
         val enabled: Boolean = false,
         val nodes: List<ProxyNode> = emptyList(),
         val selected: String = "",
-        /** 加强保护：只挑加密强的节点自动选、加密 DNS、浏览器防 WebRTC 泄漏、按网站总走代理。关掉回到原来的做法。 */
+        /** 加强保护和分流：只挑加密强的节点自动选、加密 DNS、浏览器防 WebRTC 泄漏、按网站总走代理、按 App 分流。关掉回到只给 Kavi 自己用。 */
         val hardened: Boolean = true,
     )
 

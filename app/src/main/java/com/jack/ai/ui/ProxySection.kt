@@ -126,17 +126,18 @@ fun ProxySection(vm: ChatViewModel, s: Settings) {
     }
     if (s.proxyNodes.isNotEmpty()) Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text("加强保护", style = MaterialTheme.typography.bodyMedium)
+            Text("加强保护和分流", style = MaterialTheme.typography.bodyMedium)
             Text(
                 if (s.proxyHardened) "开着：自动选节点只挑加密强的；查域名用加密 DNS（阿里 DoH），Wi-Fi 和运营商看不到访问了哪些网站；" +
-                    "Kavi 浏览器不让网页靠 WebRTC 查到真实 IP；「这个网站总走代理」生效。"
-                else "关着：和原来一样，自动选节点用全部节点，用手机自带的 DNS，浏览器不拦 WebRTC，按网站总走代理先不生效（记录留着）。",
+                    "Kavi 浏览器不让网页靠 WebRTC 查到真实 IP；「这个网站总走代理」生效；能让选中的 App 也走代理。"
+                else "关着：回到原来的样子，代理只给 Kavi 自己用，别的 App 不走代理、没有系统 VPN；自动选节点用全部节点，用手机自带的 DNS，浏览器不拦 WebRTC。" +
+                    "选过的 App、按网站的设置都留着，再打开接着用。",
                 style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
             )
         }
         Switch(s.proxyHardened, { on -> vm.updateSettings { it.copy(proxyHardened = on) } })
     }
-    if (s.proxyNodes.isNotEmpty()) ProxyAppsSection(vm, s)
+    if (s.proxyNodes.isNotEmpty() && s.proxyHardened) ProxyAppsSection(vm, s)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedButton(enabled = !busy, onClick = {
             scan.launch(ScanOptions().setPrompt("扫订阅或节点的二维码").setBeepEnabled(false).setOrientationLocked(false)
