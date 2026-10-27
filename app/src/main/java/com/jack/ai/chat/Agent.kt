@@ -66,6 +66,8 @@ class Agent(
          * 返回一段话就把它当作一条消息塞回去，接着做。已经不给工具了（到了轮数上限）就不问。
          */
         beforeFinish: (suspend (answer: String) -> String?)? = null,
+        /** 系统要告诉模型的话（比如自由时间的预算用完了）：每做完一轮工具取一次，原样作为一条消息放进下一轮请求。 */
+        notices: () -> List<String> = { emptyList() },
         /** 每轮工具做完、发下一次请求前，给调用方瘦身 messages 的机会（Work 长任务压掉旧的大段工具结果，见 ContextSlim）。 */
         slim: ((MutableList<JsonObject>) -> Unit)? = null,
     ) {
@@ -184,6 +186,11 @@ class Agent(
                     put("role", "user")
                     put("content", "【用户在你干活时插话，考虑进去后继续】\n$text")
                 }
+                messages += m
+                trail += m.toString()
+            }
+            notices().forEach { text ->
+                val m = buildJsonObject { put("role", "user"); put("content", text) }
                 messages += m
                 trail += m.toString()
             }

@@ -352,7 +352,8 @@ internal fun ReadingCard(vm: ChatViewModel, settings: com.jack.ai.data.Settings)
                 Switch(settings.readingEnabled, { on -> vm.updateSettings { it.copy(readingEnabled = on) } })
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("每天最多花 ¥%.2f · 今天已花 ¥%.2f".format(settings.readingBudget, com.jack.ai.data.Reader.spentToday(log)),
+                Text("每天 ¥%.2f".format(settings.readingBudget) + (if (settings.readingExtra > 0) " + 收尾 ¥%.2f".format(settings.readingExtra) else "") +
+                    " · 今天已花 ¥%.2f".format(com.jack.ai.data.Reader.spentToday(log)),
                     Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                 TextButton(onClick = { editBudget = true }) { Text("改预算") }
             }
@@ -406,16 +407,24 @@ internal fun ReadingCard(vm: ChatViewModel, settings: com.jack.ai.data.Settings)
     }
     if (editBudget) {
         var text by remember { mutableStateOf("%.2f".format(settings.readingBudget)) }
+        var extraText by remember { mutableStateOf("%.2f".format(settings.readingExtra)) }
+        val decimal = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal)
         AlertDialog(
             onDismissRequest = { editBudget = false },
-            title = { Text("每天的阅读预算") },
+            title = { Text("自由时间的预算") },
             text = {
-                OutlinedTextField(text, { text = it }, singleLine = true, suffix = { Text("元") },
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(text, { text = it }, singleLine = true, label = { Text("每天的预算") }, suffix = { Text("元") }, keyboardOptions = decimal)
+                    OutlinedTextField(extraText, { extraText = it }, singleLine = true, label = { Text("额外预算（用完后收尾用）") }, suffix = { Text("元") }, keyboardOptions = decimal)
+                    Text("每天的预算花完时，系统会告诉 Kavi「今日预算用完了，可以收尾，也可以明天再做」，再给它额外预算收尾，不必花完。填 0 就是直接停。",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             },
             confirmButton = {
                 TextButton(onClick = {
-                    text.toDoubleOrNull()?.let { v -> vm.updateSettings { it.copy(readingBudget = v.coerceIn(0.0, 20.0)) } }
+                    val b = text.toDoubleOrNull()?.coerceIn(0.0, 20.0)
+                    val e = extraText.toDoubleOrNull()?.coerceIn(0.0, 5.0)
+                    vm.updateSettings { it.copy(readingBudget = b ?: it.readingBudget, readingExtra = e ?: it.readingExtra) }
                     editBudget = false
                 }) { Text("保存") }
             },

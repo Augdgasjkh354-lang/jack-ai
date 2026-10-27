@@ -93,6 +93,9 @@ suspend fun runBackgroundWork(
     model: String? = null,
     /** 这次最多花多少钱（元），不填用 Work 的单次上限。 */
     costLimit: Double? = null,
+    /** 花到这么多时（还没到 costLimit）发一次 softNote 给模型，让它收尾（自由时间：今日预算用完，剩下的是收尾用的额外预算）。 */
+    softLimit: Double? = null,
+    softNote: String = "",
     onProgress: (String) -> Unit = {},
 ): TaskResult {
     com.jack.ai.data.KaviSelf.ensure(ctx)
@@ -135,6 +138,7 @@ suspend fun runBackgroundWork(
         },
     )
     var spent = 0.0
+    var softSent = false
     // 上次半路被打断了：从断点接着做（系统提示换成这次的，时间是新的）
     val checkpoint = TaskCheckpoint.file(ctx.filesDir, r.id)
     val cpKey = TaskCheckpoint.keyOf((brief ?: "") + r.prompt.ifBlank { r.title })
@@ -192,6 +196,9 @@ suspend fun runBackgroundWork(
             },
             retool = { toolsFor(session.unlocked.toSet()) },
             onTools = { TaskCheckpoint.save(checkpoint, cpKey, messages, spent) },
+            notices = {
+                if (softLimit != null && !softSent && spent >= softLimit && softNote.isNotBlank()) { softSent = true; listOf(softNote) } else emptyList()
+            },
             beforeFinish = gate?.let { g -> { answer -> g.beforeFinish(answer) } },
             slim = { msgs -> com.jack.ai.chat.ContextSlim.slim(msgs) },
             onUsage = { ev ->

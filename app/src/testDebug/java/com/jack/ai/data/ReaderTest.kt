@@ -55,4 +55,10 @@ class ReaderTest {
         store.saveSettings(store.loadSettings().copy(readingEnabled = false, readingBudget = 0.5))
         assertEquals(null, Reader.read(ctx))
     }
+
+    @Test
+    fun budgetNoteSaysGoodnight() {
+        assertEquals("系统：Kavi，你的今日预算已经用完了哦，你可以把你要做的事情收尾，也可以等明天再做，新的预算是 ¥0.10，不必必须花完，收尾即可，晚安。",
+            Reader.budgetNote(0.1))
+    }
 }

@@ -255,4 +255,17 @@ class AgentTest {
         // 到了轮数上限、已经不给工具，推回去也做不了事，就不问
         assertEquals(0, asked)
     }
+
+    @Test
+    fun systemNoticesGoInAsTheirOwnMessage() = runBlocking {
+        val api = FakeApi(toolCall("web_search"), text("好的，收尾"))
+        val agent = Agent(api::stream)
+        val msgs = mutableListOf(userMsg("自由时间"))
+        var sent = false
+        agent.run(msgs, someTools, { 10 }, { _, _ -> "结果" },
+            notices = { if (!sent) { sent = true; listOf("系统：预算用完了") } else emptyList() })
+        // 原样一条，不加「用户插话」那种前缀
+        assertTrue(msgs.any { it["role"]?.jsonPrimitive?.content == "user" && it["content"]?.jsonPrimitive?.content == "系统：预算用完了" })
+        assertEquals("好的，收尾", agent.lastRound)
+    }
 }
