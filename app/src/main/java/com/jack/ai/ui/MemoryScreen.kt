@@ -345,8 +345,8 @@ internal fun ReadingCard(vm: ChatViewModel, settings: com.jack.ai.data.Settings)
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("阅读时间（每天凌晨）", style = MaterialTheme.typography.titleSmall)
-                    Text("Kavi 自己上网读一会，查实的事实存进事实库。只读不写，不登录、不发东西。",
+                    Text("自由时间（每天凌晨）", style = MaterialTheme.typography.titleSmall)
+                    Text("Kavi 用这点预算做自己想做的事：读书存事实、调查写报告、做小工具、写东西。上网只读，不碰你的邮件和文件，不发任何东西。",
                         style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                 }
                 Switch(settings.readingEnabled, { on -> vm.updateSettings { it.copy(readingEnabled = on) } })
@@ -357,16 +357,25 @@ internal fun ReadingCard(vm: ChatViewModel, settings: com.jack.ai.data.Settings)
                 TextButton(onClick = { editBudget = true }) { Text("改预算") }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { vm.readNow() }) { Text("现在去读一会") }
+                OutlinedButton(onClick = { vm.readNow() }) { Text("现在就去") }
                 TextButton(onClick = { refresh++ }) { Text("刷新") }
             }
             log.take(5).forEach { e ->
                 Column(Modifier.padding(top = 6.dp)) {
-                    Text(fmt.format(java.util.Date(e.at)) + if (e.skipped.isNotEmpty() && e.topics.isEmpty()) " · 没读成" else " · 存了 ${e.saved} 条 · ¥%.2f".format(e.spent),
+                    val failed = e.skipped.isNotEmpty() && e.title.isEmpty() && e.topics.isEmpty()
+                    Text(fmt.format(java.util.Date(e.at)) + (if (failed) " · 没做成" else " · " + (com.jack.ai.data.Reader.KINDS[e.kind] ?: "别的") +
+                        (if (e.saved > 0) " · 存了 ${e.saved} 条事实" else "") + " · ¥%.2f".format(e.spent)),
                         style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
-                    if (e.topics.isNotEmpty()) Text(e.topics.joinToString(" · "), style = MaterialTheme.typography.bodyMedium)
+                    val head = e.title.ifBlank { e.topics.joinToString(" · ") }
+                    if (head.isNotBlank()) Text(head, style = MaterialTheme.typography.bodyMedium)
                     val body = e.report.ifBlank { e.skipped }
                     if (body.isNotBlank()) Text(body, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                    // 做出来的东西：点开看
+                    e.files.filter { java.io.File(it.path).exists() }.forEach { f ->
+                        TextButton(onClick = { openFile(ctx, f) }, contentPadding = PaddingValues(horizontal = 0.dp)) {
+                            Text("📎 " + f.name, style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
                 }
             }
             androidx.compose.material3.HorizontalDivider(Modifier.padding(vertical = 6.dp), color = colors.outlineVariant)
@@ -375,7 +384,7 @@ internal fun ReadingCard(vm: ChatViewModel, settings: com.jack.ai.data.Settings)
                     Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
                 if (facts.isNotEmpty()) TextButton(onClick = { showFacts = !showFacts }) { Text(if (showFacts) "收起" else "看看") }
             }
-            if (facts.isEmpty()) Text("还是空的。Kavi 做任务、读书时查实的事会存进来，每条都带出处。",
+            if (facts.isEmpty()) Text("还是空的。Kavi 做任务、自由时间里查实的事会存进来，每条都带出处。",
                 style = MaterialTheme.typography.bodySmall, color = colors.outline)
             if (showFacts) facts.take(50).forEach { f ->
                 Row(verticalAlignment = Alignment.Top, modifier = Modifier.padding(top = 4.dp)) {

@@ -120,6 +120,7 @@ You'll receive:
 1. All current memories (one per line; may be empty)
 2. Your previous journal entry (may be empty)
 3. All chats since the last look-back
+4. What you did in your own free time since then (may be empty): mention it in the journal if it matters, e.g. something {user} might like to see
 
 Write everything (journal, memories, changes) in {lang}, or in the language {user} uses in the chats.
 
@@ -170,6 +171,7 @@ Output only one JSON object, in this format:
             append("\n【Previous journal entry】\n")
             append(store.loadDreams().firstOrNull { it.journal.isNotBlank() }?.journal ?: "(none)")
             append("\n")
+            Reader.since(ctx, since).takeIf { it.isNotBlank() }?.let { append("\n【Your free time since then】\n").append(it).append("\n") }
             append("\n【Chats since the last look-back】")
             append(transcript)
         }

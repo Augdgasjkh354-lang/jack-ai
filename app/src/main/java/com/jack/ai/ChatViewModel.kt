@@ -914,10 +914,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private fun updateConv(id: String, transform: (Conversation) -> Conversation) = core.updateConv(id, transform)
     private fun patchMessage(convId: String, msgId: String, transform: (ChatMessage) -> ChatMessage) = core.patchMessage(convId, msgId, transform)
     private fun updateConvQuiet(id: String, transform: (Conversation) -> Conversation) = core.updateConvQuiet(id, transform)
-    /** 让 Kavi 现在去读一会（不管开没开阅读时间，预算照算）。 */
+    /** 让 Kavi 现在就去过一次自由时间（不管开没开，预算照算）。 */
     fun readNow() {
         com.jack.ai.data.Reader.runNow(getApplication())
-        _state.update { it.copy(toast = "Kavi 去读了，读完记在「阅读和知识」里") }
+        _state.update { it.copy(toast = "Kavi 去过自由时间了，做完记在「记忆与梦」页") }
     }
 
     /** 从事实库里删掉一条（连同向量）。 */
