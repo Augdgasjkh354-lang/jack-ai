@@ -172,6 +172,7 @@ fun MemoryScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
 }
 
 private val dreamDate = SimpleDateFormat("M月d日 EEEE", Locale.CHINA)
+private val dreamDay = SimpleDateFormat("M月d日", Locale.CHINA)
 
 @Composable
 fun DreamCard(d: DreamEntry, initiallyOpen: Boolean, onEdit: (String) -> Unit, onDelete: () -> Unit) {
@@ -187,7 +188,11 @@ fun DreamCard(d: DreamEntry, initiallyOpen: Boolean, onEdit: (String) -> Unit, o
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(AppIcons.Moon, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.size(6.dp))
-                Text(dreamDate.format(Date(d.createdAt)), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                Text(
+                    if (d.merged > 0) "${dreamDay.format(Date(d.from))} – ${dreamDay.format(Date(d.createdAt))} · ${d.merged} 篇合成"
+                    else dreamDate.format(Date(d.createdAt)),
+                    style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f),
+                )
                 if (open) {
                     if (d.journal.isNotBlank()) TextButton(onClick = { editing = true }) { Text("编辑") }
                     TextButton(onClick = { deleting = true }) { Text("删除") }

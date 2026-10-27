@@ -30,6 +30,11 @@ import java.util.concurrent.TimeUnit
 object Dreamer {
     private const val PERIODIC = "dream-daily"
     private const val ONCE = "dream-now"
+    private const val MORE = "dream-more"
+    /** 一次整理最多带多少字的聊天；再多的下一轮接着整理，不丢。 */
+    const val TRANSCRIPT_LIMIT = 400_000
+    /** 攒够这么多篇日记（最新一篇不算）就合成一篇。 */
+    const val MERGE_EVERY = 10
 
     /** 下一个 5:30 距现在多少毫秒。 */
     private fun delayToNext530(): Long {
@@ -64,6 +69,49 @@ object Dreamer {
     fun runNow(ctx: Context) {
         val req = OneTimeWorkRequestBuilder<DreamWorker>().setConstraints(constraints).build()
         WorkManager.getInstance(ctx).enqueueUniqueWork(ONCE, ExistingWorkPolicy.KEEP, req)
+    }
+
+    /** 聊天太多、这次没整理完：排在这次后面接着整理剩下的。 */
+    private fun runMore(ctx: Context) {
+        val req = OneTimeWorkRequestBuilder<DreamWorker>().setConstraints(constraints).build()
+        WorkManager.getInstance(ctx).enqueueUniqueWork(MORE, ExistingWorkPolicy.APPEND_OR_REPLACE, req)
+    }
+
+    /**
+     * 这次要整理的聊天记录：since 之后、until 之前的消息，按时间从早到晚放，放满 limit 字为止（至少放一条），
+     * 再按对话分好。返回（整理用的文字，没放完时最后放进来的那条消息的时间；放完了是 null）。
+     * 以前是整段拼好再截前 40 万字，聊得多的日子最新的对话会被截掉。
+     */
+    internal fun transcript(convs: List<Conversation>, since: Long, until: Long, limit: Int = TRANSCRIPT_LIMIT): Pair<String, Long?> {
+        val fmt = SimpleDateFormat("M月d日 HH:mm", Locale.CHINA)
+        fun line(m: ChatMessage): String {
+            val who = if (m.role == "user") "用户" else "AI"
+            val files = m.attachments.filter { it.kind == "file" }.joinToString("") { "[文件：${it.name}]" }
+            val imgs = m.attachments.count { it.kind == "image" }.let { if (it > 0) "[$it 张图片]" else "" }
+            return "[${fmt.format(Date(m.createdAt))}] $who：$files$imgs${m.content.take(3000)}\n"
+        }
+        val all = convs.flatMap { c -> c.messages.filter { it.createdAt in (since + 1)..until && it.content.isNotBlank() }.map { c to it } }
+            .sortedBy { it.second.createdAt }
+        var used = 0
+        var cutoff: Long? = null
+        val picked = mutableListOf<Pair<Conversation, ChatMessage>>()
+        for ((i, p) in all.withIndex()) {
+            val n = line(p.second).length
+            if (picked.isNotEmpty() && used + n > limit) {
+                // 和最后放进来那条同一毫秒的也放进来，下一轮从这个时间之后接着，不会漏
+                cutoff = picked.last().second.createdAt
+                picked += all.drop(i).takeWhile { it.second.createdAt == cutoff }
+                break
+            }
+            used += n
+            picked += p
+        }
+        val text = StringBuilder()
+        picked.groupBy { it.first.id }.values.forEach { group ->
+            text.append("\n\n### 对话「${group.first().first.title}」\n")
+            group.forEach { text.append(line(it.second)) }
+        }
+        return text.toString() to cutoff
     }
 
     private const val INSTRUCTIONS = """现在是一天结束后你给自己写日记的时间：回看这段时间和用户的聊天，想清楚什么帮上了忙、什么没做好、下次该怎么做，并更新对用户的长期记忆。
@@ -105,23 +153,10 @@ object Dreamer {
         // 从开始整理的这一刻算：做梦要好几分钟，期间新聊的下次再整理，不会被跳过
         val startedAt = System.currentTimeMillis()
         val since = store.lastDreamAt.takeIf { it > 0 } ?: (startedAt - TimeUnit.DAYS.toMillis(1))
-        val fmt = SimpleDateFormat("M月d日 HH:mm", Locale.CHINA)
-
-        val transcript = StringBuilder()
         val projects = store.loadProjects()
-        store.loadConversations()
-            // 关了「参与做梦」的对话、隐私项目里的对话不整理
-            .filter { c -> c.inDream && !c.isolatedIn(projects) && c.messages.any { it.createdAt > since } }
-            .sortedBy { c -> c.messages.first { it.createdAt > since }.createdAt }
-            .forEach { c ->
-                transcript.append("\n\n### 对话「${c.title}」\n")
-                c.messages.filter { it.createdAt > since && it.content.isNotBlank() }.forEach { m ->
-                    val who = if (m.role == "user") "用户" else "AI"
-                    val files = m.attachments.filter { it.kind == "file" }.joinToString("") { "[文件：${it.name}]" }
-                    val imgs = m.attachments.count { it.kind == "image" }.let { if (it > 0) "[$it 张图片]" else "" }
-                    transcript.append("[${fmt.format(Date(m.createdAt))}] $who：$files$imgs${m.content.take(3000)}\n")
-                }
-            }
+        // 关了「参与做梦」的对话、隐私项目里的对话不整理
+        val convs = store.loadConversations().filter { c -> c.inDream && !c.isolatedIn(projects) }
+        val (transcript, cutoff) = transcript(convs, since, startedAt)
         if (transcript.isBlank()) {
             store.lastDreamAt = startedAt
             return null
@@ -134,7 +169,7 @@ object Dreamer {
             append(store.loadDreams().firstOrNull { it.journal.isNotBlank() }?.journal ?: "（暂无）")
             append("\n")
             append("\n【上次整理以来的聊天】")
-            append(transcript.take(400_000))
+            append(transcript)
         }
         val client = DeepSeekClient(store::addUsage)
         val raw = client.complete(
@@ -170,8 +205,72 @@ object Dreamer {
         } + addedMeanwhile)
         val entry = DreamEntry(journal = str("journal").ifBlank { throw IllegalStateException("做梦结果格式不对") }, changes = str("changes"))
         store.saveDreams(listOf(entry) + store.loadDreams().take(59))
-        store.lastDreamAt = startedAt
+        // 没整理完的：下次从最后整理到的那条之后接着，马上排一轮
+        store.lastDreamAt = cutoff ?: startedAt
+        if (cutoff != null) runMore(ctx)
+        // 日记攒够十篇就合成一篇；合并失败不影响这次做梦，下次再合
+        try {
+            mergeOld(store, ep, client)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+        }
         return entry
+    }
+
+    /** 该合成一篇的那几篇：最新一篇以外、没合并过的日记攒够 MERGE_EVERY 篇，取最早的 MERGE_EVERY 篇（从早到晚）。 */
+    internal fun mergeBatch(list: List<DreamEntry>): List<DreamEntry>? {
+        // 最新一篇原样留着：之后的聊天带的就是它
+        val daily = list.filter { it.merged == 0 && it.journal.isNotBlank() }.sortedBy { it.createdAt }.dropLast(1)
+        return if (daily.size >= MERGE_EVERY) daily.take(MERGE_EVERY) else null
+    }
+
+    /** 合成后的列表：那几篇换成合成的一篇，按时间从新到旧排。 */
+    internal fun replaceWithMerged(list: List<DreamEntry>, batch: List<DreamEntry>, journal: String, changes: String): List<DreamEntry> {
+        val ids = batch.map { it.id }.toSet()
+        val merged = DreamEntry(
+            createdAt = batch.last().createdAt, from = batch.first().createdAt, merged = batch.size,
+            journal = journal, changes = changes, seen = true,
+        )
+        return (list.filterNot { it.id in ids } + merged).sortedByDescending { it.createdAt }
+    }
+
+    private const val MERGE_INSTRUCTIONS = """下面是你连着几天写给自己的日记，按时间从早到晚排。把它们合成一篇，篇幅和平时的一篇差不多（500 到 1000 字），第一人称，分几个自然段，不用标题和列表。
+
+- 留下这段时间里仍然成立的：对用户的理解（说话方式、在意什么、希望你怎么相处）、做错过和被纠正的地方、以后该怎么做、你自己形成的看法。前后说法不一致的，以后面的为准。
+- 进行中的事：写清最后的进展；已经做完或放弃的一句带过，用户明确拒绝的方向要留下。
+- 日期、名字、数字原样保留，不要编造日记里没有的东西。
+- 「我想改的地方」还没被采纳的，留着。
+
+另写 changes：一两句话概括这几天记忆主要的变化（照各篇的「记忆的变化」合并）。
+
+只输出一个 JSON 对象：{"journal": "…", "changes": "…"}"""
+
+    /** 攒够了就合成一篇（每次最多合一批）。 */
+    private suspend fun mergeOld(store: Store, ep: Endpoint, client: DeepSeekClient) {
+        val batch = mergeBatch(store.loadDreams()) ?: return
+        val fmt = SimpleDateFormat("M月d日", Locale.CHINA)
+        val input = batch.joinToString("\n\n") { d ->
+            "【${if (d.merged > 0) fmt.format(Date(d.from)) + " – " else ""}${fmt.format(Date(d.createdAt))}】\n${d.journal}" +
+                (if (d.changes.isNotBlank()) "\n（记忆的变化：${d.changes}）" else "")
+        }
+        val raw = client.complete(
+            ep,
+            listOf(
+                buildJsonObject { put("role", "system"); put("content", MERGE_INSTRUCTIONS) },
+                buildJsonObject { put("role", "user"); put("content", input) },
+            ),
+            maxTokens = 4096,
+            jsonMode = true,
+        )
+        val obj = Json.parseToJsonElement(raw.trim().removePrefix("```json").removeSuffix("```").trim()).jsonObject
+        val journal = (obj["journal"] as? JsonPrimitive)?.content?.trim().orEmpty()
+        if (journal.isEmpty()) return
+        val changes = (obj["changes"] as? JsonPrimitive)?.content?.trim().orEmpty()
+        // 合并要等一会：用现在的列表换，期间改过、删过的照现在的算（批里有被删掉的就这次不合）
+        val now = store.loadDreams()
+        if (!batch.all { b -> now.any { it.id == b.id } }) return
+        store.saveDreams(replaceWithMerged(now, batch, journal, changes))
     }
 }
 

@@ -142,6 +142,9 @@ data class DreamEntry(
     /** 醒来后想对用户说的一句话。 */
     val note: String = "",
     val seen: Boolean = false,
+    /** 合并过的日记：盖住了几篇（0 = 普通的一天一篇），从哪天开始（createdAt 是最后一篇的时间）。 */
+    val merged: Int = 0,
+    val from: Long = 0,
 )
 
 @Serializable
