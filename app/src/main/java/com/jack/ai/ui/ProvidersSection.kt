@@ -78,7 +78,7 @@ fun ProvidersSection(vm: ChatViewModel, providers: List<Provider>) {
             Column(Modifier.weight(1f)) {
                 Text(p.name, style = MaterialTheme.typography.bodyLarge)
                 Text(
-                    (if (p.apiKey.isBlank()) "还没填 Key · " else "") + "${p.models.size} 个模型 · " + p.baseUrl,
+                    (if (p.apiKey.isBlank()) "还没填 Key · " else "") + (if (p.models.isEmpty()) "只用 Key（转文字、向量检索） · " else "${p.models.size} 个模型 · ") + p.baseUrl,
                     style = MaterialTheme.typography.bodySmall,
                     color = if (p.apiKey.isBlank()) colors.error else colors.onSurfaceVariant,
                     maxLines = 1,
@@ -184,6 +184,10 @@ private fun ProviderDialog(vm: ChatViewModel, initial: Provider, onDismiss: () -
                     }
                 }
                 error?.let { Text(it, color = colors.error, style = MaterialTheme.typography.bodySmall) }
+                // 硅基流动的 Key 不选模型也有用：转文字、事实库的向量检索都借它
+                if (chosen.isEmpty() && "siliconflow" in url.lowercase()) Text(
+                    "只填 Key、不选模型也能保存：转文字和事实库的向量检索会用它。想拿它当聊天模型，再获取列表勾选。",
+                    style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                 // 有的服务不提供模型列表，可以手动填模型名
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(value = manual, onValueChange = { manual = it.trim() }, placeholder = { Text("手动填模型名") },
@@ -238,7 +242,8 @@ private fun ProviderDialog(vm: ChatViewModel, initial: Provider, onDismiss: () -
         },
         confirmButton = {
             TextButton(
-                enabled = name.isNotBlank() && url.isNotBlank() && chosen.isNotEmpty(),
+                // 不选模型、只填 Key 也能存（转文字、向量检索只要 Key）
+                enabled = name.isNotBlank() && url.isNotBlank() && (chosen.isNotEmpty() || key.isNotBlank()),
                 onClick = {
                     // 保持服务上的顺序
                     val order = available.withIndex().associate { it.value to it.index }
