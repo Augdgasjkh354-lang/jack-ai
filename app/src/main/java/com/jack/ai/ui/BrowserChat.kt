@@ -162,18 +162,22 @@ object BrowserChat {
         val client = DeepSeekClient()
         val agent = Agent({ msgs, t -> client.stream(ep, msgs, ThinkLevel.OFF, s.temperature, t) })
         var last = 0L
-        agent.run(
-            messages = messages,
-            tools = tools,
-            maxRounds = { session.maxRounds },
-            execute = { name, args -> session.execute(name, args) },
-            onText = {
-                val now = System.currentTimeMillis()
-                if (now - last > 80) { last = now; val c = agent.content.toString(); patchLast { it.copy(text = c) } }
-            },
-            onUsage = { ev -> runCatching { store.addUsage(ep, ev.promptTokens, ev.cacheHit, ev.completionTokens) } },
-            images = { session.takeImages() },
-        )
+        try {
+            agent.run(
+                messages = messages,
+                tools = tools,
+                maxRounds = { session.maxRounds },
+                execute = { name, args -> session.execute(name, args) },
+                onText = {
+                    val now = System.currentTimeMillis()
+                    if (now - last > 80) { last = now; val c = agent.content.toString(); patchLast { it.copy(text = c) } }
+                },
+                onUsage = { ev -> runCatching { store.addUsage(ep, ev.promptTokens, ev.cacheHit, ev.completionTokens) } },
+                images = { session.takeImages() },
+            )
+        } finally {
+            session.releaseBrowser()
+        }
         val reply = agent.lastRound.trim().ifBlank { agent.content.toString().trim() }
         patchLast { it.copy(text = agent.content.toString().trim().ifBlank { reply.ifBlank { "（没有回答）" } }) }
         // 留下这次的往来，太长就从头裁掉（只在用户消息那里裁，工具调用和结果不拆开）

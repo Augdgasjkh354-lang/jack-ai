@@ -874,7 +874,7 @@ private fun InputBar(
                                         }
                                     },
                                     leadingIcon = { Icon(AppIcons.Compress, null) },
-                                    enabled = !state.streaming && state.compressingId == null,
+                                    enabled = !state.streamingHere && state.compressingId == null,
                                     onClick = {
                                         attachMenu = false
                                         vm.compress()

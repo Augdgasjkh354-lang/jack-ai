@@ -110,7 +110,7 @@ fun HistoryDrawer(
     fun chatRow(c: Conversation): @Composable () -> Unit = {
         // 「⋯」只在当前对话上显示，其他的长按出菜单，列表看着清爽些
         ChatItem(c, c.id == state.currentId, { onSelect(c.id) }, { renaming = c }, { deleting = c }, onPin = { onPin(c.id) },
-            onMemory = { onMemory(c) }, showMore = c.id == state.currentId, answering = state.streaming && state.streamingId == c.id)
+            onMemory = { onMemory(c) }, showMore = c.id == state.currentId, answering = c.id in state.streamingIds)
     }
     ModalDrawerSheet(drawerContainerColor = colors.surfaceContainerLow) {
         Column(Modifier.fillMaxSize()) {

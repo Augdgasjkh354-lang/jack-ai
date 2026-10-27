@@ -155,6 +155,24 @@ class ToolSession(
 
     private val loop = LoopGuard()
 
+    /**
+     * 浏览器同一时间只给一个回答用（几个对话同时答、浏览器里的 Kavi、后台任务都算）：
+     * 谁先用谁占着，回答结束（releaseBrowser）才放；别的要用就排队等，最多等 BROWSER_WAIT_MS。
+     */
+    internal suspend fun claimBrowser(): Boolean {
+        if (BrowserLock.holds(this)) return true
+        if (BrowserLock.tryLock(this)) return true
+        val label = "等浏览器空出来（另一个回答正在用）"
+        ui.started(label)
+        ui.progress(label)
+        val got = BrowserLock.lock(this, BROWSER_WAIT_MS)
+        ui.finished(label, SearchRecord(label, error = if (got) null else "等了 ${BROWSER_WAIT_MS / 60_000} 分钟还没空出来"))
+        return got
+    }
+
+    /** 回答结束时调：占着浏览器就放出来。 */
+    fun releaseBrowser() = BrowserLock.unlock(this)
+
     /** 这次回答里读过外部内容（邮件、网页）没有；读过之后发信给新地址，完全授权下也要确认。 */
     @Volatile internal var sawExternal = false
 
@@ -272,6 +290,9 @@ class ToolSession(
     }
 
     companion object {
+        /** 浏览器被别的回答占着时最多等多久。 */
+        const val BROWSER_WAIT_MS = 5 * 60_000L
+
         /** 返回外部内容的工具：内容里可能藏着冒充用户的指令。 */
         val EXTERNAL_TOOLS = setOf("list_emails", "read_email", "web_search", "read_webpage", "notion_search", "notion_read", "browser", "github", "download_file")
 
@@ -396,4 +417,21 @@ internal fun ToolSession.updatePlan(args: JsonObject): String {
     succeeded.incrementAndGet()
     val done = items.count { it.status == "done" }
     return "清单已更新（$done/${items.size} 完成）"
+}
+
+/** 浏览器的占用：谁占着（一个 ToolSession），没人占时排队的按先后拿到。 */
+internal object BrowserLock {
+    private val mutex = kotlinx.coroutines.sync.Mutex()
+
+    fun holds(owner: Any) = mutex.holdsLock(owner)
+
+    fun tryLock(owner: Any) = mutex.tryLock(owner)
+
+    /** 等到拿到为止，最多等 timeoutMs；拿到返回 true。 */
+    suspend fun lock(owner: Any, timeoutMs: Long): Boolean =
+        kotlinx.coroutines.withTimeoutOrNull(timeoutMs) { mutex.lock(owner); true } ?: false
+
+    fun unlock(owner: Any) {
+        if (mutex.holdsLock(owner)) mutex.unlock(owner)
+    }
 }

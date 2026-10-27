@@ -70,7 +70,6 @@ data class UiState(
     val draftProjectId: String? = null,
     /** 新对话开始前选的模式：false = Chat，true = Work。 */
     val draftWork: Boolean = false,
-    val streaming: Boolean = false,
     val settings: Settings = Settings(),
     val pending: List<Attachment> = emptyList(),
     val importing: Boolean = false,
@@ -92,11 +91,13 @@ data class UiState(
     val cards: List<Flashcard> = emptyList(),
     /** 工具执行前等用户确认（比如发邮件），界面弹窗。 */
     val confirm: ConfirmRequest? = null,
-    /** 正在回答的是哪个对话（streaming 时）。切去看别的对话不会打断它。 */
-    val streamingId: String? = null,
+    /** 正在回答的对话（可以好几个同时答）。切去看别的对话不会打断它们。 */
+    val streamingIds: Set<String> = emptySet(),
 ) {
+    /** 有回答正在进行（不管是哪个对话）。 */
+    val streaming: Boolean get() = streamingIds.isNotEmpty()
     /** 当前看着的这个对话正在回答。 */
-    val streamingHere: Boolean get() = streaming && streamingId == currentId
+    val streamingHere: Boolean get() = currentId != null && currentId in streamingIds
     val current: Conversation? get() = conversations.firstOrNull { it.id == currentId }
     val currentProjectId: String? get() = current?.projectId ?: if (currentId == null) draftProjectId else null
     fun project(id: String?): Project? = id?.let { pid -> projects.firstOrNull { it.id == pid } }
@@ -114,12 +115,13 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val web = com.jack.ai.api.WebClient(tavily, { store.addPaidCall(com.jack.ai.api.WebClient.USAGE_KEY, com.jack.ai.api.WebClient.PRICE) },
             onFree = { store.addPaidCall(it, 0.0) })
     private val core = AppCore(app, store, viewModelScope).also {
-        it.stop = { stop() }
-        it.stopAndWait = { val j = job; stop(); j?.join() }
+        it.stopConv = { id -> stop(id) }
+        it.stopAndWait = { val all = jobs.values.toList(); all.forEach { j -> j.cancel() }; all.forEach { j -> j.join() } }
     }
     private val _state = core.state
     val state: StateFlow<UiState> = _state.asStateFlow()
-    private var job: Job? = null
+    /** 每个对话正在进行的回答（几个对话可以同时答）。 */
+    private val jobs = java.util.concurrent.ConcurrentHashMap<String, Job>()
 
     private val files = FilesFeature(core)
     private val projects = ProjectsFeature(core, files)
@@ -199,7 +201,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun delete(id: String) {
-        if (id == _state.value.streamingId) stop()
+        if (busy(id)) stop(id)
         val conv = _state.value.conversations.firstOrNull { it.id == id }
         _state.update { s ->
             s.copy(
@@ -226,7 +228,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun clearAll() {
-        stop()
+        jobs.values.forEach { it.cancel() }
         val all = _state.value.conversations.flatMap { it.messages }
         _state.update { it.copy(conversations = emptyList(), currentId = null) }
         files.cleanup(all)
@@ -238,28 +240,26 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------- 发消息 ----------
 
-    /** 返回 true 表示已发出，输入框可以清空。 */
-    /** 回答进行中用户插的话，等下一轮工具做完时交给 AI。 */
-    private val interjections = java.util.concurrent.ConcurrentLinkedQueue<String>()
-    /** 正在进行的回答：(对话 id, 回答消息 id)。 */
-    @Volatile private var running: Pair<String, String>? = null
+    /** 回答进行中用户插的话（按对话分开），等下一轮工具做完时交给 AI。 */
+    private val interjections = java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.ConcurrentLinkedQueue<String>>()
+    private fun interjectionsOf(convId: String) = interjections.getOrPut(convId) { java.util.concurrent.ConcurrentLinkedQueue() }
+    /** 正在进行的回答：对话 id → 回答消息 id。 */
+    private val running = java.util.concurrent.ConcurrentHashMap<String, String>()
 
+    /** 返回 true 表示已发出，输入框可以清空。 */
     fun send(text: String): Boolean {
         val trimmed = text.trim()
         val atts = _state.value.pending
-        val run = running
-        if (busy() && run != null && run.first == _state.value.currentId && trimmed.isNotEmpty()) {
-            interjections += trimmed
-            patchMessage(run.first, run.second) { it.copy(searches = it.searches + SearchRecord("💬 $trimmed")) }
+        val here = _state.value.currentId
+        val replyId = here?.let { running[it] }
+        // 这个对话正在回答：发的话当插话，下一步就会看到
+        if (here != null && busy(here) && replyId != null && trimmed.isNotEmpty()) {
+            interjectionsOf(here) += trimmed
+            patchMessage(here, replyId) { it.copy(searches = it.searches + SearchRecord("💬 $trimmed")) }
             return true
         }
-        val sid = _state.value.streamingId
-        if (busy() && sid != null && sid != _state.value.currentId && (trimmed.isNotEmpty() || atts.isNotEmpty())) {
-            val other = _state.value.conversations.firstOrNull { it.id == sid }?.title ?: "另一个对话"
-            _state.update { it.copy(toast = "「$other」还在回答，等它写完再发，或者回去点停止") }
-            return false
-        }
-        if ((trimmed.isEmpty() && atts.isEmpty()) || busy() || _state.value.importing) return false
+        if ((trimmed.isEmpty() && atts.isEmpty()) || (here != null && busy(here)) || _state.value.importing) return false
+        if (tooMany(here)) return false
         if (atts.any { it.kind == "image" } && _state.value.settings.endpoint()?.vision == false) {
             _state.update { it.copy(toast = "当前模型看不了图片，请点顶部的模型名换一个能看图的") }
             return false
@@ -291,7 +291,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     /** 重新生成最后一条回答。 */
     fun regenerate() {
         val conv = _state.value.current ?: return
-        if (busy()) return
+        if (busy(conv.id) || tooMany(conv.id)) return
         val msgs = conv.messages.dropLastWhile { it.role == "assistant" }
         if (msgs.isEmpty()) return
         files.cleanup(conv.messages.drop(msgs.size))
@@ -313,7 +313,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun continueWriting() {
         val conv = _state.value.current ?: return
-        if (busy()) return
+        if (busy(conv.id) || tooMany(conv.id)) return
         val m = conv.messages.lastOrNull()?.takeIf { it.role == "assistant" && it.truncated && it.content.isNotBlank() } ?: return
         val settings = _state.value.settings
         val ep0 = settings.endpoint(m.model.ifBlank { settings.model })?.takeIf { it.apiKey.isNotBlank() }
@@ -321,10 +321,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         if (ep0 == null) { _state.update { it.copy(toast = "这个模型用不了了，请先选一个能用的模型") }; return }
         val convId = conv.id
         patchMessage(convId, m.id) { it.copy(truncated = false) }
-        val previous = job
-        job = viewModelScope.launch {
-            previous?.join()
-            _state.update { it.copy(streaming = true, streamingId = convId) }
+        launchReply(convId) { done ->
             WorkService.start(getApplication(), convId, conv.title, conv.work)
             try {
                 val (chatMemory, projectMemory) = knowledge.memoryTexts(conv)
@@ -358,16 +355,47 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 patchMessage(convId, m.id) { it.copy(truncated = true) }
                 _state.update { it.copy(toast = "接着写失败：${e.message ?: "网络问题"}") }
             } finally {
-                _state.update { it.copy(streaming = false, streamingId = null) }
+                done()
                 persist()
                 WorkService.finish(getApplication(), convId, conv.title, "接着写完了", conv.work)
             }
         }
     }
 
+    /**
+     * 在这个对话里开一个回答：先等这个对话上一个回答收尾，标上「正在回答」，再跑 block。
+     * block 在自己的收尾里调 done() 撤掉标记（自动压缩要在撤掉之后才做得了）；没调的话结束时也会撤。
+     * 别的对话的回答不受影响，各答各的。
+     */
+    private fun launchReply(convId: String, block: suspend (done: () -> Unit) -> Unit) {
+        val previous = jobs[convId]
+        val j = viewModelScope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) {
+            previous?.join()
+            _state.update { it.copy(streamingIds = it.streamingIds + convId) }
+            var cleared = false
+            val done = { if (!cleared) { cleared = true; _state.update { it.copy(streamingIds = it.streamingIds - convId) } } }
+            try {
+                block(done)
+            } finally {
+                done()
+                jobs.remove(convId, coroutineContext[Job])
+            }
+        }
+        jobs[convId] = j
+        j.start()
+    }
+
+    /** 同时在答的回答最多几个：再多花费容易失控，手机也吃不消。 */
+    private fun tooMany(convId: String?): Boolean {
+        val others = jobs.filter { (id, j) -> id != convId && j.isActive }.size
+        if (others < MAX_PARALLEL) return false
+        _state.update { it.copy(toast = "已经有 $MAX_PARALLEL 个回答在同时进行，等其中一个写完再发，或者去那边点停止") }
+        return true
+    }
+
     fun deleteFrom(messageId: String) {
         val conv = _state.value.current ?: return
-        if (_state.value.streamingId == conv.id) stop()
+        if (busy(conv.id)) stop(conv.id)
         val idx = conv.messages.indexOfFirst { it.id == messageId }
         if (idx < 0) return
         files.cleanup(conv.messages.drop(idx))
@@ -390,16 +418,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val old = conv.messages[idx]
         val trimmed = text.trim()
         if (trimmed.isEmpty() && old.attachments.isEmpty()) return
-        // 别的对话正在回答：不替用户停掉它（和发消息一样，先说一声）
-        val sid = _state.value.streamingId
-        if (busy() && sid != null && sid != conv.id) {
-            val other = _state.value.conversations.firstOrNull { it.id == sid }?.title ?: "另一个对话"
-            _state.update { it.copy(toast = "「$other」还在回答，等它写完再改，或者回去点停止") }
-            return
-        }
-        // 这个对话正在回答时先停下，等旧的收尾（它会把 streaming 置回 false）再开始
-        val running = job
-        stop()
+        if (tooMany(conv.id)) return
+        // 这个对话正在回答时先停下，等旧的收尾（它会撤掉「正在回答」、保存）再开始；别的对话的回答不动
+        val running = jobs[conv.id]
+        stop(conv.id)
         viewModelScope.launch {
             running?.join()
             val cur = _state.value.conversations.firstOrNull { it.id == conv.id } ?: return@launch
@@ -421,15 +443,15 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * 停下正在进行的回答。job 留着不清空：下一次回答会先等它收尾完（它会把 streaming 置回 false、保存），
-     * 这样点了停止马上再发也不会乱。
+     * 停下某个对话（默认是眼前这个）正在进行的回答，别的对话的不动。job 留在表里：这个对话的下一次回答
+     * 会先等它收尾完（撤掉「正在回答」、保存），这样点了停止马上再发也不会乱。
      */
-    fun stop() {
-        job?.cancel()
+    fun stop(convId: String? = _state.value.currentId) {
+        convId?.let { jobs[it]?.cancel() }
     }
 
-    /** 有回答正在进行（停止后立刻就不算了，不用等收尾）。 */
-    private fun busy() = job?.isActive == true
+    /** 这个对话有回答正在进行（停止后立刻就不算了，不用等收尾）。 */
+    private fun busy(convId: String) = jobs[convId]?.isActive == true
 
     /** 让 V4.1 Flash 复核最后一条回答，并给出改进版。 */
     /** Work 的回答是不是被打断了：出错、没写出结论、或清单还有没做完的。 */
@@ -439,7 +461,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     /** 断点续做：带上清单，让 AI 从没做完的那一步接着做。 */
     fun continueWork() {
         val conv = _state.value.current ?: return
-        if (busy()) return
+        if (busy(conv.id) || tooMany(conv.id)) return
         val last = conv.messages.lastOrNull { it.role == "assistant" } ?: return
         val plan = conv.messages.lastOrNull { it.plan.isNotEmpty() }?.plan.orEmpty()
         val extra = buildString {
@@ -456,7 +478,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     fun reviewLast() {
         val conv = _state.value.current ?: return
-        if (busy()) return
+        if (busy(conv.id) || tooMany(conv.id)) return
         if (conv.messages.lastOrNull()?.let { it.role == "assistant" && it.content.isNotBlank() } != true) return
         // 有 DeepSeek Key 时用 V4.1 Flash 复核（比现在的 Pro 强，也便宜），否则用当前模型
         val model = if (_state.value.settings.apiKey.isNotBlank()) MODEL_FLASH else _state.value.settings.model
@@ -501,11 +523,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         fun buildHistory(withTools: Boolean, flat: Boolean = false): MutableList<JsonObject> =
             PromptBuilder.history(promptInput, if (withTools) toolSet else null, flat)
 
-        val previous = job
-        job = viewModelScope.launch {
-            // 上一次回答（被停止的）先收尾，免得它的收尾把这次的状态改乱
-            previous?.join()
-            _state.update { it.copy(streaming = true, streamingId = convId) }
+        // 这个对话上一次回答（被停止的）先收尾，免得它的收尾把这次的状态改乱；别的对话的回答照常进行
+        launchReply(convId) { done ->
             // DeepSeek 看图：图片先传一次，之后只发编号；传不上的照旧内联
             if (ep.deepseek && images) {
                 val paths = com.jack.ai.data.Compression.liveMessages(conv).flatMap { m -> m.attachments.filter { it.kind == "image" }.map { it.path } }
@@ -520,6 +539,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             val workTitle = conv.title
             // 不管 Chat 还是 Work，回答期间都开前台服务，切到后台也接着跑
             WorkService.start(getApplication(), convId, workTitle, work)
+            /** 几个对话同时在答时，弹窗上写明是哪个对话在问。 */
+            suspend fun ask(title: String, body: String, action: String) =
+                core.confirm(title, (if (_state.value.streamingIds.size > 1) "对话「$workTitle」：\n" else "") + body, action)
             var spent = 0.0
             val limit = settings.workCostLimit
             var nextLimit = limit
@@ -544,7 +566,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     m.copy(searches = m.searches.map { if (it.query == label && it.pending) record else it })
                 }
 
-                override suspend fun confirm(title: String, body: String, action: String) = core.confirm(title, body, action)
+                override suspend fun confirm(title: String, body: String, action: String) = ask(title, body, action)
 
                 /** 把生成或修改过的文件挂到这条回答上，显示成卡片。 */
                 override fun attach(file: File) {
@@ -556,8 +578,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             session.modelName = com.jack.ai.data.modelLabel(model)
             session.unlocked.addAll(unlockedStart)
             val agent = Agent({ msgs, t -> client.stream(ep, msgs, thinking, settings.temperature, t) }, sendReasoning = thinkingOn)
-            interjections.clear()
-            running = convId to reply.id
+            val myInterjections = interjectionsOf(convId).apply { clear() }
+            running[convId] = reply.id
             val reasoning = agent.reasoning
             val content = agent.content
             var lastFlush = 0L
@@ -579,7 +601,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                         if (work && limit > 0 && spent >= nextLimit && session.maxRounds != 0) {
                             if (!MainActivity.visible) com.jack.ai.data.Routines.notify(getApplication(), "work-ask-$convId",
                                 "需要你确认：$workTitle", "这次任务已经花了 ¥%.2f，打开看看要不要继续".format(spent), openChat = convId)
-                            val ok = core.confirm(
+                            val ok = ask(
                                 "这次任务已经花了 ¥%.2f".format(spent),
                                 "超过了设定的 ¥%.2f。继续的话，再多花 ¥%.2f 会再问你。".format(nextLimit, limit),
                                 "继续",
@@ -609,7 +631,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     onRound = { flush() },
                     // 带工具的请求被拒（比如旧记录格式接口不认）：先去掉旧的工具调用过程再试，工具照样能用；
                     // 还不行就不用工具，改成“先搜再答”
-                    interjections = { generateSequence { interjections.poll() }.toList() },
+                    interjections = { generateSequence { myInterjections.poll() }.toList() },
                     images = { session.takeImages() },
                     // use_skill 打开了新技能：下一轮把它的工具加上
                     retool = { PromptBuilder.toolSet(settings, skills, conv, project, session.unlocked.toSet()) },
@@ -663,18 +685,21 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 patchMessage(convId, reply.id) { m ->
                     m.copy(content = m.content.trimEnd(), searches = m.searches.map { if (it.pending) it.copy(pending = false) else it })
                 }
-                running = null
+                running.remove(convId, reply.id)
+                // 占着浏览器的话放出来，等着用的回答接着用
+                session.releaseBrowser()
                 // 这次打开的技能记进对话：之后每轮都带着它的工具，工具列表不再变，缓存照样命中
                 if (session.unlocked.any { it !in conv.skillTools }) {
                     val opened = session.unlocked.toSet()
                     updateConvQuiet(convId) { it.copy(skillTools = it.skillTools + opened) }
                 }
-                _state.update { it.copy(streaming = false, streamingId = null) }
+                done()
                 persist()
                 // 插的话没来得及用上（回答已经收尾了）：等这次结束后当成新消息发出去
-                val leftover = generateSequence { interjections.poll() }.toList()
+                val leftover = generateSequence { myInterjections.poll() }.toList()
+                val me = jobs[convId]
                 if (leftover.isNotEmpty()) viewModelScope.launch {
-                    job?.join()
+                    me?.join()
                     if (_state.value.currentId == convId) send(leftover.joinToString("\n"))
                 }
                 run {
@@ -696,21 +721,20 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun requestRecord() = _state.update { it.copy(recordRequest = true) }
     fun consumeRecordRequest() = _state.update { it.copy(recordRequest = false) }
 
-    /** 录音纪要录完：录音挂在当前对话上发出去，Kavi 转文字、出纪要。正在回答的等它答完。 */
+    /** 录音纪要录完：录音挂在当前对话上发出去，Kavi 转文字、出纪要。这个对话正在回答的话等它答完（别的对话不用等）。 */
     fun recordingDone(file: java.io.File, seconds: Long) {
+        val here = _state.value.currentId
         viewModelScope.launch {
-            job?.join()
+            here?.let { jobs[it] }?.join()
             val att = Attachment(kind = "file", name = file.name, path = file.absolutePath)
             _state.update { it.copy(pending = it.pending + att) }
             send(com.jack.ai.data.Minutes.recording(file.name, seconds))
         }
     }
 
-    /** 分享菜单的「用 Kavi 总结」：链接或视频、录音文件，开个新对话直接发出去。 */
+    /** 分享菜单的「用 Kavi 总结」：链接或视频、录音文件，开个新对话直接发出去（正在进行的回答不停，各答各的）。 */
     fun summarizeShare(text: String?, uris: List<Uri>) {
         viewModelScope.launch {
-            if (busy()) stop()
-            job?.join()
             newChat()
             val app = getApplication<Application>()
             val atts = uris.mapNotNull { uri ->
@@ -747,8 +771,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun downloadShare(text: String) {
         viewModelScope.launch {
-            if (busy()) stop()
-            job?.join()
+            // 新开对话发出去，正在进行的回答不停，各答各的
             newChat()
             send(com.jack.ai.data.Downloads.shareRequest(text))
         }
@@ -784,8 +807,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 updateConvQuiet(existing.id) { it.copy(systemPrompt = com.jack.ai.data.INBOX_PROMPT) }
             }
             select(com.jack.ai.data.INBOX_ID)
-            // 正在回答的先收尾，再发
-            job?.join()
+            // 收件箱自己正在回答的先收尾，再发（别的对话的回答不用等）
+            jobs[com.jack.ai.data.INBOX_ID]?.join()
             _state.update { it.copy(pending = atts) }
             send(text.orEmpty())
         }
@@ -805,6 +828,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     companion object {
+        /** 最多几个对话同时在回答。 */
+        const val MAX_PARALLEL = 3
+
         const val REVIEW_PROMPT = "请换一个更严格的视角，复核你上面那条回答：检查事实错误、计算错误、逻辑漏洞、" +
             "遗漏的重要信息和表达不清的地方，需要时可以联网核实。然后直接给出改进后的完整回答，" +
             "开头用一句话说明修正或补充了什么。如果原回答没有问题，就说“复核没有发现问题”，" +

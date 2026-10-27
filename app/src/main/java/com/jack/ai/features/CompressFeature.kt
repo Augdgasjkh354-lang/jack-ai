@@ -28,7 +28,8 @@ class CompressFeature(core: AppCore) : Feature(core) {
     fun compress(convId: String? = state.value.currentId, manual: Boolean = true) {
         val id = convId ?: return
         val s = state.value
-        if (s.streaming || s.compressingId != null) return
+        // 这个对话还在回答就先不压（别的对话在答不影响）
+        if (id in s.streamingIds || s.compressingId != null) return
         val conv = s.conversations.firstOrNull { it.id == id } ?: return
         val settings = s.settings
         val ep = settings.backgroundEndpoint() ?: return

@@ -21,28 +21,35 @@ class AppCore(val app: Application, val store: Store, val scope: CoroutineScope)
     val state = MutableStateFlow(UiState())
     /** 写文件按顺序来，免得两次保存互相覆盖。 */
     val ioSerial = Dispatchers.IO.limitedParallelism(1)
-    /** 停下正在进行的回答（由 ChatViewModel 设置）。 */
-    var stop: () -> Unit = {}
-    /** 停下并等它收尾完（恢复备份前用，免得旧回答收尾时的保存盖掉刚恢复的数据）。 */
+    /** 停下某个对话正在进行的回答（由 ChatViewModel 设置）。 */
+    var stopConv: (String) -> Unit = {}
+    /** 停下所有回答并等它们收尾完（恢复备份前用，免得旧回答收尾时的保存盖掉刚恢复的数据）。 */
     var stopAndWait: suspend () -> Unit = {}
 
     fun toast(msg: String) = state.update { it.copy(toast = msg) }
 
     private val waiting = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.CompletableDeferred<Boolean>>()
+    /** 排着队等用户点的确认（几个回答同时问时一个一个来），界面显示排在最前面的。 */
+    private val asks = mutableListOf<com.jack.ai.ConfirmRequest>()
+
+    private fun showNextAsk() = state.update { it.copy(confirm = synchronized(asks) { asks.firstOrNull() }) }
 
     /**
-     * 弹窗问用户，等他点了再继续。用户停止回答（协程被取消）时弹窗自动收起。
+     * 弹窗问用户，等他点了再继续。几个回答同时要问时排队，一个一个问。
+     * 用户停止回答（协程被取消）时这个弹窗自动收起，排在后面的接着出来。
      */
     suspend fun confirm(title: String, body: String, action: String): Boolean {
         val req = com.jack.ai.ConfirmRequest(com.jack.ai.data.newId(), title, body, action)
         val answer = kotlinx.coroutines.CompletableDeferred<Boolean>()
         waiting[req.id] = answer
-        state.update { it.copy(confirm = req) }
+        synchronized(asks) { asks += req }
+        showNextAsk()
         return try {
             answer.await()
         } finally {
             waiting.remove(req.id)
-            state.update { if (it.confirm?.id == req.id) it.copy(confirm = null) else it }
+            synchronized(asks) { asks.removeAll { it.id == req.id } }
+            showNextAsk()
         }
     }
 

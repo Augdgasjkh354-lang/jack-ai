@@ -71,7 +71,8 @@ class DeepSeekFiles(private val dir: File) {
             out[path] = id
             changed = true
         }
-        if (changed) synchronized(lock) { save(map) }
+        // 几个对话可能同时在传：存的时候和文件里现有的合起来，不把别人刚记下的盖掉
+        if (changed) synchronized(lock) { save(load().apply { entries.removeIf { it.value.expiresAt < now }; putAll(map) }) }
         out
     }
 

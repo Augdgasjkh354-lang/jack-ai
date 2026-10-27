@@ -165,25 +165,30 @@ suspend fun runBackgroundWork(
     val thinking = if (ep.reasoning && ep.deepseek) s.workThinking.resolve(r.prompt, work = true, hasFiles = false) else ThinkLevel.OFF
     val client = DeepSeekClient()
     val agent = Agent({ msgs, t -> client.stream(ep, msgs, thinking, s.temperature, t) }, sendReasoning = ep.deepseek && thinking.effort != null)
-    agent.run(
-        messages = messages,
-        tools = if (resumed) toolsFor(session.unlocked.toSet()) else tools,
-        maxRounds = { session.maxRounds },
-        execute = { name, args ->
-            if (s.workCostLimit > 0 && spent >= s.workCostLimit) {
-                session.maxRounds = 0
-                "花费到了上限，不要再调用工具，直接写出目前的结果，并说明还差什么。"
-            } else if (!allow(name, args)) "这个工具这次不能用。"
-            else session.perform(name, args).also { log(com.jack.ai.data.RunLog.stepOf(name, it.status, it.text)) }.text
-        },
-        retool = { toolsFor(session.unlocked.toSet()) },
-        onTools = { TaskCheckpoint.save(checkpoint, cpKey, messages, spent) },
-        onUsage = { ev ->
-            store.addUsage(ep, ev.promptTokens, ev.cacheHit, ev.completionTokens)
-            spent += Pricing.priceAt(ep, System.currentTimeMillis())
-                ?.let { Pricing.cost(it, ev.promptTokens, ev.cacheHit ?: 0, ev.completionTokens) } ?: 0.0
-        },
-    )
+    try {
+        agent.run(
+            messages = messages,
+            tools = if (resumed) toolsFor(session.unlocked.toSet()) else tools,
+            maxRounds = { session.maxRounds },
+            execute = { name, args ->
+                if (s.workCostLimit > 0 && spent >= s.workCostLimit) {
+                    session.maxRounds = 0
+                    "花费到了上限，不要再调用工具，直接写出目前的结果，并说明还差什么。"
+                } else if (!allow(name, args)) "这个工具这次不能用。"
+                else session.perform(name, args).also { log(com.jack.ai.data.RunLog.stepOf(name, it.status, it.text)) }.text
+            },
+            retool = { toolsFor(session.unlocked.toSet()) },
+            onTools = { TaskCheckpoint.save(checkpoint, cpKey, messages, spent) },
+            onUsage = { ev ->
+                store.addUsage(ep, ev.promptTokens, ev.cacheHit, ev.completionTokens)
+                spent += Pricing.priceAt(ep, System.currentTimeMillis())
+                    ?.let { Pricing.cost(it, ev.promptTokens, ev.cacheHit ?: 0, ev.completionTokens) } ?: 0.0
+            },
+        )
+    } finally {
+        // 占着浏览器的话放出来，聊天里等着用的回答接着用
+        session.releaseBrowser()
+    }
     TaskCheckpoint.clear(checkpoint)
     val text = agent.lastRound.trim().ifBlank { agent.content.toString().trim() }
     return if (text.isBlank()) TaskResult("（这次没有生成内容）", files, TaskStatus.FAILED) else TaskResult(text, files)
