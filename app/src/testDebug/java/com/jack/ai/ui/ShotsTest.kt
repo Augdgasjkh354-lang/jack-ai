@@ -138,4 +138,59 @@ class ShotsTest {
         }
         save("drawer-" + dark().name.lowercase())
     }
+
+    @Test
+    fun memory() {
+        Assume.assumeTrue(System.getenv("SHOTS_DIR") != null)
+        val app = RuntimeEnvironment.getApplication() as Application
+        val store = Store(app)
+        store.saveMemories(listOf("用户喜欢简洁直接的回答", "用户在做跨境电商，店铺在 1688 和淘宝", "用户常常熬夜，但在努力调整作息").map { com.jack.ai.data.MemoryItem(text = it) })
+        val now = System.currentTimeMillis()
+        store.saveDreams(listOf(
+            com.jack.ai.data.DreamEntry(createdAt = now, seen = true, journal = "今天聊了很多。他一边处理店铺的事情，一边在想以后的方向，有时候会焦虑，但没有停下。\n\n复盘：上午那份报价表我漏了运费一栏，被他指出来了，以后做对比表先列全成本。\n\n下次：他大概会接着问物流的事，可以提前把三家的发货时效查好。", changes = "新记住了店铺平台"),
+            com.jack.ai.data.DreamEntry(createdAt = now - 7 * 86_400_000L, seen = true, journal = "那几天他在处理物流和广告的事情，感觉有点累……"),
+            com.jack.ai.data.DreamEntry(createdAt = now - 17 * 86_400_000L, from = now - 26 * 86_400_000L, merged = 10, seen = true, journal = "这段时间聊了很多关于产品、团队和未来的想法……"),
+        ))
+        val vm = vm(emptyList())
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            val state by vm.state.collectAsState()
+            JackTheme(dark()) { MemoryScreen(vm, state) {} }
+        }
+        save("memory-" + dark().name.lowercase())
+    }
+
+    @Test
+    fun routines() {
+        Assume.assumeTrue(System.getenv("SHOTS_DIR") != null)
+        val app = RuntimeEnvironment.getApplication() as Application
+        val now = System.currentTimeMillis()
+        val day = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date(now + 86_400_000L))
+        val task = com.jack.ai.data.Routine(kind = "task", title = "汇总昨天的邮件", prompt = "x", hour = 9, minute = 0, repeat = "weekdays", date = day)
+        val watch = com.jack.ai.data.Routine(kind = "watch", title = "G1234 次二等座有票就通知我", prompt = "x", hour = 0, minute = 0, everyMin = 30, until = now + 3 * 86_400_000L)
+        Store(app).saveRoutines(listOf(
+            com.jack.ai.data.Routine(kind = "reminder", title = "喝水", hour = 8, minute = 30, repeat = "daily", date = day), task, watch))
+        com.jack.ai.data.RunLog.once(app, task, "ok", "完成")
+        com.jack.ai.data.RunLog.once(app, watch, "not_met", "")
+        val vm = vm(emptyList())
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            val state by vm.state.collectAsState()
+            JackTheme(dark()) { RoutinesScreen(vm, state) {} }
+        }
+        save("routines-" + dark().name.lowercase())
+    }
+
+    @Test
+    @Config(qualifiers = "w400dp-h2400dp-xhdpi")
+    fun settings() {
+        Assume.assumeTrue(System.getenv("SHOTS_DIR") != null)
+        val vm = vm(emptyList())
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            val state by vm.state.collectAsState()
+            JackTheme(dark()) { SettingsScreen(vm, state.settings, {}, {}, {}, { true }) }
+        }
+        save("settings-" + dark().name.lowercase())
+    }
 }

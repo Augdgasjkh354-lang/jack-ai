@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -24,6 +25,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.DatePicker
@@ -83,25 +88,39 @@ fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
         canCalendar = CalendarTool.canWrite(ctx)
     }
 
+    // 按种类筛：全部 / 提醒 / 定时任务 / 监控
+    var filter by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("all") }
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("提醒和定时任务") },
+                title = {},
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") } },
-                actions = {
-                    IconButton(onClick = { editing = Routine(title = "", hour = 9, minute = 0) }) { Icon(Icons.Default.Add, "添加") }
-                },
             )
+        },
+        floatingActionButton = {
+            androidx.compose.material3.FloatingActionButton(
+                onClick = { editing = Routine(title = "", hour = 9, minute = 0) },
+                shape = androidx.compose.foundation.shape.CircleShape,
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+            ) { Icon(Icons.Default.Add, "添加") }
         },
     ) { padding ->
         LazyColumn(
             Modifier.padding(padding).fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 96.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            item {
+                Text("提醒和任务", style = MaterialTheme.typography.headlineMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                    modifier = Modifier.padding(start = 4.dp, bottom = 4.dp))
+            }
+            item { KindFilter(filter) { filter = it } }
             if (!canNotify && Build.VERSION.SDK_INT >= 33) {
                 item {
-                    Card(Modifier.fillMaxWidth()) {
+                    androidx.compose.material3.Surface(shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text("还没有通知权限", style = MaterialTheme.typography.titleSmall)
                             OutlinedButton(onClick = { permission.launch(Manifest.permission.POST_NOTIFICATIONS) }) { Text("允许通知") }
@@ -111,7 +130,9 @@ fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
             }
             if (!canCalendar) {
                 item {
-                    Card(Modifier.fillMaxWidth()) {
+                    androidx.compose.material3.Surface(shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text("日历", style = MaterialTheme.typography.titleSmall)
                             OutlinedButton(onClick = { calendarPermission.launch(CalendarTool.PERMISSIONS) }) { Text("允许读写日历") }
@@ -130,24 +151,14 @@ fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
             if (state.routines.isEmpty()) {
                 item { Text("还没有提醒和任务。", color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(top = 12.dp)) }
             }
-            items(state.routines.sortedBy { it.nextAt() ?: Long.MAX_VALUE }, key = { it.id }) { r ->
+            val shown = state.routines.filter { filter == "all" || it.kind == filter }
+            if (state.routines.isNotEmpty() && shown.isEmpty()) {
+                item { Text("这一类还没有。", color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(top = 12.dp, start = 4.dp)) }
+            }
+            items(shown.sortedBy { it.nextAt() ?: Long.MAX_VALUE }, key = { it.id }) { r ->
                 // 监控在聊天里让 AI 设，这里只能开关和删除
-                Card(onClick = { if (r.kind != "watch") editing = r }, modifier = Modifier.fillMaxWidth()) {
-                    Row(Modifier.padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text((when (r.kind) { "reminder" -> "⏰ "; "watch" -> "👀 "; else -> "🤖 " }) + r.title, style = MaterialTheme.typography.titleSmall)
-                            Text(
-                                r.describe() + (if (r.then.isNotBlank()) " · 满足后接着做" else "") + (if (r.work) " · Work" else "") + (if (r.offPeak) " · 避开高峰" else "") + if (r.enabled && r.nextAt() == null) "（已过期）" else if (!r.enabled && r.kind == "watch") "（已结束）"
-                                    else if (!r.enabled && r.repeat == "none") "（已完成）" else "",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Switch(r.enabled, { on -> vm.saveRoutine(r.copy(enabled = on)) })
-                        IconButton(onClick = { deleting = r }) { Icon(Icons.Default.Delete, "删除", tint = MaterialTheme.colorScheme.outline) }
-                    }
-                    RunHistory(r.id)
-                }
+                RoutineCard(r, onClick = { if (r.kind != "watch") editing = r }, onToggle = { on -> vm.saveRoutine(r.copy(enabled = on)) },
+                    onDelete = { deleting = r })
             }
         }
     }
@@ -162,6 +173,87 @@ fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
             vm.saveRoutine(saved)
             editing = null
             if (!canNotify && Build.VERSION.SDK_INT >= 33) permission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+}
+
+/** 一种提醒的样子：名字、图标、颜色。 */
+private fun kindLook(kind: String): Triple<String, androidx.compose.ui.graphics.vector.ImageVector, Long> = when (kind) {
+    "reminder" -> Triple("提醒", Icons.Default.Notifications, 0xFFEF5A5A)
+    "watch" -> Triple("监控", AppIcons.Radar, 0xFF22A06B)
+    else -> Triple("任务", AppIcons.Calendar, 0xFF3B82F6)
+}
+
+/** 顶上的分段筛选：全部 / 提醒 / 定时任务 / 监控。 */
+@Composable
+private fun KindFilter(value: String, onChange: (String) -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    androidx.compose.material3.Surface(shape = androidx.compose.foundation.shape.CircleShape, color = colors.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(4.dp)) {
+            listOf("all" to "全部", "reminder" to "提醒", "task" to "定时任务", "watch" to "监控").forEach { (k, label) ->
+                val on = k == value
+                androidx.compose.material3.Surface(
+                    onClick = { onChange(k) },
+                    shape = androidx.compose.foundation.shape.CircleShape,
+                    color = if (on) colors.primary else androidx.compose.ui.graphics.Color.Transparent,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(label, style = MaterialTheme.typography.labelLarge, color = if (on) colors.onPrimary else colors.onSurfaceVariant,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center, maxLines = 1,
+                        modifier = Modifier.padding(vertical = 9.dp))
+                }
+            }
+        }
+    }
+}
+
+/** 一条提醒 / 任务 / 监控：左边彩色圆图标和种类，中间时间和标题，右边开关；下面一行是上次跑得怎么样。 */
+@Composable
+private fun RoutineCard(r: Routine, onClick: () -> Unit, onToggle: (Boolean) -> Unit, onDelete: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    val (kindName, icon, tintLong) = kindLook(r.kind)
+    val tint = androidx.compose.ui.graphics.Color(tintLong)
+    var menu by remember { mutableStateOf(false) }
+    androidx.compose.material3.Surface(
+        onClick = onClick,
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
+        color = colors.surfaceContainerLowest,
+        border = androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column {
+            Row(Modifier.padding(start = 16.dp, top = 16.dp, end = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.Top) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(58.dp)) {
+                    androidx.compose.foundation.layout.Box(
+                        Modifier.size(48.dp).clip(androidx.compose.foundation.shape.CircleShape).background(tint.copy(alpha = 0.13f)),
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(icon, null, Modifier.size(24.dp), tint = tint) }
+                    Text(kindName, style = MaterialTheme.typography.labelSmall, color = tint,
+                        modifier = Modifier.padding(top = 6.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+                            .background(tint.copy(alpha = 0.1f)).padding(horizontal = 7.dp, vertical = 2.dp))
+                }
+                Spacer(Modifier.size(10.dp))
+                Column(Modifier.weight(1f).padding(top = 2.dp)) {
+                    Text(
+                        r.describe() + (if (r.then.isNotBlank()) " · 满足后接着做" else "") + (if (r.work) " · Work" else "") + (if (r.offPeak) " · 避开高峰" else ""),
+                        style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
+                    )
+                    Text(r.title, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                        maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
+                    val ended = if (r.enabled && r.nextAt() == null) "已过期" else if (!r.enabled && r.kind == "watch") "已结束"
+                        else if (!r.enabled && r.repeat == "none") "已完成" else null
+                    if (ended != null) Text(ended, style = MaterialTheme.typography.labelSmall, color = colors.outline, modifier = Modifier.padding(top = 2.dp))
+                }
+                Switch(r.enabled, onToggle, modifier = Modifier.padding(top = 4.dp))
+                androidx.compose.foundation.layout.Box {
+                    IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "更多", tint = colors.outline) }
+                    androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        if (r.kind != "watch") androidx.compose.material3.DropdownMenuItem(text = { Text("修改") }, onClick = { menu = false; onClick() })
+                        androidx.compose.material3.DropdownMenuItem(text = { Text("删除", color = colors.error) }, onClick = { menu = false; onDelete() })
+                    }
+                }
+            }
+            RunHistory(r.id)
         }
     }
 }
@@ -280,11 +372,18 @@ private fun RunHistory(routineId: String) {
         else -> "✓"
     }
     val last = runs.first()
-    Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 10.dp)) {
+    // ✓ 绿、○ 橙、✗ △ 红，和左边的图标对齐
+    fun tone(m: String) = when (m) {
+        "✓" -> androidx.compose.ui.graphics.Color(0xFF22A06B)
+        "○" -> androidx.compose.ui.graphics.Color(0xFFE08600)
+        "✗", "△" -> colors.error
+        else -> colors.onSurfaceVariant
+    }
+    Column(Modifier.fillMaxWidth().padding(start = 84.dp, end = 16.dp, bottom = 14.dp)) {
         Text(
             "上次 ${fmt.format(java.util.Date(last.startedAt))} ${mark(last)} ${last.statusText()}" + if (runs.size > 1 || last.steps.isNotEmpty() || last.error.isNotBlank()) (if (open) "  收起" else "  查看记录") else "",
-            style = MaterialTheme.typography.labelSmall,
-            color = if (mark(last) == "✗" || mark(last) == "△") colors.error else colors.onSurfaceVariant,
+            style = MaterialTheme.typography.labelMedium,
+            color = tone(mark(last)),
             modifier = Modifier.clickable { open = !open },
         )
         if (open) runs.take(8).forEach { r ->

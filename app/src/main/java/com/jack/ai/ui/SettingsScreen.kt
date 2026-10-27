@@ -24,6 +24,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
@@ -96,10 +101,15 @@ fun SettingsScreen(
         confirmRestore = uri
     }
 
+    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     Scaffold(
+        // 浅灰的底，上面一张张白卡片
+        containerColor = if (dark) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.surfaceContainerLow,
         topBar = {
             TopAppBar(
-                title = { Text("设置") },
+                title = { Text("设置", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
+                colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
+                    containerColor = if (dark) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.surfaceContainerLow),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
@@ -115,10 +125,10 @@ fun SettingsScreen(
                 .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(22.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             // ---- 个性化 ----
-            Section("个性化") {
+            Section("个性化", icon = Icons.Default.Person) {
                 SettingField("怎么称呼你", settings.userName, "例如：Jack") { v ->
                     vm.updateSettings { it.copy(userName = v) }
                 }
@@ -131,7 +141,7 @@ fun SettingsScreen(
             }
 
             // ---- API Key ----
-            Section("DeepSeek API Key") {
+            Section("DeepSeek API Key", icon = AppIcons.Lock) {
                 OutlinedTextField(
                     value = keyInput,
                     onValueChange = {
@@ -159,24 +169,24 @@ fun SettingsScreen(
                 balance?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
             }
 
-            Section("其他模型服务") {
+            Section("其他模型服务", icon = AppIcons.Code) {
                 ProvidersSection(vm, settings.providers)
             }
 
-            Section("连接", hint = "点开一项设置；连好之后只显示一行状态。") {
+            Section("连接", icon = AppIcons.Share, hint = "点开一项设置；连好之后只显示一行状态。") {
                 ConnectionsSection(vm, settings)
             }
 
-            Section("技能") {
+            Section("技能", icon = Icons.Default.Build) {
                 OutlinedButton(onClick = onOpenSkills) { Text("管理技能") }
             }
 
-            Section("手机文件夹", hint = "授权给 Kavi 的文件夹：它能在里面找文件、拷进对话处理、把做好的文件存回去，搬和删之前先问你。别的地方它碰不到。") {
+            Section("手机文件夹", icon = AppIcons.Folder, hint = "授权给 Kavi 的文件夹：它能在里面找文件、拷进对话处理、把做好的文件存回去，搬和删之前先问你。别的地方它碰不到。") {
                 PhoneFoldersSection(vm, settings)
             }
 
             // ---- 模型 ----
-            Section("模型和思考") {
+            Section("模型和思考", icon = AppIcons.Brain) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     settings.modelChoices().forEach { c ->
                         FilterChip(
@@ -199,7 +209,7 @@ fun SettingsScreen(
 
             // ---- 统计 ----
             // ---- 长对话 ----
-            Section("长对话自动压缩", hint = "对话用到这么多上下文时，较早的部分自动压缩成提要。越高记得越全、每次越贵；模型本身的上限比它低时，以模型为准。") {
+            Section("长对话自动压缩", icon = AppIcons.Compress, hint = "对话用到这么多上下文时，较早的部分自动压缩成提要。越高记得越全、每次越贵；模型本身的上限比它低时，以模型为准。") {
                 // 松手才生效：在设置页里上下翻时误碰一下不会改掉
                 var draft by remember(settings.compressTokens) { mutableStateOf(settings.compressTokens / 1000f) }
                 Text("${draft.toInt()}k", style = MaterialTheme.typography.titleMedium)
@@ -212,7 +222,7 @@ fun SettingsScreen(
                 )
             }
 
-            Section("统计") {
+            Section("统计", icon = Icons.Default.Info) {
                 val monthSpent by produceState<Double?>(null) {
                     val month = java.text.SimpleDateFormat("yyyy-MM", Locale.US).format(java.util.Date())
                     value = vm.loadUsage().filter { it.date.startsWith(month) }.sumOf { it.costYuan() ?: 0.0 }
@@ -228,16 +238,8 @@ fun SettingsScreen(
 
 
             // ---- 外观 ----
-            Section("外观") {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ThemeMode.entries.forEach { m ->
-                        FilterChip(
-                            selected = settings.themeMode == m,
-                            onClick = { vm.updateSettings { it.copy(themeMode = m) } },
-                            label = { Text(m.label) },
-                        )
-                    }
-                }
+            Section("外观", icon = AppIcons.Image) {
+                ThemeTiles(settings.themeMode) { m -> vm.updateSettings { it.copy(themeMode = m) } }
                 Text("主题色", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     ACCENTS.forEach { a ->
@@ -284,7 +286,7 @@ fun SettingsScreen(
             }
 
             // ---- 隐私和数据 ----
-            Section("隐私和数据") {
+            Section("隐私和数据", icon = AppIcons.Lock) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("应用锁")
@@ -318,11 +320,11 @@ fun SettingsScreen(
             }
 
             // ---- 高级 ----
-            Section("版本更新") {
+            Section("版本更新", icon = AppIcons.Download) {
                 UpdateSection(vm, settings)
             }
 
-            Section("高级") {
+            Section("高级", icon = Icons.Default.Settings) {
                 var url by remember { mutableStateOf(settings.baseUrl) }
                 OutlinedTextField(
                     value = url,
@@ -392,25 +394,63 @@ private fun SettingField(
     )
 }
 
-/** 一组设置：小标题在卡片外面，卡片是平的浅底圆角块，不要阴影。 */
+/** 一组设置：一张白卡片，左上角图标加粗体标题，下面是这一组的内容；说明写在卡片下面。 */
 @Composable
-private fun Section(title: String, hint: String? = null, content: @Composable () -> Unit) {
+private fun Section(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector? = null, hint: String? = null, content: @Composable () -> Unit) {
     val colors = MaterialTheme.colorScheme
+    val dark = colors.background.luminance() < 0.5f
     Column(Modifier.fillMaxWidth()) {
-        Text(title, style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant,
-            modifier = Modifier.padding(start = 6.dp, bottom = 6.dp))
         androidx.compose.material3.Surface(
             shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
-            color = colors.surfaceContainerLow,
+            color = if (dark) colors.surfaceContainer else colors.surfaceContainerLowest,
+            border = androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant),
             modifier = Modifier.fillMaxWidth(),
         ) {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 2.dp)) {
+                    if (icon != null) {
+                        Icon(icon, null, Modifier.size(20.dp), tint = colors.onSurface)
+                        Spacer(Modifier.size(10.dp))
+                    }
+                    Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                }
                 content()
             }
         }
         hint?.let {
             Text(it, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
                 modifier = Modifier.padding(start = 6.dp, end = 6.dp, top = 6.dp))
+        }
+    }
+}
+
+/** 外观里的主题：三个小预览块（浅色、深色、跟随系统），点哪个用哪个。 */
+@Composable
+private fun ThemeTiles(selected: ThemeMode, onPick: (ThemeMode) -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        ThemeMode.entries.forEach { m ->
+            val on = m == selected
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.weight(1f).clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
+                    .border(if (on) 2.dp else 1.dp, if (on) colors.onSurface else colors.outlineVariant, androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
+                    .clickable { onPick(m) }.padding(10.dp),
+            ) {
+                // 小预览：一张「页面」上两道「文字」
+                val light = androidx.compose.ui.graphics.Color(0xFFF3F4F6) to androidx.compose.ui.graphics.Color(0xFFD1D5DB)
+                val darkC = androidx.compose.ui.graphics.Color(0xFF1D212B) to androidx.compose.ui.graphics.Color(0xFF3A4150)
+                Row(Modifier.fillMaxWidth().height(44.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))) {
+                    listOfNotNull(if (m != ThemeMode.DARK) light else null, if (m != ThemeMode.LIGHT) darkC else null).forEach { (bg, line) ->
+                        Column(Modifier.weight(1f).fillMaxSize().background(bg).padding(8.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                            Box(Modifier.fillMaxWidth(0.8f).height(4.dp).clip(androidx.compose.foundation.shape.CircleShape).background(line))
+                            Box(Modifier.fillMaxWidth(0.55f).height(4.dp).clip(androidx.compose.foundation.shape.CircleShape).background(line))
+                        }
+                    }
+                }
+                Text(m.label, style = MaterialTheme.typography.labelMedium, fontWeight = if (on) androidx.compose.ui.text.font.FontWeight.SemiBold else null,
+                    modifier = Modifier.padding(top = 8.dp))
+            }
         }
     }
 }
