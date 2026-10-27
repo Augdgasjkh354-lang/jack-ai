@@ -20,13 +20,15 @@ class MailServerTest {
     @Before
     fun start() {
         Security.setProperty("ssl.SocketFactory.provider", DummySSLSocketFactory::class.java.name)
-        server = GreenMail(arrayOf(ServerSetupTest.IMAPS))
+        // 随机空闲端口；整套测试一起跑时 SSL 起得慢，默认 2 秒等不到，放宽到 30 秒
+        server = GreenMail(arrayOf(ServerSetupTest.IMAPS.dynamicPort().apply { setServerStartupTimeout(30_000) }))
         server.start()
         val user = server.setUser("jack@test.com", "jack@test.com", "pw")
-        acc = MailAccount("jack@test.com", "pw", "127.0.0.1", ServerSetupTest.IMAPS.port, "127.0.0.1", 465)
+        val port = server.imaps.port
+        acc = MailAccount("jack@test.com", "pw", "127.0.0.1", port, "127.0.0.1", 465)
         // 建好「已删除」和「归档」
         val store = server.imaps.createStore()
-        store.connect("127.0.0.1", ServerSetupTest.IMAPS.port, "jack@test.com", "pw")
+        store.connect("127.0.0.1", port, "jack@test.com", "pw")
         listOf("已删除", "归档").forEach { store.getFolder(it).create(Folder.HOLDS_MESSAGES) }
         store.close()
         repeat(5) { i -> user.deliver(GreenMailUtil.createTextEmail("jack@test.com", "a@b.com", "广告 $i", "正文", server.imaps.serverSetup)) }
