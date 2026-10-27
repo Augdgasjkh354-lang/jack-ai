@@ -189,6 +189,7 @@ Output only one JSON object: {"send": true or false, "kind": "a two-or-three-wor
         if (!want) return record(store, Nudge(now, sent = false, kind = kind, why = str("why")))
         veto(log, kind, text, now)?.let { return record(store, Nudge(now, sent = false, text = text, kind = kind, why = str("why"), blocked = it)) }
         val n = record(store, Nudge(now, sent = true, text = text, kind = kind, why = str("why")))
+        Timeline.add(ctx, Episode(at = now, place = "proactive", text = text.take(200)))
         // 进「Kavi 找你」对话（App 打开时并进来），点通知直接打开它接着聊
         store.addInbox(InboxItem("nudge", CONV_ID, TITLE, "", text, at = now, aside = true))
         notify(ctx, n)

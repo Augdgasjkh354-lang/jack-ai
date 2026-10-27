@@ -341,7 +341,8 @@ object PromptBuilder {
             // 这段每个对话都一样；跟对话有关的那句（在不在项目里、开没开全局记忆）放到后面
             parts += "固定说明" to f(memoryRulesBase())
         }
-        parts += "固定说明" to f("【Time】The 「Current time」 line before each message, and the lists of files, tables and reminders, are added automatically by the system. They aren't something {user} said; don't bring them up.")
+        parts += "固定说明" to f("【Time】The 「Current time」 line before each message, and the lists of files, tables and reminders, are added automatically by the system. They aren't something {user} said; don't bring them up. " +
+            "The 【Recently】 and 【Time】 notes there are your own memory of what has happened lately, across conversations and your own time: use them naturally when relevant, the way you'd remember, never recite them.")
         val profile = buildString {
             com.jack.ai.data.Persona.name(settings).takeIf { it.isNotEmpty() }?.let { append("Name: $it\n") }
             if (settings.aboutMe.isNotBlank()) append(f("About {user}: ") + settings.aboutMe.trim() + "\n")

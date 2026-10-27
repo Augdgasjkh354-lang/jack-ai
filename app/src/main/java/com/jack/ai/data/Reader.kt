@@ -175,6 +175,12 @@ object Reader {
             report = if (quiet) "" else rep.body.take(2000), files = res.files.filter { it.name != NOTES },
             skipped = if (res.status == com.jack.ai.tools.TaskStatus.OK || quiet) "" else res.text.take(200))
         add(ctx, e)
+        // 写进经历流：不管在哪醒来，它都记得自己的自由时间
+        Timeline.add(ctx, Episode(place = "free", text = when {
+            e.skipped.isNotEmpty() -> "couldn't really start (${e.skipped.take(60)})"
+            e.title.isBlank() && e.report.isBlank() -> "spent it quietly, didn't do much"
+            else -> "[${e.kind}] " + listOf(e.title, e.report.take(200)).filter { it.isNotBlank() }.joinToString(": ")
+        }))
         return e
     }
 

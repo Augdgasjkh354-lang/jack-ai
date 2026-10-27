@@ -283,9 +283,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val id = conv.id
         val title = trimmed.ifEmpty { atts.first().name }.take(20).replace('\n', ' ')
         val moved = files.moveToWorkspace(conv, atts)
-        // 第一条消息：记下最近几场对话，这个对话之后一直带着（不再变，缓存才稳）
-        val recap = if (conv.messages.isEmpty() && conv.recap.isBlank() && _state.value.settings.memoryEnabled)
-            com.jack.ai.data.Recap.build(conv, _state.value.conversations, _state.value.projects) else conv.recap
+        // 以前在第一条消息时记下最近几场对话；现在每轮都带着经历流里的「刚才」（Timeline），旧对话里记下的照旧
+        val recap = conv.recap
         updateConv(id) { c ->
             c.copy(
                 title = if (c.messages.isEmpty()) title else c.title,
@@ -549,7 +548,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 if (paths.isNotEmpty()) promptInput = promptInput.copy(fileIds = runCatching { dsFiles.ensure(ep, paths) }.getOrDefault(emptyMap()))
             }
             promptInput = promptInput.copy(contextNote = withContext(Dispatchers.IO) {
-                runCatching { com.jack.ai.tools.ContextNote.build(getApplication(), store, conv, skills.map { it.id }.toSet()) }.getOrDefault("")
+                runCatching { com.jack.ai.tools.ContextNote.build(getApplication(), store, conv, skills.map { it.id }.toSet()) }.getOrDefault("") +
+                    // Kavi 的连续性：最近的经历、上次见用户是什么时候（每轮变，放这里不影响缓存）
+                    runCatching { com.jack.ai.data.Timeline.noteFor(getApplication(), settings, _state.value.conversations, _state.value.projects, conv) }.getOrDefault("")
             })
             var filesDropped = false
             // Work：开前台服务，切到后台也接着干；花费到上限先问一声
@@ -735,6 +736,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 done()
                 persist()
+                // 这段聊天停下一阵后，在后台写进 Kavi 的经历流
+                com.jack.ai.data.Timeline.scheduleSummary(getApplication(), convId)
                 // 插的话没来得及用上（回答已经收尾了）：等这次结束后当成新消息发出去
                 val leftover = generateSequence { myInterjections.poll() }.toList()
                 val me = jobs[convId]

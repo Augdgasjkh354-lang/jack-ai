@@ -209,6 +209,7 @@ Output only one JSON object, in this format:
         } + addedMeanwhile)
         val entry = DreamEntry(journal = str("journal").ifBlank { throw IllegalStateException("做梦结果格式不对") }, changes = str("changes"))
         store.saveDreams(listOf(entry) + store.loadDreams().take(59))
+        Timeline.add(ctx, Episode(place = "dream", text = "looked back over recent chats and wrote my journal" + entry.changes.takeIf { it.isNotBlank() }?.let { "; memory changes: ${it.take(150)}" }.orEmpty()))
         // 没整理完的：下次从最后整理到的那条之后接着，马上排一轮
         store.lastDreamAt = cutoff ?: startedAt
         if (cutoff != null) runMore(ctx)
