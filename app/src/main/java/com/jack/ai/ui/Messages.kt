@@ -27,6 +27,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
@@ -238,6 +242,8 @@ fun AssistantMessage(
     onFixApp: ((String) -> Unit)? = null,
     /** 删除这条会连带删掉后面几条（删除前确认时告诉用户）。 */
     laterCount: Int = 0,
+    /** Work 的回答：工具记录显示成带时间的执行记录。 */
+    work: Boolean = false,
 ) {
     var more by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -264,14 +270,14 @@ fun AssistantMessage(
     val colors = MaterialTheme.colorScheme
     Column(Modifier.fillMaxWidth()) {
         if (msg.plan.isNotEmpty()) {
-            PlanCard(msg.plan)
-            Spacer(Modifier.height(8.dp))
+            PlanCard(msg.plan, msg.cost)
+            Spacer(Modifier.height(10.dp))
         }
         // 回答正文出来之前都算「还在忙」：思考框、工具框在这段时间里保持同一个样子，
         // 不随每次工具调用开始/结束来回切换（以前切一次高度就变一次，屏幕跟着一闪一闪）
         val busy = streaming && msg.content.isEmpty()
         if (msg.searches.isNotEmpty()) {
-            SearchBox(msg.searches, busy = busy)
+            if (work) ToolTimeline(msg.searches, busy = busy) else SearchBox(msg.searches, busy = busy)
             Spacer(Modifier.height(14.dp))
         }
         // Kavi 在操作网页：回答写完之前，实时画面就放在这条回答里；每一步的截图排成一行
@@ -435,36 +441,49 @@ internal fun GeneratedFileCard(f: GeneratedFile) {
         "html", "htm", "js", "py", "kt", "java", "css", "ts" -> "</>" to Color(0xFF7B5BA6)
         else -> "F" to colors.primary
     }
+    val path = File(f.path)
     Surface(
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(18.dp),
         color = colors.surfaceContainerLowest,
         border = androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant),
-        modifier = Modifier.widthIn(max = 340.dp).fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+        modifier = Modifier.widthIn(max = 380.dp).fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
             .clickable { open() },
     ) {
-        Row(Modifier.padding(start = 12.dp, top = 10.dp, bottom = 10.dp, end = 4.dp),
+        Row(Modifier.padding(start = 14.dp, top = 12.dp, bottom = 12.dp, end = 8.dp),
             verticalAlignment = Alignment.CenterVertically) {
             Box(
-                Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)).background(tagColor),
+                Modifier.size(44.dp).clip(RoundedCornerShape(10.dp)).background(tagColor),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(tag, color = Color.White, fontWeight = FontWeight.Bold, fontSize = if (tag.length > 1) 12.sp else 18.sp)
+                Text(tag, color = Color.White, fontWeight = FontWeight.Bold, fontSize = if (tag.length > 1) 12.sp else 19.sp)
             }
-            Spacer(Modifier.size(10.dp))
+            Spacer(Modifier.size(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(f.name, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium)
+                    fontWeight = FontWeight.SemiBold)
                 Text(
-                    if (File(f.path).exists()) formatSize(f.size) else "文件已被删除",
+                    if (path.exists()) formatSize(f.size) + " · " + fileTime(path.lastModified()) else "文件已被删除",
                     style = MaterialTheme.typography.labelSmall,
                     color = colors.onSurfaceVariant,
                 )
             }
-            TextButton(onClick = { open() }) { Text("打开") }
-            TextButton(onClick = { shareFile(ctx, f) }) { Text("分享") }
+            Surface(onClick = { open() }, shape = RoundedCornerShape(12.dp), color = Color.Transparent,
+                border = androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant)) {
+                Text("打开", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp))
+            }
+            IconButton(onClick = { shareFile(ctx, f) }, modifier = Modifier.size(40.dp)) {
+                Icon(AppIcons.Share, "分享", Modifier.size(18.dp), tint = colors.onSurfaceVariant)
+            }
         }
     }
+}
+
+/** 文件卡上的时间：今天的只写几点，别的写日期。 */
+private fun fileTime(ms: Long): String {
+    val day = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US)
+    val today = day.format(java.util.Date()) == day.format(java.util.Date(ms))
+    return java.text.SimpleDateFormat(if (today) "今天 HH:mm" else "M月d日 HH:mm", java.util.Locale.CHINA).format(java.util.Date(ms))
 }
 
 internal fun formatSize(bytes: Long): String = when {
@@ -675,32 +694,126 @@ private fun SearchBox(searches: List<SearchRecord>, busy: Boolean = false) {
 
 private fun isOther(label: String) = listOf("读取", "翻阅", "记住", "使用技能", "生成", "运行", "设置", "查看", "删除", "写入", "修改", "设闹钟", "关闹钟", "读邮件", "发邮件", "已发邮件", "标为", "添加日程", "打开日历").any { label.startsWith(it) }
 
-/** Work 模式的任务清单：做完的打勾划掉，正在做的高亮。 */
+/** Work 模式的任务清单：做完的打勾变灰，正在做的整行高亮、转圈，没做的空心圆；右上角是进度和花费。 */
 @Composable
-private fun PlanCard(items: List<com.jack.ai.data.PlanItem>) {
+private fun PlanCard(items: List<com.jack.ai.data.PlanItem>, cost: Double = 0.0) {
     val colors = MaterialTheme.colorScheme
-    Surface(color = colors.surfaceVariant.copy(alpha = 0.6f), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    WorkCard {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 6.dp)) {
+            Text("任务清单", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             Text(
-                "任务清单 ${items.count { it.status == "done" }}/${items.size}",
-                style = MaterialTheme.typography.labelMedium,
-                color = colors.primary,
+                "${items.count { it.status == "done" }}/${items.size}" + if (cost > 0) " · 已花 ¥%.2f".format(cost) else "",
+                style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant,
             )
-            items.forEach { item ->
-                val mark = when (item.status) { "done" -> "✓"; "doing" -> "▸"; else -> "○" }
-                Text(
-                    "$mark  ${item.text}",
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        textDecoration = if (item.status == "done") androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
-                    ),
-                    color = when (item.status) {
-                        "done" -> colors.outline
-                        "doing" -> colors.onSurface
-                        else -> colors.onSurfaceVariant
-                    },
-                    fontWeight = if (item.status == "doing") androidx.compose.ui.text.font.FontWeight.Medium else null,
-                )
+        }
+        Column(Modifier.padding(start = 8.dp, end = 8.dp, bottom = 10.dp)) {
+            items.forEachIndexed { i, item ->
+                val doing = item.status == "doing"
+                val done = item.status == "done"
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                        .background(if (doing) colors.surfaceContainerHigh else Color.Transparent)
+                        .padding(horizontal = 8.dp, vertical = 7.dp),
+                ) {
+                    Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) {
+                        when {
+                            done -> Box(Modifier.size(20.dp).clip(androidx.compose.foundation.shape.CircleShape).background(colors.outline),
+                                contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.Check, null, Modifier.size(13.dp), tint = colors.surface)
+                            }
+                            doing -> CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = colors.onSurface)
+                            else -> Box(Modifier.size(19.dp).border(1.5.dp, colors.outlineVariant, androidx.compose.foundation.shape.CircleShape))
+                        }
+                    }
+                    Spacer(Modifier.size(12.dp))
+                    Text(
+                        "${i + 1}. ${item.text}",
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            textDecoration = if (done) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
+                        ),
+                        color = when { done -> colors.outline; doing -> colors.onSurface; else -> colors.onSurfaceVariant },
+                        fontWeight = if (doing) FontWeight.SemiBold else null,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (doing) Text("正在进行…", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 6.dp))
+                }
             }
+        }
+    }
+}
+
+/** Work 页上的白卡片：细边、大圆角。 */
+@Composable
+private fun WorkCard(content: @Composable () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Surface(
+        color = colors.surfaceContainerLowest,
+        shape = RoundedCornerShape(18.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant),
+        modifier = Modifier.fillMaxWidth(),
+    ) { Column { content() } }
+}
+
+/** 一步工具用什么图标、什么颜色（按显示的名字认）。 */
+private fun toolLook(label: String): Pair<ImageVector, Color> = when {
+    label.startsWith("浏览器") -> AppIcons.Globe to Color(0xFF3B82F6)
+    label.startsWith("生成") || label.startsWith("修改") || label.startsWith("写入") -> AppIcons.File to Color(0xFF8B5CF6)
+    label.startsWith("读取") || label.startsWith("查看") || label.startsWith("翻") -> AppIcons.File to Color(0xFF6B7280)
+    label.contains("表") || label.startsWith("查「") -> Icons.Default.List to Color(0xFF22A06B)
+    label.contains("邮件") || label.contains("邮箱") -> Icons.Default.Email to Color(0xFFEA580C)
+    label.contains("提醒") || label.contains("日程") || label.contains("闹钟") || label.contains("任务") || label.contains("监控") -> AppIcons.Calendar to Color(0xFFEF5A5A)
+    label.startsWith("运行") || label.startsWith("计算") -> AppIcons.Code to Color(0xFF0EA5E9)
+    label.startsWith("下载") || label.startsWith("存") -> AppIcons.Download to Color(0xFF0EA5E9)
+    label.startsWith("使用技能") -> AppIcons.Brain to Color(0xFF6B7280)
+    label.startsWith("💬") -> AppIcons.Chat to Color(0xFF6B7280)
+    else -> AppIcons.Globe to Color(0xFF3B82F6)
+}
+
+/** Work 的执行记录：一行一步，时间、图标、做了什么；平时露最近 5 步，点开看全部。 */
+@Composable
+private fun ToolTimeline(searches: List<SearchRecord>, busy: Boolean) {
+    var all by rememberSaveable { mutableStateOf(false) }
+    val colors = MaterialTheme.colorScheme
+    val uriHandler = LocalUriHandler.current
+    val time = remember { java.text.SimpleDateFormat("HH:mm", java.util.Locale.US) }
+    val shown = if (all) searches else searches.takeLast(5)
+    WorkCard {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 6.dp)) {
+            Text("执行记录", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            if (busy && searches.none { it.pending }) Text("接着想…", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
+            else Text("${searches.size} 步", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
+        }
+        Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            shown.forEach { rec ->
+                val (icon, tint) = toolLook(rec.query)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(if (rec.at > 0) time.format(java.util.Date(rec.at)) else "", style = MaterialTheme.typography.labelSmall,
+                        color = colors.outline, modifier = Modifier.width(40.dp))
+                    Box(Modifier.size(28.dp).clip(RoundedCornerShape(8.dp)).background(tint.copy(alpha = 0.13f)), contentAlignment = Alignment.Center) {
+                        if (rec.pending) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp, color = tint)
+                        else Icon(icon, null, Modifier.size(16.dp), tint = tint)
+                    }
+                    Spacer(Modifier.size(10.dp))
+                    Text(
+                        rec.query + (rec.error?.let { "（$it）" } ?: ""),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (rec.error != null) colors.error else colors.onSurface,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+                    )
+                }
+                if (all && rec.sources.isNotEmpty()) rec.sources.forEach { src ->
+                    Text("· ${src.title}", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth().padding(start = 78.dp).clickable { runCatching { uriHandler.openUri(src.url) } })
+                }
+            }
+            if (searches.size > 5 || searches.any { it.sources.isNotEmpty() }) Text(
+                if (all) "收起" else if (searches.size > 5) "展开全部 ${searches.size} 步" else "看参考的网页",
+                style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant,
+                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { all = !all }.padding(vertical = 2.dp),
+            )
         }
     }
 }

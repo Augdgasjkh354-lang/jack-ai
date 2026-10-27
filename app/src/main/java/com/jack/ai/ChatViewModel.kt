@@ -547,7 +547,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             var nextLimit = limit
             val session = ToolSession(toolHost, settings, conv, project, skills, object : ToolUi {
                 override fun started(label: String) {
-                    patchMessage(convId, reply.id) { it.copy(searches = it.searches + SearchRecord(label, pending = true)) }
+                    patchMessage(convId, reply.id) { it.copy(searches = it.searches + SearchRecord(label, pending = true, at = System.currentTimeMillis())) }
                     WorkService.progress(getApplication(), convId, workTitle, label, work)
                 }
 
@@ -563,7 +563,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 override fun progress(text: String) = WorkService.progress(getApplication(), convId, workTitle, text, work)
 
                 override fun finished(label: String, record: SearchRecord) = patchMessage(convId, reply.id) { m ->
-                    m.copy(searches = m.searches.map { if (it.query == label && it.pending) record else it })
+                    m.copy(searches = m.searches.map { if (it.query == label && it.pending) record.copy(at = it.at) else it })
                 }
 
                 override suspend fun confirm(title: String, body: String, action: String) = ask(title, body, action)

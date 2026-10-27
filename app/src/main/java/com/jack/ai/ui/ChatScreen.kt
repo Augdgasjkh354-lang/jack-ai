@@ -562,6 +562,7 @@ private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolea
                                 onReport = { note -> vm.reportIssue(msg.id, note) },
                                 onFixApp = { text -> vm.send(text) },
                                 laterCount = later,
+                                work = conv.work,
                             )
                         }
                     }

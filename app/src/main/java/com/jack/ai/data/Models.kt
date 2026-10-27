@@ -63,6 +63,8 @@ data class SearchRecord(
     val error: String? = null,
     /** 浏览器这一步做完时网页的截图（小图），对话里按步骤显示。 */
     val shot: String = "",
+    /** 这一步什么时候开始的（Work 的执行记录上显示时间）；以前的记录是 0。 */
+    val at: Long = 0,
 )
 
 @Serializable

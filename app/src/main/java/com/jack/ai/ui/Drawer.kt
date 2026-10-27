@@ -122,13 +122,14 @@ fun HistoryDrawer(
             ) {
                 LogoMark(32.dp)
                 Spacer(Modifier.size(10.dp))
-                Text("Kavi", style = MaterialTheme.typography.titleLarge, fontFamily = FontFamily.Serif)
+                Text("Kavi", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             }
             Surface(
                 onClick = onNew,
                 shape = RoundedCornerShape(16.dp),
-                color = colors.primary,
-                contentColor = colors.onPrimary,
+                color = drawerCard(),
+                contentColor = colors.onSurface,
+                border = androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant),
                 modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
             ) {
                 Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -151,17 +152,17 @@ fun HistoryDrawer(
                     val now = System.currentTimeMillis()
                     val due = state.cards.count { it.due <= now }
                     val main = listOf(
-                        Tool(Icons.Default.Notifications, "提醒和任务", badge = state.routines.count { it.enabled }.takeIf { it > 0 }?.toString(), onClick = onOpenRoutines),
-                        Tool(AppIcons.Moon, "记忆与梦", dot = state.dreams.any { !it.seen }, onClick = onOpenMemory),
-                        Tool(AppIcons.File, "资料库", onClick = onOpenLibrary),
-                        Tool(AppIcons.Globe, "浏览器", onClick = { ctx.startActivity(android.content.Intent(ctx, BrowserActivity::class.java)) }),
+                        Tool(Icons.Default.Notifications, "提醒和任务", badge = state.routines.count { it.enabled }.takeIf { it > 0 }?.toString(), tint = 0xFFEF5A5A, onClick = onOpenRoutines),
+                        Tool(AppIcons.Moon, "记忆与梦", dot = state.dreams.any { !it.seen }, tint = 0xFF8B5CF6, onClick = onOpenMemory),
+                        Tool(AppIcons.Folder, "资料库", tint = 0xFF3B82F6, onClick = onOpenLibrary),
+                        Tool(AppIcons.Globe, "浏览器", tint = 0xFF22A06B, onClick = { ctx.startActivity(android.content.Intent(ctx, BrowserActivity::class.java)) }),
                     )
                     val more = listOf(
-                        Tool(Icons.Default.List, "表格", onClick = onOpenTables),
-                        Tool(Icons.Default.Star, "复习卡片", badge = due.takeIf { it > 0 }?.toString(), onClick = onOpenReview),
-                        Tool(Icons.Default.Build, "技能", onClick = onOpenSkills),
-                        Tool(AppIcons.Code, "小工具", onClick = onOpenApps),
-                        Tool(AppIcons.Download, "下载", onClick = onOpenDownloads),
+                        Tool(Icons.Default.List, "表格", tint = 0xFF14B8A6, onClick = onOpenTables),
+                        Tool(Icons.Default.Star, "复习卡片", badge = due.takeIf { it > 0 }?.toString(), tint = 0xFFF59E0B, onClick = onOpenReview),
+                        Tool(Icons.Default.Build, "技能", tint = 0xFF64748B, onClick = onOpenSkills),
+                        Tool(AppIcons.Code, "小工具", tint = 0xFF6366F1, onClick = onOpenApps),
+                        Tool(AppIcons.Download, "下载", tint = 0xFF0EA5E9, onClick = onOpenDownloads),
                     )
                     ToolGrid(if (showMoreTools) main + more else main)
                     Row(
@@ -185,11 +186,11 @@ fun HistoryDrawer(
                 val shownProjects = if (showAllProjects) state.projects else state.projects.take(PROJECTS_SHOWN)
                 items(shownProjects, key = { "p" + it.id }) { p ->
                     val count = state.conversations.count { it.projectId == p.id && it.messages.isNotEmpty() }
-                    DrawerRow(
-                        icon = AppIcons.Folder,
-                        label = p.name + if (p.isolated) " 🔒" else "",
+                    ProjectRow(
+                        name = p.name + if (p.isolated) " 🔒" else "",
+                        sub = listOfNotNull("$count 个对话", "${p.files.size} 份资料".takeIf { p.files.isNotEmpty() }).joinToString(" · "),
+                        color = Color(PROJECT_COLORS[(p.id.hashCode() and 0x7fffffff) % PROJECT_COLORS.size]),
                         selected = state.currentProjectId == p.id,
-                        trailing = if (count > 0) "$count" else null,
                         onClick = { onOpenProject(p.id) },
                     )
                 }
@@ -261,7 +262,38 @@ fun HistoryDrawer(
 
 private const val PROJECTS_SHOWN = 3
 
-private class Tool(val icon: ImageVector, val label: String, val badge: String? = null, val dot: Boolean = false, val onClick: () -> Unit)
+/** 抽屉里卡片的底色：浅色是白的，深色比抽屉底亮一层（抽屉本身是 surfaceContainerLow）。 */
+@Composable
+private fun drawerCard(): Color = MaterialTheme.colorScheme.let { if (it.background.luminance() < 0.5f) it.surfaceContainerHigh else it.surfaceContainerLowest }
+
+/** 项目的小色块，按项目编号固定挑一个。 */
+private val PROJECT_COLORS = listOf(0xFF8B5CF6, 0xFF3B82F6, 0xFF22A06B, 0xFFF59E0B, 0xFFEF5A5A, 0xFF14B8A6, 0xFF6366F1)
+
+/** 抽屉里的一个项目：左边圆角色块，名字，下面一行灰字（几个对话、几份资料）。 */
+@Composable
+private fun ProjectRow(name: String, sub: String, color: Color, selected: Boolean, onClick: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .padding(horizontal = 12.dp, vertical = 3.dp)
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .border(1.dp, colors.outlineVariant, RoundedCornerShape(14.dp))
+            .background(if (selected) colors.secondaryContainer else drawerCard())
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+    ) {
+        Box(Modifier.size(30.dp).clip(RoundedCornerShape(9.dp)).background(color))
+        Spacer(Modifier.size(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            Text(sub, maxLines = 1, style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+        }
+    }
+}
+
+private class Tool(val icon: ImageVector, val label: String, val badge: String? = null, val dot: Boolean = false, val tint: Long = 0xFF6B7280, val onClick: () -> Unit)
 
 /** 常用功能：四个一行的小方块，图标在上、字在下，有待办的右上角标数字或小红点。 */
 @Composable
@@ -281,10 +313,11 @@ private fun ToolGrid(tools: List<Tool>) {
                         contentAlignment = Alignment.Center,
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            val tint = Color(t.tint)
                             Box(
-                                Modifier.size(40.dp).clip(RoundedCornerShape(13.dp)).background(colors.surfaceContainerHigh),
+                                Modifier.size(46.dp).clip(androidx.compose.foundation.shape.CircleShape).background(tint.copy(alpha = 0.14f)),
                                 contentAlignment = Alignment.Center,
-                            ) { Icon(t.icon, null, Modifier.size(20.dp), tint = colors.onSurfaceVariant) }
+                            ) { Icon(t.icon, null, Modifier.size(21.dp), tint = tint) }
                             Spacer(Modifier.size(5.dp))
                             Text(t.label, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
                                 color = colors.onSurface)
@@ -332,9 +365,10 @@ internal fun dayGroup(at: Long, now: Long = System.currentTimeMillis()): String 
 private fun SectionLabel(text: String, action: String? = null, onAction: (() -> Unit)? = null) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().padding(start = 28.dp, end = 16.dp, top = 18.dp, bottom = 4.dp),
+        modifier = Modifier.fillMaxWidth().padding(start = 28.dp, end = 16.dp, top = 20.dp, bottom = 6.dp),
     ) {
-        Text(text, Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline)
+        Text(text, Modifier.weight(1f), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface)
         if (action != null && onAction != null) {
             Text(
                 "+ $action",
@@ -377,13 +411,20 @@ fun ChatItem(
             if (c.pinned) {
                 Icon(AppIcons.Pin, null, Modifier.padding(end = 6.dp).size(14.dp), tint = colors.primary)
             }
-            Text(
-                c.title, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (selected) colors.onSecondaryContainer else colors.onSurface,
-            )
+            Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
+                Text(
+                    c.title, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium,
+                    color = if (selected) colors.onSecondaryContainer else colors.onSurface,
+                )
+                // 最后一句话（用户问的或 Kavi 答的）露一行，找起来快
+                val last = remember(c.messages.size, c.updatedAt) { preview(c) }
+                if (last.isNotEmpty()) Text(last, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+            }
             if (answering) {
-                androidx.compose.material3.CircularProgressIndicator(Modifier.padding(start = 6.dp).size(12.dp), strokeWidth = 1.5.dp)
+                Box(Modifier.padding(start = 8.dp).size(7.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Color(0xFF3B82F6)))
+                Text("回答中", style = MaterialTheme.typography.labelSmall, color = Color(0xFF3B82F6), modifier = Modifier.padding(start = 4.dp))
             }
             if (c.work) {
                 Text(
@@ -435,6 +476,11 @@ fun ChatItem(
     }
     if (showUsage) ConversationUsageDialog(c) { showUsage = false }
 }
+
+/** 对话列表里露的那一行：最后一条有字的消息，去掉换行和 Markdown 记号。 */
+internal fun preview(c: Conversation): String =
+    c.messages.lastOrNull { it.content.isNotBlank() }?.content.orEmpty()
+        .replace(Regex("""[#*`>|_]+"""), "").replace(Regex("""\s+"""), " ").trim().take(60)
 
 /** 一个对话用了多少：请求次数、token、缓存命中、花费、当前上下文。 */
 @Composable
