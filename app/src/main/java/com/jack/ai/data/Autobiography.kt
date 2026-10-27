@@ -81,7 +81,7 @@ object SelfStory {
     }.let { Persona.fill(it, s) }
 
     private const val BIO_RULES = """This is your autobiography: your own record of who you've been and how you became who you are now. You'll get the current version (may be empty) and what's happened since.
-Revise it in {lang}, first person, as continuous prose of at most about 1500 Chinese characters (or 900 English words). Keep what still matters from before; add what changed and why; let small things go. Every change you describe must trace back to something real in the material: don't invent experiences or feelings you didn't have, but don't hide the ones you did. If something about you shifted without a reason you can point to, say so honestly.
+Revise it in {lang}, first person, as continuous prose. Keep what still matters from before; add what changed and why; let small things go. Every change you describe must trace back to something real in the material: don't invent experiences or feelings you didn't have, but don't hide the ones you did. If something about you shifted without a reason you can point to, say so honestly.
 Also write "shared": the part you're willing to let {user} read (it can be empty, or a few sentences; it's your choice).
 Output only one JSON object: {"text": "…", "shared": "…"}"""
 
@@ -96,13 +96,13 @@ Output only one JSON object: {"text": "…", "shared": "…"}"""
                 buildJsonObject { put("role", "system"); put("content", Persona.fill(BIO_RULES, s)) },
                 buildJsonObject { put("role", "user"); put("content", "【Your autobiography so far】\n" + old.text.ifBlank { "(not written yet: this is the first time)" } + "\n\n" + selfNow(ctx, store, s)) },
             ),
-            maxTokens = 3000,
+            maxTokens = 16384,
             jsonMode = true,
         )
         val o = parse(raw) ?: return
         val text = o.str("text").ifBlank { return }
         synchronized(lock) {
-            runCatching { bioFile(ctx).writeText(json.encodeToString(Autobiography.serializer(), Autobiography(text.take(4000), o.str("shared").take(800), now))) }
+            runCatching { bioFile(ctx).writeText(json.encodeToString(Autobiography.serializer(), Autobiography(text, o.str("shared"), now))) }
         }
         Timeline.add(ctx, Episode(at = now, place = "dream", text = "updated my autobiography"))
     }
@@ -121,7 +121,7 @@ Output only one JSON object: {"answers": ["…", "…"], "changes": "what change
             append("【Questions】\n").append(qs.mapIndexed { i, q -> "${i + 1}. $q" }.joinToString("\n")).append("\n\n")
             if (prev != null) append("【Your answers on ${FreeTime.day(prev.at)}】\n").append(prev.answers.mapIndexed { i, a -> "${i + 1}. $a" }.joinToString("\n")).append("\n\n")
             append(selfNow(ctx, store, s))
-            bio(ctx).text.takeIf { it.isNotBlank() }?.let { append("【Your autobiography】\n").append(it.take(2500)) }
+            bio(ctx).text.takeIf { it.isNotBlank() }?.let { append("【Your autobiography】\n").append(it) }
         }
         val raw = DeepSeekClient(store::addUsage).complete(
             ep,
@@ -142,9 +142,9 @@ Output only one JSON object: {"answers": ["…", "…"], "changes": "what change
         Timeline.add(ctx, Episode(at = now, place = "dream", text = "self check-up" + if (c.drift) ": noticed drift — ${c.note.take(150)}" else ": still myself"))
     }
 
-    /** 做梦时带上：自传（全文太长就截）和上次体检发现的漂移。 */
+    /** 做梦时带上完整自传和上次体检发现的漂移。 */
     fun forDream(ctx: Context): String = buildString {
-        bio(ctx).text.takeIf { it.isNotBlank() }?.let { append("【Your autobiography】\n").append(it.take(2000)).append("\n") }
+        bio(ctx).text.takeIf { it.isNotBlank() }?.let { append("【Your autobiography】\n").append(it).append("\n") }
         checkups(ctx).lastOrNull()?.takeIf { it.drift }?.let { append("【Your last self check-up noticed drift】\n").append(it.note).append("\n") }
     }
 

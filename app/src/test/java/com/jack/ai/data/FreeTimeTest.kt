@@ -58,6 +58,20 @@ class FreeTimeTest {
         assertTrue(Reader.parseReport("随便").lately.isEmpty())
     }
     @Test
+    fun continuationStatesWhenTheSummaryWasSaved() {
+        val zone = java.time.ZoneId.systemDefault()
+        val now = java.time.LocalDateTime.of(2026, 10, 27, 12, 0).atZone(zone).toInstant().toEpochMilli()
+        val at = java.time.LocalDateTime.of(2026, 10, 25, 9, 30).atZone(zone).toInstant().toEpochMilli()
+        val note = Reader.continuationNote(FreeState(freeSummary = "还想读完那本书", freeSummaryAt = at), now)
+        assertTrue(note.contains("2026-10-25 09:30"))
+        assertTrue(note.contains("2 天前"))
+        assertTrue(note.contains("不一定是每件事发生的时间"))
+        assertTrue(Reader.continuationNote(FreeState(freeSummary = "旧线索"), now).contains("整理时间未记录"))
+        assertTrue(note.contains("（时间不明）还想读完那本书"))
+        assertEquals("（2026-10-25）旧线索", Reader.markUnknownClueTimes("（2026-10-25）旧线索"))
+    }
+
+    @Test
     fun freeTimeSummaryCarriesForwardWithoutChangingLately() = kotlinx.coroutines.runBlocking {
         val messages = listOf(
             kotlinx.serialization.json.buildJsonObject { put("role", kotlinx.serialization.json.JsonPrimitive("system")) },
@@ -66,13 +80,15 @@ class FreeTimeTest {
         )
         val old = FreeState(lately = "近来喜欢看云", freeSummary = "旧线索")
         var seen = ""
-        val summary = Reader.summarizeForNextTime(messages, old.freeSummary) { request ->
+        val summary = Reader.summarizeForNextTime(messages, old.freeSummary, "2026-10-27", 1L) { request ->
             seen = request.toString()
             "文章读到第三章；还想看看河流。"
         }
         val saved = old.copy(freeSummary = summary!!, freeSummaryAt = 1)
         assertTrue(seen.contains("文章读到第三章"))
         assertTrue(seen.contains("旧线索"))
+        assertTrue(seen.contains("2026-10-27"))
+        assertTrue(seen.contains("时间不明"))
         assertTrue(Reader.continuationNote(saved).contains("还想看看河流"))
         assertEquals("近来喜欢看云", saved.lately)
         assertEquals("", Reader.summarizeForNextTime(messages, "") { "无" })

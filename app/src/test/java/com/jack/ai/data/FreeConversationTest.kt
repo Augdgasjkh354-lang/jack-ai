@@ -59,6 +59,15 @@ class FreeConversationTest {
         Unit
     }
 
+    @Test fun dreamReceivesTheEntireAutobiography() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val full = "过往".repeat(2500) + "全文最后一段"
+        val bio = Autobiography(text = full)
+        java.io.File(app.filesDir, "autobiography.json").writeText(kotlinx.serialization.json.Json.encodeToString(Autobiography.serializer(), bio))
+        assertTrue(SelfStory.forDream(app).contains("全文最后一段"))
+        assertTrue(SelfStory.forDream(app).contains(full))
+    }
+
     @Test fun thresholdsUseActualUsageAndCutOnlyAtMessageBoundaries() {
         assertTrue(FreeConversation.current(790_000, 790_000, 800_001) >= FreeConversation.WARN)
         assertTrue(FreeConversation.current(949_000, 940_000, 950_001) >= FreeConversation.COMPACT)
