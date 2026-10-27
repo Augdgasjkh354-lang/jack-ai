@@ -49,6 +49,8 @@ object Net {
         val selected: String = "",
         /** 加强保护和分流：只挑加密强的节点自动选、加密 DNS、浏览器防 WebRTC 泄漏、按网站总走代理、按 App 分流。关掉回到只给 Kavi 自己用。 */
         val hardened: Boolean = true,
+        /** 双跳的第一跳（节点名）；空 = 不用双跳。 */
+        val entry: String = "",
     )
 
     @Volatile var config = Config()
@@ -72,7 +74,7 @@ object Net {
 
     /** 设置变了（读出或保存设置时）就更新；关掉代理时顺手停掉内核。 */
     fun apply(s: Settings) {
-        val c = Config(s.proxyEnabled && s.proxyNodes.isNotEmpty(), s.proxyNodes, s.proxyNode, s.proxyHardened)
+        val c = Config(s.proxyEnabled && s.proxyNodes.isNotEmpty(), s.proxyNodes, s.proxyNode, s.proxyHardened, s.proxyEntry)
         config = c
         if (!c.enabled && ProxyCore.isRunning) ProxyCore.stop()
     }
@@ -99,7 +101,7 @@ object Net {
     fun ensureCore(c: Config = config): Boolean {
         val bin = binary ?: return false
         val dir = appDir ?: return false
-        return ProxyCore.ensure(bin, dir, c.nodes, c.selected, c.hardened)
+        return ProxyCore.ensure(bin, dir, c.nodes, c.selected, c.hardened, c.entry)
     }
 
     /** 本机一个没人听的端口：内核起不来时把请求指到这里，宁可失败也不偷偷直连。 */

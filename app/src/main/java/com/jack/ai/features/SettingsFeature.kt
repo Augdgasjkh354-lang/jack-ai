@@ -121,7 +121,8 @@ class SettingsFeature(core: AppCore, private val client: DeepSeekClient) : Featu
         if (nodes.isEmpty()) throw IOException("没认出节点。支持订阅地址，以及 ss、vmess、vless、trojan、hysteria2、tuic 链接")
         updateSettings { s ->
             s.copy(proxySub = if (isUrl) text else "", proxyNodes = nodes, proxyEnabled = true,
-                proxyNode = s.proxyNode.takeIf { n -> nodes.any { it.name == n } }.orEmpty())
+                proxyNode = s.proxyNode.takeIf { n -> nodes.any { it.name == n } }.orEmpty(),
+                proxyEntry = s.proxyEntry.takeIf { n -> nodes.any { it.name == n } }.orEmpty())
         }
         nodes.size
     }.onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
@@ -150,7 +151,7 @@ class SettingsFeature(core: AppCore, private val client: DeepSeekClient) : Featu
 
     fun clearProxy() {
         ProxyCore.stop()
-        updateSettings { it.copy(proxyEnabled = false, proxySub = "", proxyNodes = emptyList(), proxyNode = "") }
+        updateSettings { it.copy(proxyEnabled = false, proxySub = "", proxyNodes = emptyList(), proxyNode = "", proxyEntry = "") }
     }
 
     /** 试着登录邮箱，返回给用户看的一句话。 */

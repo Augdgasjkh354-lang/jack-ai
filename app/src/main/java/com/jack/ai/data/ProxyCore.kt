@@ -34,15 +34,35 @@ object ProxyCore {
 
     val isRunning: Boolean get() = running?.isAlive == true
 
-    /** 用户选的节点；空的就自动选最快的。 */
-    fun tagFor(nodes: List<ProxyNode>, selected: String): String =
-        nodes.indexOfFirst { it.name == selected }.takeIf { it >= 0 }?.let { "n$it" } ?: if (nodes.size > 1) "auto" else "n0"
+    /** 双跳的第一跳在节点里的位置；没开、或者节点已经不在了是 -1。 */
+    fun entryIndex(nodes: List<ProxyNode>, entry: String): Int =
+        if (entry.isBlank() || nodes.size < 2) -1 else nodes.indexOfFirst { it.name == entry }
+
+    /**
+     * 出口的 tag：用户选的节点；空的就自动选最快的。开着双跳时出口用 c 开头的那份（先过第一跳）；
+     * 出口选的就是第一跳本身时，等于没有双跳，直接用它。
+     */
+    fun tagFor(nodes: List<ProxyNode>, selected: String, entry: String = ""): String {
+        val hop = entryIndex(nodes, entry)
+        val i = nodes.indexOfFirst { it.name == selected }
+        return when {
+            i >= 0 -> if (hop >= 0 && i != hop) "c$i" else "n$i"
+            nodes.size > 1 -> "auto"
+            else -> "n0"
+        }
+    }
 
     /**
      * 生成 sing-box 配置：本机一个带口令的 mixed 入口（HTTP 和 SOCKS 都认），出口是用户的节点；
      * 多个节点时加一个「自动选最快」（只挑加密强的）。节点的服务器域名用阿里的加密 DNS 解析（安卓上内核读不到系统 DNS）。
+     *
+     * 双跳（entry 是第一跳的节点名）：每个出口节点多一份 c 开头的配置，detour 指向第一跳——
+     * Kavi → 第一跳 → 出口 → 网站。第一跳只看到你连了出口节点，看不到你访问的网站；出口和网站只看到第一跳的地址，看不到你的。
+     * 「自动选最快」也在这些双跳线路里挑（测的是整条线路的速度）。
      */
-    fun config(nodes: List<ProxyNode>, selected: String, port: Int, user: String, pass: String, hardened: Boolean = true): String = buildJsonObject {
+    fun config(nodes: List<ProxyNode>, selected: String, port: Int, user: String, pass: String, hardened: Boolean = true, entry: String = ""): String = buildJsonObject {
+        val hop = entryIndex(nodes, entry)
+        fun exitTag(i: Int) = if (hop >= 0) "c$i" else "n$i"
         put("log", buildJsonObject { put("level", "warn") })
         put("dns", buildJsonObject {
             put("servers", buildJsonArray {
@@ -63,15 +83,20 @@ object ProxyCore {
         put("outbounds", buildJsonArray {
             if (nodes.size > 1) add(buildJsonObject {
                 put("type", "urltest"); put("tag", "auto")
-                // 只在加密够强的节点里挑（不加密、弱加密的手动选才用）
-                put("outbounds", JsonArray((if (hardened) NodeSecurity.autoPool(nodes) else nodes.indices.toList()).map { JsonPrimitive("n$it") }))
+                // 只在加密够强的节点里挑（不加密、弱加密的手动选才用）；双跳时第一跳本身不当出口
+                val pool = (if (hardened) NodeSecurity.autoPool(nodes) else nodes.indices.toList()).filter { it != hop }
+                    .ifEmpty { nodes.indices.filter { it != hop } }
+                put("outbounds", JsonArray(pool.map { JsonPrimitive(exitTag(it)) }))
                 put("url", "https://www.gstatic.com/generate_204"); put("interval", "10m")
             })
             nodes.forEachIndexed { i, n -> add(ProxyNodes.outbound(n, "n$i")) }
+            if (hop >= 0) nodes.forEachIndexed { i, n ->
+                if (i != hop) add(kotlinx.serialization.json.JsonObject(ProxyNodes.outbound(n, "c$i") + ("detour" to JsonPrimitive("n$hop"))))
+            }
             add(buildJsonObject { put("type", "direct"); put("tag", "direct") })
         })
         put("route", buildJsonObject {
-            put("final", tagFor(nodes, selected))
+            put("final", tagFor(nodes, selected, entry))
             put("default_domain_resolver", "dns")
         })
     }.toString()
@@ -91,9 +116,9 @@ object ProxyCore {
      * 确保内核在跑、而且用的是现在的节点设置；没在跑或设置变了就（重新）启动。成功返回 true。
      * binary 是内核程序，workDir 放配置文件。会阻塞最多几秒，不要在主线程调。
      */
-    fun ensure(binary: File, workDir: File, nodes: List<ProxyNode>, selected: String, hardened: Boolean = true): Boolean = synchronized(lock) {
+    fun ensure(binary: File, workDir: File, nodes: List<ProxyNode>, selected: String, hardened: Boolean = true, entry: String = ""): Boolean = synchronized(lock) {
         if (nodes.isEmpty()) { lastError = "还没有导入节点"; return false }
-        val key = nodes.joinToString("|") { it.outbound } + "#" + selected + "#" + hardened
+        val key = nodes.joinToString("|") { it.outbound } + "#" + selected + "#" + hardened + "#" + entry
         if (running?.isAlive == true && key == runningKey) return true
         stopLocked()
         if (!binary.exists()) { lastError = "这个安装包里没有代理内核"; return false }
@@ -101,7 +126,7 @@ object ProxyCore {
         val p = freePort()
         val u = token()
         val pw = token()
-        val cfg = File(workDir, "config.json").apply { writeText(config(nodes, selected, p, u, pw, hardened)) }
+        val cfg = File(workDir, "config.json").apply { writeText(config(nodes, selected, p, u, pw, hardened, entry)) }
         synchronized(log) { log.clear() }
         val proc = try {
             ProcessBuilder(binary.absolutePath, "run", "-c", cfg.absolutePath, "-D", workDir.absolutePath, "--disable-color")

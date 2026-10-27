@@ -119,6 +119,36 @@ fun ProxySection(vm: ChatViewModel, s: Settings) {
             }
         }
     }
+    // 双跳：先连第一跳，再从它连到上面选的出口节点
+    if (s.proxyNodes.size > 1) {
+        var pickingEntry by remember { mutableStateOf(false) }
+        val entryOn = s.proxyNodes.any { it.name == s.proxyEntry } && s.proxyEntry != s.proxyNode
+        Box {
+            OutlinedButton(onClick = { pickingEntry = true }, modifier = Modifier.fillMaxWidth()) {
+                Text("双跳：" + if (entryOn) "先经过 ${s.proxyEntry}" else "不用", maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            DropdownMenu(expanded = pickingEntry, onDismissRequest = { pickingEntry = false }) {
+                DropdownMenuItem(text = { Text("不用双跳") }, onClick = { pickingEntry = false; vm.updateSettings { it.copy(proxyEntry = "") } })
+                s.proxyNodes.forEachIndexed { i, n ->
+                    if (n.name == s.proxyNode) return@forEachIndexed
+                    val r = ratings[i]
+                    DropdownMenuItem(text = {
+                        Text("先经过 " + n.name + "  ·  " + n.type + if (r.level != NodeSecurity.Level.STRONG) "  ·  ⚠ ${r.level.label}" else "",
+                            color = if (r.level == NodeSecurity.Level.STRONG) colors.onSurface else colors.error)
+                    }, onClick = {
+                        pickingEntry = false
+                        vm.updateSettings { it.copy(proxyEntry = n.name) }
+                    })
+                }
+            }
+        }
+        Text(
+            if (entryOn) "线路：Kavi → ${s.proxyEntry} → ${s.proxyNode.ifBlank { "自动选的出口" }} → 网站。第一跳看不到你访问了哪些网站，出口和网站看不到你的真实地址。" +
+                "会比单跳慢一些；hysteria2、tuic 这类走 UDP 的出口，第一跳要支持 UDP 转发才通，不通就换个出口或第一跳。"
+            else "双跳：先连一个节点，再从它连到出口节点。第一跳看不到你访问的网站，出口看不到你的真实地址；也能用一个连得快的节点去够远处的出口。",
+            style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
+        )
+    }
     // 手动选了加密弱、不加密的节点：说清楚风险
     s.proxyNodes.indexOfFirst { it.name == s.proxyNode }.takeIf { it >= 0 }?.let { ratings[it] }?.takeIf { it.level != NodeSecurity.Level.STRONG }?.let { r ->
         Text("⚠ 这个节点${r.level.label}：${r.why}。在公共 Wi-Fi 上别人可能看到或篡改经过它的内容，能换就换个加密强的。",

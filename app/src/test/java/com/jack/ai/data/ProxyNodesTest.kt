@@ -1,6 +1,7 @@
 package com.jack.ai.data
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -82,5 +83,29 @@ class ProxyNodesTest {
         val cfg = Json.parseToJsonElement(ProxyCore.config(nodes, "", 12345, "u", "p")).jsonObject
         assertTrue(cfg.toString().contains("\"listen\":\"127.0.0.1\""))
         assertTrue(cfg.toString().contains("\"username\":\"u\""))
+    }
+
+    @Test
+    fun doubleHopGoesThroughTheEntryFirst() {
+        val nodes = ProxyNodes.parse(samples.take(3).joinToString("\n"))
+        val entry = nodes[0].name
+        val exit = nodes[2].name
+        fun outbounds(selected: String, e: String) =
+            Json.parseToJsonElement(ProxyCore.config(nodes, selected, 1080, "u", "p", hardened = false, entry = e)).jsonObject["outbounds"]!!.jsonArray.map { it.jsonObject }
+        fun tag(o: kotlinx.serialization.json.JsonObject) = o["tag"]!!.jsonPrimitive.content
+        // 出口选了节点：最终走 c2，c2 的 detour 是第一跳 n0
+        assertEquals("c2", ProxyCore.tagFor(nodes, exit, entry))
+        val ob = outbounds(exit, entry)
+        val c2 = ob.first { tag(it) == "c2" }
+        assertEquals("n0", c2["detour"]!!.jsonPrimitive.content)
+        assertEquals(c2["server"], ob.first { tag(it) == "n2" }["server"])  // 同一个节点，只是先过第一跳
+        assertTrue(ob.none { tag(it) == "c0" })  // 第一跳自己不当出口
+        // 自动选：在双跳线路里挑，不含第一跳
+        val auto = ob.first { tag(it) == "auto" }["outbounds"]!!.jsonArray.map { it.jsonPrimitive.content }
+        assertEquals(listOf("c1", "c2"), auto)
+        // 出口就是第一跳、第一跳不在节点里了、没开：都等于没有双跳
+        assertEquals("n0", ProxyCore.tagFor(nodes, entry, entry))
+        assertEquals("n2", ProxyCore.tagFor(nodes, exit, "已经删掉的节点"))
+        assertTrue(outbounds(exit, "").none { it["detour"] != null })
     }
 }

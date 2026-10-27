@@ -28,8 +28,9 @@ class ProxyCoreLiveTest {
         assumeTrue(bin?.exists() == true)
         val nodes = ProxyNodes.parse(ProxyNodesTest().samples.joinToString("\n"))
         val dir = Files.createTempDirectory("sb").toFile()
-        for (selected in listOf("", nodes[3].name)) {
-            val cfg = File(dir, "c.json").apply { writeText(ProxyCore.config(nodes, selected, 20000, "u", "p")) }
+        // 单跳（自动、手动选）和双跳（先经过 nodes[0]）都要过得了内核检查
+        for ((selected, entry) in listOf("" to "", nodes[3].name to "", nodes[3].name to nodes[0].name, "" to nodes[0].name)) {
+            val cfg = File(dir, "c.json").apply { writeText(ProxyCore.config(nodes, selected, 20000, "u", "p", entry = entry)) }
             val p = ProcessBuilder(bin!!.path, "check", "-c", cfg.path).redirectErrorStream(true).start()
             val out = p.inputStream.bufferedReader().readText()
             assertTrue(p.waitFor(30, TimeUnit.SECONDS))
