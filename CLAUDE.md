@@ -53,4 +53,3 @@ settingsEvaluated { s ->
 ROBOLECTRIC_REPO=https://maven-central.storage-download.googleapis.com/maven2/ ./gradlew --no-daemon -q :app:testDebugUnitTest --tests "com.jack.ai.*"
 ```
 
-`MailServerTest` 在容器里起不了本地邮件服务器，会失败，跟改动无关。
