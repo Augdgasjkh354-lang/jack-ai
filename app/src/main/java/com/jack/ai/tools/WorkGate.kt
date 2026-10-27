@@ -19,6 +19,8 @@ import java.io.File
  * Work 的收尾关卡，不靠提示词自觉，靠代码看清单：
  * - 开工后第一次调别的工具时还没列清单，在工具结果后面提醒一次；
  * - 模型想收尾时：没列清单、还有没做完的步骤、验收标准没写或没核对，就推回去接着做（最多 [MAX_NUDGES] 次，免得死循环）；
+ * - 连着调了 [STALL_CALLS] 次工具、清单一步没动，多半在原地绕，提醒停下重新判断；
+ * - 交付里的链接得是这次搜到过、读到过的（或对话里本来就有的），不是的打回去删掉或补查一次；
  * - 清单齐了，开着「交付前复核」时再请另一次请求（不看过程、只看结果）按验收标准复核一次，不合格打回去改一次。
  */
 class WorkGate(
@@ -31,14 +33,30 @@ class WorkGate(
     private var nudges = 0
     private var reviewed = false
     private var reminded = false
+    private var sourcesChecked = false
+    /** 卡住检测：清单上次变化时的样子，和那之后调了几次工具。 */
+    private var lastProgress = ""
+    private var sinceProgress = 0
+    /** 对话里本来就有的链接（用户发的、以前回答里查到的），算有据。 */
+    private val earlierUrls: Set<String> = session.conv.messages.flatMap { m -> Sources.find(m.content) + m.trail.flatMap(Sources::find) }.toSet()
 
     private fun fill(t: String) = Persona.fill(t, session.settings)
 
-    /** 加在工具结果后面：Work 开工了还没列清单，提醒一次。 */
+    /** 加在每个工具结果后面：开工了还没列清单提醒一次；清单好久没动提醒重新判断。 */
     fun reminder(name: String): String {
-        if (!session.conv.work || reminded || session.steps.isNotEmpty() || name in NO_REMINDER) return ""
-        reminded = true
-        return "\n\n(Work mode goes step by step: write the step list and acceptance criteria with update_plan now, before going further.)"
+        if (!session.conv.work) return ""
+        if (session.steps.isEmpty()) {
+            if (reminded || name in NO_REMINDER) return ""
+            reminded = true
+            return "\n\n(Work mode goes step by step: write the step list and acceptance criteria with update_plan now, before going further.)"
+        }
+        val now = (session.steps + session.criteria).joinToString("|") { it.text + ":" + it.status }
+        if (now != lastProgress || name == "update_plan") { lastProgress = now; sinceProgress = 0; return "" }
+        if (++sinceProgress < STALL_CALLS) return ""
+        sinceProgress = 0
+        val doing = session.steps.firstOrNull { it.status == "doing" || it.status == "pending" }?.text
+        return "\n\n(You've made $STALL_CALLS tool calls without the plan moving forward" + (doing?.let { ", still on 「$it」" } ?: "") +
+            ". Stop and reassess: is this step still achievable this way? Change the method or source, split the step, or mark it skipped with a reason, then update the plan.)"
     }
 
     /** 模型这一轮想直接收尾：返回 null 就让它收；返回一段话就塞回去让它接着做。 */
@@ -48,6 +66,17 @@ class WorkGate(
         if (session.calls.get() == 0 && session.steps.isEmpty()) return null
         if (nudges < MAX_NUDGES) {
             unfinished(session.steps, session.criteria)?.let { nudges++; return fill(it) }
+        }
+        if (!sourcesChecked) {
+            sourcesChecked = true
+            val cited = Sources.find(answer) + producedText().let(Sources::find)
+            val unknown = Sources.unknown(cited, session.seenUrls + earlierUrls)
+            if (unknown.isNotEmpty()) {
+                session.ui.notice("来源核对：${unknown.size} 个链接这次没查到过，已让 Kavi 核实")
+                return "These links in your result don't appear in anything you searched or read in this task:\n" +
+                    unknown.take(10).joinToString("\n") { "- $it" } +
+                    "\nDon't cite links you haven't seen. Read each one with read_webpage to confirm it says what you claim, or replace it with a source you actually read, or remove it. Then deliver again."
+            }
         }
         val r = review ?: return null
         if (reviewed || session.steps.isEmpty()) return null
@@ -65,8 +94,16 @@ class WorkGate(
         )
     }
 
+    /** 这次回答里生成或改过的文件的文字（来源核对用）。 */
+    private suspend fun producedText(): String = withContext(Dispatchers.IO) {
+        produced(Workspace.dir(session.app, Workspace.key(session.conv)), session.startedAt).take(5)
+            .joinToString("\n") { f -> runCatching { Workspace.readText(f, extracted = true) }.getOrDefault("").take(50_000) }
+    }
+
     companion object {
         const val MAX_NUDGES = 3
+        /** 清单不动、连着调这么多次工具，就算卡住了。 */
+        const val STALL_CALLS = 8
         /** 这些工具本身就是在准备或读东西，不用提醒列清单。 */
         private val NO_REMINDER = setOf("update_plan", "use_skill", "read_file", "self_check")
 

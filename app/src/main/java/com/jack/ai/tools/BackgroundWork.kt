@@ -188,6 +188,7 @@ suspend fun runBackgroundWork(
             retool = { toolsFor(session.unlocked.toSet()) },
             onTools = { TaskCheckpoint.save(checkpoint, cpKey, messages, spent) },
             beforeFinish = gate?.let { g -> { answer -> g.beforeFinish(answer) } },
+            slim = { msgs -> com.jack.ai.chat.ContextSlim.slim(msgs) },
             onUsage = { ev ->
                 store.addUsage(ep, ev.promptTokens, ev.cacheHit, ev.completionTokens)
                 spent += Pricing.priceAt(ep, System.currentTimeMillis())

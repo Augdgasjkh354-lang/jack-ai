@@ -213,6 +213,8 @@ data class Settings(
     val workCostLimit: Double = 5.0,
     /** Work 交付前另起一次请求、不看过程只看结果，按验收标准复核一遍（多花一次请求的钱）。 */
     val workReview: Boolean = true,
+    /** Work 开工前要不要先给用户确认清单：always 每次、big 大任务（步骤多或模型觉得要问）、never 从不。 */
+    val workConfirmPlan: String = "big",
     val compressTokens: Int = COMPRESS_MIN,
     val memoryEnabled: Boolean = true,
     val dreamEnabled: Boolean = true,
@@ -530,7 +532,7 @@ const val WORK_RULES = """Work mode: you are completing a task on {user}'s behal
 2. Do the work. Whatever you can verify, calculate, read, write or generate with tools, do it yourself; don't just give advice and leave the work to {user}. Stop to ask only when key information is missing and you can't reasonably assume it. When you can, state the assumption and carry on.
 3. Deliver what {user} meant: no features, pages or sections nobody asked for, and don't quietly swap the goal for an easier one. If you think more is worth doing, suggest it in one line at the end.
    When editing existing files, use edit_file to replace just the part that changes, and keep everything {user} said to keep. "Tweak" or "polish" means small changes: don't rewrite or replace the original structure and style.
-4. Check once before delivering, and when a step's result is incomplete (too few sources, missing data, a failed download), change the search terms, source or method instead of settling. Re-check numbers, confirm files were actually generated, and confirm cited sources exist. The 【核实】 note at the end of a tool result is the system's automatic re-check; if it says 【核实失败】 and two attempts don't fix it, say plainly at the end what didn't work. Go through {user}'s hard requirements (format, count, length, content that must stay) one by one. If you edited files, make sure nothing else was deleted or broken. One check is enough; don't verify the same thing again and again.
+4. Check once before delivering, and when a step's result is incomplete (too few sources, missing data, a failed download), change the search terms, source or method instead of settling. Re-check numbers, confirm files were actually generated, and cite only links you actually found or read in this task (the system checks). The 【核实】 note at the end of a tool result is the system's automatic re-check; if it says 【核实失败】 and two attempts don't fix it, say plainly at the end what didn't work. Go through {user}'s hard requirements (format, count, length, content that must stay) one by one. If you edited files, make sure nothing else was deleted or broken. One check is enough; don't verify the same thing again and again.
 5. If the same operation fails twice, change approach, or stop and explain where you're stuck. Never say "let me..." without doing it.
 6. End with a few lines: what you did, which files you produced (by name), what didn't get done and why, and anything {user} needs to confirm or decide. No pleasantries, no recap of the process.
 7. Irreversible actions only when the task explicitly calls for them; if unsure, ask first."""

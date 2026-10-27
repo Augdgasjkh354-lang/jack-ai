@@ -136,6 +136,18 @@ fun UsageScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                         }
                         Switch(checked = state.settings.workReview, onCheckedChange = { on -> vm.updateSettings { it.copy(workReview = on) } })
                     }
+                    Text("Work 开工前确认清单", style = MaterialTheme.typography.bodyMedium)
+                    Text("Kavi 列好步骤和验收标准后先给你看，你点「开始」才动手。大任务：6 步以上，或 Kavi 觉得要求含糊、花费大时",
+                        style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("always" to "每次", "big" to "大任务时", "never" to "从不").forEach { (id, label) ->
+                            androidx.compose.material3.FilterChip(
+                                selected = state.settings.workConfirmPlan == id,
+                                onClick = { vm.updateSettings { it.copy(workConfirmPlan = id) } },
+                                label = { Text(label) },
+                            )
+                        }
+                    }
                     if (budget > 0) {
                         val spent = monthList.money
                         LinearProgressIndicator(

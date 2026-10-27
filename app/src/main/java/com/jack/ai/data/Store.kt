@@ -363,6 +363,7 @@ class Store(context: Context) {
             // 默认值从 1 元改成了 5 元，换个键名，旧的默认值不沿用
             workCostLimit = prefs.getFloat("workCostLimit5", 5f).toDouble(),
             workReview = prefs.getBoolean("workReview", true),
+            workConfirmPlan = prefs.getString("workConfirmPlan", "big") ?: "big",
             // 压缩门槛：200k 到 1M（换了个键，以前误拖到 50k 存下的旧值不再读）
             compressTokens = prefs.getInt("compressTokens2", COMPRESS_MIN).coerceIn(COMPRESS_MIN, COMPRESS_MAX),
             memoryEnabled = prefs.getBoolean("memoryEnabled", true),
@@ -437,6 +438,7 @@ class Store(context: Context) {
             .putString("workThinking", s.workThinking.name)
             .putFloat("workCostLimit5", s.workCostLimit.toFloat())
             .putBoolean("workReview", s.workReview)
+            .putString("workConfirmPlan", s.workConfirmPlan)
             .putInt("compressTokens2", s.compressTokens.coerceIn(COMPRESS_MIN, COMPRESS_MAX))
             .putBoolean("memoryEnabled", s.memoryEnabled)
             .putBoolean("dreamEnabled", s.dreamEnabled)

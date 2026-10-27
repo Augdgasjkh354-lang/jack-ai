@@ -66,6 +66,8 @@ class Agent(
          * 返回一段话就把它当作一条消息塞回去，接着做。已经不给工具了（到了轮数上限）就不问。
          */
         beforeFinish: (suspend (answer: String) -> String?)? = null,
+        /** 每轮工具做完、发下一次请求前，给调用方瘦身 messages 的机会（Work 长任务压掉旧的大段工具结果，见 ContextSlim）。 */
+        slim: ((MutableList<JsonObject>) -> Unit)? = null,
     ) {
         // 补过图片的消息位置：新图来了就把旧的换成一句话，免得每轮都重发
         val imageAt = mutableListOf<Int>()
@@ -181,6 +183,7 @@ class Agent(
                 messages += m
                 trail += m.toString()
             }
+            slim?.invoke(messages)
             onRound()
             retool?.let { currentTools = it() }
             if (round >= maxRounds()) currentTools = null

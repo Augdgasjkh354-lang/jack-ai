@@ -18,6 +18,8 @@ object ContextNote {
 
     fun build(ctx: Context, store: Store, conv: Conversation, skillIds: Set<String>): String = buildString {
         append(files(Workspace.dir(ctx, Workspace.key(conv))))
+        // Work 任务：以前碰到过问题的网站，开工就知道该换来源（放在最后一条消息上，不影响缓存）
+        if (conv.work) append(com.jack.ai.data.Persona.fill(com.jack.ai.data.SiteNotes.note(com.jack.ai.data.SiteNotes.load(ctx)), store.loadSettings()))
         // 收件箱要知道有哪些项目，才能归到对的项目里
         if (conv.id == com.jack.ai.data.INBOX_ID) {
             // 隐私项目不列出来：收件箱是公共的入口，不往隐私项目里归档

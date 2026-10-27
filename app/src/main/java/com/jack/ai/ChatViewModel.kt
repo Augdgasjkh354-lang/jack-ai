@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.jack.ai.api.ApiException
 import com.jack.ai.chat.Agent
+import com.jack.ai.chat.ContextSlim
 import com.jack.ai.chat.PromptBuilder
 import com.jack.ai.tools.ToolHost
 import com.jack.ai.tools.ToolSession
@@ -585,6 +586,18 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             session.canSee = ep.vision
             session.modelName = com.jack.ai.data.modelLabel(model)
             session.unlocked.addAll(unlockedStart)
+            // 开工前确认清单：只在新任务里问（接着做、复核时不问）
+            if (work && extraUser == null) session.planConfirm = { steps, criteria ->
+                if (!MainActivity.visible) com.jack.ai.data.Routines.notify(getApplication(), "work-ask-$convId",
+                    "需要你确认：$workTitle", "Kavi 列好了清单，等你点开始", openChat = convId)
+                ask(
+                    "开工前确认清单",
+                    steps.mapIndexed { i, s -> "${i + 1}. ${s.text}" }.joinToString("\n") +
+                        (if (criteria.isEmpty()) "" else "\n\n验收标准：\n" + criteria.joinToString("\n") { "· ${it.text}" }) +
+                        "\n\n不满意就点取消，告诉 Kavi 要怎么改。",
+                    "开始",
+                )
+            }
             val agent = Agent({ msgs, t -> client.stream(ep, msgs, thinking, settings.temperature, t) }, sendReasoning = thinkingOn)
             // Work 的收尾关卡：清单没做完不让收尾；开着「交付前复核」再另起一次请求按验收标准查一遍
             val gate = com.jack.ai.tools.WorkGate(session, review = if (work && settings.workReview) {
@@ -623,7 +636,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                             if (ok) nextLimit = spent + limit
                             else session.maxRounds = 0
                         }
-                        if (session.maxRounds == 0) "用户让你先停下（花费到了上限）。不要再调用工具，直接说明目前做到哪一步、还差什么。"
+                        if (session.maxRounds == 0) session.stopNote ?: "用户让你先停下（花费到了上限）。不要再调用工具，直接说明目前做到哪一步、还差什么。"
                         else session.execute(name, args) + gate.reminder(name)
                     },
                     onText = {
@@ -650,6 +663,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     // use_skill 打开了新技能：下一轮把它的工具加上
                     retool = { PromptBuilder.toolSet(settings, skills, conv, project, session.unlocked.toSet()) },
                     beforeFinish = { answer -> gate.beforeFinish(answer) },
+                    slim = if (work) { msgs -> ContextSlim.slim(msgs) } else null,
                     recovery = Agent.Recovery { tried ->
                         // 先怀疑图片编号失效（过期或被删）：清掉记录，改回内联图片再试一次
                         if (!filesDropped && promptInput.fileIds.isNotEmpty()) {

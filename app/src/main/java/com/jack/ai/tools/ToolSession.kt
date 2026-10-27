@@ -130,6 +130,15 @@ class ToolSession(
     @Volatile var criteria: List<PlanItem> = emptyList()
     /** 这次回答里各类失败出现了几次（见 [Failures]），同一类再出现时提示说得更重。 */
     val failures = java.util.concurrent.ConcurrentHashMap<Failures.Kind, Int>()
+    /** 这次回答里工具结果、调用参数中出现过的链接（来源核对用，见 [Sources]）。 */
+    val seenUrls: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+    /** 开工前确认清单（Work 在聊天里、设置允许时由调用方给）：返回 true 就开始。 */
+    var planConfirm: (suspend (steps: List<PlanItem>, criteria: List<PlanItem>) -> Boolean)? = null
+    internal var planAsked = false
+    /** 让模型停下时给它看的话（maxRounds 设成 0 之后，再调工具就回这句）。 */
+    @Volatile var stopNote: String? = null
+    /** 这次回答开始的时间：之后改过的文件算这次的产出。 */
+    val startedAt = System.currentTimeMillis()
 
     /** 执行一个工具，聊天里显示「进行中」→「完成/出错」。出错时把原因交给模型，不抛出。 */
     suspend fun runTool(label: String, action: suspend () -> Pair<String, SearchRecord>): String {
@@ -211,8 +220,10 @@ class ToolSession(
             }
         }
         // 没做成（或没拿到东西）：按原因附一句换法
+        if (status == ToolStatus.OK) { seenUrls += Sources.find(result); seenUrls += Sources.find(argsText) }
         val kind = Failures.classify(name, result, status)
         val note = kind?.let { Failures.note(it, failures.merge(it, 1, Int::plus) ?: 1, result, settings) }.orEmpty()
+        recordSite(name, argsText, result, status, kind)
         return ToolOutcome(result + note, status)
     }
 
@@ -416,7 +427,23 @@ internal suspend fun ToolSession.startClock(intent: Intent, missing: String = "�
 }
 
 /** 任务清单：整份替换，显示在回答上方。不算一次“工具调用”的标记，免得刷屏。 */
-internal fun ToolSession.updatePlan(args: JsonObject): String {
+/** 碰网站的工具：做完记一笔这个网站怎么样（经验沉淀，见 SiteNotes）。 */
+private val SITE_TOOLS = setOf("read_webpage", "download_file", "browser")
+private val LOGIN_SITE = Regex("""这一页是 (\S+?) 的登录页""")
+
+internal suspend fun ToolSession.recordSite(name: String, argsText: String, result: String, status: ToolStatus, kind: Failures.Kind?) {
+    if (name !in SITE_TOOLS || project?.isolated == true) return
+    val host = LOGIN_SITE.find(result)?.groupValues?.get(1)?.lowercase()?.removePrefix("www.")
+        ?: Sources.find(argsText).firstOrNull()?.let(com.jack.ai.data.SiteNotes::hostOf) ?: return
+    val ok = status == ToolStatus.OK && kind == null
+    if (!ok && kind == null) return
+    withContext(Dispatchers.IO) { runCatching { com.jack.ai.data.SiteNotes.record(app, host, if (ok) null else kind) } }
+}
+
+/** 清单有这么多步就算大任务，开工前先给用户确认（设置是 big 时）。 */
+internal const val CONFIRM_STEPS = 6
+
+internal suspend fun ToolSession.updatePlan(args: JsonObject): String {
     fun list(key: String, ok: Set<String>, max: Int) = (args[key] as? JsonArray).orEmpty().mapNotNull { el ->
         val o = el as? JsonObject ?: return@mapNotNull null
         val text = o["text"].text().trim().ifBlank { return@mapNotNull null }
@@ -429,6 +456,19 @@ internal fun ToolSession.updatePlan(args: JsonObject): String {
     steps = items
     criteria = crit
     ui.plan(items, crit)
+    // 第一次写清单：大任务（或设置成每次）先给用户确认，不同意就停下问要怎么改
+    if (!planAsked) {
+        planAsked = true
+        val ask = planConfirm
+        val mode = settings.workConfirmPlan
+        val big = items.size >= CONFIRM_STEPS || args["confirm"].text() == "true"
+        if (ask != null && (mode == "always" || (mode == "big" && big)) && !ask(items, crit)) {
+            succeeded.incrementAndGet()
+            maxRounds = 0
+            stopNote = com.jack.ai.data.Persona.fill("{User} wants to adjust the plan before you start. Don't call any more tools: show the steps and criteria briefly and ask what to change.", settings)
+            return stopNote!!
+        }
+    }
     // 不走 runTool，自己记一次成功，工具统计里才不会算成失败
     succeeded.incrementAndGet()
     val done = items.count { it.status == "done" || it.status == "skipped" }
