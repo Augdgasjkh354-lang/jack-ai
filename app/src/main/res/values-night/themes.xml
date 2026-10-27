@@ -1,5 +1,5 @@
 <resources>
     <style name="Theme.JackAI" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">#000000</item>
+        <item name="android:windowBackground">#0C0E13</item>
     </style>
 </resources>

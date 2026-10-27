@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
@@ -138,6 +139,18 @@ internal fun inlineMarkdown(text: String, codeBg: Color, link: Color): Annotated
     append(text.substring(last))
 }
 
+/** 「**小标题**：说明」「**小标题：**说明」「**小标题**」换行「说明」，冒号或破折号、换行才算分开；「**结论**。后文」不拆。 */
+private val ITEM_TITLE = Regex("""^\*\*([^*\n]{1,40}?)\*\*(?:\s*[：:—–]\s*|\s*-\s+|\s*\n\s*)(.+)$""", RegexOption.DOT_MATCHES_ALL)
+private val ITEM_TITLE_COLON = Regex("""^\*\*([^*\n]{1,40}?[：:])\*\*\s*(.+)$""", RegexOption.DOT_MATCHES_ALL)
+
+/** 「**小标题**：说明」这样的列表项拆成（小标题，说明）；不是这个样子返回（null，原文）。 */
+internal fun itemTitle(text: String): Pair<String?, String> {
+    val t = text.trim()
+    val m = ITEM_TITLE.matchEntire(t) ?: ITEM_TITLE_COLON.matchEntire(t) ?: return null to text
+    val rest = m.groupValues[2].trim()
+    return if (rest.isEmpty()) null to text else m.groupValues[1].trim().trimEnd('：', ':') to rest
+}
+
 /** 画一段 Markdown（不含表格、不含公式；那两种由 MarkdownBlocks 分给别处）。 */
 @Composable
 internal fun ComposeMarkdown(block: String, color: Color, codeBackground: Color, modifier: Modifier = Modifier, textSizeSp: Float = 16f) {
@@ -150,20 +163,37 @@ internal fun ComposeMarkdown(block: String, color: Color, codeBackground: Color,
             when (p) {
                 is MdPart.Para -> Text(inlineMarkdown(p.text, codeBackground, accent), style = body)
                 is MdPart.Heading -> {
-                    val scale = listOf(1.3f, 1.2f, 1.1f, 1f, 1f, 1f)[p.level - 1]
+                    // 标题粗一点、大一点，和正文拉开层级（一级、二级用粗体）
+                    val scale = listOf(1.35f, 1.2f, 1.08f, 1f, 1f, 1f)[p.level - 1]
                     Text(
                         inlineMarkdown(p.text, codeBackground, accent),
-                        style = body.copy(fontSize = (textSizeSp * scale).sp, lineHeight = (textSizeSp * scale * 1.4f).sp, fontWeight = FontWeight.SemiBold),
-                        modifier = Modifier.padding(top = 4.dp),
+                        style = body.copy(fontSize = (textSizeSp * scale).sp, lineHeight = (textSizeSp * scale * 1.4f).sp,
+                            fontWeight = if (p.level <= 2) FontWeight.Bold else FontWeight.SemiBold, letterSpacing = 0.sp),
+                        modifier = Modifier.padding(top = if (p.level <= 2) 8.dp else 4.dp),
                     )
                 }
-                is MdPart.Item -> Row(Modifier.padding(start = (p.depth * 18).dp)) {
-                    Text(
+                is MdPart.Item -> Row(Modifier.padding(start = (p.depth * 18).dp, top = if (p.ordered && p.depth == 0) 4.dp else 0.dp)) {
+                    if (p.ordered && p.depth == 0) {
+                        // 第一层编号放进浅灰小圆里
+                        Box(
+                            Modifier.padding(top = ((textSizeSp * 1.6f - 24f) / 2).coerceAtLeast(0f).dp).size(24.dp)
+                                .clip(androidx.compose.foundation.shape.CircleShape).background(colors.surfaceContainerHigh),
+                            contentAlignment = androidx.compose.ui.Alignment.Center,
+                        ) {
+                            Text(p.marker.trimEnd('.', ')'), style = TextStyle(color = color, fontSize = 12.sp, fontWeight = FontWeight.SemiBold))
+                        }
+                        androidx.compose.foundation.layout.Spacer(Modifier.width(12.dp))
+                    } else Text(
                         if (p.ordered) p.marker else if (p.depth == 0) "•" else "◦",
-                        style = body.copy(color = if (p.ordered) color else accent, fontWeight = if (p.ordered) FontWeight.Medium else null),
+                        style = body.copy(color = if (p.ordered) color else colors.outline, fontWeight = if (p.ordered) FontWeight.Medium else null),
                         modifier = Modifier.width(if (p.ordered) 26.dp else 18.dp),
                     )
-                    Text(inlineMarkdown(p.text, codeBackground, accent), style = body, modifier = Modifier.weight(1f))
+                    val (title, rest) = itemTitle(p.text)
+                    if (title != null) Column(Modifier.weight(1f)) {
+                        // 「**小标题**：说明」：小标题单独一行加粗，说明换行用浅一点的字
+                        Text(inlineMarkdown(title, codeBackground, accent), style = body.copy(fontWeight = FontWeight.SemiBold))
+                        Text(inlineMarkdown(rest, codeBackground, accent), style = body.copy(color = colors.onSurfaceVariant))
+                    } else Text(inlineMarkdown(p.text, codeBackground, accent), style = body, modifier = Modifier.weight(1f))
                 }
                 is MdPart.Quote -> Row(Modifier.height(IntrinsicSize.Min)) {
                     Box(Modifier.width(3.dp).fillMaxHeight().clip(RoundedCornerShape(2.dp)).background(colors.outlineVariant))
@@ -177,7 +207,7 @@ internal fun ComposeMarkdown(block: String, color: Color, codeBackground: Color,
                     Text(p.code, style = body.copy(fontFamily = FontFamily.Monospace, fontSize = (textSizeSp * 0.86f).sp,
                         lineHeight = (textSizeSp * 1.35f).sp, letterSpacing = 0.sp), softWrap = false)
                 }
-                MdPart.Rule -> HorizontalDivider(Modifier.padding(vertical = 6.dp), color = colors.outlineVariant)
+                MdPart.Rule -> HorizontalDivider(Modifier.padding(vertical = 10.dp), color = colors.outlineVariant)
             }
         }
     }

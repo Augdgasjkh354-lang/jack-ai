@@ -1,5 +1,7 @@
 package com.jack.ai.ui
 
+import androidx.compose.ui.graphics.luminance
+
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -590,13 +592,17 @@ private fun DrawerRow(
 /** App 的小标志：陶土色圆角方块里一个对话气泡。 */
 @Composable
 fun LogoMark(size: Dp) {
-    // 和桌面图标同一张图：陶土底 + 圆润的 J。前景图四周留了安全边，放大一点再裁成圆角方块
+    // 和桌面图标同一个样子：白到淡紫的圆角底（深色模式是深蓝紫），中间蓝紫渐变的 K
+    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val bg = if (dark) listOf(Color(0xFF1C2132), Color(0xFF2A2550)) else listOf(Color.White, Color(0xFFEDEAFE))
     Box(
-        Modifier.size(size).clip(RoundedCornerShape(size * 0.3f)).background(MaterialTheme.colorScheme.primary),
+        Modifier.size(size).clip(RoundedCornerShape(size * 0.28f))
+            .background(androidx.compose.ui.graphics.Brush.linearGradient(bg))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (dark) 0f else 1f), RoundedCornerShape(size * 0.28f)),
         contentAlignment = Alignment.Center,
     ) {
         androidx.compose.foundation.Image(
-            androidx.compose.ui.res.painterResource(com.jack.ai.R.mipmap.ic_launcher_foreground), null,
+            androidx.compose.ui.res.painterResource(com.jack.ai.R.drawable.ic_logo_k_fg), null,
             Modifier.requiredSize(size * 1.5f),
         )
     }

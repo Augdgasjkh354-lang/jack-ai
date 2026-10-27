@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.runtime.collectAsState
@@ -110,6 +111,7 @@ import com.jack.ai.data.ThinkLevel
 import com.jack.ai.data.endpoint
 import com.jack.ai.data.modelChoices
 import com.jack.ai.data.modelLabel
+import com.jack.ai.data.nextAt
 import kotlinx.coroutines.launch
 import java.util.Calendar
 
@@ -209,7 +211,7 @@ fun ChatScreen(
                     },
                     navigationIcon = {
                         IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(Icons.Default.Menu, contentDescription = "菜单")
+                            Icon(AppIcons.Menu, contentDescription = "菜单", Modifier.size(24.dp))
                         }
                     },
                     actions = {
@@ -382,14 +384,15 @@ private fun ModelPicker(settings: Settings, projectName: String?, onPick: (Strin
     }
 }
 
-private data class Suggestion(val title: String, val prompt: String)
+/** 空白页的建议：图标、图标底色（浅色、深色模式各一个）、标题、点了填进输入框的话。 */
+private data class Suggestion(val icon: ImageVector, val tint: Long, val title: String, val prompt: String)
 
 // 点一下只是填进输入框，不直接发；要补的内容放在最后，光标就在那里
 private val SUGGESTIONS = listOf(
-    Suggestion("今天有什么新闻", "今天有什么值得关注的新闻？"),
-    Suggestion("帮我记一件事", "提醒我"),
-    Suggestion("读个网页给我听", "帮我打开这个网页，读完告诉我重点："),
-    Suggestion("整理成表格", "帮我把下面的内容整理成表格：\n"),
+    Suggestion(AppIcons.Globe, 0xFF3B82F6, "今天有什么新闻", "今天有什么值得关注的新闻？"),
+    Suggestion(AppIcons.Calendar, 0xFFEF5A5A, "帮我记一件事", "提醒我"),
+    Suggestion(AppIcons.Speaker, 0xFF8B5CF6, "读个网页给我听", "帮我打开这个网页，读完告诉我重点："),
+    Suggestion(AppIcons.File, 0xFF22A06B, "整理成表格", "帮我把下面的内容整理成表格：\n"),
 )
 
 private fun greeting(): String = when (Calendar.getInstance().get(Calendar.HOUR_OF_DAY)) {
@@ -398,6 +401,17 @@ private fun greeting(): String = when (Calendar.getInstance().get(Calendar.HOUR_
     in 13..17 -> "下午好"
     in 18..22 -> "晚上好"
     else -> "夜深了"
+}
+
+/** 问候下面那一行：今天还有几个提醒、任务，几个监控在盯着；什么都没有就是 null。 */
+internal fun todayLine(routines: List<com.jack.ai.data.Routine>, now: Long = System.currentTimeMillis()): String? {
+    val end = Calendar.getInstance().apply {
+        timeInMillis = now; set(Calendar.HOUR_OF_DAY, 23); set(Calendar.MINUTE, 59); set(Calendar.SECOND, 59)
+    }.timeInMillis
+    val today = routines.filter { it.kind != "watch" }.count { r -> r.nextAt(now)?.let { it <= end } == true }
+    val watching = routines.count { it.kind == "watch" && it.enabled && it.until > now }
+    val parts = listOfNotNull("$today 个提醒和任务".takeIf { today > 0 }, "$watching 个监控在盯着".takeIf { watching > 0 })
+    return if (parts.isEmpty()) null else "今天还有 " + parts.joinToString("，")
 }
 
 @Composable
@@ -415,43 +429,66 @@ private fun EmptyState(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         ModeSwitch(work = conv?.work ?: state.draftWork, onChange = vm::setWork)
-        Spacer(Modifier.height(24.dp))
-        LogoMark(52.dp)
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(36.dp))
+        LogoMark(64.dp)
+        Spacer(Modifier.height(22.dp))
         val name = state.settings.userName.trim()
         Text(
             greeting() + if (name.isNotEmpty()) "，$name" else "",
             style = MaterialTheme.typography.headlineMedium,
-            fontFamily = FontFamily.Serif,
+            fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
         )
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(8.dp))
         Text(
-            if (project != null) "在项目「${project.name}」里，想做点什么？" else "今天想聊点什么？",
+            if (project != null) "在项目「${project.name}」里，想做点什么？"
+            else todayLine(state.routines) ?: "今天想聊点什么？",
             style = MaterialTheme.typography.bodyLarge,
             color = colors.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
-        Spacer(Modifier.height(28.dp))
+        Spacer(Modifier.height(32.dp))
         if (conv?.work ?: state.draftWork) {
             WorkTemplates(vm, state.settings.workTemplates, onSuggest)
         } else SUGGESTIONS.chunked(2).forEach { row ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                row.forEach { sg ->
-                    Surface(
-                        onClick = { onSuggest(sg.prompt) },
-                        shape = RoundedCornerShape(18.dp),
-                        color = colors.surfaceContainerLowest,
-                        border = BorderStroke(1.dp, colors.outlineVariant),
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
-                            Text(sg.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                        }
-                    }
-                }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                row.forEach { sg -> SuggestionCard(sg.icon, Color(sg.tint), sg.title, Modifier.weight(1f)) { onSuggest(sg.prompt) } }
             }
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(12.dp))
+        }
+    }
+}
+
+/** 空白页的一张建议卡：左上一个浅色底的彩色小图标，下面是标题，右边一个小箭头。 */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun SuggestionCard(icon: ImageVector?, tint: Color, title: String, modifier: Modifier = Modifier, muted: Boolean = false,
+                           onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    val shape = RoundedCornerShape(20.dp)
+    Box(
+        modifier
+            .clip(shape)
+            .border(1.dp, colors.outlineVariant, shape)
+            .background(colors.surfaceContainerLowest)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(16.dp),
+    ) {
+        Column {
+            Box(
+                Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(tint.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (icon != null) Icon(icon, null, Modifier.size(20.dp), tint = tint)
+                else Text("＋", color = tint, style = MaterialTheme.typography.titleMedium)
+            }
+            Spacer(Modifier.height(14.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = if (muted) null else FontWeight.SemiBold,
+                    color = if (muted) colors.onSurfaceVariant else colors.onSurface,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Icon(Icons.Default.KeyboardArrowRight, null, Modifier.size(18.dp), tint = colors.outline)
+            }
         }
     }
 }
@@ -759,14 +796,14 @@ private fun InputBar(
         }
         com.jack.ai.RecordService.current?.let { RecordBar(it) }
         Surface(
-            shape = RoundedCornerShape(26.dp),
-            // 输入框半透明，能隐约看到后面的消息
-            color = (if (dark) colors.surfaceContainerHigh else colors.surfaceContainerLowest).copy(alpha = 0.82f),
+            shape = RoundedCornerShape(28.dp),
+            // 浮在消息上面的白色大胶囊，带一点柔和的阴影
+            color = if (dark) colors.surfaceContainerHigh else colors.surfaceContainerLowest,
             border = BorderStroke(1.dp, colors.outlineVariant),
-            shadowElevation = 0.dp,
+            shadowElevation = if (dark) 0.dp else 6.dp,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Column(Modifier.padding(start = 6.dp, end = 8.dp, top = 6.dp, bottom = 8.dp)) {
+            Column(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 8.dp)) {
                 if (state.pending.isNotEmpty() || state.importing) {
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -780,33 +817,16 @@ private fun InputBar(
                         }
                     }
                 }
-                TextField(
-                    value = text,
-                    onValueChange = onTextChange,
-                    placeholder = { Text("问点什么…", color = colors.outline) },
-                    maxLines = 6,
-                    textStyle = MaterialTheme.typography.bodyLarge,
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent,
-                        disabledContainerColor = Color.Transparent,
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                        disabledIndicatorColor = Color.Transparent,
-                    ),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Box {
+                Row(verticalAlignment = Alignment.Top) {
+                    Box(Modifier.padding(top = 8.dp)) {
                         Surface(
                             onClick = { attachMenu = true },
                             shape = CircleShape,
-                            color = Color.Transparent,
-                            border = BorderStroke(1.dp, colors.outlineVariant),
-                            modifier = Modifier.padding(start = 6.dp).size(34.dp),
+                            color = colors.surfaceContainer,
+                            modifier = Modifier.size(40.dp),
                         ) {
                             Box(contentAlignment = Alignment.Center) {
-                                Icon(Icons.Default.Add, "更多", Modifier.size(20.dp), tint = colors.onSurfaceVariant)
+                                Icon(Icons.Default.Add, "更多", Modifier.size(22.dp), tint = colors.onSurface)
                             }
                         }
                         DropdownMenu(expanded = attachMenu, onDismissRequest = { attachMenu = false }) {
@@ -883,6 +903,26 @@ private fun InputBar(
                             }
                         }
                     }
+                    TextField(
+                        value = text,
+                        onValueChange = onTextChange,
+                        placeholder = { Text("问 Kavi…", color = colors.outline) },
+                        maxLines = 6,
+                        textStyle = MaterialTheme.typography.bodyLarge,
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            disabledContainerColor = Color.Transparent,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            disabledIndicatorColor = Color.Transparent,
+                        ),
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                // 第二行：思考、联网两个小药丸，右边是话筒 / 发送 / 停止
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(top = 2.dp)) {
                     // 不支持深度思考的模型不显示思考开关
                     if (settings.endpoint()?.reasoning != false) Box {
                         Pill(
@@ -926,22 +966,22 @@ private fun InputBar(
                     if (state.streamingHere && text.isNotBlank()) {
                         // 回答进行中也能发：作为插话，下一步就会看到
                         Surface(onClick = { if (vm.send(text)) onTextChange("") }, shape = CircleShape, color = colors.primary,
-                            modifier = Modifier.size(38.dp)) {
+                            modifier = Modifier.size(42.dp)) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(AppIcons.ArrowUp, "插话", Modifier.size(20.dp), tint = colors.onPrimary)
                             }
                         }
                     }
                     if (state.streamingHere) {
-                        Surface(onClick = vm::stop, shape = CircleShape, color = colors.onSurface, modifier = Modifier.size(38.dp)) {
+                        Surface(onClick = { vm.stop() }, shape = CircleShape, color = colors.onSurface, modifier = Modifier.size(42.dp)) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(AppIcons.Stop, "停止", Modifier.size(16.dp), tint = colors.surface)
                             }
                         }
                     } else if (text.isBlank() && state.pending.isEmpty()) {
-                        Surface(onClick = { startVoice() }, shape = CircleShape, color = colors.primaryContainer, modifier = Modifier.size(38.dp)) {
+                        Surface(onClick = { startVoice() }, shape = CircleShape, color = colors.primary, modifier = Modifier.size(42.dp)) {
                             Box(contentAlignment = Alignment.Center) {
-                                Icon(AppIcons.Mic, "语音输入", Modifier.size(20.dp), tint = colors.onPrimaryContainer)
+                                Icon(AppIcons.Mic, "语音输入", Modifier.size(20.dp), tint = colors.onPrimary)
                             }
                         }
                     } else {
@@ -951,7 +991,7 @@ private fun InputBar(
                             enabled = canSend,
                             shape = CircleShape,
                             color = if (canSend) colors.primary else colors.surfaceVariant,
-                            modifier = Modifier.size(38.dp),
+                            modifier = Modifier.size(42.dp),
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(AppIcons.ArrowUp, "发送", Modifier.size(20.dp),
@@ -1012,8 +1052,9 @@ private fun ModeSwitch(work: Boolean, onChange: (Boolean) -> Unit) {
                     Text(
                         label,
                         style = MaterialTheme.typography.labelLarge,
+                        fontWeight = if (on) FontWeight.SemiBold else null,
                         color = if (on) colors.onSurface else colors.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 7.dp),
+                        modifier = Modifier.padding(horizontal = 26.dp, vertical = 9.dp),
                     )
                 }
             }
@@ -1029,27 +1070,20 @@ private fun WorkTemplates(vm: ChatViewModel, templates: List<com.jack.ai.data.Pr
     var editing by remember { mutableStateOf<com.jack.ai.data.Preset?>(null) }
     val tiles: List<com.jack.ai.data.Preset?> = templates + null
     tiles.chunked(2).forEach { row ->
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             row.forEach { t ->
-                Box(
-                    Modifier.weight(1f)
-                        .clip(RoundedCornerShape(18.dp))
-                        .border(1.dp, colors.outlineVariant, RoundedCornerShape(18.dp))
-                        .background(colors.surfaceContainerLowest)
-                        .combinedClickable(
-                            onClick = { if (t == null) editing = com.jack.ai.data.Preset(name = "", prompt = "") else onUse(t.prompt) },
-                            onLongClick = { if (t != null) editing = t },
-                        )
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                ) {
-                    Text(t?.name ?: "＋ 新模板", style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = if (t != null) FontWeight.Medium else null,
-                        color = if (t != null) colors.onSurface else colors.onSurfaceVariant)
-                }
+                SuggestionCard(
+                    icon = if (t != null) AppIcons.Work else null,
+                    tint = colors.onSurface,
+                    title = t?.name ?: "新模板",
+                    modifier = Modifier.weight(1f),
+                    muted = t == null,
+                    onLongClick = { if (t != null) editing = t },
+                ) { if (t == null) editing = com.jack.ai.data.Preset(name = "", prompt = "") else onUse(t.prompt) }
             }
             if (row.size == 1) Spacer(Modifier.weight(1f))
         }
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(12.dp))
     }
     editing?.let { t ->
         var name by remember(t.id) { mutableStateOf(t.name) }

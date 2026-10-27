@@ -162,16 +162,16 @@ fun UserBubble(msg: ChatMessage, onDelete: () -> Unit, onEdit: ((String) -> Unit
         }
         if (msg.content.isNotEmpty()) {
             Surface(
-                color = MaterialTheme.colorScheme.secondaryContainer,
-                shape = RoundedCornerShape(20.dp, 6.dp, 20.dp, 20.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                shape = RoundedCornerShape(22.dp, 8.dp, 22.dp, 22.dp),
                 modifier = Modifier
                     .widthIn(max = 320.dp)
-                    .clip(RoundedCornerShape(20.dp, 6.dp, 20.dp, 20.dp))
+                    .clip(RoundedCornerShape(22.dp, 8.dp, 22.dp, 22.dp))
                     .combinedClickable(onClick = {}, onLongClick = { menu = true }),
             ) {
                 Text(
                     msg.content,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 11.dp),
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
                     style = MaterialTheme.typography.bodyLarge,
                 )
             }
@@ -272,7 +272,7 @@ fun AssistantMessage(
         val busy = streaming && msg.content.isEmpty()
         if (msg.searches.isNotEmpty()) {
             SearchBox(msg.searches, busy = busy)
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(14.dp))
         }
         // Kavi 在操作网页：回答写完之前，实时画面就放在这条回答里；每一步的截图排成一行
         val browsing = msg.searches.any { it.query.startsWith("浏览器") }
@@ -287,7 +287,7 @@ fun AssistantMessage(
         }
         if (msg.reasoning.isNotEmpty()) {
             ThinkingBox(msg.reasoning, thinking = busy)
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(14.dp))
         }
         // 回答按打字的节奏柔和地放出来（思考框照原速）；按段渲染，写完的段落不再重排
         val shown = rememberRevealedText(msg.id, msg.content, streaming)
@@ -334,32 +334,18 @@ fun AssistantMessage(
             }
         }
         if (!streaming) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(top = 10.dp)) {
                 if (msg.content.isNotEmpty()) {
                     SmallAction(AppIcons.Copy, "复制") {
                         clipboard.setText(AnnotatedString(msg.content))
                         Toast.makeText(ctx, "已复制", Toast.LENGTH_SHORT).show()
                     }
                 }
-                if (isLast && msg.truncated && onContinueWriting != null) {
-                    TextButton(onClick = onContinueWriting, modifier = Modifier.height(32.dp),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp)) {
-                        Text("接着写", style = MaterialTheme.typography.labelMedium, color = colors.primary)
-                    }
-                }
-                if (isLast && onContinue != null) {
-                    TextButton(onClick = onContinue, modifier = Modifier.height(32.dp),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp)) {
-                        Text("接着做", style = MaterialTheme.typography.labelMedium, color = colors.primary)
-                    }
-                }
                 if (isLast) SmallAction(Icons.Default.Refresh, "重新回答", onRegenerate)
-                if (isLast && onReview != null && msg.content.isNotEmpty()) {
-                    TextButton(onClick = onReview, modifier = Modifier.height(32.dp),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp)) {
-                        Text("复核", style = MaterialTheme.typography.labelMedium, color = colors.primary)
-                    }
-                }
+                if (isLast && msg.truncated && onContinueWriting != null) ActionPill("接着写", onContinueWriting)
+                if (isLast && onContinue != null) ActionPill("接着做", onContinue)
+                if (isLast && onReview != null && msg.content.isNotEmpty()) ActionPill("复核", onReview)
                 // 不常用的收进「⋯」：朗读、这条有问题、删除（删除要确认，它会连带删掉后面的消息）
                 Box {
                     SmallAction(Icons.Default.MoreVert, "更多") { more = true }
@@ -517,11 +503,38 @@ internal fun shareFile(ctx: Context, f: GeneratedFile) {
     ctx.startActivity(Intent.createChooser(intent, "分享到"))
 }
 
+/** 回答下面的小圆按钮：浅灰底，图标灰色。 */
 @Composable
 private fun SmallAction(icon: ImageVector, desc: String, onClick: () -> Unit) {
-    IconButton(onClick = onClick, modifier = Modifier.size(36.dp)) {
-        Icon(icon, desc, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.outline)
+    Surface(onClick = onClick, shape = androidx.compose.foundation.shape.CircleShape,
+        color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.size(34.dp)) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(icon, desc, Modifier.size(17.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
+}
+
+/** 回答下面带字的小按钮（接着写、接着做、复核）：细边药丸。 */
+@Composable
+private fun ActionPill(label: String, onClick: () -> Unit) {
+    Surface(onClick = onClick, shape = androidx.compose.foundation.shape.CircleShape, color = Color.Transparent,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), modifier = Modifier.height(34.dp)) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 14.dp)) {
+            Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
+        }
+    }
+}
+
+/** 思考、工具记录收着时是一个小药丸，点开铺满一行。 */
+@Composable
+private fun CollapsiblePill(expanded: Boolean, content: @Composable () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Surface(
+        color = if (expanded) colors.surfaceContainerLow else colors.surfaceContainerLow,
+        shape = RoundedCornerShape(if (expanded) 16.dp else 20.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant),
+        modifier = if (expanded) Modifier.fillMaxWidth() else Modifier,
+    ) { content() }
 }
 
 @Composable
@@ -529,27 +542,26 @@ private fun ThinkingBox(reasoning: String, thinking: Boolean) {
     // 默认收起：想看再点开。思考中只在标题下露一行最新的思路，不刷屏
     var expanded by rememberSaveable { mutableStateOf(false) }
     val colors = MaterialTheme.colorScheme
-    Surface(
-        color = colors.surfaceContainer,
-        shape = RoundedCornerShape(14.dp),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+    // 思考中要露出最新一行，铺满一行；想完了收成小药丸
+    CollapsiblePill(expanded || thinking) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded },
+                modifier = Modifier.clickable { expanded = !expanded },
             ) {
-                Icon(AppIcons.Brain, null, Modifier.size(16.dp), tint = colors.primary)
-                Spacer(Modifier.size(6.dp))
+                Icon(AppIcons.Brain, null, Modifier.size(16.dp), tint = colors.onSurfaceVariant)
+                Spacer(Modifier.size(8.dp))
                 Text(
                     if (thinking) "思考中…" else "已深度思考",
                     style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.weight(1f),
+                    color = colors.onSurfaceVariant,
+                    modifier = Modifier.weight(1f, fill = expanded || thinking),
                 )
+                Spacer(Modifier.size(4.dp))
                 Icon(
                     if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                     contentDescription = if (expanded) "收起" else "展开",
+                    Modifier.size(18.dp), tint = colors.onSurfaceVariant,
                 )
             }
             if (thinking && !expanded) {
@@ -582,35 +594,35 @@ private fun SearchBox(searches: List<SearchRecord>, busy: Boolean = false) {
     val searching = searches.any { it.pending }
     val spinning = searching || busy
     val sources = searches.flatMap { it.sources }
-    Surface(
-        color = colors.surfaceContainer,
-        shape = RoundedCornerShape(14.dp),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+    // 忙着的时候铺满一行（标题会变），做完收成小药丸
+    CollapsiblePill(expanded || spinning) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded },
+                modifier = Modifier.clickable { expanded = !expanded },
             ) {
                 if (spinning) {
                     CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
                 } else {
-                    Icon(AppIcons.Globe, null, Modifier.size(16.dp), tint = colors.primary)
+                    Icon(AppIcons.Globe, null, Modifier.size(16.dp), tint = colors.onSurfaceVariant)
                 }
-                Spacer(Modifier.size(6.dp))
+                Spacer(Modifier.size(8.dp))
                 Text(
                     if (searching) "正在${searches.last { it.pending }.query.let { if (isOther(it)) it else "搜索：$it" }}"
                     else if (busy) "用了 ${searches.size} 次工具，接着想…"
                     else if (sources.isEmpty() || searches.all { isOther(it.query) }) "用了 ${searches.size} 次工具"
-                    else "用了 ${searches.size} 次工具，参考 ${sources.size} 个网页",
+                    else "用了 ${searches.size} 次工具 · 参考 ${sources.size} 个来源",
                     style = MaterialTheme.typography.labelLarge,
+                    color = colors.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f, fill = expanded || spinning),
                 )
+                Spacer(Modifier.size(4.dp))
                 Icon(
                     if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                     contentDescription = if (expanded) "收起" else "展开",
+                    Modifier.size(18.dp), tint = colors.onSurfaceVariant,
                 )
             }
             AnimatedVisibility(expanded) {
