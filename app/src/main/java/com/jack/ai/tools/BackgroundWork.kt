@@ -122,9 +122,11 @@ suspend fun runBackgroundWork(
     val system = PromptBuilder.systemPrompt(s, conv, project, tools, memories, skills, journal = journal, lately = com.jack.ai.data.FreeTime.latelyNote(ctx)) +
         "\n\n" + com.jack.ai.data.Persona.fill(
             (brief ?: "【Background scheduled task】It is now $now. You're running a scheduled task {user} set up in advance: 「${r.title}」. {User} isn't online and can't be asked anything, so just get it done. ") +
-                (if (s.fullAuth) "{User} has turned on full authorization: actions like sending email or deleting run without a confirmation prompt. Do only what the task explicitly asks for, and nothing you're unsure about. "
-                else "Actions that need {user}'s confirmation, like sending email or deleting, will be refused; don't try them. ") +
-                "Put everything {user} needs in your final result. That result is the message {user} will read later: short, easy to read, no preamble.",
+                (if (budget != null && r.convId == com.jack.ai.data.Reader.CONV_ID && conv.projectId == null)
+                    "Your workbench is yours to use, change or clear. You don't need to report anything or produce a result."
+                else (if (s.fullAuth) "{User} has turned on full authorization: actions like sending email or deleting run without a confirmation prompt. Do only what the task explicitly asks for, and nothing you're unsure about. "
+                    else "Actions that need {user}'s confirmation, like sending email or deleting, will be refused; don't try them. ") +
+                    "Put everything {user} needs in your final result. That result is the message {user} will read later: short, easy to read, no preamble."),
             s,
         )
     val messages = mutableListOf(

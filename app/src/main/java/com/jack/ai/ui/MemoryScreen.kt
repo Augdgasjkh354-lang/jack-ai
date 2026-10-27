@@ -358,7 +358,7 @@ internal fun ReadingCard(vm: ChatViewModel, settings: com.jack.ai.data.Settings)
         value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.jack.ai.data.FreeTime.load(ctx) }
     }
     val works by androidx.compose.runtime.produceState(emptyList<java.io.File>(), refresh) {
-        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.jack.ai.data.Reader.works(ctx) }
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.jack.ai.data.Reader.workbench(ctx) }
     }
     var showWorks by remember { mutableStateOf(false) }
     val uri = androidx.compose.ui.platform.LocalUriHandler.current
@@ -428,14 +428,14 @@ internal fun ReadingCard(vm: ChatViewModel, settings: com.jack.ai.data.Settings)
                 }
             }
             androidx.compose.material3.HorizontalDivider(Modifier.padding(vertical = 6.dp), color = colors.outlineVariant)
-            // 小作品：它文件夹里的东西，半成品也算
+            // 工作台沿用自由时间的文件夹
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("小作品 ${works.size} 个", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                Text("Kavi 的工作台 · ${works.size} 个文件", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
                 if (works.isNotEmpty()) TextButton(onClick = { showWorks = !showWorks }) { Text(if (showWorks) "收起" else "看看") }
             }
-            if (works.isEmpty()) Text("还没有。它写到一半的故事、没做完的小程序、突然想到的点子，都会留在这里。",
+            if (works.isEmpty()) Text("这里是 Kavi 的文件夹，想留下什么、修改什么，都由它自己决定。",
                 style = MaterialTheme.typography.bodySmall, color = colors.outline)
-            if (showWorks) works.take(40).forEach { f ->
+            if (showWorks) works.forEach { f ->
                 TextButton(onClick = { openFile(ctx, com.jack.ai.data.GeneratedFile(f.name, f.absolutePath, com.jack.ai.tools.ToolSession.mimeOf(f.name), f.length())) },
                     contentPadding = PaddingValues(horizontal = 0.dp)) {
                     Text("📎 " + f.name + "  ·  " + fmt.format(java.util.Date(f.lastModified())), style = MaterialTheme.typography.labelLarge)

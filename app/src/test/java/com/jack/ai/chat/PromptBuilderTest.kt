@@ -504,4 +504,13 @@ class PromptBuilderTest {
         assertTrue("end_conversation" in toolNames(Conversation()))
         assertFalse("end_conversation" in toolNames(Conversation(id = com.jack.ai.data.Reader.CONV_ID, work = true)))
     }
+    @Test
+    fun workbenchToolsAreAvailableInFreeTime() {
+        val free = Conversation(id = com.jack.ai.data.Reader.CONV_ID, work = true)
+        assertTrue("list_files" in toolNames(free))
+        assertTrue("delete_file" in toolNames(free))
+        assertTrue("list_files" in com.jack.ai.data.Reader.TOOLS)
+        assertFalse("list_files" in toolNames(Conversation()))
+    }
+
 }

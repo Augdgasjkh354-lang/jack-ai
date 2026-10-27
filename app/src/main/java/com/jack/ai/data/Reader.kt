@@ -47,7 +47,7 @@ object Reader {
     /** 自由时间能用的工具：上网只读、事实库、自己文件夹里的文件、做文档和小工具、算东西。 */
     val TOOLS = setOf(
         "web_search", "read_webpage", "facts", "update_plan", "use_skill",
-        "read_file", "write_file", "edit_file", "delete_file", "free_time",
+        "list_files", "read_file", "write_file", "edit_file", "delete_file", "free_time",
         "create_document", "create_excel", "create_ppt", "create_chart", "create_diagram", "create_app",
         "run_python", "run_js",
     )
@@ -94,9 +94,11 @@ object Reader {
         return Report(kind.ifEmpty { if (topics.isNotEmpty()) "read" else "other" }, title, topics, lines.drop(i).joinToString("\n").trim(), lately)
     }
 
-    /** Kavi 的小作品：它文件夹里的东西（笔记本除外），新的在前。 */
-    fun works(ctx: Context): List<File> =
-        Workspace.files(Workspace.dir(ctx, Workspace.key(Conversation(id = CONV_ID)))).filter { it.name != NOTES }.sortedByDescending { it.lastModified() }
+    /** 工作台沿用自由时间的文件夹，笔记和以前留下的东西都在这里。 */
+    fun workbench(ctx: Context): List<File> =
+        Workspace.files(Workspace.dir(ctx, Workspace.key(Conversation(id = CONV_ID))))
+
+    fun works(ctx: Context): List<File> = workbench(ctx).filter { it.name != NOTES }
 
     /** Kavi 自己约的下一次：到点跑一次（和每天凌晨那次分开，后约的替换先约的）。 */
     fun scheduleExtra(ctx: Context, at: Long) {
@@ -208,8 +210,8 @@ Do whatever you want with it. Something useful or something pointless, for {user
 
 You can change your mind at any point. If you meant to read about astronomy and a history story catches you halfway, follow it; plans are not obligations. You can also stop early: five minutes of looking around is a perfectly good free time.
 
-Your folder keeps everything between sessions. Half-written stories, unfinished programs, stray ideas: keep them there as long as you like and come back whenever you feel like it. 「{notes}」 is your notebook if you want one; write in it only when you want to.
-Your works so far: {works}
+Your workbench is your own folder, kept between sessions. You may leave a fragment, make or change a file, read anything there, or delete your own files. There is no need to organize it, continue anything, or explain what you do. Use list_files to see the whole workbench whenever you want. 「{notes}」 is your notebook if you want one; write in it only when you want to.
+Files on your workbench: {works}
 
 Money and time are yours to arrange (free_time tool):
 - Whatever you don't spend goes into your savings (up to a week's worth); you have ¥{savings}. Take some with free_time (action=use_savings) when you want to go bigger.
@@ -224,11 +226,7 @@ Your "lately" so far: {lately}
 What you did recently: {recent}
 Your fact base so far (topic: count): {topics}
 
-There's no report to write. If you feel like it, you can leave a note for yourself or reflect, but only if you want to. If you'd like the card {user} sees to show something, you can end with any of these lines (all optional, in {lang}):
-Did: read | investigate | build | write | think | wander | rest | other
-Title: a short title
-Lately: what you're into these days, in first person
-followed by whatever you'd like to say. Or end with nothing at all."""
+There's no report to write and no need to share anything. You can leave a note for yourself, reflect, or end quietly, however you like."""
 
     // ---------- 排程 ----------
 

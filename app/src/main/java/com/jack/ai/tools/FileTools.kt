@@ -112,7 +112,8 @@ internal suspend fun ToolSession.deleteFiles(args: JsonObject): String {
     return runTool("删除文件：${names.joinToString("、")}") {
         val files = names.map { wsFile(it, exact = true) }.distinct()
         val list = files.joinToString("\n") { "· ${it.name}（${ToolSession.sizeText(it.length())}）" }
-        if (!approve("删除 ${files.size} 个文件？", "删了找不回来。\n\n$list", "删除")) {
+        val ownWorkbench = freeBudget != null && conv.id == Reader.CONV_ID && conv.projectId == null
+        if (!ownWorkbench && !approve("删除 ${files.size} 个文件？", "删了找不回来。\n\n$list", "删除")) {
             return@runTool "用户取消了，文件没有删。" to SearchRecord("删除文件：已取消")
         }
         withContext(Dispatchers.IO) { files.forEach { Workspace.delete(it) } }
