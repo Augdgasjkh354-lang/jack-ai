@@ -18,6 +18,9 @@ data class FreeState(
     val accruedThrough: String = "",
     val lately: String = "",
     val latelyAt: Long = 0,
+    /** 给下次自由时间衔接用，和聊天中的近况分开。 */
+    val freeSummary: String = "",
+    val freeSummaryAt: Long = 0,
     /** Kavi 跟用户提的心愿：想要一笔预算做某件事，或者想买个东西。 */
     val wishes: List<Wish> = emptyList(),
     /** Kavi 自己约的下一次自由时间（0 = 没约，按每天凌晨那次）。 */
@@ -82,12 +85,19 @@ object FreeTime {
     @Volatile private var cached: FreeState? = null
 
     fun load(ctx: Context): FreeState = synchronized(lock) {
-        cached ?: runCatching { json.decodeFromString(FreeState.serializer(), file(ctx).readText()) }.getOrDefault(FreeState()).also { cached = it }
+        cached ?: runCatching { json.decodeFromString(FreeState.serializer(), String(android.util.AtomicFile(file(ctx)).readFully())) }.getOrDefault(FreeState()).also { cached = it }
     }
 
+    fun invalidate() = synchronized(lock) { cached = null }
+
     fun save(ctx: Context, s: FreeState) = synchronized(lock) {
-        cached = s
-        runCatching { file(ctx).writeText(json.encodeToString(FreeState.serializer(), s)) }
+        val f = android.util.AtomicFile(file(ctx))
+        val out = f.startWrite()
+        try {
+            out.write(json.encodeToString(FreeState.serializer(), s).toByteArray())
+            f.finishWrite(out)
+            cached = s
+        } catch (e: Exception) { f.failWrite(out); throw e }
     }
 
     fun day(at: Long): String = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(java.util.Date(at))

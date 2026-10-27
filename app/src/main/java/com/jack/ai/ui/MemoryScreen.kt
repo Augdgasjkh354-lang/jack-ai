@@ -417,6 +417,7 @@ internal fun ReadingCard(vm: ChatViewModel, settings: com.jack.ai.data.Settings)
                         style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
                     val head = e.title.ifBlank { e.topics.joinToString(" · ") }.ifBlank { if (e.report.isBlank() && e.files.isEmpty() && !failed) "安安静静待了一会" else "" }
                     if (head.isNotBlank()) Text(head, style = MaterialTheme.typography.bodyMedium)
+                    if (e.summaryError.isNotBlank()) Text("衔接摘要：${e.summaryError}", style = MaterialTheme.typography.bodySmall, color = colors.error)
                     val body = e.report.ifBlank { e.skipped }
                     if (body.isNotBlank()) Text(body, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                     // 做出来的东西：点开看

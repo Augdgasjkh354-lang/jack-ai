@@ -38,6 +38,27 @@ class FreeConversationTest {
         assertTrue(dir.listFiles().orEmpty().any { it.name.startsWith("free_day_2026-10-27_") && it.readText().contains("昨天的想法") })
     }
 
+    @Test fun nextDayGetsTheSavedContinuationInANewConversation() = kotlinx.coroutines.runBlocking {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        FreeTime.invalidate()
+        val messages = listOf(
+            buildJsonObject { put("role", "system"); put("content", "自由时间") },
+            buildJsonObject { put("role", "user"); put("content", "开始") },
+            buildJsonObject { put("role", "assistant"); put("content", "读到第三章，想看看河流") },
+        )
+        FreeConversation.save(app, FreeConversation.State(messages = messages, conversationDay = "2026-10-27"))
+        val previous = FreeState(lately = "喜欢看云")
+        val summary = Reader.summarizeForNextTime(messages, "") { "读到第三章，还想看看河流。" }!!
+        FreeTime.save(app, previous.copy(freeSummary = summary, freeSummaryAt = 123))
+        val today = FreeConversation.forDay(app, "2026-10-28")
+        FreeTime.invalidate()
+        val nextState = FreeTime.load(app)
+        assertTrue(today.messages.isEmpty())
+        assertTrue(Reader.continuationNote(nextState).contains("读到第三章"))
+        assertEquals("喜欢看云", nextState.lately)
+        Unit
+    }
+
     @Test fun thresholdsUseActualUsageAndCutOnlyAtMessageBoundaries() {
         assertTrue(FreeConversation.current(790_000, 790_000, 800_001) >= FreeConversation.WARN)
         assertTrue(FreeConversation.current(949_000, 940_000, 950_001) >= FreeConversation.COMPACT)

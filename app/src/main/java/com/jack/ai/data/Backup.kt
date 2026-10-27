@@ -10,7 +10,7 @@ import java.util.zip.ZipOutputStream
 
 /** 把聊天、项目、记忆、梦、用量、设置、图片和生成的文件打包成一个 zip，换手机时再导入。 */
 object Backup {
-    private val JSONS = listOf("conversations.json", "projects.json", "memories.json", "dreams.json", "usage.json", "routines.json", "library.json", "flashcards.json", "kavi_self.json", "browser_flows.json", "browser_site_notes.json", "browser_history.json", "price_log.json")
+    private val JSONS = listOf("conversations.json", "projects.json", "memories.json", "dreams.json", "usage.json", "routines.json", "library.json", "flashcards.json", "kavi_self.json", "browser_flows.json", "browser_site_notes.json", "browser_history.json", "price_log.json", "free_state.json")
     private val DIRS = listOf("images", "outputs", "library", "tables")
 
     fun export(ctx: Context, out: OutputStream) {
@@ -109,6 +109,7 @@ object Backup {
             }
             File(staging, "prefs.json").takeIf { it.exists() }?.let { Store(ctx).importPrefs(it.readText()) }
             KaviSelf.invalidate()
+            FreeTime.invalidate()
             return count
         } finally {
             staging.deleteRecursively()

@@ -57,4 +57,26 @@ class FreeTimeTest {
         assertEquals("今晚写了封信。", r.body)
         assertTrue(Reader.parseReport("随便").lately.isEmpty())
     }
+    @Test
+    fun freeTimeSummaryCarriesForwardWithoutChangingLately() = kotlinx.coroutines.runBlocking {
+        val messages = listOf(
+            kotlinx.serialization.json.buildJsonObject { put("role", kotlinx.serialization.json.JsonPrimitive("system")) },
+            kotlinx.serialization.json.buildJsonObject { put("role", kotlinx.serialization.json.JsonPrimitive("user")) },
+            kotlinx.serialization.json.buildJsonObject { put("role", kotlinx.serialization.json.JsonPrimitive("assistant")); put("content", kotlinx.serialization.json.JsonPrimitive("文章读到第三章，想再看看河流")) },
+        )
+        val old = FreeState(lately = "近来喜欢看云", freeSummary = "旧线索")
+        var seen = ""
+        val summary = Reader.summarizeForNextTime(messages, old.freeSummary) { request ->
+            seen = request.toString()
+            "文章读到第三章；还想看看河流。"
+        }
+        val saved = old.copy(freeSummary = summary!!, freeSummaryAt = 1)
+        assertTrue(seen.contains("文章读到第三章"))
+        assertTrue(seen.contains("旧线索"))
+        assertTrue(Reader.continuationNote(saved).contains("还想看看河流"))
+        assertEquals("近来喜欢看云", saved.lately)
+        assertEquals("", Reader.summarizeForNextTime(messages, "") { "无" })
+        Unit
+    }
+
 }
