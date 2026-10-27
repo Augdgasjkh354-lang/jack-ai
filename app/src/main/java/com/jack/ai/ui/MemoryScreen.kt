@@ -49,6 +49,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jack.ai.ChatViewModel
+import kotlinx.coroutines.launch
 import com.jack.ai.UiState
 import com.jack.ai.data.DreamEntry
 import com.jack.ai.data.MemoryItem
@@ -183,7 +184,7 @@ private fun MemoryPage(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
             item {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 12.dp)) {
                     Text("关于你", style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
-                    Text("  ${state.memories.size} 条", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium,
+                    Text("  ${state.memories.size} 条 · 约 ${com.jack.ai.data.MemoryOps.hotTokens(state.memories)}/${com.jack.ai.data.MemoryOps.HOT_BUDGET}", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     IconButton(onClick = { adding = true }) { Icon(Icons.Default.Add, "添加记忆") }
                     if (state.memories.isNotEmpty()) TextButton(onClick = { confirmClear = true }) { Text("清空") }
@@ -221,6 +222,8 @@ private fun MemoryPage(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                 }
             }
 
+            item { DeepMemories(vm, state.memories) }
+
             item {
                 Text("日记", style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
                     modifier = Modifier.padding(top = 16.dp))
@@ -250,7 +253,13 @@ private fun MemoryPage(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                     adding = false; editing = null
                 }) { Text("保存") }
             },
-            dismissButton = { TextButton(onClick = { adding = false; editing = null }) { Text("取消") } },
+            dismissButton = {
+                Row {
+                    // 还成立但不常用：放到深处，不占每次对话的篇幅
+                    editing?.let { e -> TextButton(onClick = { vm.demoteMemory(e.id); editing = null }) { Text("放到深处") } }
+                    TextButton(onClick = { adding = false; editing = null }) { Text("取消") }
+                }
+            },
         )
     }
     if (confirmClear) {
@@ -483,5 +492,45 @@ internal fun ReadingCard(vm: ChatViewModel, settings: com.jack.ai.data.Settings)
             },
             dismissButton = { TextButton(onClick = { editBudget = false }) { Text("取消") } },
         )
+    }
+}
+
+/**
+ * 深处的记忆：还成立、但不常用，平时不每次都带着，聊到相关的会自己浮上来。
+ * Kavi 做梦时放下去、拿回来；这里也能手动拿回常记或删掉。
+ */
+@Composable
+internal fun DeepMemories(vm: ChatViewModel, hot: List<com.jack.ai.data.MemoryItem>) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var open by remember { mutableStateOf(false) }
+    var rev by remember { mutableStateOf(0) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val deep by androidx.compose.runtime.produceState(emptyList<com.jack.ai.data.MemoryItem>(), hot, rev) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.jack.ai.data.MemoryOps.deep(ctx) }
+    }
+    if (deep.isEmpty()) return
+    Column(Modifier.padding(top = 8.dp)) {
+        TextButton(onClick = { open = !open }) {
+            Text((if (open) "收起" else "深处的记忆") + "（${deep.size} 条）")
+        }
+        if (open) {
+            Text("不常用的放在这里，聊到相关的会自己浮上来，不占每次对话的篇幅。", style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp))
+            deep.sortedByDescending { maxOf(it.lastUsedAt, it.createdAt) }.forEach { m ->
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp)) {
+                    Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
+                        Text(m.text, style = MaterialTheme.typography.bodySmall)
+                        if (m.lastUsedAt > 0) Text("上次浮上来 " + com.jack.ai.data.FreeTime.day(m.lastUsedAt), style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline)
+                    }
+                    TextButton(onClick = { vm.promoteMemory(m.id) }) { Text("放回常记") }
+                    IconButton(onClick = {
+                        scope.launch(kotlinx.coroutines.Dispatchers.IO) { com.jack.ai.data.MemoryOps.saveDeep(ctx, com.jack.ai.data.MemoryOps.deep(ctx).filterNot { it.id == m.id }); rev++ }
+                    }, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Default.Delete, "删除", Modifier.size(17.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
     }
 }

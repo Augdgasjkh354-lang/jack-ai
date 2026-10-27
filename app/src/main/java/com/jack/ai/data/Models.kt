@@ -137,6 +137,9 @@ data class MemoryItem(
     val source: String = "",
     /** 做梦时改过的历史：改前改后、为什么、依据哪里。 */
     val history: List<MemEdit> = emptyList(),
+    /** 最近一次在聊天里用到（或从深处浮上来）是什么时候、一共用到几次：整理时按这个决定放不放到深处。 */
+    val lastUsedAt: Long = 0,
+    val uses: Int = 0,
 )
 
 @Serializable

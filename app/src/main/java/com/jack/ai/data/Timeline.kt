@@ -214,6 +214,10 @@ Write in {lang}. Output only one JSON object:
         add(ctx, Episode(at = fresh.last().createdAt, place = "chat", convId = conv.id, title = conv.title, text = text.take(400), mood = o.str("mood").take(60)))
         // 挂着的事：这段聊天新挂上的、了结的、又碰到的
         Threads.save(ctx, Threads.applyJson(Threads.load(ctx), o, conv.id))
+        // 这段聊天用到了哪些记忆（不常用的做梦时可以放到深处）
+        if (s.memoryEnabled) {
+            store.saveMemories(MemoryOps.markUsed(store.loadMemories(), fresh.joinToString("\n") { it.content }, ignore = MemoryOps.ignoreFor(s)))
+        }
         markSummarized(ctx, convId, fresh.last().createdAt)
     }
 }

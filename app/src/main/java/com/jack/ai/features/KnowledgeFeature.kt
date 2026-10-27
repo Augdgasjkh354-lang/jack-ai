@@ -117,6 +117,22 @@ class KnowledgeFeature(core: AppCore) : Feature(core) {
     fun deleteMemory(id: String) = editMemories { l -> l.filterNot { it.id == id } }
     fun clearMemories() = editMemories { emptyList() }
 
+    /** 深处的一条拿回常记。 */
+    fun promoteMemory(id: String) = editMemories { l ->
+        val deep = MemoryOps.deep(app)
+        val m = deep.firstOrNull { it.id == id } ?: return@editMemories l
+        MemoryOps.saveDeep(app, deep.filterNot { it.id == id })
+        l + m.copy(lastUsedAt = System.currentTimeMillis())
+    }
+
+    /** 常记的一条放到深处（还记得，只是不每次都带着）。 */
+    fun demoteMemory(id: String) = editMemories { l ->
+        val m = l.firstOrNull { it.id == id } ?: return@editMemories l
+        MemoryOps.saveDeep(app, MemoryOps.deep(app) + m)
+        l.filterNot { it.id == id }
+    }
+
+
     fun markDreamsSeen() {
         if (state.value.dreams.none { !it.seen }) return
         scope.launch(ioSerial) {

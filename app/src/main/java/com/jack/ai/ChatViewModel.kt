@@ -23,6 +23,7 @@ import com.jack.ai.features.SettingsFeature
 import com.jack.ai.api.DeepSeekClient
 import com.jack.ai.api.TavilyClient
 import com.jack.ai.data.Attachment
+import com.jack.ai.data.globalAllowed
 import com.jack.ai.data.ChatExport
 import com.jack.ai.data.Workspace
 import com.jack.ai.data.Flashcard
@@ -554,6 +555,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 runCatching { com.jack.ai.tools.ContextNote.build(getApplication(), store, conv, skills.map { it.id }.toSet()) }.getOrDefault("") +
                     // Kavi 的连续性：最近的经历、上次见用户是什么时候（每轮变，放这里不影响缓存）
                     runCatching { com.jack.ai.data.Timeline.noteFor(getApplication(), settings, _state.value.conversations, _state.value.projects, conv) }.getOrDefault("") +
+                    // 深处的记忆：和这句话相关的浮上来（不常用的不再每轮都带着）
+                    (if (conv.globalAllowed(project)) runCatching { com.jack.ai.data.MemoryOps.recallNote(getApplication(), settings, lastUser?.content.orEmpty()) }.getOrDefault("") else "") +
                     // 很长的对话里重新锚定一下「我是谁」：越聊越长时开头的设定会被冲淡
                     (if (conv.messages.size >= ANCHOR_AFTER) com.jack.ai.data.Persona.fill("【Still you】" + com.jack.ai.data.KaviSelf.text(editable = false) +
                         "\nThis conversation has run long: keep your own voice and the principles you started with.\n", settings) else "")
@@ -1015,6 +1018,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun updateMemory(id: String, text: String) = knowledge.updateMemory(id, text)
     fun deleteMemory(id: String) = knowledge.deleteMemory(id)
     fun clearMemories() = knowledge.clearMemories()
+    fun promoteMemory(id: String) = knowledge.promoteMemory(id)
+    fun demoteMemory(id: String) = knowledge.demoteMemory(id)
     fun markDreamsSeen() = knowledge.markDreamsSeen()
     fun dreamNow() = knowledge.dreamNow()
     fun editJournal(id: String, text: String) = knowledge.editJournal(id, text)

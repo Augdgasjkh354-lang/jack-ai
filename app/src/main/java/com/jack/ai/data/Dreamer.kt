@@ -117,7 +117,8 @@ object Dreamer {
     private const val INSTRUCTIONS = """It's the end of the day, time to write your journal: look back over your recent chats with {user}, work out what helped, what didn't go well and what to do next time, and update your long-term memories about {user}.
 
 You'll receive:
-1. All current memories, each with a short id like [m:ab12cd] and where it came from (may be empty)
+1. All current memories, each with a short id like [m:ab12cd], where it came from and how often it has come up lately (may be empty), plus how much of your memory budget they take
+   Also any deeper memories that surfaced in chats since last time
 2. Your previous journal entry (may be empty)
 3. All chats since the last look-back
 4. What you did in your own free time since then (may be empty): mention it in the journal if it matters, e.g. something {user} might like to see
@@ -137,10 +138,15 @@ II. Write "ops": a list of changes to your memories about {user}. Don't rewrite 
    - {"op": "add", "text": "...", "why": "...", "source": "..."}: something new worth remembering long term: {user}'s identity and background, lasting preferences and habits, important people and events, ongoing plans, decisions, anything they said to remember.
    - {"op": "update", "id": "ab12cd", "text": "...", "why": "...", "source": "..."}: an existing memory that the chats refine or correct (also use this to fold a duplicate into one, then invalidate the other).
    - {"op": "invalidate", "id": "ab12cd", "why": "...", "source": "..."}: an existing memory the chats clearly overturned or {user} asked you to forget. It isn't deleted, just retired with its reason.
+   - {"op": "merge", "ids": ["ab12cd", "ef34gh"], "text": "...", "why": "..."}: several memories that say the same thing or belong together; they become one sentence.
+   - {"op": "demote", "id": "ab12cd", "why": "..."}: still true, but rarely comes up. It moves to your deeper memory: not carried in every chat, but it surfaces by itself when a chat touches it. Nothing is lost.
+   - {"op": "promote", "id": "ab12cd", "why": "..."}: a deeper memory that keeps surfacing and matters again; it goes back to the ones you always carry.
    - "source" says where in the chats it comes from, like "10-25 「报价」". Every change needs one; if you can't point to where the chats support it, don't make the change.
    - Be conservative: change only what the chats clearly support. If {user} once said one thing and now another, and you can't tell which holds, keep the old one and add the new one with its date, rather than guessing.
    - Don't record one-off questions, passing small talk, common knowledge, or details that belong to one conversation or project (a novel's characters, a plan's parameters, a role-play setup).
-   - Each memory is one complete sentence that makes sense on its own, with {user} as the subject. Keep the total under about 80; folding duplicates is better than piling up.
+   - Each memory is one complete sentence that makes sense on its own, with {user} as the subject.
+   - Your context is limited. The memories you always carry share a budget (shown with the list); every chat pays for all of them. Over budget, or close to it, make room: merge duplicates first, then demote what's still true but hasn't come up in a long while; trim long memories to their point. Never invalidate something just to save space: invalidate only what's no longer true. Keep what defines {user} (identity, people who matter, lasting preferences, what they asked you to remember) even if it's rarely used. Under budget, don't tidy for its own sake.
+   - "source" isn't needed for merge, demote and promote (they don't change what you know).
 
 III. Write "changes": one or two sentences on what you newly remembered, changed or let go of this time.
 
@@ -172,6 +178,11 @@ Output only one JSON object, in this format:
             if (held.isNotBlank()) append("【Note】Last time your memory changes were held back: $held Redo the look-back carefully, changing only what the chats clearly support.\n\n")
             append("【Current memories】\n")
             append(MemoryOps.listing(memories))
+            append("(memory budget: ~${MemoryOps.hotTokens(memories)} of ${MemoryOps.HOT_BUDGET} tokens used" + (if (MemoryOps.hotTokens(memories) > MemoryOps.HOT_BUDGET) " — over budget, make room" else "") + ")\n")
+            val deepNow = MemoryOps.deep(ctx)
+            deepNow.filter { it.lastUsedAt > since }.sortedByDescending { it.uses }.take(20).takeIf { it.isNotEmpty() }?.let { l ->
+                append("\n【Deeper memories that surfaced since last time】(${deepNow.size} in deeper memory in all)\n").append(MemoryOps.listing(l))
+            }
             Threads.listing(Threads.load(ctx)).takeIf { it.isNotBlank() }?.let { append("\n【On your mind】\n").append(Persona.fill(it, settings)).append("\n") }
             SelfStory.forDream(ctx).takeIf { it.isNotBlank() }?.let { append("\n").append(it) }
             append("\n【Previous journal entry】\n")
@@ -204,8 +215,9 @@ Output only one JSON object, in this format:
         // 在现在的记忆上执行（做梦要好一会，期间用户删掉、改过的照现在的算），改之前存一版
         val current = store.loadMemories()
         MemoryOps.snapshot(ctx, current)
-        val result = MemoryOps.apply(current, ops)
+        val result = MemoryOps.apply(current, ops, deepNow = MemoryOps.deep(ctx))
         store.saveMemories(result.live)
+        if (result.demoted + result.promoted + result.invalidated > 0) MemoryOps.saveDeep(ctx, result.deep)
         MemoryOps.addToArchive(ctx, result.archived)
         setHeld(ctx, "")
         val entry = DreamEntry(journal = str("journal").ifBlank { throw IllegalStateException("做梦结果格式不对") }, changes = str("changes"))
@@ -216,7 +228,8 @@ Output only one JSON object, in this format:
             Threads.save(ctx, faded)
             Timeline.add(ctx, Episode(place = "dream", text = "let go of things I hadn't touched in a while: " + gone.joinToString("; ") { it.text.take(60) }))
         }
-        Timeline.add(ctx, Episode(place = "dream", text = "looked back over recent chats and wrote my journal" + entry.changes.takeIf { it.isNotBlank() }?.let { "; memory changes: ${it.take(150)}" }.orEmpty()))
+        Timeline.add(ctx, Episode(place = "dream", text = "looked back over recent chats and wrote my journal" +
+            (if (result.demoted + result.promoted + result.merged > 0) "; tidied memory: ${result.demoted} moved deeper, ${result.promoted} brought back, ${result.merged} merged" else "") + entry.changes.takeIf { it.isNotBlank() }?.let { "; memory changes: ${it.take(150)}" }.orEmpty()))
         // 「自己」的连续：到时候了就更新自传（每周）、做自我体检（每两周）
         SelfStory.afterDream(ctx)
         // 没整理完的：下次从最后整理到的那条之后接着，马上排一轮
