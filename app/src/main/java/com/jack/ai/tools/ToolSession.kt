@@ -128,6 +128,8 @@ class ToolSession(
     /** 最近一次 update_plan 写下的步骤和验收标准。 */
     @Volatile var steps: List<PlanItem> = emptyList()
     @Volatile var criteria: List<PlanItem> = emptyList()
+    /** 这次回答里各类失败出现了几次（见 [Failures]），同一类再出现时提示说得更重。 */
+    val failures = java.util.concurrent.ConcurrentHashMap<Failures.Kind, Int>()
 
     /** 执行一个工具，聊天里显示「进行中」→「完成/出错」。出错时把原因交给模型，不抛出。 */
     suspend fun runTool(label: String, action: suspend () -> Pair<String, SearchRecord>): String {
@@ -208,7 +210,10 @@ class ToolSession(
                 host.store.addToolError(com.jack.ai.data.ToolError(System.currentTimeMillis(), name, argsText.take(300), result.take(800), status == ToolStatus.REJECTED))
             }
         }
-        return ToolOutcome(result, status)
+        // 没做成（或没拿到东西）：按原因附一句换法
+        val kind = Failures.classify(name, result, status)
+        val note = kind?.let { Failures.note(it, failures.merge(it, 1, Int::plus) ?: 1, result, settings) }.orEmpty()
+        return ToolOutcome(result + note, status)
     }
 
     /** 按工具名分给各自的实现。没开对应技能的工具一律不可用。 */
