@@ -142,6 +142,8 @@ class ToolSession(
     @Volatile var stopNote: String? = null
     /** 自由时间的钱（只有自由时间里有）：budget 工具看余额、从积蓄里拿。 */
     @Volatile var freeBudget: com.jack.ai.data.FreeBudget? = null
+    /** Kavi 自己提出的下一步，空着就自然结束。 */
+    var freeNext: String = ""
     /** 这次回答里已经在网页上提交过的（网站|按钮），同一个再点就是重复提交，要拦。 */
     val submitted: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
     /** 这次回答开始的时间：之后改过的文件算这次的产出。 */

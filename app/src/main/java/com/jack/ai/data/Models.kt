@@ -42,6 +42,8 @@ data class ChatMessage(
     /** 写这条回答时 App 的版本号（旧消息是 0）。App 更新后旧对话据此提醒模型：工具可能变了。 */
     val appVersion: Int = 0,
     val createdAt: Long = System.currentTimeMillis(),
+    /** 发给模型时附在用户消息前的说明，保留原样以便后续命中缓存。 */
+    val contextPrefix: String? = null,
 )
 
 /** 当前装的 App 的版本号（每次打包加一）。 */

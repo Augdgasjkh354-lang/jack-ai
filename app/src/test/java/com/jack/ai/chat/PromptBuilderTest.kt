@@ -70,6 +70,17 @@ class PromptBuilderTest {
     }
 
     @Test
+    fun savedContextStaysIdenticalInLaterRequests() {
+        val first = user("你好").copy(contextPrefix = "【Current time: first】\n【文件】a\n")
+        val one = Conversation(messages = listOf(first))
+        val two = one.copy(messages = one.messages + bot("你好") + user("下一句"))
+        val before = PromptBuilder.history(input(one), tools(one)).first { it.role() == "user" }
+        val after = PromptBuilder.history(input(two, now = 1_760_090_000_000), tools(two)).first { it.role() == "user" }
+        assertEquals(before, after)
+        assertTrue(before.textContent().contains("【文件】a"))
+    }
+
+    @Test
     fun stableSectionsComeBeforeChangingOnes() {
         val conv = Conversation(summary = "之前聊了旅行计划", summaryUntilId = "x")
         val project = Project(name = "小说", instructions = "主角叫阿明")

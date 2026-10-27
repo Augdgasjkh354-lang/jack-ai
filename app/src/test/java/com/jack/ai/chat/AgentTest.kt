@@ -132,6 +132,20 @@ class AgentTest {
     }
 
     @Test
+    fun ownNextStepContinuesTheSameMessagesAndSavesTheFinalResponse() = runBlocking {
+        val api = FakeApi(toolCall("free_time"), text("我想继续"), text("完成"))
+        val messages = mutableListOf(userMsg("自由时间"))
+        var next = ""
+        var final: JsonObject? = null
+        Agent(api::stream).run(messages, someTools, { 10 }, { _, _ -> next = "接着读"; "记下了" },
+            beforeFinish = { if (next.isBlank()) null else next.also { next = "" } },
+            onFinish = { final = it })
+        assertTrue(messages.any { it["content"]?.jsonPrimitive?.content == "接着读" })
+        assertEquals("完成", final!!["content"]!!.jsonPrimitive.content)
+        assertEquals(3, api.sizes.size)
+    }
+
+    @Test
     fun maxRoundsIsReadEveryRound() = runBlocking {
         // 用了「深度研究」后上限会在中途变大
         var limit = 1

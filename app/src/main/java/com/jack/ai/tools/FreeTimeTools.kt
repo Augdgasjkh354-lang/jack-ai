@@ -25,6 +25,12 @@ internal fun ToolSession.freeTimeTool(args: JsonObject): String {
             if (got <= 0) "积蓄是 ${money(b.savings)}，拿不出来。"
             else "从积蓄里拿了 ${money(got)}，这次能花到 ${money(b.soft)}（已花 ${money(b.spentNow())}），积蓄还剩 ${money(b.savings)}。没花完的结束时退回积蓄。"
         }
+        "continue" -> {
+            val next = args["text"].text().trim()
+            if (next.isBlank()) { freeNext = ""; return "已取消接着做，想停下也可以。" }
+            freeNext = next.take(4000)
+            "记下了。你结束这一轮后，系统会把这句话带回来，让你在同一段对话里继续；不想继续也可以改主意。"
+        }
         "next" -> {
             val h = args.num("hours")?.coerceIn(0.5, 48.0) ?: return "要给出 hours（多少小时以后，0.5 到 48）。"
             val at = System.currentTimeMillis() + (h * 3_600_000).toLong()

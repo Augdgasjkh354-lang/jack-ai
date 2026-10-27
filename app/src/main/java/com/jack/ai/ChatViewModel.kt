@@ -37,6 +37,7 @@ import com.jack.ai.data.DreamEntry
 import com.jack.ai.data.Dreamer
 import com.jack.ai.data.GeneratedFile
 import com.jack.ai.data.activeSkills
+import com.jack.ai.data.readyMails
 import com.jack.ai.data.MemoryItem
 import com.jack.ai.data.Project
 import com.jack.ai.data.SearchRecord
@@ -446,7 +447,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             updateConv(conv.id) { c ->
                 c.copy(
                     title = if (i == 0) trimmed.ifEmpty { c.title }.take(20).replace('\n', ' ') else c.title,
-                    messages = c.messages.take(i) + old.copy(content = trimmed, createdAt = System.currentTimeMillis()),
+                    messages = c.messages.take(i) + old.copy(content = trimmed, createdAt = System.currentTimeMillis(), contextPrefix = null),
                     summary = if (boundary >= i) "" else c.summary,
                     summaryUntilId = if (boundary >= i) null else c.summaryUntilId,
                 )
@@ -565,6 +566,14 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     (if (conv.messages.size >= ANCHOR_AFTER) com.jack.ai.data.Persona.fill("【Still you】" + com.jack.ai.data.KaviSelf.text(editable = false) +
                         "\nThis conversation has run long: keep your own voice and the principles you started with.\n", settings) else "")
             })
+            // 历史里的附加说明必须和第一次发出时一致，才能保住后续请求的前缀缓存。
+            if (extraUser == null && lastUser != null && lastUser.contextPrefix == null) {
+                val prefix = PromptBuilder.timeNote(promptInput.now) + PromptBuilder.updateNote(conv, reply.appVersion) +
+                    promptInput.contextNote + PromptBuilder.mentionNote(lastUser.content, skills, settings.readyMails)
+                patchMessage(convId, lastUser.id) { it.copy(contextPrefix = prefix) }
+                promptInput = promptInput.copy(conv = conv.copy(messages = conv.messages.map { if (it.id == lastUser.id) it.copy(contextPrefix = prefix) else it }))
+                persist()
+            }
             var filesDropped = false
             // Work：开前台服务，切到后台也接着干；花费到上限先问一声
             val work = conv.work

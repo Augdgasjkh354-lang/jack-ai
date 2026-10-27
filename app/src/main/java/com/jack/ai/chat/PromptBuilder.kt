@@ -80,7 +80,8 @@ object PromptBuilder {
         for (m in Compression.liveMessages(conv)) {
             if (m.error != null) continue
             if (m.role == "user") {
-                list += userMessage(m, input.vision, input.imageUrl, input.fileIds)
+                val message = userMessage(m, input.vision, input.imageUrl, input.fileIds)
+                list += if (m.contextPrefix != null) prefixUser(message, m.contextPrefix) else message
             } else if (m.content.isNotBlank()) {
                 val trail = if (withTools && !flat) m.trail.mapNotNull { t ->
                     runCatching { Json.parseToJsonElement(t).jsonObject }.getOrNull()
@@ -103,7 +104,9 @@ object PromptBuilder {
         }
         if (input.extraUser != null) list += msg("user", input.extraUser)
         val lastText = conv.messages.lastOrNull { it.role == "user" }?.content.orEmpty()
-        stampLastUser(list, input.now, updateNote(conv, input.appVersion) + input.contextNote + mentionNote(lastText, skills, settings.readyMails))
+        if (input.extraUser != null || conv.messages.lastOrNull { it.role == "user" }?.contextPrefix == null) {
+            stampLastUser(list, input.now, updateNote(conv, input.appVersion) + input.contextNote + mentionNote(lastText, skills, settings.readyMails))
+        }
         return list
     }
 
@@ -442,16 +445,16 @@ object PromptBuilder {
     fun stampLastUser(list: MutableList<JsonObject>, now: Long, extra: String = "") {
         val i = list.indexOfLast { it["role"].text() == "user" }
         if (i < 0) return
-        val m = list[i]
-        val note = timeNote(now) + extra
-        list[i] = when (val c = m["content"]) {
+        list[i] = prefixUser(list[i], timeNote(now) + extra)
+    }
+
+    private fun prefixUser(m: JsonObject, note: String): JsonObject = when (val c = m["content"]) {
             is JsonArray -> JsonObject(m + ("content" to buildJsonArray {
                 add(buildJsonObject { put("type", "text"); put("text", note.trim()) })
                 c.forEach { add(it) }
             }))
             else -> JsonObject(m + ("content" to JsonPrimitive(note + c.text())))
         }
-    }
 
     /**
      * 用户在消息里用 @ 点名的技能和邮箱（输入框「+」菜单里插进来的「@技能名」「@邮箱地址」）。

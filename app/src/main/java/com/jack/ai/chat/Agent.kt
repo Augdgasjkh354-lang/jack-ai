@@ -71,6 +71,8 @@ class Agent(
         notices: () -> List<String> = { emptyList() },
         /** 每轮工具做完、发下一次请求前，给调用方瘦身 messages 的机会（Work 长任务压掉旧的大段工具结果，见 ContextSlim）。 */
         slim: ((MutableList<JsonObject>) -> Unit)? = null,
+        beforeRequest: suspend (MutableList<JsonObject>, JsonArray?) -> Unit = { _, _ -> },
+        onFinish: (JsonObject) -> Unit = {},
     ) {
         // 补过图片的消息位置：新图来了就把旧的换成一句话，免得每轮都重发
         val imageAt = mutableListOf<Int>()
@@ -80,6 +82,7 @@ class Agent(
         var attempts = 0
         var hiccups = 0
         while (true) {
+            beforeRequest(messages, currentTools)
             val calls = sortedMapOf<Int, Call>()
             val roundReasoning = StringBuilder()
             val roundContent = StringBuilder()
@@ -125,7 +128,13 @@ class Agent(
             onRound()
             if (calls.isEmpty()) {
                 val nudge = if (currentTools != null) beforeFinish?.invoke(content.toString()) else null
-                if (nudge == null) return
+                if (nudge == null) {
+                    onFinish(buildJsonObject {
+                        put("role", "assistant"); put("content", roundContent.toString())
+                        if (sendReasoning && roundReasoning.isNotEmpty()) put("reasoning_content", roundReasoning.toString())
+                    })
+                    return
+                }
                 // 推回去接着做：这一轮说的话留在对话里，再补一条要它继续的消息（不进 trail，下次对话不用再发）
                 if (roundContent.isNotEmpty()) messages += buildJsonObject {
                     put("role", "assistant"); put("content", roundContent.toString())

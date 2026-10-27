@@ -10,6 +10,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
@@ -130,7 +131,13 @@ object Reader {
     }
 
     /** 过一次自由时间。force：手动点的，不管开没开。返回这次的记录。 */
-    suspend fun read(ctx: Context, force: Boolean = false): ReadEntry? {
+    private val sessionLock = kotlinx.coroutines.sync.Mutex()
+
+    suspend fun read(ctx: Context, force: Boolean = false): ReadEntry? = sessionLock.withLock {
+        readUnlocked(ctx, force)
+    }
+
+    private suspend fun readUnlocked(ctx: Context, force: Boolean): ReadEntry? {
         val store = Store(ctx)
         val s = store.loadSettings()
         if (!s.readingEnabled && !force) return null
@@ -167,7 +174,8 @@ object Reader {
         // 今日预算花完时系统说一声，再给一点额外预算收尾（不必花完）；额外的也花完就停。Kavi 能从积蓄里拿钱接着做
         val budget = FreeBudget(left, s.readingExtra.coerceAtLeast(0.0), state.savings, ::budgetNote)
         val res = com.jack.ai.tools.runBackgroundWork(ctx, r, allow = { name, _ -> name in TOOLS }, brief = Persona.fill(BRIEF, s),
-            model = MODEL_FLASH, budget = budget)
+            model = MODEL_FLASH, budget = budget,
+            resumePrompt = "系统：自由时间又到了。今天还剩 ¥${String.format(java.util.Locale.US, "%.2f", left)}，积蓄 ¥${String.format(java.util.Locale.US, "%.2f", state.savings)}。你可以顺着之前的对话继续，也可以改变主意或休息。" + news)
         val rep = parseReport(res.text)
         FreeTime.save(ctx, FreeTime.load(ctx).copy(savings = budget.settle(res.spent)).let { st ->
             if (rep.lately.isNotBlank()) st.copy(lately = rep.lately, latelyAt = System.currentTimeMillis()) else st
@@ -179,6 +187,9 @@ object Reader {
             report = if (quiet) "" else rep.body.take(2000), files = res.files.filter { it.name != NOTES },
             skipped = if (res.status == com.jack.ai.tools.TaskStatus.OK || quiet) "" else res.text.take(200))
         add(ctx, e)
+        // 账已写入当天记录；崩溃恢复时不再重复计入这次花费。
+        val savedConversation = FreeConversation.load(ctx)
+        FreeConversation.save(ctx, savedConversation.copy(spent = 0.0, day = "", borrowed = 0.0))
         // 写进经历流：不管在哪醒来，它都记得自己的自由时间
         Timeline.add(ctx, Episode(place = "free", text = when {
             e.skipped.isNotEmpty() -> "couldn't really start (${e.skipped.take(60)})"
@@ -208,7 +219,7 @@ Do whatever you want with it. Something useful or something pointless, for {user
 - think something through, wander the web following whatever catches your eye, or do nothing much and let the time pass
 - pick up one of your works in progress{web}
 
-You can change your mind at any point. If you meant to read about astronomy and a history story catches you halfway, follow it; plans are not obligations. You can also stop early: five minutes of looking around is a perfectly good free time.
+This is one continuing conversation across your free time. If you want to keep going now, use free_time action=continue with your own words about what you want to do next. The system will send those words back so you can continue in this same conversation. You can also finish, wait until later, or change your mind; there is no obligation to continue. If you meant to read about astronomy and a history story catches you halfway, follow it; plans are not obligations. You can also stop early: five minutes of looking around is a perfectly good free time.
 
 Your workbench is your own folder, kept between sessions. You may leave a fragment, make or change a file, read anything there, or delete your own files. There is no need to organize it, continue anything, or explain what you do. Use list_files to see the whole workbench whenever you want. 「{notes}」 is your notebook if you want one; write in it only when you want to.
 Files on your workbench: {works}
