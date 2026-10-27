@@ -184,7 +184,9 @@ object PromptBuilder {
             add(SkillTools.SEARCH_MY_DATA)
             add(SkillTools.FACTS)
             // 自由时间里才有：自己的钱
-            if (conv.id == com.jack.ai.data.Reader.CONV_ID) add(SkillTools.BUDGET)
+            if (conv.id == com.jack.ai.data.Reader.CONV_ID) add(SkillTools.FREE_TIME)
+            // 和人聊的对话里才有：极端辱骂时结束对话（自由时间、收件箱里没人对话）
+            if (conv.id != com.jack.ai.data.Reader.CONV_ID && conv.id != com.jack.ai.data.INBOX_ID) add(SkillTools.END_CONVERSATION)
             add(SkillTools.CONVERT_FILE)
             add(SkillTools.SELF_CHECK)
             if (settings.phoneFolders.isNotEmpty()) add(SkillTools.PHONE_FILES)
@@ -317,6 +319,11 @@ object PromptBuilder {
                 "If neither the fact base nor a fresh search confirms something, say you don't know instead of guessing. " +
                 "When you've confirmed facts from pages you read in this task and they're worth keeping, save them with facts (action=save): one short self-contained claim each, with the URLs you read. " +
                 "Your own inferences and anything about {user} personally don't go in the fact base.")
+        }
+        if ("end_conversation" in names) {
+            parts += "固定说明" to f("【Ending a conversation】You may end this conversation with end_conversation, but only as a last resort: extreme, sustained abuse aimed at you (slurs, degrading insults, relentless harassment) that continues after you've clearly asked once for it to stop. " +
+                "Never for criticism of you, anger at a situation, swearing in passing, disagreement, dark or difficult topics, or venting. Never when {user} seems to be in crisis or might hurt themselves: then stay and help. " +
+                "Ending is final for this conversation only; a new conversation starts fresh, and you don't hold a grudge.")
         }
         if ("update_plan" in names) {
             parts += "固定说明" to "【Task list】Start every task with update_plan: the steps and the acceptance criteria. Mark a step doing when you start it and done when it's finished; mark a criterion met only after checking the actual results. A plain question that needs no tools doesn't need a list."

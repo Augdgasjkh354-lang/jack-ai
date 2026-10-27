@@ -234,7 +234,13 @@ fun ChatScreen(
                 )
             },
             bottomBar = {
-                InputBar(
+                // Kavi 结束了这个对话：输入框换成一句说明和「新对话」
+                if (conv != null && conv.closedReason.isNotEmpty()) Surface(color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.navigationBarsPadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Kavi 结束了这个对话：${conv.closedReason}", style = MaterialTheme.typography.bodyMedium)
+                        androidx.compose.material3.OutlinedButton(onClick = { vm.newChat(state.currentProjectId) }) { Text("开一个新对话") }
+                    }
+                } else InputBar(
                     vm = vm,
                     state = state,
                     text = text,

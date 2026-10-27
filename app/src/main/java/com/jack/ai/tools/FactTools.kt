@@ -114,19 +114,3 @@ private fun ToolSession.storeFacts(items: List<JsonObject>): String {
     if (engine == null) out += "（没配硅基流动，这几条没有向量，只能按关键词找到）"
     return out.joinToString("\n")
 }
-
-/** 自由时间的钱：status 看今天还剩多少、积蓄多少；use 从积蓄里拿一些用在这次（没花完的会退回积蓄）。 */
-internal fun ToolSession.budgetTool(args: JsonObject): String {
-    val b = freeBudget ?: return "现在不是自由时间，没有这个。"
-    fun money(v: Double) = "¥" + String.format(java.util.Locale.US, "%.2f", v)
-    val spent = b.spentNow()
-    succeeded.incrementAndGet()
-    if (args["action"].text() == "use") {
-        val want = args["amount"].text().toDoubleOrNull() ?: return "要给出 amount（拿多少，元）。"
-        val got = b.use(want)
-        return if (got <= 0) "积蓄是 ${money(b.savings)}，拿不出来。"
-        else "从积蓄里拿了 ${money(got)}，这次能花到 ${money(b.soft)}（已花 ${money(spent)}），积蓄还剩 ${money(b.savings)}。没花完的结束时退回积蓄。"
-    }
-    return "这次已花 ${money(spent)}；今天的预算到 ${money(b.today)}" + (if (b.fromSavings > 0) "，加上从积蓄拿的 ${money(b.fromSavings)}" else "") +
-        "；积蓄还有 ${money(b.savings)}；收尾用的额外预算 ${money(b.extra)}。"
-}

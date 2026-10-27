@@ -264,6 +264,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             return true
         }
         if ((trimmed.isEmpty() && atts.isEmpty()) || (here != null && busy(here)) || _state.value.importing) return false
+        // Kavi 结束了这个对话：不能再发，新开一个
+        if (_state.value.current?.closedReason?.isNotEmpty() == true) {
+            _state.update { it.copy(toast = "这个对话已经结束了，开一个新对话吧") }
+            return false
+        }
         if (tooMany(here)) return false
         if (atts.any { it.kind == "image" } && _state.value.settings.endpoint()?.vision == false) {
             _state.update { it.copy(toast = "当前模型看不了图片，请点顶部的模型名换一个能看图的") }
@@ -498,6 +503,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private fun startReply(convId: String, modelOverride: String? = null, extraUser: String? = null) {
         val settings = _state.value.settings
         val conv = _state.value.conversations.firstOrNull { it.id == convId } ?: return
+        // Kavi 结束了的对话：重新回答、接着做、改消息都不再开始新的回答
+        if (conv.closedReason.isNotEmpty()) { _state.update { it.copy(toast = "这个对话已经结束了，开一个新对话吧") }; return }
         val project = _state.value.project(conv.projectId)
         val model = modelOverride ?: settings.model
         val lastUser = conv.messages.lastOrNull { it.role == "user" }
@@ -570,6 +577,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 }
 
                 override fun notice(text: String) = patchMessage(convId, reply.id) { it.copy(notices = it.notices + text) }
+
+                override fun endConversation(reason: String) = updateConv(convId) { it.copy(closedReason = reason) }
 
                 override fun progress(text: String) = WorkService.progress(getApplication(), convId, workTitle, text, work)
 
@@ -919,6 +928,14 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun readNow() {
         com.jack.ai.data.Reader.runNow(getApplication())
         _state.update { it.copy(toast = "Kavi 去过自由时间了，做完记在「记忆与梦」页") }
+    }
+
+    /** 回 Kavi 的心愿：approved 给预算 / declined 先不了 / bought 买了。 */
+    fun answerWish(id: String, status: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val app = getApplication<android.app.Application>()
+            com.jack.ai.data.FreeTime.save(app, com.jack.ai.data.FreeTime.answer(com.jack.ai.data.FreeTime.load(app), id, status))
+        }
     }
 
     /** 从事实库里删掉一条（连同向量）。 */

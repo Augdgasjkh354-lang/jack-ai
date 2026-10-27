@@ -73,6 +73,8 @@ interface ToolUi {
     fun plan(items: List<PlanItem>, criteria: List<PlanItem>) {}
     /** 要让用户一眼看到的事（比如 Kavi 改了自己），在回答里显示成一张小卡片。 */
     fun notice(text: String) {}
+    /** Kavi 结束了这个对话（极端辱骂时）。 */
+    fun endConversation(reason: String) {}
     /** 慢的工具（下载大文件）的进度，显示在通知栏上。 */
     fun progress(text: String) {}
 }
@@ -268,7 +270,8 @@ class ToolSession(
             name == "delete_file" -> deleteFiles(args)
             name == "search_my_data" -> searchMyData(args)
             name == "facts" -> if (args["action"].text() == "save") saveFact(args) else recallFacts(args)
-            name == "budget" && freeBudget != null -> budgetTool(args)
+            name == "free_time" && freeBudget != null -> freeTimeTool(args)
+            name == "end_conversation" && interactive -> endConversation(args)
             name == "schedule" && SkillIds.ROUTINE in skillIds -> schedule(args)
             name == "cancel_schedule" && SkillIds.ROUTINE in skillIds -> cancelSchedule(args)
             name == "save_flashcards" && SkillIds.LEARN in skillIds -> saveCards(args)

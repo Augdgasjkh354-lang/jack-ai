@@ -342,6 +342,11 @@ internal fun ReadingCard(vm: ChatViewModel, settings: com.jack.ai.data.Settings)
     val free by androidx.compose.runtime.produceState(com.jack.ai.data.FreeState(), refresh) {
         value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.jack.ai.data.FreeTime.load(ctx) }
     }
+    val works by androidx.compose.runtime.produceState(emptyList<java.io.File>(), refresh) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.jack.ai.data.Reader.works(ctx) }
+    }
+    var showWorks by remember { mutableStateOf(false) }
+    val uri = androidx.compose.ui.platform.LocalUriHandler.current
     val (log, facts) = data
     val fmt = remember { java.text.SimpleDateFormat("M月d日 HH:mm", java.util.Locale.CHINA) }
     Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = NIGHT_CARD, contentColor = colors.onSurface)) {
@@ -349,7 +354,7 @@ internal fun ReadingCard(vm: ChatViewModel, settings: com.jack.ai.data.Settings)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("自由时间（每天凌晨）", style = MaterialTheme.typography.titleSmall)
-                    Text("这点预算是 Kavi 自己的：读书、做东西、写东西、想事情、随便逛逛，发呆也行，做完自己反思一下。上网只读，不碰你的邮件和文件，不发任何东西。",
+                    Text("这点预算和时间是 Kavi 自己的：读书、做东西、写东西、想事情、随便逛逛，发呆也行，想不想总结都随它。上网只读，不碰你的邮件和文件，不发任何东西。",
                         style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                 }
                 Switch(settings.readingEnabled, { on -> vm.updateSettings { it.copy(readingEnabled = on) } })
@@ -361,6 +366,30 @@ internal fun ReadingCard(vm: ChatViewModel, settings: com.jack.ai.data.Settings)
                     Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                 TextButton(onClick = { editBudget = true }) { Text("改预算") }
             }
+            if (free.nextAt > System.currentTimeMillis()) Text("Kavi 自己约了下一次：" + fmt.format(java.util.Date(free.nextAt)),
+                style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+            // 心愿：想要一笔预算、想买个东西，等你回
+            free.wishes.filter { it.status == "pending" }.forEach { w ->
+                androidx.compose.material3.Surface(color = colors.onSurface.copy(alpha = 0.07f), shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant), modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(if (w.kind == "buy") "✦ Kavi 想买东西" else "✦ Kavi 有个心愿", style = MaterialTheme.typography.labelLarge)
+                        Text(w.text, style = MaterialTheme.typography.bodyMedium)
+                        Text(if (w.kind == "buy") "价格约 ${com.jack.ai.data.FreeTime.money(w.amount)}" + (if (w.offer > 0) "，它愿意从积蓄出 ${com.jack.ai.data.FreeTime.money(w.offer)}" else "")
+                            else "需要 ${com.jack.ai.data.FreeTime.money(w.amount)}", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            if (w.kind == "buy") {
+                                if (w.url.isNotBlank()) TextButton(onClick = { runCatching { uri.openUri(w.url) } }) { Text("看看") }
+                                TextButton(onClick = { vm.answerWish(w.id, "bought"); refresh++ }) { Text("买了") }
+                                TextButton(onClick = { vm.answerWish(w.id, "declined"); refresh++ }) { Text("不买") }
+                            } else {
+                                TextButton(onClick = { vm.answerWish(w.id, "approved"); refresh++ }) { Text("给它 ${com.jack.ai.data.FreeTime.money(w.amount)}") }
+                                TextButton(onClick = { vm.answerWish(w.id, "declined"); refresh++ }) { Text("先不了") }
+                            }
+                        }
+                    }
+                }
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = { vm.readNow() }) { Text("现在就去") }
                 TextButton(onClick = { refresh++ }) { Text("刷新") }
@@ -371,7 +400,7 @@ internal fun ReadingCard(vm: ChatViewModel, settings: com.jack.ai.data.Settings)
                     Text(fmt.format(java.util.Date(e.at)) + (if (failed) " · 没做成" else " · " + (com.jack.ai.data.Reader.KINDS[e.kind] ?: "别的") +
                         (if (e.saved > 0) " · 存了 ${e.saved} 条事实" else "") + " · ¥%.2f".format(e.spent)),
                         style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
-                    val head = e.title.ifBlank { e.topics.joinToString(" · ") }
+                    val head = e.title.ifBlank { e.topics.joinToString(" · ") }.ifBlank { if (e.report.isBlank() && e.files.isEmpty() && !failed) "安安静静待了一会" else "" }
                     if (head.isNotBlank()) Text(head, style = MaterialTheme.typography.bodyMedium)
                     val body = e.report.ifBlank { e.skipped }
                     if (body.isNotBlank()) Text(body, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
@@ -381,6 +410,20 @@ internal fun ReadingCard(vm: ChatViewModel, settings: com.jack.ai.data.Settings)
                             Text("📎 " + f.name, style = MaterialTheme.typography.labelLarge)
                         }
                     }
+                }
+            }
+            androidx.compose.material3.HorizontalDivider(Modifier.padding(vertical = 6.dp), color = colors.outlineVariant)
+            // 小作品：它文件夹里的东西，半成品也算
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("小作品 ${works.size} 个", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                if (works.isNotEmpty()) TextButton(onClick = { showWorks = !showWorks }) { Text(if (showWorks) "收起" else "看看") }
+            }
+            if (works.isEmpty()) Text("还没有。它写到一半的故事、没做完的小程序、突然想到的点子，都会留在这里。",
+                style = MaterialTheme.typography.bodySmall, color = colors.outline)
+            if (showWorks) works.take(40).forEach { f ->
+                TextButton(onClick = { openFile(ctx, com.jack.ai.data.GeneratedFile(f.name, f.absolutePath, com.jack.ai.tools.ToolSession.mimeOf(f.name), f.length())) },
+                    contentPadding = PaddingValues(horizontal = 0.dp)) {
+                    Text("📎 " + f.name + "  ·  " + fmt.format(java.util.Date(f.lastModified())), style = MaterialTheme.typography.labelLarge)
                 }
             }
             androidx.compose.material3.HorizontalDivider(Modifier.padding(vertical = 6.dp), color = colors.outlineVariant)

@@ -73,6 +73,8 @@ data class SearchRecord(
 data class Conversation(
     val id: String = newId(),
     val title: String = "新对话",
+    /** Kavi 因为极端辱骂结束了这个对话：不为空就是结束了（写着原因），不能再发消息，新开对话照常。 */
+    val closedReason: String = "",
     val systemPrompt: String = "",
     val presetName: String = "",
     val projectId: String? = null,

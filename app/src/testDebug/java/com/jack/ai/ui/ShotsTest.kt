@@ -159,6 +159,9 @@ class ShotsTest {
                     report = "读了三家物流公司的官方时效说明，美国线普遍 7 到 12 天；另外看了手机端运行大模型的进展。"),
             )))
         java.io.File(app.filesDir, "x").mkdirs(); java.io.File(app.filesDir, "x/运费计算.html").writeText("<html></html>")
+        com.jack.ai.data.FreeTime.save(app, com.jack.ai.data.FreeState(savings = 1.2, lately = "最近在慢慢写一个关于灯塔守夜人的短篇，也想把那个运费小工具做得更好看。",
+            nextAt = now + 20 * 3_600_000L,
+            wishes = listOf(com.jack.ai.data.Wish(kind = "buy", text = "《宇宙的琴弦》电子版：想读读弦理论到底在说什么，没什么用，就是好奇", amount = 18.0, offer = 1.2, url = "https://example.com/book"))))
         com.jack.ai.data.Facts.save(app, listOf(
             com.jack.ai.data.Fact(text = "珠穆朗玛峰海拔 8848.86 米（2020 年中尼联合测量）", topic = "地理", status = "verified",
                 sources = listOf(com.jack.ai.data.FactSource("https://www.gov.cn/x"), com.jack.ai.data.FactSource("https://en.wikipedia.org/wiki/Mount_Everest"))),

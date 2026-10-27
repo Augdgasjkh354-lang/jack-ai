@@ -18,6 +18,29 @@ data class FreeState(
     val accruedThrough: String = "",
     val lately: String = "",
     val latelyAt: Long = 0,
+    /** Kavi 跟用户提的心愿：想要一笔预算做某件事，或者想买个东西。 */
+    val wishes: List<Wish> = emptyList(),
+    /** Kavi 自己约的下一次自由时间（0 = 没约，按每天凌晨那次）。 */
+    val nextAt: Long = 0,
+)
+
+/**
+ * 一个心愿。kind：budget 想要一笔预算做某件事；buy 想买个东西（Kavi 不能付钱，用户决定买不买、自己去买）。
+ * amount：要多少预算 / 东西的价格；offer：买东西时 Kavi 愿意从积蓄里出多少。
+ * status：pending 等用户回、approved 给了预算、declined 先不了、bought 买了。told：Kavi 知道结果了没有。
+ */
+@Serializable
+data class Wish(
+    val id: String = newId(),
+    val kind: String = "budget",
+    val text: String,
+    val amount: Double = 0.0,
+    val offer: Double = 0.0,
+    val url: String = "",
+    val at: Long = System.currentTimeMillis(),
+    val status: String = "pending",
+    val answeredAt: Long = 0,
+    val told: Boolean = false,
 )
 
 /**
@@ -86,6 +109,42 @@ object FreeTime {
         return state.copy(savings = savings.coerceAtMost(budget * SAVE_DAYS), accruedThrough = yesterday)
     }
 
-    /** 聊天时给 Kavi 的那段：它自己的近况。空的就没有。 */
-    fun latelyNote(ctx: Context): String = load(ctx).lately
+    /** 聊天时给 Kavi 的那段：它自己的近况，加上还在等用户回的心愿。空的就没有。 */
+    fun latelyNote(ctx: Context): String {
+        val s = load(ctx)
+        val waiting = s.wishes.filter { it.status == "pending" }
+        return (s.lately + if (waiting.isEmpty()) "" else "\nWaiting for an answer: " + waiting.joinToString("; ") { describe(it) }).trim()
+    }
+
+    fun money(v: Double) = "¥" + String.format(Locale.US, "%.2f", v)
+
+    /** 心愿的一句话描述（给模型看）。 */
+    fun describe(w: Wish): String = if (w.kind == "buy") "buy 「${w.text}」 for ${money(w.amount)}" + (if (w.offer > 0) " (you offered ${money(w.offer)} from savings)" else "")
+        else "${money(w.amount)} for 「${w.text}」"
+
+    /** 用户回了心愿：给预算就进积蓄（不受攒钱上限限制，是送的）；买了就从积蓄里扣掉 Kavi 愿意出的那部分。 */
+    fun answer(s: FreeState, id: String, status: String, now: Long = System.currentTimeMillis()): FreeState {
+        val w = s.wishes.firstOrNull { it.id == id && it.status == "pending" } ?: return s
+        val savings = when {
+            status == "approved" && w.kind == "budget" -> s.savings + w.amount
+            status == "bought" -> (s.savings - w.offer).coerceAtLeast(0.0)
+            else -> s.savings
+        }
+        return s.copy(savings = savings, wishes = s.wishes.map { if (it.id == id) it.copy(status = status, answeredAt = now, told = false) else it })
+    }
+
+    /** 自由时间开始时告诉 Kavi 的：心愿的回音（回了没告诉过的）和还在等的。返回（给模型的话，标成已告诉后的状态）。 */
+    fun news(s: FreeState): Pair<String, FreeState> {
+        val answered = s.wishes.filter { it.status != "pending" && !it.told }
+        val waiting = s.wishes.filter { it.status == "pending" }
+        val lines = answered.map { w ->
+            when (w.status) {
+                "approved" -> "{User} said yes to your wish ${describe(w)}: ${money(w.amount)} went into your savings."
+                "bought" -> "{User} bought 「${w.text}」 for you" + (if (w.offer > 0) " (${money(w.offer)} came out of your savings, as you offered)." else ".")
+                else -> "{User} passed on your wish ${describe(w)} for now."
+            }
+        } + waiting.map { "Still waiting: ${describe(it)}" }
+        val told = s.copy(wishes = s.wishes.map { if (it.status != "pending") it.copy(told = true) else it }.takeLast(30))
+        return lines.joinToString("\n") to told
+    }
 }
