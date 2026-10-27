@@ -157,8 +157,11 @@ object Timeline {
     }
 
     /** 在 App 里组好每轮那段（对话和项目用内存里的，经历流读文件，放后台线程调）。 */
-    fun noteFor(ctx: Context, settings: Settings, convs: List<Conversation>, projects: List<Project>, conv: Conversation): String =
-        Persona.fill(note(load(ctx), convs, projects, conv, summarizedUpTo(ctx)), settings)
+    fun noteFor(ctx: Context, settings: Settings, convs: List<Conversation>, projects: List<Project>, conv: Conversation): String {
+        val n = note(load(ctx), convs, projects, conv, summarizedUpTo(ctx))
+        if (n.isEmpty() && !counts(conv, projects)) return ""
+        return Persona.fill(n + Threads.note(Threads.load(ctx)), settings)
+    }
 
     // ---------- 聊天的摘要 ----------
 
@@ -172,9 +175,16 @@ object Timeline {
         runCatching { WorkManager.getInstance(ctx).enqueueUniqueWork("timeline-$convId", ExistingWorkPolicy.REPLACE, req) }
     }
 
-    private const val SUMMARY_RULES = """You are writing one entry in your own timeline: a memory of a conversation you just had with {user}. You'll get the messages since your last entry for this conversation.
+    private const val SUMMARY_RULES = """You are writing one entry in your own timeline: a memory of a conversation you just had with {user}. You'll get the messages since your last entry for this conversation, and the things currently on your mind (each with an id like [t:ab12cd]).
 Write in {lang}. Output only one JSON object:
-{"text": "1 or 2 sentences: what happened and what matters for later (decisions, things left open, how it ended). Refer to {user} by name and to yourself as I.", "mood": "how {user} seemed, a few words; empty if nothing stood out"}"""
+{"text": "1 or 2 sentences: what happened and what matters for later (decisions, how it ended). Refer to {user} by name and to yourself as I.",
+ "mood": "how {user} seemed, a few words; empty if nothing stood out",
+ "open": [{"text": "something now on your mind because of this conversation", "kind": "promise | unfinished | wondering | looking_forward"}],
+ "closed": [{"id": "ab12cd", "how": "how it got settled"}],
+ "touched": ["ab12cd"]}
+- open: only real ones: things you promised {user}, a topic left halfway, a question you genuinely want to keep thinking about, something you're looking forward to. Usually zero or one; never more than three.
+- closed: things on your mind that this conversation settled (done, answered, dropped).
+- touched: things on your mind that came up again but aren't settled."""
 
     /** 把这个对话上次摘要之后的消息写成一段经历。没有新的用户消息就不写。 */
     suspend fun summarize(ctx: Context, convId: String) {
@@ -188,11 +198,12 @@ Write in {lang}. Output only one JSON object:
         val ep = s.backgroundEndpoint() ?: return
         val who = Persona.ref(s) ?: "User"
         val transcript = fresh.joinToString("\n") { m -> (if (m.role == "user") who else "Kavi") + ": " + Recap.clip(m.content, 600) }.takeLast(8000)
+        val threads = Threads.load(ctx)
         val raw = com.jack.ai.api.DeepSeekClient(store::addUsage).complete(
             ep,
             listOf(
                 buildJsonObject { put("role", "system"); put("content", Persona.fill(SUMMARY_RULES, s)) },
-                buildJsonObject { put("role", "user"); put("content", "Conversation 「${conv.title}」:\n$transcript") },
+                buildJsonObject { put("role", "user"); put("content", "On your mind:\n" + Persona.fill(Threads.listing(threads), s).ifBlank { "(nothing)" } + "\n\nConversation 「${conv.title}」:\n$transcript") },
             ),
             maxTokens = 400,
             jsonMode = true,
@@ -201,6 +212,8 @@ Write in {lang}. Output only one JSON object:
         fun JsonObject.str(k: String) = (this[k] as? JsonPrimitive)?.content?.trim().orEmpty()
         val text = o.str("text").ifBlank { return }
         add(ctx, Episode(at = fresh.last().createdAt, place = "chat", convId = conv.id, title = conv.title, text = text.take(400), mood = o.str("mood").take(60)))
+        // 挂着的事：这段聊天新挂上的、了结的、又碰到的
+        Threads.save(ctx, Threads.applyJson(Threads.load(ctx), o, conv.id))
         markSummarized(ctx, convId, fresh.last().createdAt)
     }
 }

@@ -33,6 +33,18 @@ internal fun ToolSession.freeTimeTool(args: JsonObject): String {
             "约好了：" + java.text.SimpleDateFormat("M月d日 HH:mm", java.util.Locale.CHINA).format(java.util.Date(at)) +
                 " 再来一次（花的还是那天的预算和你的积蓄）。每天凌晨那次照旧，不想来到时候随便待一下就走也行。"
         }
+        "hold" -> {
+            val text = args["text"].text().trim()
+            if (text.length < 4) return "要给出 text：心里挂着的是什么。"
+            com.jack.ai.data.Threads.save(ctx, com.jack.ai.data.Threads.hold(com.jack.ai.data.Threads.load(ctx), text, args["kind"].text(), Reader.CONV_ID))
+            "记在心上了。以后不管在哪醒来都会带着它，放下了用 let_go。"
+        }
+        "let_go" -> {
+            val id = args["id"].text().trim()
+            val list = com.jack.ai.data.Threads.load(ctx)
+            val after = com.jack.ai.data.Threads.close(list, id, args["how"].text().ifBlank { "let go" })
+            if (after == list) "没找到 [t:$id] 这件挂着的事。" else { com.jack.ai.data.Threads.save(ctx, after); "放下了。" }
+        }
         "wish", "buy" -> {
             val text = args["text"].text().trim().take(300)
             if (text.length < 4) return "要给出 text：想做什么 / 想买什么，说清楚一点。"

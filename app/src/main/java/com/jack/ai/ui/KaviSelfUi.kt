@@ -46,6 +46,9 @@ fun KaviSelfCard() {
             // 它自己写的近况（自由时间里）
             val lately = remember(version) { com.jack.ai.data.FreeTime.load(ctx).lately }
             if (lately.isNotBlank()) Text("最近：$lately", style = MaterialTheme.typography.bodyMedium)
+            // 自传：只显示它愿意给你看的那部分
+            val shared = remember(version) { com.jack.ai.data.SelfStory.bio(ctx).shared }
+            if (shared.isNotBlank()) Text("它愿意给你看的自传：$shared", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
             if (showAll) KaviSelf.SECTIONS.forEach { s ->
                 Text(
                     "${s.title}${if (KaviSelf.isEdited(s.key)) "（Kavi 改过）" else ""}：${KaviSelf.current(s.key).ifBlank { "（没定，按它自己的样子说；你想让它怎么说，跟它说一声就行）" }}",

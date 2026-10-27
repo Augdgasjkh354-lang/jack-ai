@@ -204,7 +204,13 @@ private fun MemoryPage(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                 androidx.compose.material3.Surface(color = NIGHT_CARD, shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
                     border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), modifier = Modifier.fillMaxWidth()) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 14.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
-                        Text(m.text, Modifier.weight(1f).padding(vertical = 8.dp), style = MaterialTheme.typography.bodyMedium)
+                        Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
+                            Text(m.text, style = MaterialTheme.typography.bodyMedium)
+                            // 做梦记下的出处，改过的标一下
+                            if (m.source.isNotBlank() || m.history.isNotEmpty()) Text(
+                                listOfNotNull(m.source.takeIf { it.isNotBlank() }?.let { "出处 $it" }, "改过 ${m.history.size} 次".takeIf { m.history.isNotEmpty() }).joinToString(" · "),
+                                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                         IconButton(onClick = { editing = m }, modifier = Modifier.size(36.dp)) {
                             Icon(Icons.Default.Edit, "修改", Modifier.size(17.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }

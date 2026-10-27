@@ -133,7 +133,18 @@ data class MemoryItem(
     val id: String = newId(),
     val text: String,
     val createdAt: Long = System.currentTimeMillis(),
+    /** 出处：哪天、哪个对话（做梦记下的）。 */
+    val source: String = "",
+    /** 做梦时改过的历史：改前改后、为什么、依据哪里。 */
+    val history: List<MemEdit> = emptyList(),
 )
+
+@Serializable
+data class MemEdit(val at: Long = System.currentTimeMillis(), val old: String, val new: String, val why: String = "", val source: String = "")
+
+/** 作废的记忆：不删，挪到这里留着（为什么作废、依据哪里）。 */
+@Serializable
+data class ArchivedMemory(val item: MemoryItem, val at: Long = System.currentTimeMillis(), val why: String = "", val source: String = "")
 
 @Serializable
 data class DreamEntry(

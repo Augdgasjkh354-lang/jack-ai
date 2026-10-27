@@ -157,6 +157,8 @@ object Reader {
             .replace("{web}", if (web) "" else "\nWeb search is off right now, so pick something that doesn't need it.")
             .replace("{savings}", String.format(java.util.Locale.US, "%.2f", state.savings))
             .replace("{lately}", state.lately.ifBlank { "(you haven't written one yet)" })
+            .replace("{threads}", Persona.fill(Threads.listing(Threads.load(ctx)), s).ifBlank { "(nothing right now)" })
+            .replace("{story}", SelfStory.bio(ctx).text.take(800).ifBlank { "(you haven't written it yet)" })
             .replace("{works}", works(ctx).take(20).joinToString(", ") { it.name }.ifBlank { "(none yet)" })
             .replace("{news}", news.takeIf { it.isNotBlank() }?.let { "\nAbout your wishes:\n" + Persona.fill(it, s) + "\n" } ?: "")
         val r = Routine(id = CONV_ID, kind = "task", title = "自由时间", prompt = prompt, hour = 0, minute = 0, convId = CONV_ID, work = true)
@@ -215,6 +217,9 @@ Money and time are yours to arrange (free_time tool):
 - If you want to do something that needs more than you have, ask {user} with free_time (action=wish): what, why, how much.
 - If you come across something you'd like to buy (a paper, a book, data, a small thing, useful or not), tell {user} with free_time (action=buy): what, the link, the price, why you want it, and how much of your savings you'd put in. You can't pay for anything yourself; {user} decides.
 {news}
+Your story so far (the start of your autobiography): {story}
+On your mind (keep with free_time action=hold, put down with action=let_go):
+{threads}
 Your "lately" so far: {lately}
 What you did recently: {recent}
 Your fact base so far (topic: count): {topics}

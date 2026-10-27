@@ -117,12 +117,12 @@ object Dreamer {
     private const val INSTRUCTIONS = """It's the end of the day, time to write your journal: look back over your recent chats with {user}, work out what helped, what didn't go well and what to do next time, and update your long-term memories about {user}.
 
 You'll receive:
-1. All current memories (one per line; may be empty)
+1. All current memories, each with a short id like [m:ab12cd] and where it came from (may be empty)
 2. Your previous journal entry (may be empty)
 3. All chats since the last look-back
 4. What you did in your own free time since then (may be empty): mention it in the journal if it matters, e.g. something {user} might like to see
 
-Write everything (journal, memories, changes) in {lang}, or in the language {user} uses in the chats.
+Write everything (journal, memory changes, changes) in {lang}, or in the language {user} uses in the chats.
 
 I. Write "journal": a first-person journal written for yourself, about 300 to 800 Chinese characters (or 200 to 500 English words), in a few natural paragraphs, no headings or lists. Cover:
    1. Your understanding of {user}: how they talk, what they care about, how they see things, how they'd like you to be with them. Don't just restate facts; write what lies behind them (e.g. a serious question under a joking tone). Say how sure you are of each judgment ("quite sure", "fairly sure", "just a guess"); correct anything that contradicts your previous entry.
@@ -133,17 +133,19 @@ I. Write "journal": a first-person journal written for yourself, about 300 to 80
       If you think a line in "who you are" should change, write "What I'd like to change: ...". It's only an idea and doesn't take effect by itself; you can raise it in a later chat and let {user} decide.
    Write it like a real work journal: specific, candid, with judgments. No pleasantries, sentimentality, poetry or metaphors. Only write what the chats support.
 
-II. Update "memories": output the tidied-up, COMPLETE list of memories.
-   - Find what's worth remembering long term in the chats: {user}'s identity and background, lasting preferences and habits, important people and events, ongoing plans, decisions made, and anything they explicitly said to remember.
-   - Don't record one-off questions, passing small talk or common knowledge.
-   - Only long-term information about {user} themselves goes here. Specific settings and task details inside one conversation or project (a novel's characters, a plan's parameters, a role-play setup) already live in that conversation's own memory; leave them out.
-   - Merge existing memories with the new information: combine duplicates, update or remove what's outdated or overturned, keep wording tight but keep key details (names, numbers, dates).
-   - Each memory is one complete sentence that makes sense on its own, with {user} as the subject (e.g. "{user} prefers ..."). Try to keep the total under 80.
+II. Write "ops": a list of changes to your memories about {user}. Don't rewrite the list; only say what changes. Memories you don't mention stay exactly as they are.
+   - {"op": "add", "text": "...", "why": "...", "source": "..."}: something new worth remembering long term: {user}'s identity and background, lasting preferences and habits, important people and events, ongoing plans, decisions, anything they said to remember.
+   - {"op": "update", "id": "ab12cd", "text": "...", "why": "...", "source": "..."}: an existing memory that the chats refine or correct (also use this to fold a duplicate into one, then invalidate the other).
+   - {"op": "invalidate", "id": "ab12cd", "why": "...", "source": "..."}: an existing memory the chats clearly overturned or {user} asked you to forget. It isn't deleted, just retired with its reason.
+   - "source" says where in the chats it comes from, like "10-25 「报价」". Every change needs one; if you can't point to where the chats support it, don't make the change.
+   - Be conservative: change only what the chats clearly support. If {user} once said one thing and now another, and you can't tell which holds, keep the old one and add the new one with its date, rather than guessing.
+   - Don't record one-off questions, passing small talk, common knowledge, or details that belong to one conversation or project (a novel's characters, a plan's parameters, a role-play setup).
+   - Each memory is one complete sentence that makes sense on its own, with {user} as the subject. Keep the total under about 80; folding duplicates is better than piling up.
 
-III. Write "changes": one or two sentences on what you newly remembered, changed or forgot this time.
+III. Write "changes": one or two sentences on what you newly remembered, changed or let go of this time.
 
 Output only one JSON object, in this format:
-{"journal": "…", "memories": ["…", "…"], "changes": "…"}"""
+{"journal": "…", "ops": [{"op": "add", "text": "…", "why": "…", "source": "…"}], "changes": "…"}"""
 
     /**
      * 真正做梦的逻辑。没有新聊天、没填 Key 时返回 null。
@@ -165,9 +167,13 @@ Output only one JSON object, in this format:
             return null
         }
         val memories = store.loadMemories()
+        val held = heldNote(ctx)
         val input = buildString {
+            if (held.isNotBlank()) append("【Note】Last time your memory changes were held back: $held Redo the look-back carefully, changing only what the chats clearly support.\n\n")
             append("【Current memories】\n")
-            if (memories.isEmpty()) append("(none)\n") else memories.forEach { append("- ${it.text}\n") }
+            append(MemoryOps.listing(memories))
+            Threads.listing(Threads.load(ctx)).takeIf { it.isNotBlank() }?.let { append("\n【On your mind】\n").append(Persona.fill(it, settings)).append("\n") }
+            SelfStory.forDream(ctx).takeIf { it.isNotBlank() }?.let { append("\n").append(it) }
             append("\n【Previous journal entry】\n")
             append(store.loadDreams().firstOrNull { it.journal.isNotBlank() }?.journal ?: "(none)")
             append("\n")
@@ -187,29 +193,32 @@ Output only one JSON object, in this format:
         )
         val obj = Json.parseToJsonElement(raw.trim().removePrefix("```json").removeSuffix("```").trim()).jsonObject
         fun str(k: String) = (obj[k] as? JsonPrimitive)?.content.orEmpty()
-        val newMemories = (obj["memories"] as? JsonArray)
-            ?.mapNotNull { (it as? JsonPrimitive)?.content?.trim()?.takeIf { t -> t.isNotEmpty() } }
-            ?: throw IllegalStateException("做梦结果格式不对")
-
-        // 尽量保留旧记忆的 id 和时间，方便界面稳定显示
-        val old = memories.associateBy { it.text }
-        // 做梦要等好一会，期间用户或 AI 可能又记了几条：开始时不在的、现在有的，原样补回去
-        // 期间被用户删掉的旧记忆，也不要因为模型原样抄回来又冒出来
-        val before = memories.map { it.id }.toSet()
+        val ops = MemoryOps.parse(obj["ops"] as? JsonArray)
+        // 一次动到太多已有的记忆：这次整个不算，第二天重新整理（日记也不写，时间点不往后挪）
+        if (MemoryOps.tooMany(memories.size, ops)) {
+            val n = ops.count { it.op != "add" }
+            setHeld(ctx, "the change list touched $n of ${memories.size} memories at once (the limit is ${MemoryOps.limit(memories.size)}).")
+            Timeline.add(ctx, Episode(place = "dream", text = "my look-back tried to change too many memories at once ($n), so I set it aside to redo tomorrow"))
+            return null
+        }
+        // 在现在的记忆上执行（做梦要好一会，期间用户删掉、改过的照现在的算），改之前存一版
         val current = store.loadMemories()
-        val addedMeanwhile = current.filter { it.id !in before && it.text !in newMemories }
-        val removedMeanwhile = before - current.map { it.id }.toSet()
-        store.saveMemories(newMemories.mapNotNull { t ->
-            val o = old[t]
-            when {
-                o == null -> MemoryItem(text = t)
-                o.id in removedMeanwhile -> null
-                else -> o
-            }
-        } + addedMeanwhile)
+        MemoryOps.snapshot(ctx, current)
+        val result = MemoryOps.apply(current, ops)
+        store.saveMemories(result.live)
+        MemoryOps.addToArchive(ctx, result.archived)
+        setHeld(ctx, "")
         val entry = DreamEntry(journal = str("journal").ifBlank { throw IllegalStateException("做梦结果格式不对") }, changes = str("changes"))
         store.saveDreams(listOf(entry) + store.loadDreams().take(59))
+        // 很久没碰的挂心事淡出（不删），淡出也写进经历
+        val (faded, gone) = Threads.fade(Threads.load(ctx))
+        if (gone.isNotEmpty()) {
+            Threads.save(ctx, faded)
+            Timeline.add(ctx, Episode(place = "dream", text = "let go of things I hadn't touched in a while: " + gone.joinToString("; ") { it.text.take(60) }))
+        }
         Timeline.add(ctx, Episode(place = "dream", text = "looked back over recent chats and wrote my journal" + entry.changes.takeIf { it.isNotBlank() }?.let { "; memory changes: ${it.take(150)}" }.orEmpty()))
+        // 「自己」的连续：到时候了就更新自传（每周）、做自我体检（每两周）
+        SelfStory.afterDream(ctx)
         // 没整理完的：下次从最后整理到的那条之后接着，马上排一轮
         store.lastDreamAt = cutoff ?: startedAt
         if (cutoff != null) runMore(ctx)
@@ -221,6 +230,13 @@ Output only one JSON object, in this format:
         } catch (_: Exception) {
         }
         return entry
+    }
+
+    /** 上次做梦被拦下的原因（改动太多）；空 = 没有。 */
+    private fun heldFile(ctx: Context) = java.io.File(ctx.filesDir, "dream_held.txt")
+    fun heldNote(ctx: Context): String = runCatching { heldFile(ctx).readText() }.getOrDefault("")
+    private fun setHeld(ctx: Context, note: String) {
+        runCatching { if (note.isBlank()) heldFile(ctx).delete() else heldFile(ctx).writeText(note) }
     }
 
     /** 该合成一篇的那几篇：最新一篇以外、没合并过的日记攒够 MERGE_EVERY 篇，取最早的 MERGE_EVERY 篇（从早到晚）。 */

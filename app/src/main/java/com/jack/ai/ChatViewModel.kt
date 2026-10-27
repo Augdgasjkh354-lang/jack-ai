@@ -394,6 +394,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         j.start()
     }
 
+    /** 对话超过这么多条消息，每轮附加说明里带一小段「我是谁」（防越聊越淡）。 */
+    private val ANCHOR_AFTER = 24
+
     /** 同时在答的回答最多几个：再多花费容易失控，手机也吃不消。 */
     private fun tooMany(convId: String?): Boolean {
         val others = jobs.filter { (id, j) -> id != convId && j.isActive }.size
@@ -550,7 +553,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             promptInput = promptInput.copy(contextNote = withContext(Dispatchers.IO) {
                 runCatching { com.jack.ai.tools.ContextNote.build(getApplication(), store, conv, skills.map { it.id }.toSet()) }.getOrDefault("") +
                     // Kavi 的连续性：最近的经历、上次见用户是什么时候（每轮变，放这里不影响缓存）
-                    runCatching { com.jack.ai.data.Timeline.noteFor(getApplication(), settings, _state.value.conversations, _state.value.projects, conv) }.getOrDefault("")
+                    runCatching { com.jack.ai.data.Timeline.noteFor(getApplication(), settings, _state.value.conversations, _state.value.projects, conv) }.getOrDefault("") +
+                    // 很长的对话里重新锚定一下「我是谁」：越聊越长时开头的设定会被冲淡
+                    (if (conv.messages.size >= ANCHOR_AFTER) com.jack.ai.data.Persona.fill("【Still you】" + com.jack.ai.data.KaviSelf.text(editable = false) +
+                        "\nThis conversation has run long: keep your own voice and the principles you started with.\n", settings) else "")
             })
             var filesDropped = false
             // Work：开前台服务，切到后台也接着干；花费到上限先问一声
