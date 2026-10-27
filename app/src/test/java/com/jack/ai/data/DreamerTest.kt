@@ -18,7 +18,7 @@ class DreamerTest {
         assertFalse(text.contains("旧的"))
         // 对话按第一条新消息的先后排
         assertTrue(text.indexOf("甲") < text.indexOf("乙"))
-        assertTrue(text.contains("AI：三"))
+        assertTrue(text.contains("Kavi: 三"))
     }
 
     @Test

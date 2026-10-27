@@ -115,12 +115,15 @@ suspend fun runBackgroundWork(
     // 隐私项目里的任务不带全局记忆和日记
     val memories = if (s.memoryEnabled && conv.globalAllowed(project)) store.loadMemories() else emptyList()
     val journal = store.loadDreams().firstOrNull { it.journal.isNotBlank() }?.journal.orEmpty()
-    val now = SimpleDateFormat("yyyy年M月d日 EEEE HH:mm", Locale.CHINA).format(Date())
+    val now = SimpleDateFormat("yyyy-MM-dd EEEE HH:mm", Locale.ENGLISH).format(Date())
     val system = PromptBuilder.systemPrompt(s, conv, project, tools, memories, skills, journal = journal) +
-        "\n\n" + (brief ?: "【后台定时任务】现在是$now。你在后台执行用户预先设定的定时任务「${r.title}」，用户此刻不在线，不能向他提问，直接把任务做完。") +
-        (if (s.fullAuth) "用户开了完全授权，发邮件、删除这类操作不会弹窗确认、会直接执行，只做任务里明确要求的，拿不准的不要做。"
-        else "发邮件、删除这类需要用户确认的操作会被拒绝，不要尝试。") +
-        "需要交给用户的内容直接写在最后的结果里。结果就是用户稍后会看到的消息，简洁好读，不要开场白。"
+        "\n\n" + com.jack.ai.data.Persona.fill(
+            (brief ?: "【Background scheduled task】It is now $now. You're running a scheduled task {user} set up in advance: 「${r.title}」. {User} isn't online and can't be asked anything, so just get it done. ") +
+                (if (s.fullAuth) "{User} has turned on full authorization: actions like sending email or deleting run without a confirmation prompt. Do only what the task explicitly asks for, and nothing you're unsure about. "
+                else "Actions that need {user}'s confirmation, like sending email or deleting, will be refused; don't try them. ") +
+                "Put everything {user} needs in your final result. That result is the message {user} will read later: short, easy to read, no preamble.",
+            s,
+        )
     val messages = mutableListOf(
         buildJsonObject { put("role", "system"); put("content", system) },
         buildJsonObject {

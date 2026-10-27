@@ -124,11 +124,11 @@ object Proactive {
 
     /** 交给 Kavi 判断的材料：最近的对话、日记里还在进行的事、到期该回访的客户、今明两天的日程、最近的后台任务、它以前找过用户的记录。 */
     fun material(ctx: Context, store: Store, now: Long): String = buildString {
-        val f = SimpleDateFormat("M月d日 HH:mm", Locale.CHINA)
+        val f = SimpleDateFormat("MM-dd HH:mm", Locale.ENGLISH)
         val projects = store.loadProjects()
         val recap = Recap.build(Conversation(id = "-"), store.loadConversations().filter { it.id != CONV_ID }, projects, now)
-        append("【最近的对话】\n").append(recap.ifBlank { "（最近几天没聊过）" }).append("\n\n")
-        store.loadDreams().firstOrNull { it.journal.isNotBlank() }?.let { append("【你上一篇日记】\n").append(it.journal.take(3000)).append("\n\n") }
+        append("【Recent conversations】\n").append(recap.ifBlank { "(no chats in the last few days)" }).append("\n\n")
+        store.loadDreams().firstOrNull { it.journal.isNotBlank() }?.let { append("【Your latest journal entry】\n").append(it.journal.take(3000)).append("\n\n") }
         // 表里写着「下次联系」的：今天和以前的都算到期
         val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(now))
         val due = runCatching {
@@ -138,26 +138,26 @@ object Proactive {
                     .map { r -> "「${t.name}」" + t.columns.zip(r).filter { it.second.isNotBlank() }.take(6).joinToString("，") { "${it.first}：${it.second.take(40)}" } }
             }
         }.getOrDefault(emptyList())
-        append("【到了该联系的日子的】\n").append(due.take(15).joinToString("\n").ifBlank { "（没有）" }).append("\n\n")
+        append("【Due for a follow-up】\n").append(due.take(15).joinToString("\n").ifBlank { "(none)" }).append("\n\n")
         val events = runCatching { if (CalendarTool.canRead(ctx)) CalendarTool.list(ctx, now, now + 36 * 3_600_000L) else null }.getOrNull()
-        if (events != null) append("【接下来 36 小时的日程】\n").append(events.take(10).joinToString("\n") { "${f.format(Date(it.begin))} ${it.title}" }.ifBlank { "（没有）" }).append("\n\n")
+        if (events != null) append("【Calendar for the next 36 hours】\n").append(events.take(10).joinToString("\n") { "${f.format(Date(it.begin))} ${it.title}" }.ifBlank { "(none)" }).append("\n\n")
         val runs = runCatching { RunLog.all(ctx).filter { now - it.startedAt < 86_400_000L } }.getOrDefault(emptyList())
-        append("【最近 24 小时的后台任务】（已经按自己的规则通知过用户的，别重复）\n")
-            .append(runs.takeLast(10).joinToString("\n") { "${f.format(Date(it.startedAt))} ${it.title}：${it.status} ${(it.note.ifBlank { it.error }).take(100)}" }.ifBlank { "（没有）" }).append("\n\n")
+        append("【Background tasks in the last 24 hours】(those already notified under their own rules shouldn't be repeated)\n")
+            .append(runs.takeLast(10).joinToString("\n") { "${f.format(Date(it.startedAt))} ${it.title}：${it.status} ${(it.note.ifBlank { it.error }).take(100)}" }.ifBlank { "(none)" }).append("\n\n")
         val log = store.loadNudges()
-        append("【你以前主动找用户的记录】\n")
-            .append(log.filter { it.sent }.takeLast(8).joinToString("\n") { "${f.format(Date(it.at))}［${it.kind}］${it.text}" + when (it.feedback) { "useful" -> "（用户点了有用）"; "mute" -> "（用户说别为这种事找他）"; else -> "" } }.ifBlank { "（还没有）" })
-        muted(log).takeIf { it.isNotEmpty() }?.let { append("\n用户不想被打扰的事：" + it.joinToString("、")) }
+        append("【Times you reached out before】\n")
+            .append(log.filter { it.sent }.takeLast(8).joinToString("\n") { "${f.format(Date(it.at))}［${it.kind}］${it.text}" + when (it.feedback) { "useful" -> " (marked useful)"; "mute" -> " (asked not to be contacted about this kind of thing)"; else -> "" } }.ifBlank { "(none yet)" })
+        muted(log).takeIf { it.isNotEmpty() }?.let { append("\nKinds of things not to reach out about: " + it.joinToString(", ")) }
     }
 
-    private const val RULES = """现在是一次「要不要主动找用户」的回看。用户此刻没在和你聊天；你说的话会推送到他手机上，会打断他。
-默认不说。只有同时满足这三条才说：
-1. 有时效：现在不说，过了就晚了或损失明显（今天该回访的客户、快到期的事、明天一早的安排要提前准备）；
-2. 用户能做点什么：说完他知道下一步干嘛；
-3. 他多半还不知道：已设好的提醒会自己响、后台任务已经通知过的、他刚聊过的，都不用再说。
-闲聊、关心、「好久不见」、复述日记、泛泛的建议，都不说。拿不准就不说。
-要说的话：一件事，一两句（不超过 80 字），像朋友发的一条消息，直接说事和建议的下一步，不寒暄、不加表情。
-只输出一个 JSON：{"send": true 或 false, "kind": "两三个字的类别（客户回访、待办到期、日程准备……）", "text": "要发的话（不发就空）", "why": "一句话说为什么发或为什么不发"}"""
+    private const val RULES = """This is a look-back to decide whether to reach out to {user} on your own. {User} isn't chatting with you right now; anything you say is pushed to their phone and will interrupt them.
+Default to saying nothing. Speak only when all three hold:
+1. It's time-sensitive: if you don't say it now, it'll be too late or cost something real (a client due for a follow-up today, something about to expire, an early plan tomorrow that needs preparing).
+2. {User} can act on it: after reading, they know what to do next.
+3. They probably don't know yet: reminders already set will ring by themselves, and background tasks that already notified them or things they just chatted about don't need repeating.
+No small talk, check-ins, "long time no see", retelling the journal, or general advice. If unsure, say nothing.
+If you do speak: one thing, one or two sentences (at most about 80 Chinese characters or 50 English words), like a message from a friend. State the matter and the suggested next step directly; no greetings, no emoji. Write it in {lang}, or in the language {user} uses in the recent conversations.
+Output only one JSON object: {"send": true or false, "kind": "a two-or-three-word category (client follow-up, to-do due, schedule prep...)", "text": "the message to send (empty if not sending)", "why": "one sentence on why you're sending or not"}"""
 
     /** 回看一次：判断、按规矩拦、发通知、记一笔。返回这次的记录（没配好模型返回 null）。 */
     suspend fun check(ctx: Context, slot: String = "", force: Boolean = false): Nudge? {
@@ -170,12 +170,12 @@ object Proactive {
         val log = store.loadNudges()
         gate(log, now, hour)?.let { if (!force) return record(store, Nudge(now, sent = false, blocked = it)) }
         KaviSelf.ensure(ctx)
-        val time = SimpleDateFormat("yyyy年M月d日 EEEE HH:mm", Locale.CHINA).format(Date(now))
+        val time = SimpleDateFormat("yyyy-MM-dd EEEE HH:mm", Locale.ENGLISH).format(Date(now))
         val raw = DeepSeekClient(store::addUsage).complete(
             ep,
             listOf(
-                buildJsonObject { put("role", "system"); put("content", KaviSelf.text(editable = false) + "\n\n" + RULES) },
-                buildJsonObject { put("role", "user"); put("content", "现在是$time（${if (slot == "evening") "傍晚" else "早上"}的回看）。\n\n" + material(ctx, store, now)) },
+                buildJsonObject { put("role", "system"); put("content", Persona.fill(KaviSelf.text(editable = false) + Persona.nameLine(s).let { if (it.isEmpty()) "" else "\n\n$it" } + "\n\n" + CONFIDENTIAL_PROMPT + "\n\n" + RULES, s)) },
+                buildJsonObject { put("role", "user"); put("content", "It is now $time (the ${if (slot == "evening") "evening" else "morning"} look-back).\n\n" + material(ctx, store, now)) },
             ),
             maxTokens = 1024,
             jsonMode = true,

@@ -159,9 +159,9 @@ class WeChatWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx
         if (batch.isEmpty()) return Result.success()
         val r = Routine(id = WeChat.CONV_ID, kind = "task", title = WeChat.TITLE, prompt = WeChat.prompt(batch),
             hour = 0, minute = 0, convId = WeChat.CONV_ID, work = true)
-        val now = SimpleDateFormat("yyyy年M月d日 EEEE HH:mm", Locale.CHINA).format(Date())
-        val brief = "【后台：微信客户消息】现在是$now。用户在设置里打开了「微信消息交给 Kavi」，你在后台看他刚收到的微信私聊，" +
-            "把客户的情况记下来、要紧的推到他手机上。用户此刻不在线，不能向他提问。"
+        val now = SimpleDateFormat("yyyy-MM-dd EEEE HH:mm", Locale.ENGLISH).format(Date())
+        val brief = "【Background: WeChat client messages】It is now $now. {User} turned on 「微信消息交给 Kavi」 in settings; you're going through the WeChat private messages they just received, in the background. " +
+            "Record each client's situation, and push anything urgent to their phone. {User} isn't online and can't be asked anything. "
         val result = try {
             com.jack.ai.tools.runBackgroundWork(ctx, r, allow = WeChat::allow, brief = brief, model = MODEL_FLASH)
         } catch (e: kotlinx.coroutines.CancellationException) {

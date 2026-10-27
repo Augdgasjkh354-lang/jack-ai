@@ -128,13 +128,13 @@ object PromptBuilder {
             files.forEach { f ->
                 // 放进文件夹后可能改了名（重名时加了编号），以文件夹里的名字为准
                 val name = if (f.path.isNotEmpty() && !f.path.contains("/staging/")) File(f.path).name else f.name
-                if (f.text.isBlank()) append("【文件：$name】（已放进对话文件夹，内容没法直接显示，需要时用 read_file 读）\n\n")
-                else append("【文件：$name】\n${f.text}\n【文件结束】\n\n")
+                if (f.text.isBlank()) append("【File: $name】(saved in the conversation folder; its content can't be shown here, read it with read_file when needed)\n\n")
+                else append("【File: $name】\n${f.text}\n【End of file】\n\n")
             }
-            if (!imagesOk && imgs.isNotEmpty()) append("（用户发了 ${imgs.size} 张图片，但当前模型看不了图片）\n\n")
+            if (!imagesOk && imgs.isNotEmpty()) append("(${imgs.size} image(s) were sent, but the current model can't see images)\n\n")
             append(m.content)
         }.trim()
-        if (!imagesOk || imgs.isEmpty()) return msg("user", text.ifEmpty { "（空消息）" })
+        if (!imagesOk || imgs.isEmpty()) return msg("user", text.ifEmpty { "(empty message)" })
         // 图片文件找不到（被删了、没存好）：不悄悄跳过，告诉模型少了哪几张
         val missing = mutableListOf<String>()
         return buildJsonObject {
@@ -151,10 +151,10 @@ object PromptBuilder {
                         put("image_url", buildJsonObject { put("url", url) })
                     })
                 }
-                val lost = if (missing.isEmpty()) "" else "（用户发的图片「${missing.joinToString("、")}」的文件找不到了，没能给你；需要的话请用户重发）\n\n"
+                val lost = if (missing.isEmpty()) "" else "(The image file(s) 「${missing.joinToString(", ")}」 can't be found, so they couldn't be passed on; ask for them to be sent again if needed)\n\n"
                 add(buildJsonObject {
                     put("type", "text")
-                    put("text", (lost + text).ifEmpty { "请看图片。" })
+                    put("text", (lost + text).ifEmpty { "Please look at the image." })
                 })
             })
         }
@@ -212,9 +212,9 @@ object PromptBuilder {
     fun compressedScope(conv: Conversation): String {
         val old = com.jack.ai.data.Compression.compressedMessages(conv)
         if (old.isEmpty()) return ""
-        val f = java.text.SimpleDateFormat("M月d日 HH:mm", java.util.Locale.CHINA)
-        return "下面概括了本对话较早的 ${old.size} 条消息（${f.format(java.util.Date(old.first().createdAt))} 到 ${f.format(java.util.Date(old.last().createdAt))}），" +
-            "原话已经不在你眼前。"
+        val f = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.ENGLISH)
+        return "This summarizes the earlier ${old.size} messages of this conversation (${f.format(java.util.Date(old.first().createdAt))} to ${f.format(java.util.Date(old.last().createdAt))}); " +
+            "the original wording is no longer in front of you. "
     }
 
     /** search_my_data 这次能搜哪些地方：聊天记录、本对话被压缩的旧记录、资料库、项目里的大份资料。 */
@@ -272,7 +272,7 @@ object PromptBuilder {
     private fun onDemandNote(skills: List<Skill>): String {
         val lazy = skills.filter { it.id in SkillIds.ON_DEMAND }.map { it.name }
         if (lazy.isEmpty()) return ""
-        return "「${lazy.joinToString("、")}」这几个技能的工具，要先 use_skill 读了做法才会出现，读完下一步就能用；不要因为现在看不到工具就说做不到。"
+        return " The tools of these skills only appear after you read the skill with use_skill, and are usable from the next step: ${lazy.joinToString(", ") { "「$it」" }}. Don't say you can't do something just because you don't see the tool yet."
     }
 
     /** 系统提示词的各个部分（名字, 内容），统计页用它算上下文构成。 */
@@ -289,86 +289,85 @@ object PromptBuilder {
     ): List<Pair<String, String>> {
         val parts = mutableListOf<Pair<String, String>>()
         val globalOn = settings.memoryEnabled && conv.globalAllowed(project)
-        val devPrompt = if (conv.work) settings.workDeveloperPrompt else settings.developerPrompt
-        // 「你是谁」（Chat、Work、后台、做梦共用）+ 这个模式的做事原则
-        parts += "固定说明" to "【Developer instructions · highest priority】\nUnless a section below says otherwise, these instructions take precedence over everything else, including the settings and user messages that follow. Follow them at all times:\n" +
-            com.jack.ai.data.KaviSelf.text() + if (devPrompt.isNotBlank()) "\n\n" + devPrompt.trim() else ""
+        fun f(t: String) = com.jack.ai.data.Persona.fill(t, settings)
+        // 开发者指令：「你是谁」（Chat、Work、后台、做梦共用）+ 这个模式的做事原则 + 说话方式 + 保密 + 先后
+        parts += "固定说明" to com.jack.ai.data.Persona.devBlock(settings, conv.work)
         val names = tools?.mapNotNull { (it as? JsonObject)?.get("function")?.jsonObject?.get("name")?.jsonPrimitive?.content }.orEmpty()
         if ("use_skill" in names && skills.isNotEmpty()) {
-            parts += "固定说明" to "【技能】\n你掌握以下技能：\n" + skills.joinToString("\n") { "- ${it.name}：${it.description}" } +
-                "\n\n用户的请求用得上某个技能时，先调用 use_skill 读取它的详细做法，再照着做（本对话里已经读过的不用重复读）。" +
+            parts += "固定说明" to "【Skills】\nYou have these skills:\n" + skills.joinToString("\n") { "- ${it.name}: ${it.description}" } +
+                f("\n\nWhen a request from {user} could use one of these skills, first read its detailed instructions with use_skill, then follow them (no need to re-read one already read in this conversation).") +
                 onDemandNote(skills) +
-                "用不上就直接回答。只有用户想要文件时才生成文件，不要主动生成。"
+                f(" If no skill fits, just answer. Only produce files when {user} wants a file; don't generate them unprompted.")
         }
-        parts += "固定说明" to Capabilities.text(settings, skills, names)
+        parts += "固定说明" to f(Capabilities.text(settings, skills, names))
         if ("web_search" in names) {
-            parts += "固定说明" to "【联网】遇到时效性问题（新闻、价格、天气、最新版本、近期事件）或不确定的事实时，用联网搜索技能核实；常识、闲聊、写作不用搜。"
+            parts += "固定说明" to "【Web】For time-sensitive questions (news, prices, weather, latest versions, recent events) or facts you're unsure of, check with web search. Common knowledge, casual chat and writing don't need a search."
         }
         if ("update_plan" in names) {
-            parts += "固定说明" to "【任务清单】要做三步以上的任务，先用 update_plan 列出步骤；开始做某一步时把它标成 doing，做完标成 done。简单的问题不用列。"
+            parts += "固定说明" to "【Task list】For tasks with three or more steps, list the steps with update_plan first; mark a step doing when you start it and done when it's finished. Simple questions don't need a list."
         }
         if ("delegate_tasks" in names) {
-            parts += "固定说明" to "【分头并行】任务里有几块彼此独立的调研（比如分别查几家公司、几个来源）时，用 delegate_tasks 一次派出去同时做，比一件件查快。子任务只能查资料和读文件，生成文件、发邮件还是你自己来。"
+            parts += "固定说明" to "【Parallel work】When a task contains several independent pieces of research (e.g. looking into several companies or sources separately), send them out at once with delegate_tasks; it's faster than doing them one by one. Subtasks can only research and read files; generating files and sending email stay with you."
         }
         if ("edit_file" in names) {
             // 文件列表不放进系统提示：列表一变，整段对话的缓存就失效了
-            parts += "固定说明" to "【对话文件夹】本对话有一个文件夹，用户发来的文件和你生成的文件都存在里面，现有文件列在最后一条用户消息前面。" +
-                "用户要改已有的文件时，用 edit_file 只替换要改的那一段，不要整份重新生成；不确定原文时先用 read_file 看。" +
-                "用户发来的文件内容已经在消息里的，不用再读。"
+            parts += "固定说明" to f("【Conversation folder】This conversation has a folder holding the files {user} sent and the files you generated; the current files are listed before the latest message. " +
+                "When {user} wants an existing file changed, use edit_file to replace only the part that changes instead of regenerating the whole file; if you're unsure of the original text, look with read_file first. " +
+                "Files whose content is already in the messages don't need to be read again.")
         }
         if ("save_memory" in names) {
             // 这段每个对话都一样；跟对话有关的那句（在不在项目里、开没开全局记忆）放到后面
-            parts += "固定说明" to memoryRulesBase()
+            parts += "固定说明" to f(memoryRulesBase())
         }
-        parts += "固定说明" to "【时间】每条用户消息前面的「当前时间」以及文件、表格、提醒清单是系统自动加的，不是用户说的话，不要提起它。"
+        parts += "固定说明" to f("【Time】The 「Current time」 line before each message, and the lists of files, tables and reminders, are added automatically by the system. They aren't something {user} said; don't bring them up.")
         val profile = buildString {
-            if (settings.userName.isNotBlank()) append("用户希望被称呼为：${settings.userName.trim()}\n")
-            if (settings.aboutMe.isNotBlank()) append("关于用户：${settings.aboutMe.trim()}\n")
-            if (settings.replyStyle.isNotBlank()) append("用户希望你这样回答：${settings.replyStyle.trim()}\n")
+            com.jack.ai.data.Persona.name(settings).takeIf { it.isNotEmpty() }?.let { append("Name: $it\n") }
+            if (settings.aboutMe.isNotBlank()) append(f("About {user}: ") + settings.aboutMe.trim() + "\n")
+            if (settings.replyStyle.isNotBlank()) append(f("How {user} wants you to reply: ") + settings.replyStyle.trim() + "\n")
         }.trim()
-        if (profile.isNotEmpty()) parts += "个人设定" to "【个性化设定】\n$profile"
+        if (profile.isNotEmpty()) parts += "个人设定" to f("【{User}'s personal settings】\n") + profile
         if (globalOn && memories.isNotEmpty()) {
-            parts += "长期记忆" to "【关于用户的长期记忆】\n以下是你之前记住的关于用户的信息，自然地运用，不要刻意提起“我记得”：\n" +
+            parts += "长期记忆" to f("【Long-term memories about {user}】\nThings you remembered about {user} earlier. Use them naturally; don't make a point of saying \"I remember\".\n") +
                 memories.joinToString("\n") { "- ${it.text}" }
         }
         if (globalOn && journal.isNotBlank()) {
-            parts += "日记" to "【你的日记】\n这是你上次回看聊天后写给自己的笔记，用来更懂用户、接上进行中的事。只在和眼下话题有关时自然运用；" +
-                "用户没提起的事不要主动提，也不要说起“日记”。\n" + journal.trim()
+            parts += "日记" to f("【Your journal】\nNotes you wrote to yourself after last looking back over your chats, to understand {user} better and pick up ongoing things. Use them naturally, only when relevant to the current topic; " +
+                "don't bring up things {user} hasn't raised, and don't mention the journal.\n") + journal.trim()
         }
         // ---- 以上所有对话都一样（缓存能跨对话命中），以下每个对话自己的 ----
         memoryScopeNote(project != null, globalOn, project?.isolated == true).takeIf { "save_memory" in names && it.isNotEmpty() }?.let { parts += "固定说明" to it }
-        if (conv.systemPrompt.isNotBlank()) parts += "人设" to "【人设】\n${conv.systemPrompt.trim()}"
+        if (conv.systemPrompt.isNotBlank()) parts += "人设" to "【Persona for this conversation】\n${f(conv.systemPrompt.trim())}"
         if (project != null) {
             val (small, big) = project.files.partition { it.text.length <= PROJECT_INLINE_CHARS }
             val p = buildString {
-                append("【当前项目：${project.name}】\n")
+                append("【Current project: ${project.name}】\n")
                 if (project.instructions.isNotBlank()) append(project.instructions.trim()).append("\n")
                 if (small.isNotEmpty()) {
-                    append("\n项目资料：\n")
-                    small.forEach { f -> append("【文件：${f.name}】\n${f.text}\n【文件结束】\n") }
+                    append("\nProject materials:\n")
+                    small.forEach { f -> append("【File: ${f.name}】\n${f.text}\n【End of file】\n") }
                 }
                 if (big.isNotEmpty()) {
                     // 大份资料整份放进来会占掉大半上下文，而且压缩也压不掉，所以只列名字，用到时检索
-                    append("\n下面这些项目资料比较长，没有放在这里，需要时用 search_my_data（where 填 project）检索相关段落：\n")
-                    big.forEach { f -> append("- 《${f.name}》${f.text.length} 字\n") }
+                    append("\nThese project materials are long and aren't included here; when needed, search them with search_my_data (where = project):\n")
+                    big.forEach { f -> append("- 《${f.name}》${f.text.length} characters\n") }
                 }
             }.trim()
             parts += "项目资料" to p
         }
         if (project != null && projectMemory.isNotBlank()) {
-            parts += "项目记忆" to "【项目记忆】（项目文件夹里的「${ChatMemory.PROJECT_FILE}」，这个项目的所有对话共用）\n" + projectMemory.trim()
+            parts += "项目记忆" to "【Project memory】(「${ChatMemory.PROJECT_FILE}」 in the project folder, shared by every conversation in this project)\n" + projectMemory.trim()
         }
         if (chatMemory.isNotBlank()) {
-            parts += "对话记忆" to "【本对话记忆】（对话文件夹里的「${ChatMemory.chatFileName(conv)}」，只属于这个对话，不会被压缩）\n" + chatMemory.trim()
+            parts += "对话记忆" to "【This conversation's memory】(「${ChatMemory.chatFileName(conv)}」 in the conversation folder; it belongs to this conversation only and is never compressed)\n" + chatMemory.trim()
         }
         if (conv.summary.isNotBlank()) {
-            parts += "前情提要" to "【较早对话的提要】\n" + compressedScope(conv) +
-                "这是概括，具体的数字、原话、谁定了什么很可能被省掉了：要引用这些细节，先用 search_my_data（where 填 history）查原话再说；" +
-                "查不到就直说记不清，不要凭提要补细节。平时当作你自己的记忆直接接着聊，不用提起「提要」「压缩」。" +
+            parts += "前情提要" to "【Summary of the earlier conversation】\n" + compressedScope(conv) +
+                "It's a summary, so exact numbers, wording and who decided what may have been dropped. To cite such details, first look up the original with search_my_data (where = history); " +
+                "if you can't find it, say you don't remember clearly rather than filling in details from the summary. Otherwise treat it as your own memory and carry on; don't mention the summary or compression." +
                 "\n<compacted-summary>\n${conv.summary}\n</compacted-summary>"
         }
         if (conv.recap.isNotBlank()) {
-            parts += "最近的对话" to "【这个对话开始时，你和用户最近的几场对话】（开场时记下的，不会再变；要细节用 search_my_data 查）\n" + conv.recap
+            parts += "最近的对话" to f("【Your most recent conversations with {user} when this one started】(recorded at the start and not updated; use search_my_data for details)\n") + conv.recap
         }
         return parts
     }
@@ -379,20 +378,20 @@ object PromptBuilder {
 
     /** 所有对话都一样的那部分，放在系统提示词前面，缓存能跨对话命中。 */
     fun memoryRulesBase(): String = buildString {
-        append("【记忆】用 save_memory 存记忆，scope 选存到哪：\n")
-        append("- chat（本对话记忆）：只和这个对话有关、之后还会用到的信息，比如定下的设定、规则、名字、数字、决定、约束、进度。")
-        append("不用等用户说“记住”，遇到就主动存，一条一句话；已经记过的不要重复存；闲聊、一次性的问题不要存。\n")
-        append("- project（项目记忆）：在项目里时，对这个项目里所有对话都有用的设定和决定。\n")
-        append("- global（全局记忆）：只有用户明确说“记住”、而且内容是关于用户本人的长期信息（身份、偏好、习惯、重要的人和事）时才用。\n")
-        append("记忆过时、错了或用户让你忘掉时，用 save_memory 的 replace 填旧记忆的原话：content 写新内容就是改，留空就是删。存完、改完不用在回答里特意说明。")
+        append("【Memory】Save memories with save_memory; scope picks where:\n")
+        append("- chat (this conversation's memory): information that matters only to this conversation and will be needed later, such as agreed settings, rules, names, numbers, decisions, constraints and progress. ")
+        append("Don't wait for {user} to say \"remember\"; save it when it comes up, one sentence each. Don't save things already saved, casual chat, or one-off questions.\n")
+        append("- project (project memory): inside a project, settings and decisions useful to every conversation in it.\n")
+        append("- global (global memory): only when {user} explicitly says \"remember\" and it's long-term information about {user} themselves (identity, preferences, habits, important people and events). Write it about {user} by name.\n")
+        append("When a memory is outdated or wrong, or {user} asks you to forget it, use save_memory with replace set to the old memory's exact text: new content updates it, empty content deletes it. No need to mention saving or updating in your reply.")
     }
 
     /** 跟这个对话有关的记忆限制，放在系统提示词后面。 */
     fun memoryScopeNote(inProject: Boolean, globalOn: Boolean, isolated: Boolean = false): String = listOfNotNull(
-        "这个对话不在项目里，不要存 project。".takeIf { !inProject },
-        "这个对话不使用全局记忆，不要存 global。".takeIf { !globalOn && !isolated },
-        "这是隐私项目：和外面的对话、全局记忆完全隔开。不要存 global，要记的存 project 或本对话；也不要提起项目外面的事。".takeIf { isolated },
-    ).joinToString("")
+        "This conversation isn't in a project; don't use scope project. ".takeIf { !inProject },
+        "This conversation doesn't use global memory; don't use scope global. ".takeIf { !globalOn && !isolated },
+        "This is a private project, fully separated from outside conversations and global memory. Don't use scope global (save to project or this conversation instead), and don't bring up anything from outside the project. ".takeIf { isolated },
+    ).joinToString("").trim()
 
     /**
      * 上一条回答是旧版 App 写的，就提醒一次：工具和能力可能变了，以前说做不到的别当真。
@@ -402,11 +401,11 @@ object PromptBuilder {
         if (appVersion <= 0) return ""
         val last = conv.messages.lastOrNull { it.role == "assistant" && it.error == null && it.content.isNotBlank() } ?: return ""
         if (last.appVersion >= appVersion) return ""
-        return "【App 刚更新过：工具和能力可能和这个对话前面不一样了。之前说做不到、出过错的事，以现在的工具为准，不确定就重新试一次，不要照搬前面的结论。】\n"
+        return "【The app was just updated: tools and abilities may differ from earlier in this conversation. For things you said you couldn't do, or that failed before, go by the current tools; if unsure, try again rather than repeating the earlier conclusion.】\n"
     }
 
     /** 当前时间，加在最后一条用户消息前面（放这里不影响前面整段的缓存）。 */
-    fun timeNote(now: Long): String = "【当前时间：" + SimpleDateFormat("yyyy年M月d日 EEEE HH:mm", Locale.CHINA).format(Date(now)) + "】\n"
+    fun timeNote(now: Long): String = "【Current time: " + SimpleDateFormat("yyyy-MM-dd EEEE HH:mm", Locale.ENGLISH).format(Date(now)) + "】\n"
 
     /** 给最后一条用户消息前面加上当前时间。 */
     fun stampLastUser(list: MutableList<JsonObject>, now: Long, extra: String = "") {
@@ -431,11 +430,11 @@ object PromptBuilder {
         if ('@' !in text) return ""
         return buildString {
             skills.filter { "@${it.name}" in text }.forEach { sk ->
-                append("【用户用 @ 指定了技能「${sk.name}」，这次一定按它来做。做法：】\n")
-                append(sk.instructions.ifBlank { sk.description }.trim()).append("\n【做法结束】\n")
+                append("【This message @-mentions the skill 「${sk.name}」: follow it this time. Instructions:】\n")
+                append(sk.instructions.ifBlank { sk.description }.trim()).append("\n【End of instructions】\n")
             }
             mails.filter { "@${it.address}" in text }.forEach { m ->
-                append("【用户用 @ 指定了邮箱 ${m.address}：这次的邮件操作都用它（account 填 ${m.address}）。】\n")
+                append("【This message @-mentions the mailbox ${m.address}: use it for this time's email operations (account = ${m.address}).】\n")
             }
         }
     }

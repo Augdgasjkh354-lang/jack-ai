@@ -47,7 +47,7 @@ class CompressFeature(core: AppCore) : Feature(core) {
                 val counted = DeepSeekClient { e, p, h, c -> core.recordSpend(id, e, p, h, c) }
                 val summary = counted.complete(
                     ep,
-                    Compression.buildRequest(conv.summary, msgs, imagesOk = ep.vision),
+                    Compression.buildRequest(conv.summary, msgs, imagesOk = ep.vision, user = com.jack.ai.data.Persona.zh(settings)),
                 )
                 // 程序再把原话里的数字、日期、编号原样摘一份接在末尾，模型改写时丢了也还在
                 val full = Compression.withMemo(summary.trim(), conv.summary, msgs)

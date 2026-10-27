@@ -195,8 +195,8 @@ AI 用工具实际做成的事：设了哪些提醒和日程（时间、编号�
         return if (lines.isEmpty()) body else body + "\n\n" + MEMO + "\n" + lines.joinToString("\n") { "- $it" }
     }
 
-    /** 生成压缩请求。图片原样发给模型（Flash 能看图），让它写成文字描述。 */
-    fun buildRequest(prevSummary: String, msgs: List<ChatMessage>, imagesOk: Boolean): List<JsonObject> {
+    /** 生成压缩请求。图片原样发给模型（Flash 能看图），让它写成文字描述。user：设置里的名字，提要里用名字称呼用户。 */
+    fun buildRequest(prevSummary: String, msgs: List<ChatMessage>, imagesOk: Boolean, user: String = "用户"): List<JsonObject> {
         val parts = buildJsonArray {
             fun text(t: String) = add(buildJsonObject { put("type", "text"); put("text", t) })
             if (prevSummary.isNotBlank()) text("【之前的提要】\n${withoutMemo(prevSummary)}\n\n【之后的新记录】\n")
@@ -204,7 +204,7 @@ AI 用工具实际做成的事：设了哪些提醒和日程（时间、编号�
             val sb = StringBuilder()
             for (m in msgs) {
                 if (m.error != null && m.content.isBlank()) continue
-                val who = if (m.role == "user") "用户" else "AI"
+                val who = if (m.role == "user") user else "AI"
                 sb.append("\n— $who：")
                 m.attachments.filter { it.kind == "file" }.forEach { f ->
                     sb.append("\n[文件：${f.name}]\n${f.text.take(20_000)}\n[文件结束]\n")
@@ -212,7 +212,7 @@ AI 用工具实际做成的事：设了哪些提醒和日程（时间、编号�
                 val imgs = m.attachments.filter { it.kind == "image" }
                 if (imgs.isNotEmpty()) {
                     if (imagesOk) {
-                        sb.append("\n[用户发了 ${imgs.size} 张图片，见下]\n")
+                        sb.append("\n[$user 发了 ${imgs.size} 张图片，见下]\n")
                         text(sb.toString()); sb.clear()
                         imgs.forEach { img ->
                             val url = Attachments.imageDataUrl(img.path) ?: return@forEach
@@ -222,7 +222,7 @@ AI 用工具实际做成的事：设了哪些提醒和日程（时间、编号�
                             })
                         }
                     } else {
-                        sb.append("\n[用户发了 ${imgs.size} 张图片]\n")
+                        sb.append("\n[$user 发了 ${imgs.size} 张图片]\n")
                     }
                 }
                 if (m.searches.isNotEmpty()) {
@@ -242,7 +242,7 @@ AI 用工具实际做成的事：设了哪些提醒和日程（时间、编号�
             text("\n请按要求写出完整的前情提要。")
         }
         return listOf(
-            buildJsonObject { put("role", "system"); put("content", INSTRUCTIONS) },
+            buildJsonObject { put("role", "system"); put("content", INSTRUCTIONS.replace("用户", user)) },
             buildJsonObject { put("role", "user"); put("content", parts) },
         )
     }

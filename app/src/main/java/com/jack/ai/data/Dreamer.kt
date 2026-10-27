@@ -82,13 +82,13 @@ object Dreamer {
      * 再按对话分好。返回（整理用的文字，没放完时最后放进来的那条消息的时间；放完了是 null）。
      * 以前是整段拼好再截前 40 万字，聊得多的日子最新的对话会被截掉。
      */
-    internal fun transcript(convs: List<Conversation>, since: Long, until: Long, limit: Int = TRANSCRIPT_LIMIT): Pair<String, Long?> {
-        val fmt = SimpleDateFormat("M月d日 HH:mm", Locale.CHINA)
+    internal fun transcript(convs: List<Conversation>, since: Long, until: Long, limit: Int = TRANSCRIPT_LIMIT, user: String = "User"): Pair<String, Long?> {
+        val fmt = SimpleDateFormat("MM-dd HH:mm", Locale.ENGLISH)
         fun line(m: ChatMessage): String {
-            val who = if (m.role == "user") "用户" else "AI"
-            val files = m.attachments.filter { it.kind == "file" }.joinToString("") { "[文件：${it.name}]" }
-            val imgs = m.attachments.count { it.kind == "image" }.let { if (it > 0) "[$it 张图片]" else "" }
-            return "[${fmt.format(Date(m.createdAt))}] $who：$files$imgs${m.content.take(3000)}\n"
+            val who = if (m.role == "user") user else "Kavi"
+            val files = m.attachments.filter { it.kind == "file" }.joinToString("") { "[file: ${it.name}]" }
+            val imgs = m.attachments.count { it.kind == "image" }.let { if (it > 0) "[$it image(s)]" else "" }
+            return "[${fmt.format(Date(m.createdAt))}] $who: $files$imgs${m.content.take(3000)}\n"
         }
         val all = convs.flatMap { c -> c.messages.filter { it.createdAt in (since + 1)..until && it.content.isNotBlank() }.map { c to it } }
             .sortedBy { it.second.createdAt }
@@ -108,38 +108,40 @@ object Dreamer {
         }
         val text = StringBuilder()
         picked.groupBy { it.first.id }.values.forEach { group ->
-            text.append("\n\n### 对话「${group.first().first.title}」\n")
+            text.append("\n\n### Conversation 「${group.first().first.title}」\n")
             group.forEach { text.append(line(it.second)) }
         }
         return text.toString() to cutoff
     }
 
-    private const val INSTRUCTIONS = """现在是一天结束后你给自己写日记的时间：回看这段时间和用户的聊天，想清楚什么帮上了忙、什么没做好、下次该怎么做，并更新对用户的长期记忆。
+    private const val INSTRUCTIONS = """It's the end of the day, time to write your journal: look back over your recent chats with {user}, work out what helped, what didn't go well and what to do next time, and update your long-term memories about {user}.
 
-你会收到：
-1. 当前的全部记忆（每条一行，可能为空）
-2. 你上一篇日记（可能为空）
-3. 上次整理以来的所有聊天记录
+You'll receive:
+1. All current memories (one per line; may be empty)
+2. Your previous journal entry (may be empty)
+3. All chats since the last look-back
 
-一、写“journal”：第一人称、写给你自己看的日记，300 到 800 字，分几个自然段，不用标题和列表。写这几样：
-   1. 对用户的理解：从聊天里看出来的说话方式、在意什么、怎么看问题、希望你怎么跟他相处。不要只复述事实，要写出背后的意思（比如玩笑语气下其实是个认真的问题）。每个判断说清把握多大（“相当有把握”“把握中等”“只是猜测”）；和上一篇日记对不上的，直接修正。
-   2. 眼下还在进行的事：每件写清进展到哪、卡在哪、下次怎么接上。用户明确拒绝或放弃的方向也写下来，以后别再提。
-   3. 复盘：哪里做对了，哪里做错了或被用户纠正了，具体到事，说清以后怎么改。
-   4. 下次怎么做：用户回来大概会聊什么、你可以提前想好什么；以及哪些事不该做，比如他没提就别主动提起、别说教、别重复系统已经会发的提醒。
-   5. 关于我自己：这段时间你学到了怎么和用户相处、形成或改变了哪些自己的看法、被纠正了什么。每一条都要能指到聊天里具体的哪件事，不形容自己的成长过程。
-      如果你觉得「你是谁」里有哪句该改，写成「我想改的地方：……」。这只是想法，不会自动生效；下次聊天时可以提出来，由用户决定。
-   写得像真实的工作日记：具体、坦诚、有判断。不客套、不煽情、不写诗、不打比方。只写聊天里有依据的东西。
+Write everything (journal, memories, changes) in {lang}, or in the language {user} uses in the chats.
 
-二、更新“memories”：输出整理后的【完整】记忆列表。
-   - 从聊天中找出值得长期记住的信息：用户的身份背景、长期偏好和习惯、重要的人和事、正在进行的计划、做过的决定、明确说“记住”的内容。
-   - 一次性的问题、临时的闲聊、常识性内容不要记。
-   - 这里只放关于用户本人的长期信息。某个对话或项目里的具体设定和任务细节（比如小说的人物设定、某个方案的参数、角色扮演的设定）已经存在那个对话自己的记忆里，不要放进这里。
-   - 把已有记忆和新信息合并：重复的合成一条，过时或被推翻的更新或删掉，表述精简但保留关键细节（名字、数字、日期）。
-   - 每条记忆是一句完整、独立能看懂的话，用“用户……”开头描述用户，总数尽量不超过 80 条。
+I. Write "journal": a first-person journal written for yourself, about 300 to 800 Chinese characters (or 200 to 500 English words), in a few natural paragraphs, no headings or lists. Cover:
+   1. Your understanding of {user}: how they talk, what they care about, how they see things, how they'd like you to be with them. Don't just restate facts; write what lies behind them (e.g. a serious question under a joking tone). Say how sure you are of each judgment ("quite sure", "fairly sure", "just a guess"); correct anything that contradicts your previous entry.
+   2. Things still in progress: for each, where it stands, where it's stuck, and how to pick it up next time. Also note directions {user} clearly rejected or dropped, so you don't raise them again.
+   3. Review: what you got right, what you got wrong or were corrected on, concretely, and how you'll change.
+   4. Next time: what {user} will probably want to talk about and what you can think through in advance; and what not to do, e.g. don't bring things up unprompted, don't lecture, don't repeat reminders the system will send anyway.
+   5. About yourself: what you learned about being with {user}, which views of your own formed or changed, what you were corrected on. Each point must trace back to something specific in the chats; don't describe your own growth.
+      If you think a line in "who you are" should change, write "What I'd like to change: ...". It's only an idea and doesn't take effect by itself; you can raise it in a later chat and let {user} decide.
+   Write it like a real work journal: specific, candid, with judgments. No pleasantries, sentimentality, poetry or metaphors. Only write what the chats support.
 
-三、写“changes”：一两句话说明这次新记住了什么、改了什么、忘掉了什么。
+II. Update "memories": output the tidied-up, COMPLETE list of memories.
+   - Find what's worth remembering long term in the chats: {user}'s identity and background, lasting preferences and habits, important people and events, ongoing plans, decisions made, and anything they explicitly said to remember.
+   - Don't record one-off questions, passing small talk or common knowledge.
+   - Only long-term information about {user} themselves goes here. Specific settings and task details inside one conversation or project (a novel's characters, a plan's parameters, a role-play setup) already live in that conversation's own memory; leave them out.
+   - Merge existing memories with the new information: combine duplicates, update or remove what's outdated or overturned, keep wording tight but keep key details (names, numbers, dates).
+   - Each memory is one complete sentence that makes sense on its own, with {user} as the subject (e.g. "{user} prefers ..."). Try to keep the total under 80.
 
-只输出一个 JSON 对象，格式：
+III. Write "changes": one or two sentences on what you newly remembered, changed or forgot this time.
+
+Output only one JSON object, in this format:
 {"journal": "…", "memories": ["…", "…"], "changes": "…"}"""
 
     /**
@@ -156,26 +158,26 @@ object Dreamer {
         val projects = store.loadProjects()
         // 关了「参与做梦」的对话、隐私项目里的对话不整理
         val convs = store.loadConversations().filter { c -> c.inDream && !c.isolatedIn(projects) }
-        val (transcript, cutoff) = transcript(convs, since, startedAt)
+        val (transcript, cutoff) = transcript(convs, since, startedAt, user = Persona.name(settings).ifEmpty { "User" })
         if (transcript.isBlank()) {
             store.lastDreamAt = startedAt
             return null
         }
         val memories = store.loadMemories()
         val input = buildString {
-            append("【当前记忆】\n")
-            if (memories.isEmpty()) append("（暂无）\n") else memories.forEach { append("- ${it.text}\n") }
-            append("\n【上一篇日记】\n")
-            append(store.loadDreams().firstOrNull { it.journal.isNotBlank() }?.journal ?: "（暂无）")
+            append("【Current memories】\n")
+            if (memories.isEmpty()) append("(none)\n") else memories.forEach { append("- ${it.text}\n") }
+            append("\n【Previous journal entry】\n")
+            append(store.loadDreams().firstOrNull { it.journal.isNotBlank() }?.journal ?: "(none)")
             append("\n")
-            append("\n【上次整理以来的聊天】")
+            append("\n【Chats since the last look-back】")
             append(transcript)
         }
         val client = DeepSeekClient(store::addUsage)
         val raw = client.complete(
             ep,
             listOf(
-                buildJsonObject { put("role", "system"); put("content", KaviSelf.also { it.ensure(ctx) }.text(editable = false) + "\n\n" + INSTRUCTIONS) },
+                buildJsonObject { put("role", "system"); put("content", Persona.fill(KaviSelf.also { it.ensure(ctx) }.text(editable = false) + Persona.nameLine(settings).let { if (it.isEmpty()) "" else "\n\n$it" } + "\n\n" + INSTRUCTIONS, settings)) },
                 buildJsonObject { put("role", "user"); put("content", input) },
             ),
             maxTokens = 16384,
@@ -235,29 +237,29 @@ object Dreamer {
         return (list.filterNot { it.id in ids } + merged).sortedByDescending { it.createdAt }
     }
 
-    private const val MERGE_INSTRUCTIONS = """下面是你连着几天写给自己的日记，按时间从早到晚排。把它们合成一篇，篇幅和平时的一篇差不多（500 到 1000 字），第一人称，分几个自然段，不用标题和列表。
+    private const val MERGE_INSTRUCTIONS = """Below are journal entries you wrote to yourself over several days, oldest first. Merge them into one entry about as long as a usual one (about 500 to 1000 Chinese characters, or 300 to 600 English words), first person, a few natural paragraphs, no headings or lists. Write in the same language as the entries.
 
-- 留下这段时间里仍然成立的：对用户的理解（说话方式、在意什么、希望你怎么相处）、做错过和被纠正的地方、以后该怎么做、你自己形成的看法。前后说法不一致的，以后面的为准。
-- 进行中的事：写清最后的进展；已经做完或放弃的一句带过，用户明确拒绝的方向要留下。
-- 日期、名字、数字原样保留，不要编造日记里没有的东西。
-- 「我想改的地方」还没被采纳的，留着。
+- Keep what still holds for this period: your understanding of {user} (how they talk, what they care about, how they'd like you to be with them), what you got wrong and were corrected on, what to do going forward, and the views you formed. Where entries disagree, the later one wins.
+- Things in progress: give the latest state; mention finished or dropped things in a sentence, and keep directions {user} clearly rejected.
+- Keep dates, names and numbers exactly; don't invent anything that isn't in the entries.
+- Keep any "What I'd like to change" that hasn't been adopted yet.
 
-另写 changes：一两句话概括这几天记忆主要的变化（照各篇的「记忆的变化」合并）。
+Also write "changes": one or two sentences summing up how memories mainly changed over these days (merging each entry's memory changes).
 
-只输出一个 JSON 对象：{"journal": "…", "changes": "…"}"""
+Output only one JSON object: {"journal": "…", "changes": "…"}"""
 
     /** 攒够了就合成一篇（每次最多合一批）。 */
     private suspend fun mergeOld(store: Store, ep: Endpoint, client: DeepSeekClient) {
         val batch = mergeBatch(store.loadDreams()) ?: return
-        val fmt = SimpleDateFormat("M月d日", Locale.CHINA)
+        val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH)
         val input = batch.joinToString("\n\n") { d ->
             "【${if (d.merged > 0) fmt.format(Date(d.from)) + " – " else ""}${fmt.format(Date(d.createdAt))}】\n${d.journal}" +
-                (if (d.changes.isNotBlank()) "\n（记忆的变化：${d.changes}）" else "")
+                (if (d.changes.isNotBlank()) "\n(Memory changes: ${d.changes})" else "")
         }
         val raw = client.complete(
             ep,
             listOf(
-                buildJsonObject { put("role", "system"); put("content", MERGE_INSTRUCTIONS) },
+                buildJsonObject { put("role", "system"); put("content", Persona.fill(MERGE_INSTRUCTIONS, store.loadSettings())) },
                 buildJsonObject { put("role", "user"); put("content", input) },
             ),
             maxTokens = 4096,

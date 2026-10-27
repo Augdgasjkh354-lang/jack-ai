@@ -13,23 +13,23 @@ object Capabilities {
     fun text(settings: Settings, skills: List<Skill>, tools: List<String>): String {
         fun skill(id: String) = skills.firstOrNull { it.id == id }?.name
         val lines = mutableListOf<String>()
-        if ("web_search" in tools) lines += "查资料：web_search；读网页全文：read_webpage"
-        if ("download_file" in tools) lines += "按网址下载文件（含 m3u8 视频）：download_file，存到手机加 to=phone"
-        skill(SkillIds.BROWSER)?.let { lines += "操作网页、存网页里的视频音乐（download_media）、整页图片附件（download_all）：「$it」" }
-        if ("convert_file" in tools) lines += "图片转 PDF、合并拆分 PDF、压缩图片、剪视频压视频、取声音、录音和视频转文字（transcribe，用户发来录音、视频要内容时先转）：convert_file" +
-            if (Transcriber.engine(settings.providers) == null) "（转文字还没配服务，要用时请用户在 设置 → 其他模型服务 添加硅基流动）" else ""
-        if ("phone_files" in tools) lines += "手机文件夹（已授权：${settings.phoneFolders.joinToString("、") { it.name }}）：phone_files，读写前先 import 拷进对话文件夹"
-        if ("run_python" in tools) lines += "算数、处理表格数据、画图：run_python"
-        else if ("run_js" in tools) lines += "精确计算：run_js"
-        skill(SkillIds.TABLES)?.let { lines += "记账、清单、客户这类表格：「$it」" }
-        skill(SkillIds.RECEIPTS)?.let { lines += "照片里的发票、小票、快递单、名片记进表格：「$it」" }
-        if ("schedule" in tools) lines += "提醒、定时任务、盯网页变化：schedule"
+        if ("web_search" in tools) lines += "Look things up: web_search; read a full web page: read_webpage"
+        if ("download_file" in tools) lines += "Download a file by URL (m3u8 video included): download_file; add to=phone to save it to the phone"
+        skill(SkillIds.BROWSER)?.let { lines += "Operate web pages, save video or music from a page (download_media), grab all images and attachments on a page (download_all): 「$it」" }
+        if ("convert_file" in tools) lines += "Images to PDF, merge or split PDFs, compress images, trim or compress video, extract audio, transcribe recordings and video (transcribe; when {user} sends a recording or video and wants its content, transcribe it first): convert_file" +
+            if (Transcriber.engine(settings.providers) == null) " (transcription has no service set up yet; when it's needed, ask {user} to add SiliconFlow under 设置 → 其他模型服务)" else ""
+        if ("phone_files" in tools) lines += "Phone folders (authorized: ${settings.phoneFolders.joinToString(", ") { it.name }}): phone_files; import a file into the conversation folder before reading or editing it"
+        if ("run_python" in tools) lines += "Arithmetic, processing tabular data, plotting: run_python"
+        else if ("run_js" in tools) lines += "Exact calculation: run_js"
+        skill(SkillIds.TABLES)?.let { lines += "Bookkeeping, lists, clients and other tables: 「$it」" }
+        skill(SkillIds.RECEIPTS)?.let { lines += "Record invoices, receipts, delivery slips and business cards from photos into tables: 「$it」" }
+        if ("schedule" in tools) lines += "Reminders, scheduled tasks, watching a web page for changes: schedule"
         listOf(SkillIds.MAIL, SkillIds.CALENDAR, SkillIds.GITHUB, SkillIds.NOTION, SkillIds.TRAIN, SkillIds.WORD, SkillIds.PPT, SkillIds.EXCEL, SkillIds.PDF, SkillIds.APP)
-            .mapNotNull { skill(it) }.takeIf { it.isNotEmpty() }?.let { lines += "其他技能：" + it.joinToString("、") { n -> "「$n」" } }
+            .mapNotNull { skill(it) }.takeIf { it.isNotEmpty() }?.let { lines += "Other skills: " + it.joinToString(", ") { n -> "「$n」" } }
         // App 里用户自己点的入口：用得上时告诉用户
-        lines += "用户那边的入口：输入框「+ → 录音纪要」（录完你会收到录音，转文字出纪要）；别的 App 里「分享 → 用 Kavi 下载 / 用 Kavi 总结」；侧边栏「下载」看下过的文件" +
-            if ("phone_files" !in tools) "；设置 → 手机文件夹（授权后你才能读写手机里的文件）" else ""
-        if ("self_check" in tools) lines += "拿不准自己能不能做、工具为什么报错：先 self_check 看真实状态，再说「做不到」"
-        return "【能力清单】\n" + lines.joinToString("\n") { "- $it" }
+        lines += "Entry points on {user}'s side: 「+ → 录音纪要」 in the input box (you'll receive the recording; transcribe it and write up notes); 「分享 → 用 Kavi 下载 / 用 Kavi 总结」 in other apps; 「下载」 in the side menu for downloaded files" +
+            if ("phone_files" !in tools) "; 设置 → 手机文件夹 (you can only read and write the phone's files after {user} authorizes a folder there)" else ""
+        if ("self_check" in tools) lines += "Unsure whether you can do something, or why a tool failed: check the real state with self_check before saying you can't"
+        return "【What you can do】\n" + lines.joinToString("\n") { "- $it" }
     }
 }

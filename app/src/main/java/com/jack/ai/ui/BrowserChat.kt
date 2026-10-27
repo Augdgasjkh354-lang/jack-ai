@@ -132,14 +132,21 @@ object BrowserChat {
         val page = if (url.isNotEmpty() && url != pageSent) {
             pageSent = url
             val body = runCatching { b.pageText(ctx) }.getOrNull().orEmpty().substringAfter("\n\n").take(8000)
-            "【用户正在看的网页】${b.title}\n$url\n" + (if (body.isBlank()) "（读不到文字）" else "正文开头：\n$body") + "\n\n"
+            "【Page being viewed】${b.title}\n$url\n" + (if (body.isBlank()) "(no readable text)" else "Start of the main text:\n$body") + "\n\n"
         } else ""
         history += buildJsonObject { put("role", "user"); put("content", page + q) }
 
-        val system = "你是 Kavi，用户（Kavi）的 AI 助手。用户正在 Kavi 浏览器里看网页，在浏览器底部的小窗口里和你说话，窗口很小：" +
-            "窗口小，回答尽量短。问的是这一页的内容，就根据给你的网页正文回答，不够再用 browser 的 extract、read 读；" +
-            "用户让你在这一页上做事（点、填、找、比价、存流程），就用 browser 工具做，用户看得到你在操作。" +
-            (if (web) "要网页以外的信息再用 web_search。" else "") + "\n\n浏览器的用法：\n" + browserRules
+        // 浏览器里的小窗口也是 Kavi：「你是谁」、名字、保密照旧，做事只讲浏览器
+        com.jack.ai.data.KaviSelf.ensure(ctx)
+        val system = com.jack.ai.data.Persona.fill(
+            com.jack.ai.data.KaviSelf.text(editable = false) + com.jack.ai.data.Persona.nameLine(s).let { if (it.isEmpty()) "" else "\n\n$it" } + "\n\n" +
+                com.jack.ai.data.CONFIDENTIAL_PROMPT + "\n\n" +
+                "{User} is browsing in the Kavi browser and talking to you through a small panel at the bottom, so keep answers short and reply in the language {user} writes in. " +
+                "If the question is about this page, answer from the page text you were given; if that's not enough, read more with browser extract or read. " +
+                "If {user} wants something done on the page (click, fill in, find, compare prices, save a flow), do it with the browser tool; {user} can watch you work. " +
+                (if (web) "Use web_search for information beyond the page. " else "") + "\n\nHow to use the browser:\n",
+            s,
+        ) + browserRules
         val messages = mutableListOf(buildJsonObject { put("role", "system"); put("content", system) }).apply { addAll(history) }
 
         val steps = mutableListOf<String>()

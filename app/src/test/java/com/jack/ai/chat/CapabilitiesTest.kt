@@ -15,13 +15,13 @@ class CapabilitiesTest {
     @Test
     fun listsOnlyWhatIsOn() {
         val t = Capabilities.text(Settings(), skills, listOf("web_search", "download_file", "convert_file", "use_skill"))
-        assertTrue(t, t.startsWith("【能力清单】"))
+        assertTrue(t, t.startsWith("【What you can do】"))
         assertTrue(t.contains("download_file") && t.contains("「操作浏览器」") && t.contains("「表格」"))
         // 没开的不写；没配语音服务就说清去哪配；没授权文件夹就告诉它入口
         assertFalse(t.contains("phone_files")); assertFalse(t.contains("run_python")); assertFalse(t.contains("拍票据"))
-        assertTrue(t.contains("添加硅基流动")); assertTrue(t.contains("设置 → 手机文件夹"))
+        assertTrue(t.contains("add SiliconFlow")); assertTrue(t.contains("设置 → 手机文件夹"))
         assertFalse(t.contains("self_check"))
-        assertTrue(Capabilities.text(Settings(), skills, listOf("self_check")).contains("先 self_check"))
+        assertTrue(Capabilities.text(Settings(), skills, listOf("self_check")).contains("check the real state with self_check"))
     }
 
     @Test
@@ -29,7 +29,7 @@ class CapabilitiesTest {
         val s = Settings(phoneFolders = listOf(PhoneFolder("content://a", "Download"), PhoneFolder("content://b", "工作")),
             providers = listOf(Provider(name = "硅基流动", baseUrl = "https://api.siliconflow.cn/v1", apiKey = "k")))
         val t = Capabilities.text(s, skills, listOf("convert_file", "phone_files"))
-        assertTrue(t, t.contains("已授权：Download、工作"))
-        assertFalse(t.contains("添加硅基流动")); assertFalse(t.contains("设置 → 手机文件夹"))
+        assertTrue(t, t.contains("authorized: Download, 工作"))
+        assertFalse(t.contains("add SiliconFlow")); assertFalse(t.contains("设置 → 手机文件夹"))
     }
 }

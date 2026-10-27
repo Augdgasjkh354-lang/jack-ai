@@ -655,7 +655,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                                 if (session.web && q.isNotBlank()) {
                                     val results = session.search(q)
                                     fresh.add(1.coerceAtMost(fresh.size), msg("system",
-                                        "以下是联网搜索结果，回答时参考并用 [编号](链接) 标注来源：\n\n$results"))
+                                        "Web search results below. Use them in your answer and mark sources as [n](link):\n\n$results"))
                                 }
                                 fresh to null
                             }

@@ -22,27 +22,27 @@ object ContextNote {
         if (conv.id == com.jack.ai.data.INBOX_ID) {
             // 隐私项目不列出来：收件箱是公共的入口，不往隐私项目里归档
             val names = store.loadProjects().filterNot { it.isolated }.map { it.name }
-            append("【项目】").append(if (names.isEmpty()) "还没有项目" else names.take(MAX_ITEMS).joinToString("、")).append("\n")
+            append("【Projects】").append(if (names.isEmpty()) "none yet" else names.take(MAX_ITEMS).joinToString(", ")).append("\n")
         }
         if (SkillIds.TABLES in skillIds) {
             val tables = Tables.list(ctx)
-            append("【表格】")
-            if (tables.isEmpty()) append("还没有")
-            else append(tables.take(MAX_ITEMS).joinToString("；") { "「${it.name}」${it.rows.size} 行：${it.columns.joinToString("、")}" })
-            if (tables.size > MAX_ITEMS) append("；……还有 ${tables.size - MAX_ITEMS} 张")
+            append("【Tables】")
+            if (tables.isEmpty()) append("none yet")
+            else append(tables.take(MAX_ITEMS).joinToString("; ") { "「${it.name}」${it.rows.size} rows: ${it.columns.joinToString(", ")}" })
+            if (tables.size > MAX_ITEMS) append("; ...and ${tables.size - MAX_ITEMS} more")
             append("\n")
         }
         if (SkillIds.ROUTINE in skillIds) {
             val list = store.loadRoutines().filter { it.enabled }
             if (list.isNotEmpty()) {
-                append("【提醒和任务】\n")
+                append("【Reminders and tasks】\n")
                 list.take(MAX_ITEMS).forEach { r ->
-                    append("编号 ${r.id.take(8)}｜${when (r.kind) { "reminder" -> "提醒"; "watch" -> "监控"; else -> "任务" }}｜${r.describe()}｜${r.title}")
+                    append("id ${r.id.take(8)} | ${when (r.kind) { "reminder" -> "reminder"; "watch" -> "watch"; else -> "task" }} | ${r.describe()} | ${r.title}")
                     // 上一次跑得怎么样：用户问「那个任务怎么没跑」时有据可查
-                    com.jack.ai.data.RunLog.lastText(ctx, r.id)?.let { append("｜$it") }
+                    com.jack.ai.data.RunLog.lastText(ctx, r.id)?.let { append(" | $it") }
                     append("\n")
                 }
-                if (list.size > MAX_ITEMS) append("……还有 ${list.size - MAX_ITEMS} 条没列出，在左侧菜单「提醒和任务」里能看全\n")
+                if (list.size > MAX_ITEMS) append("...${list.size - MAX_ITEMS} more not listed; the full list is under 「提醒和任务」 in the side menu\n")
             }
         }
     }
@@ -51,7 +51,7 @@ object ContextNote {
     fun files(dir: File): String {
         val list = Workspace.files(dir)
         if (list.isEmpty()) return ""
-        val shown = list.take(MAX_ITEMS).joinToString("、") { "${it.name}（${ToolSession.sizeText(it.length())}）" }
-        return "【对话文件夹】$shown" + (if (list.size > MAX_ITEMS) " 等 ${list.size} 个" else "") + "\n"
+        val shown = list.take(MAX_ITEMS).joinToString(", ") { "${it.name} (${ToolSession.sizeText(it.length())})" }
+        return "【Conversation folder】$shown" + (if (list.size > MAX_ITEMS) " (${list.size} in total)" else "") + "\n"
     }
 }

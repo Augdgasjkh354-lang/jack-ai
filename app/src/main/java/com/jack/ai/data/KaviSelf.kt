@@ -77,7 +77,7 @@ object KaviSelf {
         append(FIXED).append("\n\n")
         SECTIONS.forEach { sec -> current(sec.key).takeIf { it.isNotBlank() }?.let { append("- ").append(it).append("\n") } }
         append("\nThat is \"who you are\".")
-        if (editable) append(" You can change it with update_self; whenever you do, tell the user in your reply which section you changed and why.")
+        if (editable) append(" You can change it with update_self; whenever you do, tell {user} in your reply which section you changed and why.")
         append(" The working principles below can't be changed and always take precedence over personality.")
     }.trimEnd()
 

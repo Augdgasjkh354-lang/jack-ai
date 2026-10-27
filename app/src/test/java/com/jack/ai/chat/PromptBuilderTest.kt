@@ -66,7 +66,7 @@ class PromptBuilderTest {
         val b = PromptBuilder.history(input(c2, now = 1_760_090_000_000), tools(c2))[0]
         assertEquals("system", a.role())
         assertEquals(a, b)
-        assertFalse(a.textContent().contains("当前时间："))
+        assertFalse(a.textContent().contains("Current time: "))
     }
 
     @Test
@@ -74,7 +74,7 @@ class PromptBuilderTest {
         val conv = Conversation(summary = "之前聊了旅行计划", summaryUntilId = "x")
         val project = Project(name = "小说", instructions = "主角叫阿明")
         val sys = PromptBuilder.systemPrompt(settings, conv, project, tools(conv, project), memories, settings.activeSkills())
-        val order = listOf("【Developer instructions", "【技能】", "【个性化设定】", "【关于用户的长期记忆】", "【当前项目：小说】", "【较早对话的提要】")
+        val order = listOf("【Developer instructions", "【Skills】", "personal settings】", "【Long-term memories about", "【Current project: 小说】", "【Summary of the earlier conversation】")
             .map { sys.indexOf(it) }
         order.forEach { assertTrue("缺少某个段落：$order", it >= 0) }
         assertEquals(order.sorted(), order)
@@ -87,8 +87,8 @@ class PromptBuilderTest {
         val conv = Conversation(messages = listOf(user("第一句"), bot("回答"), user("第二句")))
         val list = PromptBuilder.history(input(conv), tools(conv))
         val users = list.filter { it.role() == "user" }
-        assertFalse(users[0].textContent().contains("当前时间"))
-        assertTrue(users[1].textContent().startsWith("【当前时间："))
+        assertFalse(users[0].textContent().contains("Current time"))
+        assertTrue(users[1].textContent().startsWith("【Current time: "))
         assertTrue(users[1].textContent().endsWith("第二句"))
     }
 
@@ -96,9 +96,9 @@ class PromptBuilderTest {
     fun extraUserMessageGetsTheTimestamp() {
         val conv = Conversation(messages = listOf(user("问题"), bot("回答")))
         val list = PromptBuilder.history(input(conv, extra = "请复核"), tools(conv))
-        assertTrue(list.last().textContent().startsWith("【当前时间："))
+        assertTrue(list.last().textContent().startsWith("【Current time: "))
         assertTrue(list.last().textContent().endsWith("请复核"))
-        assertFalse(list.first { it.role() == "user" }.textContent().contains("当前时间"))
+        assertFalse(list.first { it.role() == "user" }.textContent().contains("Current time"))
     }
 
     @Test
@@ -109,7 +109,7 @@ class PromptBuilderTest {
         PromptBuilder.stampLastUser(list, 0)
         val parts = list[0]["content"] as JsonArray
         assertEquals(2, parts.size)
-        assertTrue((parts[0] as JsonObject)["text"]!!.jsonPrimitive.content.startsWith("【当前时间："))
+        assertTrue((parts[0] as JsonObject)["text"]!!.jsonPrimitive.content.startsWith("【Current time: "))
     }
 
     // ---------- 历史消息 ----------
@@ -177,8 +177,8 @@ class PromptBuilderTest {
         val img = Attachment(kind = "image", name = "a.jpg", path = "/x/a.jpg")
         val m = PromptBuilder.userMessage(user("看看", file, img), imagesOk = false)
         val t = m.textContent()
-        assertTrue(t.contains("【文件：合同.txt】\n第一条：甲方……\n【文件结束】"))
-        assertTrue(t.contains("用户发了 1 张图片，但当前模型看不了图片"))
+        assertTrue(t.contains("【File: 合同.txt】\n第一条：甲方……\n【End of file】"))
+        assertTrue(t.contains("1 image(s) were sent, but the current model can't see images"))
         assertTrue(t.endsWith("看看"))
     }
 
@@ -188,7 +188,7 @@ class PromptBuilderTest {
         val m = PromptBuilder.userMessage(user("", img), imagesOk = true, imageUrl = { "data:image/jpeg;base64,AAA" })
         val parts = m["content"] as JsonArray
         assertEquals("image_url", (parts[0] as JsonObject)["type"]!!.jsonPrimitive.content)
-        assertEquals("请看图片。", (parts[1] as JsonObject)["text"]!!.jsonPrimitive.content)
+        assertEquals("Please look at the image.", (parts[1] as JsonObject)["text"]!!.jsonPrimitive.content)
     }
 
     @Test
@@ -250,7 +250,7 @@ class PromptBuilderTest {
     fun journalGoesWithGlobalMemoryOnly() {
         val conv = Conversation()
         val sys = PromptBuilder.systemPrompt(settings, conv, null, null, memories, settings.activeSkills(), journal = "他说话玩笑裹着认真")
-        assertTrue(sys.contains("【你的日记】"))
+        assertTrue(sys.contains("【Your journal】"))
         assertTrue(sys.contains("玩笑裹着认真"))
         val off = PromptBuilder.systemPrompt(settings, conv.copy(useGlobalMemory = false), null, null, memories, settings.activeSkills(), journal = "他说话玩笑裹着认真")
         assertFalse(off.contains("玩笑裹着认真"))
@@ -265,7 +265,7 @@ class PromptBuilderTest {
         // 不带全局记忆和日记，告诉模型这是隐私项目、别存全局
         assertFalse(sys.contains("喜欢简短的回答"))
         assertFalse(sys.contains("玩笑裹着认真"))
-        assertTrue(sys.contains("隐私项目"))
+        assertTrue(sys.contains("private project"))
         // 普通项目照旧
         val conv2 = Conversation(projectId = open.id)
         val sys2 = PromptBuilder.systemPrompt(settings, conv2, open, tools(conv2, open), memories, settings.activeSkills())
@@ -284,12 +284,12 @@ class PromptBuilderTest {
         val note = PromptBuilder.mentionNote("@${web.name} 查一下 @jack@163.com 的信", skills, listOf(mail))
         assertTrue(note.contains("「${web.name}」"))
         assertTrue(note.contains(web.instructions.trim().take(20)))
-        assertTrue(note.contains("account 填 jack@163.com"))
+        assertTrue(note.contains("account = jack@163.com"))
         assertEquals("", PromptBuilder.mentionNote("没有点名", skills, listOf(mail)))
         // 只加在最后一条用户消息上
         val conv = Conversation(messages = listOf(user("@${web.name} 今天天气")))
         val h = PromptBuilder.history(PromptBuilder.Input(settings, conv, null, memories, skills, vision = false, sendReasoning = false), null)
-        assertTrue(h.last()["content"]!!.jsonPrimitive.content.contains("这次一定按它来做"))
+        assertTrue(h.last()["content"]!!.jsonPrimitive.content.contains("follow it this time"))
     }
 
     @Test
@@ -305,7 +305,7 @@ class PromptBuilderTest {
         assertTrue("update_plan" in toolNames(work))
         assertTrue("delegate_tasks" in toolNames(work))
         assertFalse("delegate_tasks" in toolNames(chat))
-        assertTrue("【任务清单】" in workSys)
+        assertTrue("【Task list】" in workSys)
     }
 
     @Test
@@ -322,7 +322,7 @@ class PromptBuilderTest {
         val conv = Conversation(projectId = project.id, summary = "提要", summaryUntilId = "x")
         val sys = PromptBuilder.systemPrompt(settings, conv, project, tools(conv, project), memories, settings.activeSkills(),
             chatMemory = "- 主角叫阿明", projectMemory = "- 故事发生在 1990 年")
-        val order = listOf("【关于用户的长期记忆】", "【项目记忆】", "【本对话记忆】", "【较早对话的提要】").map { sys.indexOf(it) }
+        val order = listOf("【Long-term memories about", "【Project memory】", "【This conversation's memory】", "【Summary of the earlier conversation】").map { sys.indexOf(it) }
         order.forEach { assertTrue("缺少某段：$order", it >= 0) }
         assertEquals(order.sorted(), order)
         assertTrue(sys.contains("主角叫阿明"))
@@ -335,7 +335,7 @@ class PromptBuilderTest {
         val conv = Conversation(useGlobalMemory = false)
         val sys = PromptBuilder.systemPrompt(settings, conv, null, tools(conv), memories, settings.activeSkills(), chatMemory = "- 只在这里")
         assertFalse(sys.contains("喜欢简短的回答"))
-        assertTrue(sys.contains("不要存 global"))
+        assertTrue(sys.contains("don't use scope global"))
         assertTrue(sys.contains("只在这里"))
         assertTrue(sys.contains("「记忆.md」"))
     }
@@ -343,10 +343,10 @@ class PromptBuilderTest {
     @Test
     fun memoryRulesMatchWhereWeAre() {
         val plain = PromptBuilder.memoryRules(Conversation(), inProject = false, globalOn = true)
-        assertTrue(plain.contains("chat（本对话记忆）"))
-        assertTrue(plain.contains("global（全局记忆）"))
-        assertTrue(plain.contains("不要存 project"))
-        assertFalse(PromptBuilder.memoryRules(Conversation(), inProject = true, globalOn = true).contains("不要存 project"))
+        assertTrue(plain.contains("chat (this conversation's memory)"))
+        assertTrue(plain.contains("global (global memory)"))
+        assertTrue(plain.contains("don't use scope project"))
+        assertFalse(PromptBuilder.memoryRules(Conversation(), inProject = true, globalOn = true).contains("don't use scope project"))
     }
 
     @Test
@@ -355,7 +355,7 @@ class PromptBuilderTest {
         val conv = Conversation()
         val a = PromptBuilder.systemPrompt(settings, conv, null, tools(conv), memories, settings.activeSkills())
         val b = PromptBuilder.systemPrompt(settings, conv, null, tools(conv), memories, settings.activeSkills(), chatMemory = "- 新的一条")
-        assertTrue(b.startsWith(a.substringBefore("【个性化设定】")))
+        assertTrue(b.startsWith(a.substringBefore("personal settings】")))
     }
 
     @Test
@@ -408,7 +408,7 @@ class PromptBuilderTest {
         assertEquals(fresh.size + 1, withGit.size)
         // 系统提示词告诉模型这些技能要先 use_skill，免得它以为做不到
         val sys = PromptBuilder.systemPrompt(settings, Conversation(), null, tools(Conversation()), memories, settings.activeSkills())
-        assertTrue(sys.contains("要先 use_skill 读了做法才会出现"))
+        assertTrue(sys.contains("only appear after you read the skill with use_skill"))
         // 开场的工具说明比全部打开时少一半以上
         val small = tools(Conversation()).toString().length
         val big = tools(Conversation(skillTools = SkillIds.ON_DEMAND)).toString().length
@@ -419,11 +419,11 @@ class PromptBuilderTest {
     fun contextNoteGoesOnLastUserMessageOnly() {
         val conv = Conversation(messages = listOf(user("第一句"), bot("好"), user("第二句")))
         val input = PromptBuilder.Input(settings, conv, null, memories, settings.activeSkills(), vision = false, sendReasoning = false,
-            contextNote = "【表格】「记账」3 行：日期、金额\n")
+            contextNote = "【Tables】「记账」3 rows: 日期, 金额\n")
         val hist = PromptBuilder.history(input, tools(conv))
         val users = hist.filter { it["role"]!!.jsonPrimitive.content == "user" }.map { it["content"]!!.jsonPrimitive.content }
-        assertFalse(users.first().contains("【表格】"))
-        assertTrue(users.last().contains("【表格】「记账」") && users.last().endsWith("第二句"))
+        assertFalse(users.first().contains("【Tables】"))
+        assertTrue(users.last().contains("【Tables】「记账」") && users.last().endsWith("第二句"))
         // 清单不进系统提示词，免得缓存失效
         assertFalse(hist.first()["content"]!!.jsonPrimitive.content.contains("「记账」"))
     }
@@ -450,14 +450,14 @@ class PromptBuilderTest {
         // 有人设、在项目里的对话，开头到日记为止都和普通对话一字不差
         val shared = plain.substring(0, plain.indexOf(journal) + journal.length)
         assertTrue(other.startsWith(shared))
-        assertTrue(other.indexOf("【人设】") > other.indexOf(journal))
-        assertTrue(other.indexOf("【当前项目") > other.indexOf(journal))
+        assertTrue(other.indexOf("【Persona for this conversation】") > other.indexOf(journal))
+        assertTrue(other.indexOf("【Current project") > other.indexOf(journal))
     }
 
     @Test
     fun updateNoteShowsOnceAfterAppUpdate() {
         val old = Conversation(messages = listOf(user("你好"), bot("你好呀"), user("再试试读 PDF")))
-        assertTrue(PromptBuilder.updateNote(old, appVersion = 46).contains("App 刚更新过"))
+        assertTrue(PromptBuilder.updateNote(old, appVersion = 46).contains("The app was just updated"))
         // 上一条回答已经是新版写的，就不再提醒
         val fresh = old.copy(messages = listOf(user("你好"), bot("你好呀").copy(appVersion = 46), user("再试试")))
         assertEquals("", PromptBuilder.updateNote(fresh, appVersion = 46))
@@ -476,16 +476,16 @@ class PromptBuilderTest {
         val m = com.jack.ai.data.ChatMessage(role = "user", content = "看看这个",
             attachments = listOf(com.jack.ai.data.Attachment(kind = "image", name = "截图.jpg", path = "/gone/截图.jpg")))
         val out = PromptBuilder.userMessage(m, imagesOk = true, imageUrl = { null }).toString()
-        assertTrue(out, out.contains("「截图.jpg」的文件找不到了"))
+        assertTrue(out, out.contains("「截图.jpg」 can't be found"))
         val ok = PromptBuilder.userMessage(m, imagesOk = true, imageUrl = { "data:image/jpeg;base64,AAAA" }).toString()
-        assertTrue(ok.contains("image_url")); assertFalse(ok.contains("找不到"))
+        assertTrue(ok.contains("image_url")); assertFalse(ok.contains("can't be found"))
     }
 
     @Test
     fun compressedPartSaysWhatIsMissing() {
         val msgs = (1..6).map { com.jack.ai.data.ChatMessage(id = "m$it", role = if (it % 2 == 1) "user" else "assistant", content = "第 $it 条", createdAt = 1_700_000_000_000L + it * 60_000L) }
         val conv = Conversation(messages = msgs, summary = "聊了报价", summaryUntilId = "m4")
-        assertTrue(PromptBuilder.compressedScope(conv).contains("较早的 4 条消息"))
+        assertTrue(PromptBuilder.compressedScope(conv).contains("the earlier 4 messages"))
         assertEquals("", PromptBuilder.compressedScope(Conversation(messages = msgs)))
     }
 }

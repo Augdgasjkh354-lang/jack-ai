@@ -297,30 +297,31 @@ object Routines {
             SkillTools.WEB_SEARCH.takeIf { web }, SkillTools.READ_WEBPAGE.takeIf { web }, SkillTools.QUERY_TRAINS.takeIf { train },
         ) + mcpTools
         val tools = if (toolList.isEmpty()) null else JsonArray(toolList)
-        val today = SimpleDateFormat("yyyy年M月d日 EEEE HH:mm", Locale.CHINA).format(Date())
+        val today = SimpleDateFormat("yyyy-MM-dd EEEE HH:mm", Locale.ENGLISH).format(Date())
         // 隐私项目里设的任务不带全局记忆
         val isolated = store.loadConversations().firstOrNull { it.id == r.convId }?.isolatedIn(store.loadProjects()) == true
         val memories = if (s.memoryEnabled && !isolated) store.loadMemories() else emptyList()
         val system = buildString {
-            // 后台任务也是 Kavi：同一份「你是谁」+ 做事原则
+            // 后台任务也是 Kavi：同一份开发者指令（「你是谁」+ 做事原则 + 说话方式 + 保密）
             KaviSelf.ensure(ctx)
-            append(KaviSelf.text(editable = false)).append("\n\n")
-            if (s.developerPrompt.isNotBlank()) append(s.developerPrompt.trim()).append("\n\n")
-            append("现在是$today。\n")
-            if (s.userName.isNotBlank()) append("用户希望被称呼为：${s.userName}\n")
-            if (s.aboutMe.isNotBlank()) append("关于用户：${s.aboutMe}\n")
-            if (memories.isNotEmpty()) append("关于用户的长期记忆：\n" + memories.joinToString("\n") { "- ${it.text}" } + "\n")
-            if (watch) {
-                append("\n你正在后台替用户盯着一件事（监控「${r.title}」），这是其中一次检查。用户此刻不在线，不能向他提问。")
-                append("用工具查最新情况，判断是否满足下面的条件。回复的第一行只写【满足】【不满足】或【没查成】；")
-                append("满足时，第二行起写清用户需要的具体信息（比如车次、时间、余票、价格、链接），简洁好读；不满足时第二行用一句话说明现在的情况。")
-                append("查不到、工具出错、拿不到可靠数据时，第一行写【没查成】，第二行说明原因——这种情况不能写【不满足】。")
-            } else {
-                append("\n你正在后台执行用户预先设定的定时任务「${r.title}」。用户此刻不在线，不能向他提问，直接把任务做完。")
-                append("输出就是用户稍后会看到的消息：直接给内容，简洁、好读，不要说“好的”“根据你的任务”之类的开场。")
+            append(Persona.devBlock(s, work = false, editable = false)).append("\n\n")
+            val body = buildString {
+                append("It is now $today.\n")
+                if (s.aboutMe.isNotBlank()) append("About {user}: ${s.aboutMe.trim()}\n")
+                if (memories.isNotEmpty()) append("Long-term memories about {user}:\n" + memories.joinToString("\n") { "- ${it.text}" } + "\n")
+                if (watch) {
+                    append("\nYou're keeping an eye on something in the background for {user} (watch 「${r.title}」); this is one of the checks. {User} isn't online and can't be asked anything. ")
+                    append("Use tools to find the latest situation and decide whether the condition below is met. The first line of your reply must be only 【满足】 (met), 【不满足】 (not met) or 【没查成】 (couldn't check). ")
+                    append("If met, from the second line on give the specific information {user} needs (e.g. train numbers, times, tickets left, prices, links), short and easy to read; if not met, describe the current situation in one sentence on the second line. ")
+                    append("If you couldn't find out, a tool failed, or you have no reliable data, write 【没查成】 on the first line and the reason on the second; never write 【不满足】 in that case. ")
+                } else {
+                    append("\nYou're running a scheduled task {user} set up in advance: 「${r.title}」. {User} isn't online and can't be asked anything, so just get it done. ")
+                    append("Your output is the message {user} will read later: give the content directly, short and easy to read, without openers like \"Sure\" or \"Based on your task\". ")
+                }
+                if (web) append("Use web_search when you need current information, and mark sources as [n](link). ")
+                if (train) append("Use query_trains for train tickets. ")
             }
-            if (web) append("需要最新信息时用 web_search 搜索，用 [编号](链接) 标出处。")
-            if (train) append("查火车票用 query_trains。")
+            append(Persona.fill(body, s).trim())
         }
         val messages = mutableListOf(
             buildJsonObject { put("role", "system"); put("content", system) },
@@ -377,11 +378,11 @@ object Routines {
     suspend fun runWatchWork(ctx: Context, r: Routine, log: (RunStep) -> Unit = {}, onProgress: (String) -> Unit = {}): Outcome {
         var ok = 0
         var failed = 0
-        val now = SimpleDateFormat("yyyy年M月d日 EEEE HH:mm", Locale.CHINA).format(Date())
-        val brief = "【后台监控】现在是$now。你在后台替用户盯着一件事（监控「${r.title}」），这是其中一次检查。用户此刻不在线，不能向他提问。" +
-            "要用浏览器就先 use_skill 打开「操作浏览器」；网站存了浏览器流程就照着做。查完回复的第一行只写【满足】【不满足】或【没查成】；" +
-            "满足时第二行起写清用户需要的具体信息（价格、状态、链接等）；不满足时第二行用一句话说现在的情况；" +
-            "打不开、要登录、读不到可靠数据时第一行写【没查成】并说明原因——这种情况不能写【不满足】。"
+        val now = SimpleDateFormat("yyyy-MM-dd EEEE HH:mm", Locale.ENGLISH).format(Date())
+        val brief = "【Background watch】It is now $now. You're keeping an eye on something in the background for {user} (watch 「${r.title}」); this is one of the checks. {User} isn't online and can't be asked anything. " +
+            "If you need the browser, open the 「操作浏览器」 skill with use_skill first; if a browser flow is saved for the site, follow it. When done, the first line of your reply must be only 【满足】 (met), 【不满足】 (not met) or 【没查成】 (couldn't check). " +
+            "If met, from the second line on give the specific information {user} needs (price, status, link, etc.); if not met, describe the current situation in one sentence on the second line. " +
+            "If the site won't open, needs a login, or you can't get reliable data, write 【没查成】 on the first line with the reason; never write 【不满足】 in that case. "
         val res = com.jack.ai.tools.runBackgroundWork(ctx, r.copy(work = true), log = { step ->
             if (step.ok) ok++ else failed++
             log(step)
