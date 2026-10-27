@@ -92,12 +92,22 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
         val note = StringBuilder()
         val fromTab = JackBrowser.tab.id
         when (action) {
-            "open" -> JackBrowser.load(ctx, normalizeUrl(args["url"].text()))?.let { note.append("打开出错：$it\n") }
+            "open" -> {
+                val err = JackBrowser.load(ctx, normalizeUrl(args["url"].text()))
+                err?.let { note.append("打开出错：$it\n") }
+                stat(com.jack.ai.api.BrowserPages.site(normalizeUrl(args["url"].text())), action, if (err == null) "ok" else "error")
+            }
             "click", "type", "delete", "select", "key", "hover" -> {
                 // 按文字点：找到的元素用它原来的编号（没有就标成 0），后面和按编号一样
-                val info = if (n != null) JackBrowser.inspect(ctx, n) else JackBrowser.markText(ctx, text)
-                val id = n ?: info?.get("n").text().toIntOrNull() ?: 0
+                val site = com.jack.ai.api.BrowserPages.site(JackBrowser.address)
+                val first = if (n != null) JackBrowser.inspect(ctx, n) else JackBrowser.markText(ctx, text)
+                // 编号对不上了（网页改版、重画）：按上一步看到的文字和类型重新找，不用模型再花一步
+                val moved = if (n != null) relocate(n, first) else null
+                val info = moved?.first ?: first
+                val id = moved?.second ?: n ?: info?.get("n").text().toIntOrNull() ?: 0
+                if (moved != null) note.append("编号 $n 对不上了（页面变了），按「${info?.get("label").text()}」重新找到了 [$id]。\n")
                 if (info == null || info["found"].flag() != true) {
+                    stat(site, action, "miss")
                     val miss = if (n != null) "找不到编号 $n，页面可能变了" else "页面上没找到写着「$text」的东西（可能还没加载出来，可以先 wait）"
                     return@runTool "$miss。下面是最新的页面：\n" + show(JackBrowser.read(ctx), full = true) to SearchRecord(label)
                 }
@@ -108,7 +118,22 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
                 }
                 if (info["file"].flag() == true) return@runTool "这是选文件的按钮：要上传对话文件夹里的文件，用 action=upload（n 填它，file 填文件名）。" to SearchRecord(label)
                 val key = args["key"].text().trim().lowercase()
-                checkRisk(action, info, key, what, text)?.let { return@runTool it to SearchRecord("$label：已取消") }
+                // 同一次任务里同一个提交、下单类按钮再点一次：多半是重复提交，单独拦
+                val submitWhy = submitReason(action, info, key)
+                // 同一个网站、同一页、同一个按钮才算重复（换了一页的同名按钮是另一件事）
+                val submitKey = "$site|" + JackBrowser.address.substringAfter("://").substringAfter('/').substringBefore('?').substringBefore('#') + "|" + info["label"].text()
+                val repeat = submitWhy != null && submitKey in submitted
+                if (repeat) {
+                    val again = if (!interactive) false else ui.confirm(
+                        "再提交一次？",
+                        "这次任务里已经在 $site 点过一次「${info["label"].text()}」。再点可能重复下单、重复提交。\n\n确定要再来一次吗？",
+                        "再提交一次",
+                    )
+                    if (!again) return@runTool ("这个提交（$what）这次任务里已经做过一次，" + (if (interactive) "用户没同意再来一次" else "后台不重复提交") +
+                        "。先读页面确认上一次有没有生效，不要再点。") to SearchRecord("$label：已拦下重复提交")
+                }
+                // 重复的那次用户已经点了「再提交一次」，不再问第二遍
+                if (!repeat) checkRisk(action, info, key, what, text)?.let { return@runTool it to SearchRecord("$label：已取消") }
                 val arg = when (action) {
                     "type", "select" -> text
                     "delete" -> args["count"].text().ifBlank { "0" }
@@ -120,19 +145,40 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
                     info["formPost"].flag() == true, info["formPassword"].flag() == true, info["formButtons"].text(), "") == null
                 val before = if (retry) JackBrowser.pageSignature(ctx) else ""
                 val mark = JackBrowser.tab.diag.mark()
+                val seq0 = JackBrowser.netSeq(ctx)
                 val err = JackBrowser.act(ctx, id, action, arg, clear = args["clear"].flag() == true)
                 err?.let { note.append("出错：$it\n") }
+                if (err == null && submitWhy != null) submitted += submitKey
                 if (n == null) note.append("点了$what。\n")
+                var stuck = false
                 if (retry && err == null && JackBrowser.tab.id == fromTab && JackBrowser.pageSignature(ctx) == before) {
-                    note.append(retapNote(id, before, mark))
+                    val r = retapNote(id, before, mark)
+                    stuck = "都没变化" in r || "页面没变化" in r
+                    note.append(r)
                 }
                 if (action == "type" && args["submit"].flag() == true) {
                     val why = BrowserNet.confirmReason("key", info["label"].text(), false, info["formPost"].flag() == true,
                         info["formPassword"].flag() == true, info["formButtons"].text(), "enter")
                     if (why == null || approve("让 Kavi 提交这个表单？", "网页：${JackBrowser.address}\n\n$why", "提交")) {
                         JackBrowser.act(ctx, id, "key", "enter")?.let { note.append("提交出错：$it\n") }
+                        if (submitReason("key", info, "enter") != null) submitted += submitKey
                     } else note.append("已输入，但用户没同意提交。\n")
                 }
+                // 页面动了不等于后台成功了：这期间同一个网站的请求失败就说出来
+                val bad = seq0?.let { s0 ->
+                    val s1 = JackBrowser.netSeq(ctx)
+                    val since = if (s1 != null && s1 < s0) 0 else s0  // 换了一页，序号从头数
+                    com.jack.ai.ui.BrowserNetWatch.relevant(JackBrowser.netFailsSince(ctx, since), com.jack.ai.api.BrowserPages.site(JackBrowser.address).ifBlank { site })
+                }.orEmpty()
+                if (bad.isNotEmpty()) note.append("⚠ 页面上看着做了，但这期间网站的后台请求失败了：" + bad.take(3).joinToString("；") { com.jack.ai.ui.BrowserNetWatch.describe(it) } +
+                    "。不能当成已经成功：先读页面确认结果；提交类的操作不要直接重复，先确认上一次有没有生效。\n")
+                stat(site, action, when {
+                    err != null -> "error"
+                    bad.isNotEmpty() -> "request_failed"
+                    stuck -> "no_change"
+                    moved != null -> "relocated"
+                    else -> "ok"
+                })
             }
             "fill" -> {
                 // 一次填好几个：输入框整格换成新值，下拉框选，勾选框按「是/否」勾；不提交（提交另外点按钮，会照常先问用户）
@@ -280,6 +326,40 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
         // 读页面、截图时发全部；其他动作只发变了的部分
         note.toString() + show(page, full = action == "read" || action == "look") to SearchRecord(label, shot = stepShot())
     }
+}
+
+/** 记一笔浏览器实测结果（隐私项目里不记）。 */
+private suspend fun ToolSession.stat(site: String, action: String, outcome: String) {
+    if (project?.isolated == true) return
+    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { com.jack.ai.data.BrowserStats.record(app, site, action, outcome) } }
+}
+
+/**
+ * 这个动作是不是下单、付款、发出、删除这类（重复做一次就是两单、两条）：是就返回原因。
+ * 普通的表单提交（「下一步」「搜索」）不算，多步表单里连着点几次「下一步」是正常的。
+ */
+private fun submitReason(action: String, info: JsonObject, key: String): String? = when {
+    action == "click" && BrowserNet.isRisky(info["label"].text()) -> "按钮「${info["label"].text()}」"
+    action == "key" && key == "enter" && BrowserNet.isRisky(info["formButtons"].text()) -> "表单按钮「${info["formButtons"].text()}」"
+    else -> null
+}
+
+/**
+ * 编号失效时重新定位：上一步看到的编号 n 是什么（文字、类型），现在 n 找不到或者文字变了，就按原来的文字再找一次。
+ * 原来的文字在那一页上不是独一个的（一列「加入购物车」）不找，免得点到别的商品上；找到的类型对不上也不算。
+ */
+private suspend fun ToolSession.relocate(n: Int, now: JsonObject?): Pair<JsonObject, Int>? {
+    val seen = browserSeen[JackBrowser.tab.id] ?: return null
+    val was = seen.items.firstOrNull { it.n == n } ?: return null
+    val label = was.label.trim().removePrefix("[嵌入] ")
+    if (label.length < 2 || seen.items.count { it.label.trim() == label } != 1) return null
+    fun norm(s: String) = s.replace(Regex("\\s+"), " ").trim()
+    if (now != null && now["found"].flag() == true && norm(now["label"].text()) == norm(label)) return null
+    val again = JackBrowser.markText(app, label) ?: return null
+    if (norm(again["label"].text()) != norm(label)) return null
+    if (was.kind.isNotEmpty() && again["kind"].text().isNotEmpty() && again["kind"].text() != was.kind) return null
+    val id = again["n"].text().toIntOrNull() ?: 0
+    return if (id == n) null else again to id
 }
 
 /** 点了没反应时可以再用真实触摸点一次的：按钮、链接这类（勾选框、开关点两次会点回去，不重点）。 */

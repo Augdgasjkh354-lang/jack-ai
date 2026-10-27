@@ -99,6 +99,9 @@ object BrowserNet {
      * 点到上面那类按钮要问；点提交按钮、在输入框里回车，提交的是 POST 表单（登录除外）也要问。
      * 输入、删字、选择本身不会提交，不问（密码框另外拦）。
      */
+    /** 下单、付款、发出、删除这类：点两次就是两单、两条，重复了收不回。 */
+    fun isRisky(text: String) = RISKY.containsMatchIn(text)
+
     fun confirmReason(action: String, label: String, submit: Boolean, formPost: Boolean, formPassword: Boolean, formButtons: String, key: String = ""): String? {
         return when {
             action == "click" && RISKY.containsMatchIn(label) -> "按钮上写着「$label」，可能会下单、付款、发出内容或删除东西。"

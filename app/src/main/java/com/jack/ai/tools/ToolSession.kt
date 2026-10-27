@@ -137,6 +137,8 @@ class ToolSession(
     internal var planAsked = false
     /** 让模型停下时给它看的话（maxRounds 设成 0 之后，再调工具就回这句）。 */
     @Volatile var stopNote: String? = null
+    /** 这次回答里已经在网页上提交过的（网站|按钮），同一个再点就是重复提交，要拦。 */
+    val submitted: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
     /** 这次回答开始的时间：之后改过的文件算这次的产出。 */
     val startedAt = System.currentTimeMillis()
 

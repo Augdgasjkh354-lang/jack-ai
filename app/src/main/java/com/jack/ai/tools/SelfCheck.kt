@@ -72,6 +72,8 @@ internal suspend fun ToolSession.selfCheck(args: JsonObject): String = runTool("
             append(items.joinToString("\n") { (n, ok) -> "- $n：" + if (ok) "有" else "没有" } + "\n")
             append("（闹钟写进系统时钟，系统不给读别的闹钟详情；设完会用「下一个闹钟」核对。）\n")
 
+            com.jack.ai.data.BrowserStats.summary(com.jack.ai.data.BrowserStats.load(ctx)).takeIf { it.isNotEmpty() }?.let { append("【浏览器实测】$it\n") }
+
             val errors = host.store.loadToolErrors().takeLast(args["errors"].text().toIntOrNull()?.coerceIn(1, 30) ?: 8)
             if (errors.isEmpty()) append("【最近没做成的工具调用】没有\n")
             else {

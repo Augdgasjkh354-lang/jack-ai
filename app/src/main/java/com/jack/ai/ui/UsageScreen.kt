@@ -115,6 +115,20 @@ fun UsageScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                 }
             }
 
+            // ---- 浏览器实测 ----
+            val appCtx = androidx.compose.ui.platform.LocalContext.current.applicationContext
+            val browserStats by androidx.compose.runtime.produceState("") {
+                value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    com.jack.ai.data.BrowserStats.summary(com.jack.ai.data.BrowserStats.load(appCtx))
+                }
+            }
+            if (browserStats.isNotEmpty()) Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("浏览器实测成功率", style = MaterialTheme.typography.titleSmall)
+                    Text(browserStats, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                }
+            }
+
             // ---- 预算 ----
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

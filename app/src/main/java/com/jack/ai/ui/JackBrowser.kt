@@ -100,6 +100,8 @@ object JackBrowser {
         /** 网页诊断：出错的平时就记；diagOn 时网页里加了钩子，点击、弹框、请求也记。 */
         val diag = BrowserDiag.Log()
         var diagOn by mutableStateOf(false)
+        /** 数后台请求的钩子（见 BrowserNetWatch）；旧网页组件装不上开头注入时是 null，页面露出来再补。 */
+        var netScript: androidx.webkit.ScriptHandler? = null
         var diagScript: androidx.webkit.ScriptHandler? = null
         var teachScript: androidx.webkit.ScriptHandler? = null
         /** 防 IP 泄漏的脚本（关着 WebRTC 时装上）。 */
@@ -502,6 +504,8 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
             // 网页生成文件后马上收回（revokeObjectURL）的话就存不下来了：晚两分钟再收；顺便记下链接上写的文件名
             if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
                 runCatching { androidx.webkit.WebViewCompat.addDocumentStartJavaScript(this, KEEP_BLOB_JS, setOf("*")) }
+                // 数着后台请求：动作做完等它们回来再读页面，失败的告诉模型（只在主页面装）
+                t.netScript = runCatching { androidx.webkit.WebViewCompat.addDocumentStartJavaScript(this, BrowserNetWatch.JS, setOf("*")) }.getOrNull()
                 // 不让网页靠 WebRTC 查到真实 IP（每个嵌入框也装）
                 if (rtcBlocked()) t.rtcScript = runCatching { androidx.webkit.WebViewCompat.addDocumentStartJavaScript(this, RTC_JS, setOf("*")) }.getOrNull()
             }
@@ -1010,6 +1014,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
             if (rtcBlocked() && t.rtcScript == null) view.evaluateJavascript(RTC_JS, null)
             // 不支持开头注入的旧网页组件：页面露出来时补装钩子
             if (t.diagOn && t.diagScript == null) view.evaluateJavascript(BrowserDiag.HOOK_JS, null)
+            if (t.netScript == null) view.evaluateJavascript(BrowserNetWatch.JS, null)
             widenIfDesktop(view, url)
             if (blocksAds(t.site)) view.evaluateJavascript(BrowserAds.INJECT_JS, null)
             applyBlocks(view, t.site)
@@ -1547,7 +1552,27 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
         if (pending != null) withTimeoutOrNull(15_000) { pending.await() }
         // 很多网页加载完还在慢慢往里填内容：等它不再变（最多 4 秒）
         runCatching { waitStable(app, 4_000) }
+        // 后台请求还没回来的话，数据可能还没刷新：再等它们回来（最多 5 秒，长连接不等）
+        runCatching { waitNetQuiet(app, 5_000) }
     }
+
+    /** 等网页的后台请求都回来。钩子没装上就不等。 */
+    private suspend fun waitNetQuiet(ctx: Context, timeoutMs: Long) {
+        val end = System.currentTimeMillis() + timeoutMs
+        var waited = false
+        while (System.currentTimeMillis() < end) {
+            val (inflight, _) = BrowserNetWatch.state(eval(ctx, BrowserNetWatch.STATE_JS)) ?: return
+            if (inflight == 0) { if (waited) runCatching { waitStable(ctx, 1_500) }; return }
+            waited = true
+            delay(300)
+        }
+    }
+
+    /** 现在的请求失败序号（动作前记一下，做完用 [netFailsSince] 取这期间失败的）。钩子没装上是 null。 */
+    suspend fun netSeq(ctx: Context): Int? = runCatching { BrowserNetWatch.state(eval(ctx, BrowserNetWatch.STATE_JS))?.second }.getOrNull()
+
+    suspend fun netFailsSince(ctx: Context, seq: Int): List<BrowserNetWatch.Fail> =
+        runCatching { BrowserNetWatch.fails(eval(ctx, BrowserNetWatch.failsSinceJs(seq))) }.getOrDefault(emptyList())
 
     /**
      * 这一步做完的网页截个小图（不画编号框），存成 JPEG，对话里按步骤显示。网页没画出来就不存，返回 false。
