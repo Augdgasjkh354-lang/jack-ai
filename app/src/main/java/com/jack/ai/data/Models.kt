@@ -458,6 +458,18 @@ data class ToolStat(val name: String, val calls: Int = 0, val failures: Int = 0)
 @Serializable
 data class ToolError(val at: Long, val name: String, val args: String, val result: String, val rejected: Boolean = false)
 
+/** 最近的一次请求：用量页列出来，看缓存有没有命中。hit 为 null 表示服务没返回命中数。 */
+@Serializable
+data class UsageRecord(
+    val at: Long,
+    val model: String,
+    val label: String = "",
+    val prompt: Int = 0,
+    val hit: Int? = null,
+    val completion: Int = 0,
+    val cost: Double? = null,
+)
+
 /** 每天每个模型用了多少 token。 */
 @Serializable
 data class UsageDay(

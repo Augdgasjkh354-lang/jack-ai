@@ -107,7 +107,8 @@ class AppCore(val app: Application, val store: Store, val scope: CoroutineScope)
     /** 记一笔用量：写进每日统计（当场算钱），再累加到对话上。 */
     fun recordSpend(convId: String, ep: Endpoint, prompt: Int, hit: Int?, completion: Int) {
         scope.launch(Dispatchers.IO) {
-            val cost = store.addUsage(ep, prompt, hit, completion)
+            val title = state.value.conversations.firstOrNull { it.id == convId }?.title.orEmpty()
+            val cost = store.addUsage(ep, prompt, hit, completion, label = "对话「${title.take(12)}」")
             updateConvQuiet(convId) {
                 it.copy(
                     spentTokens = it.spentTokens + prompt + completion,

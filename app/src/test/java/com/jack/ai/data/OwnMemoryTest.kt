@@ -65,4 +65,36 @@ class OwnMemoryTest {
         assertTrue(Timeline.load(app).any { it.text == "原经历" })
     }
 
+
+    /** 做梦的修改单里 [o:] 的那些交给自己的经历：放到深处、合并；关于用户的记忆不受影响。 */
+    @Test fun dreamOpsOnOwnExperiences() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val a = OwnMemoryItem(text = "读了一篇讲河流改道的文章", source = "s.json", at = 1)
+        val b = OwnMemoryItem(text = "又读了河流改道的另一篇", source = "s.json", at = 2, uses = 2)
+        val c = OwnMemoryItem(text = "写了半首诗", source = "s.json", at = 3)
+        OwnMemory.add(app, listOf(a, b, c))
+        val ops = MemoryOps.parse(kotlinx.serialization.json.Json.parseToJsonElement("""[
+            {"op":"merge","ids":["o:${a.id.take(6)}","o:${b.id.take(6)}"],"text":"读了两篇讲河流改道的文章"},
+            {"op":"demote","id":"o:${c.id.take(6)}"}
+        ]""") as kotlinx.serialization.json.JsonArray)
+        assertTrue(ops.all { it.own })
+        assertFalse(MemoryOps.tooMany(5, ops))
+        assertEquals(0, MemoryOps.apply(emptyList(), ops).skipped)
+        val r = OwnMemory.applyOps(app, ops)
+        assertEquals(1, r.merged); assertEquals(1, r.demoted)
+        val left = OwnMemory.load(app)
+        assertEquals(listOf("读了两篇讲河流改道的文章", "写了半首诗"), left.map { it.text })
+        assertEquals(2, left[0].uses)
+        assertTrue(left[1].deep)
+    }
+
+    /** 没配向量服务时按关键词想起来，浮上来的算用到一次。 */
+    @Test fun deepRecallWithoutVectors() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        MemoryOps.saveDeep(app, listOf(MemoryItem(text = "Jack 对花生过敏，吃了会起疹子")))
+        val note = DeepRecall.note(app, Settings(userName = "Jack"), "晚上想做个花生酱拌面，会不会过敏")
+        assertTrue(note, note.contains("花生"))
+        assertEquals(1, MemoryOps.deep(app).single().uses)
+        assertEquals("", DeepRecall.note(app, Settings(userName = "Jack"), "今天天气不错"))
+    }
 }

@@ -37,8 +37,10 @@ internal suspend fun ToolSession.delegateTasks(args: JsonObject): String {
         if (title.isBlank() || what.isBlank()) null else title to what
     }.take(5)
     if (tasks.isEmpty()) return "没有子任务"
-    val fallback = settings.backgroundEndpoint()
+    // 自由时间里只用免费模型（分身的花费不走它的预算，用付费的就等于白花用户的钱）
+    val fallback = if (freeBudget != null) null else settings.backgroundEndpoint()
     val pool = com.jack.ai.data.FreePool.load(app)
+    if (freeBudget != null && com.jack.ai.data.freeCandidates(pool, settings, 0).isEmpty()) return "现在没有免费模型可用（额度用完了或还没探测到），这些事自己做就好。"
     return runTool("分头做 ${tasks.size} 件事") {
         val client = DeepSeekClient()
         // 池里的硅基流动模型探测时已经按价格页筛过是免费的，这里不用每次再抓一遍网页
@@ -90,7 +92,7 @@ internal suspend fun ToolSession.delegateTasks(args: JsonObject): String {
                                 if (name !in SUB_TOOLS || (name == "facts" && action?.get("action").text() != "recall")) "这个操作子任务不能用"
                                 else execute(name, a)
                             },
-                            onUsage = { ev -> host.store.addUsage(ep, ev.promptTokens, ev.cacheHit, ev.completionTokens) },
+                            onUsage = { ev -> host.store.addUsage(ep, ev.promptTokens, ev.cacheHit, ev.completionTokens, label = "子 agent「${title.take(12)}」") },
                         )
                         "## $title\n" + agent.lastRound.trim().ifBlank { agent.content.toString().trim() }.ifBlank { "（没有结果）" }
                     } catch (e: kotlinx.coroutines.CancellationException) {

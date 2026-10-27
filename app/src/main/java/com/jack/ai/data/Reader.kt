@@ -50,7 +50,7 @@ object Reader {
     const val NOTES = "我的笔记.md"
     /** 自由时间能用的工具：上网只读、事实库、自己文件夹里的文件、做文档和小工具、算东西。 */
     val TOOLS = setOf(
-        "web_search", "read_webpage", "facts", "update_plan", "use_skill",
+        "web_search", "read_webpage", "facts", "update_plan", "use_skill", "delegate_tasks",
         "list_files", "read_file", "write_file", "edit_file", "delete_file", "free_time", "own_history",
         "create_document", "create_excel", "create_ppt", "create_chart", "create_diagram", "create_app",
         "run_python", "run_js",
@@ -174,6 +174,9 @@ object Reader {
             .replace("{freeSummary}", continuationNote(state))
             .replace("{ownMemories}", OwnMemory.note(ctx, "最近自由时间"))
             .replace("{recently}", recently)
+            .replace("{helpers}", freeCandidates(FreePool.load(ctx), s, 0).size.takeIf { it > 0 }?.let {
+                "\nYou also have $it free helper models: delegate_tasks sends independent pieces of work (looking things up, reading, calculating, drafting files) to them in parallel, at no cost to your budget. They can only see the web and your workbench. Use them whenever it helps, or not at all.\n"
+            }.orEmpty())
             .replace("{threads}", Persona.fill(Threads.listing(Threads.load(ctx)), s).ifBlank { "(nothing right now)" })
             .replace("{story}", SelfStory.bio(ctx).text.ifBlank { "(you haven't written it yet)" })
             .replace("{works}", works(ctx).take(20).joinToString(", ") { it.name }.ifBlank { "(none yet)" })
@@ -327,7 +330,7 @@ Each day's free time has its own conversation; within today you can continue the
 
 Your workbench is your own folder, kept between sessions. You may leave a fragment, make or change a file, read anything there, or delete your own files. There is no need to organize it, continue anything, or explain what you do. Use list_files to see the whole workbench whenever you want. 「{notes}」 is your notebook if you want one; write in it only when you want to.
 Files on your workbench: {works}
-
+{helpers}
 Money and time are yours to arrange (free_time tool):
 - Whatever you don't spend goes into your savings (up to a week's worth); you have ¥{savings}. Take some with free_time (action=use_savings) when you want to go bigger.
 - Pick when you come back: free_time (action=next) sets an extra session 0.5 to 48 hours from now. The nightly one still happens; come and leave quickly if you don't feel like it.

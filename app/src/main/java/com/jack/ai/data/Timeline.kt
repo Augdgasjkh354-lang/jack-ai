@@ -216,7 +216,9 @@ Write in {lang}. Output only one JSON object:
         Threads.save(ctx, Threads.applyJson(Threads.load(ctx), o, conv.id))
         // 这段聊天用到了哪些记忆（不常用的做梦时可以放到深处）
         if (s.memoryEnabled) {
-            store.saveMemories(MemoryOps.markUsed(store.loadMemories(), fresh.joinToString("\n") { it.content }, ignore = MemoryOps.ignoreFor(s)))
+            val text = fresh.joinToString("\n") { it.content }
+            store.saveMemories(MemoryOps.markUsed(store.loadMemories(), text, ignore = MemoryOps.ignoreFor(s)))
+            OwnMemory.markUsed(ctx, text, MemoryOps.ignoreFor(s))
         }
         markSummarized(ctx, convId, fresh.last().createdAt)
     }

@@ -27,20 +27,22 @@ object Embedder {
     private const val BATCH = 32
     private val json = Json { ignoreUnknownKeys = true }
     private val client by lazy { sharedHttp.newBuilder().callTimeout(60, TimeUnit.SECONDS).build() }
+    /** 每轮回忆用：等不了太久，超时就退回关键词。 */
+    private val quickClient by lazy { sharedHttp.newBuilder().callTimeout(6, TimeUnit.SECONDS).build() }
 
     fun engine(providers: List<Provider>): Engine? =
         providers.firstOrNull { it.apiKey.isNotBlank() && "siliconflow" in it.baseUrl.lowercase() }
             ?.let { Engine(it.baseUrl.trimEnd('/'), it.apiKey) }
 
     /** 一批文字的向量（顺序和输入一样）。网络或接口出错抛 IOException。 */
-    fun embed(e: Engine, texts: List<String>): List<FloatArray> = texts.chunked(BATCH).flatMap { part ->
+    fun embed(e: Engine, texts: List<String>, quick: Boolean = false): List<FloatArray> = texts.chunked(BATCH).flatMap { part ->
         val body = buildJsonObject {
             put("model", e.model)
             put("input", buildJsonArray { part.forEach { add(JsonPrimitive(it.take(4000))) } })
             put("encoding_format", "float")
         }.toString().toRequestBody("application/json".toMediaType())
         val req = Request.Builder().url(e.baseUrl + "/embeddings").header("Authorization", "Bearer ${e.apiKey}").post(body).build()
-        client.newCall(req).execute().use { r ->
+        (if (quick) quickClient else client).newCall(req).execute().use { r ->
             val text = r.body?.string().orEmpty()
             if (!r.isSuccessful) throw IOException("向量服务返回 ${r.code}：${text.take(200)}")
             val data = json.parseToJsonElement(text).jsonObject["data"] as? JsonArray ?: throw IOException("向量服务的返回看不懂")

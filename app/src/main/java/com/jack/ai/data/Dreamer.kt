@@ -149,6 +149,7 @@ II. Write "ops": a list of changes to your memories about {user}. Don't rewrite 
    - Each memory is one complete sentence that makes sense on its own, with {user} as the subject.
    - Your context is limited. The memories you always carry share a budget (shown with the list); every chat pays for all of them. Over budget, or close to it, make room: merge duplicates first, then demote what's still true but hasn't come up in a long while; trim long memories to their point. Never invalidate something just to save space: invalidate only what's no longer true. Keep what defines {user} (identity, people who matter, lasting preferences, what they asked you to remember) even if it's rarely used. Under budget, don't tidy for its own sake.
    - "source" isn't needed for merge, demote and promote (they don't change what you know).
+   - Your own experiences (ids like [o:ab12cd]) follow the same rules and share the same kind of budget: you can update, merge, demote, promote or invalidate them (write the id with its "o:" prefix). Don't add them here; they come from your free time. Keep what made you who you are and what you're still in the middle of; let small passing things move deeper.
 
 III. Write "changes": one or two sentences on what you newly remembered, changed or let go of this time.
 
@@ -192,7 +193,15 @@ Output only one JSON object, in this format:
             append(store.loadDreams().firstOrNull { it.journal.isNotBlank() }?.journal ?: "(none)")
             append("\n")
             freeSince.takeIf { it.isNotBlank() }?.let { append("\n【Your free time since then】\n").append(it).append("\n") }
-            ownSince(ctx, since).takeIf { it.isNotBlank() }?.let { append("\n【What you did or thought in your own time since then】\n").append(it).append("\n") }
+            // 自己的经历：常记的（带预算）和这段时间浮上来过的深处的，都能整理
+            val own = OwnMemory.load(ctx)
+            own.filterNot { it.deep }.takeIf { it.isNotEmpty() }?.let { l ->
+                append("\n【Your own experiences you always carry】(from your free time)\n").append(OwnMemory.listing(l.sortedBy { it.at }))
+                append("(budget: ~${OwnMemory.hotTokens(own)} of ${OwnMemory.HOT_BUDGET} tokens used" + (if (OwnMemory.hotTokens(own) > OwnMemory.HOT_BUDGET) " — over budget, make room" else "") + ")\n")
+            }
+            own.filter { it.deep && it.lastUsedAt > since }.takeIf { it.isNotEmpty() }?.let { l ->
+                append("\n【Deeper experiences of yours that surfaced since last time】(${own.count { it.deep }} in deeper memory in all)\n").append(OwnMemory.listing(l))
+            }
             FreeTime.load(ctx).freeSummary.takeIf { it.isNotBlank() }?.let { append("\n【Left unfinished in your free time】\n").append(it).append("\n") }
             append("\n【Chats since the last look-back】")
             append(transcript)
@@ -209,10 +218,11 @@ Output only one JSON object, in this format:
         )
         val obj = Json.parseToJsonElement(raw.trim().removePrefix("```json").removeSuffix("```").trim()).jsonObject
         fun str(k: String) = (obj[k] as? JsonPrimitive)?.content.orEmpty()
-        val ops = if (transcript.isBlank()) emptyList() else MemoryOps.parse(obj["ops"] as? JsonArray)
+        // 没有新聊天时关于用户的记忆不动，自己的经历照样能整理
+        val ops = MemoryOps.parse(obj["ops"] as? JsonArray).filter { it.own || transcript.isNotBlank() }
         // 一次动到太多已有的记忆：这次整个不算，第二天重新整理（日记也不写，时间点不往后挪）
         if (MemoryOps.tooMany(memories.size, ops)) {
-            val n = ops.count { it.op != "add" }
+            val n = ops.count { it.op != "add" && !it.own }
             setHeld(ctx, "the change list touched $n of ${memories.size} memories at once (the limit is ${MemoryOps.limit(memories.size)}).")
             Timeline.add(ctx, Episode(place = "dream", text = "my look-back tried to change too many memories at once ($n), so I set it aside to redo tomorrow"))
             return null
@@ -224,6 +234,7 @@ Output only one JSON object, in this format:
         store.saveMemories(result.live)
         if (result.demoted + result.promoted + result.invalidated > 0) MemoryOps.saveDeep(ctx, result.deep)
         MemoryOps.addToArchive(ctx, result.archived)
+        val ownResult = OwnMemory.applyOps(ctx, ops.filter { it.own })
         setHeld(ctx, "")
         val entry = DreamEntry(journal = str("journal").ifBlank { throw IllegalStateException("做梦结果格式不对") }, changes = str("changes"))
         val currentDreams = store.loadDreams()
@@ -236,7 +247,8 @@ Output only one JSON object, in this format:
             Timeline.add(ctx, Episode(place = "dream", text = "let go of things I hadn't touched in a while: " + gone.joinToString("; ") { it.text.take(60) }))
         }
         Timeline.add(ctx, Episode(place = "dream", text = "looked back over recent chats and wrote my journal" +
-            (if (result.demoted + result.promoted + result.merged > 0) "; tidied memory: ${result.demoted} moved deeper, ${result.promoted} brought back, ${result.merged} merged" else "") + entry.changes.takeIf { it.isNotBlank() }?.let { "; memory changes: ${it.take(150)}" }.orEmpty()))
+            (if (result.demoted + result.promoted + result.merged > 0) "; tidied memory: ${result.demoted} moved deeper, ${result.promoted} brought back, ${result.merged} merged" else "") +
+            (if (ownResult.demoted + ownResult.promoted + ownResult.merged > 0) "; tidied my own experiences: ${ownResult.demoted} moved deeper, ${ownResult.promoted} brought back, ${ownResult.merged} merged" else "") + entry.changes.takeIf { it.isNotBlank() }?.let { "; memory changes: ${it.take(150)}" }.orEmpty()))
         // 「自己」的连续：到时候了就更新自传（每周）、做自我体检（每两周）
         SelfStory.afterDream(ctx)
         // 没整理完的：下次从最后整理到的那条之后接着，马上排一轮
@@ -286,10 +298,6 @@ Output only one JSON object, in this format:
 Also write "changes": one or two sentences summing up how memories mainly changed over these days (merging each entry's memory changes).
 
 Output only one JSON object: {"journal": "…", "changes": "…"}"""
-
-    /** 上次做梦以来自由时间里整理出的自己的经历（按发生的那天算，往前多放一天，免得半夜那次漏掉）。 */
-    private fun ownSince(ctx: Context, since: Long): String = OwnMemory.load(ctx).filter { it.at >= since - 86_400_000L }
-        .sortedBy { it.at }.takeLast(30).joinToString("\n") { "- ${FreeTime.day(it.at)} ${it.kind}：${it.text}" }
 
     /** 攒够了就合成一篇（每次最多合一批）。 */
     private suspend fun mergeOld(ctx: Context, store: Store, ep: Endpoint, client: DeepSeekClient) {

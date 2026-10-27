@@ -563,8 +563,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     // Kavi 的连续性：最近的经历、上次见用户是什么时候（每轮变，放这里不影响缓存）
                     runCatching { com.jack.ai.data.Timeline.noteFor(getApplication(), settings, _state.value.conversations, _state.value.projects, conv) }.getOrDefault("") +
                     // 深处的记忆：和这句话相关的浮上来（不常用的不再每轮都带着）
-                    (if (conv.globalAllowed(project)) runCatching { com.jack.ai.data.MemoryOps.recallNote(getApplication(), settings, lastUser?.content.orEmpty()) }.getOrDefault("") else "") +
-                    (if (settings.memoryEnabled && conv.globalAllowed(project)) runCatching { com.jack.ai.data.OwnMemory.note(getApplication(), lastUser?.content.orEmpty(), includeHot = false) }.getOrDefault("") else "") +
+                    (if (conv.globalAllowed(project)) runCatching { com.jack.ai.data.DeepRecall.note(getApplication(), settings, lastUser?.content.orEmpty()) }.getOrDefault("") else "") +
                     // 很长的对话里重新锚定一下「我是谁」：越聊越长时开头的设定会被冲淡
                     (if (conv.messages.size >= ANCHOR_AFTER) com.jack.ai.data.Persona.fill("【Still you】" + com.jack.ai.data.KaviSelf.text(editable = false) +
                         "\nThis conversation has run long: keep your own voice and the principles you started with.\n", settings) else "")

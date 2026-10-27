@@ -240,6 +240,8 @@ fun UsageScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
 
             ContextCard(vm, state.current)
 
+            RecentRequestsCard()
+
             ToolStatsCard(vm)
 
             FeedbackCard(vm)
@@ -350,6 +352,38 @@ private fun ContextCard(vm: ChatViewModel, conv: Conversation?) {
 }
 
 /** 每个工具调了几次、失败几次，失败多的排前面：用来看哪个工具不好用。 */
+/** 最近每一次请求：输入多少、缓存命中多少。看哪里的缓存没命中。 */
+@Composable
+private fun RecentRequestsCard() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val list by produceState(emptyList<com.jack.ai.data.UsageRecord>()) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.jack.ai.data.Store(ctx).recentRequests().reversed() }
+    }
+    if (list.isEmpty()) return
+    val colors = MaterialTheme.colorScheme
+    var all by remember { mutableStateOf(false) }
+    val fmt = remember { java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.US) }
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("最近的请求", style = MaterialTheme.typography.titleSmall)
+            Text("命中越高越省钱。同一个对话里接着聊，正常应该大部分命中。", style = MaterialTheme.typography.bodySmall, color = colors.outline)
+            (if (all) list else list.take(10)).forEach { r ->
+                val rate = r.hit?.let { h -> if (r.prompt > 0) h * 100 / r.prompt else 0 }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(r.label.ifBlank { "后台" }, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+                        Text(fmt.format(java.util.Date(r.at)) + " · " + modelLabel(r.model) + " · 输入 ${tokens(r.prompt.toLong())} · 输出 ${tokens(r.completion.toLong())}",
+                            style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, maxLines = 1)
+                    }
+                    Text(rate?.let { "命中 $it%" } ?: "未返回", style = MaterialTheme.typography.labelLarge,
+                        color = when { rate == null -> colors.outline; rate >= 60 -> colors.primary; else -> colors.error })
+                }
+            }
+            if (list.size > 10) TextButton(onClick = { all = !all }) { Text(if (all) "收起" else "全部 ${list.size} 次") }
+        }
+    }
+}
+
 @Composable
 private fun ToolStatsCard(vm: ChatViewModel) {
     val stats by produceState<List<com.jack.ai.data.ToolStat>?>(null) { value = vm.loadToolStats() }

@@ -15,8 +15,12 @@ data class OwnMemoryItem(
     val uses: Int = 0, val lastUsedAt: Long = 0,
 )
 
+/**
+ * 自己的经历也分常记和深处：做梦时 Kavi 自己整理（合并、放到深处、拿回来，见 [applyOps]），和关于用户的记忆一样有预算。
+ * 自由时间里新整理出来的只在常记超出两倍预算时才按最久没用的放下去，免得做梦前一直膨胀。
+ */
 object OwnMemory {
-    private const val HOT_BUDGET = 1500
+    const val HOT_BUDGET = 1500
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val lock = Any()
     private fun file(ctx: Context) = AtomicFile(File(ctx.filesDir, "own_memories.json"))
@@ -37,11 +41,72 @@ object OwnMemory {
         items.filter { it.text.isNotBlank() && it.source.isNotBlank() }.forEach { item ->
             if (all.none { it.text.trim().equals(item.text.trim(), ignoreCase = true) }) all += item
         }
-        while (all.filterNot { it.deep }.sumOf { MemoryOps.estTokens(it.text) + 4 } > HOT_BUDGET) {
+        while (hotTokens(all) > HOT_BUDGET * 2) {
             val i = all.indices.filter { !all[it].deep }.minByOrNull { all[it].lastUsedAt.takeIf { t -> t > 0 } ?: all[it].at } ?: break
             all[i] = all[i].copy(deep = true)
         }
         save(ctx, all)
+    }
+
+    fun hotTokens(items: List<OwnMemoryItem>) = items.filterNot { it.deep }.sumOf { MemoryOps.estTokens(it.text) + 4 }
+
+    /** 做梦时给模型看的：带 [o:] 编号、多久没用、用过几次。 */
+    fun listing(items: List<OwnMemoryItem>, now: Long = System.currentTimeMillis()): String = items.joinToString("") { m ->
+        val used = if (m.lastUsedAt > 0) "last used ${Timeline.ago(m.lastUsedAt, now)}, ${m.uses}×" else "not used since " + FreeTime.day(m.at)
+        "- [o:${m.id.take(6)}] ${FreeTime.day(m.at)} ${m.kind}：${m.text}（$used）\n"
+    }
+
+    /** 这段聊天用到的常记经历：记下时间、次数加一。 */
+    fun markUsed(ctx: Context, text: String, ignore: Set<String> = emptySet(), now: Long = System.currentTimeMillis()) = synchronized(lock) {
+        val all = load(ctx)
+        val tt = LibraryIndex.tokens(text).toSet()
+        val used = all.filter { !it.deep && MemoryOps.related(it.text, tt, ignore) }.map { it.id }.toSet()
+        if (used.isNotEmpty()) save(ctx, all.map { if (it.id in used) it.copy(uses = it.uses + 1, lastUsedAt = now) else it })
+    }
+
+    /** 浮上来的深处经历：算用到一次。 */
+    fun markDeepUsed(ctx: Context, ids: Set<String>, now: Long = System.currentTimeMillis()) = synchronized(lock) {
+        if (ids.isEmpty()) return@synchronized
+        save(ctx, load(ctx).map { if (it.id in ids) it.copy(uses = it.uses + 1, lastUsedAt = now) else it })
+    }
+
+    data class Applied(val demoted: Int = 0, val promoted: Int = 0, val merged: Int = 0, val updated: Int = 0, val removed: Int = 0)
+
+    /** 做梦的修改单里针对 [o:] 的那些：修改、合并、放到深处、拿回来、作废（原文还在工作台里，用 own_history 找得回来）。 */
+    fun applyOps(ctx: Context, ops: List<MemoryOps.Op>, now: Long = System.currentTimeMillis()): Applied = synchronized(lock) {
+        val list = load(ctx).toMutableList()
+        fun find(id: String) = if (id.length < 4) -1 else list.indexOfFirst { it.id.startsWith(id) }
+        var demoted = 0; var promoted = 0; var merged = 0; var updated = 0; var removed = 0
+        for (op in ops) when (op.op) {
+            "demote", "promote" -> {
+                val i = find(op.id)
+                if (i < 0 || list[i].deep == (op.op == "demote")) continue
+                list[i] = list[i].copy(deep = op.op == "demote", lastUsedAt = if (op.op == "promote") now else list[i].lastUsedAt)
+                if (op.op == "demote") demoted++ else promoted++
+            }
+            "update" -> {
+                val i = find(op.id)
+                if (i < 0 || op.text.length < 4) continue
+                list[i] = list[i].copy(text = op.text.take(500)); updated++
+            }
+            "invalidate" -> {
+                val i = find(op.id)
+                if (i < 0) continue
+                list.removeAt(i); removed++
+            }
+            "merge" -> {
+                val idx = op.ids.map { find(it) }.filter { it >= 0 }.distinct()
+                if (idx.size < 2 || op.text.length < 4) continue
+                val first = list[idx.first()]
+                val others = idx.drop(1).map { list[it] }
+                list[idx.first()] = first.copy(text = op.text.take(500), uses = first.uses + others.sumOf { it.uses },
+                    lastUsedAt = maxOf(first.lastUsedAt, others.maxOf { it.lastUsedAt }), deep = false)
+                list.removeAll { o -> others.any { it.id == o.id } }
+                merged += others.size
+            }
+        }
+        save(ctx, list)
+        Applied(demoted, promoted, merged, updated, removed)
     }
 
     fun move(ctx: Context, id: String, deep: Boolean): Boolean = synchronized(lock) {

@@ -12,13 +12,14 @@ import java.io.File
  * 做梦改记忆不再整份重写，而是提交一张修改单：一条条新增 / 修改 / 作废 / 合并 / 放到深处 / 拿回来，各带理由和出处。
  * 代码来执行：改前先存一版（能回退），作废的挪进存档（不删），一次改动太多就整次不做、第二天重新整理。
  *
- * 记忆分两层：常记（每次都带着，有预算 [HOT_BUDGET]）和深处（不常用但仍然成立，平时不占上下文，聊到相关的自动浮上来，见 [recallNote]）。
+ * 记忆分两层：常记（每次都带着，有预算 [HOT_BUDGET]）和深处（不常用但仍然成立，平时不占上下文，聊到相关的自动浮上来，见 DeepRecall）。
  * 上下文有限：常记放不下时，不常用的放到深处，重复的合并，不再成立的才作废。
  */
 object MemoryOps {
     /** 常记的预算（token，约 60 来句）。 */
     const val HOT_BUDGET = 1500
-    data class Op(val op: String, val id: String = "", val text: String = "", val why: String = "", val source: String = "", val ids: List<String> = emptyList())
+    /** own：针对 Kavi 自己的经历（编号 [o:]），交给 OwnMemory.applyOps，这里跳过。 */
+    data class Op(val op: String, val id: String = "", val text: String = "", val why: String = "", val source: String = "", val ids: List<String> = emptyList(), val own: Boolean = false)
     data class Result(
         val live: List<MemoryItem>, val archived: List<ArchivedMemory>, val added: Int, val updated: Int, val invalidated: Int, val skipped: Int,
         val deep: List<MemoryItem> = emptyList(), val demoted: Int = 0, val promoted: Int = 0, val merged: Int = 0,
@@ -33,13 +34,14 @@ object MemoryOps {
         val o = e as? JsonObject ?: return@mapNotNull null
         fun s(k: String) = (o[k] as? JsonPrimitive)?.content?.trim().orEmpty()
         val op = s("op").lowercase().takeIf { it in OPS } ?: return@mapNotNull null
-        val ids = (o["ids"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.content?.trim()?.removePrefix("m:") }
-        Op(op, s("id").removePrefix("m:"), s("text"), s("why"), s("source"), ids)
+        val rawIds = (o["ids"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.content?.trim() }
+        val own = s("id").startsWith("o:") || rawIds.any { it.startsWith("o:") }
+        Op(op, s("id").removePrefix("m:").removePrefix("o:"), s("text"), s("why"), s("source"), rawIds.map { it.removePrefix("m:").removePrefix("o:") }, own)
     }
 
     /** 这张修改单动到的已有记忆是不是太多了。 */
     fun tooMany(liveSize: Int, ops: List<Op>): Boolean =
-        ops.sumOf { when (it.op) { "update", "invalidate" -> 1; "merge" -> it.ids.size.coerceAtLeast(1); else -> 0 }.toInt() } > limit(liveSize)
+        ops.filterNot { it.own }.sumOf { when (it.op) { "update", "invalidate" -> 1; "merge" -> it.ids.size.coerceAtLeast(1); else -> 0 }.toInt() } > limit(liveSize)
 
     /** 估 token：中文约 0.6 个一字，其他约 0.3 个（和 PromptBuilder.estTokens 一样）。 */
     fun estTokens(s: String): Int {
@@ -60,7 +62,7 @@ object MemoryOps {
         var added = 0; var updated = 0; var invalidated = 0; var skipped = 0; var demoted = 0; var promoted = 0; var merged = 0
         fun find(id: String) = if (id.length < 4) -1 else list.indexOfFirst { it.id.startsWith(id) }
         fun findDeep(id: String) = if (id.length < 4) -1 else deep.indexOfFirst { it.id.startsWith(id) }
-        for (op in ops) when (op.op) {
+        for (op in ops.filterNot { it.own }) when (op.op) {
             "add" -> {
                 if (op.text.length < 4 || list.any { norm(it.text) == norm(op.text) }) { skipped++; continue }
                 // 深处已经有这一条：拿回来就行
@@ -162,21 +164,6 @@ object MemoryOps {
 
     fun saveDeep(ctx: Context, list: List<MemoryItem>): Unit = synchronized(lock) {
         runCatching { deepFile(ctx).writeText(json.encodeToString(ListSerializer(MemoryItem.serializer()), list.takeLast(2000))) }
-    }
-
-    /**
-     * 每轮附加说明里的那段：从深处浮上来的、和这句话相关的几条（浮上来就算用到一次，下次整理时它可以拿回常记）。
-     * 没开记忆、这个对话不用全局记忆时没有。
-     */
-    fun recallNote(ctx: Context, settings: Settings, query: String, now: Long = System.currentTimeMillis()): String {
-        if (!settings.memoryEnabled) return ""
-        val deep = deep(ctx)
-        val hits = recall(deep, query, ignore = ignoreFor(settings))
-        if (hits.isEmpty()) return ""
-        val ids = hits.map { it.id }.toSet()
-        saveDeep(ctx, deep.map { if (it.id in ids) it.copy(lastUsedAt = now, uses = it.uses + 1) else it })
-        return Persona.fill("【Also remembered】(from deeper memory, because it seems related; use only if it helps)\n", settings) +
-            hits.joinToString("\n") { "- [m:${it.id.take(6)}] ${it.text}" } + "\n"
     }
 
     // ---------- 存档和版本 ----------

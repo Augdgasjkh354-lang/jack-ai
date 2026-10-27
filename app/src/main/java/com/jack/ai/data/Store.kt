@@ -16,6 +16,8 @@ class Store(context: Context) {
     companion object {
         /** 这次启动时从副本恢复（或清空）过的文件，「文件名:prev」或「文件名:empty」。 */
         val recovered = java.util.concurrent.ConcurrentLinkedQueue<String>()
+        /** 用量页列出最近多少次请求。 */
+        const val RECENT_REQUESTS = 60
     }
 
     private val app = context.applicationContext
@@ -196,7 +198,7 @@ class Store(context: Context) {
      * 记一笔用量（按天、按模型累加），并按请求发生的这一刻的价格算钱。
      * cacheHit 为 null 表示服务没返回缓存命中数。返回这次花了多少元，不知道价格时返回 null。
      */
-    fun addUsage(ep: Endpoint, prompt: Int, cacheHit: Int?, completion: Int): Double? = synchronized(LOCK) {
+    fun addUsage(ep: Endpoint, prompt: Int, cacheHit: Int?, completion: Int, label: String = ""): Double? = synchronized(LOCK) {
         val now = System.currentTimeMillis()
         val date = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date(now))
         val price = Pricing.priceAt(ep, now)
@@ -216,9 +218,15 @@ class Store(context: Context) {
         )
         if (i >= 0) list[i] = new else list += new
         atomicWrite("usage.json", json.encodeToString(ListSerializer(UsageDay.serializer()), list.takeLast(800)))
+        // 最近每一次请求单独记一笔（用量页看缓存命中）
+        val recent = loadUnlocked("usage_recent.json", UsageRecord.serializer())
+        atomicWrite("usage_recent.json", json.encodeToString(ListSerializer(UsageRecord.serializer()),
+            (recent + UsageRecord(now, ep.key, label, prompt, cacheHit, completion, cost)).takeLast(RECENT_REQUESTS)))
         checkBudget(list, date.take(7))
         cost
     }
+
+    fun recentRequests(): List<UsageRecord> = synchronized(LOCK) { loadUnlocked("usage_recent.json", UsageRecord.serializer()) }
 
     /** 记一次按次收费的调用（比如 DeepSeek 联网），算进当天统计。 */
     fun addPaidCall(key: String, price: Double) = synchronized(LOCK) {
