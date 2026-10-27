@@ -17,8 +17,17 @@ class MailServerTest {
     private lateinit var server: GreenMail
     private lateinit var acc: MailAccount
 
+    // Robolectric 的测试会把 Conscrypt 装成整个 JVM 默认的加密实现，GreenMail 的 SSL 服务器在它上面起不来
+    // （报不支持的加密套件）。这个测试跑的时候先拿掉，跑完放回原位
+    private var conscrypt: java.security.Provider? = null
+    private var conscryptAt = 0
+
     @Before
     fun start() {
+        Security.getProviders().withIndex().firstOrNull { it.value.name == "Conscrypt" }?.let { (i, p) ->
+            conscrypt = p; conscryptAt = i + 1
+            Security.removeProvider(p.name)
+        }
         Security.setProperty("ssl.SocketFactory.provider", DummySSLSocketFactory::class.java.name)
         // 随机空闲端口；整套测试一起跑时 SSL 起得慢，默认 2 秒等不到，放宽到 30 秒
         server = GreenMail(arrayOf(ServerSetupTest.IMAPS.dynamicPort().apply { setServerStartupTimeout(30_000) }))
@@ -35,7 +44,10 @@ class MailServerTest {
     }
 
     @After
-    fun stop() = server.stop()
+    fun stop() {
+        server.stop()
+        conscrypt?.let { Security.insertProviderAt(it, conscryptAt) }
+    }
 
     private fun inbox() = MailClient.list(acc, "INBOX", 30, false, "", null)
 
