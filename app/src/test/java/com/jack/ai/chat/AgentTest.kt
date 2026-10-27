@@ -227,4 +227,32 @@ class AgentTest {
         assertEquals(4, agent.trail.size)
         assertTrue(agent.trail.none { "base64" in it })
     }
+
+    @Test
+    fun finishHookPushesBackUntilItAllowsFinishing() = runBlocking {
+        val api = FakeApi(text("做完了"), toolCall("web_search"), text("这回真做完了"))
+        val agent = Agent(api::stream)
+        var asked = 0
+        val msgs = mutableListOf(userMsg("找 5 家供应商"))
+        agent.run(msgs, someTools, { 10 }, { _, _ -> "结果" },
+            beforeFinish = { asked++; if (asked == 1) "还有两步没做完" else null })
+        assertEquals(2, asked)
+        // 推回去的那句和第一轮说的话都在对话里，接着做了一轮工具，最后才收尾
+        assertTrue(msgs.any { it["content"]?.jsonPrimitive?.content == "还有两步没做完" })
+        assertTrue(msgs.any { it["role"]?.jsonPrimitive?.content == "assistant" && it["content"]?.jsonPrimitive?.content == "做完了" })
+        assertEquals("这回真做完了", agent.lastRound)
+        // 推回去的话不进 trail（下次对话不用再发）
+        assertTrue(agent.trail.none { "还有两步没做完" in it })
+    }
+
+    @Test
+    fun finishHookIsNotAskedWhenToolsAreGone() = runBlocking {
+        val api = FakeApi(toolCall("web_search"), text("只能这样了"))
+        val agent = Agent(api::stream)
+        var asked = 0
+        agent.run(mutableListOf(userMsg("查")), someTools, { 1 }, { _, _ -> "结果" },
+            beforeFinish = { asked++; "接着做" })
+        // 到了轮数上限、已经不给工具，推回去也做不了事，就不问
+        assertEquals(0, asked)
+    }
 }

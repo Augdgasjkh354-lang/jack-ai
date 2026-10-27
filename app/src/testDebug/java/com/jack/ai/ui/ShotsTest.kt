@@ -106,6 +106,8 @@ class ShotsTest {
             ChatMessage(role = "assistant", content = "", cost = 0.38,
                 plan = listOf(com.jack.ai.data.PlanItem("收集 3 家供应商的最新报价", "done"), com.jack.ai.data.PlanItem("整理关键参数并对比", "done"),
                     com.jack.ai.data.PlanItem("生成汇总表格（Excel）", "doing"), com.jack.ai.data.PlanItem("检查数据并优化格式"), com.jack.ai.data.PlanItem("输出结果")),
+                criteria = listOf(com.jack.ai.data.PlanItem("找满 3 家供应商", "met"), com.jack.ai.data.PlanItem("每家都有价格和来源链接", "met"),
+                    com.jack.ai.data.PlanItem("规格一致、可以直接比较"), com.jack.ai.data.PlanItem("Excel 能打开、没有空行")),
                 searches = steps.mapIndexed { i, q -> SearchRecord(q, at = t0 + i * 60_000L, pending = i == steps.lastIndex) },
                 files = listOf(com.jack.ai.data.GeneratedFile(xlsx.name, xlsx.absolutePath, "application/vnd.ms-excel", xlsx.length()))),
         ))

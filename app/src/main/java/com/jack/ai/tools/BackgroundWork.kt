@@ -94,6 +94,7 @@ suspend fun runBackgroundWork(
     onProgress: (String) -> Unit = {},
 ): TaskResult {
     com.jack.ai.data.KaviSelf.ensure(ctx)
+    val startedAt = System.currentTimeMillis()
     val host = BackgroundToolHost(ctx)
     val store = host.store
     val s = store.loadSettings()
@@ -168,6 +169,10 @@ suspend fun runBackgroundWork(
     val thinking = if (ep.reasoning && ep.deepseek) s.workThinking.resolve(r.prompt, work = true, hasFiles = false) else ThinkLevel.OFF
     val client = DeepSeekClient()
     val agent = Agent({ msgs, t -> client.stream(ep, msgs, thinking, s.temperature, t) }, sendReasoning = ep.deepseek && thinking.effort != null)
+    // 定时的 Work 任务也过收尾关卡；监控、微信这类按固定格式回话的（带 brief）不过
+    val gate = if (brief == null) WorkGate(session, review = if (s.workReview) {
+        WorkGate.reviewer(session, DeepSeekClient(store::addUsage), s.backgroundEndpoint() ?: ep, r.prompt.ifBlank { r.title }, startedAt)
+    } else null) else null
     try {
         agent.run(
             messages = messages,
@@ -178,10 +183,11 @@ suspend fun runBackgroundWork(
                     session.maxRounds = 0
                     "花费到了上限，不要再调用工具，直接写出目前的结果，并说明还差什么。"
                 } else if (!allow(name, args)) "这个工具这次不能用。"
-                else session.perform(name, args).also { log(com.jack.ai.data.RunLog.stepOf(name, it.status, it.text)) }.text
+                else session.perform(name, args).also { log(com.jack.ai.data.RunLog.stepOf(name, it.status, it.text)) }.text + (gate?.reminder(name) ?: "")
             },
             retool = { toolsFor(session.unlocked.toSet()) },
             onTools = { TaskCheckpoint.save(checkpoint, cpKey, messages, spent) },
+            beforeFinish = gate?.let { g -> { answer -> g.beforeFinish(answer) } },
             onUsage = { ev ->
                 store.addUsage(ep, ev.promptTokens, ev.cacheHit, ev.completionTokens)
                 spent += Pricing.priceAt(ep, System.currentTimeMillis())

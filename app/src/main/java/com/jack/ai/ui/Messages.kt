@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
@@ -43,6 +44,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -270,7 +272,7 @@ fun AssistantMessage(
     val colors = MaterialTheme.colorScheme
     Column(Modifier.fillMaxWidth()) {
         if (msg.plan.isNotEmpty()) {
-            PlanCard(msg.plan, msg.cost)
+            PlanCard(msg.plan, msg.cost, msg.criteria)
             Spacer(Modifier.height(10.dp))
         }
         // 回答正文出来之前都算「还在忙」：思考框、工具框在这段时间里保持同一个样子，
@@ -696,13 +698,13 @@ private fun isOther(label: String) = listOf("读取", "翻阅", "记住", "使�
 
 /** Work 模式的任务清单：做完的打勾变灰，正在做的整行高亮、转圈，没做的空心圆；右上角是进度和花费。 */
 @Composable
-private fun PlanCard(items: List<com.jack.ai.data.PlanItem>, cost: Double = 0.0) {
+private fun PlanCard(items: List<com.jack.ai.data.PlanItem>, cost: Double = 0.0, criteria: List<com.jack.ai.data.PlanItem> = emptyList()) {
     val colors = MaterialTheme.colorScheme
     WorkCard {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 6.dp)) {
             Text("任务清单", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             Text(
-                "${items.count { it.status == "done" }}/${items.size}" + if (cost > 0) " · 已花 ¥%.2f".format(cost) else "",
+                "${items.count { it.status == "done" || it.status == "skipped" }}/${items.size}" + if (cost > 0) " · 已花 ¥%.2f".format(cost) else "",
                 style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant,
             )
         }
@@ -710,6 +712,7 @@ private fun PlanCard(items: List<com.jack.ai.data.PlanItem>, cost: Double = 0.0)
             items.forEachIndexed { i, item ->
                 val doing = item.status == "doing"
                 val done = item.status == "done"
+                val skipped = item.status == "skipped"
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
@@ -723,6 +726,8 @@ private fun PlanCard(items: List<com.jack.ai.data.PlanItem>, cost: Double = 0.0)
                                 Icon(Icons.Default.Check, null, Modifier.size(13.dp), tint = colors.surface)
                             }
                             doing -> CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = colors.onSurface)
+                            skipped -> Box(Modifier.size(19.dp).border(1.5.dp, colors.outlineVariant, androidx.compose.foundation.shape.CircleShape),
+                                contentAlignment = Alignment.Center) { Box(Modifier.size(width = 8.dp, height = 1.5.dp).background(colors.outline)) }
                             else -> Box(Modifier.size(19.dp).border(1.5.dp, colors.outlineVariant, androidx.compose.foundation.shape.CircleShape))
                         }
                     }
@@ -732,14 +737,43 @@ private fun PlanCard(items: List<com.jack.ai.data.PlanItem>, cost: Double = 0.0)
                         style = MaterialTheme.typography.bodyMedium.copy(
                             textDecoration = if (done) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
                         ),
-                        color = when { done -> colors.outline; doing -> colors.onSurface; else -> colors.onSurfaceVariant },
+                        color = when { done || skipped -> colors.outline; doing -> colors.onSurface; else -> colors.onSurfaceVariant },
                         fontWeight = if (doing) FontWeight.SemiBold else null,
                         modifier = Modifier.weight(1f),
                     )
                     if (doing) Text("正在进行…", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant,
                         modifier = Modifier.padding(start = 6.dp))
+                    if (skipped) Text("跳过", style = MaterialTheme.typography.labelSmall, color = colors.outline,
+                        modifier = Modifier.padding(start = 6.dp))
                 }
             }
+            if (criteria.isNotEmpty()) CriteriaList(criteria)
+        }
+    }
+}
+
+/** 验收标准：做完要满足的条件，核对过的打勾，做不到的标叉。 */
+@Composable
+private fun CriteriaList(criteria: List<com.jack.ai.data.PlanItem>) {
+    val colors = MaterialTheme.colorScheme
+    HorizontalDivider(Modifier.padding(horizontal = 8.dp, vertical = 6.dp), color = colors.outlineVariant)
+    Row(Modifier.padding(horizontal = 8.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("验收标准", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+        Text("${criteria.count { it.status == "met" }}/${criteria.size} 已满足", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
+    }
+    criteria.forEach { c ->
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+            Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) {
+                when (c.status) {
+                    "met" -> Icon(Icons.Default.Check, null, Modifier.size(16.dp), tint = colors.onSurface)
+                    "failed" -> Icon(Icons.Default.Close, null, Modifier.size(16.dp), tint = colors.error)
+                    else -> Box(Modifier.size(14.dp).border(1.5.dp, colors.outlineVariant, RoundedCornerShape(4.dp)))
+                }
+            }
+            Spacer(Modifier.size(12.dp))
+            Text(c.text, style = MaterialTheme.typography.bodySmall,
+                color = when (c.status) { "met" -> colors.onSurface; "failed" -> colors.error; else -> colors.onSurfaceVariant },
+                modifier = Modifier.weight(1f))
         }
     }
 }

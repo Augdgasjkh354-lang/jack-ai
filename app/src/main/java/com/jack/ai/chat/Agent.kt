@@ -61,6 +61,11 @@ class Agent(
         retool: (() -> JsonArray?)? = null,
         /** 每个工具做完、结果放进 messages 以后调（后台任务在这里存断点）。 */
         onTools: () -> Unit = {},
+        /**
+         * 模型这一轮没调工具、想直接收尾时问一声（Work 的收尾关卡，见 WorkGate）：返回 null 就收尾；
+         * 返回一段话就把它当作一条消息塞回去，接着做。已经不给工具了（到了轮数上限）就不问。
+         */
+        beforeFinish: (suspend (answer: String) -> String?)? = null,
     ) {
         // 补过图片的消息位置：新图来了就把旧的换成一句话，免得每轮都重发
         val imageAt = mutableListOf<Int>()
@@ -112,7 +117,14 @@ class Agent(
             }
             lastRound = roundContent.toString()
             onRound()
-            if (calls.isEmpty()) return
+            if (calls.isEmpty()) {
+                val nudge = if (currentTools != null) beforeFinish?.invoke(content.toString()) else null
+                if (nudge == null) return
+                // 推回去接着做：这一轮说的话留在对话里，再补一条要它继续的消息（不进 trail，下次对话不用再发）
+                if (roundContent.isNotEmpty()) messages += buildJsonObject { put("role", "assistant"); put("content", roundContent.toString()) }
+                messages += buildJsonObject { put("role", "user"); put("content", nudge) }
+                continue
+            }
 
             round++
             // 有的服务不给工具调用编号；编号空着的话，工具结果对不上调用，下一轮会被拒

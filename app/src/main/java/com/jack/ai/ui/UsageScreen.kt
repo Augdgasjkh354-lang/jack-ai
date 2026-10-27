@@ -25,6 +25,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -126,6 +127,14 @@ fun UsageScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                         Text("Work 单次任务上限" + if (wl > 0) " ${yuan(wl)}" else "：不限",
                             style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                         TextButton(onClick = { editWorkLimit = true }) { Text("修改") }
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Work 交付前复核", style = MaterialTheme.typography.bodyMedium)
+                            Text("做完后另请一次模型，只看结果、按验收标准查一遍，不合格打回去改。每个任务多花一次请求",
+                                style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                        }
+                        Switch(checked = state.settings.workReview, onCheckedChange = { on -> vm.updateSettings { it.copy(workReview = on) } })
                     }
                     if (budget > 0) {
                         val spent = monthList.money

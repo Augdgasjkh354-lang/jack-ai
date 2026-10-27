@@ -304,7 +304,7 @@ object PromptBuilder {
             parts += "固定说明" to "【Web】For time-sensitive questions (news, prices, weather, latest versions, recent events) or facts you're unsure of, check with web search. Common knowledge, casual chat and writing don't need a search."
         }
         if ("update_plan" in names) {
-            parts += "固定说明" to "【Task list】For tasks with three or more steps, list the steps with update_plan first; mark a step doing when you start it and done when it's finished. Simple questions don't need a list."
+            parts += "固定说明" to "【Task list】Start every task with update_plan: the steps and the acceptance criteria. Mark a step doing when you start it and done when it's finished; mark a criterion met only after checking the actual results. A plain question that needs no tools doesn't need a list."
         }
         if ("delegate_tasks" in names) {
             parts += "固定说明" to "【Parallel work】When a task contains several independent pieces of research (e.g. looking into several companies or sources separately), send them out at once with delegate_tasks; it's faster than doing them one by one. Subtasks can only research and read files; generating files and sending email stay with you."

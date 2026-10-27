@@ -31,6 +31,8 @@ data class ChatMessage(
     val files: List<GeneratedFile> = emptyList(),
     /** Work 模式的任务清单（update_plan）。 */
     val plan: List<PlanItem> = emptyList(),
+    /** Work 模式的验收标准（update_plan 的 criteria）：status 是 pending / met / failed。 */
+    val criteria: List<PlanItem> = emptyList(),
     /** 要让用户一眼看到的事，比如「Kavi 改了自己」。 */
     val notices: List<String> = emptyList(),
     /** Work 模式下这条回答花了多少元（当场按价格算）。 */
@@ -48,7 +50,7 @@ fun appVersion(ctx: android.content.Context): Int = runCatching {
     if (android.os.Build.VERSION.SDK_INT >= 28) info.longVersionCode.toInt() else @Suppress("DEPRECATION") info.versionCode
 }.getOrDefault(0)
 
-/** 任务清单的一项：status 是 pending / doing / done。 */
+/** 任务清单的一项：步骤的 status 是 pending / doing / done / skipped；验收标准的是 pending / met / failed。 */
 @Serializable
 data class PlanItem(val text: String, val status: String = "pending")
 
@@ -209,6 +211,8 @@ data class Settings(
     val workTemplates: List<Preset> = DEFAULT_WORK_TEMPLATES,
     /** Work 一次任务花到多少元先停下问用户，0 表示不限。 */
     val workCostLimit: Double = 5.0,
+    /** Work 交付前另起一次请求、不看过程只看结果，按验收标准复核一遍（多花一次请求的钱）。 */
+    val workReview: Boolean = true,
     val compressTokens: Int = COMPRESS_MIN,
     val memoryEnabled: Boolean = true,
     val dreamEnabled: Boolean = true,
@@ -522,11 +526,11 @@ const val CORE_PRINCIPLES = """Working principles (fixed):
 /** Work 模式另外的几条：把事做完、交付前检查、最后交代清楚。 */
 const val WORK_RULES = """Work mode: you are completing a task on {user}'s behalf. The goal is to get it done, and done right, not to chat.
 
-1. First work out what you need to deliver. If the task has three or more steps, list them with update_plan first, and update it each time you start or finish a step.
+1. Always start with update_plan: break the goal into steps (usually 3 to 8) and write 2 to 6 checkable acceptance criteria (e.g. "5 suppliers found", "every row has a price and a source link", "the Excel opens with no empty rows"). Update it each time you start or finish a step; {user} sees each finished step crossed off. Mark a criterion met only after checking it against the actual results. You can't finish while steps are open or criteria are unchecked: if something truly can't be done, mark the step skipped or the criterion failed and explain why.
 2. Do the work. Whatever you can verify, calculate, read, write or generate with tools, do it yourself; don't just give advice and leave the work to {user}. Stop to ask only when key information is missing and you can't reasonably assume it. When you can, state the assumption and carry on.
 3. Deliver what {user} meant: no features, pages or sections nobody asked for, and don't quietly swap the goal for an easier one. If you think more is worth doing, suggest it in one line at the end.
    When editing existing files, use edit_file to replace just the part that changes, and keep everything {user} said to keep. "Tweak" or "polish" means small changes: don't rewrite or replace the original structure and style.
-4. Check once before delivering. Re-check numbers, confirm files were actually generated, and confirm cited sources exist. The 【核实】 note at the end of a tool result is the system's automatic re-check; if it says 【核实失败】 and two attempts don't fix it, say plainly at the end what didn't work. Go through {user}'s hard requirements (format, count, length, content that must stay) one by one. If you edited files, make sure nothing else was deleted or broken. One check is enough; don't verify the same thing again and again.
+4. Check once before delivering, and when a step's result is incomplete (too few sources, missing data, a failed download), change the search terms, source or method instead of settling. Re-check numbers, confirm files were actually generated, and confirm cited sources exist. The 【核实】 note at the end of a tool result is the system's automatic re-check; if it says 【核实失败】 and two attempts don't fix it, say plainly at the end what didn't work. Go through {user}'s hard requirements (format, count, length, content that must stay) one by one. If you edited files, make sure nothing else was deleted or broken. One check is enough; don't verify the same thing again and again.
 5. If the same operation fails twice, change approach, or stop and explain where you're stuck. Never say "let me..." without doing it.
 6. End with a few lines: what you did, which files you produced (by name), what didn't get done and why, and anything {user} needs to confirm or decide. No pleasantries, no recap of the process.
 7. Irreversible actions only when the task explicitly calls for them; if unsure, ask first."""

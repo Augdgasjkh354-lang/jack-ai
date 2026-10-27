@@ -69,8 +69,8 @@ interface ToolUi {
     fun attach(file: File)
     /** 做了就收不回的操作（发邮件等）先问用户，返回 true 才执行。工具里别直接调，用 ToolSession.approve。 */
     suspend fun confirm(title: String, body: String, action: String): Boolean
-    /** Work 模式的任务清单更新了。 */
-    fun plan(items: List<PlanItem>) {}
+    /** Work 模式的任务清单（步骤和验收标准）更新了。 */
+    fun plan(items: List<PlanItem>, criteria: List<PlanItem>) {}
     /** 要让用户一眼看到的事（比如 Kavi 改了自己），在回答里显示成一张小卡片。 */
     fun notice(text: String) {}
     /** 慢的工具（下载大文件）的进度，显示在通知栏上。 */
@@ -123,6 +123,11 @@ class ToolSession(
 
     /** 成功跑完的工具次数；execute 前后比一比，就知道这次调用成没成（参数不对没进 runTool 的也算失败）。 */
     internal val succeeded = java.util.concurrent.atomic.AtomicInteger()
+    /** 这次回答一共调了几次工具（收尾关卡用：没动过工具的简单问答不用列清单）。 */
+    val calls = java.util.concurrent.atomic.AtomicInteger()
+    /** 最近一次 update_plan 写下的步骤和验收标准。 */
+    @Volatile var steps: List<PlanItem> = emptyList()
+    @Volatile var criteria: List<PlanItem> = emptyList()
 
     /** 执行一个工具，聊天里显示「进行中」→「完成/出错」。出错时把原因交给模型，不抛出。 */
     suspend fun runTool(label: String, action: suspend () -> Pair<String, SearchRecord>): String {
@@ -187,6 +192,7 @@ class ToolSession(
         }
         // 连接器返回的也是外部内容
         if (name in EXTERNAL_TOOLS || name.startsWith(com.jack.ai.data.Mcp.PREFIX)) sawExternal = true
+        calls.incrementAndGet()
         val before = succeeded.get()
         val refusedBefore = rejected.get()
         val result = dispatch(name, argsText)
@@ -406,17 +412,23 @@ internal suspend fun ToolSession.startClock(intent: Intent, missing: String = "�
 
 /** 任务清单：整份替换，显示在回答上方。不算一次“工具调用”的标记，免得刷屏。 */
 internal fun ToolSession.updatePlan(args: JsonObject): String {
-    val items = (args["items"] as? JsonArray).orEmpty().mapNotNull { el ->
+    fun list(key: String, ok: Set<String>, max: Int) = (args[key] as? JsonArray).orEmpty().mapNotNull { el ->
         val o = el as? JsonObject ?: return@mapNotNull null
         val text = o["text"].text().trim().ifBlank { return@mapNotNull null }
-        PlanItem(text.take(120), o["status"].text().takeIf { it in setOf("pending", "doing", "done") } ?: "pending")
-    }.take(30)
+        PlanItem(text.take(120), o["status"].text().takeIf { it in ok } ?: "pending")
+    }.take(max)
+    val items = list("items", setOf("pending", "doing", "done", "skipped"), 30)
     if (items.isEmpty()) return "清单是空的"
-    ui.plan(items)
+    // 验收标准没传就沿用上次的（模型更新步骤时常常只传 items）
+    val crit = if (args["criteria"] is JsonArray) list("criteria", setOf("pending", "met", "failed"), 10) else criteria
+    steps = items
+    criteria = crit
+    ui.plan(items, crit)
     // 不走 runTool，自己记一次成功，工具统计里才不会算成失败
     succeeded.incrementAndGet()
-    val done = items.count { it.status == "done" }
-    return "清单已更新（$done/${items.size} 完成）"
+    val done = items.count { it.status == "done" || it.status == "skipped" }
+    return "清单已更新（步骤 $done/${items.size} 完成" +
+        (if (crit.isEmpty()) "；还没写验收标准，补上 criteria" else "；验收标准 ${crit.count { it.status != "pending" }}/${crit.size} 已核对") + "）"
 }
 
 /** 浏览器的占用：谁占着（一个 ToolSession），没人占时排队的按先后拿到。 */

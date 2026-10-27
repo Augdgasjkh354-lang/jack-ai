@@ -43,6 +43,7 @@ import com.jack.ai.data.Store
 import com.jack.ai.data.ThinkLevel
 import com.jack.ai.data.MODEL_FLASH
 import com.jack.ai.data.endpoint
+import com.jack.ai.data.backgroundEndpoint
 import com.jack.ai.data.Provider
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -465,13 +466,18 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val conv = _state.value.current ?: return
         if (busy(conv.id) || tooMany(conv.id)) return
         val last = conv.messages.lastOrNull { it.role == "assistant" } ?: return
-        val plan = conv.messages.lastOrNull { it.plan.isNotEmpty() }?.plan.orEmpty()
+        val planMsg = conv.messages.lastOrNull { it.plan.isNotEmpty() }
+        val plan = planMsg?.plan.orEmpty()
         val extra = buildString {
             append("刚才的任务被打断了，请接着做完。已经做完的不要重做，文件夹里已有的文件先看一眼再决定。")
             if (plan.isNotEmpty()) {
                 append("\n当时的清单：\n")
                 plan.forEach { append(if (it.status == "done") "- [完成] " else "- [没做完] ").append(it.text).append("\n") }
-                append("先用 update_plan 写出最新的清单，再从没做完的那步开始。")
+                planMsg?.criteria?.takeIf { it.isNotEmpty() }?.let { c ->
+                    append("验收标准：\n")
+                    c.forEach { append(if (it.status == "met") "- [已满足] " else "- [未核对] ").append(it.text).append("\n") }
+                }
+                append("先用 update_plan 写出最新的清单和验收标准，再从没做完的那步开始。")
             }
             last.error?.let { append("\n上次停下的原因：$it") }
         }
@@ -553,8 +559,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     WorkService.progress(getApplication(), convId, workTitle, label, work)
                 }
 
-                override fun plan(items: List<com.jack.ai.data.PlanItem>) {
-                    patchMessage(convId, reply.id) { it.copy(plan = items) }
+                override fun plan(items: List<com.jack.ai.data.PlanItem>, criteria: List<com.jack.ai.data.PlanItem>) {
+                    patchMessage(convId, reply.id) { it.copy(plan = items, criteria = criteria) }
                     val doing = items.firstOrNull { it.status == "doing" }?.text
                     WorkService.progress(getApplication(), convId, workTitle,
                         "${items.count { it.status == "done" }}/${items.size}" + (doing?.let { " · $it" } ?: ""), work)
@@ -580,6 +586,12 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             session.modelName = com.jack.ai.data.modelLabel(model)
             session.unlocked.addAll(unlockedStart)
             val agent = Agent({ msgs, t -> client.stream(ep, msgs, thinking, settings.temperature, t) }, sendReasoning = thinkingOn)
+            // Work 的收尾关卡：清单没做完不让收尾；开着「交付前复核」再另起一次请求按验收标准查一遍
+            val gate = com.jack.ai.tools.WorkGate(session, review = if (work && settings.workReview) {
+                val reviewEp = settings.backgroundEndpoint() ?: ep
+                val request = conv.messages.lastOrNull { it.role == "user" }?.content.orEmpty()
+                com.jack.ai.tools.WorkGate.reviewer(session, DeepSeekClient { e, p, h, c -> core.recordSpend(convId, e, p, h, c) }, reviewEp, request, reply.createdAt)
+            } else null)
             val myInterjections = interjectionsOf(convId).apply { clear() }
             running[convId] = reply.id
             val reasoning = agent.reasoning
@@ -612,7 +624,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                             else session.maxRounds = 0
                         }
                         if (session.maxRounds == 0) "用户让你先停下（花费到了上限）。不要再调用工具，直接说明目前做到哪一步、还差什么。"
-                        else session.execute(name, args)
+                        else session.execute(name, args) + gate.reminder(name)
                     },
                     onText = {
                         val now = System.currentTimeMillis()
@@ -637,6 +649,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     images = { session.takeImages() },
                     // use_skill 打开了新技能：下一轮把它的工具加上
                     retool = { PromptBuilder.toolSet(settings, skills, conv, project, session.unlocked.toSet()) },
+                    beforeFinish = { answer -> gate.beforeFinish(answer) },
                     recovery = Agent.Recovery { tried ->
                         // 先怀疑图片编号失效（过期或被删）：清掉记录，改回内联图片再试一次
                         if (!filesDropped && promptInput.fileIds.isNotEmpty()) {
