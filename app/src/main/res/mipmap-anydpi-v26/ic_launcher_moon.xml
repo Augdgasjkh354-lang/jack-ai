@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 整张图（底色加图案）照着参考图抠下来，放在背景层；前景空着 -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <background android:drawable="@drawable/ic_logo_bg" />
-    <foreground android:drawable="@drawable/ic_logo_moon_fg" />
-    <monochrome android:drawable="@drawable/ic_logo_moon_fg" />
+    <background android:drawable="@drawable/ic_logo_moon" />
+    <foreground android:drawable="@android:color/transparent" />
+    <monochrome android:drawable="@drawable/ic_logo_moon_mono" />
 </adaptive-icon>

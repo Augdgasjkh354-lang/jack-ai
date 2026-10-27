@@ -5,23 +5,18 @@ import android.content.Context
 import android.content.pm.PackageManager
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import com.jack.ai.R
 
 /**
@@ -33,9 +28,9 @@ object AppIcon {
     data class Option(val id: String, val label: String, val alias: String, val foreground: Int)
 
     val OPTIONS = listOf(
-        Option("k", "K", ".LauncherK", R.drawable.ic_logo_k_fg),
-        Option("bubble", "对话气泡", ".LauncherBubble", R.drawable.ic_logo_bubble_fg),
-        Option("moon", "月亮", ".LauncherMoon", R.drawable.ic_logo_moon_fg),
+        Option("k", "K", ".LauncherK", R.drawable.ic_logo_k),
+        Option("bubble", "对话气泡", ".LauncherBubble", R.drawable.ic_logo_bubble),
+        Option("moon", "月亮", ".LauncherMoon", R.drawable.ic_logo_moon),
         Option("classic", "原来的", ".LauncherClassic", R.mipmap.ic_launcher_foreground),
     )
 
@@ -71,22 +66,17 @@ object AppIcon {
 /** 现在用的图标（JackTheme 里给），Kavi 的标志跟着它变。 */
 val LocalAppIcon = staticCompositionLocalOf { "k" }
 
-/** 图标的样子：和桌面上一样的底色加前景。 */
+/** 图标的样子：和桌面上一样（新图标是整张图，原来的是橙底加前景）。 */
 @Composable
 fun AppIconTile(id: String, size: Dp, modifier: Modifier = Modifier) {
     val o = AppIcon.option(id)
-    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
-    val bg: Brush = when {
-        o.id == "classic" -> Brush.linearGradient(listOf(Color(0xFFC7673C), Color(0xFFC7673C)))
-        dark -> Brush.linearGradient(listOf(Color(0xFF1C2132), Color(0xFF2A2550)))
-        else -> Brush.linearGradient(listOf(Color.White, Color(0xFFEDEAFE)))
-    }
+    val classic = o.id == "classic"
     val shape = RoundedCornerShape(size * 0.28f)
     Box(
-        modifier.size(size).clip(shape).background(bg)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (dark || o.id == "classic") 0f else 1f), shape),
+        modifier.size(size).clip(shape).background(if (classic) Color(0xFFC7673C) else Color.White),
         contentAlignment = Alignment.Center,
     ) {
+        // 108 份的画布露出中间 72 份，和桌面上一样
         Image(painterResource(o.foreground), null, Modifier.requiredSize(size * 1.5f))
     }
 }
