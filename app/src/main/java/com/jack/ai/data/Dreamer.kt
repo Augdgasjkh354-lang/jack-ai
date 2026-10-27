@@ -299,6 +299,11 @@ Also write "changes": one or two sentences summing up how memories mainly change
 
 Output only one JSON object: {"journal": "…", "changes": "…"}"""
 
+    /** 聊天时带着的最近几篇日记（旧的在前，带日期）。 */
+    const val JOURNALS = 3
+    fun recentJournals(dreams: List<DreamEntry>, n: Int = JOURNALS): String = dreams.filter { it.journal.isNotBlank() }.take(n).reversed()
+        .joinToString("\n\n") { "— " + FreeTime.day(it.createdAt) + " —\n" + it.journal.trim() }
+
     /** 攒够了就合成一篇（每次最多合一批）。 */
     private suspend fun mergeOld(ctx: Context, store: Store, ep: Endpoint, client: DeepSeekClient) {
         val batch = mergeBatch(store.loadDreams()) ?: return

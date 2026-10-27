@@ -12,8 +12,7 @@ object DreamArchive {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private fun file(ctx: Context) = AtomicFile(File(ctx.filesDir, "dream_originals.json"))
     fun load(ctx: Context): List<DreamEntry> = synchronized(lock) {
-        val bytes = try { file(ctx).readFully() } catch (_: java.io.FileNotFoundException) { return emptyList() }
-        json.decodeFromString(ListSerializer(DreamEntry.serializer()), String(bytes))
+        runCatching { json.decodeFromString(ListSerializer(DreamEntry.serializer()), String(file(ctx).readFully())) }.getOrDefault(emptyList())
     }
     private fun save(ctx: Context, entries: List<DreamEntry>) {
         val f = file(ctx); val out = f.startWrite()

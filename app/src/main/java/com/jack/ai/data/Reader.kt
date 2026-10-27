@@ -156,7 +156,7 @@ object Reader {
         val before = Facts.load(ctx).count { it.origin == "reading" }
         // 最近和用户聊了什么、自己做了什么（经历流），不管从哪醒来都接得上
         val recently = runCatching { Timeline.freeNote(ctx, s, store.loadConversations(), store.loadProjects()) }.getOrDefault("")
-        val recent = entries.filter { it.skipped.isEmpty() }.take(10).joinToString("\n") { e ->
+        val recent = entries.filter { it.skipped.isEmpty() }.take(20).joinToString("\n") { e ->
             java.text.SimpleDateFormat("MM-dd", java.util.Locale.ENGLISH).format(java.util.Date(e.at)) + " [" + e.kind + "] " +
                 e.title.ifBlank { e.topics.joinToString("; ") } + (if (e.files.isNotEmpty()) " (files: " + e.files.joinToString(", ") { it.name } + ")" else "")
         }

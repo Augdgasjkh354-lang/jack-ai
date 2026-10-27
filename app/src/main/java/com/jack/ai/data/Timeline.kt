@@ -43,7 +43,7 @@ data class Episode(
 object Timeline {
     const val IDLE_MIN = 15L
     /** 「刚才」带几段。 */
-    const val RECENT = 5
+    const val RECENT = 12
     /** 隔这么多天以上，才可以提一句「隔了几天了」。 */
     const val GAP_DAYS = 3
     private const val NOTE_WINDOW = 500

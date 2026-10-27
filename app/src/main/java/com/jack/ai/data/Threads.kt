@@ -33,7 +33,7 @@ data class OpenThread(
  */
 object Threads {
     const val FADE_DAYS = 14
-    const val SHOW = 6
+    const val SHOW = 12
     private const val MAX_OPEN = 20
     val KINDS = setOf("wondering", "promise", "unfinished", "looking_forward")
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }

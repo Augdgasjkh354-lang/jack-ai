@@ -101,7 +101,8 @@ suspend fun runBackgroundWork(
     val host = BackgroundToolHost(ctx)
     val store = host.store
     val s = store.loadSettings()
-    val ep = s.endpoint(model ?: s.workModel)?.takeIf { it.apiKey.isNotBlank() } ?: s.backgroundEndpoint()
+    // Work 的模型是用户在 Work 里最后选的那个：第三方的（c: 开头）多半是聊天时临时换的、没标价格，定时任务不跟着它跑
+    val ep = s.endpoint(model ?: s.workModel.takeIf { !it.startsWith("c:") } ?: com.jack.ai.data.MODEL_FLASH)?.takeIf { it.apiKey.isNotBlank() } ?: s.backgroundEndpoint()
         ?: return TaskResult(NO_KEY, status = TaskStatus.NEEDS_SETUP)
     val conv = store.loadConversations().firstOrNull { it.id == r.convId }?.copy(work = true)
         ?: Conversation(id = r.convId, title = "⏰ " + r.title, work = true)
@@ -118,7 +119,7 @@ suspend fun runBackgroundWork(
     val tools = toolsFor(conv.skillTools)
     // 隐私项目里的任务不带全局记忆和日记
     val memories = if (s.memoryEnabled && conv.globalAllowed(project)) store.loadMemories() else emptyList()
-    val journal = store.loadDreams().firstOrNull { it.journal.isNotBlank() }?.journal.orEmpty()
+    val journal = com.jack.ai.data.Dreamer.recentJournals(store.loadDreams())
     val now = SimpleDateFormat("yyyy-MM-dd EEEE HH:mm", Locale.ENGLISH).format(Date())
     val system = PromptBuilder.systemPrompt(s, conv, project, tools, memories, skills, journal = journal, lately = com.jack.ai.data.FreeTime.latelyNote(ctx, full = r.convId != com.jack.ai.data.Reader.CONV_ID)) +
         "\n\n" + com.jack.ai.data.Persona.fill(

@@ -83,10 +83,17 @@ internal suspend fun ToolSession.listFiles() = runTool("查看文件夹") {
     (if (list.isEmpty()) "对话文件夹是空的。" else list.joinToString("\n")) to SearchRecord("查看文件夹")
 }
 
+/** Kavi 自己工作台（自由时间的文件夹）上的文件：聊天里提到自己做过的东西时能直接读。隐私项目里不看外面的。 */
+private fun ToolSession.ownWorkbenchFile(name: String): File? {
+    if (project?.isolated == true || conv.id == Reader.CONV_ID) return null
+    return Workspace.find(Workspace.dir(app, Workspace.key(Conversation(id = Reader.CONV_ID))), name)
+}
+
 internal suspend fun ToolSession.readFile(args: JsonObject): String {
     val name = args["name"].text()
     return runTool("查看 $name") {
-        val file = wsFile(name)
+        val file = runCatching { wsFile(name) }.getOrElse { e -> ownWorkbenchFile(name) ?: throw TextEdit.EditException(e.message.orEmpty() +
+            if (name.startsWith("free_") || name.endsWith(".json")) "（自由时间、梦的原文用 own_history 看，不用 read_file）" else "") }
         val extracted = args["extracted"].text() == "true"
         val text = withContext(Dispatchers.IO) { Workspace.readText(file, extracted) }
         val lines = text.lines()

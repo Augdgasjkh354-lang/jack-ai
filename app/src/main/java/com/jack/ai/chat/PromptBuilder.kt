@@ -55,6 +55,8 @@ object PromptBuilder {
         val journal: String = "",
         /** Kavi 自己的近况（自由时间里写的）。 */
         val lately: String = "",
+        /** Kavi 的自传（它自己写的，每周更新，同一篇）。 */
+        val story: String = "",
         /** 已上传到 DeepSeek 的图片：路径 → file_id，这些图只发编号。 */
         val fileIds: Map<String, String> = emptyMap(),
         val now: Long = System.currentTimeMillis(),
@@ -75,7 +77,7 @@ object PromptBuilder {
         val thinkingOn = input.sendReasoning
         val withTools = tools != null
         val list = mutableListOf<JsonObject>()
-        val system = systemPrompt(settings, conv, project, tools, memories, skills, input.chatMemory, input.projectMemory, input.journal, input.lately)
+        val system = systemPrompt(settings, conv, project, tools, memories, skills, input.chatMemory, input.projectMemory, input.journal, input.lately, input.story)
         if (system.isNotBlank()) list += msg("system", system)
         for (m in Compression.liveMessages(conv)) {
             if (m.error != null) continue
@@ -249,12 +251,12 @@ object PromptBuilder {
     /** 一次请求的上下文大概由哪些部分组成（名字, 估算 token）。 */
     fun contextBreakdown(
         settings: Settings, conv: Conversation, project: Project?, memories: List<MemoryItem>, skills: List<Skill>,
-        chatMemory: String = "", projectMemory: String = "", journal: String = "",
+        chatMemory: String = "", projectMemory: String = "", journal: String = "", lately: String = "", story: String = "",
     ): List<Pair<String, Int>> {
         val tools = toolSet(settings, skills, conv, project)
         val out = linkedMapOf<String, Int>()
         out["工具说明"] = tools?.let { estTokens(it.toString()) } ?: 0
-        systemParts(settings, conv, project, tools, memories, skills, chatMemory, projectMemory, journal).forEach { (k, v) -> out[k] = (out[k] ?: 0) + estTokens(v) }
+        systemParts(settings, conv, project, tools, memories, skills, chatMemory, projectMemory, journal, lately, story).forEach { (k, v) -> out[k] = (out[k] ?: 0) + estTokens(v) }
         val history = Compression.liveMessages(conv).filter { it.error == null }.sumOf { m ->
             estTokens(m.content) + m.attachments.sumOf { estTokens(it.text) } + m.trail.sumOf { estTokens(it) }
         }
@@ -278,7 +280,8 @@ object PromptBuilder {
         projectMemory: String = "",
         journal: String = "",
         lately: String = "",
-    ): String = systemParts(settings, conv, project, tools, memories, skills, chatMemory, projectMemory, journal, lately).joinToString("\n\n") { it.second }
+        story: String = "",
+    ): String = systemParts(settings, conv, project, tools, memories, skills, chatMemory, projectMemory, journal, lately, story).joinToString("\n\n") { it.second }
 
     /**
      * 有些技能的工具要读过做法才出现，先告诉模型，免得它以为没有这个能力。
@@ -302,6 +305,7 @@ object PromptBuilder {
         projectMemory: String = "",
         journal: String = "",
         lately: String = "",
+        story: String = "",
     ): List<Pair<String, String>> {
         val parts = mutableListOf<Pair<String, String>>()
         val globalOn = settings.memoryEnabled && conv.globalAllowed(project)
@@ -362,8 +366,12 @@ object PromptBuilder {
                 memories.joinToString("\n") { "- ${it.text}" }
         }
         if (globalOn && journal.isNotBlank()) {
-            parts += "日记" to f("【Your journal】\nNotes you wrote to yourself after last looking back over your chats, to understand {user} better and pick up ongoing things. Use them naturally, only when relevant to the current topic; " +
+            parts += "日记" to f("【Your journal】\nNotes you wrote to yourself after your recent look-backs over your chats (oldest first), to understand {user} better and pick up ongoing things. Use them naturally, only when relevant to the current topic; " +
                 "don't bring up things {user} hasn't raised, and don't mention the journal.\n") + journal.trim()
+        }
+        // 自传每周才变，放在近况前面；隐私项目里不带（它讲的是外面的事）
+        if (globalOn && story.isNotBlank()) {
+            parts += "自传" to f("【Your autobiography】\nYour own account of who you've been and how you became who you are now, written and revised by you. It's your continuity, not something to recite; let it inform how you are.\n") + story.trim()
         }
         if (lately.isNotBlank()) {
             parts += "近况" to f("【How you've been lately】\n") + lately.trim() +

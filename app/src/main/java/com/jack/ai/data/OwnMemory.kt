@@ -26,8 +26,8 @@ object OwnMemory {
     private fun file(ctx: Context) = AtomicFile(File(ctx.filesDir, "own_memories.json"))
 
     fun load(ctx: Context): List<OwnMemoryItem> = synchronized(lock) {
-        val bytes = try { file(ctx).readFully() } catch (_: java.io.FileNotFoundException) { return emptyList() }
-        json.decodeFromString(ListSerializer(OwnMemoryItem.serializer()), String(bytes))
+        // 读不出来（没有或坏了）就当空的：近况、每轮回忆都会读它，不能因为它让聊天发不出去
+        runCatching { json.decodeFromString(ListSerializer(OwnMemoryItem.serializer()), String(file(ctx).readFully())) }.getOrDefault(emptyList())
     }
     private fun save(ctx: Context, items: List<OwnMemoryItem>) {
         val f = file(ctx); val out = f.startWrite()
@@ -191,6 +191,6 @@ object OwnMemory {
         .joinToString("\n") { "- ${FreeTime.day(it.at)} ${it.kind}：${it.text}" }
 
     fun format(items: List<OwnMemoryItem>): String = if (items.isEmpty()) "" else
-        "【你自己的经历记忆】以下是你做过或想过的事，附日期和原始记录编号；需要细节可以用 own_history 查阅。\n" +
-            items.joinToString("\n") { "- [${it.id.take(8)}] ${FreeTime.day(it.at)} ${it.kind}：${it.text}（来源 ${it.source}）" } + "\n"
+        "【你自己的经历记忆】以下是你做过或想过的事；要看当时的原文，用 own_history（action=read，id 填编号）。\n" +
+            items.joinToString("\n") { "- [${it.id.take(8)}] ${FreeTime.day(it.at)} ${it.kind}：${it.text}" } + "\n"
 }

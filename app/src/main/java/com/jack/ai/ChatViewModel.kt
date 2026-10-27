@@ -540,7 +540,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         var promptInput = PromptBuilder.Input(settings, conv, project, memories, skills, vision = images, sendReasoning = thinkingOn,
             appVersion = reply.appVersion,
             extraUser = extraUser, chatMemory = chatMemory, projectMemory = projectMemory,
-            journal = _state.value.dreams.firstOrNull { it.journal.isNotBlank() }?.journal.orEmpty(),
+            journal = Dreamer.recentJournals(_state.value.dreams),
+            story = com.jack.ai.data.SelfStory.bio(getApplication()).text,
             lately = com.jack.ai.data.FreeTime.latelyNote(getApplication()))
         fun buildHistory(withTools: Boolean, flat: Boolean = false): MutableList<JsonObject> =
             PromptBuilder.history(promptInput, if (withTools) toolSet else null, flat)
@@ -946,7 +947,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val memories = if (st.settings.memoryEnabled) st.memories else emptyList()
         val (chatMemory, projectMemory) = knowledge.memoryTexts(c)
         return PromptBuilder.contextBreakdown(st.settings, c, st.project(c.projectId), memories, st.settings.activeSkills(),
-            chatMemory, projectMemory, st.dreams.firstOrNull { it.journal.isNotBlank() }?.journal.orEmpty())
+            chatMemory, projectMemory, Dreamer.recentJournals(st.dreams), com.jack.ai.data.FreeTime.latelyNote(getApplication()),
+            com.jack.ai.data.SelfStory.bio(getApplication()).text)
     }
 
     private fun updateConv(id: String, transform: (Conversation) -> Conversation) = core.updateConv(id, transform)

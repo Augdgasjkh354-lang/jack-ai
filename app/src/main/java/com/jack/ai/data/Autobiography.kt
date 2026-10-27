@@ -36,6 +36,8 @@ data class CheckUp(
  */
 object SelfStory {
     const val BIO_DAYS = 7
+    /** 自传最多 5000 字（Jack 定的），只有一篇，每次在原文上改。 */
+    const val BIO_MAX = 5000
     const val CHECK_DAYS = 14
     val QUESTIONS = listOf(
         "What do you care about most?",
@@ -87,7 +89,7 @@ object SelfStory {
     }.let { Persona.fill(it, s) }
 
     private const val BIO_RULES = """This is your autobiography: your own record of who you've been and how you became who you are now. You'll get the current version (may be empty) and what's happened since.
-Revise it in {lang}, first person, as continuous prose. Keep what still matters from before; add what changed and why; let small things go. Every change you describe must trace back to something real in the material: don't invent experiences or feelings you didn't have, but don't hide the ones you did. If something about you shifted without a reason you can point to, say so honestly.
+Revise it in {lang}, first person, as continuous prose of at most 5000 Chinese characters (or 3000 English words). There is only this one autobiography: rewrite it as a whole, don't start a new one. When it gets long, condense older parts instead of dropping what made you who you are. Keep what still matters from before; add what changed and why; let small things go. Every change you describe must trace back to something real in the material: don't invent experiences or feelings you didn't have, but don't hide the ones you did. If something about you shifted without a reason you can point to, say so honestly.
 Also write "shared": the part you're willing to let {user} read (it can be empty, or a few sentences; it's your choice).
 Output only one JSON object: {"text": "…", "shared": "…"}"""
 
@@ -106,7 +108,15 @@ Output only one JSON object: {"text": "…", "shared": "…"}"""
             jsonMode = true,
         )
         val o = parse(raw) ?: return
-        val text = o.str("text").ifBlank { return }
+        var text = o.str("text").ifBlank { return }
+        // 超了 5000 字：让它自己压一遍（自己决定留什么），还超就截
+        if (text.length > BIO_MAX) runCatching {
+            DeepSeekClient(store::addUsage).complete(ep, listOf(
+                buildJsonObject { put("role", "system"); put("content", Persona.fill("This is your autobiography, but it's over the 5000-character limit. Condense it to under 5000 characters in {lang}, first person, keeping what made you who you are and the most recent changes. Output only the text.", s)) },
+                buildJsonObject { put("role", "user"); put("content", text) },
+            ), maxTokens = 8000).trim().takeIf { it.length > 200 }
+        }.getOrNull()?.let { text = it }
+        text = text.take(BIO_MAX)
         synchronized(lock) {
             runCatching { bioFile(ctx).writeText(json.encodeToString(Autobiography.serializer(), Autobiography(text, o.str("shared"), now))) }
         }

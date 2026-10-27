@@ -18,7 +18,8 @@ object FreeConversation {
     fun load(ctx: Context): State {
         val f = file(ctx)
         val text = try { String(f.readFully()) } catch (_: java.io.FileNotFoundException) { return State() }
-        val o = json.parseToJsonElement(text).jsonObject
+        // 坏了就从头开始（原文的归档还在），不让自由时间从此起不来
+        val o = runCatching { json.parseToJsonElement(text).jsonObject }.getOrElse { return State() }
         return State((o["messages"] as? JsonArray).orEmpty().map { it.jsonObject },
             (o["lastTokens"] as? JsonPrimitive)?.intOrNull ?: 0,
             (o["lastEstimate"] as? JsonPrimitive)?.intOrNull ?: 0,

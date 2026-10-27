@@ -69,10 +69,10 @@ object DeepRecall {
         fun sim(id: String, text: String) = sims[key(id, text)] ?: 0f
 
         val userHits = (MemoryOps.recall(deep, query, ignore = ignore) + deep.filter { sim(it.id, it.text) >= MIN_SIM })
-            .distinctBy { it.id }.sortedByDescending { sim(it.id, it.text) }.take(3)
+            .distinctBy { it.id }.sortedByDescending { sim(it.id, it.text) }.take(6)
         // 自己的：问到最近在干嘛时带上最近几件（常记的也算），再加上意思相近的深处经历
         val ownHits = (OwnMemory.select(own, query, includeHot = false) + ownDeep.filter { sim(it.id, it.text) >= MIN_SIM })
-            .distinctBy { it.id }.sortedByDescending { sim(it.id, it.text) }.take(5)
+            .distinctBy { it.id }.sortedByDescending { sim(it.id, it.text) }.take(6)
 
         val out = StringBuilder()
         if (userHits.isNotEmpty()) {
