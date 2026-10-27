@@ -112,6 +112,7 @@ private fun ProviderDialog(vm: ChatViewModel, initial: Provider, onDismiss: () -
     var name by remember { mutableStateOf(initial.name) }
     var url by remember { mutableStateOf(initial.baseUrl) }
     var key by remember { mutableStateOf(initial.apiKey) }
+    var workspaceId by remember { mutableStateOf(initial.workspaceId) }
     // 服务上全部模型的 id；已勾选的模型和它们的能力单独记
     var available by remember { mutableStateOf(initial.models.map { it.id }) }
     // 服务返回的价格（OpenRouter 才有）
@@ -128,7 +129,7 @@ private fun ProviderDialog(vm: ChatViewModel, initial: Provider, onDismiss: () -
         error = null
         scope.launch {
             try {
-                val (base, list) = vm.fetchModels(url, key)
+                val (base, list) = vm.fetchModels(url, key, workspaceId)
                 val ids = list.map { it.first }
                 url = base
                 available = ids
@@ -174,6 +175,12 @@ private fun ProviderDialog(vm: ChatViewModel, initial: Provider, onDismiss: () -
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     modifier = Modifier.fillMaxWidth(),
                 )
+                if (runCatching { java.net.URI(url).host.equals("dashscope.aliyuncs.com", ignoreCase = true) }.getOrDefault(false)) {
+                    OutlinedTextField(value = workspaceId, onValueChange = { workspaceId = it.trim() },
+                        label = { Text("百炼业务空间 ID") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    Text("在百炼控制台的业务空间管理中复制业务空间 ID；获取模型列表和免费池探测需要。",
+                        style = MaterialTheme.typography.bodySmall)
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedButton(onClick = { fetch() }, enabled = url.isNotBlank() && !loading) {
                         Text(if (available.isEmpty()) "获取模型列表" else "刷新模型列表")
@@ -247,7 +254,7 @@ private fun ProviderDialog(vm: ChatViewModel, initial: Provider, onDismiss: () -
                 onClick = {
                     // 保持服务上的顺序
                     val order = available.withIndex().associate { it.value to it.index }
-                    onSave(initial.copy(name = name.trim(), baseUrl = url.trimEnd('/'), apiKey = key,
+                    onSave(initial.copy(name = name.trim(), baseUrl = url.trimEnd('/'), apiKey = key, workspaceId = workspaceId,
                         models = chosen.sortedBy { order[it.id] ?: Int.MAX_VALUE }))
                 },
             ) { Text("保存") }
@@ -338,7 +345,7 @@ fun FreePoolCard(settings: com.jack.ai.data.Settings) {
             Text("已用完：" + exhausted.joinToString("、") { it.model }.ifBlank { "无" })
             val time = if (state.checkedAt == 0L) "尚未探测" else java.text.DateFormat.getDateTimeInstance().format(java.util.Date(state.checkedAt))
             Text("上次探测：$time", style = MaterialTheme.typography.bodySmall)
-            error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            (error ?: state.error.takeIf { it.isNotBlank() })?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             OutlinedButton(enabled = !probing, onClick = {
                 scope.launch {
                     probing = true; error = null

@@ -50,6 +50,16 @@ class ApiException(message: String, val code: Int = 0, val serviceCode: String =
 internal fun JsonElement?.str(): String =
     if (this == null || this is JsonNull) "" else (this as? JsonPrimitive)?.content ?: ""
 
+/** 百炼模型列表使用 output.models 和分页字段，不是 OpenAI 的 data。 */
+internal fun parseBailianModels(body: String?): Pair<List<String>, Int> {
+    val obj = runCatching { Json.parseToJsonElement(body.orEmpty()) as? JsonObject }.getOrNull()
+    val output = obj?.get("output") as? JsonObject ?: throw ApiException("百炼没有返回模型列表")
+    val models = output["models"] as? JsonArray ?: throw ApiException("百炼没有返回模型列表")
+    val ids = models.mapNotNull { ((it as? JsonObject)?.get("model") as? JsonPrimitive)?.content?.takeIf(String::isNotBlank) }
+    val total = (output["total"] as? JsonPrimitive)?.intOrNull ?: throw ApiException("百炼没有返回模型总数")
+    return ids to total
+}
+
 internal val sharedHttp: OkHttpClient = OkHttpClient.Builder()
     .connectTimeout(30, TimeUnit.SECONDS)
     .readTimeout(5, TimeUnit.MINUTES) // 深度思考模型可能很久才出第一个字
@@ -229,9 +239,32 @@ class DeepSeekClient(
      * 列出服务上能用的模型（OpenAI 格式的 GET /models）。
      * 用户填的地址少了 /v1 时自动补上再试一次，返回实际可用的地址和模型列表。
      */
-    suspend fun listModels(baseUrl: String, apiKey: String): Pair<String, List<Pair<String, Price?>>> = withContext(Dispatchers.IO) {
+    suspend fun listModels(baseUrl: String, apiKey: String, workspaceId: String = ""): Pair<String, List<Pair<String, Price?>>> = withContext(Dispatchers.IO) {
         val base = baseUrl.trim().trimEnd('/')
         if (!base.startsWith("http")) throw ApiException("接口地址要以 http:// 或 https:// 开头")
+        val host = runCatching { java.net.URI(base).host.orEmpty().lowercase() }.getOrDefault("")
+        if (host == "dashscope.aliyuncs.com" || host == "dashscope-intl.aliyuncs.com" || host == "cn-hongkong.dashscope.aliyuncs.com" || host.endsWith(".cn-beijing.maas.aliyuncs.com")) {
+            val listHost = if (host == "dashscope.aliyuncs.com") {
+                val id = workspaceId.trim()
+                if (!Regex("[a-zA-Z0-9-]+").matches(id)) throw ApiException("请在百炼控制台的业务空间管理中复制业务空间 ID，填入后再获取模型列表")
+                "$id.cn-beijing.maas.aliyuncs.com"
+            } else host
+            val result = mutableListOf<Pair<String, Price?>>()
+            var page = 1
+            while (true) {
+                val request = Request.Builder().url("https://$listHost/api/v1/models?capabilities=TG&page_no=$page&page_size=100")
+                    .header("Authorization", "Bearer $apiKey").get().build()
+                val response = http.newCall(request).execute().use { resp ->
+                    val text = resp.body?.string()
+                    if (!resp.isSuccessful) throw ApiException(describeError(resp.code, text), resp.code)
+                    parseBailianModels(text)
+                }
+                result += response.first.map { it to null }
+                if (result.size >= response.second || response.first.isEmpty()) break
+                page++
+            }
+            return@withContext base to result.distinctBy { it.first }
+        }
         val candidates = listOf(base) + (if (!Regex("""/v\d+[a-z]*$""").containsMatchIn(base)) listOf("$base/v1") else emptyList())
         var last: ApiException? = null
         for (b in candidates) {

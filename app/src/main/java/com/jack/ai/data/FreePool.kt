@@ -21,7 +21,7 @@ import java.time.ZoneId
 data class FreeModel(val providerId: String, val model: String, val exhaustedAt: Long = 0, val baseUrl: String = "")
 
 @Serializable
-data class FreePoolState(val checkedAt: Long = 0, val models: List<FreeModel> = emptyList())
+data class FreePoolState(val checkedAt: Long = 0, val models: List<FreeModel> = emptyList(), val error: String = "")
 
 internal fun isFreeTierOnly(body: String?): Boolean {
     val obj = runCatching { Json.parseToJsonElement(body.orEmpty()) as? JsonObject }.getOrNull() ?: return false
@@ -83,9 +83,10 @@ object FreePool {
             val providers = settings.providers.filter { it.apiKey.isNotBlank() && "dashscope" in it.baseUrl.lowercase() }
             if (providers.isEmpty()) return@withContext old
             val found = mutableListOf<FreeModel>()
+            val errors = mutableListOf<String>()
             val client = DeepSeekClient()
             for (p in providers) {
-                val listed = try { client.listModels(p.baseUrl, p.apiKey) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) { null }
+                val listed = try { client.listModels(p.baseUrl, p.apiKey, p.workspaceId) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { errors += "${p.name}：${e.message ?: "获取模型列表失败"}"; null }
                 if (listed == null) { found += old.models.filter { it.providerId == p.id && it.exhaustedAt != 0L }; continue }
                 for ((model, _) in listed.second.filter { isChatModel(it.first) }) {
                     val body = buildJsonObject {
@@ -110,7 +111,7 @@ object FreePool {
             synchronized(lock) {
                 val latest = load(context)
                 val merged = found.map { m -> latest.models.firstOrNull { it.providerId == m.providerId && it.model == m.model && it.exhaustedAt > now } ?: m }
-                FreePoolState(now, merged).also { save(context, it) }
+                FreePoolState(now, merged, errors.joinToString("；")).also { save(context, it) }
             }
         }
     }

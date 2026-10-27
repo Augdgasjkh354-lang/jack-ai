@@ -992,7 +992,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     // 设置和模型服务
     fun updateSettings(transform: (Settings) -> Settings) = settingsFeature.updateSettings(transform)
-    suspend fun fetchModels(baseUrl: String, apiKey: String) = settingsFeature.fetchModels(baseUrl, apiKey)
+    suspend fun fetchModels(baseUrl: String, apiKey: String, workspaceId: String = "") = settingsFeature.fetchModels(baseUrl, apiKey, workspaceId)
     suspend fun providerBalance(p: Provider) = settingsFeature.providerBalance(p)
     fun guessModel(id: String, price: com.jack.ai.data.Price? = null) = settingsFeature.guessModel(id, price)
     fun saveProvider(p: Provider) = settingsFeature.saveProvider(p)

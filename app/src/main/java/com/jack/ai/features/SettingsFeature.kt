@@ -37,8 +37,8 @@ class SettingsFeature(core: AppCore, private val client: DeepSeekClient) : Featu
     }
 
     /** 获取某个服务的模型列表，返回 (可用的地址, [模型 id 和价格])。 */
-    suspend fun fetchModels(baseUrl: String, apiKey: String): Pair<String, List<Pair<String, com.jack.ai.data.Price?>>> =
-        client.listModels(baseUrl, apiKey)
+    suspend fun fetchModels(baseUrl: String, apiKey: String, workspaceId: String = ""): Pair<String, List<Pair<String, com.jack.ai.data.Price?>>> =
+        client.listModels(baseUrl, apiKey, workspaceId)
 
     /** 查其他服务的余额；这个服务不支持查询时返回 null。 */
     suspend fun providerBalance(p: Provider): String? = try {

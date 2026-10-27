@@ -348,6 +348,7 @@ data class Provider(
     val baseUrl: String,
     val apiKey: String = "",
     val models: List<ProviderModel> = emptyList(),
+    val workspaceId: String = "",
 )
 
 /** vision：能看图；reasoning：支持 reasoning_effort（深度思考）。 */
