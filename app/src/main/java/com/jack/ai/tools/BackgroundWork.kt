@@ -159,6 +159,8 @@ suspend fun runBackgroundWork(
     })
     session.interactive = false
     session.unlocked.addAll(conv.skillTools)
+    // 接着断点做：清单和验收标准从断点里找回来
+    if (resumed) WorkGate.restorePlan(session, messages)
     // 接着上次做：上次用 use_skill 打开过的技能，工具要接着带上
     if (resumed) TaskCheckpoint.skillsUsed(messages).forEach { name ->
         findSkill(skills, name)?.id?.takeIf { it in com.jack.ai.data.SkillIds.ON_DEMAND }?.let { id ->

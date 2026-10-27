@@ -107,6 +107,25 @@ class WorkGate(
         /** 这些工具本身就是在准备或读东西，不用提醒列清单。 */
         private val NO_REMINDER = setOf("update_plan", "use_skill", "read_file", "self_check")
 
+        /**
+         * 接着断点做时，把断点里最后一次 update_plan 写的清单和验收标准找回来，
+         * 免得关卡以为还没列清单、让模型再列一遍。
+         */
+        fun restorePlan(session: ToolSession, messages: List<kotlinx.serialization.json.JsonObject>) {
+            val call = messages.asReversed().asSequence().filter { (it["role"] as? JsonPrimitive)?.content == "assistant" }
+                .flatMap { (it["tool_calls"] as? JsonArray).orEmpty().asSequence() }
+                .mapNotNull { runCatching { it.jsonObject["function"]!!.jsonObject }.getOrNull() }
+                .firstOrNull { (it["name"] as? JsonPrimitive)?.content == "update_plan" } ?: return
+            val args = runCatching { Json.parseToJsonElement((call["arguments"] as JsonPrimitive).content).jsonObject }.getOrNull() ?: return
+            fun list(key: String) = (args[key] as? JsonArray).orEmpty().mapNotNull { e ->
+                val o = runCatching { e.jsonObject }.getOrNull() ?: return@mapNotNull null
+                val text = (o["text"] as? JsonPrimitive)?.content?.trim().orEmpty().ifEmpty { return@mapNotNull null }
+                PlanItem(text, (o["status"] as? JsonPrimitive)?.content ?: "pending")
+            }
+            session.steps = list("items")
+            session.criteria = list("criteria")
+        }
+
         /** 还差什么：没清单、没做完的步骤、没写或没核对的验收标准。都齐了返回 null。 */
         internal fun unfinished(steps: List<PlanItem>, criteria: List<PlanItem>): String? {
             if (steps.isEmpty()) return "You're about to finish, but there is no plan yet. Work mode goes step by step: write the steps and 2 to 6 checkable acceptance criteria with update_plan, " +

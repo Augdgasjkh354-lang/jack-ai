@@ -18,6 +18,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.io.File
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.add
 
 /** Work 的几道关：开工前确认清单、卡住提醒、来源核对、网站经验。 */
 @RunWith(RobolectricTestRunner::class)
@@ -113,5 +115,25 @@ class WorkStrengthTest {
         assertTrue(note.contains("zhihu.com: needs login ×2"))
         assertFalse(note.contains("example.org"))  // 没出过问题的不提
         assertEquals("taobao.com", SiteNotes.hostOf("https://www.Taobao.com/item?id=1"))
+    }
+
+    @Test
+    fun resumedTasksKeepTheirPlan() {
+        val s = session()
+        val call = kotlinx.serialization.json.buildJsonObject {
+            put("role", "assistant")
+            put("tool_calls", kotlinx.serialization.json.buildJsonArray {
+                add(kotlinx.serialization.json.buildJsonObject {
+                    put("id", "c1"); put("type", "function")
+                    put("function", kotlinx.serialization.json.buildJsonObject {
+                        put("name", "update_plan")
+                        put("arguments", """{"items":[{"text":"搜","status":"done"},{"text":"做表","status":"doing"}],"criteria":[{"text":"5 家","status":"pending"}]}""")
+                    })
+                })
+            })
+        }
+        WorkGate.restorePlan(s, listOf(call))
+        assertEquals(listOf("done", "doing"), s.steps.map { it.status })
+        assertEquals("5 家", s.criteria.single().text)
     }
 }

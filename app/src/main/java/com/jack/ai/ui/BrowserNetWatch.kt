@@ -8,23 +8,29 @@ import kotlinx.serialization.json.jsonObject
 
 /**
  * 网页的后台请求：每一页开头装一个小钩子，数着还没回来的 fetch / XHR，记下最近失败的请求。
- * - 动作做完等请求都回来再读页面（页面看着加载完了，数据可能还没刷新）；
+ * - 动作做完等请求都回来再读页面（页面看着加载完了，数据可能还没刷新）；只等 [FRESH_MS] 内发出的，
+ *   挂着不回的长连接、轮询不算，免得每一步都白等；
  * - 点完、提交完查一下这期间同一个网站的请求有没有失败（页面变了不等于后台成功了）。
  * 只记方法、网址和状态码，不记内容。
  */
 object BrowserNetWatch {
     val JS = """
-(function(){if(window.__kaviNet)return;var N=window.__kaviNet={inflight:0,seq:0,fails:[]};
+(function(){if(window.__kaviNet)return;var N=window.__kaviNet={seq:0,fails:[],p:{},id:0};
+N.fresh=function(ms){var t=Date.now(),c=0;for(var k in N.p)if(t-N.p[k]<ms)c++;return c};
+function start(){var id=++N.id;N.p[id]=Date.now();return id}function stop(id){delete N.p[id]}
 function fail(m,u,s){N.seq++;N.fails.push({i:N.seq,m:String(m||'GET').toUpperCase(),u:String(u||'').slice(0,200),s:s});if(N.fails.length>20)N.fails.shift();}
-var F=window.fetch;if(F){window.fetch=function(i,o){var u=(i&&i.url)||i,m=(o&&o.method)||(i&&i.method)||'GET';N.inflight++;var p;try{p=F.apply(this,arguments)}catch(e){N.inflight--;throw e}
-return p.then(function(r){N.inflight--;if(!r.ok&&r.type!=='opaque')fail(m,u,r.status);return r},function(e){N.inflight--;if(!(e&&e.name==='AbortError'))fail(m,u,0);throw e})}}
-var X=window.XMLHttpRequest&&XMLHttpRequest.prototype;if(X){var o=X.open,s=X.send;X.open=function(m,u){this.__kn=[m,u];return o.apply(this,arguments)};
-X.send=function(){var x=this,k=x.__kn||['GET',''],done=false;N.inflight++;function end(){if(done)return;done=true;N.inflight--;if(x.status>=400||(x.status===0&&x.__ke))fail(k[0],k[1],x.status)}
-x.addEventListener('error',function(){x.__ke=1});x.addEventListener('loadend',end);try{return s.apply(this,arguments)}catch(e){end();throw e}}}
+function same(f,g){try{f.toString=function(){return Function.prototype.toString.call(g)}}catch(e){}return f}
+var F=window.fetch;if(F){window.fetch=same(function(i,o){var u=(i&&i.url)||i,m=(o&&o.method)||(i&&i.method)||'GET',id=start();var p;try{p=F.apply(this,arguments)}catch(e){stop(id);throw e}
+return p.then(function(r){stop(id);if(!r.ok&&r.type!=='opaque')fail(m,u,r.status);return r},function(e){stop(id);if(!(e&&e.name==='AbortError'))fail(m,u,0);throw e})},F)}
+var X=window.XMLHttpRequest&&XMLHttpRequest.prototype;if(X){var o=X.open,s=X.send;X.open=same(function(m,u){this.__kn=[m,u];return o.apply(this,arguments)},o);
+X.send=same(function(){var x=this,k=x.__kn||['GET',''],done=false,id=start();function end(){if(done)return;done=true;stop(id);if(x.status>=400||(x.status===0&&x.__ke))fail(k[0],k[1],x.status)}
+x.addEventListener('error',function(){x.__ke=1});x.addEventListener('loadend',end);try{return s.apply(this,arguments)}catch(e){end();throw e}},s)}
 })();
 """.trimIndent()
 
-    const val STATE_JS = "JSON.stringify(window.__kaviNet?{inflight:__kaviNet.inflight,seq:__kaviNet.seq}:null)"
+    /** 发出多久以内、还没回来的请求才等（更早的多半是长连接或轮询，不会回来）。 */
+    const val FRESH_MS = 8_000
+    const val STATE_JS = "JSON.stringify(window.__kaviNet?{inflight:__kaviNet.fresh($FRESH_MS),seq:__kaviNet.seq}:null)"
     fun failsSinceJs(seq: Int) = "JSON.stringify(window.__kaviNet?__kaviNet.fails.filter(function(f){return f.i>$seq}):[])"
 
     data class Fail(val method: String, val url: String, val status: Int)

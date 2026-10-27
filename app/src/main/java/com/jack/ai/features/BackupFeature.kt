@@ -80,6 +80,8 @@ class BackupFeature(core: AppCore, private val knowledge: KnowledgeFeature) : Fe
                     // 完全授权不跟着备份走，沿用手机上现在的
                     fullAuthUntil = old.fullAuthUntil)
                 store.saveSettings(s)
+                // 备份里的桌面图标选择：恢复后马上换过去，不用等下次启动
+                runCatching { com.jack.ai.ui.AppIcon.ensure(app, s.appIcon) }
                 state.value = UiState(
                     conversations = store.loadConversations().sortedByDescending { it.updatedAt },
                     projects = store.loadProjects().sortedByDescending { it.updatedAt },

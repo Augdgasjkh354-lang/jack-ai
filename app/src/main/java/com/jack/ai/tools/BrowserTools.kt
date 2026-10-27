@@ -143,12 +143,15 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
                 // 点按钮、链接：先记下页面的样子，点完没变就换真实触摸再点一次（有的网站不认脚本点的）
                 val retry = action == "click" && kind in RETAP_KINDS && !NO_RETAP.containsMatchIn(info["label"].text()) && BrowserNet.confirmReason("click", info["label"].text(), info["submit"].flag() == true,
                     info["formPost"].flag() == true, info["formPassword"].flag() == true, info["formButtons"].text(), "") == null
-                val before = if (retry) JackBrowser.pageSignature(ctx) else ""
+                val before = if (retry || submitWhy != null) JackBrowser.pageSignature(ctx) else ""
                 val mark = JackBrowser.tab.diag.mark()
                 val seq0 = JackBrowser.netSeq(ctx)
                 val err = JackBrowser.act(ctx, id, action, arg, clear = args["clear"].flag() == true)
                 err?.let { note.append("出错：$it\n") }
-                if (err == null && submitWhy != null) submitted += submitKey
+                if (err == null && submitWhy != null) {
+                    if (JackBrowser.pageSignature(ctx) != before) submitted += submitKey
+                    else note.append("点了以后页面一点没变，可能没点上（没算作已提交）。先读页面确认，再决定要不要重试。\n")
+                }
                 if (n == null) note.append("点了$what。\n")
                 var stuck = false
                 if (retry && err == null && JackBrowser.tab.id == fromTab && JackBrowser.pageSignature(ctx) == before) {
@@ -357,7 +360,8 @@ private suspend fun ToolSession.relocate(n: Int, now: JsonObject?): Pair<JsonObj
     if (now != null && now["found"].flag() == true && norm(now["label"].text()) == norm(label)) return null
     val again = JackBrowser.markText(app, label) ?: return null
     if (norm(again["label"].text()) != norm(label)) return null
-    if (was.kind.isNotEmpty() && again["kind"].text().isNotEmpty() && again["kind"].text() != was.kind) return null
+    // 类型要一样：按文字找到的可能是输入框旁边的说明文字，往那儿输入就错了
+    if (again["kind"].text() != was.kind) return null
     val id = again["n"].text().toIntOrNull() ?: 0
     return if (id == n) null else again to id
 }

@@ -564,7 +564,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     patchMessage(convId, reply.id) { it.copy(plan = items, criteria = criteria) }
                     val doing = items.firstOrNull { it.status == "doing" }?.text
                     WorkService.progress(getApplication(), convId, workTitle,
-                        "${items.count { it.status == "done" }}/${items.size}" + (doing?.let { " · $it" } ?: ""), work)
+                        "${items.count { it.status == "done" || it.status == "skipped" }}/${items.size}" + (doing?.let { " · $it" } ?: ""), work)
                 }
 
                 override fun notice(text: String) = patchMessage(convId, reply.id) { it.copy(notices = it.notices + text) }

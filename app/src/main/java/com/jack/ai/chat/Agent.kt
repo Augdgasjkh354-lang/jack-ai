@@ -123,7 +123,11 @@ class Agent(
                 val nudge = if (currentTools != null) beforeFinish?.invoke(content.toString()) else null
                 if (nudge == null) return
                 // 推回去接着做：这一轮说的话留在对话里，再补一条要它继续的消息（不进 trail，下次对话不用再发）
-                if (roundContent.isNotEmpty()) messages += buildJsonObject { put("role", "assistant"); put("content", roundContent.toString()) }
+                if (roundContent.isNotEmpty()) messages += buildJsonObject {
+                    put("role", "assistant"); put("content", roundContent.toString())
+                    // 开着思考时同一轮里的回答要带上思考内容，不然接口会拒
+                    if (sendReasoning) put("reasoning_content", roundReasoning.toString())
+                }
                 messages += buildJsonObject { put("role", "user"); put("content", nudge) }
                 continue
             }
