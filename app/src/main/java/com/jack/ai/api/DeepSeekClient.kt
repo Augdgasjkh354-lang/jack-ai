@@ -45,7 +45,7 @@ sealed interface StreamEvent {
     data class Finish(val reason: String) : StreamEvent
 }
 
-class ApiException(message: String, val code: Int = 0) : Exception(message)
+class ApiException(message: String, val code: Int = 0, val serviceCode: String = "") : Exception(message)
 
 internal fun JsonElement?.str(): String =
     if (this == null || this is JsonNull) "" else (this as? JsonPrimitive)?.content ?: ""
@@ -113,7 +113,11 @@ class DeepSeekClient(
             override fun onResponse(call: Call, response: Response) {
                 try {
                     response.use { resp ->
-                        if (!resp.isSuccessful) throw ApiException(describeError(resp.code, resp.body?.string()), resp.code)
+                        if (!resp.isSuccessful) {
+                            val body = resp.body?.string()
+                            val quota = com.jack.ai.data.isFreeTierOnly(body)
+                            throw ApiException(describeError(resp.code, body), resp.code, if (quota) "AllocationQuota.FreeTierOnly" else "")
+                        }
                         val source = resp.body?.source() ?: throw ApiException("服务器没有返回内容")
                         while (true) {
                             val line = source.readUtf8Line() ?: break
@@ -123,7 +127,7 @@ class DeepSeekClient(
                             val obj = runCatching { json.parseToJsonElement(data).jsonObject }.getOrNull() ?: continue
                             // 有的服务出错时仍回 200，把错误放在流里；不报出来就只会显示“没有收到回复”
                             (obj["error"] as? JsonObject)?.let { err ->
-                                throw ApiException("服务返回错误：" + err["message"].str().ifBlank { err.toString() })
+                                throw ApiException("服务返回错误：" + err["message"].str().ifBlank { err.toString() }, serviceCode = err["code"].str())
                             }
                             (obj["usage"] as? JsonObject)?.let { u ->
                                 val p = (u["prompt_tokens"] as? JsonPrimitive)?.intOrNull ?: 0

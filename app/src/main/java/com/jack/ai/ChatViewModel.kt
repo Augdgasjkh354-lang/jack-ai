@@ -551,7 +551,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 val paths = com.jack.ai.data.Compression.liveMessages(conv).flatMap { m -> m.attachments.filter { it.kind == "image" }.map { it.path } }
                 if (paths.isNotEmpty()) promptInput = promptInput.copy(fileIds = runCatching { dsFiles.ensure(ep, paths) }.getOrDefault(emptyMap()))
             }
+            viewModelScope.launch(Dispatchers.IO) {
+                runCatching { com.jack.ai.data.FreePool.probe(getApplication(), settings) }
+            }
             promptInput = promptInput.copy(contextNote = withContext(Dispatchers.IO) {
+                "\n免费子 agent：${com.jack.ai.data.freeCandidates(com.jack.ai.data.FreePool.load(getApplication()), settings, 0).size} 个模型可用\n" +
                 runCatching { com.jack.ai.tools.ContextNote.build(getApplication(), store, conv, skills.map { it.id }.toSet()) }.getOrDefault("") +
                     // Kavi 的连续性：最近的经历、上次见用户是什么时候（每轮变，放这里不影响缓存）
                     runCatching { com.jack.ai.data.Timeline.noteFor(getApplication(), settings, _state.value.conversations, _state.value.projects, conv) }.getOrDefault("") +

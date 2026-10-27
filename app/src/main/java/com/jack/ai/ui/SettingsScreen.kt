@@ -171,6 +171,7 @@ fun SettingsScreen(
 
             Section("其他模型服务", icon = AppIcons.Code) {
                 ProvidersSection(vm, settings.providers)
+                FreePoolCard(settings)
             }
 
             Section("连接", icon = AppIcons.Share, hint = "点开一项设置；连好之后只显示一行状态。") {

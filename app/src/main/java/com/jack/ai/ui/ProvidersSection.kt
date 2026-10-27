@@ -314,3 +314,40 @@ private fun BalanceButton(vm: ChatViewModel, p: Provider) {
         scope.launch { result = vm.providerBalance(p) ?: "不支持" }
     }) { Text(result ?: "余额") }
 }
+
+@Composable
+fun FreePoolCard(settings: com.jack.ai.data.Settings) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    var state by remember { mutableStateOf(com.jack.ai.data.FreePool.load(context)) }
+    var probing by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    androidx.compose.runtime.LaunchedEffect(settings.providers) {
+        try { state = com.jack.ai.data.FreePool.probe(context, settings) }
+        catch (e: CancellationException) { throw e }
+        catch (e: Exception) { error = "探测失败：${e.message ?: "请稍后再试"}" }
+    }
+    androidx.compose.material3.Card(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("免费额度池", style = MaterialTheme.typography.titleMedium)
+            Text("请在百炼控制台给每个模型开「免费额度用完即停」，否则会扣费。", style = MaterialTheme.typography.bodySmall)
+            val valid = state.models.filter { m -> settings.providers.any { it.id == m.providerId && it.apiKey.isNotBlank() && "dashscope" in it.baseUrl.lowercase() } }
+            val available = valid.filter { it.exhaustedAt == 0L }
+            val exhausted = valid.filter { it.exhaustedAt != 0L }
+            Text("可用：" + available.joinToString("、") { it.model }.ifBlank { "无" })
+            Text("已用完：" + exhausted.joinToString("、") { it.model }.ifBlank { "无" })
+            val time = if (state.checkedAt == 0L) "尚未探测" else java.text.DateFormat.getDateTimeInstance().format(java.util.Date(state.checkedAt))
+            Text("上次探测：$time", style = MaterialTheme.typography.bodySmall)
+            error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            OutlinedButton(enabled = !probing, onClick = {
+                scope.launch {
+                    probing = true; error = null
+                    try { state = com.jack.ai.data.FreePool.probe(context, settings, force = true) }
+                    catch (e: CancellationException) { throw e }
+                    catch (e: Exception) { error = "探测失败：${e.message ?: "请稍后再试"}" }
+                    finally { probing = false }
+                }
+            }) { Text(if (probing) "探测中…" else "重新探测") }
+        }
+    }
+}

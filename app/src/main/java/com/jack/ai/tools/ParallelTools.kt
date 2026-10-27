@@ -9,6 +9,7 @@ import com.jack.ai.data.backgroundEndpoint
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.collect
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -29,7 +30,9 @@ internal suspend fun ToolSession.delegateTasks(args: JsonObject): String {
         if (title.isBlank() || what.isBlank()) null else title to what
     }.take(5)
     if (tasks.isEmpty()) return "没有子任务"
-    val ep = settings.backgroundEndpoint() ?: return "没有可用的模型"
+    val fallback = settings.backgroundEndpoint()
+    val pool = com.jack.ai.data.FreePool.load(app)
+    if (fallback == null && com.jack.ai.data.freeCandidates(pool, settings, 0).isEmpty()) return "没有可用的模型"
     return runTool("分头做 ${tasks.size} 件事") {
         val client = DeepSeekClient()
         val folder = ContextNote.files(wsDir)
@@ -38,9 +41,27 @@ internal suspend fun ToolSession.delegateTasks(args: JsonObject): String {
             SkillTools.READ_FILE,
         ))
         val results = coroutineScope {
-            tasks.map { (title, what) ->
+            tasks.mapIndexed { index, (title, what) ->
                 async {
-                    val agent = Agent({ msgs, t -> client.stream(ep, msgs, ThinkLevel.OFF, 1.0f, t) })
+                    val candidates = com.jack.ai.data.freeCandidates(pool, settings, index)
+                    val attempted = mutableSetOf<String>()
+                    var ep = com.jack.ai.data.chooseFreeOrFallback(candidates, fallback)!!
+                    val agent = Agent({ msgs, t ->
+                        kotlinx.coroutines.flow.flow {
+                            while (true) {
+                                try {
+                                    client.stream(ep, msgs, ThinkLevel.OFF, 1.0f, t).collect { emit(it) }
+                                    break
+                                } catch (e: com.jack.ai.api.ApiException) {
+                                    if (e.serviceCode != "AllocationQuota.FreeTierOnly" || ep.key in attempted || candidates.none { it.key == ep.key }) throw e
+                                    com.jack.ai.data.FreePool.exhaust(app, ep)
+                                    attempted += ep.key
+                                    val live = com.jack.ai.data.freeCandidates(com.jack.ai.data.FreePool.load(app), settings, index)
+                                    ep = com.jack.ai.data.chooseFreeOrFallback(live.filter { it.key !in attempted }, fallback?.takeIf { it.key !in attempted }) ?: throw e
+                                }
+                            }
+                        }
+                    })
                     val messages = mutableListOf(
                         buildJsonObject {
                             put("role", "system")
