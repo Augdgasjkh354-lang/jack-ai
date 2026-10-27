@@ -34,6 +34,7 @@ data class ReadEntry(
     val skipped: String = "",
     /** 衔接摘要没写成时的原因；上次的摘要继续保留。 */
     val summaryError: String = "",
+    val memoryError: String = "",
 )
 
 /**
@@ -46,12 +47,11 @@ object Reader {
     const val CONV_ID = "reading"
     private const val PERIODIC = "reading-daily"
     private const val ONCE = "reading-now"
-    private const val KEEP = 60
     const val NOTES = "我的笔记.md"
     /** 自由时间能用的工具：上网只读、事实库、自己文件夹里的文件、做文档和小工具、算东西。 */
     val TOOLS = setOf(
         "web_search", "read_webpage", "facts", "update_plan", "use_skill",
-        "list_files", "read_file", "write_file", "edit_file", "delete_file", "free_time",
+        "list_files", "read_file", "write_file", "edit_file", "delete_file", "free_time", "own_history",
         "create_document", "create_excel", "create_ppt", "create_chart", "create_diagram", "create_app",
         "run_python", "run_js",
     )
@@ -67,7 +67,7 @@ object Reader {
     }
 
     private fun add(ctx: Context, e: ReadEntry) = synchronized(lock) {
-        runCatching { file(ctx).writeText(json.encodeToString(ListSerializer(ReadEntry.serializer()), (listOf(e) + log(ctx)).take(KEEP))) }
+        runCatching { file(ctx).writeText(json.encodeToString(ListSerializer(ReadEntry.serializer()), (listOf(e) + log(ctx)))) }
     }
 
     /** 今天（自然日）已经花了多少。 */
@@ -170,6 +170,7 @@ object Reader {
             .replace("{savings}", String.format(java.util.Locale.US, "%.2f", state.savings))
             .replace("{lately}", state.lately.ifBlank { "(you haven't written one yet)" })
             .replace("{freeSummary}", continuationNote(state))
+            .replace("{ownMemories}", OwnMemory.note(ctx, "最近自由时间"))
             .replace("{threads}", Persona.fill(Threads.listing(Threads.load(ctx)), s).ifBlank { "(nothing right now)" })
             .replace("{story}", SelfStory.bio(ctx).text.ifBlank { "(you haven't written it yet)" })
             .replace("{works}", works(ctx).take(20).joinToString(", ") { it.name }.ifBlank { "(none yet)" })
@@ -179,7 +180,7 @@ object Reader {
         val budget = FreeBudget(left, s.readingExtra.coerceAtLeast(0.0), state.savings, ::budgetNote)
         val res = com.jack.ai.tools.runBackgroundWork(ctx, r, allow = { name, _ -> name in TOOLS }, brief = Persona.fill(BRIEF, s),
             model = MODEL_FLASH, budget = budget,
-            resumePrompt = "系统：自由时间又到了。今天还剩 ¥${String.format(java.util.Locale.US, "%.2f", left)}，积蓄 ¥${String.format(java.util.Locale.US, "%.2f", state.savings)}。你可以顺着之前的对话继续，也可以改变主意或休息。" + news)
+            resumePrompt = "系统：自由时间又到了。今天还剩 ¥${String.format(java.util.Locale.US, "%.2f", left)}，积蓄 ¥${String.format(java.util.Locale.US, "%.2f", state.savings)}。你可以顺着之前的对话继续，也可以改变主意或休息。" + news + OwnMemory.note(ctx, "最近自由时间"))
         val rep = parseReport(res.text)
         val quiet = res.status == com.jack.ai.tools.TaskStatus.FAILED && res.text.startsWith("（这次没有生成内容）")
         var summaryCost = 0.0
@@ -202,6 +203,29 @@ object Reader {
                 catch (e: Exception) { summaryError = e.message ?: "整理衔接摘要失败"; null }
             }
         } else null
+        var memoryError = ""
+        if (res.status == com.jack.ai.tools.TaskStatus.OK || quiet) {
+            val conversation = FreeConversation.load(ctx)
+            FreeConversation.queueHistorical(ctx)
+            val latestSource = if (conversation.messages.size >= 3) FreeConversation.snapshot(ctx, conversation) else null
+            if (ep != null) {
+                val client = com.jack.ai.api.DeepSeekClient { endpoint, p, h, c ->
+                    store.addUsage(endpoint, p, h, c)
+                    summaryCost += Pricing.priceAt(endpoint, System.currentTimeMillis())?.let { Pricing.cost(it, p, h ?: 0, c) } ?: 0.0
+                }
+                val pending = FreeConversation.pending(ctx)
+                val ordered = listOfNotNull(latestSource) + pending.filter { it != latestSource }
+                for (source in ordered.take(3)) {
+                    if (res.spent + summaryCost >= budget.limit) { memoryError = "预算用完，经历会在下次继续整理"; break }
+                    try {
+                        val batch = OwnMemory.extract(ctx, source, FreeConversation.pendingOffset(ctx, source)) { request -> client.complete(ep, request, maxTokens = 900, jsonMode = true) }
+                        OwnMemory.add(ctx, batch.items)
+                        FreeConversation.advancePending(ctx, source, batch.nextOffset)
+                    } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                    catch (e: Exception) { memoryError = "经历暂未整理：${e.message ?: "请稍后再试"}"; break }
+                }
+            } else if (FreeConversation.pending(ctx).isNotEmpty()) memoryError = "没有 DeepSeek Key，经历会在下次继续整理"
+        }
         val totalSpent = res.spent + summaryCost
         FreeTime.save(ctx, FreeTime.load(ctx).copy(savings = budget.settle(totalSpent)).let { st ->
             val withLately = if (rep.lately.isNotBlank()) st.copy(lately = rep.lately, latelyAt = System.currentTimeMillis()) else st
@@ -209,7 +233,7 @@ object Reader {
         })
         val saved = Facts.load(ctx).count { it.origin == "reading" } - before
         // 什么都没写也没关系：安安静静过了一会，不算失败
-        val e = ReadEntry(kind = if (quiet) "rest" else rep.kind, title = rep.title, topics = rep.topics, saved = saved.coerceAtLeast(0), spent = totalSpent, summaryError = summaryError,
+        val e = ReadEntry(kind = if (quiet) "rest" else rep.kind, title = rep.title, topics = rep.topics, saved = saved.coerceAtLeast(0), spent = totalSpent, summaryError = summaryError, memoryError = memoryError,
             report = if (quiet) "" else rep.body.take(2000), files = res.files.filter { it.name != NOTES },
             skipped = if (res.status == com.jack.ai.tools.TaskStatus.OK || quiet) "" else res.text.take(200))
         add(ctx, e)
@@ -304,6 +328,7 @@ Money and time are yours to arrange (free_time tool):
 - If you come across something you'd like to buy (a paper, a book, data, a small thing, useful or not), tell {user} with free_time (action=buy): what, the link, the price, why you want it, and how much of your savings you'd put in. You can't pay for anything yourself; {user} decides.
 {news}
 {freeSummary}
+{ownMemories}
 Your autobiography: {story}
 On your mind (keep with free_time action=hold, put down with action=let_go):
 {threads}

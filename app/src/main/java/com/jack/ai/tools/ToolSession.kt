@@ -20,6 +20,7 @@ import com.jack.ai.data.SkillIds
 import com.jack.ai.data.Store
 import com.jack.ai.data.Workspace
 import com.jack.ai.data.fullAuth
+import com.jack.ai.data.globalAllowed
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -273,6 +274,7 @@ class ToolSession(
             name == "delete_file" -> deleteFiles(args)
             name == "search_my_data" -> searchMyData(args)
             name == "facts" -> if (args["action"].text() == "save") saveFact(args) else recallFacts(args)
+            name == "own_history" && ((conv.id == com.jack.ai.data.Reader.CONV_ID && freeBudget != null) || (settings.memoryEnabled && conv.globalAllowed(project))) -> ownHistory(args)
             name == "free_time" && freeBudget != null -> freeTimeTool(args)
             name == "end_conversation" && interactive -> endConversation(args)
             name == "schedule" && SkillIds.ROUTINE in skillIds -> schedule(args)

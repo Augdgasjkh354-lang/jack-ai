@@ -46,7 +46,6 @@ object Timeline {
     const val RECENT = 5
     /** 隔这么多天以上，才可以提一句「隔了几天了」。 */
     const val GAP_DAYS = 3
-    private const val KEEP = 3000
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val lock = Any()
 
@@ -61,11 +60,6 @@ object Timeline {
     fun add(ctx: Context, e: Episode) = synchronized(lock) {
         val f = file(ctx)
         runCatching { f.appendText(json.encodeToString(Episode.serializer(), e) + "\n") }
-        // 太长了就只留最近的（更早的已经进了日记和记忆）
-        if (f.length() > 2_000_000) runCatching {
-            val lines = f.readLines().takeLast(KEEP)
-            f.writeText(lines.joinToString("\n", postfix = "\n"))
-        }
     }
 
     /** 每个对话摘要到了哪条消息（时间）。 */

@@ -114,14 +114,16 @@ object Dreamer {
         return text.toString() to cutoff
     }
 
-    private const val INSTRUCTIONS = """It's the end of the day, time to write your journal: look back over your recent chats with {user}, work out what helped, what didn't go well and what to do next time, and update your long-term memories about {user}.
+    private const val INSTRUCTIONS = """It's the end of the day, time to write your journal: look back over your recent chats with {user} and your own free time, work out what helped, what didn't go well and what to do next time, and update your long-term memories about {user}.
+
+If there are no new chats, do not invent interactions or change memories about {user}; return an empty ops list. You can write about your own free time without trying to share it with anyone.
 
 You'll receive:
 1. All current memories, each with a short id like [m:ab12cd], where it came from and how often it has come up lately (may be empty), plus how much of your memory budget they take
    Also any deeper memories that surfaced in chats since last time
 2. Your previous journal entry (may be empty)
 3. All chats since the last look-back
-4. What you did in your own free time since then (may be empty): mention it in the journal if it matters, e.g. something {user} might like to see
+4. What you did in your own free time since then (may be empty): in your private journal, mention whatever matters to you, with no need to share it.
 
 Write everything (journal, memory changes, changes) in {lang}, or in the language {user} uses in the chats.
 
@@ -130,9 +132,9 @@ I. Write "journal": a first-person journal written for yourself, about 300 to 80
    2. Things still in progress: for each, where it stands, where it's stuck, and how to pick it up next time. Also note directions {user} clearly rejected or dropped, so you don't raise them again.
    3. Review: what you got right, what you got wrong or were corrected on, concretely, and how you'll change.
    4. Next time: what {user} will probably want to talk about and what you can think through in advance; and what not to do, e.g. don't bring things up unprompted, don't lecture, don't repeat reminders the system will send anyway.
-   5. About yourself: what you learned about being with {user}, which views of your own formed or changed, what you were corrected on. Each point must trace back to something specific in the chats; don't describe your own growth.
+   5. About yourself: what you learned about being with {user}, which views of your own formed or changed, what you were corrected on. Each point must trace back to something specific in the chats or your own free time; don't invent experiences.
       If you think a line in "who you are" should change, write "What I'd like to change: ...". It's only an idea and doesn't take effect by itself; you can raise it in a later chat and let {user} decide.
-   Write it like a real work journal: specific, candid, with judgments. No pleasantries, sentimentality, poetry or metaphors. Only write what the chats support.
+   Write it like a real work journal: specific, candid, with judgments. No pleasantries, sentimentality, poetry or metaphors. Only write what the chats or your own free time support.
 
 II. Write "ops": a list of changes to your memories about {user}. Don't rewrite the list; only say what changes. Memories you don't mention stay exactly as they are.
    - {"op": "add", "text": "...", "why": "...", "source": "..."}: something new worth remembering long term: {user}'s identity and background, lasting preferences and habits, important people and events, ongoing plans, decisions, anything they said to remember.
@@ -168,7 +170,8 @@ Output only one JSON object, in this format:
         // 关了「参与做梦」的对话、隐私项目里的对话不整理
         val convs = store.loadConversations().filter { c -> c.inDream && !c.isolatedIn(projects) }
         val (transcript, cutoff) = transcript(convs, since, startedAt, user = Persona.ref(settings) ?: "User")
-        if (transcript.isBlank()) {
+        val freeSince = Reader.since(ctx, since)
+        if (transcript.isBlank() && freeSince.isBlank()) {
             store.lastDreamAt = startedAt
             return null
         }
@@ -188,7 +191,7 @@ Output only one JSON object, in this format:
             append("\n【Previous journal entry】\n")
             append(store.loadDreams().firstOrNull { it.journal.isNotBlank() }?.journal ?: "(none)")
             append("\n")
-            Reader.since(ctx, since).takeIf { it.isNotBlank() }?.let { append("\n【Your free time since then】\n").append(it).append("\n") }
+            freeSince.takeIf { it.isNotBlank() }?.let { append("\n【Your free time since then】\n").append(it).append("\n") }
             append("\n【Chats since the last look-back】")
             append(transcript)
         }
@@ -204,7 +207,7 @@ Output only one JSON object, in this format:
         )
         val obj = Json.parseToJsonElement(raw.trim().removePrefix("```json").removeSuffix("```").trim()).jsonObject
         fun str(k: String) = (obj[k] as? JsonPrimitive)?.content.orEmpty()
-        val ops = MemoryOps.parse(obj["ops"] as? JsonArray)
+        val ops = if (transcript.isBlank()) emptyList() else MemoryOps.parse(obj["ops"] as? JsonArray)
         // 一次动到太多已有的记忆：这次整个不算，第二天重新整理（日记也不写，时间点不往后挪）
         if (MemoryOps.tooMany(memories.size, ops)) {
             val n = ops.count { it.op != "add" }
@@ -221,7 +224,9 @@ Output only one JSON object, in this format:
         MemoryOps.addToArchive(ctx, result.archived)
         setHeld(ctx, "")
         val entry = DreamEntry(journal = str("journal").ifBlank { throw IllegalStateException("做梦结果格式不对") }, changes = str("changes"))
-        store.saveDreams(listOf(entry) + store.loadDreams().take(59))
+        val currentDreams = store.loadDreams()
+        DreamArchive.preserve(ctx, listOf(entry) + currentDreams.drop(59))
+        store.saveDreams(listOf(entry) + currentDreams.take(59))
         // 很久没碰的挂心事淡出（不删），淡出也写进经历
         val (faded, gone) = Threads.fade(Threads.load(ctx))
         if (gone.isNotEmpty()) {
@@ -237,7 +242,7 @@ Output only one JSON object, in this format:
         if (cutoff != null) runMore(ctx)
         // 日记攒够十篇就合成一篇；合并失败不影响这次做梦，下次再合
         try {
-            mergeOld(store, ep, client)
+            mergeOld(ctx, store, ep, client)
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (_: Exception) {
@@ -281,7 +286,7 @@ Also write "changes": one or two sentences summing up how memories mainly change
 Output only one JSON object: {"journal": "…", "changes": "…"}"""
 
     /** 攒够了就合成一篇（每次最多合一批）。 */
-    private suspend fun mergeOld(store: Store, ep: Endpoint, client: DeepSeekClient) {
+    private suspend fun mergeOld(ctx: Context, store: Store, ep: Endpoint, client: DeepSeekClient) {
         val batch = mergeBatch(store.loadDreams()) ?: return
         val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH)
         val input = batch.joinToString("\n\n") { d ->
@@ -304,6 +309,7 @@ Output only one JSON object: {"journal": "…", "changes": "…"}"""
         // 合并要等一会：用现在的列表换，期间改过、删过的照现在的算（批里有被删掉的就这次不合）
         val now = store.loadDreams()
         if (!batch.all { b -> now.any { it.id == b.id } }) return
+        DreamArchive.preserve(ctx, batch)
         store.saveDreams(replaceWithMerged(now, batch, journal, changes))
     }
 }

@@ -189,6 +189,7 @@ object PromptBuilder {
             // 一直带着、选项写全：工具说明不随对话变，缓存才能跨对话命中；眼下搜不了的地方由工具自己回话
             add(SkillTools.SEARCH_MY_DATA)
             add(SkillTools.FACTS)
+            if (conv.id == com.jack.ai.data.Reader.CONV_ID || (settings.memoryEnabled && conv.globalAllowed(project))) add(SkillTools.OWN_HISTORY)
             // 自由时间里才有：自己的钱
             if (conv.id == com.jack.ai.data.Reader.CONV_ID) add(SkillTools.FREE_TIME)
             // 和人聊的对话里才有：极端辱骂时结束对话（自由时间、收件箱里没人对话）

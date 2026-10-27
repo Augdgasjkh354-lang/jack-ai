@@ -56,8 +56,42 @@ object FreeConversation {
         val out = archive.startWrite()
         try { out.write(file(ctx).readFully()); archive.finishWrite(out) }
         catch (e: Exception) { archive.failWrite(out); throw e }
+        File(dir(ctx), "pending_${archive.baseFile.name}").writeText("0")
         return State(conversationDay = today).also { save(ctx, it) }
     }
+
+    /** 每次自由时间留原文；待整理标记会在记忆成功生成后删除。 */
+    fun snapshot(ctx: Context, state: State): String {
+        val name = "free_session_${state.conversationDay.ifBlank { FreeTime.day(System.currentTimeMillis()) }}_${java.util.UUID.randomUUID()}.json"
+        val archive = AtomicFile(File(dir(ctx), name)); val out = archive.startWrite()
+        try { out.write(JsonArray(state.messages).toString().toByteArray()); archive.finishWrite(out) }
+        catch (e: Exception) { archive.failWrite(out); throw e }
+        File(dir(ctx), "pending_$name").writeText("0")
+        return name
+    }
+    /** 迁移时为旧日记录排一次整理队列，原文始终留着。 */
+    fun queueHistorical(ctx: Context) {
+        val folder = dir(ctx)
+        val flag = File(folder, "own_history_indexed.json")
+        if (flag.exists()) return
+        folder.listFiles().orEmpty().filter { it.isFile && it.name.endsWith(".json") && (it.name.startsWith("free_day_") || it.name.startsWith("free_archive_")) }.forEach { f ->
+            File(folder, "pending_${f.name}").writeText("0")
+        }
+        flag.writeText("{}")
+    }
+    fun pending(ctx: Context): List<String> = dir(ctx).listFiles().orEmpty()
+        .filter { it.name.startsWith("pending_free_") }.sortedBy { it.lastModified() }.map { it.name.removePrefix("pending_") }
+    fun pendingOffset(ctx: Context, source: String): Int =
+        runCatching { File(dir(ctx), "pending_$source").readText().toInt().coerceAtLeast(0) }.getOrDefault(0)
+    fun advancePending(ctx: Context, source: String, next: Int?) {
+        val marker = File(dir(ctx), "pending_$source")
+        if (next == null) marker.delete() else {
+            val f = AtomicFile(marker); val out = f.startWrite()
+            try { out.write(next.toString().toByteArray()); f.finishWrite(out) } catch (e: Exception) { f.failWrite(out); throw e }
+        }
+    }
+    fun source(ctx: Context, name: String): File? =
+        File(dir(ctx), name).takeIf { name == it.name && name.startsWith("free_") && name.endsWith(".json") && it.isFile }
 
     fun estimate(messages: List<JsonObject>, tools: JsonArray?): Int =
         Compression.estimateTokens(JsonArray(messages).toString()) + (tools?.let { Compression.estimateTokens(it.toString()) } ?: 0)
@@ -86,6 +120,7 @@ object FreeConversation {
         // 先归档再替换；任何一步失败都保留原对话。
         val archive = File(dir(ctx), "free_archive_${System.currentTimeMillis()}_${java.util.UUID.randomUUID()}.json")
         archive.writeText(JsonArray(old).toString())
+        File(dir(ctx), "pending_${archive.name}").writeText("0")
         val rest = messages.drop(cut)
         val system = messages.first()
         messages.clear(); messages += system

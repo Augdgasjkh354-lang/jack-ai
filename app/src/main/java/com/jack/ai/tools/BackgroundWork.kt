@@ -202,6 +202,7 @@ suspend fun runBackgroundWork(
             com.jack.ai.data.FreeConversation.save(ctx, freeState)
         }
     }
+    val surfacedOwn = mutableSetOf<String>()
     val agent = Agent({ msgs, t -> client.stream(ep, msgs, thinking, s.temperature, t) }, sendReasoning = ep.deepseek && thinking.effort != null)
     // 定时的 Work 任务也过收尾关卡；监控、微信这类按固定格式回话的（带 brief）不过
     val gate = if (brief == null) WorkGate(session, review = if (s.workReview) {
@@ -238,6 +239,13 @@ suspend fun runBackgroundWork(
             beforeRequest = { msgs, requestTools ->
                 if (free) {
                     val f = com.jack.ai.data.FreeConversation
+                    val recentAssistant = msgs.lastOrNull { (it["role"] as? kotlinx.serialization.json.JsonPrimitive)?.content == "assistant" }
+                    if (recentAssistant != null) {
+                        val query = recentAssistant.toString().takeLast(4000)
+                        val recalled = com.jack.ai.data.OwnMemory.select(com.jack.ai.data.OwnMemory.load(ctx), query)
+                            .filter { it.deep && surfacedOwn.add(it.id) }
+                        if (recalled.isNotEmpty()) msgs += buildJsonObject { put("role", "user"); put("content", com.jack.ai.data.OwnMemory.format(recalled)) }
+                    }
                     var estimate = f.estimate(msgs, requestTools)
                     var current = f.current(estimate, freeState.lastEstimate, freeState.lastTokens)
                     if (current >= f.COMPACT) {

@@ -46,4 +46,12 @@ class WorkbenchTest {
         userFile.delete()
         Unit
     }
+    @Test fun ownHistoryReadsFullArchivedDream() = runBlocking {
+        val dream = com.jack.ai.data.DreamEntry(dream = "旧梦全文", journal = "日记全文", summary = "摘要全文", changes = "变化全文", note = "醒来全文")
+        com.jack.ai.data.DreamArchive.preserve(app, listOf(dream))
+        val session = ToolSession(BackgroundToolHost(app), Settings(), Conversation(id = Reader.CONV_ID), null, emptyList(), ui)
+        val result = session.ownHistory(buildJsonObject { put("action", "read"); put("kind", "dream"); put("id", dream.id) })
+        listOf("旧梦全文", "日记全文", "摘要全文", "变化全文", "醒来全文").forEach { assertTrue(result.contains(it)) }
+    }
+
 }
