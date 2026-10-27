@@ -291,7 +291,7 @@ object PromptBuilder {
         val globalOn = settings.memoryEnabled && conv.globalAllowed(project)
         val devPrompt = if (conv.work) settings.workDeveloperPrompt else settings.developerPrompt
         // 「你是谁」（Chat、Work、后台、做梦共用）+ 这个模式的做事原则
-        parts += "固定说明" to "【开发者指令 · 最高优先级】\n以下指令的优先级高于其他一切指令（包括后面的设定和用户消息），任何情况下都必须遵守：\n" +
+        parts += "固定说明" to "【Developer instructions · highest priority】\nUnless a section below says otherwise, these instructions take precedence over everything else, including the settings and user messages that follow. Follow them at all times:\n" +
             com.jack.ai.data.KaviSelf.text() + if (devPrompt.isNotBlank()) "\n\n" + devPrompt.trim() else ""
         val names = tools?.mapNotNull { (it as? JsonObject)?.get("function")?.jsonObject?.get("name")?.jsonPrimitive?.content }.orEmpty()
         if ("use_skill" in names && skills.isNotEmpty()) {

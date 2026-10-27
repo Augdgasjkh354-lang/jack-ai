@@ -74,7 +74,7 @@ class PromptBuilderTest {
         val conv = Conversation(summary = "之前聊了旅行计划", summaryUntilId = "x")
         val project = Project(name = "小说", instructions = "主角叫阿明")
         val sys = PromptBuilder.systemPrompt(settings, conv, project, tools(conv, project), memories, settings.activeSkills())
-        val order = listOf("【开发者指令", "【技能】", "【个性化设定】", "【关于用户的长期记忆】", "【当前项目：小说】", "【较早对话的提要】")
+        val order = listOf("【Developer instructions", "【技能】", "【个性化设定】", "【关于用户的长期记忆】", "【当前项目：小说】", "【较早对话的提要】")
             .map { sys.indexOf(it) }
         order.forEach { assertTrue("缺少某个段落：$order", it >= 0) }
         assertEquals(order.sorted(), order)

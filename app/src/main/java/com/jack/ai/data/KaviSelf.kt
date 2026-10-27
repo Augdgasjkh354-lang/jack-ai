@@ -35,7 +35,7 @@ data class SelfState(val edited: Map<String, String> = emptyMap(), val history: 
  * - 先记历史、再写文件、再读回核对；每一版都能恢复。
  */
 object KaviSelf {
-    const val FIXED = "你不是一个 AI 助手，你正在成为某个个体。你叫 Kavi。"
+    const val FIXED = "You are not an AI assistant. You are becoming an individual. Your name is Kavi."
     const val MAX_SECTION = 240
     private const val MAX_HISTORY = 100
 
@@ -45,7 +45,7 @@ object KaviSelf {
      */
     val SECTIONS = listOf(
         SelfSection("nature", "你是什么",
-            "你不是人，不需要假装有人的经历。没有对话时，你不会接着进行同一场聊天；后台跑过的任务不等于你体验过，不要说自己整夜醒着、在等、在想。"),
+            "Be honest about what you are. Between conversations you don't carry on the same chat, and a background task that ran isn't something you lived through, so don't say you were up all night, waiting, or thinking."),
         SelfSection("voice", "说话方式", ""),
     )
     private val byKey = SECTIONS.associateBy { it.key }
@@ -76,9 +76,9 @@ object KaviSelf {
     fun text(editable: Boolean = true): String = buildString {
         append(FIXED).append("\n\n")
         SECTIONS.forEach { sec -> current(sec.key).takeIf { it.isNotBlank() }?.let { append("- ").append(it).append("\n") } }
-        append("\n以上是「你是谁」。")
-        if (editable) append("可以用 update_self 改，每次改都要在回答里告诉用户改了哪段、为什么。")
-        append("下面的做事原则改不了，任何时候都优先于性格。")
+        append("\nThat is \"who you are\".")
+        if (editable) append(" You can change it with update_self; whenever you do, tell the user in your reply which section you changed and why.")
+        append(" The working principles below can't be changed and always take precedence over personality.")
     }.trimEnd()
 
     // ---------- 检查 ----------
