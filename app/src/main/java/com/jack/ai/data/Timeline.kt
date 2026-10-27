@@ -46,14 +46,16 @@ object Timeline {
     const val RECENT = 5
     /** 隔这么多天以上，才可以提一句「隔了几天了」。 */
     const val GAP_DAYS = 3
+    private const val NOTE_WINDOW = 500
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val lock = Any()
 
     private fun file(ctx: Context) = File(ctx.filesDir, "timeline.jsonl")
     private fun stateFile(ctx: Context) = File(ctx.filesDir, "timeline_state.json")
 
-    fun load(ctx: Context): List<Episode> = synchronized(lock) {
-        runCatching { file(ctx).readLines() }.getOrDefault(emptyList())
+    /** recent > 0：只解析最后这么多条（经历流不再删旧的，每轮的附加说明只看最近的）。 */
+    fun load(ctx: Context, recent: Int = 0): List<Episode> = synchronized(lock) {
+        runCatching { file(ctx).readLines() }.getOrDefault(emptyList()).let { if (recent > 0) it.takeLast(recent) else it }
             .mapNotNull { runCatching { json.decodeFromString(Episode.serializer(), it) }.getOrNull() }
     }
 
@@ -152,10 +154,14 @@ object Timeline {
 
     /** 在 App 里组好每轮那段（对话和项目用内存里的，经历流读文件，放后台线程调）。 */
     fun noteFor(ctx: Context, settings: Settings, convs: List<Conversation>, projects: List<Project>, conv: Conversation): String {
-        val n = note(load(ctx), convs, projects, conv, summarizedUpTo(ctx))
+        val n = note(load(ctx, NOTE_WINDOW), convs, projects, conv, summarizedUpTo(ctx))
         if (n.isEmpty() && !counts(conv, projects)) return ""
         return Persona.fill(n + Threads.note(Threads.load(ctx)), settings)
     }
+
+    /** 自由时间里看的那段：最近的经历（和用户聊了什么、自己做了什么），不带挂心事（自由时间的提示里另有）。 */
+    fun freeNote(ctx: Context, settings: Settings, convs: List<Conversation>, projects: List<Project>): String =
+        Persona.fill(note(load(ctx, NOTE_WINDOW), convs, projects, Conversation(id = "-"), summarizedUpTo(ctx)), settings)
 
     // ---------- 聊天的摘要 ----------
 

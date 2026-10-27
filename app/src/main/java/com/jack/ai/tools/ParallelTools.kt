@@ -39,11 +39,8 @@ internal suspend fun ToolSession.delegateTasks(args: JsonObject): String {
     val pool = com.jack.ai.data.FreePool.load(app)
     return runTool("分头做 ${tasks.size} 件事") {
         val client = DeepSeekClient()
-        val hasSilicon = settings.providers.any { com.jack.ai.data.isSiliconFlow(it.baseUrl) && it.apiKey.isNotBlank() }
-        val siliconFree = if (hasSilicon) try { com.jack.ai.data.siliconFreeModels() }
-            catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) { emptySet() } else emptySet()
-        fun getCandidates(state: com.jack.ai.data.FreePoolState, index: Int) =
-            com.jack.ai.data.freeCandidates(state, settings, index).filter { !com.jack.ai.data.isSiliconFlow(it.baseUrl) || it.model in siliconFree }
+        // 池里的硅基流动模型探测时已经按价格页筛过是免费的，这里不用每次再抓一遍网页
+        fun getCandidates(state: com.jack.ai.data.FreePoolState, index: Int) = com.jack.ai.data.freeCandidates(state, settings, index)
         val folder = ContextNote.files(wsDir)
         val tools = JsonArray(PromptBuilder.toolSet(settings, skills, conv, project, unlocked).orEmpty().filter { definition ->
             val fn = (definition as? JsonObject)?.get("function") as? JsonObject

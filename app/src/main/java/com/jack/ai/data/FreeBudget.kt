@@ -119,11 +119,21 @@ object FreeTime {
         return state.copy(savings = maxOf(state.savings, savings.coerceAtMost(budget * SAVE_DAYS)), accruedThrough = yesterday)
     }
 
-    /** 聊天时给 Kavi 的那段：它自己的近况，加上还在等用户回的心愿。空的就没有。 */
-    fun latelyNote(ctx: Context): String {
+    /**
+     * 聊天时给 Kavi 的那段：它自己的近况、还在等用户回的心愿；full 时再加上常记的自己的经历和自由时间里没做完的事
+     * （自由时间的开场里已经有这两样，那里不用 full）。都只在自由时间后变，放在系统提示最后。空的就没有。
+     */
+    fun latelyNote(ctx: Context, full: Boolean = true): String {
         val s = load(ctx)
         val waiting = s.wishes.filter { it.status == "pending" }
-        return (s.lately + if (waiting.isEmpty()) "" else "\nWaiting for an answer: " + waiting.joinToString("; ") { describe(it) }).trim()
+        return buildString {
+            append(s.lately)
+            if (waiting.isNotEmpty()) append("\nWaiting for an answer: ").append(waiting.joinToString("; ") { describe(it) })
+            if (full) {
+                OwnMemory.hotLines(ctx).takeIf { it.isNotBlank() }?.let { append("\nThings you did or thought in your own time (details with own_history):\n").append(it) }
+                s.freeSummary.takeIf { it.isNotBlank() }?.let { append("\nLeft unfinished in your free time:\n").append(it) }
+            }
+        }.trim()
     }
 
     fun money(v: Double) = "¥" + String.format(Locale.US, "%.2f", v)

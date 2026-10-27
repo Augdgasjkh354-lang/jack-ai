@@ -243,12 +243,11 @@ class DeepSeekClient(
         val base = baseUrl.trim().trimEnd('/')
         if (!base.startsWith("http")) throw ApiException("接口地址要以 http:// 或 https:// 开头")
         val host = runCatching { java.net.URI(base).host.orEmpty().lowercase() }.getOrDefault("")
-        if (host == "dashscope.aliyuncs.com" || host == "dashscope-intl.aliyuncs.com" || host == "cn-hongkong.dashscope.aliyuncs.com" || host.endsWith(".cn-beijing.maas.aliyuncs.com")) {
-            val listHost = if (host == "dashscope.aliyuncs.com") {
-                val id = workspaceId.trim()
-                if (!Regex("[a-zA-Z0-9-]+").matches(id)) throw ApiException("请在百炼控制台的业务空间管理中复制业务空间 ID，填入后再获取模型列表")
-                "$id.cn-beijing.maas.aliyuncs.com"
-            } else host
+        // 百炼的模型目录：北京要填业务空间 ID；没填就照常走 OpenAI 兼容的 /models（以前就是这么拿列表的）
+        val bailian = host == "dashscope-intl.aliyuncs.com" || host == "cn-hongkong.dashscope.aliyuncs.com" || host.endsWith(".cn-beijing.maas.aliyuncs.com") ||
+            (host == "dashscope.aliyuncs.com" && Regex("[a-zA-Z0-9-]+").matches(workspaceId.trim()))
+        if (bailian) {
+            val listHost = if (host == "dashscope.aliyuncs.com") "${workspaceId.trim()}.cn-beijing.maas.aliyuncs.com" else host
             val result = mutableListOf<Pair<String, Price?>>()
             var page = 1
             while (true) {

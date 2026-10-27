@@ -71,7 +71,13 @@ object SelfStory {
         if (edits.isNotEmpty()) append("【Changes you made to who you are】\n").append(edits.joinToString("\n") { e ->
             FreeTime.day(e.at) + " 「" + KaviSelf.title(e.section) + "」: " + e.old.take(80) + " → " + e.new.take(80) + (if (e.reason.isNotBlank()) " (why: ${e.reason.take(80)})" else "")
         }).append("\n\n")
-        FreeTime.load(ctx).lately.takeIf { it.isNotBlank() }?.let { append("【Lately】\n").append(it).append("\n\n") }
+        val free = FreeTime.load(ctx)
+        free.lately.takeIf { it.isNotBlank() }?.let { append("【Lately】\n").append(it).append("\n\n") }
+        // 自由时间里自己的经历和没做完的事：自传和体检最该回看的就是这些
+        OwnMemory.load(ctx).sortedBy { it.at }.takeLast(40).takeIf { it.isNotEmpty() }?.let { l ->
+            append("【What you did or thought in your own time】\n").append(l.joinToString("\n") { "- ${FreeTime.day(it.at)} ${it.kind}：${it.text}" }).append("\n\n")
+        }
+        free.freeSummary.takeIf { it.isNotBlank() }?.let { append("【Left unfinished in your free time】\n").append(it).append("\n\n") }
         store.loadDreams().filter { it.journal.isNotBlank() }.take(3).forEach { d ->
             append("【Journal ").append(FreeTime.day(d.createdAt)).append("】\n").append(d.journal.take(1500)).append("\n\n")
         }

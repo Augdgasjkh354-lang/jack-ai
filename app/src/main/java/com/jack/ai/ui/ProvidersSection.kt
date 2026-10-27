@@ -178,7 +178,7 @@ private fun ProviderDialog(vm: ChatViewModel, initial: Provider, onDismiss: () -
                 if (runCatching { java.net.URI(url).host.equals("dashscope.aliyuncs.com", ignoreCase = true) }.getOrDefault(false)) {
                     OutlinedTextField(value = workspaceId, onValueChange = { workspaceId = it.trim() },
                         label = { Text("百炼业务空间 ID") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    Text("在百炼控制台的业务空间管理中复制业务空间 ID；获取模型列表和免费池探测需要。",
+                    Text("选填。在百炼控制台的业务空间管理里复制；填了能拿到更全的模型目录，不填也能获取列表和探测免费额度。",
                         style = MaterialTheme.typography.bodySmall)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {

@@ -120,7 +120,7 @@ suspend fun runBackgroundWork(
     val memories = if (s.memoryEnabled && conv.globalAllowed(project)) store.loadMemories() else emptyList()
     val journal = store.loadDreams().firstOrNull { it.journal.isNotBlank() }?.journal.orEmpty()
     val now = SimpleDateFormat("yyyy-MM-dd EEEE HH:mm", Locale.ENGLISH).format(Date())
-    val system = PromptBuilder.systemPrompt(s, conv, project, tools, memories, skills, journal = journal, lately = com.jack.ai.data.FreeTime.latelyNote(ctx)) +
+    val system = PromptBuilder.systemPrompt(s, conv, project, tools, memories, skills, journal = journal, lately = com.jack.ai.data.FreeTime.latelyNote(ctx, full = r.convId != com.jack.ai.data.Reader.CONV_ID)) +
         "\n\n" + com.jack.ai.data.Persona.fill(
             (brief ?: "【Background scheduled task】It is now $now. You're running a scheduled task {user} set up in advance: 「${r.title}」. {User} isn't online and can't be asked anything, so just get it done. ") +
                 (if (budget != null && r.convId == com.jack.ai.data.Reader.CONV_ID && conv.projectId == null)
@@ -140,8 +140,8 @@ suspend fun runBackgroundWork(
     val free = budget != null && r.convId == com.jack.ai.data.Reader.CONV_ID && conv.projectId == null
     var freeState = if (free) com.jack.ai.data.FreeConversation.forDay(ctx, com.jack.ai.data.FreeTime.day(startedAt)) else com.jack.ai.data.FreeConversation.State()
     if (free && freeState.messages.isNotEmpty()) {
-        val first = messages.first()
-        messages.clear(); messages += first
+        // 同一天接着做：用当天第一次的系统提示（换成新的，后面整段对话的缓存就全没了），变了的东西写进这次的开场
+        messages.clear(); messages += freeState.messages.first()
         messages += TaskCheckpoint.repair(freeState.messages.drop(1))
         val note = resumePrompt.ifBlank { "系统：自由时间又到了，按你自己的节奏继续，也可以休息。" } +
             if (freeState.next.isNotBlank()) "\n系统：这是你之前想继续的事，你随时可以改变主意：\n" + freeState.next else ""

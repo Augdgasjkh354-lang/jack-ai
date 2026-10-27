@@ -98,26 +98,32 @@ object OwnMemory {
         catch (_: Exception) { f.lastModified() }
     }
 
-    /** 当前话题的深层记忆，以及不依赖关键词的近期经历。 */
-    fun select(items: List<OwnMemoryItem>, query: String): List<OwnMemoryItem> {
-        val hot = items.filterNot { it.deep }
+    /** 当前话题的深层记忆，以及不依赖关键词的近期经历。includeHot：连常记的一起（聊天里常记已经在系统提示里了，不用）。 */
+    fun select(items: List<OwnMemoryItem>, query: String, includeHot: Boolean = true): List<OwnMemoryItem> {
+        val hot = if (includeHot) items.filterNot { it.deep } else emptyList()
         val deep = items.filter { it.deep }
         val tokens = MemoryOps.keyTokens(query)
+        // 至少共有两个有分量的词才算沾边（问得很短、只有一个词时一个就够）
+        val need = minOf(2, tokens.size).coerceAtLeast(1)
         val found = deep.map { it to MemoryOps.keyTokens(it.text).count { token -> token in tokens } }
-            .filter { it.second > 0 }.sortedByDescending { it.second }.take(3).map { it.first }
-        val recentQuestion = listOf("最近", "近来", "这几天", "做了什么", "怎么样", "自由时间", "recent", "lately").any { it in query.lowercase() }
+            .filter { it.second >= need }.sortedByDescending { it.second }.take(3).map { it.first }
+        val recentQuestion = listOf("最近", "近来", "这几天", "自由时间", "recent", "lately").any { it in query.lowercase() }
         val recent = if (recentQuestion) items.sortedByDescending { it.at }.take(5) else emptyList()
         return (hot + recent + found).distinctBy { it.id }
     }
 
-    fun note(ctx: Context, query: String): String = synchronized(lock) {
+    fun note(ctx: Context, query: String, includeHot: Boolean = true): String = synchronized(lock) {
         val all = load(ctx)
-        val selected = select(all, query)
+        val selected = select(all, query, includeHot)
         if (selected.isEmpty()) return ""
         val ids = selected.filter { it.deep }.map { it.id }.toSet()
         if (ids.isNotEmpty()) save(ctx, all.map { if (it.id in ids) it.copy(uses = it.uses + 1, lastUsedAt = System.currentTimeMillis()) else it })
         format(selected)
     }
+
+    /** 系统提示里的那段：常记的自己的经历（只在自由时间后变，放在近况里，不每轮重复）。 */
+    fun hotLines(ctx: Context): String = load(ctx).filterNot { it.deep }.sortedBy { it.at }
+        .joinToString("\n") { "- ${FreeTime.day(it.at)} ${it.kind}：${it.text}" }
 
     fun format(items: List<OwnMemoryItem>): String = if (items.isEmpty()) "" else
         "【你自己的经历记忆】以下是你做过或想过的事，附日期和原始记录编号；需要细节可以用 own_history 查阅。\n" +

@@ -192,6 +192,8 @@ Output only one JSON object, in this format:
             append(store.loadDreams().firstOrNull { it.journal.isNotBlank() }?.journal ?: "(none)")
             append("\n")
             freeSince.takeIf { it.isNotBlank() }?.let { append("\n【Your free time since then】\n").append(it).append("\n") }
+            ownSince(ctx, since).takeIf { it.isNotBlank() }?.let { append("\n【What you did or thought in your own time since then】\n").append(it).append("\n") }
+            FreeTime.load(ctx).freeSummary.takeIf { it.isNotBlank() }?.let { append("\n【Left unfinished in your free time】\n").append(it).append("\n") }
             append("\n【Chats since the last look-back】")
             append(transcript)
         }
@@ -284,6 +286,10 @@ Output only one JSON object, in this format:
 Also write "changes": one or two sentences summing up how memories mainly changed over these days (merging each entry's memory changes).
 
 Output only one JSON object: {"journal": "…", "changes": "…"}"""
+
+    /** 上次做梦以来自由时间里整理出的自己的经历（按发生的那天算，往前多放一天，免得半夜那次漏掉）。 */
+    private fun ownSince(ctx: Context, since: Long): String = OwnMemory.load(ctx).filter { it.at >= since - 86_400_000L }
+        .sortedBy { it.at }.takeLast(30).joinToString("\n") { "- ${FreeTime.day(it.at)} ${it.kind}：${it.text}" }
 
     /** 攒够了就合成一篇（每次最多合一批）。 */
     private suspend fun mergeOld(ctx: Context, store: Store, ep: Endpoint, client: DeepSeekClient) {

@@ -143,7 +143,8 @@ object FreePool {
                 if (listed == null) { found += old.models.filter { it.providerId == p.id && it.exhaustedAt != 0L }; continue }
                 for ((model, _) in listed.second.filter { isChatModel(it.first) && (freePrices == null || it.first in freePrices) }) {
                     val body = buildJsonObject {
-                        put("model", model); put("max_tokens", 1); put("stream", false)
+                        // Qwen3 这类开源模型非流式调用要关掉思考，否则报错，会被误判成不能用
+                        put("model", model); put("max_tokens", 1); put("stream", false); put("enable_thinking", false)
                         put("messages", buildJsonArray { add(buildJsonObject { put("role", "user"); put("content", "Hi") }) })
                     }.toString()
                     val result = try {

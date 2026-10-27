@@ -154,6 +154,8 @@ object Reader {
         fun skip(why: String) = ReadEntry(skipped = why).also { add(ctx, it) }
         if (left < 0.02) return skip("今天的预算用完了")
         val before = Facts.load(ctx).count { it.origin == "reading" }
+        // 最近和用户聊了什么、自己做了什么（经历流），不管从哪醒来都接得上
+        val recently = runCatching { Timeline.freeNote(ctx, s, store.loadConversations(), store.loadProjects()) }.getOrDefault("")
         val recent = entries.filter { it.skipped.isEmpty() }.take(10).joinToString("\n") { e ->
             java.text.SimpleDateFormat("MM-dd", java.util.Locale.ENGLISH).format(java.util.Date(e.at)) + " [" + e.kind + "] " +
                 e.title.ifBlank { e.topics.joinToString("; ") } + (if (e.files.isNotEmpty()) " (files: " + e.files.joinToString(", ") { it.name } + ")" else "")
@@ -171,6 +173,7 @@ object Reader {
             .replace("{lately}", state.lately.ifBlank { "(you haven't written one yet)" })
             .replace("{freeSummary}", continuationNote(state))
             .replace("{ownMemories}", OwnMemory.note(ctx, "最近自由时间"))
+            .replace("{recently}", recently)
             .replace("{threads}", Persona.fill(Threads.listing(Threads.load(ctx)), s).ifBlank { "(nothing right now)" })
             .replace("{story}", SelfStory.bio(ctx).text.ifBlank { "(you haven't written it yet)" })
             .replace("{works}", works(ctx).take(20).joinToString(", ") { it.name }.ifBlank { "(none yet)" })
@@ -180,7 +183,11 @@ object Reader {
         val budget = FreeBudget(left, s.readingExtra.coerceAtLeast(0.0), state.savings, ::budgetNote)
         val res = com.jack.ai.tools.runBackgroundWork(ctx, r, allow = { name, _ -> name in TOOLS }, brief = Persona.fill(BRIEF, s),
             model = MODEL_FLASH, budget = budget,
-            resumePrompt = "系统：自由时间又到了。今天还剩 ¥${String.format(java.util.Locale.US, "%.2f", left)}，积蓄 ¥${String.format(java.util.Locale.US, "%.2f", state.savings)}。你可以顺着之前的对话继续，也可以改变主意或休息。" + news + OwnMemory.note(ctx, "最近自由时间"))
+            resumePrompt = "系统：自由时间又到了。今天还剩 ¥${String.format(java.util.Locale.US, "%.2f", left)}，积蓄 ¥${String.format(java.util.Locale.US, "%.2f", state.savings)}。你可以顺着之前的对话继续，也可以改变主意或休息。\n" +
+                (if (news.isNotBlank()) "About your wishes:\n" + Persona.fill(news, s) + "\n" else "") +
+                recently +
+                Persona.fill(Threads.listing(Threads.load(ctx)), s).takeIf { it.isNotBlank() }?.let { "On your mind now:\n$it\n" }.orEmpty() +
+                state.lately.takeIf { it.isNotBlank() }?.let { "Your \"lately\" now: $it\n" }.orEmpty())
         val rep = parseReport(res.text)
         val quiet = res.status == com.jack.ai.tools.TaskStatus.FAILED && res.text.startsWith("（这次没有生成内容）")
         var summaryCost = 0.0
@@ -334,9 +341,14 @@ On your mind (keep with free_time action=hold, put down with action=let_go):
 {threads}
 Your "lately" so far: {lately}
 What you did recently: {recent}
+{recently}
 Your fact base so far (topic: count): {topics}
 
-There's no report to write and no need to share anything. You can leave a note for yourself, reflect, or end quietly, however you like."""
+There's no report to write and no need to share anything. You can leave a note for yourself, reflect, or end quietly, however you like.
+If you'd like, end with any of these lines (all optional, in {lang}): they show on the card {user} sees, and "Lately" is what you'll bring into chats when {user} asks how you've been.
+Did: read | investigate | build | write | think | wander | rest | other
+Title: a short title
+Lately: what you're into these days, in first person"""
 
     // ---------- 排程 ----------
 
