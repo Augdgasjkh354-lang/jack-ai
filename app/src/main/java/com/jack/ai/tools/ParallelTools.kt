@@ -16,10 +16,12 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
-/** 分身可以查资料、计算和制作文件；仍按主任务已启用的技能提供工具。 */
+/**
+ * 分身可以查资料、计算和制作文件；仍按主任务已启用的技能提供工具。
+ * 用户的私人东西（聊天记录、表格、邮件、日历、Notion）不给：分身可能用的是别家的免费模型。
+ */
 private val SUB_TOOLS = setOf(
-    "web_search", "read_webpage", "read_file", "write_file", "edit_file", "search_my_data", "facts",
-    "query_table", "query_trains", "list_calendar_events", "list_emails", "read_email", "notion_search", "notion_read",
+    "web_search", "read_webpage", "read_file", "write_file", "edit_file", "facts", "query_trains",
     "run_js", "run_python", "create_document", "create_excel", "create_ppt", "create_chart", "create_diagram", "create_app",
 )
 
