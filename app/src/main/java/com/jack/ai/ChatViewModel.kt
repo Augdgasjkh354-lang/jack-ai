@@ -144,6 +144,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             dreams = store.loadDreams(),
         )
         Dreamer.schedule(app, _state.value.settings.dreamEnabled)
+        com.jack.ai.data.Reader.schedule(app, _state.value.settings.readingEnabled)
         // 桌面图标和设置对不上（比如从备份恢复了别的选择）：照设置改过来
         runCatching { com.jack.ai.ui.AppIcon.ensure(app, _state.value.settings.appIcon) }
         com.jack.ai.data.Proactive.schedule(app, _state.value.settings.proactive)
@@ -913,6 +914,21 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private fun updateConv(id: String, transform: (Conversation) -> Conversation) = core.updateConv(id, transform)
     private fun patchMessage(convId: String, msgId: String, transform: (ChatMessage) -> ChatMessage) = core.patchMessage(convId, msgId, transform)
     private fun updateConvQuiet(id: String, transform: (Conversation) -> Conversation) = core.updateConvQuiet(id, transform)
+    /** 让 Kavi 现在去读一会（不管开没开阅读时间，预算照算）。 */
+    fun readNow() {
+        com.jack.ai.data.Reader.runNow(getApplication())
+        _state.update { it.copy(toast = "Kavi 去读了，读完记在「阅读和知识」里") }
+    }
+
+    /** 从事实库里删掉一条（连同向量）。 */
+    fun deleteFact(id: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val app = getApplication<android.app.Application>()
+            com.jack.ai.data.Facts.save(app, com.jack.ai.data.Facts.load(app).filterNot { it.id == id })
+            com.jack.ai.data.Facts.removeVector(app, id)
+        }
+    }
+
     private fun persist() = core.persist()
 
     // ---------- 交给各功能块（名字不变，界面不用改） ----------

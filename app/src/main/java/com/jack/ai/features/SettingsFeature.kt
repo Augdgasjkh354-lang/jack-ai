@@ -25,6 +25,7 @@ class SettingsFeature(core: AppCore, private val client: DeepSeekClient) : Featu
         val after = state.value.settings
         store.saveSettings(after)
         if (before.dreamEnabled != after.dreamEnabled) Dreamer.schedule(app, after.dreamEnabled)
+        if (before.readingEnabled != after.readingEnabled) com.jack.ai.data.Reader.schedule(app, after.readingEnabled)
         if (before.proactive != after.proactive) com.jack.ai.data.Proactive.schedule(app, after.proactive)
         if (before.appIcon != after.appIcon) com.jack.ai.ui.AppIcon.apply(app, after.appIcon)
         if (before.proxyHardened != after.proxyHardened) {

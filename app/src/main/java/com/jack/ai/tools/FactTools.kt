@@ -88,7 +88,7 @@ private fun ToolSession.storeFacts(items: List<JsonObject>): String {
             return@forEachIndexed
         }
         var fact = Fact(text = n.text, topic = n.topic, sources = n.sources, createdAt = now, updatedAt = now,
-            expiresAt = if (n.days > 0) now + n.days * 86_400_000L else 0, origin = if (interactive) "work" else "reading")
+            expiresAt = if (n.days > 0) now + n.days * 86_400_000L else 0, origin = if (conv.id == com.jack.ai.data.Reader.CONV_ID) "reading" else "work")
         fact = fact.copy(status = Facts.statusOf(fact))
         find(n.replaces).takeIf { it >= 0 }?.let { i ->
             val old = list[i]

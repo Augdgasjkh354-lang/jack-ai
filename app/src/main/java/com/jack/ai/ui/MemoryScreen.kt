@@ -179,6 +179,7 @@ private fun MemoryPage(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
 
             item { NudgeCard(vm, settings) }
             item { KaviSelfCard() }
+            item { ReadingCard(vm, settings) }
             item {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 12.dp)) {
                     Text("关于你", style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
@@ -319,5 +320,97 @@ fun DreamCard(d: DreamEntry, initiallyOpen: Boolean, onEdit: (String) -> Unit, o
         ConfirmDeleteDialog("删除这篇日记？", "删掉后之后的聊天不会再参考它。", onDismiss = { deleting = false }) {
             onDelete(); deleting = false
         }
+    }
+}
+
+/**
+ * 阅读和知识：Kavi 每天自己上网读一会（开关、每日预算、现在就去读），读过什么、存了几条；
+ * 事实库里有什么（状态、出处），不对的可以删。
+ */
+@Composable
+internal fun ReadingCard(vm: ChatViewModel, settings: com.jack.ai.data.Settings) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current.applicationContext
+    val colors = MaterialTheme.colorScheme
+    var refresh by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    var editBudget by remember { mutableStateOf(false) }
+    var showFacts by remember { mutableStateOf(false) }
+    val data by androidx.compose.runtime.produceState(emptyList<com.jack.ai.data.ReadEntry>() to emptyList<com.jack.ai.data.Fact>(), refresh) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            com.jack.ai.data.Reader.log(ctx) to com.jack.ai.data.Facts.load(ctx).filter { it.status != "retired" }.sortedByDescending { it.updatedAt }
+        }
+    }
+    val (log, facts) = data
+    val fmt = remember { java.text.SimpleDateFormat("M月d日 HH:mm", java.util.Locale.CHINA) }
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = NIGHT_CARD, contentColor = colors.onSurface)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("阅读时间（每天凌晨）", style = MaterialTheme.typography.titleSmall)
+                    Text("Kavi 自己上网读一会，查实的事实存进事实库。只读不写，不登录、不发东西。",
+                        style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                }
+                Switch(settings.readingEnabled, { on -> vm.updateSettings { it.copy(readingEnabled = on) } })
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("每天最多花 ¥%.2f · 今天已花 ¥%.2f".format(settings.readingBudget, com.jack.ai.data.Reader.spentToday(log)),
+                    Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                TextButton(onClick = { editBudget = true }) { Text("改预算") }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { vm.readNow() }) { Text("现在去读一会") }
+                TextButton(onClick = { refresh++ }) { Text("刷新") }
+            }
+            log.take(5).forEach { e ->
+                Column(Modifier.padding(top = 6.dp)) {
+                    Text(fmt.format(java.util.Date(e.at)) + if (e.skipped.isNotEmpty() && e.topics.isEmpty()) " · 没读成" else " · 存了 ${e.saved} 条 · ¥%.2f".format(e.spent),
+                        style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
+                    if (e.topics.isNotEmpty()) Text(e.topics.joinToString(" · "), style = MaterialTheme.typography.bodyMedium)
+                    val body = e.report.ifBlank { e.skipped }
+                    if (body.isNotBlank()) Text(body, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                }
+            }
+            androidx.compose.material3.HorizontalDivider(Modifier.padding(vertical = 6.dp), color = colors.outlineVariant)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("事实库 ${facts.size} 条" + (if (facts.isNotEmpty()) "（已核对 ${facts.count { it.status == "verified" }}）" else ""),
+                    Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                if (facts.isNotEmpty()) TextButton(onClick = { showFacts = !showFacts }) { Text(if (showFacts) "收起" else "看看") }
+            }
+            if (facts.isEmpty()) Text("还是空的。Kavi 做任务、读书时查实的事会存进来，每条都带出处。",
+                style = MaterialTheme.typography.bodySmall, color = colors.outline)
+            if (showFacts) facts.take(50).forEach { f ->
+                Row(verticalAlignment = Alignment.Top, modifier = Modifier.padding(top = 4.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        Text(f.text, style = MaterialTheme.typography.bodyMedium)
+                        val state = when (f.status) { "verified" -> "已核对"; "conflict" -> "有冲突"; else -> "单一来源" } +
+                            (if (f.expiresAt in 1 until System.currentTimeMillis()) " · 可能过时" else "")
+                        Text(state + " · " + f.sources.map { com.jack.ai.data.Facts.host(it.url) }.distinct().take(3).joinToString("、") +
+                            (if (f.topic.isNotBlank()) " · ${f.topic}" else ""),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (f.status == "conflict") colors.error else colors.onSurfaceVariant)
+                    }
+                    IconButton(onClick = { vm.deleteFact(f.id); refresh++ }, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.Delete, "删除", Modifier.size(16.dp), tint = colors.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+    }
+    if (editBudget) {
+        var text by remember { mutableStateOf("%.2f".format(settings.readingBudget)) }
+        AlertDialog(
+            onDismissRequest = { editBudget = false },
+            title = { Text("每天的阅读预算") },
+            text = {
+                OutlinedTextField(text, { text = it }, singleLine = true, suffix = { Text("元") },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal))
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    text.toDoubleOrNull()?.let { v -> vm.updateSettings { it.copy(readingBudget = v.coerceIn(0.0, 20.0)) } }
+                    editBudget = false
+                }) { Text("保存") }
+            },
+            dismissButton = { TextButton(onClick = { editBudget = false }) { Text("取消") } },
+        )
     }
 }

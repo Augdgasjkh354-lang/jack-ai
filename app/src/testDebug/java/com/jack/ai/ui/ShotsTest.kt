@@ -1,5 +1,8 @@
 package com.jack.ai.ui
 
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.background
 import android.app.Application
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -139,6 +142,36 @@ class ShotsTest {
             }
         }
         save("drawer-" + dark().name.lowercase())
+    }
+
+    @Test
+    fun knowledge() {
+        Assume.assumeTrue(System.getenv("SHOTS_DIR") != null)
+        val app = RuntimeEnvironment.getApplication() as Application
+        val now = System.currentTimeMillis()
+        java.io.File(app.filesDir, "reading_log.json").writeText(kotlinx.serialization.json.Json.encodeToString(
+            kotlinx.serialization.builtins.ListSerializer(com.jack.ai.data.ReadEntry.serializer()),
+            listOf(com.jack.ai.data.ReadEntry(at = now - 3_600_000L, topics = listOf("跨境电商物流时效", "端侧大模型"), saved = 6, spent = 0.21,
+                report = "读了三家物流公司的官方时效说明，美国线普遍 7 到 12 天；另外看了手机端运行大模型的进展，你之前问过的那个方向今年有了明显进步。"))))
+        com.jack.ai.data.Facts.save(app, listOf(
+            com.jack.ai.data.Fact(text = "珠穆朗玛峰海拔 8848.86 米（2020 年中尼联合测量）", topic = "地理", status = "verified",
+                sources = listOf(com.jack.ai.data.FactSource("https://www.gov.cn/x"), com.jack.ai.data.FactSource("https://en.wikipedia.org/wiki/Mount_Everest"))),
+            com.jack.ai.data.Fact(text = "某物流美国专线标准时效 7 到 12 个工作日", topic = "物流", sources = listOf(com.jack.ai.data.FactSource("https://example-logistics.com/us"))),
+        ))
+        val vm = vm(emptyList())
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            val state by vm.state.collectAsState()
+            JackTheme(ThemeMode.DARK) {
+                androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color(0xFF0B1030)).padding(androidx.compose.ui.unit.Dp(16f))) {
+                    androidx.compose.foundation.layout.Column {
+                        ReadingCard(vm, state.settings)
+                    }
+                }
+            }
+        }
+        Thread.sleep(500)
+        save("knowledge")
     }
 
     @Test

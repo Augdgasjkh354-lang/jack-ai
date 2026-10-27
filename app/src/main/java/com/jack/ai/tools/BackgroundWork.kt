@@ -74,7 +74,7 @@ const val NO_KEY = "还没有填写 API Key，任务没法执行。到设置里�
 enum class TaskStatus { OK, FAILED, NEEDS_SETUP }
 
 /** 定时 Work 的结果：文字、生成的文件，以及成没成（由代码置位，不看文字）。 */
-data class TaskResult(val text: String, val files: List<GeneratedFile> = emptyList(), val status: TaskStatus = TaskStatus.OK)
+data class TaskResult(val text: String, val files: List<GeneratedFile> = emptyList(), val status: TaskStatus = TaskStatus.OK, val spent: Double = 0.0)
 
 /**
  * 到点在后台跑一个 Work 任务：和聊天里的 Work 一样能用全部开着的技能（邮箱、文件、联网……），
@@ -91,6 +91,8 @@ suspend fun runBackgroundWork(
     brief: String? = null,
     /** 用哪个模型，不填用 Work 的模型。 */
     model: String? = null,
+    /** 这次最多花多少钱（元），不填用 Work 的单次上限。 */
+    costLimit: Double? = null,
     onProgress: (String) -> Unit = {},
 ): TaskResult {
     com.jack.ai.data.KaviSelf.ensure(ctx)
@@ -181,7 +183,8 @@ suspend fun runBackgroundWork(
             tools = if (resumed) toolsFor(session.unlocked.toSet()) else tools,
             maxRounds = { session.maxRounds },
             execute = { name, args ->
-                if (s.workCostLimit > 0 && spent >= s.workCostLimit) {
+                val limit = costLimit ?: s.workCostLimit
+                if (limit > 0 && spent >= limit) {
                     session.maxRounds = 0
                     "花费到了上限，不要再调用工具，直接写出目前的结果，并说明还差什么。"
                 } else if (!allow(name, args)) "这个工具这次不能用。"
@@ -203,5 +206,5 @@ suspend fun runBackgroundWork(
     }
     TaskCheckpoint.clear(checkpoint)
     val text = agent.lastRound.trim().ifBlank { agent.content.toString().trim() }
-    return if (text.isBlank()) TaskResult("（这次没有生成内容）", files, TaskStatus.FAILED) else TaskResult(text, files)
+    return if (text.isBlank()) TaskResult("（这次没有生成内容）", files, TaskStatus.FAILED, spent) else TaskResult(text, files, spent = spent)
 }
