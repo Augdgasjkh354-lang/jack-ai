@@ -158,7 +158,7 @@ Output only one JSON object, in this format:
         val projects = store.loadProjects()
         // 关了「参与做梦」的对话、隐私项目里的对话不整理
         val convs = store.loadConversations().filter { c -> c.inDream && !c.isolatedIn(projects) }
-        val (transcript, cutoff) = transcript(convs, since, startedAt, user = Persona.name(settings).ifEmpty { "User" })
+        val (transcript, cutoff) = transcript(convs, since, startedAt, user = Persona.ref(settings) ?: "User")
         if (transcript.isBlank()) {
             store.lastDreamAt = startedAt
             return null

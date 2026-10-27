@@ -35,6 +35,22 @@ class PersonaTest {
     }
 
     @Test
+    fun wordLikeNamesStillReadAsNames() {
+        // 小写的普通词：首字母大写，读起来是名字，不会当成动词
+        val have = Persona.devBlock(Settings(userName = "have"), work = false)
+        assertTrue(have.contains("Do what Have asks"))
+        assertTrue(have.contains("named \"have\" (written Have below)"))
+        // 代词、「用户」这类：正文还是 the user，只告诉模型他叫什么
+        listOf("you", "I", "我", "用户").forEach { n ->
+            val t = Persona.devBlock(Settings(userName = n), work = false)
+            assertTrue(n, t.contains("Do what the user asks"))
+            assertTrue(n, t.contains("The user's name is \"$n\""))
+        }
+        assertEquals("用户", Persona.zh(Settings(userName = "你")))
+        assertEquals("小明", Persona.zh(Settings(userName = "小明")))
+    }
+
+    @Test
     fun nameIsFlattenedAndCapped() {
         assertEquals("a b", Persona.name(Settings(userName = "  a\n\nb ")))
         assertEquals(30, Persona.name(Settings(userName = "x".repeat(100))).length)
