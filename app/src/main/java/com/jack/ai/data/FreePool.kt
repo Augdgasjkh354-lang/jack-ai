@@ -40,9 +40,58 @@ internal fun isChatModel(id: String): Boolean {
     return listOf("embedding", "rerank", "tts", "asr", "audio", "speech", "image", "video", "transcription", "whisper", "omni", "vl", "ocr", "realtime", "moderation", "translation", "paraformer", "cosyvoice", "sensevoice", "wanx", "wan2", "multimodal", "music").none { it in lower }
 }
 
+internal fun freePoolProvider(baseUrl: String): Boolean {
+    val host = runCatching { java.net.URI(baseUrl).host.orEmpty().lowercase() }.getOrDefault("")
+    return (host.endsWith(".aliyuncs.com") && "dashscope" in host) ||
+        host == "api.siliconflow.cn" || host == "api-st.siliconflow.cn"
+}
+
+internal fun isSiliconFlow(baseUrl: String): Boolean =
+    runCatching { java.net.URI(baseUrl).host.orEmpty().lowercase() in setOf("api.siliconflow.cn", "api-st.siliconflow.cn") }.getOrDefault(false)
+
+/** 仅接收价格页同时明确标为输入、输出免费的模型；页面结构改变时不猜价格。 */
+internal fun parseSiliconFreeModels(html: String): Set<String> {
+    val chunk = Regex("""self\.__next_f\.push\(\[1,("(?:\\.|[^"\\])*")\]\)""")
+    val data = chunk.findAll(html).mapNotNull { match ->
+        runCatching { (Json.parseToJsonElement(match.groupValues[1]) as JsonPrimitive).content }.getOrNull()
+    }.joinToString("")
+    val objects = data.lineSequence().mapNotNull { line ->
+        val i = line.indexOf(':')
+        if (i <= 0) return@mapNotNull null
+        val key = line.substring(0, i)
+        val value = runCatching { Json.parseToJsonElement(line.substring(i + 1)) }.getOrNull() ?: return@mapNotNull null
+        key to value
+    }.toMap()
+    fun resolve(element: JsonElement?): JsonElement? {
+        val ref = (element as? JsonPrimitive)?.content ?: return element
+        return if (ref.startsWith("$")) objects[ref.drop(1)] else element
+    }
+    return objects.values.mapNotNull { element ->
+        val model = element as? JsonObject ?: return@mapNotNull null
+        fun field(key: String) = (model[key] as? JsonPrimitive)?.content.orEmpty()
+        if (field("type") != "text" || field("subType") != "chat" || field("status") != "normal") return@mapNotNull null
+        val pricing = resolve(model["pricing"]) as? JsonArray ?: return@mapNotNull null
+        val prices = pricing.map { resolve(it) as? JsonObject ?: return@mapNotNull null }
+        val specs = prices.map { (it["specification"] as? JsonPrimitive)?.content }
+        if (!specs.contains("prompt") || !specs.contains("completion")) return@mapNotNull null
+        if (prices.any { (it["price"] as? JsonPrimitive)?.content?.toDoubleOrNull() != 0.0 }) return@mapNotNull null
+        if (field("price").toDoubleOrNull() != 0.0 || field("inputPrice").toDoubleOrNull() != 0.0) return@mapNotNull null
+        field("modelName").takeIf { it.isNotBlank() }
+    }.toSet()
+}
+
+internal suspend fun siliconFreeModels(): Set<String> = withContext(Dispatchers.IO) {
+    val req = Request.Builder().url("https://siliconflow.cn/pricing").get().build()
+    sharedHttp.newBuilder().callTimeout(15, java.util.concurrent.TimeUnit.SECONDS).build().newCall(req).execute().use { resp ->
+        if (!resp.isSuccessful) throw com.jack.ai.api.ApiException("硅基流动价格查询失败（${resp.code}）")
+        parseSiliconFreeModels(resp.body?.string().orEmpty()).takeIf { it.isNotEmpty() }
+            ?: throw com.jack.ai.api.ApiException("无法识别硅基流动免费模型价格，请稍后再试")
+    }
+}
+
 internal fun freeCandidates(state: FreePoolState, settings: Settings, start: Int): List<Endpoint> {
     val eligible = state.models.filter { it.exhaustedAt == 0L }.mapNotNull { m ->
-        val p = settings.providers.firstOrNull { it.id == m.providerId && it.apiKey.isNotBlank() && "dashscope" in it.baseUrl.lowercase() } ?: return@mapNotNull null
+        val p = settings.providers.firstOrNull { it.id == m.providerId && it.apiKey.isNotBlank() && freePoolProvider(it.baseUrl) } ?: return@mapNotNull null
         val base = p.baseUrl.trimEnd('/')
         if (m.baseUrl.isNotBlank() && m.baseUrl != base && m.baseUrl != "$base/v1") return@mapNotNull null
         settings.endpoint(customModelKey(p.id, m.model))?.let { ep -> if (m.baseUrl.isNotBlank()) ep.copy(baseUrl = m.baseUrl) else ep }
@@ -80,15 +129,19 @@ object FreePool {
             val old = load(context)
             val today = Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault()).toLocalDate()
             if (!force && old.checkedAt > 0 && Instant.ofEpochMilli(old.checkedAt).atZone(ZoneId.systemDefault()).toLocalDate() == today) return@withContext old
-            val providers = settings.providers.filter { it.apiKey.isNotBlank() && "dashscope" in it.baseUrl.lowercase() }
+            val providers = settings.providers.filter { it.apiKey.isNotBlank() && freePoolProvider(it.baseUrl) }
             if (providers.isEmpty()) return@withContext old
             val found = mutableListOf<FreeModel>()
             val errors = mutableListOf<String>()
             val client = DeepSeekClient()
             for (p in providers) {
+                val freePrices = if (isSiliconFlow(p.baseUrl)) {
+                    try { siliconFreeModels() } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                    catch (e: Exception) { errors += "${p.name}：${e.message ?: "价格查询失败"}"; continue }
+                } else null
                 val listed = try { client.listModels(p.baseUrl, p.apiKey, p.workspaceId) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { errors += "${p.name}：${e.message ?: "获取模型列表失败"}"; null }
                 if (listed == null) { found += old.models.filter { it.providerId == p.id && it.exhaustedAt != 0L }; continue }
-                for ((model, _) in listed.second.filter { isChatModel(it.first) }) {
+                for ((model, _) in listed.second.filter { isChatModel(it.first) && (freePrices == null || it.first in freePrices) }) {
                     val body = buildJsonObject {
                         put("model", model); put("max_tokens", 1); put("stream", false)
                         put("messages", buildJsonArray { add(buildJsonObject { put("role", "user"); put("content", "Hi") }) })

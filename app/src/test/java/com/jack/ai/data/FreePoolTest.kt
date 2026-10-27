@@ -33,4 +33,19 @@ class FreePoolTest {
         assertNull(chooseFreeOrFallback(empty, null))
         assertEquals("a", chooseFreeOrFallback(freeCandidates(pool, settings, 0), fallback)?.model)
     }
+    @Test fun siliconModelsRequireBothZeroPrices() {
+        val payload = listOf(
+            "1:{\"modelName\":\"free\",\"type\":\"text\",\"subType\":\"chat\",\"status\":\"normal\",\"price\":\"0\",\"inputPrice\":\"0\",\"pricing\":\"$" + "2\"}",
+            "2:[\"$" + "3\",\"$" + "4\"]",
+            "3:{\"specification\":\"prompt\",\"price\":\"0\"}",
+            "4:{\"specification\":\"completion\",\"price\":\"0\"}",
+            "5:{\"modelName\":\"paid\",\"type\":\"text\",\"subType\":\"chat\",\"status\":\"normal\",\"price\":\"1\",\"inputPrice\":\"0\",\"pricing\":\"$" + "2\"}",
+        ).joinToString("\n")
+        val html = "<script>self.__next_f.push([1," + kotlinx.serialization.json.JsonPrimitive(payload).toString() + "])</script>"
+        assertEquals(setOf("free"), parseSiliconFreeModels(html))
+        assertTrue(parseSiliconFreeModels("not a price page").isEmpty())
+        assertTrue(freePoolProvider("https://api.siliconflow.cn/v1"))
+        assertFalse(freePoolProvider("https://api.siliconflow.cn.example.com/v1"))
+    }
+
 }

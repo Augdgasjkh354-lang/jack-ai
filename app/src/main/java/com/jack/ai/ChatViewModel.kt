@@ -648,6 +648,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     messages = history,
                     tools = toolSet,
                     maxRounds = { session.maxRounds },
+                    maxToolCalls = { session.maxRounds },
                     execute = { name, args ->
                         // 用户已经点了“先停下”就不再问：同一轮里剩下的工具调用直接拦掉
                         if (work && limit > 0 && spent >= nextLimit && session.maxRounds != 0) {

@@ -118,6 +118,20 @@ class AgentTest {
     }
 
     @Test
+    fun multipleCallsInOneRoundRespectTheCallLimit() = runBlocking {
+        val batch = { flow<StreamEvent> {
+            repeat(3) { i -> emit(StreamEvent.ToolCall(i, "call_$i", "tool", "{}")) }
+        } }
+        val api = FakeApi(batch, text("完成"))
+        val messages = mutableListOf(userMsg("x"))
+        var count = 0
+        Agent(api::stream).run(messages, someTools, { 10 }, { _, _ -> count++; "ok" }, maxToolCalls = { 2 })
+        assertEquals(2, count)
+        assertNull(api.toolsSeen[1])
+        assertTrue(messages.last()["content"]!!.jsonPrimitive.content.contains("上限"))
+    }
+
+    @Test
     fun maxRoundsIsReadEveryRound() = runBlocking {
         // 用了「深度研究」后上限会在中途变大
         var limit = 1

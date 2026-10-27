@@ -337,8 +337,8 @@ fun FreePoolCard(settings: com.jack.ai.data.Settings) {
     androidx.compose.material3.Card(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("免费额度池", style = MaterialTheme.typography.titleMedium)
-            Text("请在百炼控制台给每个模型开「免费额度用完即停」，否则会扣费。", style = MaterialTheme.typography.bodySmall)
-            val valid = state.models.filter { m -> settings.providers.any { it.id == m.providerId && it.apiKey.isNotBlank() && "dashscope" in it.baseUrl.lowercase() } }
+            Text("百炼模型请开启「免费额度用完即停」，否则会扣费；硅基流动只选价格页标为免费的模型。", style = MaterialTheme.typography.bodySmall)
+            val valid = state.models.filter { m -> settings.providers.any { it.id == m.providerId && it.apiKey.isNotBlank() && com.jack.ai.data.freePoolProvider(it.baseUrl) } }
             val available = valid.filter { it.exhaustedAt == 0L }
             val exhausted = valid.filter { it.exhaustedAt != 0L }
             Text("可用：" + available.joinToString("、") { it.model }.ifBlank { "无" })

@@ -332,7 +332,7 @@ object PromptBuilder {
             parts += "固定说明" to "【Task list】Start every task with update_plan: the steps and the acceptance criteria. Mark a step doing when you start it and done when it's finished; mark a criterion met only after checking the actual results. A plain question that needs no tools doesn't need a list."
         }
         if ("delegate_tasks" in names) {
-            parts += "固定说明" to "【Parallel work】When a task contains several independent pieces of research (e.g. looking into several companies or sources separately), send them out at once with delegate_tasks; it's faster than doing them one by one. Subtasks can only research and read files; generating files and sending email stay with you."
+            parts += "固定说明" to "【Parallel work】When a task contains several independent pieces of research (e.g. looking into several companies or sources separately), send them out at once with delegate_tasks; it's faster than doing them one by one. Subtasks can research, read and write files, calculate and create documents using enabled tools. Coordinate shared filenames; sending email and other external changes stay with you."
         }
         if ("edit_file" in names) {
             // 文件列表不放进系统提示：列表一变，整段对话的缓存就失效了

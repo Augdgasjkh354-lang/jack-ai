@@ -174,7 +174,6 @@ internal suspend fun ToolSession.saveCards(args: JsonObject) = runTool("生成�
 
 internal suspend fun ToolSession.useSkill(name: String) = runTool("使用技能：$name") {
     val skill = findSkill(skills, name)
-    if (skill?.id == SkillIds.RESEARCH) maxRounds = maxOf(maxRounds, 25)
     // 工具按需出现的技能：读了做法就把它的工具加上（下一步就能用，本对话之后一直带着）
     val opened = skill?.id?.takeIf { it in SkillIds.ON_DEMAND }?.let { unlocked.add(it) } == true
     // 浏览器流程靠 browser 工具读和存，顺带把浏览器打开；还要附上现有流程的清单

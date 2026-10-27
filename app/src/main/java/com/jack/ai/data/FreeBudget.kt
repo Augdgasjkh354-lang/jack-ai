@@ -106,7 +106,7 @@ object FreeTime {
         byDay.keys.filter { it > state.accruedThrough && it < today }.sorted().forEach { d ->
             savings += (budget - byDay.getValue(d).sumOf { it.spent }).coerceAtLeast(0.0)
         }
-        return state.copy(savings = savings.coerceAtMost(budget * SAVE_DAYS), accruedThrough = yesterday)
+        return state.copy(savings = maxOf(state.savings, savings.coerceAtMost(budget * SAVE_DAYS)), accruedThrough = yesterday)
     }
 
     /** 聊天时给 Kavi 的那段：它自己的近况，加上还在等用户回的心愿。空的就没有。 */

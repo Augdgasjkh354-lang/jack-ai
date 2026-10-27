@@ -49,6 +49,7 @@ class Agent(
         tools: JsonArray?,
         maxRounds: () -> Int,
         execute: suspend (name: String, args: String) -> String,
+        maxToolCalls: () -> Int = { Int.MAX_VALUE },
         onText: () -> Unit = {},
         onUsage: (StreamEvent.Usage) -> Unit = {},
         onRound: () -> Unit = {},
@@ -75,6 +76,7 @@ class Agent(
         val imageAt = mutableListOf<Int>()
         var currentTools = tools
         var round = 0
+        var toolCalls = 0
         var attempts = 0
         var hiccups = 0
         while (true) {
@@ -157,7 +159,10 @@ class Agent(
             messages += assistantCall
             trail += assistantCall.toString()
             for (c in calls.values) {
-                val result = execute(c.name, c.args.toString())
+                val result = if (toolCalls >= maxToolCalls()) "工具调用次数已到上限，请根据已有结果回答。" else {
+                    toolCalls++
+                    execute(c.name, c.args.toString())
+                }
                 val toolMsg = buildJsonObject {
                     put("role", "tool")
                     put("tool_call_id", c.id)
@@ -197,7 +202,7 @@ class Agent(
             slim?.invoke(messages)
             onRound()
             retool?.let { currentTools = it() }
-            if (round >= maxRounds()) currentTools = null
+            if (round >= maxRounds() || toolCalls >= maxToolCalls()) currentTools = null
         }
     }
 

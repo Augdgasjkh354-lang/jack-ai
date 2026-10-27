@@ -185,6 +185,7 @@ suspend fun runBackgroundWork(
             messages = messages,
             tools = if (resumed) toolsFor(session.unlocked.toSet()) else tools,
             maxRounds = { session.maxRounds },
+            maxToolCalls = { session.maxRounds },
             execute = { name, args ->
                 val limit = budget?.limit ?: s.workCostLimit
                 if (limit > 0 && spent >= limit) {

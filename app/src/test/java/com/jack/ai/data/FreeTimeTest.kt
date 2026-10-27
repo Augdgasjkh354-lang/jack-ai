@@ -28,6 +28,14 @@ class FreeTimeTest {
     }
 
     @Test
+    fun existingGiftsAreNeverReducedWhenSavingsAreCapped() {
+        val log = listOf(ReadEntry(at = now - 2 * day, spent = 0.2))
+        val state = FreeState(savings = 5.0, accruedThrough = "2026-10-24")
+        assertEquals(5.0, FreeTime.accrue(state, log, 0.5, now).savings, 1e-9)
+        assertEquals(3.5, FreeTime.accrue(state.copy(savings = 3.4), log, 0.5, now).savings, 1e-9)
+    }
+
+    @Test
     fun takingFromSavingsRaisesTheLimitAndReturnsTheRest() {
         val b = FreeBudget(today = 0.5, extra = 0.1, savings = 1.0) { "系统：用完了 $it" }
         assertEquals(0.6, b.limit, 1e-9)
