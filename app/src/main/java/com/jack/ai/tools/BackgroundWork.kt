@@ -138,7 +138,7 @@ suspend fun runBackgroundWork(
         },
     )
     val free = budget != null && r.convId == com.jack.ai.data.Reader.CONV_ID && conv.projectId == null
-    var freeState = if (free) com.jack.ai.data.FreeConversation.load(ctx) else com.jack.ai.data.FreeConversation.State()
+    var freeState = if (free) com.jack.ai.data.FreeConversation.forDay(ctx, com.jack.ai.data.FreeTime.day(startedAt)) else com.jack.ai.data.FreeConversation.State()
     if (free && freeState.messages.isNotEmpty()) {
         val first = messages.first()
         messages.clear(); messages += first

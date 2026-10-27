@@ -13,7 +13,7 @@ object FreeConversation {
     private fun dir(ctx: Context) = File(Workspace.dir(ctx, Reader.CONV_ID), ".src").apply { mkdirs() }
     private fun file(ctx: Context) = AtomicFile(File(dir(ctx), "free_conversation.json"))
 
-    data class State(val messages: List<JsonObject> = emptyList(), val lastTokens: Int = 0, val lastEstimate: Int = 0, val warned: Boolean = false, val next: String = "", val spent: Double = 0.0, val day: String = "", val borrowed: Double = 0.0)
+    data class State(val messages: List<JsonObject> = emptyList(), val lastTokens: Int = 0, val lastEstimate: Int = 0, val warned: Boolean = false, val next: String = "", val spent: Double = 0.0, val day: String = "", val borrowed: Double = 0.0, val conversationDay: String = "")
 
     fun load(ctx: Context): State {
         val f = file(ctx)
@@ -26,7 +26,8 @@ object FreeConversation {
             (o["next"] as? JsonPrimitive)?.content.orEmpty(),
             (o["spent"] as? JsonPrimitive)?.doubleOrNull ?: 0.0,
             (o["day"] as? JsonPrimitive)?.content.orEmpty(),
-            (o["borrowed"] as? JsonPrimitive)?.doubleOrNull ?: 0.0)
+            (o["borrowed"] as? JsonPrimitive)?.doubleOrNull ?: 0.0,
+            (o["conversationDay"] as? JsonPrimitive)?.content.orEmpty())
     }
 
     fun save(ctx: Context, state: State) {
@@ -34,9 +35,28 @@ object FreeConversation {
             put("messages", JsonArray(state.messages)); put("lastTokens", state.lastTokens)
             put("lastEstimate", state.lastEstimate); put("warned", state.warned); put("next", state.next)
             put("spent", state.spent); put("day", state.day); put("borrowed", state.borrowed)
+            put("conversationDay", state.conversationDay)
         }.toString()
         val f = file(ctx); val out = f.startWrite()
         try { out.write(data.toByteArray()); f.finishWrite(out) } catch (e: Exception) { f.failWrite(out); throw e }
+    }
+
+    /** 每个自然日使用一段独立对话；换日时先保留前一天的完整记录。 */
+    fun forDay(ctx: Context, today: String): State {
+        val state = load(ctx)
+        val previousDay = state.conversationDay.ifBlank {
+            state.day.ifBlank {
+                file(ctx).baseFile.lastModified().takeIf { it > 0 }?.let(FreeTime::day).orEmpty()
+            }
+        }
+        if (state.messages.isEmpty() || previousDay.isBlank() || previousDay == today) {
+            return state.copy(conversationDay = today)
+        }
+        val archive = AtomicFile(File(dir(ctx), "free_day_${previousDay}_${java.util.UUID.randomUUID()}.json"))
+        val out = archive.startWrite()
+        try { out.write(file(ctx).readFully()); archive.finishWrite(out) }
+        catch (e: Exception) { archive.failWrite(out); throw e }
+        return State(conversationDay = today).also { save(ctx, it) }
     }
 
     fun estimate(messages: List<JsonObject>, tools: JsonArray?): Int =

@@ -23,6 +23,21 @@ class FreeConversationTest {
         assertEquals(state, FreeConversation.load(app))
     }
 
+    @Test fun keepsTheSameDaysMessagesAndArchivesThemOnTheNextDay() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val messages = listOf(buildJsonObject { put("role", "assistant"); put("content", "昨天的想法") })
+        val state = FreeConversation.State(messages = messages, next = "接着做", conversationDay = "2026-10-27")
+        FreeConversation.save(app, state)
+        assertEquals(state, FreeConversation.forDay(app, "2026-10-27"))
+        val next = FreeConversation.forDay(app, "2026-10-28")
+        assertTrue(next.messages.isEmpty())
+        assertTrue(next.next.isEmpty())
+        assertEquals("2026-10-28", next.conversationDay)
+        assertEquals(next, FreeConversation.load(app))
+        val dir = java.io.File(Workspace.dir(app, Reader.CONV_ID), ".src")
+        assertTrue(dir.listFiles().orEmpty().any { it.name.startsWith("free_day_2026-10-27_") && it.readText().contains("昨天的想法") })
+    }
+
     @Test fun thresholdsUseActualUsageAndCutOnlyAtMessageBoundaries() {
         assertTrue(FreeConversation.current(790_000, 790_000, 800_001) >= FreeConversation.WARN)
         assertTrue(FreeConversation.current(949_000, 940_000, 950_001) >= FreeConversation.COMPACT)
