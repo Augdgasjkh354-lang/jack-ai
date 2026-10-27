@@ -378,7 +378,8 @@ class PromptBuilderTest {
         // 31：加了 update_self（Kavi 改自己只能走这一个专门的工具，不并进别的工具里）；32：加了 download_file（给网址直接下文件）；
         // 33：加了 convert_file（文件工具箱，图片 PDF 视频转文字都在这一个里）。phone_files 只在授权了手机文件夹时才有
         // 34：加了 self_check（看自己的真实状态，免得把「这次没加载」当成「做不到」）
-        assertTrue("技能全开时工具不该超过 34 个，现在 ${all.size} 个", all.size <= 34)
+        // 35：加了 facts（Kavi 自己的事实库，查和存在一个工具里）
+        assertTrue("技能全开时工具不该超过 35 个，现在 ${all.size} 个", all.size <= 35)
         assertFalse("phone_files" in all)
         // 关了 Python，算数就用 run_js
         assertTrue("run_js" in toolNames(Conversation(), s = settings.copy(disabledSkills = setOf(SkillIds.PYTHON))))

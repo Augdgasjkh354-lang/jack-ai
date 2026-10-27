@@ -180,6 +180,7 @@ object PromptBuilder {
             if (SkillIds.EXCEL in skillIds) add(SkillTools.CREATE_EXCEL)
             // 一直带着、选项写全：工具说明不随对话变，缓存才能跨对话命中；眼下搜不了的地方由工具自己回话
             add(SkillTools.SEARCH_MY_DATA)
+            add(SkillTools.FACTS)
             add(SkillTools.CONVERT_FILE)
             add(SkillTools.SELF_CHECK)
             if (settings.phoneFolders.isNotEmpty()) add(SkillTools.PHONE_FILES)
@@ -302,6 +303,14 @@ object PromptBuilder {
         parts += "固定说明" to f(Capabilities.text(settings, skills, names))
         if ("web_search" in names) {
             parts += "固定说明" to "【Web】For time-sensitive questions (news, prices, weather, latest versions, recent events) or facts you're unsure of, check with web search. Common knowledge, casual chat and writing don't need a search."
+        }
+        if ("facts" in names) {
+            parts += "固定说明" to f("【Fact base】You keep your own fact base, built only from sources you actually read. " +
+                "For factual questions (names, numbers, dates, definitions, how things work), check facts (action=recall) first and cite the sources it gives. " +
+                "Facts marked single-source, conflicting or possibly outdated: say so, and verify with a search when it matters. " +
+                "If neither the fact base nor a fresh search confirms something, say you don't know instead of guessing. " +
+                "When you've confirmed facts from pages you read in this task and they're worth keeping, save them with facts (action=save): one short self-contained claim each, with the URLs you read. " +
+                "Your own inferences and anything about {user} personally don't go in the fact base.")
         }
         if ("update_plan" in names) {
             parts += "固定说明" to "【Task list】Start every task with update_plan: the steps and the acceptance criteria. Mark a step doing when you start it and done when it's finished; mark a criterion met only after checking the actual results. A plain question that needs no tools doesn't need a list."

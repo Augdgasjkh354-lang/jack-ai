@@ -265,6 +265,7 @@ class ToolSession(
             name == "edit_file" -> editFile(args)
             name == "delete_file" -> deleteFiles(args)
             name == "search_my_data" -> searchMyData(args)
+            name == "facts" -> if (args["action"].text() == "save") saveFact(args) else recallFacts(args)
             name == "schedule" && SkillIds.ROUTINE in skillIds -> schedule(args)
             name == "cancel_schedule" && SkillIds.ROUTINE in skillIds -> cancelSchedule(args)
             name == "save_flashcards" && SkillIds.LEARN in skillIds -> saveCards(args)

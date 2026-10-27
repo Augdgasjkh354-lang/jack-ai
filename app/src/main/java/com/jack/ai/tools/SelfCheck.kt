@@ -72,6 +72,11 @@ internal suspend fun ToolSession.selfCheck(args: JsonObject): String = runTool("
             append(items.joinToString("\n") { (n, ok) -> "- $n：" + if (ok) "有" else "没有" } + "\n")
             append("（闹钟写进系统时钟，系统不给读别的闹钟详情；设完会用「下一个闹钟」核对。）\n")
 
+            com.jack.ai.data.Facts.load(ctx).let { fs ->
+                val live = fs.filter { it.status != "retired" }
+                append("【事实库】${live.size} 条（已核对 ${live.count { it.status == "verified" }}，有冲突 ${live.count { it.status == "conflict" }}）；向量检索：" +
+                    (if (com.jack.ai.api.Embedder.engine(settings.providers) != null) "开着（硅基流动 bge-m3）" else "没开，只按关键词找（要在 设置 → 其他模型服务 加硅基流动）") + "\n")
+            }
             com.jack.ai.data.BrowserStats.summary(com.jack.ai.data.BrowserStats.load(ctx)).takeIf { it.isNotEmpty() }?.let { append("【浏览器实测】$it\n") }
 
             val errors = host.store.loadToolErrors().takeLast(args["errors"].text().toIntOrNull()?.coerceIn(1, 30) ?: 8)
