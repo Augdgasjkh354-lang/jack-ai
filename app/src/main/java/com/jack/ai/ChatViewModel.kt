@@ -529,7 +529,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         var promptInput = PromptBuilder.Input(settings, conv, project, memories, skills, vision = images, sendReasoning = thinkingOn,
             appVersion = reply.appVersion,
             extraUser = extraUser, chatMemory = chatMemory, projectMemory = projectMemory,
-            journal = _state.value.dreams.firstOrNull { it.journal.isNotBlank() }?.journal.orEmpty())
+            journal = _state.value.dreams.firstOrNull { it.journal.isNotBlank() }?.journal.orEmpty(),
+            lately = com.jack.ai.data.FreeTime.latelyNote(getApplication()))
         fun buildHistory(withTools: Boolean, flat: Boolean = false): MutableList<JsonObject> =
             PromptBuilder.history(promptInput, if (withTools) toolSet else null, flat)
 

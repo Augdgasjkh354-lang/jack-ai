@@ -489,4 +489,16 @@ class PromptBuilderTest {
         assertTrue(PromptBuilder.compressedScope(conv).contains("the earlier 4 messages"))
         assertEquals("", PromptBuilder.compressedScope(Conversation(messages = msgs)))
     }
+
+    @Test
+    fun latelyIsKavisOwnAndOnlyWhenWritten() {
+        val conv = Conversation(messages = listOf(user("你最近在干嘛")))
+        val with = PromptBuilder.systemPrompt(settings, conv, null, tools(conv), memories, settings.activeSkills(), lately = "最近在学写短诗。")
+        assertTrue(with.contains("【How you've been lately】\n最近在学写短诗。"))
+        assertTrue(with.contains("don't steer conversations toward yourself"))
+        assertFalse(PromptBuilder.systemPrompt(settings, conv, null, tools(conv), memories, settings.activeSkills()).contains("lately"))
+        // 自由时间里才有 budget 工具
+        assertFalse("budget" in toolNames(Conversation()))
+        assertTrue("budget" in toolNames(Conversation(id = com.jack.ai.data.Reader.CONV_ID, work = true)))
+    }
 }

@@ -91,11 +91,8 @@ suspend fun runBackgroundWork(
     brief: String? = null,
     /** 用哪个模型，不填用 Work 的模型。 */
     model: String? = null,
-    /** 这次最多花多少钱（元），不填用 Work 的单次上限。 */
-    costLimit: Double? = null,
-    /** 花到这么多时（还没到 costLimit）发一次 softNote 给模型，让它收尾（自由时间：今日预算用完，剩下的是收尾用的额外预算）。 */
-    softLimit: Double? = null,
-    softNote: String = "",
+    /** 自由时间的钱：花到今天的预算时提醒一次、到上限就停，Kavi 能从积蓄里拿（见 FreeBudget）。不给就用 Work 的单次上限。 */
+    budget: com.jack.ai.data.FreeBudget? = null,
     onProgress: (String) -> Unit = {},
 ): TaskResult {
     com.jack.ai.data.KaviSelf.ensure(ctx)
@@ -122,7 +119,7 @@ suspend fun runBackgroundWork(
     val memories = if (s.memoryEnabled && conv.globalAllowed(project)) store.loadMemories() else emptyList()
     val journal = store.loadDreams().firstOrNull { it.journal.isNotBlank() }?.journal.orEmpty()
     val now = SimpleDateFormat("yyyy-MM-dd EEEE HH:mm", Locale.ENGLISH).format(Date())
-    val system = PromptBuilder.systemPrompt(s, conv, project, tools, memories, skills, journal = journal) +
+    val system = PromptBuilder.systemPrompt(s, conv, project, tools, memories, skills, journal = journal, lately = com.jack.ai.data.FreeTime.latelyNote(ctx)) +
         "\n\n" + com.jack.ai.data.Persona.fill(
             (brief ?: "【Background scheduled task】It is now $now. You're running a scheduled task {user} set up in advance: 「${r.title}」. {User} isn't online and can't be asked anything, so just get it done. ") +
                 (if (s.fullAuth) "{User} has turned on full authorization: actions like sending email or deleting run without a confirmation prompt. Do only what the task explicitly asks for, and nothing you're unsure about. "
@@ -138,7 +135,6 @@ suspend fun runBackgroundWork(
         },
     )
     var spent = 0.0
-    var softSent = false
     // 上次半路被打断了：从断点接着做（系统提示换成这次的，时间是新的）
     val checkpoint = TaskCheckpoint.file(ctx.filesDir, r.id)
     val cpKey = TaskCheckpoint.keyOf((brief ?: "") + r.prompt.ifBlank { r.title })
@@ -164,6 +160,7 @@ suspend fun runBackgroundWork(
         override suspend fun confirm(title: String, body: String, action: String) = false
     })
     session.interactive = false
+    budget?.let { b -> b.spentNow = { spent }; session.freeBudget = b }
     session.unlocked.addAll(conv.skillTools)
     // 接着断点做：清单和验收标准从断点里找回来
     if (resumed) WorkGate.restorePlan(session, messages)
@@ -187,7 +184,7 @@ suspend fun runBackgroundWork(
             tools = if (resumed) toolsFor(session.unlocked.toSet()) else tools,
             maxRounds = { session.maxRounds },
             execute = { name, args ->
-                val limit = costLimit ?: s.workCostLimit
+                val limit = budget?.limit ?: s.workCostLimit
                 if (limit > 0 && spent >= limit) {
                     session.maxRounds = 0
                     "花费到了上限，不要再调用工具，直接写出目前的结果，并说明还差什么。"
@@ -197,7 +194,8 @@ suspend fun runBackgroundWork(
             retool = { toolsFor(session.unlocked.toSet()) },
             onTools = { TaskCheckpoint.save(checkpoint, cpKey, messages, spent) },
             notices = {
-                if (softLimit != null && !softSent && spent >= softLimit && softNote.isNotBlank()) { softSent = true; listOf(softNote) } else emptyList()
+                val b = budget
+                if (b != null && b.extra > 0 && !b.noted && spent >= b.soft) { b.noted = true; listOf(b.note()) } else emptyList()
             },
             beforeFinish = gate?.let { g -> { answer -> g.beforeFinish(answer) } },
             slim = { msgs -> com.jack.ai.chat.ContextSlim.slim(msgs) },

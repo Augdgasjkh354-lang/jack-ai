@@ -339,6 +339,9 @@ internal fun ReadingCard(vm: ChatViewModel, settings: com.jack.ai.data.Settings)
             com.jack.ai.data.Reader.log(ctx) to com.jack.ai.data.Facts.load(ctx).filter { it.status != "retired" }.sortedByDescending { it.updatedAt }
         }
     }
+    val free by androidx.compose.runtime.produceState(com.jack.ai.data.FreeState(), refresh) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.jack.ai.data.FreeTime.load(ctx) }
+    }
     val (log, facts) = data
     val fmt = remember { java.text.SimpleDateFormat("M月d日 HH:mm", java.util.Locale.CHINA) }
     Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = NIGHT_CARD, contentColor = colors.onSurface)) {
@@ -353,7 +356,8 @@ internal fun ReadingCard(vm: ChatViewModel, settings: com.jack.ai.data.Settings)
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("每天 ¥%.2f".format(settings.readingBudget) + (if (settings.readingExtra > 0) " + 收尾 ¥%.2f".format(settings.readingExtra) else "") +
-                    " · 今天已花 ¥%.2f".format(com.jack.ai.data.Reader.spentToday(log)),
+                    " · 今天已花 ¥%.2f".format(com.jack.ai.data.Reader.spentToday(log)) +
+                    (if (free.savings > 0.005) "\n积蓄 ¥%.2f（没花完的自动攒下，最多攒 ${com.jack.ai.data.FreeTime.SAVE_DAYS} 天的量）".format(free.savings) else ""),
                     Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                 TextButton(onClick = { editBudget = true }) { Text("改预算") }
             }

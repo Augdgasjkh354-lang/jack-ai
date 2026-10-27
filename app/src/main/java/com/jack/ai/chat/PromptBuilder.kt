@@ -53,6 +53,8 @@ object PromptBuilder {
         val projectMemory: String = "",
         /** 最近一篇做梦日记。 */
         val journal: String = "",
+        /** Kavi 自己的近况（自由时间里写的）。 */
+        val lately: String = "",
         /** 已上传到 DeepSeek 的图片：路径 → file_id，这些图只发编号。 */
         val fileIds: Map<String, String> = emptyMap(),
         val now: Long = System.currentTimeMillis(),
@@ -73,7 +75,7 @@ object PromptBuilder {
         val thinkingOn = input.sendReasoning
         val withTools = tools != null
         val list = mutableListOf<JsonObject>()
-        val system = systemPrompt(settings, conv, project, tools, memories, skills, input.chatMemory, input.projectMemory, input.journal)
+        val system = systemPrompt(settings, conv, project, tools, memories, skills, input.chatMemory, input.projectMemory, input.journal, input.lately)
         if (system.isNotBlank()) list += msg("system", system)
         for (m in Compression.liveMessages(conv)) {
             if (m.error != null) continue
@@ -181,6 +183,8 @@ object PromptBuilder {
             // 一直带着、选项写全：工具说明不随对话变，缓存才能跨对话命中；眼下搜不了的地方由工具自己回话
             add(SkillTools.SEARCH_MY_DATA)
             add(SkillTools.FACTS)
+            // 自由时间里才有：自己的钱
+            if (conv.id == com.jack.ai.data.Reader.CONV_ID) add(SkillTools.BUDGET)
             add(SkillTools.CONVERT_FILE)
             add(SkillTools.SELF_CHECK)
             if (settings.phoneFolders.isNotEmpty()) add(SkillTools.PHONE_FILES)
@@ -264,7 +268,8 @@ object PromptBuilder {
         chatMemory: String = "",
         projectMemory: String = "",
         journal: String = "",
-    ): String = systemParts(settings, conv, project, tools, memories, skills, chatMemory, projectMemory, journal).joinToString("\n\n") { it.second }
+        lately: String = "",
+    ): String = systemParts(settings, conv, project, tools, memories, skills, chatMemory, projectMemory, journal, lately).joinToString("\n\n") { it.second }
 
     /**
      * 有些技能的工具要读过做法才出现，先告诉模型，免得它以为没有这个能力。
@@ -287,6 +292,7 @@ object PromptBuilder {
         chatMemory: String = "",
         projectMemory: String = "",
         journal: String = "",
+        lately: String = "",
     ): List<Pair<String, String>> {
         val parts = mutableListOf<Pair<String, String>>()
         val globalOn = settings.memoryEnabled && conv.globalAllowed(project)
@@ -342,6 +348,10 @@ object PromptBuilder {
         if (globalOn && journal.isNotBlank()) {
             parts += "日记" to f("【Your journal】\nNotes you wrote to yourself after last looking back over your chats, to understand {user} better and pick up ongoing things. Use them naturally, only when relevant to the current topic; " +
                 "don't bring up things {user} hasn't raised, and don't mention the journal.\n") + journal.trim()
+        }
+        if (lately.isNotBlank()) {
+            parts += "近况" to f("【How you've been lately】\n") + lately.trim() +
+                f("\nThis is your own life, from your free time. Bring it up only when {user} asks how you are or what you've been up to, or when it's genuinely relevant; don't steer conversations toward yourself.")
         }
         // ---- 以上所有对话都一样（缓存能跨对话命中），以下每个对话自己的 ----
         memoryScopeNote(project != null, globalOn, project?.isolated == true).takeIf { "save_memory" in names && it.isNotEmpty() }?.let { parts += "固定说明" to it }

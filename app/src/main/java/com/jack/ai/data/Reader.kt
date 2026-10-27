@@ -47,7 +47,7 @@ object Reader {
     /** 自由时间能用的工具：上网只读、事实库、自己文件夹里的文件、做文档和小工具、算东西。 */
     val TOOLS = setOf(
         "web_search", "read_webpage", "facts", "update_plan", "use_skill",
-        "read_file", "write_file", "edit_file", "delete_file",
+        "read_file", "write_file", "edit_file", "delete_file", "budget",
         "create_document", "create_excel", "create_ppt", "create_chart", "create_diagram", "create_app",
         "run_python", "run_js",
     )
@@ -73,24 +73,25 @@ object Reader {
     }
 
     /** 小结开头那几行（Did / Title / Topics，模型照要求写的）。 */
-    data class Report(val kind: String, val title: String, val topics: List<String>, val body: String)
+    data class Report(val kind: String, val title: String, val topics: List<String>, val body: String, val lately: String = "")
 
     fun parseReport(text: String): Report {
         val lines = text.trim().lines()
-        var kind = ""; var title = ""; var topics = emptyList<String>()
+        var kind = ""; var title = ""; var topics = emptyList<String>(); var lately = ""
         var i = 0
-        val head = Regex("""^\s*\**\s*(Did|Title|Topics|做了|标题|话题|主题)\s*\**\s*[:：]\s*(.*)$""", RegexOption.IGNORE_CASE)
+        val head = Regex("""^\s*\**\s*(Did|Title|Topics|Lately|做了|标题|话题|主题|近况)\s*\**\s*[:：]\s*(.*)$""", RegexOption.IGNORE_CASE)
         while (i < lines.size) {
             val m = head.find(lines[i]) ?: break
             val v = m.groupValues[2].trim()
             when (m.groupValues[1].lowercase()) {
                 "did", "做了" -> kind = KINDS.keys.firstOrNull { v.lowercase().startsWith(it) } ?: "other"
                 "title", "标题" -> title = v.take(60)
+                "lately", "近况" -> lately = v.take(200)
                 else -> topics = v.split(';', '；', '、', ',', '，').map { it.trim() }.filter { it.isNotEmpty() }.take(5)
             }
             i++
         }
-        return Report(kind.ifEmpty { if (topics.isNotEmpty()) "read" else "other" }, title, topics, lines.drop(i).joinToString("\n").trim())
+        return Report(kind.ifEmpty { if (topics.isNotEmpty()) "read" else "other" }, title, topics, lines.drop(i).joinToString("\n").trim(), lately)
     }
 
     /** 过一次自由时间。force：手动点的，不管开没开。返回这次的记录。 */
@@ -99,6 +100,8 @@ object Reader {
         val s = store.loadSettings()
         if (!s.readingEnabled && !force) return null
         val entries = log(ctx)
+        // 以前没花完的先攒进积蓄
+        val state = FreeTime.accrue(FreeTime.load(ctx), entries, s.readingBudget).also { FreeTime.save(ctx, it) }
         val left = s.readingBudget - spentToday(entries)
         fun skip(why: String) = ReadEntry(skipped = why).also { add(ctx, it) }
         if (left < 0.02) return skip("今天的预算用完了")
@@ -116,12 +119,17 @@ object Reader {
             .replace("{topics}", topicCounts.ifBlank { "(empty so far)" })
             .replace("{notes}", NOTES)
             .replace("{web}", if (web) "" else "\nWeb search is off right now, so pick something that doesn't need it.")
+            .replace("{savings}", String.format(java.util.Locale.US, "%.2f", state.savings))
+            .replace("{lately}", state.lately.ifBlank { "(you haven't written one yet)" })
         val r = Routine(id = CONV_ID, kind = "task", title = "自由时间", prompt = prompt, hour = 0, minute = 0, convId = CONV_ID, work = true)
-        // 今日预算花完时系统说一声，再给一点额外预算收尾（不必花完）；额外的也花完就停
-        val extra = s.readingExtra.coerceAtLeast(0.0)
+        // 今日预算花完时系统说一声，再给一点额外预算收尾（不必花完）；额外的也花完就停。Kavi 能从积蓄里拿钱接着做
+        val budget = FreeBudget(left, s.readingExtra.coerceAtLeast(0.0), state.savings, ::budgetNote)
         val res = com.jack.ai.tools.runBackgroundWork(ctx, r, allow = { name, _ -> name in TOOLS }, brief = Persona.fill(BRIEF, s),
-            model = MODEL_FLASH, costLimit = left + extra, softLimit = left.takeIf { extra > 0 }, softNote = budgetNote(extra))
+            model = MODEL_FLASH, budget = budget)
         val rep = parseReport(res.text)
+        FreeTime.save(ctx, FreeTime.load(ctx).copy(savings = budget.settle(res.spent)).let { st ->
+            if (rep.lately.isNotBlank()) st.copy(lately = rep.lately, latelyAt = System.currentTimeMillis()) else st
+        })
         val saved = Facts.load(ctx).count { it.origin == "reading" } - before
         val e = ReadEntry(kind = rep.kind, title = rep.title, topics = rep.topics, saved = saved.coerceAtLeast(0), spent = res.spent,
             report = rep.body.take(2000), files = res.files.filter { it.name != NOTES },
@@ -153,7 +161,9 @@ Do whatever you want with it. Something useful or something pointless, something
 - do nothing much: rest, look at one thing for a long time, let the time pass
 - pick up something from your notes{web}
 
-Your folder keeps everything between sessions. 「{notes}」 is your own notebook: read it first if it exists, and write in it before you finish. Spending less than the budget, or none of it, is fine too.
+Your folder keeps everything between sessions. 「{notes}」 is your own notebook: read it first if it exists, and write in it before you finish.
+Money: whatever you don't spend today goes into your savings automatically (up to a week's worth). You have ¥{savings} saved. For something bigger, take some with budget (action=use); check with budget (action=status). Spending less, or nothing, is fine too.
+Your "lately" so far: {lately}
 What you did recently: {recent}
 Your fact base so far (topic: count): {topics}
 
@@ -163,6 +173,7 @@ Then end with a short report in {lang}, starting with exactly these lines:
 Did: read | investigate | build | write | think | wander | rest | other
 Title: a short title
 Topics: topic one; topic two (or leave it empty)
+Lately: one or two sentences, in first person, on what you're into or working on these days (this is how you'll remember your own life when talking with {user})
 Then a few sentences, in your own voice: what you did, and your reflection on it."""
 
     // ---------- 排程 ----------
