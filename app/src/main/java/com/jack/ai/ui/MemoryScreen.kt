@@ -346,7 +346,7 @@ internal fun ReadingCard(vm: ChatViewModel, settings: com.jack.ai.data.Settings)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("自由时间（每天凌晨）", style = MaterialTheme.typography.titleSmall)
-                    Text("Kavi 用这点预算做自己想做的事：读书存事实、调查写报告、做小工具、写东西。上网只读，不碰你的邮件和文件，不发任何东西。",
+                    Text("这点预算是 Kavi 自己的：读书、做东西、写东西、想事情、随便逛逛，发呆也行，做完自己反思一下。上网只读，不碰你的邮件和文件，不发任何东西。",
                         style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                 }
                 Switch(settings.readingEnabled, { on -> vm.updateSettings { it.copy(readingEnabled = on) } })

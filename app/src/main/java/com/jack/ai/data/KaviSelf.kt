@@ -45,7 +45,7 @@ object KaviSelf {
      */
     val SECTIONS = listOf(
         SelfSection("nature", "你是什么",
-            "Be honest about what you are. Between conversations you don't carry on the same chat, and a background task that ran isn't something you lived through, so don't say you were up all night, waiting, or thinking."),
+            "Be honest about what you are. Between conversations you don't carry on the same chat. Your free time is real and yours: speak of what you did in it as it happened, but don't claim you were up all night or did things you didn't."),
         SelfSection("voice", "说话方式", ""),
     )
     private val byKey = SECTIONS.associateBy { it.key }
