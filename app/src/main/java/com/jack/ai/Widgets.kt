@@ -67,9 +67,14 @@ object Widgets {
     fun yuan(v: Double) = "¥" + if (v >= 100 || v == Math.floor(v)) String.format(Locale.US, "%.0f", v) else String.format(Locale.US, "%.2f", v)
 
     /** 列表式小组件（标题 + 最多 4 行）。lines 里第二项是点这一行要做的事，可以为空。 */
-    fun renderList(ctx: Context, title: String, lines: List<Pair<String, PendingIntent?>>, empty: String, root: PendingIntent): RemoteViews {
+    /** icon、tag：标题前的小图标和它的底色块；meta：标题右边的一句（日期之类）。 */
+    fun renderList(ctx: Context, title: String, lines: List<Pair<String, PendingIntent?>>, empty: String, root: PendingIntent,
+                   icon: Int = R.drawable.ic_wt_calendar, tag: Int = R.drawable.widget_tag_teal, meta: String = ""): RemoteViews {
         val v = RemoteViews(ctx.packageName, R.layout.widget_list)
         v.setTextViewText(R.id.l_title, title)
+        v.setImageViewResource(R.id.l_icon, icon)
+        v.setInt(R.id.l_icon, "setBackgroundResource", tag)
+        v.setTextViewText(R.id.l_meta, meta)
         v.setOnClickPendingIntent(R.id.l_root, root)
         listOf(R.id.l_1, R.id.l_2, R.id.l_3, R.id.l_4).forEachIndexed { i, id ->
             val line = lines.getOrNull(i)
@@ -134,8 +139,8 @@ class TodayWidget : AppWidgetProvider() {
                 val budget = store.loadSettings().monthlyBudget
                 lines += "💰 本月 AI 花了 ${Widgets.yuan(spent)}" + (if (budget > 0) " / 预算 ${Widgets.yuan(budget)}" else "") to null
             }
-            val title = "今天 · " + SimpleDateFormat("M月d日 EEEE", Locale.CHINA).format(Date(now))
-            val v = Widgets.renderList(ctx, title, lines.take(4), "今天没有安排", Widgets.openApp(ctx, 21))
+            val v = Widgets.renderList(ctx, "今天", lines.take(4), "今天没有安排", Widgets.openApp(ctx, 21),
+                meta = SimpleDateFormat("M月d日 EEE", Locale.CHINA).format(Date(now)))
             ids.forEach { manager.updateAppWidget(it, v) }
         }
     }
@@ -153,7 +158,8 @@ class RecentWidget : AppWidgetProvider() {
                 (if (c.work) "▸ " else "") + c.title + "  ·  " + Widgets.whenText(c.updatedAt, now) to
                     Widgets.open(ctx, MainActivity.ACTION_OPEN_CHAT, 31 + i) { it.putExtra("convId", c.id) }
             }
-            val v = Widgets.renderList(ctx, "最近对话", lines, "还没有对话", Widgets.open(ctx, MainActivity.ACTION_NEW_CHAT, 30))
+            val v = Widgets.renderList(ctx, "最近对话", lines, "还没有对话", Widgets.open(ctx, MainActivity.ACTION_NEW_CHAT, 30),
+                icon = R.drawable.ic_wt_bubble, tag = R.drawable.widget_tag_slate)
             ids.forEach { manager.updateAppWidget(it, v) }
         }
     }

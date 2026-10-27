@@ -2,8 +2,8 @@
     <style name="WidgetLine">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:paddingTop">4dp</item>
-        <item name="android:paddingBottom">4dp</item>
+        <item name="android:paddingTop">5dp</item>
+        <item name="android:paddingBottom">5dp</item>
         <item name="android:textColor">@color/widget_text</item>
         <item name="android:textSize">14sp</item>
         <item name="android:maxLines">1</item>

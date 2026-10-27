@@ -26,6 +26,7 @@ class SettingsFeature(core: AppCore, private val client: DeepSeekClient) : Featu
         store.saveSettings(after)
         if (before.dreamEnabled != after.dreamEnabled) Dreamer.schedule(app, after.dreamEnabled)
         if (before.proactive != after.proactive) com.jack.ai.data.Proactive.schedule(app, after.proactive)
+        if (before.appIcon != after.appIcon) com.jack.ai.ui.AppIcon.apply(app, after.appIcon)
         if (before.proxyHardened != after.proxyHardened) {
             com.jack.ai.ui.JackBrowser.protectionChanged()
             // 关掉：回到只给 Kavi 自己用（分流停掉，选的 App 留着）；再打开：之前开着分流就接着开

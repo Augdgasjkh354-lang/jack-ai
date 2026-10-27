@@ -193,4 +193,49 @@ class ShotsTest {
         }
         save("settings-" + dark().name.lowercase())
     }
+
+    /** 小组件：用 RemoteViews 真实地展开、画出来，背后垫一张深色「壁纸」。 */
+    @Test
+    @Config(qualifiers = "w400dp-h860dp-night-xxhdpi")
+    fun widgetsNight() = widgets("night")
+
+    @Test
+    fun widgetsDay() = widgets("day")
+
+    private fun widgets(name: String) {
+        Assume.assumeTrue(System.getenv("SHOTS_DIR") != null)
+        val ctx = RuntimeEnvironment.getApplication()
+        val root = android.widget.LinearLayout(ctx).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(40, 40, 40, 40)
+            background = android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(0xFF3A4A66.toInt(), 0xFFB98A7A.toInt(), 0xFF2E3550.toInt()))
+        }
+        val now = System.currentTimeMillis()
+        val pi = com.jack.ai.Widgets.openApp(ctx, 1)
+        val today = com.jack.ai.Widgets.renderList(ctx, "今天", listOf("⏰ 今天 11:00  和产品团队周会" to null, "📅 15:00  写周报" to null,
+            "💰 本月 AI 花了 ¥48 / 预算 ¥200" to null), "今天没有安排", pi, meta = "10月27日 周二")
+        val recent = com.jack.ai.Widgets.renderList(ctx, "最近对话", listOf("帮我优化这段产品文案  ·  今天 10:18" to null,
+            "这张图的风格是什么？  ·  昨天 21:04" to null, "帮我列一个去京都的 5 天行程  ·  昨天" to null), "还没有对话", pi,
+            icon = com.jack.ai.R.drawable.ic_wt_bubble, tag = com.jack.ai.R.drawable.widget_tag_slate)
+        val ledger = android.widget.RemoteViews(ctx.packageName, com.jack.ai.R.layout.widget_ledger).apply {
+            setTextViewText(com.jack.ai.R.id.g_today, "今天 ¥86"); setTextViewText(com.jack.ai.R.id.g_month, "本月 ¥2140 · 记账")
+        }
+        listOf(today to 520, recent to 480, ledger to 220).forEach { (rv, h) ->
+            val v = rv.apply(ctx, root)
+            root.addView(v, android.widget.LinearLayout.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, h).apply { bottomMargin = 40 })
+        }
+        // 桌面图标四种
+        val icons = android.widget.LinearLayout(ctx)
+        listOf(com.jack.ai.R.mipmap.ic_launcher_k, com.jack.ai.R.mipmap.ic_launcher_bubble, com.jack.ai.R.mipmap.ic_launcher_moon, com.jack.ai.R.mipmap.ic_launcher).forEach { id ->
+            icons.addView(android.widget.ImageView(ctx).apply { setImageResource(id) }, android.widget.LinearLayout.LayoutParams(200, 200).apply { marginEnd = 40 })
+        }
+        root.addView(icons)
+        val w = 1200; val h = 2000
+        root.measure(android.view.View.MeasureSpec.makeMeasureSpec(w, android.view.View.MeasureSpec.EXACTLY), android.view.View.MeasureSpec.makeMeasureSpec(h, android.view.View.MeasureSpec.EXACTLY))
+        root.layout(0, 0, w, h)
+        val bmp = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+        root.draw(android.graphics.Canvas(bmp))
+        File(System.getenv("SHOTS_DIR")!!, "widgets-$name.png").outputStream().use { bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+    }
 }

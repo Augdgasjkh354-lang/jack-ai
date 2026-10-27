@@ -142,6 +142,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             dreams = store.loadDreams(),
         )
         Dreamer.schedule(app, _state.value.settings.dreamEnabled)
+        // 桌面图标和设置对不上（比如从备份恢复了别的选择）：照设置改过来
+        runCatching { com.jack.ai.ui.AppIcon.ensure(app, _state.value.settings.appIcon) }
         com.jack.ai.data.Proactive.schedule(app, _state.value.settings.proactive)
         // 上次开着按 App 分流、进程被收掉了：授权还在就接着开
         if (_state.value.settings.proxyAppsOn && _state.value.settings.proxyHardened && !com.jack.ai.vpn.KaviVpnService.running && com.jack.ai.vpn.TProxyService.available &&

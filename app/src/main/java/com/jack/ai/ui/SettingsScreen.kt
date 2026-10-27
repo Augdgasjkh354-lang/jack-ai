@@ -240,6 +240,25 @@ fun SettingsScreen(
             // ---- 外观 ----
             Section("外观", icon = AppIcons.Image) {
                 ThemeTiles(settings.themeMode) { m -> vm.updateSettings { it.copy(themeMode = m) } }
+                Text("桌面图标", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    AppIcon.OPTIONS.forEach { o ->
+                        val on = settings.appIcon == o.id
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.weight(1f).clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
+                                .border(if (on) 2.dp else 1.dp, if (on) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outlineVariant,
+                                    androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
+                                .clickable { if (!on) vm.updateSettings { it.copy(appIcon = o.id) } }
+                                .padding(vertical = 10.dp),
+                        ) {
+                            AppIconTile(o.id, 44.dp)
+                            Text(o.label, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 6.dp), maxLines = 1)
+                        }
+                    }
+                }
+                Text("换了以后，桌面上的图标要过几秒才变；有的手机会把它挪到最后一页，或者要重新拖回原来的位置。",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text("主题色", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     ACCENTS.forEach { a ->

@@ -245,6 +245,8 @@ data class Settings(
     val proxyAppsOn: Boolean = false,
     /** 代理的加强保护和分流（只挑加密强的节点自动选、加密 DNS、浏览器防 WebRTC 泄漏、按网站总走代理、按 App 分流）；关掉回到只给 Kavi 自己用。 */
     val proxyHardened: Boolean = true,
+    /** 桌面图标：k / bubble / moon / classic（见 ui/AppIcon）。 */
+    val appIcon: String = "k",
     /** Notion 内部集成的密钥（ntn_…）。不进备份。 */
     val notionToken: String = "",
     /** GitHub 令牌（只读权限就够）。不填也能看公开项目；不进备份。 */

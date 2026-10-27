@@ -118,7 +118,7 @@ val ACCENTS = listOf(
 )
 
 @Composable
-fun JackTheme(mode: ThemeMode, accent: String = "mono", fontScale: Float = 1f, content: @Composable () -> Unit) {
+fun JackTheme(mode: ThemeMode, accent: String = "mono", fontScale: Float = 1f, appIcon: String = "k", content: @Composable () -> Unit) {
     val dark = isDark(mode)
     val a = ACCENTS.firstOrNull { it.id == accent } ?: ACCENTS.first()
     val (p, c, on) = if (dark) a.dark else a.light
@@ -136,6 +136,7 @@ fun JackTheme(mode: ThemeMode, accent: String = "mono", fontScale: Float = 1f, c
     CompositionLocalProvider(
         LocalDensity provides Density(density.density, density.fontScale * fontScale),
         androidx.compose.ui.platform.LocalUriHandler provides links,
+        LocalAppIcon provides appIcon,
     ) {
         MaterialTheme(
             colorScheme = colors,

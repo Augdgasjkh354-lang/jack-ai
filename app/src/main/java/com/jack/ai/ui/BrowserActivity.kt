@@ -1,5 +1,10 @@
 package com.jack.ai.ui
 
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.draw.clip
+
+import androidx.compose.foundation.layout.widthIn
+
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
@@ -142,7 +147,7 @@ class BrowserActivity : ComponentActivity() {
         JackBrowser.askSelection = ::askAboutSelection
         JackBrowser.setDark(settings.themeMode != ThemeMode.LIGHT)
         setContent {
-            JackTheme(settings.themeMode, settings.accent, settings.fontScale) {
+            JackTheme(settings.themeMode, settings.accent, settings.fontScale, settings.appIcon) {
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { Screen() }
             }
         }
@@ -465,7 +470,8 @@ class BrowserActivity : ComponentActivity() {
         }
         }
         b.pressed?.let { p -> PressMenu(p) }
-        BrowserChat.asking?.let { a ->
+        // 面板开着时在面板里问；收着时弹窗问
+        BrowserChat.asking?.takeIf { !BrowserChat.open }?.let { a ->
             AlertDialog(
                 onDismissRequest = { a.answer.complete(false) },
                 title = { Text(a.title) },
@@ -698,38 +704,63 @@ class BrowserActivity : ComponentActivity() {
         }
     }
 
-    /** 浏览器里的 Kavi：问这一页、让它在这一页上做事。 */
+    /** 浏览器里的 Kavi：问这一页、让它在这一页上做事。从底部浮起的圆角半屏，要确认的事直接在这里给两个大按钮。 */
     @Composable
     private fun ChatPanel() {
         val chat = BrowserChat
         val colors = MaterialTheme.colorScheme
         var input by remember { mutableStateOf("") }
         val list = androidx.compose.foundation.lazy.rememberLazyListState()
-        LaunchedEffect(chat.lines.size, chat.lines.lastOrNull()?.text?.length) { if (chat.lines.isNotEmpty()) list.scrollToItem(chat.lines.lastIndex) }
-        val h = (resources.displayMetrics.heightPixels / resources.displayMetrics.density * 0.42f).dp
-        Surface(Modifier.fillMaxWidth().height(h), color = colors.surfaceVariant) {
+        LaunchedEffect(chat.lines.size, chat.lines.lastOrNull()?.text?.length, chat.asking) {
+            val n = list.layoutInfo.totalItemsCount
+            if (n > 0) list.scrollToItem(n - 1)
+        }
+        val h = (resources.displayMetrics.heightPixels / resources.displayMetrics.density * 0.45f).dp
+        Surface(
+            Modifier.fillMaxWidth().height(h),
+            color = colors.surface,
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp),
+            shadowElevation = 12.dp,
+            border = androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant),
+        ) {
             Column(Modifier.fillMaxSize()) {
-                Row(Modifier.fillMaxWidth().padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Kavi · 问这一页", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                // 拖动条（点它收起）
+                Box(Modifier.fillMaxWidth().clickable { BrowserChat.open = false }.padding(top = 8.dp, bottom = 4.dp), contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(width = 40.dp, height = 4.dp).clip(androidx.compose.foundation.shape.CircleShape).background(colors.outlineVariant))
+                }
+                Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    LogoMark(36.dp)
+                    Column(Modifier.weight(1f).padding(start = 10.dp)) {
+                        Text("Kavi", style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                        Text(if (chat.busy) (chat.progress ?: "想一想…") else "问这一页，或者让它在这页上做事",
+                            style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                     if (chat.lines.isNotEmpty()) {
                         TextButton(onClick = { toChat(chat.transcript()) }) { Text("转到聊天") }
                         TextButton(onClick = { chat.clear() }) { Text("清空") }
                     }
                     IconButton(onClick = { BrowserChat.open = false }) { Icon(Icons.Default.KeyboardArrowDown, "收起") }
                 }
-                LazyColumn(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp), state = list) {
+                LazyColumn(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp), state = list,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (chat.lines.isEmpty()) item {
                         Text("问问这一页讲了什么，或者让 Kavi 在这页上做事：比价、填表、找东西、把操作存成流程。",
-                            style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                            style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
                     }
                     items(chat.lines.size) { i ->
                         val l = chat.lines[i]
-                        if (l.role == "user") Text(l.text, Modifier.fillMaxWidth().padding(vertical = 4.dp), style = MaterialTheme.typography.bodyMedium,
-                            color = colors.primary, maxLines = 6, overflow = TextOverflow.Ellipsis)
-                        else Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                        if (l.role == "user") Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+                            Text(l.text, Modifier.widthIn(max = 280.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(18.dp, 6.dp, 18.dp, 18.dp))
+                                .background(colors.surfaceContainerHigh).padding(horizontal = 14.dp, vertical = 9.dp),
+                                style = MaterialTheme.typography.bodyMedium, maxLines = 6, overflow = TextOverflow.Ellipsis)
+                        }
+                        else Column(Modifier.fillMaxWidth()) {
                             if (l.steps.isNotEmpty()) Text(l.steps.joinToString(" → "), style = MaterialTheme.typography.labelSmall,
-                                color = colors.onSurfaceVariant, maxLines = 3, overflow = TextOverflow.Ellipsis)
-                            if (l.text.isNotBlank()) MarkdownBlocks(l.text, colors.onSurface, colors.surface, Modifier.fillMaxWidth(), textSizeSp = 14f)
+                                color = colors.onSurfaceVariant, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(bottom = 4.dp))
+                            if (l.text.isNotBlank()) Box(Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(6.dp, 18.dp, 18.dp, 18.dp))
+                                .background(colors.surfaceContainer).padding(horizontal = 14.dp, vertical = 10.dp)) {
+                                MarkdownBlocks(l.text, colors.onSurface, colors.surface, Modifier.fillMaxWidth(), textSizeSp = 15f)
+                            }
                             l.error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = colors.error) }
                             l.files.forEach { f ->
                                 Text("打开「${f.name}」", Modifier.clickable { openFile(f) }.padding(vertical = 4.dp),
@@ -737,21 +768,51 @@ class BrowserActivity : ComponentActivity() {
                             }
                         }
                     }
-                    if (chat.busy) item {
-                        Text(chat.progress ?: "想一想…", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+                    // 要用户拍板的事：就在对话里给两个大按钮
+                    chat.asking?.let { a ->
+                        item {
+                            Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                                Text(a.title, style = MaterialTheme.typography.titleSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                                Text(a.body.take(600), style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
+                                    maxLines = 6, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp, bottom = 10.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    androidx.compose.material3.Button(onClick = { a.answer.complete(true) }, modifier = Modifier.weight(1f).height(48.dp),
+                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp)) { Text(a.action) }
+                                    androidx.compose.material3.FilledTonalButton(onClick = { a.answer.complete(false) }, modifier = Modifier.weight(1f).height(48.dp),
+                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp)) { Text("先不要") }
+                                }
+                            }
+                        }
                     }
                 }
-                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
+                // 输入：和聊天页一样的圆角胶囊，右边黑色圆按钮
+                Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 10.dp)
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(24.dp)).background(colors.surfaceContainer)
+                    .padding(start = 4.dp, end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    androidx.compose.material3.TextField(
                         value = input,
                         onValueChange = { input = it },
-                        placeholder = { Text("问这一页，或者让它做事") },
+                        placeholder = { Text("问这一页，或者让它做事", color = colors.outline) },
                         maxLines = 3,
                         textStyle = MaterialTheme.typography.bodyMedium,
+                        colors = androidx.compose.material3.TextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent,
+                            focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
+                        ),
                         modifier = Modifier.weight(1f),
                     )
-                    if (chat.busy) TextButton(onClick = { chat.stop() }) { Text("停") }
-                    else TextButton(enabled = input.isNotBlank(), onClick = { chat.send(this@BrowserActivity, input); input = "" }) { Text("发送") }
+                    val busy = chat.busy
+                    Surface(
+                        onClick = { if (busy) chat.stop() else if (input.isNotBlank()) { chat.send(this@BrowserActivity, input); input = "" } },
+                        shape = androidx.compose.foundation.shape.CircleShape,
+                        color = if (busy || input.isNotBlank()) colors.onSurface else colors.surfaceVariant,
+                        modifier = Modifier.size(38.dp),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(if (busy) AppIcons.Stop else AppIcons.ArrowUp, if (busy) "停" else "发送", Modifier.size(if (busy) 14.dp else 18.dp),
+                                tint = if (busy || input.isNotBlank()) colors.surface else colors.outline)
+                        }
+                    }
                 }
             }
         }

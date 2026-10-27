@@ -32,8 +32,8 @@
         android:allowBackup="true"
         android:fullBackupContent="@xml/backup_rules"
         android:dataExtractionRules="@xml/data_extraction_rules"
-        android:icon="@mipmap/ic_launcher"
-        android:roundIcon="@mipmap/ic_launcher"
+        android:icon="@mipmap/ic_launcher_k"
+        android:roundIcon="@mipmap/ic_launcher_k"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.JackAI">
@@ -42,11 +42,7 @@
             android:exported="true"
             android:launchMode="singleTop"
             android:windowSoftInputMode="adjustResize">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
+            <!-- 桌面图标在下面几个 activity-alias 上：设置里能换图标，换的时候开一个、关其他的 -->
             <!-- 从别的 App 分享文字、图片、文件进来 -->
             <intent-filter android:label="问 Kavi">
                 <action android:name="android.intent.action.SEND" />
@@ -71,6 +67,62 @@
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- 桌面图标：K -->
+        <activity-alias
+            android:name=".LauncherK"
+            android:enabled="true"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_k"
+            android:roundIcon="@mipmap/ic_launcher_k"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
+        </activity-alias>
+        <!-- 桌面图标：对话气泡 -->
+        <activity-alias
+            android:name=".LauncherBubble"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_bubble"
+            android:roundIcon="@mipmap/ic_launcher_bubble"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
+        </activity-alias>
+        <!-- 桌面图标：月亮 -->
+        <activity-alias
+            android:name=".LauncherMoon"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_moon"
+            android:roundIcon="@mipmap/ic_launcher_moon"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
+        </activity-alias>
+        <!-- 桌面图标：原来的 -->
+        <activity-alias
+            android:name=".LauncherClassic"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
+        </activity-alias>
         <activity-alias
             android:name=".InboxShare"
             android:exported="true"

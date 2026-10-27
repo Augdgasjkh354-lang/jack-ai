@@ -1,7 +1,7 @@
 <resources>
     <color name="ic_launcher_background">#C7673C</color>
     <!-- 小组件配色，夜间模式在 values-night 里 -->
-    <color name="widget_bg">#FFFFFF</color>
+    <color name="widget_bg">#F5FFFFFF</color>
     <color name="widget_stroke">#E5E5E5</color>
     <color name="widget_text">#0A0A0A</color>
     <color name="widget_hint">#6B6B6B</color>
@@ -9,4 +9,10 @@
     <color name="widget_chip">#F1F1F1</color>
     <color name="widget_on_chip">#0A0A0A</color>
     <color name="widget_logo">#0A0A0A</color>
+    <!-- 小组件标题前的彩色小图标块，和 App 里的标记颜色一致 -->
+    <color name="widget_tag_teal">#2BA89A</color>
+    <color name="widget_tag_slate">#6B7280</color>
+    <color name="widget_tag_green">#22A06B</color>
+    <color name="widget_mint">#BFF0D6</color>
+    <color name="widget_on_mint">#0B3D2A</color>
 </resources>
