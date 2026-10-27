@@ -31,7 +31,8 @@ class ProjectsFeature(core: AppCore, private val files: FilesFeature) : Feature(
 
     fun deleteProject(id: String) {
         val removedConvs = state.value.conversations.filter { it.projectId == id }
-        if (removedConvs.any { it.id == state.value.currentId }) core.stop()
+        // 停的是正在回答的那个（可能不是眼前这个）：它在项目里就停，别的对话的回答不动
+        if (removedConvs.any { it.id == state.value.streamingId }) core.stop()
         state.update { s ->
             s.copy(
                 projects = s.projects.filterNot { it.id == id },

@@ -733,7 +733,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 别的 App 分享过来的内容：开一个新对话，文字放进输入框，图片和文件作为附件。 */
     fun handleShare(text: String?, uris: List<Uri>, mime: String?) {
-        if (busy()) stop()
+        // 只是填进新对话的输入框、不发出去：正在写的回答不用停，让它在后台写完
         newChat()
         if (!text.isNullOrBlank()) receiveText(text)
         if (uris.isNotEmpty()) {

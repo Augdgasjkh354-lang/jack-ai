@@ -109,7 +109,8 @@ class TodayWidget : AppWidgetProvider() {
             val store = Store(ctx)
             val lines = mutableListOf<Pair<String, PendingIntent?>>()
             runCatching {
-                store.loadRoutines().mapNotNull { r -> r.nextAt(now)?.let { it to r } }.minByOrNull { it.first }?.let { (t, r) ->
+                // 监控没有固定的时刻（下一次总是「一会儿后」），不算安排
+                store.loadRoutines().filter { it.kind != "watch" }.mapNotNull { r -> r.nextAt(now)?.let { it to r } }.minByOrNull { it.first }?.let { (t, r) ->
                     lines += "⏰ ${Widgets.whenText(t, now)}  ${r.title}" to null
                 }
             }

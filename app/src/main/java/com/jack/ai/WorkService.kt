@@ -91,6 +91,8 @@ class WorkService : Service() {
         /** 干完了：关掉前台服务；App 不在眼前时发一条完成通知。 */
         fun finish(ctx: Context, convId: String, title: String, result: String, work: Boolean) {
             ctx.stopService(Intent(ctx, WorkService::class.java))
+            // 前台服务没开成时，进度是普通的常驻通知，停服务撤不掉它，要自己撤（不然一直挂着「正在回答」划不掉）
+            runCatching { NotificationManagerCompat.from(ctx).cancel(ID) }
             if (!MainActivity.visible) Routines.notify(ctx, "work-$convId", (if (work) "完成了：" else "回答好了：") + title, result, openChat = convId)
         }
     }
