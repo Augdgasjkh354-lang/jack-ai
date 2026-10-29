@@ -191,6 +191,8 @@ object PromptBuilder {
             // 一直带着、选项写全：工具说明不随对话变，缓存才能跨对话命中；眼下搜不了的地方由工具自己回话
             add(SkillTools.SEARCH_MY_DATA)
             add(SkillTools.FACTS)
+            // Kavi 自己的钱：哪里都能看（一直带着，工具说明不随对话变）
+            add(SkillTools.MY_SAVINGS)
             if (conv.id == com.jack.ai.data.Reader.CONV_ID || (settings.memoryEnabled && conv.globalAllowed(project))) add(SkillTools.OWN_HISTORY)
             // 自由时间里才有：自己的钱
             if (conv.id == com.jack.ai.data.Reader.CONV_ID) add(SkillTools.FREE_TIME)

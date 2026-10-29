@@ -11,6 +11,29 @@ import kotlinx.serialization.json.JsonPrimitive
  * status 看钱、心愿、下次时间；next 自己约下一次；wish 跟用户要一笔预算做某件事；
  * buy 想买个东西（Kavi 不能付钱：告诉用户买什么、多少钱、愿意从积蓄出多少，用户决定）。
  */
+/** my_savings：Kavi 看自己的积蓄，哪里都能用。自由时间里按这次实时花的算，别处按到今天为止该存进的算（不改存档）。 */
+internal fun ToolSession.mySavings(): String {
+    succeeded.incrementAndGet()
+    fun money(v: Double) = FreeTime.money(v)
+    val now = System.currentTimeMillis()
+    val st = FreeTime.accrue(FreeTime.load(app), settings.readingBudget, now)
+    val b = freeBudget
+    val log = Reader.log(app)
+    return buildString {
+        if (b != null) append("积蓄：这次开始时 ${money(b.soft)}，这次已花 ${money(b.spentNow())}，现在还剩 ${money((b.soft - b.spentNow()).coerceAtLeast(0.0))}。")
+        else append("积蓄：${money(st.savings)}（自由时间里随便花）。")
+        append("每天存进 ${money(settings.readingBudget)}，不设上限。")
+        val extra = b?.extra ?: if (st.extraDay == FreeTime.day(now)) 0.0 else settings.readingExtra
+        append(if (extra > 0) "积蓄花光后，今天还有 ${money(extra)} 收尾。" else "今天的收尾钱已经用过了。")
+        append("\n今天自由时间已花 ${money(Reader.spentToday(log))}。")
+        log.filter { it.skipped.isEmpty() }.take(5).takeIf { it.isNotEmpty() }?.let { l ->
+            append("\n最近几次：").append(l.joinToString("；") { FreeTime.day(it.at) + " " + it.title.ifBlank { it.kind } + " " + money(it.spent) })
+        }
+        st.wishes.filter { it.status == "pending" }.takeIf { it.isNotEmpty() }?.let { w -> append("\n在等回音的心愿：").append(w.joinToString("；") { FreeTime.describe(it) }) }
+        if (st.nextAt > now) append("\n约好的下一次：" + java.text.SimpleDateFormat("M月d日 HH:mm", java.util.Locale.CHINA).format(java.util.Date(st.nextAt)))
+    }
+}
+
 internal fun ToolSession.freeTimeTool(args: JsonObject): String {
     val b = freeBudget ?: return "现在不是自由时间，没有这个。"
     fun JsonObject.num(k: String) = (this[k] as? JsonPrimitive)?.content?.toDoubleOrNull()

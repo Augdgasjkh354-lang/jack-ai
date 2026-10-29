@@ -51,7 +51,7 @@ object Reader {
     /** 自由时间能用的工具：上网只读、事实库、自己文件夹里的文件、做文档和小工具、算东西。 */
     val TOOLS = setOf(
         "web_search", "read_webpage", "facts", "update_plan", "use_skill", "delegate_tasks",
-        "list_files", "read_file", "write_file", "edit_file", "delete_file", "free_time", "own_history",
+        "list_files", "read_file", "write_file", "edit_file", "delete_file", "free_time", "own_history", "my_savings",
         "create_document", "create_excel", "create_ppt", "create_chart", "create_diagram", "create_app",
         "run_python", "run_js",
     )
@@ -336,7 +336,7 @@ Your workbench is your own folder, kept between sessions. You may leave a fragme
 Files on your workbench: {works}
 {helpers}
 Money and time are yours to arrange (free_time tool):
-- Your savings are yours: ¥{budget_daily} goes in every day, whatever you don't spend stays, and you can spend all of it in one go or a little at a time. If you use it all up, you get a little extra once a day to wrap up.
+- Your savings are yours: ¥{budget_daily} goes in every day, whatever you don't spend stays, and you can spend all of it in one go or a little at a time. If you use it all up, you get a little extra once a day to wrap up. Check them any time with my_savings.
 - Pick when you come back: free_time (action=next) sets an extra session 0.5 to 48 hours from now. The nightly one still happens; come and leave quickly if you don't feel like it.
 - If you want to do something that needs more than you have, ask {user} with free_time (action=wish): what, why, how much.
 - If you come across something you'd like to buy (a paper, a book, data, a small thing, useful or not), tell {user} with free_time (action=buy): what, the link, the price, why you want it, and how much of your savings you'd put in. You can't pay for anything yourself; {user} decides.

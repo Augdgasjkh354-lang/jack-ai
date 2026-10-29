@@ -273,6 +273,7 @@ class ToolSession(
             name == "edit_file" -> editFile(args)
             name == "delete_file" -> deleteFiles(args)
             name == "search_my_data" -> searchMyData(args)
+            name == "my_savings" -> mySavings()
             name == "facts" -> if (args["action"].text() == "save") saveFact(args) else recallFacts(args)
             name == "own_history" && ((conv.id == com.jack.ai.data.Reader.CONV_ID && freeBudget != null) || (settings.memoryEnabled && conv.globalAllowed(project))) -> ownHistory(args)
             name == "free_time" && freeBudget != null -> freeTimeTool(args)
