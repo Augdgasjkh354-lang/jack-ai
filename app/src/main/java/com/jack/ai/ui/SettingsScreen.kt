@@ -135,7 +135,7 @@ fun SettingsScreen(
                 SettingField("关于你", settings.aboutMe, "职业、兴趣、所在城市、正在做的事…AI 会参考这些来回答", minLines = 3) { v ->
                     vm.updateSettings { it.copy(aboutMe = v) }
                 }
-                SettingField("希望 AI 怎么回答", settings.replyStyle, "例如：简洁直接、先给结论、用中文、像朋友一样说话", minLines = 3) { v ->
+                SettingField("希望 AI 怎么回答", settings.replyStyle, "例如：像朋友一样聊天，轻松一点；正经做事时简洁、先给结论", minLines = 3) { v ->
                     vm.updateSettings { it.copy(replyStyle = v) }
                 }
             }
