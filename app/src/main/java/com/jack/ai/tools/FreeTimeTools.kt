@@ -8,7 +8,7 @@ import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * 自由时间里 Kavi 自己的事（free_time 工具，只有自由时间里有）：
- * status 看钱、心愿、下次时间；use_savings 从积蓄拿钱；next 自己约下一次；wish 跟用户要一笔预算做某件事；
+ * status 看钱、心愿、下次时间；next 自己约下一次；wish 跟用户要一笔预算做某件事；
  * buy 想买个东西（Kavi 不能付钱：告诉用户买什么、多少钱、愿意从积蓄出多少，用户决定）。
  */
 internal fun ToolSession.freeTimeTool(args: JsonObject): String {
@@ -19,12 +19,8 @@ internal fun ToolSession.freeTimeTool(args: JsonObject): String {
     val action = args["action"].text()
     succeeded.incrementAndGet()
     return when (action) {
-        "use_savings" -> {
-            val want = args.num("amount") ?: return "要给出 amount（拿多少，元）。"
-            val got = b.use(want)
-            if (got <= 0) "积蓄是 ${money(b.savings)}，拿不出来。"
-            else "从积蓄里拿了 ${money(got)}，这次能花到 ${money(b.soft)}（已花 ${money(b.spentNow())}），积蓄还剩 ${money(b.savings)}。没花完的结束时退回积蓄。"
-        }
+        // 旧版的动作：现在整个积蓄一开始就能花，不用再取
+        "use_savings" -> "积蓄现在都能直接花，不用取。这次已花 ${money(b.spentNow())}，还能花 ${money((b.soft - b.spentNow()).coerceAtLeast(0.0))}。"
         "continue" -> {
             val next = args["text"].text().trim()
             if (next.isBlank()) { freeNext = ""; return "已取消接着做，想停下也可以。" }
@@ -37,7 +33,7 @@ internal fun ToolSession.freeTimeTool(args: JsonObject): String {
             Reader.scheduleExtra(ctx, at)
             FreeTime.save(ctx, FreeTime.load(ctx).copy(nextAt = at))
             "约好了：" + java.text.SimpleDateFormat("M月d日 HH:mm", java.util.Locale.CHINA).format(java.util.Date(at)) +
-                " 再来一次（花的还是那天的预算和你的积蓄）。每天凌晨那次照旧，不想来到时候随便待一下就走也行。"
+                " 再来一次（花的是你的积蓄）。每天凌晨那次照旧，不想来到时候随便待一下就走也行。"
         }
         "hold" -> {
             val text = args["text"].text().trim()
@@ -72,8 +68,8 @@ internal fun ToolSession.freeTimeTool(args: JsonObject): String {
         }
         else -> {
             val st = FreeTime.load(ctx)
-            "这次已花 ${money(b.spentNow())}；今天的预算到 ${money(b.today)}" + (if (b.fromSavings > 0) "，加上从积蓄拿的 ${money(b.fromSavings)}" else "") +
-                "；积蓄还有 ${money(b.savings)}；收尾用的额外预算 ${money(b.extra)}。" +
+            "这次已花 ${money(b.spentNow())}；积蓄这次开始时有 ${money(b.soft)}，还能花 ${money((b.soft - b.spentNow()).coerceAtLeast(0.0))}；" +
+                (if (b.extra > 0) "花光后有 ${money(b.extra)} 收尾（今天这一次）。" else "今天的收尾钱已经用过了，花光就停。") +
                 (st.wishes.filter { it.status == "pending" }.takeIf { it.isNotEmpty() }?.let { w -> "\n在等回音的心愿：" + w.joinToString("；") { FreeTime.describe(it) } } ?: "") +
                 (if (st.nextAt > System.currentTimeMillis()) "\n你约的下一次：" + java.text.SimpleDateFormat("M月d日 HH:mm", java.util.Locale.CHINA).format(java.util.Date(st.nextAt)) else "")
         }

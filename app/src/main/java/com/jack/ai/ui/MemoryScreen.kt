@@ -375,9 +375,8 @@ internal fun ReadingCard(vm: ChatViewModel, settings: com.jack.ai.data.Settings)
                 Switch(settings.readingEnabled, { on -> vm.updateSettings { it.copy(readingEnabled = on) } })
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("每天 ¥%.2f".format(settings.readingBudget) + (if (settings.readingExtra > 0) " + 收尾 ¥%.2f".format(settings.readingExtra) else "") +
-                    " · 今天已花 ¥%.2f".format(com.jack.ai.data.Reader.spentToday(log)) +
-                    (if (free.savings > 0.005) "\n积蓄 ¥%.2f（没花完的自动攒下，最多攒 ${com.jack.ai.data.FreeTime.SAVE_DAYS} 天的量）".format(free.savings) else ""),
+                Text("积蓄 ¥%.2f · 每天存进 ¥%.2f".format(free.savings, settings.readingBudget) + (if (settings.readingExtra > 0) " · 花光后收尾 ¥%.2f（每天一次）".format(settings.readingExtra) else "") +
+                    "\n今天已花 ¥%.2f".format(com.jack.ai.data.Reader.spentToday(log)),
                     Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                 TextButton(onClick = { editBudget = true }) { Text("改预算") }
             }
@@ -478,9 +477,9 @@ internal fun ReadingCard(vm: ChatViewModel, settings: com.jack.ai.data.Settings)
             title = { Text("自由时间的预算") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(text, { text = it }, singleLine = true, label = { Text("每天的预算") }, suffix = { Text("元") }, keyboardOptions = decimal)
-                    OutlinedTextField(extraText, { extraText = it }, singleLine = true, label = { Text("额外预算（用完后收尾用）") }, suffix = { Text("元") }, keyboardOptions = decimal)
-                    Text("每天的预算花完时，系统会告诉 Kavi「今日预算用完了，可以收尾，也可以明天再做」，再给它额外预算收尾，不必花完。填 0 就是直接停。",
+                    OutlinedTextField(text, { text = it }, singleLine = true, label = { Text("每天存进积蓄") }, suffix = { Text("元") }, keyboardOptions = decimal)
+                    OutlinedTextField(extraText, { extraText = it }, singleLine = true, label = { Text("额外预算（积蓄花光后收尾用，每天一次）") }, suffix = { Text("元") }, keyboardOptions = decimal)
+                    Text("每天的钱按日历存进 Kavi 的积蓄，没花完的一直留着，自由时间里它想怎么花都行。积蓄花光时，系统会告诉它「积蓄用完了，可以收尾，也可以明天再做」，再给它额外预算收尾（每天一次，不从积蓄扣），不必花完。填 0 就是直接停。",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },

@@ -5,48 +5,30 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Kavi 的钱：没花完的攒下（有上限、没过自由时间的日子不攒）；从积蓄拿了没花完的退回；近况写得出来。 */
+/** Kavi 的钱：每天按日历存进积蓄（不设上限）；整个积蓄都能花，花光后收尾的钱不从积蓄扣；近况写得出来。 */
 class FreeTimeTest {
     private val day = 86_400_000L
     private val now = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US).parse("2026-10-27 02:30")!!.time
 
     @Test
-    fun unspentBudgetIsSaved() {
-        // 第一次：只记下日子
-        val first = FreeTime.accrue(FreeState(), emptyList(), 0.5, now)
-        assertEquals(0.0, first.savings, 1e-9)
-        assertEquals("2026-10-26", first.accruedThrough)
-        // 之后：前天花了 0.2（攒 0.3），昨天没过自由时间（不攒），今天的不算
-        val log = listOf(ReadEntry(at = now - 2 * day, spent = 0.2), ReadEntry(at = now, spent = 0.4))
-        val s = FreeTime.accrue(FreeState(accruedThrough = "2026-10-24"), log, 0.5, now)
-        assertEquals(0.3, s.savings, 1e-9)
-        assertEquals("2026-10-26", s.accruedThrough)
-        // 同一天再算一次不重复攒
-        assertEquals(s, FreeTime.accrue(s, log, 0.5, now))
-        // 最多攒 7 天
-        assertEquals(3.5, FreeTime.accrue(FreeState(savings = 3.4, accruedThrough = "2026-10-24"), log, 0.5, now).savings, 1e-9)
+    fun dailyBudgetGoesIntoSavingsEveryCalendarDay() {
+        // 第一次：今天这份存进去
+        val first = FreeTime.accrue(FreeState(savings = 0.2), 0.5, now)
+        assertEquals(0.7, first.savings, 1e-9)
+        assertEquals("2026-10-27", first.accruedThrough)
+        // 同一天再算一次不重复存
+        assertEquals(first, FreeTime.accrue(first, 0.5, now))
+        // 隔了三天（手机关着也算）：存三份，没有上限
+        assertEquals(10.0 + 1.5, FreeTime.accrue(FreeState(savings = 10.0, accruedThrough = "2026-10-24"), 0.5, now).savings, 1e-9)
     }
 
     @Test
-    fun existingGiftsAreNeverReducedWhenSavingsAreCapped() {
-        val log = listOf(ReadEntry(at = now - 2 * day, spent = 0.2))
-        val state = FreeState(savings = 5.0, accruedThrough = "2026-10-24")
-        assertEquals(5.0, FreeTime.accrue(state, log, 0.5, now).savings, 1e-9)
-        assertEquals(3.5, FreeTime.accrue(state.copy(savings = 3.4), log, 0.5, now).savings, 1e-9)
-    }
-
-    @Test
-    fun takingFromSavingsRaisesTheLimitAndReturnsTheRest() {
-        val b = FreeBudget(today = 0.5, extra = 0.1, savings = 1.0) { "系统：用完了 $it" }
-        assertEquals(0.6, b.limit, 1e-9)
-        b.noted = true
-        assertEquals(0.4, b.use(0.4), 1e-9)
-        assertFalse(b.noted)  // 拿了钱，用完时再提醒一次
-        assertEquals(0.9, b.soft, 1e-9)
-        assertEquals(0.6, b.savings, 1e-9)
-        assertEquals(0.6, b.use(5.0), 1e-9)  // 拿不了那么多就拿全部
-        // 一共花了 0.7：今天的 0.5 + 积蓄里的 0.2，没花的 0.8 退回
-        assertEquals(0.8, b.settle(0.7), 1e-9)
+    fun wholeSavingsCanBeSpentAndWrapUpMoneyIsNotDeducted() {
+        val b = FreeBudget(0.0, extra = 0.1, savings = 1.0) { "系统：用完了 $it" }.also { it.use(1.0) }
+        assertEquals(1.0, b.soft, 1e-9)
+        assertEquals(1.1, b.limit, 1e-9)
+        assertEquals(0.6, b.settle(0.4), 1e-9)   // 花了 0.4，剩 0.6
+        assertEquals(0.0, b.settle(1.05), 1e-9)  // 花进了收尾钱：积蓄归零，不倒欠
     }
 
     @Test

@@ -47,9 +47,9 @@ class ReaderTest {
         store.saveSettings(store.loadSettings().copy(apiKey = "", tavilyKey = "", exaKey = "", readingEnabled = true, readingBudget = 0.5))
         val e = Reader.read(ctx)!!
         assertTrue(e.skipped.isNotEmpty())
-        // 预算是 0：不去
-        store.saveSettings(store.loadSettings().copy(readingBudget = 0.0))
-        assertTrue(Reader.read(ctx)!!.skipped.contains("预算"))
+        // 积蓄花光、今天的收尾钱也用过了：不去
+        FreeTime.save(ctx, FreeTime.load(ctx).copy(savings = 0.0, extraDay = FreeTime.day(System.currentTimeMillis())))
+        assertTrue(Reader.read(ctx)!!.skipped.contains("积蓄"))
         assertEquals(2, Reader.log(ctx).size)
         // 关着又不是手动点的：什么都不做
         store.saveSettings(store.loadSettings().copy(readingEnabled = false, readingBudget = 0.5))
@@ -58,7 +58,7 @@ class ReaderTest {
 
     @Test
     fun budgetNoteSaysGoodnight() {
-        assertEquals("系统：Kavi，你的今日预算已经用完了哦，你可以把你要做的事情收尾，也可以等明天再做，新的预算是 ¥0.10，不必必须花完，收尾即可，晚安。",
+        assertEquals("系统：Kavi，你的积蓄已经用完了哦，你可以把你要做的事情收尾，也可以等明天再做，新的预算是 ¥0.10，不必必须花完，收尾即可，晚安。",
             Reader.budgetNote(0.1))
     }
 }

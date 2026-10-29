@@ -9,7 +9,7 @@ import java.util.Locale
 
 /**
  * Kavi 自己的钱和近况：
- * - savings：以前没花完的每日预算攒下来的积蓄，最多攒 [SAVE_DAYS] 天的量；accruedThrough 是攒到了哪一天（yyyy-MM-dd）；
+ * - savings：Kavi 的积蓄（一个钱包）：每天的预算按日历存进来，没花完的一直留着，不设上限；accruedThrough 是存到了哪一天（yyyy-MM-dd）；
  * - lately：它最近在想什么、在做什么（每次自由时间结束时自己写的一两句），聊天时它知道自己的近况。
  */
 @Serializable
@@ -18,6 +18,8 @@ data class FreeState(
     val accruedThrough: String = "",
     val lately: String = "",
     val latelyAt: Long = 0,
+    /** 收尾用的额外预算哪天用过了（一天一次）。 */
+    val extraDay: String = "",
     /** 给下次自由时间衔接用，和聊天中的近况分开。 */
     val freeSummary: String = "",
     val freeSummaryAt: Long = 0,
@@ -78,7 +80,6 @@ class FreeBudget(val today: Double, val extra: Double, savings: Double, private 
 }
 
 object FreeTime {
-    const val SAVE_DAYS = 7
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val lock = Any()
     private fun file(ctx: Context) = File(ctx.filesDir, "free_state.json")
@@ -103,20 +104,15 @@ object FreeTime {
     fun day(at: Long): String = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(java.util.Date(at))
 
     /**
-     * 把以前没花完的预算攒进积蓄：从上次攒到的那天之后、到昨天为止，有过自由时间的每一天，没花完的部分攒进来；
-     * 一共最多攒 SAVE_DAYS 天的预算。没过自由时间的日子（手机关着、关了自由时间）不攒。第一次只记下日子，不攒。
+     * 每天的预算按日历存进积蓄（一个钱包，不设上限）：从上次存到的那天之后、到今天为止，每天存一份。
+     * 那天自由时间没跑（手机关着）也照存。第一次就把今天这份存进去。
      */
-    fun accrue(state: FreeState, entries: List<ReadEntry>, budget: Double, now: Long = System.currentTimeMillis()): FreeState {
+    fun accrue(state: FreeState, budget: Double, now: Long = System.currentTimeMillis()): FreeState {
         val today = day(now)
-        val yesterday = day(now - 86_400_000L)
-        if (state.accruedThrough.isEmpty()) return state.copy(accruedThrough = yesterday)
-        if (state.accruedThrough >= yesterday) return state
-        val byDay = entries.groupBy { day(it.at) }
-        var savings = state.savings
-        byDay.keys.filter { it > state.accruedThrough && it < today }.sorted().forEach { d ->
-            savings += (budget - byDay.getValue(d).sumOf { it.spent }).coerceAtLeast(0.0)
-        }
-        return state.copy(savings = maxOf(state.savings, savings.coerceAtMost(budget * SAVE_DAYS)), accruedThrough = yesterday)
+        if (state.accruedThrough >= today) return state
+        val days = if (state.accruedThrough.isEmpty()) 1L
+            else runCatching { java.time.temporal.ChronoUnit.DAYS.between(java.time.LocalDate.parse(state.accruedThrough), java.time.LocalDate.parse(today)) }.getOrDefault(1L).coerceAtLeast(1L)
+        return state.copy(savings = state.savings + budget * days, accruedThrough = today)
     }
 
     /**
