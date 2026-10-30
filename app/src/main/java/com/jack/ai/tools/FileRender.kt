@@ -16,9 +16,13 @@ import java.util.Locale
 
 /** 按工具名和参数把文件真正画出来/写出来（FileTools 用）。 */
 
-/** 按工具名和参数生成文件。先写到临时文件，成功了再替换，失败不会弄坏原文件。 */
-internal suspend fun ToolSession.renderFile(tool: String, args: JsonObject, file: File, cache: File) {
+/**
+ * 按工具名和参数生成文件。先写到临时文件，成功了再替换，失败不会弄坏原文件。
+ * 返回排版提醒（PPT 字太多、图标没有之类），没有就是空的。
+ */
+internal suspend fun ToolSession.renderFile(tool: String, args: JsonObject, file: File, cache: File): List<String> {
     val slides = if (tool == "create_ppt") withImages(parseSlides(args), args, cache) else null
+    var warnings = emptyList<String>()
     withContext(Dispatchers.IO) {
         file.parentFile?.mkdirs()
         val tmp = File(file.parentFile, ".tmp-" + file.name)
@@ -26,7 +30,8 @@ internal suspend fun ToolSession.renderFile(tool: String, args: JsonObject, file
             tmp.outputStream().buffered().use { out ->
                 when (tool) {
                     "create_word" -> OfficeWriter.writeDocx(args["markdown"].text(), out)
-                    "create_ppt" -> OfficeWriter.writePptx(slides!!, args["theme"].text().ifBlank { "blue" }, out)
+                    "create_ppt" -> warnings = OfficeWriter.writePptx(slides!!, args["theme"].text().ifBlank { "blue" }, out,
+                        args["transition"].text().ifBlank { "fade" }, args["animation"].text().ifBlank { "fade" })
                     "create_pdf" -> PdfWriter.write(args["markdown"].text(), out)
                     "create_excel" -> OfficeWriter.writeXlsx(parseSheets(args), out)
                     "create_chart" -> renderChart(args, out)
@@ -43,7 +48,13 @@ internal suspend fun ToolSession.renderFile(tool: String, args: JsonObject, file
             tmp.delete()
         }
     }
+    return warnings
 }
+
+/** 排版提醒写给模型看：哪页字太多、哪些图标没有。 */
+internal fun layoutNote(warnings: List<String>): String =
+    if (warnings.isEmpty()) "" else "\n【排版提醒】\n" + warnings.take(8).joinToString("\n") { "- $it" } +
+        "\n能改就用 edit_file 改底稿（精简文字、拆成两页、换个版式），改完会重新生成。"
 
 internal fun ToolSession.renderChart(args: JsonObject, out: java.io.OutputStream) {
     val labels = (args["labels"] as? JsonArray).orEmpty().map { it.text() }
@@ -89,7 +100,13 @@ internal fun ToolSession.parseSlides(args: JsonObject): List<OfficeWriter.Slide>
             null, JsonNull -> emptyList()
             else -> b.text().lines().filter { it.isNotBlank() }
         }
-        OfficeWriter.Slide(o["layout"].text().ifBlank { "content" }, o["title"].text(), bullets)
+        val icons = when (val ic = o["icons"]) {
+            is JsonArray -> ic.map { it.text() }
+            null, JsonNull -> listOfNotNull(o["icon"].text().takeIf { it.isNotBlank() })
+            else -> ic.text().split(',', '，').map { it.trim() }
+        }
+        OfficeWriter.Slide(o["layout"].text().ifBlank { "content" }, o["title"].text(), bullets,
+            icons = icons, transition = o["transition"].text())
     }.ifEmpty { throw IllegalArgumentException("没有幻灯片内容") }
 
 /** 给写了 image_query 的正文页搜一张图，下载失败就不配图。最多 6 张。 */
@@ -99,7 +116,7 @@ internal suspend fun ToolSession.withImages(slides: List<OfficeWriter.Slide>, ar
     var count = 0
     return slides.mapIndexed { i, s ->
         val q = queries.getOrNull(i).orEmpty()
-        if (q.isBlank() || s.layout != "content" || count >= 6) return@mapIndexed s
+        if (q.isBlank() || s.layout !in setOf("content", "image") || count >= 6) return@mapIndexed s
         val img = runCatching { cachedImage(cache, q) ?: fetchImage(key, q)?.also { saveImage(cache, q, it) } }.getOrNull()
             ?: return@mapIndexed s
         count++

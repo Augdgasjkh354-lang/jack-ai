@@ -12,6 +12,8 @@ object OfficeWriter {
 
     private const val FONT = "微软雅黑"
 
+    internal fun escXml(s: String): String = esc(s)
+
     private fun esc(s: String): String = buildString(s.length) {
         for (ch in s) when (ch) {
             '&' -> append("&amp;")
@@ -190,111 +192,27 @@ object OfficeWriter {
         val imageExt: String = "jpeg",
         val imageW: Int = 0,
         val imageH: Int = 0,
+        /** 每个条目（或这页）配的图标名（Lucide），见 [PptDeck.ICONS]。 */
+        val icons: List<String> = emptyList(),
+        /** 这页的转场；空的话跟整份的设置走。 */
+        val transition: String = "",
     )
 
-    private fun picture(id: Int, rId: String, x: Long, y: Long, cx: Long, cy: Long) =
-        """<p:pic><p:nvPicPr><p:cNvPr id="$id" name="Picture $id"/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="$rId"/><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr><a:xfrm><a:off x="$x" y="$y"/><a:ext cx="$cx" cy="$cy"/></a:xfrm><a:prstGeom prst="roundRect"><a:avLst><a:gd name="adj" fmla="val 4000"/></a:avLst></a:prstGeom></p:spPr></p:pic>"""
-
-    /** 把图片放进框里，保持比例、居中。 */
-    private fun fit(s: Slide, bx: Long, by: Long, bw: Long, bh: Long): LongArray {
-        val ratio = if (s.imageW > 0 && s.imageH > 0) s.imageW.toDouble() / s.imageH else 4.0 / 3
-        var w = bw
-        var h = (bw / ratio).toLong()
-        if (h > bh) { h = bh; w = (bh * ratio).toLong() }
-        return longArrayOf(bx + (bw - w) / 2, by + (bh - h) / 2, w, h)
-    }
-
-    private data class Theme(val primary: String, val accent: String, val bg: String, val title: String, val text: String, val soft: String)
-
-    private val THEMES = mapOf(
-        "blue" to Theme("1F4E99", "4D8EF0", "FFFFFF", "1F3864", "333333", "EEF3FC"),
-        "green" to Theme("2E7D4F", "5CB85C", "FFFFFF", "1E5235", "333333", "EEF7F0"),
-        "orange" to Theme("D9662B", "F4A259", "FFFFFF", "8A3B12", "333333", "FDF1E7"),
-        "purple" to Theme("5B3E96", "9B7FD4", "FFFFFF", "3E2A6B", "333333", "F3EFFA"),
-        "dark" to Theme("0F172A", "38BDF8", "111827", "F8FAFC", "E2E8F0", "1E293B"),
-    )
-
-    private const val W = 12192000L
-    private const val H = 6858000L
+    private const val W = PptDeck.W
+    private const val H = PptDeck.H
     private const val NS = """xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main""""
-
-    private fun rect(id: Int, x: Long, y: Long, cx: Long, cy: Long, fill: String) =
-        """<p:sp><p:nvSpPr><p:cNvPr id="$id" name="Shape $id"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="$x" y="$y"/><a:ext cx="$cx" cy="$cy"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="$fill"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr></p:sp>"""
-
-    private fun rPr(size: Int, color: String, bold: Boolean) =
-        """<a:rPr lang="zh-CN" altLang="en-US" sz="$size"${if (bold) " b=\"1\"" else ""} dirty="0"><a:solidFill><a:srgbClr val="$color"/></a:solidFill><a:latin typeface="$FONT"/><a:ea typeface="$FONT"/></a:rPr>"""
-
-    private fun textBox(
-        id: Int, x: Long, y: Long, cx: Long, cy: Long,
-        paragraphs: List<String>, size: Int, color: String, bold: Boolean,
-        align: String = "l", anchor: String = "t", bullets: Boolean = false, bulletColor: String = color,
-    ): String {
-        val ps = paragraphs.joinToString("") { raw ->
-            val level = if (bullets && raw.startsWith("  ")) 1 else 0
-            val text = raw.trim().removePrefix("- ").removePrefix("• ")
-            val ppr = if (bullets) {
-                val mar = 342900 + level * 457200
-                """<a:pPr marL="$mar" indent="-342900" algn="$align"><a:spcBef><a:spcPts val="${if (level == 0) 1200 else 400}"/></a:spcBef><a:buClr><a:srgbClr val="$bulletColor"/></a:buClr><a:buFont typeface="Arial"/><a:buChar char="${if (level == 0) "•" else "–"}"/></a:pPr>"""
-            } else {
-                """<a:pPr algn="$align"/>"""
-            }
-            val sz = if (level == 1) size - 400 else size
-            "<a:p>$ppr<a:r>${rPr(sz, color, bold)}<a:t>${esc(text)}</a:t></a:r></a:p>"
-        }
-        return """<p:sp><p:nvSpPr><p:cNvPr id="$id" name="Text $id"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="$x" y="$y"/><a:ext cx="$cx" cy="$cy"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr><p:txBody><a:bodyPr wrap="square" lIns="91440" tIns="45720" rIns="91440" bIns="45720" anchor="$anchor"><a:normAutofit/></a:bodyPr><a:lstStyle/>$ps</p:txBody></p:sp>"""
-    }
-
-    private fun slideXml(s: Slide, t: Theme, index: Int, total: Int): String {
-        val shapes = StringBuilder()
-        val bg: String
-        when (s.layout) {
-            "title" -> {
-                bg = t.primary
-                shapes.append(rect(2, 0, H - 900000, W, 900000, t.accent))
-                shapes.append(textBox(3, 800000, 1900000, W - 1600000, 1600000, listOf(s.title), 4400, "FFFFFF", true, "ctr", "b"))
-                if (s.bullets.isNotEmpty()) {
-                    shapes.append(textBox(4, 800000, 3650000, W - 1600000, 1200000, s.bullets.take(3), 2000, "FFFFFF", false, "ctr", "t"))
-                }
-            }
-            "section" -> {
-                bg = t.soft
-                shapes.append(rect(2, 0, 0, 380000, H, t.primary))
-                shapes.append(textBox(3, 1200000, 2300000, W - 2400000, 1400000, listOf(s.title), 4000, t.title, true, "l", "ctr"))
-                shapes.append(rect(4, 1290000, 3800000, 1500000, 60000, t.accent))
-                if (s.bullets.isNotEmpty()) {
-                    shapes.append(textBox(5, 1200000, 4000000, W - 2400000, 1000000, s.bullets.take(2), 2000, t.text, false))
-                }
-            }
-            else -> {
-                bg = t.bg
-                shapes.append(rect(2, 0, 0, W, 120000, t.primary))
-                shapes.append(textBox(3, 600000, 350000, W - 1200000, 900000, listOf(s.title), 3000, t.title, true, "l", "ctr"))
-                shapes.append(rect(4, 690000, 1250000, 900000, 50000, t.accent))
-                val items = s.bullets.ifEmpty { listOf(" ") }
-                val withImage = s.image != null
-                val size = when {
-                    items.size <= 4 -> if (withImage) 2000 else 2200
-                    items.size <= 6 -> if (withImage) 1800 else 2000
-                    else -> 1600
-                }
-                val textW = if (withImage) (W * 0.5).toLong() else W - 1200000
-                shapes.append(textBox(5, 600000, 1500000, textW, H - 2200000, items, size, t.text, false, bullets = true, bulletColor = t.accent))
-                if (withImage) {
-                    val (x, y, w, h) = fit(s, (W * 0.56).toLong(), 1500000, (W * 0.39).toLong(), H - 2300000).toList()
-                    shapes.append(picture(7, "rId2", x, y, w, h))
-                }
-                shapes.append(textBox(6, W - 1500000, H - 550000, 1000000, 400000, listOf("$index / $total"), 1100, t.text, false, "r"))
-            }
-        }
-        return """$XML<p:sld $NS><p:cSld><p:bg><p:bgPr><a:solidFill><a:srgbClr val="$bg"/></a:solidFill><a:effectLst/></p:bgPr></p:bg><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>$shapes</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>"""
-    }
 
     private val PPT_THEME = XML + """<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Jack"><a:themeElements><a:clrScheme name="Jack"><a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1><a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="1F3864"/></a:dk2><a:lt2><a:srgbClr val="E7E6E6"/></a:lt2><a:accent1><a:srgbClr val="4472C4"/></a:accent1><a:accent2><a:srgbClr val="ED7D31"/></a:accent2><a:accent3><a:srgbClr val="A5A5A5"/></a:accent3><a:accent4><a:srgbClr val="FFC000"/></a:accent4><a:accent5><a:srgbClr val="5B9BD5"/></a:accent5><a:accent6><a:srgbClr val="70AD47"/></a:accent6><a:hlink><a:srgbClr val="0563C1"/></a:hlink><a:folHlink><a:srgbClr val="954F72"/></a:folHlink></a:clrScheme><a:fontScheme name="Jack"><a:majorFont><a:latin typeface="Calibri"/><a:ea typeface="$FONT"/><a:cs typeface=""/></a:majorFont><a:minorFont><a:latin typeface="Calibri"/><a:ea typeface="$FONT"/><a:cs typeface=""/></a:minorFont></a:fontScheme><a:fmtScheme name="Office"><a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:fillStyleLst><a:lnStyleLst><a:ln w="6350"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="12700"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="19050"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst><a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:bgFillStyleLst></a:fmtScheme></a:themeElements><a:objectDefaults/><a:extraClrSchemeLst/></a:theme>"""
 
     private val EMPTY_TREE = """<p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr></p:spTree>"""
 
-    fun writePptx(slides: List<Slide>, themeName: String, out: OutputStream) {
-        val t = THEMES[themeName] ?: THEMES.getValue("blue")
+    /**
+     * 写 PPT。每页怎么排、转场和动画见 [PptDeck]。transition 是整份默认的转场，某页自己写了就用那页的；
+     * animation 是条目怎么一个个出现（none 就一次全出来）。返回排版时发现的问题（字太多、图标没有……），给模型看。
+     */
+    fun writePptx(slides: List<Slide>, themeName: String, out: OutputStream, transition: String = "fade", animation: String = "fade"): List<String> {
+        val t = PptDeck.theme(themeName)
+        val warnings = mutableListOf<String>()
         val list = slides.ifEmpty { listOf(Slide("title", "演示文稿", emptyList())) }
         val rel = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
         val files = mutableListOf<Pair<String, String>>()
@@ -336,10 +254,17 @@ object OfficeWriter {
         files += "ppt/slideLayouts/slideLayout1.xml" to """$XML<p:sldLayout $NS type="blank" preserve="1"><p:cSld name="Blank">$EMPTY_TREE</p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>"""
         files += "ppt/slideLayouts/_rels/slideLayout1.xml.rels" to """$XML<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="$rel/slideMaster" Target="../slideMasters/slideMaster1.xml"/></Relationships>"""
         val media = mutableListOf<Pair<String, ByteArray>>()
+        var section = 0
         list.forEachIndexed { i, raw ->
-            // 只有正文页放配图
-            val s = if (raw.layout == "content" || raw.layout !in setOf("title", "section")) raw else raw.copy(image = null)
-            files += "ppt/slides/slide${i + 1}.xml" to slideXml(s, t, i + 1, list.size)
+            // 只有正文页和大图页放配图
+            val s = if (raw.layout == "content" || raw.layout == "image" || raw.layout !in PptDeck.LAYOUTS) raw else raw.copy(image = null)
+            if (s.layout == "section") section++
+            val r = PptDeck.render(s, t, i + 1, list.size, section)
+            warnings += r.warnings
+            // 封面、章节页、引言、结尾页不逐条出现，进来就是完整的
+            val anim = if (s.layout in setOf("title", "section", "quote", "end", "image")) "none" else animation
+            val trans = PptDeck.transition(s.transition.ifBlank { transition })
+            files += "ppt/slides/slide${i + 1}.xml" to """$XML<p:sld $NS><p:cSld><p:bg><p:bgPr><a:solidFill><a:srgbClr val="${r.bg}"/></a:solidFill><a:effectLst/></p:bgPr></p:bg><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>${r.shapes}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>$trans${PptDeck.timing(r.steps, anim, r.byParagraph, r.noBuild)}</p:sld>"""
             val imageRel = s.image?.let { bytes ->
                 val name = "image${i + 1}.${s.imageExt}"
                 media += "ppt/media/$name" to bytes
@@ -348,6 +273,7 @@ object OfficeWriter {
             files += "ppt/slides/_rels/slide${i + 1}.xml.rels" to """$XML<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="$rel/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>$imageRel</Relationships>"""
         }
         zip(out, files, media)
+        return warnings
     }
 
     // ======================= Excel =======================

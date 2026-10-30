@@ -1,0 +1,11 @@
+target rocket lightbulb users user user-check chart-column chart-line chart-pie chart-bar trending-up trending-down dollar-sign wallet briefcase building building-2
+calendar calendar-check clock globe map map-pin mail phone message-circle message-square shield shield-check lock key settings wrench cpu database cloud server code
+smartphone laptop monitor wifi zap battery-charging leaf sun moon heart star award trophy flag book-open graduation-cap pencil file-text clipboard-list
+circle-check circle-x triangle-alert info circle-help search eye camera image music video play gift shopping-cart shopping-bag truck package plane car train-front bike house
+hospital stethoscope pill activity brain puzzle layers layout-grid list-checks git-branch network share-2 link refresh-cw recycle droplet flame tree-pine mountain coffee utensils
+smile handshake thumbs-up megaphone bell newspaper scale gavel landmark factory hammer palette brush sparkles compass telescope microscope flask-conical atom dna sprout
+banknote piggy-bank receipt percent calculator hourglass timer milestone route goal crown gem medal baby school store warehouse anchor ship bot
+headphones mic presentation file-chart-column folder-open archive inbox send rss hash at-sign cloud-upload download upload printer qr-code fingerprint scan
+circle-dollar-sign hand-coins coins chart-no-axes-combined chart-scatter gauge sliders-horizontal filter funnel boxes box blocks workflow waypoints
+heart-pulse apple salad dumbbell bed tent umbrella snowflake cloud-sun wind waves fish paw-print bird flower trees earth languages
+pen-tool ruler shapes infinity arrow-right arrow-up-right check x plus minus repeat shuffle clock-3 alarm-clock history

@@ -94,15 +94,26 @@ val BUILTIN_SKILLS = listOf(
         id = SkillIds.PPT, builtin = true, name = "PPT 演示文稿",
         description = "生成 .pptx 演示文稿：汇报、课件、方案展示、读书分享等。",
         instructions = """生成 PPT 的做法：
-1. 先在心里列好大纲：封面 → （目录）→ 若干章节 → 总结/致谢。一般 6 到 15 页，用户指定页数时照做。
-2. 用 create_ppt 工具，每页一个对象：
-   - layout: "title"（封面，title 写主标题，bullets 第一条写副标题，比如汇报人和日期）、"section"（章节过渡页，只写 title）、"content"（正文页）。
-   - 正文页 bullets 每页 3 到 6 条，每条不超过 25 个字，写要点不写长段落。
-   - 需要层级时，在条目前加两个空格表示二级要点。
-3. 标题短而有力，最好是结论式的（“销售额同比增长 32%”优于“销售情况”）。
-4. theme 从 blue、green、orange、purple、dark 里选一个最贴合主题的：商务用 blue，环保健康用 green，活泼创意用 orange，文艺用 purple，科技用 dark。
-5. 配图：挑 2 到 4 页最适合配图的正文页，给它们写 image_query（配图搜索词，用英文、具体的名词效果最好，比如 "electric car charging station"）。抽象的、全是数字的页不配图。配图会放在正文页右侧。
-6. 生成后用一两句话说明一共几页、讲了什么。""",
+1. 先列大纲：封面 → 目录（6 页以上时）→ 每章一个章节页 + 几页内容 → 总结 → 结尾页。一般 8 到 15 页，用户指定页数时照做。
+2. 用 create_ppt 工具，每页一个对象。版式按内容挑，同一种版式别连着用三页以上，一份里至少用到四五种：
+   - title 封面：title 主标题，bullets 第一条副标题（汇报人、日期），可再加一两条小字。
+   - section 章节页：title 写章节名，bullets 第一条可写一句导语；编号自动排。
+   - agenda 目录：bullets 写各章，「章名：一句说明」，最多 8 条。
+   - content 要点页：3 到 6 条，每条不超过 25 字；「小标题：说明」会把小标题加粗；两个空格开头是二级要点。可配一张图（image_query），配图在右边。
+   - cards 卡片：2 到 4 个并列的点（最多 6 个），每条「标题：一两句说明」，icons 给每张卡配图标。适合优势、特点、原则、团队。
+   - two_column 两栏对比：bullets 用「## 栏名」开一栏，下面写这栏的条目，正好两栏。适合方案对比、前后对比、优缺点。icons 可给两栏标题各配一个。
+   - timeline 时间线：最多 6 个节点，「时间：事件」，按先后排。适合发展历程、计划排期。
+   - stats 大数字：2 到 4 个，「数字：说明」，数字要短（「32%」「1.2 亿」「Top 3」），icons 可配图标。适合成绩、市场数据。
+   - process 流程：最多 5 步，「步骤名：说明」，步骤名四五个字以内。
+   - quote 金句：title 写引言本身，bullets 第一条写出处。
+   - image 大图：整页铺满一张图，title 压在图上，必须写 image_query。适合开篇、转场、情绪页，一份最多两三页。
+   - end 结尾：title 写「谢谢」或一句收尾的话，bullets 写联系方式。
+3. 字要少：标题短而有力，最好是结论式的（「销售额同比增长 32%」优于「销售情况」）。一页只讲一件事，讲不完就拆成两页。生成后如果有【排版提醒】，按提醒改。
+4. 图标（icons）用英文名，常用的：target rocket lightbulb users user chart-column chart-line chart-pie trending-up dollar-sign wallet briefcase building-2 calendar clock globe map-pin mail phone message-circle shield-check lock settings wrench cpu database cloud code smartphone laptop zap leaf sun heart star award trophy flag book-open graduation-cap pencil file-text clipboard-list circle-check search eye camera image gift shopping-cart truck package plane car house hospital stethoscope pill activity brain puzzle layers workflow network link recycle droplet flame trees coffee utensils smile handshake thumbs-up megaphone bell scale landmark factory palette sparkles compass microscope flask-conical atom sprout piggy-bank receipt percent calculator hourglass milestone route goal crown gem bot headphones mic presentation gauge funnel heart-pulse dumbbell earth languages。写别的也行，认不出会尽量换成相近的，实在没有就不放。
+5. theme 选最贴合主题的一个：商务 blue，环保健康 green，活泼创意 orange，文艺 purple，科技 dark，庆典、节日、党政 red，医疗、清新 teal，极简高级 ink，生活、文艺、温暖 warm。
+6. 转场 transition 整份统一一种就好，默认 fade；正式场合用 fade 或 push，活泼的可以 zoom 或 cover；个别页要强调时单独写这一页的 transition。animation 默认 fade（条目点一下出现一个），用户要一页全出来就写 none。这些在 WPS、PowerPoint 放映时才看得到，App 里预览只显示最后的样子。
+7. 配图：挑两三页最适合配图的 content 或 image 页写 image_query（英文、具体的名词最好，比如 "electric car charging station"）。抽象的、全是数字的页不配图。
+8. 生成后用一两句话说明一共几页、讲了什么、用了什么风格。""",
     ),
     Skill(
         id = SkillIds.EXCEL, builtin = true, name = "Excel 表格",
@@ -466,7 +477,8 @@ object SkillTools {
 
     val READ_WEBPAGE = schema("""{"type":"function","function":{"name":"read_webpage","description":"读取一个网页的正文内容。","parameters":{"type":"object","properties":{"url":{"type":"string","description":"完整网址，以 http 开头"}},"required":["url"]}}}""")
 
-    val CREATE_PPT = schema("""{"type":"function","function":{"name":"create_ppt","description":"生成一个 PPT (.pptx) 演示文稿。","parameters":{"type":"object","properties":{"filename":{"type":"string","description":"文件名，不带扩展名"},"theme":{"type":"string","enum":["blue","green","orange","purple","dark"],"description":"配色主题"},"slides":{"type":"array","description":"每页幻灯片","items":{"type":"object","properties":{"layout":{"type":"string","enum":["title","section","content"]},"title":{"type":"string"},"bullets":{"type":"array","items":{"type":"string"}},"image_query":{"type":"string","description":"配图搜索词（英文更好），只用于正文页，不需要配图就不写"}},"required":["layout","title"]}}},"required":["filename","slides"]}}}""")
+    val CREATE_PPT = schema("""{"type":"function","function":{"name":"create_ppt","description":"生成一个 PPT (.pptx) 演示文稿：12 种版式、9 套配色、矢量图标、转场和逐条出现的动画。先用 use_skill 读「PPT 演示文稿」的做法。","parameters":{"type":"object","properties":{"filename":{"type":"string","description":"文件名，不带扩展名"},"theme":{"type":"string","enum":["blue","green","orange","purple","dark","red","teal","ink","warm"],"description":"配色：blue 商务、green 自然健康、orange 活力创意、purple 文艺、dark 科技、red 中国红/庆典/党政、teal 清新医疗、ink 极简黑白、warm 暖调莫兰迪"},"transition":{"type":"string","enum":["none","fade","push","wipe","split","cover","zoom"],"description":"翻页转场，整份统一，默认 fade"},"animation":{"type":"string","enum":["none","fade","rise","wipe"],"description":"正文里的条目、卡片点一下出现一个：fade 淡入、rise 淡入上浮、wipe 擦出；none 一次全出来。默认 fade"},"slides":{"type":"array","description":"每页幻灯片","items":{"type":"object","properties":{"layout":{"type":"string","enum":["title","section","agenda","content","cards","two_column","timeline","stats","process","quote","image","end"]},"title":{"type":"string"},"bullets":{"type":"array","items":{"type":"string"},"description":"条目；cards/timeline/stats/process/agenda 用「标题：说明」，two_column 用「## 栏名」分栏"},"icons":{"type":"array","items":{"type":"string"},"description":"图标名（英文），和 bullets 一一对应；content 只用第一个，放在标题旁"},"image_query":{"type":"string","description":"配图搜索词（英文更好），只用于 content 和 image 页"},"transition":{"type":"string","enum":["none","fade","push","wipe","split","cover","zoom"],"description":"只改这一页的转场"}},"required":["layout","title"]}}},"required":["filename","slides"]}}}""")
+
 
     val CREATE_EXCEL = schema("""{"type":"function","function":{"name":"create_excel","description":"生成一个 Excel (.xlsx) 表格。","parameters":{"type":"object","properties":{"filename":{"type":"string","description":"文件名，不带扩展名"},"sheets":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"rows":{"type":"array","description":"二维数组，第一行是表头","items":{"type":"array","items":{"type":"string","description":"单元格内容；数字也写成字符串，公式以 = 开头"}}}},"required":["name","rows"]}}},"required":["filename","sheets"]}}}""")
 

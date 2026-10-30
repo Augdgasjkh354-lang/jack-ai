@@ -18,9 +18,10 @@ import java.util.Locale
 
 internal suspend fun ToolSession.create(tool: String, args: JsonObject, base: String, ext: String, label: String): String =
     runTool("生成 $label：$base.$ext") {
+        var warnings = emptyList<String>()
         val file = withContext(Dispatchers.IO) { Workspace.uniqueFile(wsDir, "$base.$ext") }
         try {
-            renderFile(tool, args, file, wsCache)
+            warnings = renderFile(tool, args, file, wsCache)
         } catch (e: Exception) {
             file.delete(); throw e
         }
@@ -31,7 +32,7 @@ internal suspend fun ToolSession.create(tool: String, args: JsonObject, base: St
             "html" -> "小工具「${file.name}」已经显示在聊天里，用户可以直接点、输入、计算，也能全屏打开"
             else -> "已生成文件「${file.name}」，用户可以在聊天里打开或分享"
         }
-        "$shown。文件保存在对话文件夹里，以后要修改就用 edit_file 改它的底稿，不要重新生成。" + verifyGenerated(tool, args, file) to
+        "$shown。文件保存在对话文件夹里，以后要修改就用 edit_file 改它的底稿，不要重新生成。" + verifyGenerated(tool, args, file) + layoutNote(warnings) to
             SearchRecord("生成 $label：${file.name}")
     }
 
@@ -162,9 +163,9 @@ internal suspend fun ToolSession.editFile(args: JsonObject): String {
             val (tool, a) = src
             val (edited, count) = TextEdit.replace(Workspace.sourceText(tool, a), old, new, all)
             val newArgs = Workspace.argsFromText(tool, a, edited)
-            renderFile(tool, newArgs, file, wsCache)
+            val warnings = renderFile(tool, newArgs, file, wsCache)
             withContext(Dispatchers.IO) { Workspace.saveSource(file, tool, newArgs) }
-            check = verifyGenerated(tool, newArgs, file)
+            check = verifyGenerated(tool, newArgs, file) + layoutNote(warnings)
             count
         } else withContext(Dispatchers.IO) {
             when {
