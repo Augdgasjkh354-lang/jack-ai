@@ -361,6 +361,7 @@ internal fun ReadingCard(vm: ChatViewModel, settings: com.jack.ai.data.Settings)
         value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.jack.ai.data.Reader.workbench(ctx) }
     }
     var showWorks by remember { mutableStateOf(false) }
+    val open = rememberFileOpener()
     val uri = androidx.compose.ui.platform.LocalUriHandler.current
     val (log, facts) = data
     val fmt = remember { java.text.SimpleDateFormat("M月d日 HH:mm", java.util.Locale.CHINA) }
@@ -422,7 +423,7 @@ internal fun ReadingCard(vm: ChatViewModel, settings: com.jack.ai.data.Settings)
                     if (body.isNotBlank()) Text(body, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                     // 做出来的东西：点开看
                     e.files.filter { java.io.File(it.path).exists() }.forEach { f ->
-                        TextButton(onClick = { openFile(ctx, f) }, contentPadding = PaddingValues(horizontal = 0.dp)) {
+                        TextButton(onClick = { open(f) }, contentPadding = PaddingValues(horizontal = 0.dp)) {
                             Text("📎 " + f.name, style = MaterialTheme.typography.labelLarge)
                         }
                     }
@@ -437,7 +438,7 @@ internal fun ReadingCard(vm: ChatViewModel, settings: com.jack.ai.data.Settings)
             if (works.isEmpty()) Text("这里是 Kavi 的文件夹，想留下什么、修改什么，都由它自己决定。",
                 style = MaterialTheme.typography.bodySmall, color = colors.outline)
             if (showWorks) works.forEach { f ->
-                TextButton(onClick = { openFile(ctx, com.jack.ai.data.GeneratedFile(f.name, f.absolutePath, com.jack.ai.tools.ToolSession.mimeOf(f.name), f.length())) },
+                TextButton(onClick = { open(com.jack.ai.data.GeneratedFile(f.name, f.absolutePath, com.jack.ai.tools.ToolSession.mimeOf(f.name), f.length())) },
                     contentPadding = PaddingValues(horizontal = 0.dp)) {
                     Text("📎 " + f.name + "  ·  " + fmt.format(java.util.Date(f.lastModified())), style = MaterialTheme.typography.labelLarge)
                 }

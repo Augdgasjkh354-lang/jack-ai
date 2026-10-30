@@ -503,13 +503,42 @@ internal fun formatSize(bytes: Long): String = when {
 private fun fileUri(ctx: Context, f: GeneratedFile) =
     FileProvider.getUriForFile(ctx, ctx.packageName + ".files", File(f.path))
 
+/**
+ * 点开一个文件，和聊天里的文件卡片一样：网页（小工具）、txt、md、json、代码在 App 里看，别的交给手机上的 App。
+ * 手机上多半没有能打开 md 的 App，直接丢出去会一闪就退回来。查看器由它自己画，返回打开用的函数。
+ */
+@Composable
+internal fun rememberFileOpener(): (GeneratedFile) -> Unit {
+    val ctx = LocalContext.current
+    var app by remember { mutableStateOf<GeneratedFile?>(null) }
+    var text by remember { mutableStateOf<GeneratedFile?>(null) }
+    app?.let { f -> AppViewer(File(f.path)) { app = null } }
+    text?.let { f ->
+        TextViewer(f.name, load = { com.jack.ai.data.TextPreview.read(File(f.path)) }, onDismiss = { text = null },
+            onShare = { shareFile(ctx, f) }, onOpenWith = { openFile(ctx, f) })
+    }
+    return { f ->
+        when {
+            !File(f.path).exists() -> openFile(ctx, f)
+            f.name.endsWith(".html", true) || f.name.endsWith(".htm", true) -> app = f
+            com.jack.ai.data.TextPreview.isText(f.name) -> text = f
+            else -> openFile(ctx, f)
+        }
+    }
+}
+
 internal fun openFile(ctx: Context, f: GeneratedFile) {
     if (!File(f.path).exists()) {
         Toast.makeText(ctx, "文件已被删除", Toast.LENGTH_SHORT).show()
         return
     }
+    // 文件不在能分享出去的文件夹里时 getUriForFile 会抛错，不能让它把 App 带崩
+    val uri = runCatching { fileUri(ctx, f) }.getOrElse {
+        Toast.makeText(ctx, "这个文件打不开：${f.name}", Toast.LENGTH_SHORT).show()
+        return
+    }
     val intent = Intent(Intent.ACTION_VIEW)
-        .setDataAndType(fileUri(ctx, f), f.mime)
+        .setDataAndType(uri, f.mime)
         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     try {
         ctx.startActivity(Intent.createChooser(intent, "用什么打开").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
