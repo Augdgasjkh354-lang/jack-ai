@@ -404,6 +404,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     /** 对话超过这么多条消息，每轮附加说明里带一小段「我是谁」（防越聊越淡）。 */
     private val ANCHOR_AFTER = 24
 
+    /** 删除消息后能撤销的时间。 */
+    private val UNDO_MS = 8_000L
+
     /** 同时在答的回答最多几个：再多花费容易失控，手机也吃不消。 */
     private fun tooMany(convId: String?): Boolean {
         val others = jobs.filter { (id, j) -> id != convId && j.isActive }.size
@@ -412,12 +415,29 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         return true
     }
 
-    fun deleteFrom(messageId: String) {
-        val conv = _state.value.current ?: return
+    /** 刚删掉、还能撤销的消息：图片和生成的文件先留着，过了撤销时间才真删。 */
+    private class Deleted(val convId: String, val keptLastId: String?, val removed: List<ChatMessage>,
+                          val summary: String, val summaryUntilId: String?) {
+        var cleanup: Job? = null
+    }
+    private var deleted: Deleted? = null
+
+    /** 删除某条消息以及它之后的所有消息，返回删了几条（0 是没删）。[UNDO_MS] 内可以 [undoDelete]。 */
+    fun deleteFrom(messageId: String): Int {
+        val conv = _state.value.current ?: return 0
         if (busy(conv.id)) stop(conv.id)
         val idx = conv.messages.indexOfFirst { it.id == messageId }
-        if (idx < 0) return
-        files.cleanup(conv.messages.drop(idx))
+        if (idx < 0) return 0
+        val removed = conv.messages.drop(idx)
+        // 上一次删的不等了，现在就清掉
+        deleted?.let { d -> d.cleanup?.cancel(); files.cleanup(d.removed) }
+        deleted = Deleted(conv.id, conv.messages.getOrNull(idx - 1)?.id, removed, conv.summary, conv.summaryUntilId).also { d ->
+            d.cleanup = viewModelScope.launch {
+                kotlinx.coroutines.delay(UNDO_MS)
+                if (deleted === d) deleted = null
+                files.cleanup(d.removed)
+            }
+        }
         val boundary = conv.summaryUntilId?.let { id -> conv.messages.indexOfFirst { it.id == id } } ?: -1
         updateConv(conv.id) {
             it.copy(
@@ -427,6 +447,19 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             )
         }
         persist()
+        return removed.size
+    }
+
+    /** 把刚删的消息放回去。对话在那之后又有了新消息、或者正在回答，就放不回去了。 */
+    fun undoDelete(): Boolean {
+        val d = deleted ?: return false
+        val cur = _state.value.conversations.firstOrNull { it.id == d.convId }
+        if (cur == null || busy(cur.id) || cur.messages.lastOrNull()?.id != d.keptLastId) return false
+        deleted = null
+        d.cleanup?.cancel()
+        updateConv(d.convId) { it.copy(messages = it.messages + d.removed, summary = d.summary, summaryUntilId = d.summaryUntilId) }
+        persist()
+        return true
     }
 
     /** 改写一条自己发的消息：它之后的对话全部丢掉，用新内容重新回答。 */

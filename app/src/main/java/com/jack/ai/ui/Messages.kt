@@ -126,14 +126,12 @@ internal fun ImageViewer(path: String, onDismiss: () -> Unit) {
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
-fun UserBubble(msg: ChatMessage, onDelete: () -> Unit, onEdit: ((String) -> Unit)? = null, laterCount: Int = 0) {
+fun UserBubble(msg: ChatMessage, onDelete: () -> Unit, onEdit: (() -> Unit)? = null, editing: Boolean = false) {
     val clipboard = LocalClipboardManager.current
     val ctx = LocalContext.current
     var menu by remember { mutableStateOf(false) }
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
-    var editing by remember { mutableStateOf(false) }
     var viewing by remember { mutableStateOf<String?>(null) }
-    var confirmDelete by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
         val images = msg.attachments.filter { it.kind == "image" }
         val files = msg.attachments.filter { it.kind == "file" }
@@ -175,7 +173,8 @@ fun UserBubble(msg: ChatMessage, onDelete: () -> Unit, onEdit: ((String) -> Unit
         }
         if (msg.content.isNotEmpty()) {
             Surface(
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                // 正在输入框里改这条：气泡换成浅陶土色，看得出改的是哪条
+                color = if (editing) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
                 shape = RoundedCornerShape(22.dp, 8.dp, 22.dp, 22.dp),
                 modifier = Modifier
                     .widthIn(max = 320.dp)
@@ -203,37 +202,17 @@ fun UserBubble(msg: ChatMessage, onDelete: () -> Unit, onEdit: ((String) -> Unit
                     menu = false
                 })
                 if (onEdit != null) DropdownMenuItem(text = { Text("编辑后重发") }, leadingIcon = { Icon(Icons.Default.Edit, null) },
-                    onClick = { menu = false; editing = true })
+                    onClick = { menu = false; onEdit() })
+                // 不再先确认：删了底下会出「撤销」
                 DropdownMenuItem(
                     text = { Text("删除", color = MaterialTheme.colorScheme.error) },
                     leadingIcon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
-                    onClick = { menu = false; confirmDelete = true },
+                    onClick = { menu = false; onDelete() },
                 )
             }
         }
     }
     viewing?.let { ImageViewer(it) { viewing = null } }
-    if (confirmDelete) DeleteFromDialog(laterCount, onDismiss = { confirmDelete = false }) { confirmDelete = false; onDelete() }
-    if (editing && onEdit != null) {
-        var text by remember { mutableStateOf(msg.content) }
-        AlertDialog(
-            onDismissRequest = { editing = false },
-            title = { Text("编辑消息") },
-            text = {
-                Column {
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(value = text, onValueChange = { text = it }, minLines = 3, maxLines = 10,
-                        modifier = Modifier.fillMaxWidth())
-                }
-            },
-            confirmButton = {
-                TextButton(enabled = text.isNotBlank() || msg.attachments.isNotEmpty(), onClick = { onEdit(text); editing = false }) {
-                    Text("发送")
-                }
-            },
-            dismissButton = { TextButton(onClick = { editing = false }) { Text("取消") } },
-        )
-    }
 }
 
 @Composable
@@ -252,14 +231,10 @@ fun AssistantMessage(
     onReport: ((String) -> Unit)? = null,
     /** 小工具出错时「让 Kavi 修」：发一条消息给 AI。 */
     onFixApp: ((String) -> Unit)? = null,
-    /** 删除这条会连带删掉后面几条（删除前确认时告诉用户）。 */
-    laterCount: Int = 0,
     /** Work 的回答：工具记录显示成带时间的执行记录。 */
     work: Boolean = false,
 ) {
     var more by remember { mutableStateOf(false) }
-    var confirmDelete by remember { mutableStateOf(false) }
-    if (confirmDelete) DeleteFromDialog(laterCount, onDismiss = { confirmDelete = false }) { confirmDelete = false; onDelete() }
     var reporting by remember { mutableStateOf(false) }
     if (reporting && onReport != null) {
         var note by remember { mutableStateOf("") }
@@ -371,7 +346,7 @@ fun AssistantMessage(
                 if (isLast && msg.truncated && onContinueWriting != null) ActionPill("接着写", onContinueWriting)
                 if (isLast && onContinue != null) ActionPill("接着做", onContinue)
                 if (isLast && onReview != null && msg.content.isNotEmpty()) ActionPill("复核", onReview)
-                // 不常用的收进「⋯」：朗读、这条有问题、删除（删除要确认，它会连带删掉后面的消息）
+                // 不常用的收进「⋯」：朗读、这条有问题、删除（连带删掉后面的消息，删了可以撤销）
                 Box {
                     SmallAction(Icons.Default.MoreVert, "更多") { more = true }
                     DropdownMenu(expanded = more, onDismissRequest = { more = false }) {
@@ -391,7 +366,7 @@ fun AssistantMessage(
                         DropdownMenuItem(
                             text = { Text("删除", color = colors.error) },
                             leadingIcon = { Icon(Icons.Default.Delete, null, tint = colors.error) },
-                            onClick = { more = false; confirmDelete = true },
+                            onClick = { more = false; onDelete() },
                         )
                     }
                 }
@@ -894,20 +869,6 @@ private fun ToolTimeline(searches: List<SearchRecord>, busy: Boolean) {
     }
 }
 
-
-/** 删除一条消息会连带删掉它后面的消息和生成的文件，删之前说清楚。 */
-@Composable
-private fun DeleteFromDialog(laterCount: Int, onDismiss: () -> Unit, onConfirm: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("删除这条消息？") },
-        text = {
-            Text(if (laterCount > 0) "它后面的 $laterCount 条消息也会一起删掉，生成的文件也会删除，删了找不回来。" else "删了找不回来。")
-        },
-        confirmButton = { TextButton(onClick = onConfirm) { Text("删除", color = MaterialTheme.colorScheme.error) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
-    )
-}
 
 /** Work 的交付清单：这一轮对话文件夹里新建、改动、删除了哪些文件。 */
 @Composable

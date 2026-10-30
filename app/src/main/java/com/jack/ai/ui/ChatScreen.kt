@@ -43,6 +43,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowRight
@@ -92,6 +93,10 @@ import androidx.compose.runtime.mutableIntStateOf
 import kotlinx.coroutines.flow.debounce
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.animation.togetherWith
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
@@ -150,6 +155,11 @@ fun ChatScreen(
     val drafts = remember { DraftStore(ctx) }
     var text by rememberSaveable { mutableStateOf(drafts.get(conv?.id)) }
     var draftOf by remember { mutableStateOf(conv?.id) }
+    // 在输入框里改一条发过的消息：editing 是那条消息，editBackup 是改之前输入框里本来的草稿
+    var editing by remember { mutableStateOf<com.jack.ai.data.ChatMessage?>(null) }
+    var editBackup by remember { mutableStateOf("") }
+    fun stopEditing() { text = editBackup; editing = null }
+    if (editing != null && (draftOf != conv?.id || conv?.messages?.none { it.id == editing?.id } != false)) stopEditing()
     if (draftOf != conv?.id) {
         drafts.put(draftOf, text)
         text = drafts.get(conv?.id)
@@ -158,10 +168,21 @@ fun ChatScreen(
     // 打字时停一下再存，不每个字都写一次
     LaunchedEffect(Unit) {
         @OptIn(kotlinx.coroutines.FlowPreview::class)
-        snapshotFlow { draftOf to text }.debounce(400).collect { (id, t) -> drafts.put(id, t) }
+        snapshotFlow { Triple(draftOf, text, editing) }.debounce(400).collect { (id, t, e) -> if (e == null) drafts.put(id, t) }
     }
     // 点了建议、模板：光标放进输入框、弹出键盘，接着打字就行
     var focusInput by remember { mutableIntStateOf(0) }
+    val snackbar = remember { androidx.compose.material3.SnackbarHostState() }
+    // 删了消息：底下出一条「撤销」，不再先弹确认框
+    fun onDeleted(n: Int) {
+        scope.launch {
+            snackbar.currentSnackbarData?.dismiss()
+            val r = snackbar.showSnackbar("删除了 $n 条消息", actionLabel = "撤销", duration = androidx.compose.material3.SnackbarDuration.Short)
+            if (r == androidx.compose.material3.SnackbarResult.ActionPerformed && !vm.undoDelete()) {
+                Toast.makeText(ctx, "对话已经往下走了，撤销不了", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
     var showFiles by remember { mutableStateOf(false) }
     var memoryOf by remember { mutableStateOf<Conversation?>(null) }
     val bg = MaterialTheme.colorScheme.background
@@ -205,6 +226,7 @@ fun ChatScreen(
     ) {
         Scaffold(
             containerColor = bg,
+            snackbarHost = { androidx.compose.material3.SnackbarHost(snackbar) },
             topBar = {
                 // 顶栏透明：背景色从上往下渐变到全透明，消息滚上去时自然淡出
                 CenterAlignedTopAppBar(
@@ -261,6 +283,9 @@ fun ChatScreen(
                     text = text,
                     onTextChange = { text = it },
                     focusRequest = focusInput,
+                    editing = editing,
+                    onCancelEdit = { stopEditing() },
+                    onSubmitEdit = { editing?.let { m -> vm.editMessage(m.id, text) }; stopEditing() },
                     onNeedTavily = {
                         Toast.makeText(ctx, "请先在 设置 → 连接 → 联网搜索 里填 Exa 或 Tavily 的 Key", Toast.LENGTH_LONG).show()
                         onOpenSettings()
@@ -273,7 +298,12 @@ fun ChatScreen(
                 if (conv == null || conv.messages.isEmpty()) {
                     Box(Modifier.padding(padding)) { EmptyState(vm, state, conv, onOpenMemory, onSuggest = { text = it; focusInput++ }) }
                 } else {
-                    MessageList(vm, conv, state.streamingHere, padding)
+                    MessageList(vm, conv, state.streamingHere, padding, editingId = editing?.id, onDeleted = ::onDeleted, onEdit = { m ->
+                        if (editing == null) editBackup = text
+                        editing = m
+                        text = m.content
+                        focusInput++
+                    })
                 }
                 // 只在 Kavi 还在回答时出来；答完就收起，免得盖住回答
                 BrowserPeek(Modifier.align(Alignment.TopEnd).padding(top = padding.calculateTopPadding() + 4.dp, end = 12.dp), working = state.streaming)
@@ -446,8 +476,13 @@ private fun EmptyState(
 ) {
     val project = state.project(state.currentProjectId)
     val colors = MaterialTheme.colorScheme
+    // 新对话的空白页轻轻浮上来，不是一下子蹦出来
+    val enter = remember(conv?.id) { androidx.compose.animation.core.Animatable(0f) }
+    LaunchedEffect(conv?.id) { enter.animateTo(1f, androidx.compose.animation.core.tween(320, easing = androidx.compose.animation.core.FastOutSlowInEasing)) }
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp),
+        Modifier.fillMaxSize()
+            .graphicsLayer { alpha = enter.value; translationY = (1f - enter.value) * 24.dp.toPx() }
+            .verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         ModeSwitch(work = conv?.work ?: state.draftWork, onChange = vm::setWork)
@@ -488,12 +523,18 @@ private fun SuggestionCard(icon: ImageVector?, tint: Color, title: String, modif
                            onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     val shape = RoundedCornerShape(20.dp)
+    // 按下去时卡片微微缩一下，手感更实
+    val press = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val pressed by press.collectIsPressedAsState()
+    val scale by androidx.compose.animation.core.animateFloatAsState(if (pressed) 0.97f else 1f, label = "press")
     Box(
         modifier
+            .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(shape)
             .border(1.dp, colors.outlineVariant, shape)
             .background(colors.surfaceContainerLowest)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .combinedClickable(interactionSource = press, indication = androidx.compose.foundation.LocalIndication.current,
+                onClick = onClick, onLongClick = onLongClick)
             .padding(16.dp),
     ) {
         Column {
@@ -547,7 +588,8 @@ private fun Pill(
 }
 
 @Composable
-private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolean, bars: PaddingValues) {
+private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolean, bars: PaddingValues,
+                        editingId: String?, onDeleted: (Int) -> Unit, onEdit: (com.jack.ai.data.ChatMessage) -> Unit) {
     // 一打开就停在最后一条附近，不先闪一下最顶上
     val listState = remember(conv.id) { androidx.compose.foundation.lazy.LazyListState(firstVisibleItemIndex = (conv.messages.size - 1).coerceAtLeast(0)) }
     val scope = rememberCoroutineScope()
@@ -578,12 +620,12 @@ private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolea
             ),
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
-            conv.messages.forEachIndexed { index, msg ->
-                val later = conv.messages.size - 1 - index
+            conv.messages.forEach { msg ->
                 item(key = msg.id) {
                     Box(Modifier.animateItem()) {
                         if (msg.role == "user") {
-                            UserBubble(msg, onDelete = { vm.deleteFrom(msg.id) }, onEdit = { vm.editMessage(msg.id, it) }, laterCount = later)
+                            UserBubble(msg, onDelete = { vm.deleteFrom(msg.id).let { if (it > 0) onDeleted(it) } }, onEdit = { onEdit(msg) },
+                                editing = msg.id == editingId)
                         } else {
                             val isLast = msg.id == lastId
                             AssistantMessage(
@@ -591,13 +633,12 @@ private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolea
                                 streaming = streaming && isLast,
                                 isLast = isLast,
                                 onRegenerate = vm::regenerate,
-                                onDelete = { vm.deleteFrom(msg.id) },
+                                onDelete = { vm.deleteFrom(msg.id).let { if (it > 0) onDeleted(it) } },
                                 onReview = vm::reviewLast,
                                 onContinue = if (conv.work && isLast && !msg.truncated && vm.canContinue(msg)) ({ vm.continueWork() }) else null,
                                 onContinueWriting = vm::continueWriting,
                                 onReport = { note -> vm.reportIssue(msg.id, note) },
                                 onFixApp = { text -> vm.send(text) },
-                                laterCount = later,
                                 work = conv.work,
                             )
                         }
@@ -715,6 +756,9 @@ private fun InputBar(
     onTextChange: (String) -> Unit,
     onNeedTavily: () -> Unit,
     focusRequest: Int = 0,
+    editing: com.jack.ai.data.ChatMessage? = null,
+    onCancelEdit: () -> Unit = {},
+    onSubmitEdit: () -> Unit = {},
 ) {
     var attachMenu by remember { mutableStateOf(false) }
     // 「@技能」「@邮箱」选择框：null 不显示
@@ -810,6 +854,31 @@ private fun InputBar(
             keyboard?.show()
         }
     }
+    // 剪贴板里有图片（截图、复制的图）：输入框上面出一个「粘贴图片」，点一下加进来。
+    // 只看剪贴板的说明（不读内容，系统不会弹「已读取剪贴板」）；App 在前台、输入框拿到焦点时都看一眼
+    val clipboardSys = remember { ctx.getSystemService(android.content.ClipboardManager::class.java) }
+    var clipShown by remember { mutableStateOf<Long?>(null) }
+    var clipDone by rememberSaveable { mutableStateOf(0L) }
+    fun checkClip() {
+        val d = runCatching { clipboardSys?.primaryClipDescription }.getOrNull()
+        clipShown = d?.takeIf { it.hasMimeType("image/*") && it.timestamp != clipDone }?.timestamp
+    }
+    val windowInfo = androidx.compose.ui.platform.LocalWindowInfo.current
+    LaunchedEffect(Unit) { snapshotFlow { windowInfo.isWindowFocused }.collect { if (it) checkClip() } }
+    androidx.compose.runtime.DisposableEffect(clipboardSys) {
+        val l = android.content.ClipboardManager.OnPrimaryClipChangedListener { checkClip() }
+        clipboardSys?.addPrimaryClipChangedListener(l)
+        onDispose { clipboardSys?.removePrimaryClipChangedListener(l) }
+    }
+    fun pasteClipImage() {
+        val ts = clipShown ?: return
+        clipDone = ts
+        clipShown = null
+        val clip = runCatching { clipboardSys?.primaryClip }.getOrNull() ?: return
+        val uris = (0 until clip.itemCount).mapNotNull { clip.getItemAt(it).uri }
+        if (uris.isEmpty()) Toast.makeText(ctx, "没读到剪贴板里的图片", Toast.LENGTH_SHORT).show() else vm.addImages(uris)
+    }
+    val showClip = clipShown != null && editing == null
     // 打「@」就地列出技能、邮箱，点一下补全
     val mentionNames = remember(settings) {
         settings.activeSkills().map { it.name } +
@@ -854,6 +923,16 @@ private fun InputBar(
             }
         }
         com.jack.ai.RecordService.current?.let { RecordBar(it) }
+        // 正在改一条发过的消息：输入框上面标一下，随时可以取消
+        androidx.compose.animation.AnimatedVisibility(editing != null) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp, bottom = 2.dp)) {
+                Icon(Icons.Default.Edit, null, Modifier.size(16.dp), tint = colors.primary)
+                Spacer(Modifier.size(8.dp))
+                Text("编辑消息 · 发出后从这条重新回答", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
+                    modifier = Modifier.weight(1f))
+                TextButton(onClick = onCancelEdit) { Text("取消") }
+            }
+        }
         Surface(
             shape = RoundedCornerShape(28.dp),
             // 浮在消息上面的白色大胶囊，带一点柔和的阴影
@@ -863,13 +942,24 @@ private fun InputBar(
             modifier = Modifier.fillMaxWidth(),
         ) {
             Column(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 8.dp)) {
-                if (state.pending.isNotEmpty() || state.importing) {
+                if (state.pending.isNotEmpty() || state.importing || showClip) {
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         contentPadding = PaddingValues(horizontal = 8.dp),
                         modifier = Modifier.padding(top = 4.dp),
                     ) {
+                        if (showClip) item(key = "clip") {
+                            InputChip(
+                                selected = false,
+                                onClick = { pasteClipImage() },
+                                label = { Text("粘贴图片") },
+                                leadingIcon = { Icon(AppIcons.Image, null, Modifier.size(18.dp)) },
+                                trailingIcon = {
+                                    Icon(Icons.Default.Close, "不用", Modifier.size(16.dp).clickable { clipDone = clipShown ?: 0L; clipShown = null })
+                                },
+                            )
+                        }
                         items(state.pending, key = { it.id }) { att -> PendingChip(att) { vm.removePending(att.id) } }
                         if (state.importing) {
                             item { CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) }
@@ -994,7 +1084,8 @@ private fun InputBar(
                             unfocusedIndicatorColor = Color.Transparent,
                             disabledIndicatorColor = Color.Transparent,
                         ),
-                        modifier = Modifier.weight(1f).focusRequester(focus),
+                        modifier = Modifier.weight(1f).focusRequester(focus)
+                            .onFocusChanged { if (it.isFocused) checkClip() },
                     )
                 }
                 // 第二行：思考、联网两个小药丸，右边是话筒 / 发送 / 停止
@@ -1040,7 +1131,7 @@ private fun InputBar(
                         Text("高峰 ×2", style = MaterialTheme.typography.labelSmall, color = colors.outline,
                             modifier = Modifier.padding(end = 2.dp))
                     }
-                    if (state.streamingHere && text.isNotBlank()) {
+                    if (editing == null && state.streamingHere && text.isNotBlank()) {
                         // 回答进行中也能发：作为插话，下一步就会看到
                         Surface(onClick = { if (vm.send(text)) onTextChange("") }, shape = CircleShape, color = colors.primary,
                             modifier = Modifier.size(42.dp)) {
@@ -1049,30 +1140,50 @@ private fun InputBar(
                             }
                         }
                     }
-                    if (state.streamingHere) {
-                        Surface(onClick = { vm.stop() }, shape = CircleShape, color = colors.onSurface, modifier = Modifier.size(42.dp)) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(AppIcons.Stop, "停止", Modifier.size(16.dp), tint = colors.surface)
+                    // 右下角的圆按钮：话筒、发送、停止之间换的时候缩放淡入，不生硬地闪一下
+                    val action = when {
+                        editing != null -> SendAction.EDIT
+                        state.streamingHere -> SendAction.STOP
+                        text.isBlank() && state.pending.isEmpty() -> SendAction.MIC
+                        else -> SendAction.SEND
+                    }
+                    androidx.compose.animation.AnimatedContent(
+                        targetState = action,
+                        transitionSpec = {
+                            (androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(160)) +
+                                androidx.compose.animation.scaleIn(androidx.compose.animation.core.tween(160), initialScale = 0.6f)) togetherWith
+                                (androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(90)) +
+                                    androidx.compose.animation.scaleOut(androidx.compose.animation.core.tween(90), targetScale = 0.6f))
+                        },
+                        label = "send",
+                    ) { a ->
+                        when (a) {
+                            SendAction.STOP -> Surface(onClick = { vm.stop() }, shape = CircleShape, color = colors.onSurface, modifier = Modifier.size(42.dp)) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(AppIcons.Stop, "停止", Modifier.size(16.dp), tint = colors.surface)
+                                }
                             }
-                        }
-                    } else if (text.isBlank() && state.pending.isEmpty()) {
-                        Surface(onClick = { startVoice() }, shape = CircleShape, color = colors.primary, modifier = Modifier.size(42.dp)) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(AppIcons.Mic, "语音输入", Modifier.size(20.dp), tint = colors.onPrimary)
+                            SendAction.MIC -> Surface(onClick = { startVoice() }, shape = CircleShape, color = colors.primary, modifier = Modifier.size(42.dp)) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(AppIcons.Mic, "语音输入", Modifier.size(20.dp), tint = colors.onPrimary)
+                                }
                             }
-                        }
-                    } else {
-                        val canSend = (text.isNotBlank() || state.pending.isNotEmpty()) && !state.importing
-                        Surface(
-                            onClick = { if (vm.send(text)) onTextChange("") },
-                            enabled = canSend,
-                            shape = CircleShape,
-                            color = if (canSend) colors.primary else colors.surfaceVariant,
-                            modifier = Modifier.size(42.dp),
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(AppIcons.ArrowUp, "发送", Modifier.size(20.dp),
-                                    tint = if (canSend) colors.onPrimary else colors.outline)
+                            else -> {
+                                val edit = a == SendAction.EDIT
+                                val canSend = if (edit) text.isNotBlank() || editing?.attachments?.isNotEmpty() == true
+                                    else (text.isNotBlank() || state.pending.isNotEmpty()) && !state.importing
+                                Surface(
+                                    onClick = { if (edit) onSubmitEdit() else if (vm.send(text)) onTextChange("") },
+                                    enabled = canSend,
+                                    shape = CircleShape,
+                                    color = if (canSend) colors.primary else colors.surfaceVariant,
+                                    modifier = Modifier.size(42.dp),
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(if (edit) Icons.Default.Check else AppIcons.ArrowUp, if (edit) "改好发送" else "发送", Modifier.size(20.dp),
+                                            tint = if (canSend) colors.onPrimary else colors.outline)
+                                    }
+                                }
                             }
                         }
                     }
@@ -1081,6 +1192,8 @@ private fun InputBar(
         }
     }
 }
+
+private enum class SendAction { MIC, SEND, STOP, EDIT }
 
 @Composable
 private fun PendingChip(att: Attachment, onRemove: () -> Unit) {
