@@ -35,7 +35,7 @@ internal suspend fun ToolSession.renderFile(tool: String, args: JsonObject, file
         try {
             tmp.outputStream().buffered().use { out ->
                 when (tool) {
-                    "create_word" -> OfficeWriter.writeDocx(args["markdown"].text(), out)
+                    "create_word" -> OfficeWriter.writeDocx(args["markdown"].text(), out, wordOptions(args))
                     "create_ppt" -> warnings = style?.let { listOf(INFO + it.summary) }.orEmpty() +
                         OfficeWriter.writePptx(slides!!, args["theme"].text().ifBlank { "blue" }, out,
                             args["transition"].text().ifBlank { "fade" }, args["animation"].text().ifBlank { "fade" }, style?.theme)
@@ -121,6 +121,27 @@ internal fun ToolSession.parseSlides(args: JsonObject): List<OfficeWriter.Slide>
         OfficeWriter.Slide(o["layout"].text().ifBlank { "content" }, o["title"].text(), bullets,
             icons = icons, transition = o["transition"].text(), notes = o["notes"].text(), chart = parseChart(o["chart"] as? JsonObject))
     }.ifEmpty { throw IllegalArgumentException("没有幻灯片内容") }
+
+/** Word 的排版选项：封面、目录、页眉、页码、标题编号、首行缩进、字体风格、配色。没写的按默认。 */
+internal fun wordOptions(args: JsonObject): WordDoc.Options {
+    val c = args["cover"]
+    val cover = when (c) {
+        is JsonObject -> WordDoc.Cover(c["title"].text(), c["subtitle"].text(), c["author"].text(), c["organization"].text(), c["date"].text())
+        is kotlinx.serialization.json.JsonPrimitive -> if (c.text() == "true") WordDoc.Cover() else null
+        else -> null
+    }
+    fun bool(key: String): Boolean? = when (args[key].text()) { "true" -> true; "false" -> false; else -> null }
+    return WordDoc.Options(
+        theme = args["theme"].text().ifBlank { "blue" },
+        cover = cover,
+        toc = bool("toc"),
+        header = (args["header"] as? kotlinx.serialization.json.JsonPrimitive)?.content,
+        pageNumbers = bool("page_numbers") ?: true,
+        headingNumbers = args["heading_numbers"].text().ifBlank { "none" },
+        indent = bool("indent") ?: false,
+        fontStyle = args["font_style"].text().ifBlank { "modern" },
+    )
+}
 
 /** chart 版式的数据：type、categories、series[{name, values}]、unit。数字写成字符串也认（去掉千分位逗号）。 */
 internal fun parseChart(o: JsonObject?): PptChart.Chart? {

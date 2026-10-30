@@ -83,12 +83,18 @@ val BUILTIN_SKILLS = listOf(
         instructions = """生成 Word 文档的做法：
 1. 动手前想清楚：这份文档给谁看、要解决什么问题。用户没说清楚篇幅和用途时，按最常见的情况来，不要反复追问。
 2. 用 create_document 工具（format 填 word），内容用 Markdown 写：
-   - 第一行用 “# 标题” 作为文档标题；章节用 ##，小节用 ###。
-   - 列表用 “- ” 或 “1. ”；表格用 Markdown 表格；重点用 **加粗**。
-3. 结构清晰：开头一两段说明目的或结论，中间分章节展开，结尾给出总结或下一步。
-4. 内容要具体、有信息量，避免空话套话；正式文档用书面语。
-5. 文件名简短明确，比如 “2026年第三季度工作总结”。
-6. 生成后在聊天里用一两句话说明文档包含什么，不要把全文再贴一遍。""",
+   - 第一行用 “# 标题” 作为文档标题；章节用 ##，小节用 ###，再下一级用 ####。
+   - 列表用 “- ” 或 “1. ”；表格用 Markdown 表格（表头会自动着色、隔行浅底、数字靠右）；重点用 **加粗**；引用、注意事项用 “> ”。
+3. 排版按文档类型挑：
+   - 正式报告、方案、计划书、论文：cover 写封面（标题、副标题、作者或部门、日期），toc 加目录，heading_numbers 用 chinese（公文、国内报告）或 decimal（技术文档、论文），indent 首行缩进，font_style 用 classic。
+   - 普通文档、总结、说明书：不要封面，章节多就加目录，font_style 用 modern。
+   - 信件、通知、简历、一两页的短文：不要封面和目录，header 写空字符串不要页眉。
+   - theme 挑和内容相配的颜色：商务 blue、环保健康 green、活泼 orange、文艺 purple、庆典党政 red、医疗 teal、极简 ink、温暖 warm。
+   - 用了 heading_numbers 时，标题里别再自己写“一、”“1.”这种编号。
+4. 结构清晰：开头一两段说明目的或结论，中间分章节展开，结尾给出总结或下一步。
+5. 内容要具体、有信息量，避免空话套话；正式文档用书面语。
+6. 文件名简短明确，比如 “2026年第三季度工作总结”。
+7. 生成后在聊天里用一两句话说明文档包含什么、用了什么排版，不要把全文再贴一遍。有目录的话提一句：在 Word 里打开时如果问要不要更新域，点“是”，页码就准了。""",
     ),
     Skill(
         id = SkillIds.PPT, builtin = true, name = "PPT 演示文稿",
@@ -518,7 +524,7 @@ object SkillTools {
 
     val SEND_EMAIL = schema("""{"type":"function","function":{"name":"send_email","description":"发送邮件。发之前会弹窗让用户确认。","parameters":{"type":"object","properties":{"account":{"type":"string","description":"用哪个邮箱（邮箱地址），不填用默认邮箱"},"to":{"type":"string","description":"收件人邮箱，多个用逗号隔开"},"cc":{"type":"string","description":"抄送，可以不填"},"subject":{"type":"string"},"body":{"type":"string","description":"正文，纯文本"},"attachments":{"type":"array","items":{"type":"string"},"description":"对话文件夹里要附上的文件名"},"reply_to_uid":{"type":"integer","description":"回信时填原信的编号（读过的信会自动找到它所在的文件夹）"}},"required":["to","body"]}}}""")
 
-    val CREATE_DOCUMENT = schema("""{"type":"function","function":{"name":"create_document","description":"把 Markdown 写成文档文件：Word（.docx，能再编辑）或 PDF（定稿、直接发人或打印）。","parameters":{"type":"object","properties":{"filename":{"type":"string","description":"文件名，不带扩展名"},"markdown":{"type":"string","description":"文档全文，Markdown 格式，第一行用 # 标题"},"format":{"type":"string","enum":["word","pdf"],"description":"默认 word"}},"required":["filename","markdown"]}}}""")
+    val CREATE_DOCUMENT = schema("""{"type":"function","function":{"name":"create_document","description":"把 Markdown 写成文档文件：Word（.docx，能再编辑，可加封面、自动目录、标题编号、页眉页脚，表格自动美化）或 PDF（定稿、直接发人或打印；封面目录这些选项只对 Word 生效）。","parameters":{"type":"object","properties":{"filename":{"type":"string","description":"文件名，不带扩展名"},"markdown":{"type":"string","description":"文档全文，Markdown 格式，第一行用 # 标题"},"format":{"type":"string","enum":["word","pdf"],"description":"默认 word"},"theme":{"type":"string","enum":["blue","green","orange","purple","red","teal","ink","warm"],"description":"Word 的配色（标题、表头的颜色），默认 blue"},"cover":{"type":"object","description":"封面页（正式报告、方案、论文用）；不要封面就不写","properties":{"title":{"type":"string"},"subtitle":{"type":"string"},"author":{"type":"string"},"organization":{"type":"string"},"date":{"type":"string"}}},"toc":{"type":"boolean","description":"自动目录；不写的话章节（##）有四个以上就加"},"header":{"type":"string","description":"页眉文字，默认是文档标题；写空字符串就不要页眉"},"page_numbers":{"type":"boolean","description":"页脚「第 X 页 / 共 Y 页」，默认要"},"heading_numbers":{"type":"string","enum":["none","decimal","chinese"],"description":"标题自动编号：decimal 是 1 / 1.1，chinese 是 一、/（一）；Markdown 里的标题就别再自己写编号了"},"indent":{"type":"boolean","description":"正文首行缩进两字（公文、论文、正式报告）"},"font_style":{"type":"string","enum":["modern","classic"],"description":"modern 全文微软雅黑；classic 正文宋体、标题黑体（正式文件）"}},"required":["filename","markdown"]}}}""")
 
     /** 只开了 Word 或 PDF 其中一个时，format 只留那一个。 */
     fun createDocument(word: Boolean, pdf: Boolean): JsonObject {

@@ -24,6 +24,8 @@ object OfficeWriter {
         }
     }
 
+    internal fun zipParts(out: OutputStream, files: List<Pair<String, String>>) = zip(out, files)
+
     private fun zip(out: OutputStream, files: List<Pair<String, String>>, binaries: List<Pair<String, ByteArray>> = emptyList()) {
         ZipOutputStream(out).use { z ->
             for ((name, content) in files) {
@@ -43,143 +45,8 @@ object OfficeWriter {
 
     // ======================= Word =======================
 
-    /** 一段文字里的 **粗体** / *斜体* / `代码` 转成 Word 的 run。 */
-    private fun runs(text: String, baseBold: Boolean = false, size: Int? = null): String {
-        val sb = StringBuilder()
-        val re = Regex("""\*\*(.+?)\*\*|`([^`]+)`|\*(?!\s)(.+?)\*""")
-        var last = 0
-        fun run(t: String, bold: Boolean, italic: Boolean, code: Boolean) {
-            if (t.isEmpty()) return
-            sb.append("<w:r><w:rPr>")
-            if (code) sb.append("""<w:rFonts w:ascii="Consolas" w:hAnsi="Consolas"/>""")
-            if (bold) sb.append("<w:b/>")
-            if (italic) sb.append("<w:i/>")
-            if (size != null) sb.append("""<w:sz w:val="$size"/><w:szCs w:val="$size"/>""")
-            sb.append("""</w:rPr><w:t xml:space="preserve">""").append(esc(t)).append("</w:t></w:r>")
-        }
-        for (m in re.findAll(text)) {
-            run(text.substring(last, m.range.first), baseBold, false, false)
-            when {
-                m.groups[1] != null -> run(m.groupValues[1], true, false, false)
-                m.groups[2] != null -> run(m.groupValues[2], baseBold, false, true)
-                else -> run(m.groupValues[3], baseBold, true, false)
-            }
-            last = m.range.last + 1
-        }
-        run(text.substring(last), baseBold, false, false)
-        return sb.toString()
-    }
-
-    private fun para(text: String, style: String? = null, indentTwips: Int = 0, bold: Boolean = false): String {
-        val ppr = buildString {
-            if (style != null) append("""<w:pStyle w:val="$style"/>""")
-            if (indentTwips > 0) append("""<w:ind w:left="$indentTwips" w:hanging="300"/>""")
-        }
-        return "<w:p>" + (if (ppr.isNotEmpty()) "<w:pPr>$ppr</w:pPr>" else "") + runs(text, bold) + "</w:p>"
-    }
-
-    private fun table(rows: List<List<String>>): String {
-        val cols = rows.maxOf { it.size }
-        val sb = StringBuilder("""<w:tbl><w:tblPr><w:tblStyle w:val="Grid"/><w:tblW w:w="5000" w:type="pct"/>""")
-        sb.append("""<w:tblBorders>""")
-        for (side in listOf("top", "left", "bottom", "right", "insideH", "insideV")) {
-            sb.append("""<w:$side w:val="single" w:sz="4" w:space="0" w:color="999999"/>""")
-        }
-        sb.append("</w:tblBorders></w:tblPr><w:tblGrid>")
-        repeat(cols) { sb.append("""<w:gridCol w:w="${9000 / cols}"/>""") }
-        sb.append("</w:tblGrid>")
-        rows.forEachIndexed { r, row ->
-            sb.append("<w:tr>")
-            for (c in 0 until cols) {
-                val cell = row.getOrElse(c) { "" }
-                sb.append("<w:tc><w:tcPr>")
-                if (r == 0) sb.append("""<w:shd w:val="clear" w:color="auto" w:fill="E8ECF8"/>""")
-                sb.append("</w:tcPr><w:p>").append(runs(cell, baseBold = r == 0)).append("</w:p></w:tc>")
-            }
-            sb.append("</w:tr>")
-        }
-        sb.append("</w:tbl><w:p/>")
-        return sb.toString()
-    }
-
-    fun writeDocx(markdown: String, out: OutputStream) {
-        val body = StringBuilder()
-        val lines = markdown.replace("\r\n", "\n").split("\n")
-        var i = 0
-        var firstHeading = true
-        while (i < lines.size) {
-            val line = lines[i]
-            val t = line.trim()
-            when {
-                t.startsWith("```") -> {
-                    i++
-                    while (i < lines.size && !lines[i].trim().startsWith("```")) {
-                        body.append(para(lines[i].ifEmpty { " " }, "Code"))
-                        i++
-                    }
-                }
-                t.startsWith("|") && i + 1 < lines.size && lines[i + 1].trim().matches(Regex("""\|?\s*:?-{2,}.*""")) -> {
-                    val rows = mutableListOf<List<String>>()
-                    rows += splitRow(t)
-                    i += 2
-                    while (i < lines.size && lines[i].trim().startsWith("|")) {
-                        rows += splitRow(lines[i].trim()); i++
-                    }
-                    body.append(table(rows))
-                    continue
-                }
-                t.startsWith("# ") -> {
-                    body.append(para(t.removePrefix("# "), if (firstHeading) "Title" else "Heading1"))
-                    firstHeading = false
-                }
-                t.startsWith("## ") -> body.append(para(t.removePrefix("## "), "Heading1"))
-                t.startsWith("### ") -> body.append(para(t.removePrefix("### "), "Heading2"))
-                t.startsWith("#### ") -> body.append(para(t.removePrefix("#### "), "Heading3"))
-                t.matches(Regex("""[-*+]\s+.*""")) -> {
-                    val level = (line.length - line.trimStart().length) / 2
-                    body.append(para("•  " + t.substring(1).trim(), "ListPara", 420 + level * 420))
-                }
-                t.matches(Regex("""\d+[.)、]\s*.*""")) -> {
-                    val level = (line.length - line.trimStart().length) / 2
-                    body.append(para(t, "ListPara", 420 + level * 420))
-                }
-                t.startsWith(">") -> body.append(para(t.removePrefix(">").trim(), "Quote"))
-                t.matches(Regex("""-{3,}|\*{3,}""")) -> body.append("<w:p/>")
-                t.isEmpty() -> {}
-                else -> body.append(para(t))
-            }
-            i++
-        }
-
-        val document = """$XML<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>$body<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="851" w:footer="992" w:gutter="0"/></w:sectPr></w:body></w:document>"""
-
-        fun pstyle(id: String, name: String, size: Int, bold: Boolean, color: String? = null, spaceBefore: Int = 0, spaceAfter: Int = 120, extraPPr: String = "", font: String? = null) =
-            """<w:style w:type="paragraph" w:styleId="$id"><w:name w:val="$name"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="$spaceBefore" w:after="$spaceAfter"/>$extraPPr</w:pPr><w:rPr>""" +
-                (if (font != null) """<w:rFonts w:ascii="$font" w:hAnsi="$font"/>""" else "") +
-                (if (bold) "<w:b/>" else "") + (if (color != null) """<w:color w:val="$color"/>""" else "") +
-                """<w:sz w:val="$size"/><w:szCs w:val="$size"/></w:rPr></w:style>"""
-
-        val styles = XML + """<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:eastAsia="$FONT" w:cs="Calibri"/><w:sz w:val="22"/><w:szCs w:val="22"/><w:lang w:val="en-US" w:eastAsia="zh-CN"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="120" w:line="360" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style>""" +
-            pstyle("Title", "Title", 40, true, "1F3864", 0, 240, """<w:jc w:val="center"/>""") +
-            pstyle("Heading1", "heading 1", 32, true, "2F5496", 360, 120) +
-            pstyle("Heading2", "heading 2", 28, true, "2F5496", 240, 80) +
-            pstyle("Heading3", "heading 3", 24, true, "404040", 200, 60) +
-            pstyle("ListPara", "List Paragraph", 22, false, null, 0, 60) +
-            pstyle("Quote", "Quote", 22, false, "595959", 60, 60, """<w:ind w:left="567"/>""") +
-            pstyle("Code", "Code", 20, false, "333333", 0, 0, """<w:shd w:val="clear" w:color="auto" w:fill="F2F2F2"/>""", "Consolas") +
-            """<w:style w:type="table" w:styleId="Grid"><w:name w:val="Table Grid"/></w:style></w:styles>"""
-
-        zip(out, listOf(
-            "[Content_Types].xml" to """$XML<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>""",
-            "_rels/.rels" to """$XML<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>""",
-            "word/_rels/document.xml.rels" to """$XML<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>""",
-            "word/document.xml" to document,
-            "word/styles.xml" to styles,
-        ))
-    }
-
-    private fun splitRow(line: String): List<String> =
-        line.trim().removePrefix("|").removeSuffix("|").split("|").map { it.trim().replace("**", "") }
+    /** Word：排版交给 [WordDoc]（封面、目录、标题样式、页眉页脚、表格）。 */
+    fun writeDocx(markdown: String, out: OutputStream, options: WordDoc.Options = WordDoc.Options()) = WordDoc.write(markdown, out, options)
 
     // ======================= PPT =======================
 
