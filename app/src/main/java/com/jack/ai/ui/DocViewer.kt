@@ -75,7 +75,8 @@ import java.io.File
 fun isViewableDoc(name: String) = name.endsWith(".pdf", true) || OfficeHtml.supports(name)
 
 /**
- * 在 App 里看 PDF、Word、Excel、PPT：PDF 一页页画出来（两指缩放，双击复原），Office 转成网页显示。
+ * 在 App 里看 PDF、Word、Excel、PPT：PDF 一页页画出来（两指缩放，双击复原）；Word、PPT 按原样排版（分页、页眉页脚、形状和位置），
+ * 画不出来时和 Excel 一样转成简单的网页显示。
  * 看不清的还能从菜单里用其他应用打开。
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -108,7 +109,11 @@ fun DocViewer(file: File, onDismiss: () -> Unit, onShare: (() -> Unit)? = null, 
         ) { padding ->
             val m = Modifier.fillMaxSize().padding(padding)
             if (file.name.endsWith(".pdf", true)) PdfPages(file, m) { info = it }
-            else OfficePage(file, m)
+            else {
+                // Word、PPT 先按原样排版画；画不出来（库没打包进来、文件太怪）就换成简单版，Excel 一直用简单版
+                var simple by remember(file.path) { mutableStateOf(file.extension.lowercase() !in FAITHFUL) }
+                if (simple) OfficePage(file, m) else FaithfulPage(file, m) { simple = true }
+            }
         }
     }
 }
@@ -203,7 +208,77 @@ private fun PdfPage(pdf: PdfDoc, i: Int, widthPx: Int) {
     }
 }
 
-// ---------- Word / Excel / PPT ----------
+// ---------- Word / PPT 按原样排版 ----------
+
+/** 这两种用前端库按原样画（库在打包时下载，见 app/build.gradle.kts）。 */
+private val FAITHFUL = setOf("docx", "pptx")
+private const val DOC_HOST = "doc.jack.local"
+/** 这么久还没画完就当画不出来。 */
+private const val FAITHFUL_TIMEOUT_MS = 25_000L
+
+@SuppressLint("SetJavaScriptEnabled")
+@Composable
+private fun FaithfulPage(file: File, modifier: Modifier, onFail: () -> Unit) {
+    var done by remember(file.path) { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(file.path) {
+        kotlinx.coroutines.delay(FAITHFUL_TIMEOUT_MS)
+        if (!done) onFail()
+    }
+    Box(modifier.background(Color(0xFF6B6B6B))) {
+        AndroidView(
+            modifier = Modifier.fillMaxSize(),
+            factory = { ctx ->
+                WebView(ctx).apply {
+                    // 脚本要开（库是 JS 写的），但只能拿到查看器自己的几个文件和这一个文档，别处一律不通
+                    settings.javaScriptEnabled = true
+                    settings.allowFileAccess = false
+                    settings.allowContentAccess = false
+                    settings.useWideViewPort = true
+                    settings.loadWithOverviewMode = true
+                    settings.builtInZoomControls = true
+                    settings.displayZoomControls = false
+                    setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                    webChromeClient = object : android.webkit.WebChromeClient() {
+                        override fun onConsoleMessage(m: android.webkit.ConsoleMessage): Boolean {
+                            val text = m.message()
+                            if (text.startsWith("DOCVIEW_OK")) done = true
+                            else if (text.startsWith("DOCVIEW_FAIL") && !done) { done = true; onFail() }
+                            return true
+                        }
+                    }
+                    webViewClient = object : WebViewClient() {
+                        override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
+                            val url = request.url
+                            if (url.scheme == "data" || url.scheme == "blob") return null
+                            val name = url.path.orEmpty().removePrefix("/")
+                            if (url.scheme == "https" && url.host == DOC_HOST) {
+                                if (name == "file") return runCatching {
+                                    WebResourceResponse("application/octet-stream", null, file.inputStream())
+                                }.getOrNull()
+                                if (name.matches(Regex("[a-z.-]+\\.(html|js)"))) return runCatching {
+                                    WebResourceResponse(if (name.endsWith(".html")) "text/html" else "application/javascript", "utf-8",
+                                        view.context.assets.open("docview/$name"))
+                                }.getOrNull() ?: blocked()
+                            }
+                            return blocked()
+                        }
+
+                        override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                            if (request.url.host != DOC_HOST) runCatching { view.context.startActivity(Intent(Intent.ACTION_VIEW, request.url)) }
+                            return true
+                        }
+                    }
+                    loadUrl("https://$DOC_HOST/viewer.html?kind=" + file.extension.lowercase())
+                }
+            },
+        )
+        if (!done) CircularProgressIndicator(Modifier.align(Alignment.Center))
+    }
+}
+
+private fun blocked() = WebResourceResponse("text/plain", "utf-8", 403, "Blocked", emptyMap(), ByteArrayInputStream(ByteArray(0)))
+
+// ---------- Word / Excel / PPT 简单版 ----------
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable

@@ -1,3 +1,6 @@
+import java.net.URI
+import java.security.MessageDigest
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -133,3 +136,37 @@ dependencies {
     implementation("org.yaml:snakeyaml:2.3")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
 }
+
+// ---------- 文档查看器的前端库 ----------
+// Word、PPT 在 App 里按原样排版显示，用的是 docx-preview（Apache-2.0）、jszip（MIT）、pptx-preview（ISC，作者没公开源码、不许把它的代码发到网上）。
+// 所以不放进仓库：打包时从 npm 下载，核对文件指纹后放进 assets/docview/。下不来就打包失败，不会悄悄换成别的版本。
+val docViewLibs = listOf(
+    Triple("https://registry.npmjs.org/docx-preview/-/docx-preview-0.4.1.tgz", "package/dist/docx-preview.min.js",
+        "c4a133c65a112799e35b143c572dfff9e923a3bf39b5fd3b07a06aa0f8f530c2"),
+    Triple("https://registry.npmjs.org/jszip/-/jszip-3.10.1.tgz", "package/dist/jszip.min.js",
+        "acc7e41455a80765b5fd9c7ee1b8078a6d160bbbca455aeae854de65c947d59e"),
+    Triple("https://registry.npmjs.org/pptx-preview/-/pptx-preview-1.0.7.tgz", "package/dist/pptx-preview.umd.js",
+        "98bcf8fbb5efb42dff406eeea7e7b9d7497a388955582e5b1815489c63c75fe2"),
+)
+val docViewDir = layout.buildDirectory.dir("generated/docview")
+
+fun sha256(f: File): String = MessageDigest.getInstance("SHA-256").digest(f.readBytes()).joinToString("") { "%02x".format(it) }
+
+val fetchDocViewLibs by tasks.registering {
+    outputs.dir(docViewDir)
+    inputs.property("libs", docViewLibs.toString())
+    doLast {
+        val out = docViewDir.get().dir("docview").asFile.apply { mkdirs() }
+        for ((url, entry, sha) in docViewLibs) {
+            val target = File(out, entry.substringAfterLast('/'))
+            if (target.exists() && sha256(target) == sha) continue
+            val tgz = File(temporaryDir, url.substringAfterLast('/'))
+            URI(url).toURL().openStream().use { input -> tgz.outputStream().use { input.copyTo(it) } }
+            val file = tarTree(resources.gzip(tgz)).matching { include(entry) }.singleFile
+            check(sha256(file) == sha) { "$entry 的指纹对不上，不打包（下到的文件被改过或版本变了）" }
+            file.copyTo(target, overwrite = true)
+        }
+    }
+}
+android.sourceSets["main"].assets.srcDir(docViewDir)
+tasks.named("preBuild") { dependsOn(fetchDocViewLibs) }

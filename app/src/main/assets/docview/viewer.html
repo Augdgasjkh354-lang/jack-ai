@@ -1,0 +1,38 @@
+<!doctype html><html><head><meta charset="utf-8">
+<!-- 文档查看器：按原样排版显示 Word、PPT。库在打包时下载（见 app/build.gradle.kts），文件从 /file 取。 -->
+<meta name="viewport" content="width=840">
+<style>
+html,body{margin:0;background:#6b6b6b}
+#box{padding:12px 0}
+.docx-wrapper{background:transparent!important;padding:0!important}
+.docx-wrapper>section.docx{margin:0 auto 12px!important;box-shadow:0 1px 4px rgba(0,0,0,.3)}
+</style>
+<script src="jszip.min.js"></script>
+</head><body><div id="box"></div>
+<script>
+// 成功、失败都写进控制台，App 看到失败就换成简单版
+const kind = new URLSearchParams(location.search).get('kind');
+function fail(e) { console.error('DOCVIEW_FAIL ' + (e && e.message || e)); }
+window.onerror = (m) => fail(m);
+function load(src) {
+  return new Promise((ok, no) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => no('库没加载上'); document.head.appendChild(s); });
+}
+fetch('file').then(r => { if (!r.ok) throw '读不到文件'; return r.arrayBuffer(); }).then(async buf => {
+  const box = document.getElementById('box');
+  if (kind === 'docx') {
+    await load('docx-preview.min.js');
+    await docx.renderAsync(buf, box, null, { inWrapper: true, breakPages: true, experimental: true });
+    if (!box.querySelector('section.docx')) throw '没画出内容';
+    // 按最宽的一页定页面宽度，手机上整页铺满，两指再放大
+    const w = Math.max(...[...box.querySelectorAll('section.docx')].map(s => s.offsetWidth), 600);
+    document.querySelector('meta[name=viewport]').setAttribute('content', 'width=' + (w + 24));
+  } else {
+    await load('pptx-preview.umd.js');
+    const p = pptxPreview.init(box, { width: 960, mode: 'list' });
+    await p.preview(buf);
+    if (!box.children.length) throw '没画出内容';
+    document.querySelector('meta[name=viewport]').setAttribute('content', 'width=984');
+  }
+  console.log('DOCVIEW_OK');
+}).catch(fail);
+</script></body></html>
