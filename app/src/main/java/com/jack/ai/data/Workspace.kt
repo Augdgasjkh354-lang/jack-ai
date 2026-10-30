@@ -108,6 +108,23 @@ object Workspace {
             JsonObject(parsed + ("filename" to (old["filename"] ?: JsonPrimitive(""))))
         }
 
+    /** 图表部件里缓存的数：类型、分类、每组的数，一段话写清，给模型看。 */
+    fun chartText(xml: String): String? {
+        val type = Regex("""<c:(bar|line|pie|doughnut|area|scatter)Chart>""").find(xml)?.groupValues?.get(1) ?: return null
+        val kind = when (type) { "bar" -> if (xml.contains("<c:barDir val=\"bar\"/>")) "横条图" else "柱状图"; "line" -> "折线图"; "pie" -> "饼图"; "doughnut" -> "环形图"; else -> type }
+        val title = Regex("""<c:title>.*?<a:t>(.*?)</a:t>""", RegexOption.DOT_MATCHES_ALL).find(xml)?.groupValues?.get(1)?.trim().orEmpty()
+        fun pts(block: String) = Regex("""<c:pt idx="\d+">\s*<c:v>(.*?)</c:v>""").findAll(block).map { TextEdit.unescape(it.groupValues[1]) }.toList()
+        val sers = Regex("""<c:ser>(.*?)</c:ser>""", RegexOption.DOT_MATCHES_ALL).findAll(xml).map { it.groupValues[1] }.toList()
+        if (sers.isEmpty()) return null
+        val cats = Regex("""<c:cat>(.*?)</c:cat>""", RegexOption.DOT_MATCHES_ALL).find(sers[0])?.groupValues?.get(1)?.let(::pts).orEmpty()
+        val lines = sers.map { s ->
+            val name = Regex("""<c:tx>(.*?)</c:tx>""", RegexOption.DOT_MATCHES_ALL).find(s)?.groupValues?.get(1)?.let(::pts)?.firstOrNull()?.trim().orEmpty()
+            val vals = Regex("""<c:val>(.*?)</c:val>""", RegexOption.DOT_MATCHES_ALL).find(s)?.groupValues?.get(1)?.let(::pts).orEmpty()
+            (name.ifBlank { "数值" }) + "：" + vals.joinToString("、")
+        }
+        return kind + (if (title.isNotBlank()) "「$title」" else "") + "\n分类：" + cats.joinToString("、") + "\n" + lines.joinToString("\n")
+    }
+
     // ---------- 读文字 ----------
 
     private val TEXT_EXT = setOf(
@@ -136,15 +153,35 @@ object Workspace {
         if (!extracted) source(file)?.let { (tool, args) -> return sourceText(tool, args) }
         return when (ext(file)) {
             "docx" -> ZipFile(file).use { z ->
-                z.getEntry("word/document.xml")?.let { TextEdit.docxText(z.getInputStream(it).readBytes().toString(Charsets.UTF_8)) }.orEmpty()
+                val text = z.getEntry("word/document.xml")?.let { TextEdit.docxText(z.getInputStream(it).readBytes().toString(Charsets.UTF_8)) }.orEmpty()
+                // 图表里的数（转成 PPT、Excel 时用得上）
+                val charts = z.entries().toList().map { it.name }.filter { it.matches(Regex("word/charts/chart\\d+\\.xml")) }
+                    .sortedBy { it.filter(Char::isDigit).toIntOrNull() ?: 0 }
+                    .mapIndexedNotNull { i, n -> chartText(z.getInputStream(z.getEntry(n)).readBytes().toString(Charsets.UTF_8))?.let { "【图表 ${i + 1}】$it" } }
+                if (charts.isEmpty()) text else text + "\n\n" + charts.joinToString("\n\n")
             }
             "pdf" -> PDDocument.load(file).use { PDFTextStripper().getText(it) }
             "pptx" -> ZipFile(file).use { z ->
+                fun read(name: String) = z.getEntry(name)?.let { e -> z.getInputStream(e).readBytes().toString(Charsets.UTF_8) }
+                fun texts(xml: String) = Regex("<a:p>(.*?)</a:p>", RegexOption.DOT_MATCHES_ALL).findAll(xml)
+                    .map { p -> Regex("<a:t>(.*?)</a:t>").findAll(p.value).joinToString("") { TextEdit.unescape(it.groupValues[1]) } }
+                    .filter { it.isNotBlank() }.joinToString("\n")
                 z.entries().toList().filter { it.name.matches(Regex("ppt/slides/slide\\d+\\.xml")) }
                     .sortedBy { it.name.filter(Char::isDigit).toIntOrNull() ?: 0 }
                     .mapIndexed { i, e ->
                         val xml = z.getInputStream(e).readBytes().toString(Charsets.UTF_8)
-                        "【第 ${i + 1} 页】\n" + Regex("<a:t>(.*?)</a:t>").findAll(xml).joinToString("\n") { TextEdit.unescape(it.groupValues[1]) }
+                        // 这页的关系：图表、讲稿
+                        val rels = read("ppt/slides/_rels/" + e.name.substringAfterLast('/') + ".rels").orEmpty()
+                        fun target(type: String) = Regex("""Type="[^"]*/$type" Target="\.\./([^"]+)"""").findAll(rels).map { "ppt/" + it.groupValues[1] }.toList()
+                        val charts = target("chart").mapNotNull { read(it)?.let(::chartText) }
+                        val notes = target("notesSlide").firstOrNull()?.let(::read)?.let { n ->
+                            // 讲稿在 body 占位符里，缩略图占位符没有字
+                            Regex("""<p:sp>.*?</p:sp>""", RegexOption.DOT_MATCHES_ALL).findAll(n).map { it.value }
+                                .filter { it.contains("type=\"body\"") }.joinToString("\n") { texts(it) }
+                        }.orEmpty()
+                        "【第 ${i + 1} 页】\n" + texts(xml) +
+                            charts.joinToString("") { "\n【图表】$it" } +
+                            (if (notes.isNotBlank()) "\n【讲稿】$notes" else "")
                     }.joinToString("\n\n")
             }
             "xlsx" -> ZipFile(file).use { z ->

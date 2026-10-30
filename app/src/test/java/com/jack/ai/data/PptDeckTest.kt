@@ -101,6 +101,20 @@ class PptDeckTest {
     }
 
     @Test
+    fun readingBackGivesTextNotesAndChartData() {
+        val all = deck.take(2).map { it.copy(notes = "这页讲开场。") } + charts.take(1)
+        val f = File.createTempFile("read", ".pptx")
+        f.outputStream().use { OfficeWriter.writePptx(all, "blue", it) }
+        val text = Workspace.readText(f, extracted = true)
+        assertTrue(text, text.contains("【第 1 页】\n2026 年度产品战略"))
+        assertTrue(text, text.contains("【讲稿】这页讲开场。"))
+        assertTrue(text, text.contains("【图表】柱状图"))
+        assertTrue(text, text.contains("分类：Q1、Q2、Q3、Q4"))
+        assertTrue(text, text.contains("2026：150、190、230、280"))
+        assertTrue(text, text.contains("Q4 同比增长：32%"))  // 一段里的几个 run 连成一行
+    }
+
+    @Test
     fun badChartDataIsReportedNotFatal() {
         val warnings = OfficeWriter.writePptx(listOf(
             OfficeWriter.Slide("chart", "没数据", emptyList()),

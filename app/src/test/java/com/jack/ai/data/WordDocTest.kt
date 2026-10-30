@@ -141,6 +141,10 @@ budget = 800
         assertTrue(warnings.toString(), warnings.any { it.contains("没有这张") })
         assertTrue(warnings.toString(), warnings.any { it.contains("不是有效的 JSON") })
         assertEquals(2, warnings.size)
+        val tmp = File.createTempFile("read", ".docx").apply { writeBytes(bos.toByteArray()) }
+        val read = Workspace.readText(tmp, extracted = true)
+        assertTrue(read, read.contains("【图表 1】折线图「」") || read.contains("【图表 1】折线图"))
+        assertTrue(read, read.contains("用户：10、12、15"))
     }
 
     @Test
