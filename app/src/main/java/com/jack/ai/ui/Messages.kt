@@ -233,7 +233,30 @@ fun AssistantMessage(
     onFixApp: ((String) -> Unit)? = null,
     /** Work 的回答：工具记录显示成带时间的执行记录。 */
     work: Boolean = false,
+    /** 「改成我想要的说法」：用户改好的版本交给 Kavi，让它学进「说话方式」。 */
+    onRestyle: ((String) -> Unit)? = null,
 ) {
+    var restyling by remember { mutableStateOf(false) }
+    if (restyling && onRestyle != null) {
+        var edited by remember { mutableStateOf(msg.content) }
+        AlertDialog(
+            onDismissRequest = { restyling = false },
+            title = { Text("改成我想要的说法") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("直接在下面改：删掉绕的话、换成你会说的句子。Kavi 会对比两版，把规律记进它的「说话方式」。",
+                        style = MaterialTheme.typography.bodySmall)
+                    OutlinedTextField(value = edited, onValueChange = { edited = it }, minLines = 6, maxLines = 14,
+                        modifier = Modifier.fillMaxWidth())
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = edited.isNotBlank() && edited.trim() != msg.content.trim(),
+                    onClick = { onRestyle(edited.trim()); restyling = false }) { Text("交给 Kavi") }
+            },
+            dismissButton = { TextButton(onClick = { restyling = false }) { Text("取消") } },
+        )
+    }
     var more by remember { mutableStateOf(false) }
     var reporting by remember { mutableStateOf(false) }
     if (reporting && onReport != null) {
@@ -358,6 +381,11 @@ fun AssistantMessage(
                                 onClick = { more = false; Speaker.toggle(ctx, msg.id, msg.content) },
                             )
                         }
+                        if (onRestyle != null && msg.content.isNotEmpty()) DropdownMenuItem(
+                            text = { Text("改成我想要的说法") },
+                            leadingIcon = { Icon(Icons.Default.Edit, null) },
+                            onClick = { more = false; restyling = true },
+                        )
                         if (onReport != null) DropdownMenuItem(
                             text = { Text("这条有问题") },
                             leadingIcon = { Icon(Icons.Default.Warning, null) },

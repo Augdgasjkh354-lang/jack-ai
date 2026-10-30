@@ -246,6 +246,8 @@ fun UsageScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
 
             FeedbackCard(vm)
 
+            HedgeCard(state.conversations)
+
             val top = state.conversations.filter { it.spentTokens > 0 }.sortedWith(
                 compareByDescending<Conversation> { it.spentCost }.thenByDescending { it.spentTokens },
             ).take(5)
@@ -438,6 +440,27 @@ private fun FeedbackCard(vm: ChatViewModel) {
                     }
                 }) { Text("导出") }
                 TextButton(onClick = { vm.clearFeedback(); refresh++ }) { Text("清空") }
+            }
+        }
+    }
+}
+
+/** 说话绕不绕：改成「先下判断」的提示词之前、之后，Chat 回答里每千字的转折数。 */
+@Composable
+private fun HedgeCard(convs: List<Conversation>) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val colors = MaterialTheme.colorScheme
+    val (before, after) = androidx.compose.runtime.remember(convs) { com.jack.ai.data.HedgeMeter.beforeAfter(ctx, convs) }
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("说话直不直", style = MaterialTheme.typography.titleSmall)
+            Text("Chat 回答里每千字有几处「但、不过、不意味着、而是」这类转折。越少越直接",
+                style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+            listOf("改之前" to before, "改之后" to after).forEach { (label, r) ->
+                Row {
+                    Text(label, Modifier.weight(1f))
+                    Text(if (r.answers == 0) "还没有回答" else "%.1f 处 · %d 条".format(r.perThousand, r.answers), color = colors.onSurfaceVariant)
+                }
             }
         }
     }

@@ -591,6 +591,7 @@ private fun Pill(
 private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolean, bars: PaddingValues,
                         editingId: String?, onDeleted: (Int) -> Unit, onEdit: (com.jack.ai.data.ChatMessage) -> Unit) {
     // 一打开就停在最后一条附近，不先闪一下最顶上
+    val ctx = LocalContext.current
     val listState = remember(conv.id) { androidx.compose.foundation.lazy.LazyListState(firstVisibleItemIndex = (conv.messages.size - 1).coerceAtLeast(0)) }
     val scope = rememberCoroutineScope()
     val lastId = conv.messages.last().id
@@ -640,6 +641,10 @@ private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolea
                                 onReport = { note -> vm.reportIssue(msg.id, note) },
                                 onFixApp = { text -> vm.send(text) },
                                 work = conv.work,
+                                onRestyle = if (conv.work) null else { edited ->
+                                    if (streaming) Toast.makeText(ctx, "等这条答完再交给 Kavi", Toast.LENGTH_SHORT).show()
+                                    else vm.send(restyleRequest(msg.content, edited))
+                                },
                             )
                         }
                     }
@@ -1217,6 +1222,12 @@ private fun PendingChip(att: Attachment, onRemove: () -> Unit) {
         )
     }
 }
+
+/** 「改成我想要的说法」发给 Kavi 的话：两版原文，要它找出说话方式上的规律、合进「说话方式」那段。 */
+internal fun restyleRequest(original: String, edited: String): String =
+    "我把你的一条回答改成了我想要的说法。对比两版，找出我改的规律（说话方式上的，不是这条的内容），" +
+        "合进你的「说话方式」，用 update_self 更新那一段：原来的规律留着，写不下就压缩，别只抄这次的例子。改完告诉我你总结出了什么。\n\n" +
+        "【你的原话】\n" + original.take(2000) + "\n\n【我改成】\n" + edited.take(2000)
 
 /** 在输入框末尾插入「@名字 」，前面不是空白就先补个空格。 */
 private fun withMention(text: String, name: String): String {
