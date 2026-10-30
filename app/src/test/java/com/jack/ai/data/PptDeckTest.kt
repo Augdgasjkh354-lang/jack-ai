@@ -50,6 +50,68 @@ class PptDeckTest {
         slide("end", "谢谢", "jack@example.com"),
     )
 
+    private val charts = listOf(
+        OfficeWriter.Slide("chart", "营收逐季增长", listOf("Q4 同比增长：32%", "线上占比：首次过半"), notes = "这一页看营收。\n四个季度一路往上，第四季度最高。",
+            chart = PptChart.Chart("column", listOf("Q1", "Q2", "Q3", "Q4"), listOf(PptChart.Series("2025", listOf(120.0, 150.0, 170.0, 210.0)), PptChart.Series("2026", listOf(150.0, 190.0, 230.0, 280.0))), "万元")),
+        OfficeWriter.Slide("chart", "用户数趋势", emptyList(), notes = "用户数稳步增长。",
+            chart = PptChart.Chart("line", listOf("1月", "2月", "3月", "4月", "5月", "6月"), listOf(PptChart.Series("活跃用户", listOf(32.0, 35.5, 41.0, 48.0, 52.0, 61.0))), "万")),
+        OfficeWriter.Slide("chart", "收入构成", listOf("订阅是大头"),
+            chart = PptChart.Chart("pie", listOf("订阅", "广告", "增值服务", "其他"), listOf(PptChart.Series("占比", listOf(55.0, 25.0, 15.0, 5.0))))),
+        OfficeWriter.Slide("chart", "渠道分布", emptyList(),
+            chart = PptChart.Chart("doughnut", listOf("应用商店", "官网", "合作方"), listOf(PptChart.Series("用户", listOf(60.0, 25.0, 15.0))))),
+        OfficeWriter.Slide("chart", "各地区销售额", emptyList(),
+            chart = PptChart.Chart("bar", listOf("华东", "华南", "华北", "西南", "西北"), listOf(PptChart.Series("销售额", listOf(320.0, 260.0, 210.0, 120.0, 60.0))), "万元")),
+    )
+
+    @Test
+    fun chartsAndNotesArePackaged() {
+        val all = deck.mapIndexed { i, s -> s.copy(notes = "第 ${i + 1} 页的演讲稿。\n第二句话。") }.take(3) + charts
+        val bos = ByteArrayOutputStream()
+        val warnings = OfficeWriter.writePptx(all, "blue", bos)
+        File(System.getProperty("user.dir"), "build/office-samples/charts.pptx").writeBytes(bos.toByteArray())
+        assertTrue(warnings.toString(), warnings.isEmpty())
+        val p = parts(bos.toByteArray())
+        val names = ZipInputStream(bos.toByteArray().inputStream()).use { z -> generateSequence { z.nextEntry?.name }.toList() }
+        val f = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
+        (4..8).forEach { n ->
+            f.newDocumentBuilder().parse(p.getValue("ppt/charts/chart$n.xml").byteInputStream())
+            assertTrue("ppt/embeddings/Microsoft_Excel_Worksheet$n.xlsx" in names)
+            assertTrue(p.getValue("ppt/slides/_rels/slide$n.xml.rels").contains("../charts/chart$n.xml"))
+            assertTrue(p.getValue("[Content_Types].xml").contains("/ppt/charts/chart$n.xml"))
+        }
+        assertTrue(p.getValue("ppt/charts/chart4.xml").contains("<c:barDir val=\"col\"/>"))
+        assertTrue(p.getValue("ppt/charts/chart5.xml").contains("<c:lineChart>"))
+        assertTrue(p.getValue("ppt/charts/chart6.xml").contains("<c:pieChart>"))
+        assertTrue(p.getValue("ppt/charts/chart7.xml").contains("<c:doughnutChart>"))
+        assertFalse(p.getValue("ppt/charts/chart7.xml").contains("dLblPos"))  // 环形图写了会被 PowerPoint 判损坏
+        assertTrue(p.getValue("ppt/charts/chart8.xml").contains("<c:barDir val=\"bar\"/>"))
+        // 图表动画：先出图，再出结论
+        val s4 = p.getValue("ppt/slides/slide4.xml")
+        assertTrue(s4.contains("<p:bldGraphic"))
+        // 演讲稿：有的页才有，母版只有一份
+        listOf(1, 2, 3, 4, 5).forEach { n ->
+            val notes = p.getValue("ppt/notesSlides/notesSlide$n.xml")
+            f.newDocumentBuilder().parse(notes.byteInputStream())
+            assertTrue(p.getValue("ppt/slides/_rels/slide$n.xml.rels").contains("notesSlide$n.xml"))
+        }
+        assertTrue(p.getValue("ppt/notesSlides/notesSlide4.xml").contains("这一页看营收。"))
+        assertFalse(p.containsKey("ppt/notesSlides/notesSlide6.xml"))
+        assertTrue(p.getValue("ppt/presentation.xml").contains("<p:notesMasterIdLst>"))
+        f.newDocumentBuilder().parse(p.getValue("ppt/notesMasters/notesMaster1.xml").byteInputStream())
+    }
+
+    @Test
+    fun badChartDataIsReportedNotFatal() {
+        val warnings = OfficeWriter.writePptx(listOf(
+            OfficeWriter.Slide("chart", "没数据", emptyList()),
+            OfficeWriter.Slide("chart", "长度不齐", emptyList(), chart = PptChart.Chart("pie", listOf("A", "B", "C"),
+                listOf(PptChart.Series("一", listOf(1.0, 2.0)), PptChart.Series("二", listOf(3.0, 4.0, 5.0))))),
+        ), "blue", ByteArrayOutputStream())
+        assertTrue(warnings.toString(), warnings.any { it.contains("第 1 页") && it.contains("没给 chart 数据") })
+        assertTrue(warnings.toString(), warnings.any { it.contains("只画第一组") })
+        assertTrue(warnings.toString(), warnings.any { it.contains("已按分类对齐") })
+    }
+
     private fun parts(bytes: ByteArray): Map<String, String> {
         val out = mutableMapOf<String, String>()
         ZipInputStream(bytes.inputStream()).use { z ->

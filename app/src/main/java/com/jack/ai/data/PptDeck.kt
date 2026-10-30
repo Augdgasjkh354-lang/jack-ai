@@ -19,7 +19,7 @@ object PptDeck {
     private const val MX = 640000L
     private const val FONT = "微软雅黑"
 
-    val LAYOUTS = listOf("title", "section", "agenda", "content", "cards", "two_column", "timeline", "stats", "process", "quote", "image", "end")
+    val LAYOUTS = listOf("title", "section", "agenda", "content", "cards", "two_column", "timeline", "stats", "process", "chart", "quote", "image", "end")
     val TRANSITIONS = listOf("none", "fade", "push", "wipe", "split", "cover", "zoom")
     val ANIMATIONS = listOf("none", "fade", "rise", "wipe")
 
@@ -193,8 +193,14 @@ object PptDeck {
     /** 动画的一步：点一下，这些一起出现。target 是 (形状编号, 第几段)，段为 -1 表示整个形状。 */
     class Step(val targets: List<Pair<Int, Int>>)
 
-    /** noBuild：图片和图标，动画的 bldLst 里不列它们（没有文字）。 */
-    class Rendered(val bg: String, val shapes: String, val steps: List<Step>, val byParagraph: Set<Int>, val noBuild: Set<Int>, val warnings: List<String>)
+    /**
+     * noBuild：图片和图标，动画的 bldLst 里不列它们（没有文字）；graphics：图表框，bldLst 里写成 bldGraphic。
+     * chart：理过的图表数据，打包时写成图表部件（关系 rId3）。
+     */
+    class Rendered(
+        val bg: String, val shapes: String, val steps: List<Step>, val byParagraph: Set<Int>, val noBuild: Set<Int>, val warnings: List<String>,
+        val graphics: Set<Int> = emptySet(), val chart: PptChart.Chart? = null,
+    )
 
     /** 「标题：说明」拆成两半；没有冒号就只有标题。 */
     internal fun split(s: String): Pair<String, String> {
@@ -250,6 +256,8 @@ object PptDeck {
         }
 
         val bg: String
+        var chart: PptChart.Chart? = null
+        val graphics = mutableSetOf<Int>()
         when (s.layout) {
             "title", "end" -> {
                 bg = t.primary
@@ -470,6 +478,49 @@ object PptDeck {
                 }
                 pageNo()
             }
+            "chart" -> {
+                bg = t.bg; decor()
+                header(s.title)
+                val problems = mutableListOf<String>()
+                chart = s.chart?.let { PptChart.clean(it, problems) }
+                problems.forEach { warn += "第 $number 页（chart）：$it" }
+                if (s.chart == null) warn += "第 $number 页是 chart 版式，但没给 chart 数据"
+                // 右边有要点时图占六成多，没有就整页
+                val list = clip(items, 4, "要点")
+                val chartW = if (list.isEmpty()) W - 2 * MX else (W * 0.6).toLong()
+                val top = 1500000L; val chartH = H - top - 700000
+                chart?.let { c ->
+                    val gid = next(); graphics += gid
+                    out.append("""<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="$gid" name="Chart $gid"/><p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr><p:nvPr/></p:nvGraphicFramePr>""" +
+                        """<p:xfrm><a:off x="$MX" y="$top"/><a:ext cx="$chartW" cy="$chartH"/></p:xfrm><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart">""" +
+                        """<c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId3"/></a:graphicData></a:graphic></p:graphicFrame>""")
+                    steps += Step(listOf(gid to -1))
+                    // 单位放在图的右上角，不压标题下的短线
+                    if (c.unit.isNotEmpty()) out.append(text(next(), MX, top - 260000, chartW, 300000, listOf(para(listOf(Run("单位：${c.unit}", 1200, t.muted)), "r")), name = "Unit"))
+                }
+                if (list.isNotEmpty()) {
+                    val x = MX + chartW + 300000
+                    val w = W - x - MX
+                    val card = next()
+                    val size = fit(list, w - 500000, chartH - 500000, 2000, 1300, spacing = 0.7)
+                    small(size, 1300, "图表旁的要点")
+                    // 卡片高度跟着字走，和图竖着居中
+                    val lineH = (size / 100.0 * 12700 * 1.4).toLong()
+                    val ch = (500000 + list.sumOf { lines(it, size, w - 500000) } * lineH + (list.size - 1) * lineH * 7 / 10).coerceIn(minOf(1800000L, chartH), chartH)
+                    val cy = top + (chartH - ch) / 2
+                    out.append(shape(card, x, cy, w, ch, "roundRect", t.card, line = if (t.dark) null else t.soft, adj = "6000", shadow = !t.dark, name = "Takeaways"))
+                    val tid = next()
+                    out.append(text(tid, x + 200000, cy + 250000, w - 400000, ch - 500000, list.mapIndexed { j, v ->
+                        val (head, rest) = split(v)
+                        val runs = if (rest.isNotEmpty()) listOf(Run("$head：", size, t.title, true), Run(rest, size, t.text)) else listOf(Run(v, size, t.text))
+                        para(runs, bullet = "•", bulletColor = t.accent, before = if (j == 0) 0 else 1000)
+                    }, "t", "Takeaways text"))
+                    byPara += tid
+                    list.indices.forEach { steps += Step(listOf(tid to it)) }
+                    steps.add(steps.size - list.size, Step(listOf(card to -1)))
+                }
+                pageNo()
+            }
             "quote" -> {
                 bg = if (t.dark) t.bg else t.soft
                 out.append(text(next(), MX + 200000, 500000, 2000000, 2000000, listOf(para(listOf(Run("“", 16000, t.accent, true)))), name = "Quote mark"))
@@ -522,7 +573,7 @@ object PptDeck {
             }
         }
         iconIds.remove()
-        return Rendered(bg, out.toString(), steps, byPara, pics.toSet(), warn)
+        return Rendered(bg, out.toString(), steps, byPara, pics.toSet(), warn, graphics, chart)
     }
 
     // ---------- 转场和动画 ----------
@@ -538,7 +589,7 @@ object PptDeck {
     }
 
     /** 点一下出现一步。fade 淡入、rise 淡入并往上浮一点、wipe 从左往右擦出来。 */
-    fun timing(steps: List<Step>, kind: String, byParagraph: Set<Int>, noBuild: Set<Int>): String {
+    fun timing(steps: List<Step>, kind: String, byParagraph: Set<Int>, noBuild: Set<Int>, graphics: Set<Int> = emptySet()): String {
         if (kind == "none" || kind !in ANIMATIONS || steps.isEmpty()) return ""
         var n = 2
         fun id() = ++n
@@ -566,7 +617,11 @@ object PptDeck {
         }
         val shapes = steps.flatMap { it.targets.map { t -> t.first } }.distinct()
         val bld = shapes.filter { it !in noBuild }.joinToString("") { spid ->
-            if (spid in byParagraph) """<p:bldP spid="$spid" grpId="0" build="p"/>""" else """<p:bldP spid="$spid" grpId="0" animBg="1"/>"""
+            when (spid) {
+                in byParagraph -> """<p:bldP spid="$spid" grpId="0" build="p"/>"""
+                in graphics -> """<p:bldGraphic spid="$spid" grpId="0"><p:bldAsOne/></p:bldGraphic>"""
+                else -> """<p:bldP spid="$spid" grpId="0" animBg="1"/>"""
+            }
         }
         return """<p:timing><p:tnLst><p:par><p:cTn id="1" dur="indefinite" restart="never" nodeType="tmRoot"><p:childTnLst><p:seq concurrent="1" nextAc="seek"><p:cTn id="2" dur="indefinite" nodeType="mainSeq"><p:childTnLst>$body</p:childTnLst></p:cTn>""" +
             """<p:prevCondLst><p:cond evt="onPrev" delay="0"><p:tgtEl><p:sldTgt/></p:tgtEl></p:cond></p:prevCondLst><p:nextCondLst><p:cond evt="onNext" delay="0"><p:tgtEl><p:sldTgt/></p:tgtEl></p:cond></p:nextCondLst></p:seq></p:childTnLst></p:cTn></p:par></p:tnLst>""" +

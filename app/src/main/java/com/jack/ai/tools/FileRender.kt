@@ -106,8 +106,20 @@ internal fun ToolSession.parseSlides(args: JsonObject): List<OfficeWriter.Slide>
             else -> ic.text().split(',', '，').map { it.trim() }
         }
         OfficeWriter.Slide(o["layout"].text().ifBlank { "content" }, o["title"].text(), bullets,
-            icons = icons, transition = o["transition"].text())
+            icons = icons, transition = o["transition"].text(), notes = o["notes"].text(), chart = parseChart(o["chart"] as? JsonObject))
     }.ifEmpty { throw IllegalArgumentException("没有幻灯片内容") }
+
+/** chart 版式的数据：type、categories、series[{name, values}]、unit。数字写成字符串也认（去掉千分位逗号）。 */
+internal fun parseChart(o: JsonObject?): PptChart.Chart? {
+    o ?: return null
+    val cats = (o["categories"] as? JsonArray).orEmpty().map { it.text() }
+    val series = (o["series"] as? JsonArray).orEmpty().mapNotNull { el ->
+        val s = el as? JsonObject ?: return@mapNotNull null
+        val values = (s["values"] as? JsonArray).orEmpty().map { it.text().replace(",", "").replace("，", "").trim().toDoubleOrNull() ?: 0.0 }
+        PptChart.Series(s["name"].text(), values)
+    }
+    return PptChart.Chart(o["type"].text().ifBlank { "column" }, cats, series, o["unit"].text())
+}
 
 /** 给写了 image_query 的正文页搜一张图，下载失败就不配图。最多 6 张。 */
 internal suspend fun ToolSession.withImages(slides: List<OfficeWriter.Slide>, args: JsonObject, cache: File): List<OfficeWriter.Slide> {
