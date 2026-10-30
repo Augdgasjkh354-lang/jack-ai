@@ -154,6 +154,8 @@ object Timeline {
 
     /** 在 App 里组好每轮那段（对话和项目用内存里的，经历流读文件，放后台线程调）。 */
     fun noteFor(ctx: Context, settings: Settings, convs: List<Conversation>, projects: List<Project>, conv: Conversation): String {
+        // Work 不带经历流：做事不需要「刚才聊了什么」
+        if (conv.separateWork) return ""
         val n = note(load(ctx, NOTE_WINDOW), convs, projects, conv, summarizedUpTo(ctx))
         if (n.isEmpty() && !counts(conv, projects)) return ""
         return Persona.fill(n + Threads.note(Threads.load(ctx)), settings)

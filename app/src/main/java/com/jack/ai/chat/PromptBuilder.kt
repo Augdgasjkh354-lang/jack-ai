@@ -10,6 +10,8 @@ import com.jack.ai.data.MailAccount
 import com.jack.ai.data.readyMails
 import com.jack.ai.data.Project
 import com.jack.ai.data.globalAllowed
+import com.jack.ai.data.workMemoryAllowed
+import com.jack.ai.data.separateWork
 import com.jack.ai.data.Settings
 import com.jack.ai.data.Skill
 import com.jack.ai.data.SkillIds
@@ -57,6 +59,8 @@ object PromptBuilder {
         val lately: String = "",
         /** Kavi 的自传（它自己写的，每周更新，同一篇）。 */
         val story: String = "",
+        /** 工作记忆（所有 Work 共用）；只有 Work 用。 */
+        val workMemory: String = "",
         /** 已上传到 DeepSeek 的图片：路径 → file_id，这些图只发编号。 */
         val fileIds: Map<String, String> = emptyMap(),
         val now: Long = System.currentTimeMillis(),
@@ -77,7 +81,7 @@ object PromptBuilder {
         val thinkingOn = input.sendReasoning
         val withTools = tools != null
         val list = mutableListOf<JsonObject>()
-        val system = systemPrompt(settings, conv, project, tools, memories, skills, input.chatMemory, input.projectMemory, input.journal, input.lately, input.story)
+        val system = systemPrompt(settings, conv, project, tools, memories, skills, input.chatMemory, input.projectMemory, input.journal, input.lately, input.story, input.workMemory)
         if (system.isNotBlank()) list += msg("system", system)
         for (m in Compression.liveMessages(conv)) {
             if (m.error != null) continue
@@ -253,12 +257,12 @@ object PromptBuilder {
     /** 一次请求的上下文大概由哪些部分组成（名字, 估算 token）。 */
     fun contextBreakdown(
         settings: Settings, conv: Conversation, project: Project?, memories: List<MemoryItem>, skills: List<Skill>,
-        chatMemory: String = "", projectMemory: String = "", journal: String = "", lately: String = "", story: String = "",
+        chatMemory: String = "", projectMemory: String = "", journal: String = "", lately: String = "", story: String = "", workMemory: String = "",
     ): List<Pair<String, Int>> {
         val tools = toolSet(settings, skills, conv, project)
         val out = linkedMapOf<String, Int>()
         out["工具说明"] = tools?.let { estTokens(it.toString()) } ?: 0
-        systemParts(settings, conv, project, tools, memories, skills, chatMemory, projectMemory, journal, lately, story).forEach { (k, v) -> out[k] = (out[k] ?: 0) + estTokens(v) }
+        systemParts(settings, conv, project, tools, memories, skills, chatMemory, projectMemory, journal, lately, story, workMemory).forEach { (k, v) -> out[k] = (out[k] ?: 0) + estTokens(v) }
         val history = Compression.liveMessages(conv).filter { it.error == null }.sumOf { m ->
             estTokens(m.content) + m.attachments.sumOf { estTokens(it.text) } + m.trail.sumOf { estTokens(it) }
         }
@@ -283,7 +287,8 @@ object PromptBuilder {
         journal: String = "",
         lately: String = "",
         story: String = "",
-    ): String = systemParts(settings, conv, project, tools, memories, skills, chatMemory, projectMemory, journal, lately, story).joinToString("\n\n") { it.second }
+        workMemory: String = "",
+    ): String = systemParts(settings, conv, project, tools, memories, skills, chatMemory, projectMemory, journal, lately, story, workMemory).joinToString("\n\n") { it.second }
 
     /**
      * 有些技能的工具要读过做法才出现，先告诉模型，免得它以为没有这个能力。
@@ -308,6 +313,7 @@ object PromptBuilder {
         journal: String = "",
         lately: String = "",
         story: String = "",
+        workMemory: String = "",
     ): List<Pair<String, String>> {
         val parts = mutableListOf<Pair<String, String>>()
         val globalOn = settings.memoryEnabled && conv.globalAllowed(project)
@@ -352,7 +358,7 @@ object PromptBuilder {
         }
         if ("save_memory" in names) {
             // 这段每个对话都一样；跟对话有关的那句（在不在项目里、开没开全局记忆）放到后面
-            parts += "固定说明" to f(memoryRulesBase())
+            parts += "固定说明" to f(memoryRulesBase(conv.separateWork))
         }
         parts += "固定说明" to f("【Time】The 「Current time」 line before each message, and the lists of files, tables and reminders, are added automatically by the system. They aren't something {user} said; don't bring them up. " +
             "The 【Recently】 and 【Time】 notes there are your own memory of what has happened lately, across conversations and your own time: use them naturally when relevant, the way you'd remember, never recite them. " +
@@ -375,12 +381,16 @@ object PromptBuilder {
         if (globalOn && story.isNotBlank()) {
             parts += "自传" to f("【Your autobiography】\nYour own account of who you've been and how you became who you are now, written and revised by you. It's your continuity, not something to recite; let it inform how you are.\n") + story.trim()
         }
-        if (lately.isNotBlank()) {
+        // Work 和 Chat 分开：Kavi 自己的生活不带进 Work
+        if (lately.isNotBlank() && !conv.separateWork) {
             parts += "近况" to f("【How you've been lately】\n") + lately.trim() +
                 f("\nThis is your own life, from your free time. Bring it up only when {user} asks how you are or what you've been up to, or when it's genuinely relevant; don't steer conversations toward yourself.")
         }
+        if (settings.memoryEnabled && conv.workMemoryAllowed(project) && workMemory.isNotBlank()) {
+            parts += "工作记忆" to f("【Work memory】(shared by every Work conversation, kept apart from your chats with {user})\n") + workMemory.trim()
+        }
         // ---- 以上所有对话都一样（缓存能跨对话命中），以下每个对话自己的 ----
-        memoryScopeNote(project != null, globalOn, project?.isolated == true).takeIf { "save_memory" in names && it.isNotEmpty() }?.let { parts += "固定说明" to it }
+        memoryScopeNote(project != null, globalOn, project?.isolated == true, conv.separateWork).takeIf { "save_memory" in names && it.isNotEmpty() }?.let { parts += "固定说明" to it }
         if (conv.systemPrompt.isNotBlank()) parts += "人设" to "【Persona for this conversation】\n${f(conv.systemPrompt.trim())}"
         if (project != null) {
             val (small, big) = project.files.partition { it.text.length <= PROJECT_INLINE_CHARS }
@@ -422,19 +432,20 @@ object PromptBuilder {
         memoryRulesBase() + memoryScopeNote(inProject, globalOn).let { if (it.isEmpty()) "" else "\n$it" }
 
     /** 所有对话都一样的那部分，放在系统提示词前面，缓存能跨对话命中。 */
-    fun memoryRulesBase(): String = buildString {
+    fun memoryRulesBase(work: Boolean = false): String = buildString {
         append("【Memory】Save memories with save_memory; scope picks where:\n")
         append("- chat (this conversation's memory): information that matters only to this conversation and will be needed later, such as agreed settings, rules, names, numbers, decisions, constraints and progress. ")
         append("Don't wait for {user} to say \"remember\"; save it when it comes up, one sentence each. Don't save things already saved, casual chat, or one-off questions.\n")
         append("- project (project memory): inside a project, settings and decisions useful to every conversation in it.\n")
-        append("- global (global memory): only when {user} explicitly says \"remember\" and it's long-term information about {user} themselves (identity, preferences, habits, important people and events). Write it about {user} by name.\n")
+        if (work) append("- global (in Work this is the work memory, shared by every Work conversation and kept apart from chats): lessons that will help future tasks, such as how {user} likes work delivered, sources and methods that worked or failed, and paths, formats and conventions {user} uses. One self-contained sentence each; nothing that only matters to this task.\n")
+        else append("- global (global memory): only when {user} explicitly says \"remember\" and it's long-term information about {user} themselves (identity, preferences, habits, important people and events). Write it about {user} by name.\n")
         append("When a memory is outdated or wrong, or {user} asks you to forget it, use save_memory with replace set to the old memory's exact text: new content updates it, empty content deletes it. No need to mention saving or updating in your reply.")
     }
 
     /** 跟这个对话有关的记忆限制，放在系统提示词后面。 */
-    fun memoryScopeNote(inProject: Boolean, globalOn: Boolean, isolated: Boolean = false): String = listOfNotNull(
+    fun memoryScopeNote(inProject: Boolean, globalOn: Boolean, isolated: Boolean = false, work: Boolean = false): String = listOfNotNull(
         "This conversation isn't in a project; don't use scope project. ".takeIf { !inProject },
-        "This conversation doesn't use global memory; don't use scope global. ".takeIf { !globalOn && !isolated },
+        "This conversation doesn't use global memory; don't use scope global. ".takeIf { !globalOn && !isolated && !work },
         "This is a private project, fully separated from outside conversations and global memory. Don't use scope global (save to project or this conversation instead), and don't bring up anything from outside the project. ".takeIf { isolated },
     ).joinToString("").trim()
 

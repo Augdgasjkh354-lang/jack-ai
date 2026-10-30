@@ -25,8 +25,9 @@ private fun ToolSession.findOld(query: String) = Compression.searchHistory(Compr
 private suspend fun ToolSession.findChats(query: String): String {
     // 隐私项目和外面互不相通：在隐私项目里只翻这个项目的对话；在外面翻不到任何隐私项目的对话
     val projects = host.store.loadProjects()
-    val all = if (project?.isolated == true) host.conversations().filter { it.projectId == project.id }
-        else host.conversations().filterNot { it.isolatedIn(projects) }
+    // Chat 和 Work 也互不相通：各自只翻各自的
+    val all = (if (project?.isolated == true) host.conversations().filter { it.projectId == project.id }
+        else host.conversations().filterNot { it.isolatedIn(projects) }).filter { it.separateWork == conv.separateWork }
     return withContext(Dispatchers.Default) { Compression.searchAllChats(all, query, conv.id) }
 }
 
@@ -84,18 +85,20 @@ internal suspend fun ToolSession.searchMyData(args: JsonObject): String {
 
 /**
  * 存记忆：本对话、项目、全局三种。不该存全局的（这个对话关了全局记忆）就存进本对话。
+ * Work 里的 global 是工作记忆（所有 Work 共用，和 Chat 的全局记忆不相通）。
  * 填了 replace 就是改旧的那条，content 留空就是删掉它。
  */
 internal suspend fun ToolSession.remember(args: JsonObject): String {
     val text = args["content"].text().trim()
     val old = args["replace"].text().trim()
     val globalOn = settings.memoryEnabled && conv.globalAllowed(project)
+    val workOn = settings.memoryEnabled && conv.workMemoryAllowed(project)
     val scope = when (val s = args["scope"].text()) {
-        "global" -> if (globalOn) s else "chat"
+        "global" -> if (globalOn) s else if (workOn) "work" else "chat"
         "project" -> if (project != null) s else "chat"
         else -> "chat"
     }
-    val where = when (scope) { "global" -> "全局"; "project" -> "项目"; else -> "本对话" }
+    val where = when (scope) { "global" -> "全局"; "work" -> "工作"; "project" -> "项目"; else -> "本对话" }
     val label = when {
         old.isEmpty() -> "记住（$where）：$text"
         text.isEmpty() -> "忘掉（$where）：$old"
@@ -116,7 +119,11 @@ internal suspend fun ToolSession.remember(args: JsonObject): String {
                 host.setMemories(updated)
             }
             else -> withContext(Dispatchers.IO) {
-                val file = if (scope == "project") ChatMemory.projectFile(app, project!!.id) else ChatMemory.chatFile(app, conv)
+                val file = when (scope) {
+                    "project" -> ChatMemory.projectFile(app, project!!.id)
+                    "work" -> ChatMemory.workFile(app)
+                    else -> ChatMemory.chatFile(app, conv)
+                }
                 if (old.isEmpty()) ChatMemory.add(file, text)
                 else ChatMemory.write(file, ChatMemory.replace(ChatMemory.items(ChatMemory.read(file)), old, text))
             }
@@ -131,6 +138,7 @@ internal suspend fun ToolSession.remember(args: JsonObject): String {
             when (scope) {
                 "global" -> host.store.loadMemories().map { it.text }
                 "project" -> ChatMemory.items(ChatMemory.read(ChatMemory.projectFile(app, project!!.id)))
+                "work" -> ChatMemory.items(ChatMemory.read(ChatMemory.workFile(app)))
                 else -> ChatMemory.items(ChatMemory.read(ChatMemory.chatFile(app, conv)))
             }
         }

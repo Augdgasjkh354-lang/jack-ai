@@ -78,6 +78,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.jack.ai.data.Attachments
 import com.jack.ai.data.ChatMessage
+import com.jack.ai.data.Delivered
+import com.jack.ai.data.Deliverables
 import com.jack.ai.data.GeneratedFile
 import androidx.core.content.FileProvider
 import java.io.File
@@ -322,6 +324,10 @@ fun AssistantMessage(
                         color = colors.onPrimaryContainer.copy(alpha = 0.6f), modifier = Modifier.padding(top = 4.dp))
                 }
             }
+        }
+        if (msg.delivered.isNotEmpty() && !streaming) {
+            Spacer(Modifier.height(8.dp))
+            DeliveredBox(msg.delivered)
         }
         msg.files.forEach { f ->
             Spacer(Modifier.height(8.dp))
@@ -865,4 +871,25 @@ private fun DeleteFromDialog(laterCount: Int, onDismiss: () -> Unit, onConfirm: 
         confirmButton = { TextButton(onClick = onConfirm) { Text("删除", color = MaterialTheme.colorScheme.error) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
     )
+}
+
+/** Work 的交付清单：这一轮对话文件夹里新建、改动、删除了哪些文件。 */
+@Composable
+private fun DeliveredBox(list: List<Delivered>) {
+    val colors = MaterialTheme.colorScheme
+    Surface(color = colors.surfaceVariant.copy(alpha = 0.6f), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+            Text("交付清单 · " + Deliverables.summary(list), style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant)
+            list.forEach { d ->
+                val mark = when (d.kind) { "new" -> "＋"; "deleted" -> "－"; else -> "✎" }
+                val lines = when {
+                    d.kind == "changed" && d.added >= 0 -> "  +${d.added} −${d.removed} 行"
+                    d.kind == "new" && d.added > 0 -> "  ${d.added} 行"
+                    else -> ""
+                }
+                Text("$mark ${d.name}$lines", style = MaterialTheme.typography.bodySmall,
+                    color = if (d.kind == "deleted") colors.outline else colors.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
+            }
+        }
+    }
 }

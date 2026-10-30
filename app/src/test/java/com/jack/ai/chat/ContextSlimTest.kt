@@ -29,4 +29,21 @@ class ContextSlimTest {
         assertEquals(big, content(msgs.last()))  // 最近的原样
         assertEquals(0, ContextSlim.slim(msgs).let { if (it > 0) -1 else 0 }.coerceAtMost(0))
     }
+
+    @Test
+    fun spilledResultsPointToTheSavedFile() {
+        val big = "开头" + "正文".repeat(6000) + "\n结尾"
+        val msgs = MutableList(ContextSlim.KEEP_RECENT + 2) { tool(big + it) }
+        val saved = mutableListOf<String>()
+        ContextSlim.slim(msgs) { saved += it; ".spill/r000000000000.txt" }
+        assertEquals(2, saved.size)
+        assertEquals(big + 0, saved[0])  // 存的是全文
+        val trimmed = content(msgs[0])
+        assertTrue(trimmed.startsWith(ContextSlim.MARK))
+        assertTrue(trimmed.contains("read_file (name = .spill/r000000000000.txt)"))
+        // 存不了就照旧提示重新调工具
+        val m2 = MutableList(ContextSlim.KEEP_RECENT + 1) { tool(big + it) }
+        ContextSlim.slim(m2) { null }
+        assertTrue(content(m2[0]).contains("Call the tool again"))
+    }
 }

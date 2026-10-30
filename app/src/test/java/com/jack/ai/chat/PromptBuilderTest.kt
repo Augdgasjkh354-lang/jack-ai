@@ -268,6 +268,42 @@ class PromptBuilderTest {
     }
 
     @Test
+    fun workIsSeparateFromChat() {
+        val work = Conversation(work = true)
+        val sys = PromptBuilder.systemPrompt(settings, work, null, tools(work), memories, settings.activeSkills(),
+            journal = "他说话玩笑裹着认真", lately = "最近在读诗", story = "我的自传", workMemory = "- 报告用 Word 交")
+        // 不带全局记忆、日记、近况、自传
+        assertFalse(sys.contains("喜欢简短的回答"))
+        assertFalse(sys.contains("玩笑裹着认真"))
+        assertFalse(sys.contains("最近在读诗"))
+        assertFalse(sys.contains("我的自传"))
+        // 带工作记忆，global 说的是工作记忆，没有「别用 global」的话
+        assertTrue(sys.contains("【Work memory】"))
+        assertTrue(sys.contains("报告用 Word 交"))
+        assertTrue(sys.contains("in Work this is the work memory"))
+        assertFalse(sys.contains("don't use scope global"))
+        // 个人设定和工具照旧
+        assertTrue(sys.contains("Jack"))
+        assertTrue("update_plan" in toolNames(work))
+        // Chat 不带工作记忆
+        val chat = Conversation()
+        val c = PromptBuilder.systemPrompt(settings, chat, null, tools(chat), memories, settings.activeSkills(), lately = "最近在读诗", workMemory = "- 报告用 Word 交")
+        assertTrue(c.contains("喜欢简短的回答"))
+        assertTrue(c.contains("最近在读诗"))
+        assertFalse(c.contains("报告用 Word 交"))
+        // 后台借 Work 做法跑的 Chat 任务照旧带记忆
+        val bg = Conversation(work = true, ownLife = true)
+        val b = PromptBuilder.systemPrompt(settings, bg, null, tools(bg), memories, settings.activeSkills(), lately = "最近在读诗", workMemory = "- 报告用 Word 交")
+        assertTrue(b.contains("喜欢简短的回答"))
+        assertTrue(b.contains("最近在读诗"))
+        assertFalse(b.contains("报告用 Word 交"))
+        // 隐私项目里的 Work 也不用工作记忆
+        val sealed = Project(name = "日记本", isolated = true)
+        val w2 = Conversation(work = true, projectId = sealed.id)
+        assertFalse(PromptBuilder.systemPrompt(settings, w2, sealed, tools(w2, sealed), memories, settings.activeSkills(), workMemory = "- 报告用 Word 交").contains("报告用 Word 交"))
+    }
+
+    @Test
     fun privateProjectIsSealedOff() {
         val open = Project(name = "开发")
         val sealed = Project(name = "日记本", isolated = true)

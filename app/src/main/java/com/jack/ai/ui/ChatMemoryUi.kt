@@ -67,7 +67,7 @@ fun MemoryItems(
     }
 }
 
-/** 一个对话的记忆：本对话记忆，以及用不用全局记忆、参不参与做梦。 */
+/** 一个对话的记忆：本对话记忆，以及用不用全局记忆、参不参与做梦。Work 没有这两个开关，换成所有 Work 共用的工作记忆。 */
 @Composable
 fun ConversationMemoryDialog(vm: ChatViewModel, conv: Conversation, onDismiss: () -> Unit) {
     var items by remember(conv.id) { mutableStateOf(vm.chatMemory(conv)) }
@@ -76,6 +76,8 @@ fun ConversationMemoryDialog(vm: ChatViewModel, conv: Conversation, onDismiss: (
     // 隐私项目里的对话：两个开关都锁成关，说明原因
     val isolated = vm.state.value.project(conv.projectId)?.isolated == true
     val globalOn = useGlobal && !isolated && vm.state.value.settings.memoryEnabled
+    val workOn = conv.work && !isolated && vm.state.value.settings.memoryEnabled
+    var workItems by remember(conv.id) { mutableStateOf(if (conv.work) vm.workMemory() else emptyList()) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("记忆") },
@@ -83,20 +85,34 @@ fun ConversationMemoryDialog(vm: ChatViewModel, conv: Conversation, onDismiss: (
             Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (isolated) Text("这个对话在隐私项目里，和全局记忆、做梦都隔开了。", style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("使用全局记忆", Modifier.weight(1f))
-                    Switch(useGlobal && !isolated, { useGlobal = it; vm.setMemoryFlags(conv.id, it, inDream) }, enabled = !isolated)
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("参与做梦", Modifier.weight(1f))
-                    Switch(inDream && !isolated, { inDream = it; vm.setMemoryFlags(conv.id, useGlobal, it) }, enabled = !isolated)
+                if (conv.work) {
+                    Text("Work 和 Chat 分开：不带全局记忆、日记和近况，也不参与做梦。工具和技能照常共用。", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (workOn) {
+                        Text("工作记忆 · 所有 Work 共用", style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 8.dp))
+                        MemoryItems(workItems, onChange = { workItems = it; vm.setWorkMemory(it) })
+                    }
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("使用全局记忆", Modifier.weight(1f))
+                        Switch(useGlobal && !isolated, { useGlobal = it; vm.setMemoryFlags(conv.id, it, inDream) }, enabled = !isolated)
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("参与做梦", Modifier.weight(1f))
+                        Switch(inDream && !isolated, { inDream = it; vm.setMemoryFlags(conv.id, useGlobal, it) }, enabled = !isolated)
+                    }
                 }
                 Text("本对话记忆 · ${ChatMemory.chatFileName(conv)}", style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 8.dp))
                 MemoryItems(
                     items,
                     onChange = { items = it; vm.setChatMemory(conv, it) },
-                    onMoveUp = if (globalOn) { item -> items = items - item; vm.moveToGlobal(conv, item) } else null,
+                    onMoveUp = when {
+                        workOn -> { item -> items = items - item; vm.setChatMemory(conv, items); workItems = (workItems + item).distinct(); vm.setWorkMemory(workItems) }
+                        globalOn && !conv.work -> { item -> items = items - item; vm.moveToGlobal(conv, item) }
+                        else -> null
+                    },
                 )
             }
         },

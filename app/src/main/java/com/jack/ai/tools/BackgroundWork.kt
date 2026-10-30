@@ -18,6 +18,7 @@ import com.jack.ai.data.Project
 import com.jack.ai.data.Routine
 import com.jack.ai.data.Routines
 import com.jack.ai.data.SearchRecord
+import com.jack.ai.data.separateWork
 import com.jack.ai.data.Store
 import com.jack.ai.data.ThinkLevel
 import com.jack.ai.data.activeSkills
@@ -104,8 +105,8 @@ suspend fun runBackgroundWork(
     // Work 的模型是用户在 Work 里最后选的那个：第三方的（c: 开头）多半是聊天时临时换的、没标价格，定时任务不跟着它跑
     val ep = s.endpoint(model ?: s.workModel.takeIf { !it.startsWith("c:") } ?: com.jack.ai.data.MODEL_FLASH)?.takeIf { it.apiKey.isNotBlank() } ?: s.backgroundEndpoint()
         ?: return TaskResult(NO_KEY, status = TaskStatus.NEEDS_SETUP)
-    val conv = store.loadConversations().firstOrNull { it.id == r.convId }?.copy(work = true)
-        ?: Conversation(id = r.convId, title = "⏰ " + r.title, work = true)
+    val stored = store.loadConversations().firstOrNull { it.id == r.convId }
+    val conv = (stored ?: Conversation(id = r.convId, title = "⏰ " + r.title)).copy(work = true, ownLife = stored?.work != true)
     val skills = s.activeSkills()
     // 项目里设的任务：工具也要知道在哪个项目（隐私项目的隔离、项目资料的检索都靠它）
     val project = conv.projectId?.let { id -> store.loadProjects().firstOrNull { it.id == id } }
@@ -121,7 +122,8 @@ suspend fun runBackgroundWork(
     val memories = if (s.memoryEnabled && conv.globalAllowed(project)) store.loadMemories() else emptyList()
     val journal = com.jack.ai.data.Dreamer.recentJournals(store.loadDreams())
     val now = SimpleDateFormat("yyyy-MM-dd EEEE HH:mm", Locale.ENGLISH).format(Date())
-    val system = PromptBuilder.systemPrompt(s, conv, project, tools, memories, skills, journal = journal, lately = com.jack.ai.data.FreeTime.latelyNote(ctx, full = r.convId != com.jack.ai.data.Reader.CONV_ID)) +
+    val system = PromptBuilder.systemPrompt(s, conv, project, tools, memories, skills, journal = journal, lately = com.jack.ai.data.FreeTime.latelyNote(ctx, full = r.convId != com.jack.ai.data.Reader.CONV_ID),
+        workMemory = if (conv.separateWork) com.jack.ai.data.ChatMemory.read(com.jack.ai.data.ChatMemory.workFile(ctx)) else "") +
         "\n\n" + com.jack.ai.data.Persona.fill(
             (brief ?: "【Background scheduled task】It is now $now. You're running a scheduled task {user} set up in advance: 「${r.title}」. {User} isn't online and can't be asked anything, so just get it done. ") +
                 (if (budget != null && r.convId == com.jack.ai.data.Reader.CONV_ID && conv.projectId == null)

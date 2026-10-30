@@ -51,6 +51,8 @@ import com.jack.ai.data.Provider
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -126,6 +128,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     val state: StateFlow<UiState> = _state.asStateFlow()
     /** 每个对话正在进行的回答（几个对话可以同时答）。 */
     private val jobs = java.util.concurrent.ConcurrentHashMap<String, Job>()
+    /** 每个 Work 对话连着自动接着做了几次（答成功一次、用户发新消息就清零）。 */
+    private val autoResumes = java.util.concurrent.ConcurrentHashMap<String, Int>()
 
     private val files = FilesFeature(core)
     private val projects = ProjectsFeature(core, files)
@@ -295,6 +299,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             )
         }
         _state.update { it.copy(pending = emptyList()) }
+        autoResumes.remove(id)
         startReply(id)
         return true
     }
@@ -472,9 +477,12 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun canContinue(m: ChatMessage): Boolean =
         m.role == "assistant" && (m.error != null || m.content.isBlank() || m.plan.any { it.status != "done" })
 
+    /** Work 一时出错（网络、限流、服务端 5xx）才自动接着做；Key 不对、余额不足这类接了也没用。 */
+    private fun transient(e: Exception): Boolean = e is IOException || (e is ApiException && (e.code == 408 || e.code == 429 || e.code >= 500))
+
     /** 断点续做：带上清单，让 AI 从没做完的那一步接着做。 */
-    fun continueWork() {
-        val conv = _state.value.current ?: return
+    fun continueWork(convId: String? = _state.value.currentId) {
+        val conv = _state.value.conversations.firstOrNull { it.id == convId } ?: return
         if (busy(conv.id) || tooMany(conv.id)) return
         val last = conv.messages.lastOrNull { it.role == "assistant" } ?: return
         val planMsg = conv.messages.lastOrNull { it.plan.isNotEmpty() }
@@ -542,7 +550,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             extraUser = extraUser, chatMemory = chatMemory, projectMemory = projectMemory,
             journal = Dreamer.recentJournals(_state.value.dreams),
             story = com.jack.ai.data.SelfStory.bio(getApplication()).text,
-            lately = com.jack.ai.data.FreeTime.latelyNote(getApplication()))
+            lately = com.jack.ai.data.FreeTime.latelyNote(getApplication()),
+            workMemory = if (conv.work) knowledge.workMemoryText() else "")
         fun buildHistory(withTools: Boolean, flat: Boolean = false): MutableList<JsonObject> =
             PromptBuilder.history(promptInput, if (withTools) toolSet else null, flat)
 
@@ -653,6 +662,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 val t = agent.trail.toList()
                 patchMessage(convId, reply.id) { it.copy(reasoning = r, content = c, trail = t) }
             }
+            // 交付清单：先记下对话文件夹现在的样子，答完一比就知道交了哪些文件
+            val wsDir = com.jack.ai.data.Workspace.dir(getApplication(), com.jack.ai.data.Workspace.key(conv))
+            val before = if (work) withContext(Dispatchers.IO) { runCatching { com.jack.ai.data.Deliverables.snapshot(wsDir) }.getOrNull() } else null
+            // 出错停下时记下是哪种错，能自动接着做的（网络断了、服务一时忙）就接着做
+            var failure: Exception? = null
             try {
                 // 拼历史要读图、转码，放到后台线程，免得界面卡
                 val history = withContext(Dispatchers.Default) { buildHistory(toolSet != null) }
@@ -701,7 +715,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     // use_skill 打开了新技能：下一轮把它的工具加上
                     retool = { PromptBuilder.toolSet(settings, skills, conv, project, session.unlocked.toSet()) },
                     beforeFinish = { answer -> gate.beforeFinish(answer) },
-                    slim = if (work) { msgs -> ContextSlim.slim(msgs) } else null,
+                    slim = if (work) { msgs -> ContextSlim.slim(msgs) { com.jack.ai.data.Spill.save(wsDir, it) } } else null,
                     recovery = Agent.Recovery { tried ->
                         // 先怀疑图片编号失效（过期或被删）：清掉记录，改回内联图片再试一次
                         if (!filesDropped && promptInput.fileIds.isNotEmpty()) {
@@ -740,9 +754,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 throw e
             } catch (e: ApiException) {
                 flush()
+                failure = e
                 patchMessage(convId, reply.id) { it.copy(error = e.message) }
             } catch (e: IOException) {
                 flush()
+                failure = e
                 patchMessage(convId, reply.id) { it.copy(error = "网络连接失败：${e.message ?: "请检查网络"}" + com.jack.ai.api.Net.hint()) }
             } catch (e: Exception) {
                 flush()
@@ -753,6 +769,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     m.copy(content = m.content.trimEnd(), searches = m.searches.map { if (it.pending) it.copy(pending = false) else it })
                 }
                 running.remove(convId, reply.id)
+                if (before != null) {
+                    val delivered = withContext(NonCancellable + Dispatchers.IO) { runCatching { com.jack.ai.data.Deliverables.diff(before, wsDir) }.getOrDefault(emptyList()) }
+                    if (delivered.isNotEmpty()) patchMessage(convId, reply.id) { it.copy(delivered = delivered) }
+                }
                 // 占着浏览器的话放出来，等着用的回答接着用
                 session.releaseBrowser()
                 // 这次打开的技能记进对话：之后每轮都带着它的工具，工具列表不再变，缓存照样命中
@@ -770,6 +790,22 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 if (leftover.isNotEmpty()) viewModelScope.launch {
                     me?.join()
                     if (_state.value.currentId == convId) send(leftover.joinToString("\n"))
+                }
+                // Work 一时出错停下（网络断了、服务忙）：等一会儿自动接着做，连着最多 AUTO_RESUME_MAX 次；用户停下、花费到上限、复核的不接
+                if (failure == null) autoResumes.remove(convId)
+                val resumes = autoResumes[convId] ?: 0
+                if (work && leftover.isEmpty() && extraUser != REVIEW_PROMPT && session.maxRounds != 0 &&
+                    failure?.let(::transient) == true && resumes < AUTO_RESUME_MAX) {
+                    autoResumes[convId] = resumes + 1
+                    val wait = AUTO_RESUME_DELAY_S * (resumes + 1)
+                    patchMessage(convId, reply.id) { it.copy(error = (it.error ?: "出错了") + "\n${wait} 秒后自动接着做（第 ${resumes + 1}/$AUTO_RESUME_MAX 次）") }
+                    viewModelScope.launch {
+                        me?.join()
+                        delay(wait * 1000L)
+                        // 这期间用户自己发了消息、点了接着做，或者对话被删了，就不再接
+                        val cur = _state.value.conversations.firstOrNull { it.id == convId }
+                        if (!busy(convId) && cur?.messages?.lastOrNull()?.id == reply.id) continueWork(convId)
+                    }
                 }
                 run {
                     val m = _state.value.conversations.firstOrNull { it.id == convId }?.messages?.firstOrNull { it.id == reply.id }
@@ -899,6 +935,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     companion object {
         /** 最多几个对话同时在回答。 */
         const val MAX_PARALLEL = 3
+        /** Work 一时出错后自动接着做：连着最多几次，第 n 次等 n × 这么多秒。 */
+        const val AUTO_RESUME_MAX = 3
+        const val AUTO_RESUME_DELAY_S = 15
 
         const val REVIEW_PROMPT = "请换一个更严格的视角，复核你上面那条回答：检查事实错误、计算错误、逻辑漏洞、" +
             "遗漏的重要信息和表达不清的地方，需要时可以联网核实。然后直接给出改进后的完整回答，" +
@@ -948,7 +987,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val (chatMemory, projectMemory) = knowledge.memoryTexts(c)
         return PromptBuilder.contextBreakdown(st.settings, c, st.project(c.projectId), memories, st.settings.activeSkills(),
             chatMemory, projectMemory, Dreamer.recentJournals(st.dreams), com.jack.ai.data.FreeTime.latelyNote(getApplication()),
-            com.jack.ai.data.SelfStory.bio(getApplication()).text)
+            com.jack.ai.data.SelfStory.bio(getApplication()).text, if (c.work) knowledge.workMemoryText() else "")
     }
 
     private fun updateConv(id: String, transform: (Conversation) -> Conversation) = core.updateConv(id, transform)
@@ -1048,6 +1087,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun setChatMemory(conv: Conversation, items: List<String>) = knowledge.setChatMemory(conv, items)
     fun moveToGlobal(conv: Conversation, item: String) = knowledge.moveToGlobal(conv, item)
     fun projectMemory(projectId: String) = knowledge.projectMemory(projectId)
+    fun workMemory() = knowledge.workMemory()
+    fun setWorkMemory(items: List<String>) = knowledge.setWorkMemory(items)
     fun setProjectMemory(projectId: String, items: List<String>) = knowledge.setProjectMemory(projectId, items)
     fun setMemoryFlags(id: String, useGlobal: Boolean, inDream: Boolean) {
         updateConvQuiet(id) { it.copy(useGlobalMemory = useGlobal, inDream = inDream) }

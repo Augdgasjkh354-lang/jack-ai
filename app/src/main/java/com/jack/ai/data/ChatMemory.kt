@@ -12,6 +12,8 @@ import java.io.File
 object ChatMemory {
     const val CHAT_FILE = "记忆.md"
     const val PROJECT_FILE = "项目记忆.md"
+    const val WORK_FILE = "工作记忆.md"
+    const val WORK_DIR = "work"
 
     fun chatFileName(conv: Conversation): String =
         if (conv.projectId == null) CHAT_FILE else "对话记忆-${conv.id.take(6)}.md"
@@ -21,6 +23,9 @@ object ChatMemory {
 
     fun projectFile(ctx: Context, projectId: String): File =
         File(Workspace.dir(ctx, "p_$projectId"), PROJECT_FILE)
+
+    /** 工作记忆：所有 Work 对话共用，和 Chat 的全局记忆不相通。 */
+    fun workFile(ctx: Context): File = File(Workspace.dir(ctx, WORK_DIR), WORK_FILE)
 
     fun read(file: File): String = runCatching { if (file.exists()) file.readText() else "" }.getOrDefault("")
 
@@ -34,7 +39,7 @@ object ChatMemory {
     fun render(title: String, items: List<String>): String =
         if (items.isEmpty()) "" else "# $title\n\n" + items.joinToString("\n") { "- $it" } + "\n"
 
-    fun titleOf(file: File) = if (file.name == PROJECT_FILE) "项目记忆" else "本对话记忆"
+    fun titleOf(file: File) = when (file.name) { PROJECT_FILE -> "项目记忆"; WORK_FILE -> "工作记忆"; else -> "本对话记忆" }
 
     /** 加一条；已经有一模一样的就不重复加。返回 false 表示没加。 */
     fun add(file: File, item: String): Boolean {

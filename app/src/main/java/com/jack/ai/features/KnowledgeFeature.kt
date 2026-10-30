@@ -181,6 +181,12 @@ class KnowledgeFeature(core: AppCore) : Feature(core) {
         ChatMemory.read(ChatMemory.chatFile(app, conv)) to
             (conv.projectId?.let { ChatMemory.read(ChatMemory.projectFile(app, it)) } ?: "")
 
+    fun workMemoryText(): String = ChatMemory.read(ChatMemory.workFile(app))
+
+    fun workMemory(): List<String> = ChatMemory.items(workMemoryText())
+
+    fun setWorkMemory(items: List<String>) = ChatMemory.write(ChatMemory.workFile(app), items)
+
     fun chatMemory(conv: Conversation): List<String> = ChatMemory.items(ChatMemory.read(ChatMemory.chatFile(app, conv)))
 
     fun setChatMemory(conv: Conversation, items: List<String>) = ChatMemory.write(ChatMemory.chatFile(app, conv), items)

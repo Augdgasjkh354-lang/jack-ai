@@ -92,7 +92,8 @@ private fun ToolSession.ownWorkbenchFile(name: String): File? {
 internal suspend fun ToolSession.readFile(args: JsonObject): String {
     val name = args["name"].text()
     return runTool("查看 $name") {
-        val file = runCatching { wsFile(name) }.getOrElse { e -> ownWorkbenchFile(name) ?: throw TextEdit.EditException(e.message.orEmpty() +
+        // 长任务里压掉的工具结果全文（.spill/…），文件夹列表里看不到，但能读
+        val file = Spill.file(wsDir, name) ?: runCatching { wsFile(name) }.getOrElse { e -> ownWorkbenchFile(name) ?: throw TextEdit.EditException(e.message.orEmpty() +
             if (name.startsWith("free_") || name.endsWith(".json")) "（自由时间、梦的原文用 own_history 看，不用 read_file）" else "") }
         val extracted = args["extracted"].text() == "true"
         val text = withContext(Dispatchers.IO) { Workspace.readText(file, extracted) }

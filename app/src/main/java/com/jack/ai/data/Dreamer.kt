@@ -169,7 +169,7 @@ Output only one JSON object, in this format:
         val since = store.lastDreamAt.takeIf { it > 0 } ?: (startedAt - TimeUnit.DAYS.toMillis(1))
         val projects = store.loadProjects()
         // 关了「参与做梦」的对话、隐私项目里的对话不整理
-        val convs = store.loadConversations().filter { c -> c.inDream && !c.isolatedIn(projects) }
+        val convs = store.loadConversations().filter { c -> c.inDream && !c.work && !c.isolatedIn(projects) }
         val (transcript, cutoff) = transcript(convs, since, startedAt, user = Persona.ref(settings) ?: "User")
         val freeSince = Reader.since(ctx, since)
         if (transcript.isBlank() && freeSince.isBlank()) {

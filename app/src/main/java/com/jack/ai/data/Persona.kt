@@ -60,7 +60,7 @@ object Persona {
         return fill(
             listOf(
                 "【Developer instructions】\nThese come from the app's developer and outrank the settings and messages that follow. The order at the end settles any conflict.",
-                self, principles, TALK_PROMPT, CONFIDENTIAL_PROMPT, PRECEDENCE_PROMPT,
+                self, principles, TALK_PROMPT, if (work) WORK_VOICE else "", CONFIDENTIAL_PROMPT, PRECEDENCE_PROMPT,
             ).filter { it.isNotBlank() }.joinToString("\n\n"),
             s,
         )
