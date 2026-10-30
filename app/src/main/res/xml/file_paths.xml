@@ -4,6 +4,7 @@
     <files-path name="workspaces" path="workspaces/" />
     <files-path name="tables" path="tables/" />
     <cache-path name="exports" path="exports/" />
+    <cache-path name="viewing" path="viewing/" />
     <cache-path name="camera" path="camera/" />
     <cache-path name="updates" path="updates/" />
     <external-files-path name="downloads" path="Download/" />

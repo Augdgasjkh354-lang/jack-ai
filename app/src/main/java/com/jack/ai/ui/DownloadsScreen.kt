@@ -61,6 +61,8 @@ import java.util.Locale
 fun DownloadsScreen(onBack: () -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
+    // 文字、网页、PDF、Word、Excel、PPT 在 App 里看，和聊天里的文件一样；别的交给手机上的 App
+    val viewer = rememberFileOpener()
     var version by remember { mutableIntStateOf(0) }
     var query by remember { mutableStateOf("") }
     var deleting by remember { mutableStateOf<DownloadRecord?>(null) }
@@ -112,7 +114,14 @@ fun DownloadsScreen(onBack: () -> Unit) {
             LazyColumn(contentPadding = PaddingValues(vertical = 4.dp)) {
                 items(shown, key = { it.first.at.toString() + it.first.uri }) { (r, ok) ->
                     Row(
-                        Modifier.fillMaxWidth().clickable(enabled = ok) { open(ctx, r) { message = it } }.padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+                        Modifier.fillMaxWidth().clickable(enabled = ok) {
+                            if (!inApp(r.name)) open(ctx, r) { message = it }
+                            else scope.launch {
+                                val f = withContext(Dispatchers.IO) { runCatching { localCopy(ctx, r) }.getOrNull() }
+                                if (f == null) open(ctx, r) { message = it }
+                                else viewer(com.jack.ai.data.GeneratedFile(r.name, f.absolutePath, r.mime.ifBlank { com.jack.ai.tools.ToolSession.mimeOf(r.name) }, f.length()))
+                            }
+                        }.padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(Modifier.weight(1f)) {
@@ -168,6 +177,21 @@ private fun exists(ctx: Context, r: DownloadRecord): Boolean = runCatching {
 
 private fun uriOf(ctx: Context, r: DownloadRecord): Uri =
     r.path?.let { androidx.core.content.FileProvider.getUriForFile(ctx, ctx.packageName + ".files", File(it)) } ?: Uri.parse(r.uri)
+
+private fun inApp(name: String) =
+    com.jack.ai.data.TextPreview.isText(name) || isViewableDoc(name) || name.endsWith(".html", true) || name.endsWith(".htm", true)
+
+/**
+ * 在 App 里看要一个文件：存在 App 里的直接用；存进手机「下载」文件夹的（只有 content:// 地址）先拷一份到缓存里看，
+ * 同一时间只留一份，免得越堆越多。
+ */
+private fun localCopy(ctx: Context, r: DownloadRecord): File {
+    r.path?.let { p -> File(p).takeIf { it.exists() }?.let { return it } }
+    val dir = File(ctx.cacheDir, "viewing").apply { deleteRecursively(); mkdirs() }
+    val out = File(dir, com.jack.ai.data.Workspace.safeName(r.name))
+    ctx.contentResolver.openInputStream(Uri.parse(r.uri))!!.use { input -> out.outputStream().use { input.copyTo(it) } }
+    return out
+}
 
 private fun open(ctx: Context, r: DownloadRecord, fail: (String) -> Unit) {
     runCatching {
