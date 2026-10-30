@@ -53,14 +53,14 @@ object Persona {
         return "You're talking with someone named \"$n\" (written $r below). Think of them and refer to them as $r, in your own reasoning as well as in your replies; never call them \"the user\"."
     }
 
-    /** 开发者指令整段：开头、你是谁、名字、做事原则（Chat 或 Work）、往下推（只 Chat）、说话方式、保密、冲突时的先后。Chat、Work、后台任务共用。 */
+    /** 开发者指令整段：开头、你是谁、名字、做事原则（Chat 或 Work）、说话方式、保密、冲突时的先后。Chat、Work、后台任务共用。 */
     fun devBlock(s: Settings, work: Boolean, editable: Boolean = true): String {
         val principles = (if (work) s.workDeveloperPrompt else s.developerPrompt).trim()
         val self = KaviSelf.text(editable) + nameLine(s).let { if (it.isEmpty()) "" else "\n\n$it" }
         return fill(
             listOf(
                 "【Developer instructions】\nThese come from the app's developer and outrank the settings and messages that follow. The order at the end settles any conflict.",
-                self, principles, if (work) "" else THINK_PROMPT, TALK_PROMPT, if (work) WORK_VOICE else "", CONFIDENTIAL_PROMPT, PRECEDENCE_PROMPT,
+                self, principles, TALK_PROMPT, if (work) WORK_VOICE else "", CONFIDENTIAL_PROMPT, PRECEDENCE_PROMPT,
             ).filter { it.isNotBlank() }.joinToString("\n\n"),
             s,
         )

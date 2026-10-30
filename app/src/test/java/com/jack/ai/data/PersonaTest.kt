@@ -25,8 +25,6 @@ class PersonaTest {
         // 共用原则只写一遍；Work 多出自己的几条
         assertEquals(1, Regex("Working principles").findAll(work).count())
         assertTrue(work.contains("Work mode:") && !chat.contains("Work mode:"))
-        // 往下推的检查清单只在 Chat
-        assertTrue(chat.contains("Thinking it through") && !work.contains("Thinking it through"))
     }
 
     @Test
