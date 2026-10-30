@@ -1,6 +1,11 @@
 <!doctype html><html><head><meta charset="utf-8">
 <!-- 文档查看器：按原样排版显示 Word、PPT。库在打包时下载（见 app/build.gradle.kts），文件从 /file 取。 -->
 <meta name="viewport" content="width=840">
+<script>
+// 截图用：一开始就按给定的宽度排，不等画完再改
+const fixedWidth = new URLSearchParams(location.search).get('w');
+if (fixedWidth) document.querySelector('meta[name=viewport]').setAttribute('content', 'width=' + fixedWidth);
+</script>
 <style>
 html,body{margin:0;background:#6b6b6b}
 #box{padding:12px 0}
@@ -25,13 +30,13 @@ fetch('file').then(r => { if (!r.ok) throw '读不到文件'; return r.arrayBuff
     if (!box.querySelector('section.docx')) throw '没画出内容';
     // 按最宽的一页定页面宽度，手机上整页铺满，两指再放大
     const w = Math.max(...[...box.querySelectorAll('section.docx')].map(s => s.offsetWidth), 600);
-    document.querySelector('meta[name=viewport]').setAttribute('content', 'width=' + (w + 24));
+    if (!fixedWidth) document.querySelector('meta[name=viewport]').setAttribute('content', 'width=' + (w + 24));
   } else {
     await load('pptx-preview.umd.js');
     const p = pptxPreview.init(box, { width: 960, mode: 'list' });
     await p.preview(buf);
     if (!box.children.length) throw '没画出内容';
-    document.querySelector('meta[name=viewport]').setAttribute('content', 'width=984');
+    if (!fixedWidth) document.querySelector('meta[name=viewport]').setAttribute('content', 'width=984');
   }
   console.log('DOCVIEW_OK');
 }).catch(fail);

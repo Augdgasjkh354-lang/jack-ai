@@ -111,7 +111,24 @@ internal suspend fun ToolSession.reviseFile(args: JsonObject): String {
         withContext(Dispatchers.IO) { Workspace.saveSource(file, tool, newArgs) }
         ui.attach(file)
         val pages = (newArgs["slides"] as? JsonArray)?.size?.let { "，现在一共 $it 页" }.orEmpty()
-        "已修改「${file.name}」：" + done.joinToString("；") + pages + "。" + verifyGenerated(tool, newArgs, file) + layoutNote(warnings) to
+        "已修改「${file.name}」：" + done.joinToString("；") + pages + "。" + verifyGenerated(tool, newArgs, file) + layoutNote(warnings) +
+            (if (tool == "create_ppt") lookAtSlides(file) else "") to
             SearchRecord("修改 ${file.name}")
     }
+}
+
+/**
+ * 生成或改完 PPT 后自己看一眼：每页截图（六页一张）放进下一条消息，让模型检查排版，有问题按页改。
+ * 当前模型看不了图、这次已经看过两次、或者截不到图时就不看，只说一声。
+ */
+internal suspend fun ToolSession.lookAtSlides(file: java.io.File): String {
+    if (!canSee) return "\n（当前模型看不了图，没法看实际效果；有【排版提醒】就按提醒改。）"
+    if (slideLooks >= 2) return ""
+    slideLooks++
+    val r = runCatching { com.jack.ai.ui.SlideShots.capture(app, file) }.getOrNull()
+        ?: return "\n（这次没截到图，没法看实际效果；有【排版提醒】就按提醒改。）"
+    images += r.sheets
+    return "\n【看一眼】${r.pages} 页的截图在下一条消息里（每张六页，左上角红字是页码，这是 App 里的预览，和 PowerPoint、WPS 里大体一样）。" +
+        "逐页看：字有没有溢出、被遮住或挤在一起，哪页太空，颜色看不看得清，图标、图表、配图合不合适，同一种版式是不是连着太多。" +
+        "有问题就用 revise_file 按页改；没问题就直接交付，不用向用户描述截图。"
 }

@@ -32,7 +32,8 @@ internal suspend fun ToolSession.create(tool: String, args: JsonObject, base: St
             "html" -> "小工具「${file.name}」已经显示在聊天里，用户可以直接点、输入、计算，也能全屏打开"
             else -> "已生成文件「${file.name}」，用户可以在聊天里打开或分享"
         }
-        "$shown。文件保存在对话文件夹里，以后要修改就用 edit_file 改它的底稿，不要重新生成。" + verifyGenerated(tool, args, file) + layoutNote(warnings) to
+        "$shown。文件保存在对话文件夹里，以后要修改就用 revise_file 或 edit_file 改它的底稿，不要重新生成。" + verifyGenerated(tool, args, file) + layoutNote(warnings) +
+            (if (tool == "create_ppt") lookAtSlides(file) else "") to
             SearchRecord("生成 $label：${file.name}")
     }
 

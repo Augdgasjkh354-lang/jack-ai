@@ -212,7 +212,7 @@ private fun PdfPage(pdf: PdfDoc, i: Int, widthPx: Int) {
 
 /** 这两种用前端库按原样画（库在打包时下载，见 app/build.gradle.kts）。 */
 private val FAITHFUL = setOf("docx", "pptx")
-private const val DOC_HOST = "doc.jack.local"
+internal const val DOC_HOST = "doc.jack.local"
 /** 这么久还没画完就当画不出来。 */
 private const val FAITHFUL_TIMEOUT_MS = 25_000L
 
@@ -246,33 +246,36 @@ private fun FaithfulPage(file: File, modifier: Modifier, onFail: () -> Unit) {
                             return true
                         }
                     }
-                    webViewClient = object : WebViewClient() {
-                        override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
-                            val url = request.url
-                            if (url.scheme == "data" || url.scheme == "blob") return null
-                            val name = url.path.orEmpty().removePrefix("/")
-                            if (url.scheme == "https" && url.host == DOC_HOST) {
-                                if (name == "file") return runCatching {
-                                    WebResourceResponse("application/octet-stream", null, file.inputStream())
-                                }.getOrNull()
-                                if (name.matches(Regex("[a-z.-]+\\.(html|js)"))) return runCatching {
-                                    WebResourceResponse(if (name.endsWith(".html")) "text/html" else "application/javascript", "utf-8",
-                                        view.context.assets.open("docview/$name"))
-                                }.getOrNull() ?: blocked()
-                            }
-                            return blocked()
-                        }
-
-                        override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                            if (request.url.host != DOC_HOST) runCatching { view.context.startActivity(Intent(Intent.ACTION_VIEW, request.url)) }
-                            return true
-                        }
-                    }
+                    webViewClient = docViewClient(file)
                     loadUrl("https://$DOC_HOST/viewer.html?kind=" + file.extension.lowercase())
                 }
             },
         )
         if (!done) CircularProgressIndicator(Modifier.align(Alignment.Center))
+    }
+}
+
+/**
+ * 查看器网页的请求只放行三样：viewer.html 和几个库（App 自带的 assets/docview）、这一个文档（/file），别的一律拦下。
+ * 点链接交给系统浏览器。截图（[SlideShots]）也用它。
+ */
+internal fun docViewClient(file: File) = object : WebViewClient() {
+    override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
+        val url = request.url
+        if (url.scheme == "data" || url.scheme == "blob") return null
+        val name = url.path.orEmpty().removePrefix("/")
+        if (url.scheme == "https" && url.host == DOC_HOST) {
+            if (name == "file") return runCatching { WebResourceResponse("application/octet-stream", null, file.inputStream()) }.getOrNull()
+            if (name.matches(Regex("[a-z.-]+\\.(html|js)"))) return runCatching {
+                WebResourceResponse(if (name.endsWith(".html")) "text/html" else "application/javascript", "utf-8", view.context.assets.open("docview/$name"))
+            }.getOrNull() ?: blocked()
+        }
+        return blocked()
+    }
+
+    override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+        if (request.url.host != DOC_HOST) runCatching { view.context.startActivity(Intent(Intent.ACTION_VIEW, request.url)) }
+        return true
     }
 }
 
