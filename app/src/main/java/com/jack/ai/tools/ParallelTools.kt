@@ -21,7 +21,7 @@ import kotlinx.serialization.json.put
  * 用户的私人东西（聊天记录、表格、邮件、日历、Notion）不给：分身可能用的是别家的免费模型。
  */
 private val SUB_TOOLS = setOf(
-    "web_search", "read_webpage", "read_file", "write_file", "edit_file", "facts", "query_trains",
+    "web_search", "read_webpage", "read_file", "write_file", "edit_file", "revise_file", "facts", "query_trains",
     "run_js", "run_python", "create_document", "create_excel", "create_ppt", "create_chart", "create_diagram", "create_app",
 )
 

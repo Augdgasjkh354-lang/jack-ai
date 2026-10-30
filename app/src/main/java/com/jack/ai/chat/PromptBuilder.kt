@@ -192,6 +192,7 @@ object PromptBuilder {
             if (word || pdf) add(SkillTools.createDocument(word, pdf))
             if (SkillIds.PPT in skillIds) add(SkillTools.CREATE_PPT)
             if (SkillIds.EXCEL in skillIds) add(SkillTools.CREATE_EXCEL)
+            if (word || SkillIds.PPT in skillIds || SkillIds.EXCEL in skillIds) add(SkillTools.REVISE_FILE)
             // 一直带着、选项写全：工具说明不随对话变，缓存才能跨对话命中；眼下搜不了的地方由工具自己回话
             add(SkillTools.SEARCH_MY_DATA)
             add(SkillTools.FACTS)
@@ -354,6 +355,7 @@ object PromptBuilder {
             // 文件列表不放进系统提示：列表一变，整段对话的缓存就失效了
             parts += "固定说明" to f("【Conversation folder】This conversation has a folder holding the files {user} sent and the files you generated; the current files are listed before the latest message. " +
                 "When {user} wants an existing file changed, use edit_file to replace only the part that changes instead of regenerating the whole file; if you're unsure of the original text, look with read_file first. " +
+                "For Word, PPT and Excel files you generated, revise_file is easier: change one slide, insert/delete/move slides, switch the theme or transition, add a cover or TOC, or add totals, highlights or charts to one sheet. " +
                 "Files whose content is already in the messages don't need to be read again.")
         }
         if ("save_memory" in names) {
