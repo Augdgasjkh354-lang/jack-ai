@@ -135,6 +135,8 @@ dependencies {
     // Jack 专用代理：读 Clash 订阅（YAML）、扫二维码（不依赖谷歌服务）
     implementation("org.yaml:snakeyaml:2.3")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+    // 照片里的表格转 Excel：离线中文文字识别，模型打包在 App 里，不需要谷歌服务
+    implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
 }
 
 // ---------- 文档查看器的前端库 ----------

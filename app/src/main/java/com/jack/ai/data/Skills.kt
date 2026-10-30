@@ -143,7 +143,8 @@ val BUILTIN_SKILLS = listOf(
    - highlights 条件格式：超预算、不及格标红（op 用 > 或 <），前三名标绿（top），状态是“延期”标黄（contains），金额大小用数据条（databar）。一张表两三条就够，别满屏都是颜色。
    - charts 图表：数据要看趋势、比大小、看占比时，在表旁边画一张，category_column 写分类那列的表头，value_columns 写数那几列的表头。图直接指着表里的数，用户改了数图会跟着变。
 5. 数据较多时按逻辑分成几个工作表，比如“明细”和“汇总”。
-6. 生成后用一两句话说明表格结构和加了什么（合计、标色规则、图表），不要把整张表再贴出来。有【排版提醒】就按提醒改。""",
+6. 用户发来表格的照片、截图要变成 Excel：先用 read_table_image 认出来（离线识别，数字准），能看图的话再对照原图核对一遍，把认错的字、数改掉，合计行验算一下，然后 create_excel（原表有合计行就用 total_row 代替手抄的合计）。没把握的格子在回复里列出来请用户确认。
+7. 生成后用一两句话说明表格结构和加了什么（合计、标色规则、图表），不要把整张表再贴出来。有【排版提醒】就按提醒改。""",
     ),
     Skill(
         id = SkillIds.PDF, builtin = true, name = "PDF 文档",
@@ -519,6 +520,8 @@ object SkillTools {
     val DELETE_FILE = schema("""{"type":"function","function":{"name":"delete_file","description":"删除对话文件夹里的文件，会先问用户。","parameters":{"type":"object","properties":{"names":{"type":"array","items":{"type":"string"},"description":"要删的文件名，可以多个"}},"required":["names"]}}}""")
 
     val WRITE_FILE = schema("""{"type":"function","function":{"name":"write_file","description":"在对话文件夹里新建或整个覆盖一个文字文件（代码、md、txt、csv、json、html 等）。只改一小部分时用 edit_file。","parameters":{"type":"object","properties":{"name":{"type":"string","description":"文件名，带扩展名"},"content":{"type":"string"}},"required":["name","content"]}}}""")
+
+    val READ_TABLE_IMAGE = schema("""{"type":"function","function":{"name":"read_table_image","description":"把照片、截图里的表格认出来（手机上的离线文字识别），按位置排回行和列，返回表格和可以直接给 create_excel 的 rows。用户发来表格的照片、截图要做成 Excel 时先用它，再核对、生成。","parameters":{"type":"object","properties":{"name":{"type":"string","description":"对话文件夹里的图片文件名"}},"required":["name"]}}}""")
 
     val MY_TEMPLATES = schema("""{"type":"function","function":{"name":"my_templates","description":"「我的模板」：把用户满意的风格存下来，以后生成时 template 写模板名就照它来；设成默认的话不写也用。list 列出全部；save 存（from_file 从一份你生成过的文件或用户发来的 .pptx 取风格，或者直接写 settings）；delete 删；set_default 设默认（default=false 取消）。","parameters":{"type":"object","properties":{"action":{"type":"string","enum":["list","save","delete","set_default"]},"name":{"type":"string","description":"模板名，比如「公司汇报」「我的简历」"},"kind":{"type":"string","enum":["ppt","word","excel"],"description":"用 from_file 时不用写"},"from_file":{"type":"string","description":"对话文件夹里的文件名：你生成过的 Word / PPT / Excel（取它的设置），或用户发来的 .pptx（取配色和字体）"},"settings":{"type":"object","description":"直接写或覆盖设置。PPT：theme、transition、animation；Word：theme、cover（可以只写 author、organization）、toc、header、page_numbers、heading_numbers、indent、font_style；Excel：theme"},"default":{"type":"boolean","description":"设成这一类的默认模板"}},"required":["action"]}}}""")
 

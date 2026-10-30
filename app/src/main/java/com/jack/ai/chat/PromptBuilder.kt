@@ -191,7 +191,7 @@ object PromptBuilder {
             val pdf = SkillIds.PDF in skillIds
             if (word || pdf) add(SkillTools.createDocument(word, pdf))
             if (SkillIds.PPT in skillIds) add(SkillTools.CREATE_PPT)
-            if (SkillIds.EXCEL in skillIds) add(SkillTools.CREATE_EXCEL)
+            if (SkillIds.EXCEL in skillIds) { add(SkillTools.CREATE_EXCEL); add(SkillTools.READ_TABLE_IMAGE) }
             if (word || SkillIds.PPT in skillIds || SkillIds.EXCEL in skillIds) { add(SkillTools.REVISE_FILE); add(SkillTools.MY_TEMPLATES) }
             // 一直带着、选项写全：工具说明不随对话变，缓存才能跨对话命中；眼下搜不了的地方由工具自己回话
             add(SkillTools.SEARCH_MY_DATA)
