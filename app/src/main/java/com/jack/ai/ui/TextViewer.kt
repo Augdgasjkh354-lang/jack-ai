@@ -97,7 +97,7 @@ fun TextViewer(
                                 DropdownMenuItem(text = { Text("复制全部") }, enabled = !loaded?.text.isNullOrEmpty(), onClick = {
                                     menu = false
                                     clipboard.setText(AnnotatedString(loaded?.text.orEmpty()))
-                                    Toast.makeText(ctx, "已复制", Toast.LENGTH_SHORT).show()
+                                    copiedToast(ctx)
                                 })
                                 onShare?.let { DropdownMenuItem(text = { Text("分享") }, onClick = { menu = false; it() }) }
                                 onOpenWith?.let { DropdownMenuItem(text = { Text("用其他应用打开") }, onClick = { menu = false; it() }) }

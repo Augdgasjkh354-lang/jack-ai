@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -129,6 +130,7 @@ fun UserBubble(msg: ChatMessage, onDelete: () -> Unit, onEdit: ((String) -> Unit
     val clipboard = LocalClipboardManager.current
     val ctx = LocalContext.current
     var menu by remember { mutableStateOf(false) }
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     var editing by remember { mutableStateOf(false) }
     var viewing by remember { mutableStateOf<String?>(null) }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -178,7 +180,10 @@ fun UserBubble(msg: ChatMessage, onDelete: () -> Unit, onEdit: ((String) -> Unit
                 modifier = Modifier
                     .widthIn(max = 320.dp)
                     .clip(RoundedCornerShape(22.dp, 8.dp, 22.dp, 22.dp))
-                    .combinedClickable(onClick = {}, onLongClick = { menu = true }),
+                    .combinedClickable(onClick = {}, onLongClick = {
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                        menu = true
+                    }),
             ) {
                 Text(
                     msg.content,
@@ -194,7 +199,7 @@ fun UserBubble(msg: ChatMessage, onDelete: () -> Unit, onEdit: ((String) -> Unit
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                 if (msg.content.isNotEmpty()) DropdownMenuItem(text = { Text("复制") }, leadingIcon = { Icon(AppIcons.Copy, null) }, onClick = {
                     clipboard.setText(AnnotatedString(msg.content))
-                    Toast.makeText(ctx, "已复制", Toast.LENGTH_SHORT).show()
+                    copiedToast(ctx)
                     menu = false
                 })
                 if (onEdit != null) DropdownMenuItem(text = { Text("编辑后重发") }, leadingIcon = { Icon(Icons.Default.Edit, null) },
@@ -354,9 +359,12 @@ fun AssistantMessage(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.padding(top = 10.dp)) {
                 if (msg.content.isNotEmpty()) {
-                    SmallAction(AppIcons.Copy, "复制") {
+                    // 复制后图标变成对勾一会儿，不再弹一条提示
+                    var copied by remember { mutableStateOf(false) }
+                    LaunchedEffect(copied) { if (copied) { kotlinx.coroutines.delay(1500); copied = false } }
+                    SmallAction(if (copied) Icons.Default.Check else AppIcons.Copy, if (copied) "已复制" else "复制") {
                         clipboard.setText(AnnotatedString(msg.content))
-                        Toast.makeText(ctx, "已复制", Toast.LENGTH_SHORT).show()
+                        copied = true
                     }
                 }
                 if (isLast) SmallAction(Icons.Default.Refresh, "重新回答", onRegenerate)
@@ -551,6 +559,11 @@ internal fun shareFile(ctx: Context, f: GeneratedFile) {
         .putExtra(Intent.EXTRA_STREAM, fileUri(ctx, f))
         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     ctx.startActivity(Intent.createChooser(intent, "分享到"))
+}
+
+/** 复制后提示一下；安卓 13 起系统自己会在底下弹复制的提示，就不再重复。 */
+internal fun copiedToast(ctx: Context) {
+    if (android.os.Build.VERSION.SDK_INT < 33) Toast.makeText(ctx, "已复制", Toast.LENGTH_SHORT).show()
 }
 
 /** 回答下面的小圆按钮：浅灰底，图标灰色。 */

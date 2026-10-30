@@ -88,6 +88,13 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import kotlinx.coroutines.flow.debounce
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -137,16 +144,24 @@ fun ChatScreen(
     val conv = state.current
     val project = state.project(state.currentProjectId)
     val ctx = LocalContext.current
-    var text by rememberSaveable { mutableStateOf("") }
     // 每个对话各有各的草稿：换到别的对话时把没发的字先收起来，回来再放回去，不会把 A 里写了一半的话发到 B 里。
+    // 草稿存在手机上，App 被系统清掉再打开也还在。
     // 在这里（组合时）就换掉，比分享、语音塞进来的文字先一步，后者会接在换好的草稿后面
-    val drafts = remember { mutableMapOf<String?, String>() }
+    val drafts = remember { DraftStore(ctx) }
+    var text by rememberSaveable { mutableStateOf(drafts.get(conv?.id)) }
     var draftOf by remember { mutableStateOf(conv?.id) }
     if (draftOf != conv?.id) {
-        drafts[draftOf] = text
-        text = drafts.remove(conv?.id).orEmpty()
+        drafts.put(draftOf, text)
+        text = drafts.get(conv?.id)
         draftOf = conv?.id
     }
+    // 打字时停一下再存，不每个字都写一次
+    LaunchedEffect(Unit) {
+        @OptIn(kotlinx.coroutines.FlowPreview::class)
+        snapshotFlow { draftOf to text }.debounce(400).collect { (id, t) -> drafts.put(id, t) }
+    }
+    // 点了建议、模板：光标放进输入框、弹出键盘，接着打字就行
+    var focusInput by remember { mutableIntStateOf(0) }
     var showFiles by remember { mutableStateOf(false) }
     var memoryOf by remember { mutableStateOf<Conversation?>(null) }
     val bg = MaterialTheme.colorScheme.background
@@ -245,6 +260,7 @@ fun ChatScreen(
                     state = state,
                     text = text,
                     onTextChange = { text = it },
+                    focusRequest = focusInput,
                     onNeedTavily = {
                         Toast.makeText(ctx, "请先在 设置 → 连接 → 联网搜索 里填 Exa 或 Tavily 的 Key", Toast.LENGTH_LONG).show()
                         onOpenSettings()
@@ -255,7 +271,7 @@ fun ChatScreen(
             // 消息铺满整屏，从上下两个半透明的框后面滚过去
             Box(Modifier.fillMaxSize().swipeToOpen { scope.launch { drawerState.open() } }) {
                 if (conv == null || conv.messages.isEmpty()) {
-                    Box(Modifier.padding(padding)) { EmptyState(vm, state, conv, onOpenMemory, onSuggest = { text = it }) }
+                    Box(Modifier.padding(padding)) { EmptyState(vm, state, conv, onOpenMemory, onSuggest = { text = it; focusInput++ }) }
                 } else {
                     MessageList(vm, conv, state.streamingHere, padding)
                 }
@@ -538,10 +554,24 @@ private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolea
     val lastId = conv.messages.last().id
     val lastUserId = conv.messages.lastOrNull { it.role == "user" }?.id
     val follow = rememberFollowBottom(listState, conv.id, lastUserId, moving = streaming || StreamReveal.pending)
+    // 往上翻看旧消息时收起键盘，屏幕留给消息（和微信一样）
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    val hideKeyboard = remember {
+        object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
+            override fun onPreScroll(available: androidx.compose.ui.geometry.Offset, source: androidx.compose.ui.input.nestedscroll.NestedScrollSource): androidx.compose.ui.geometry.Offset {
+                if (source == androidx.compose.ui.input.nestedscroll.NestedScrollSource.UserInput && available.y > 4f) {
+                    keyboard?.hide()
+                    focusManager.clearFocus()
+                }
+                return androidx.compose.ui.geometry.Offset.Zero
+            }
+        }
+    }
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize().nestedScroll(follow.connection),
+            modifier = Modifier.fillMaxSize().nestedScroll(follow.connection).nestedScroll(hideKeyboard),
             contentPadding = PaddingValues(
                 start = 16.dp, end = 16.dp,
                 top = bars.calculateTopPadding() + 12.dp, bottom = bars.calculateBottomPadding() + 12.dp,
@@ -684,6 +714,7 @@ private fun InputBar(
     text: String,
     onTextChange: (String) -> Unit,
     onNeedTavily: () -> Unit,
+    focusRequest: Int = 0,
 ) {
     var attachMenu by remember { mutableStateOf(false) }
     // 「@技能」「@邮箱」选择框：null 不显示
@@ -767,6 +798,27 @@ private fun InputBar(
             Toast.makeText(ctx, recordError, Toast.LENGTH_LONG).show()
         }
     }
+    // 输入框自己管光标：外面塞进来的字（建议、分享、语音、@）都把光标放到最后，接着打就行
+    var field by remember { mutableStateOf(TextFieldValue(text, TextRange(text.length))) }
+    if (field.text != text) field = TextFieldValue(text, TextRange(text.length))
+    val focus = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(focusRequest) {
+        if (focusRequest > 0) {
+            withFrameNanos { }
+            runCatching { focus.requestFocus() }
+            keyboard?.show()
+        }
+    }
+    // 打「@」就地列出技能、邮箱，点一下补全
+    val mentionNames = remember(settings) {
+        settings.activeSkills().map { it.name } +
+            if (settings.activeSkills().any { it.id == com.jack.ai.data.SkillIds.MAIL }) settings.readyMails.map { it.address } else emptyList()
+    }
+    val mentionHits = mentionQuery(field.text, field.selection.end)
+        ?.takeIf { field.selection.collapsed }
+        ?.let { mentionCandidates(mentionNames, it, field.text) }
+        .orEmpty()
     mentionPick?.let { options ->
         AlertDialog(
             onDismissRequest = { mentionPick = null },
@@ -778,7 +830,7 @@ private fun InputBar(
                             name,
                             style = MaterialTheme.typography.bodyLarge,
                             modifier = Modifier.fillMaxWidth()
-                                .clickable { onTextChange(withMention(text, name)); mentionPick = null }
+                                .clickable { onTextChange(withMention(text, name)); mentionPick = null; runCatching { focus.requestFocus() } }
                                 .padding(vertical = 12.dp),
                         )
                     }
@@ -821,6 +873,24 @@ private fun InputBar(
                         items(state.pending, key = { it.id }) { att -> PendingChip(att) { vm.removePending(att.id) } }
                         if (state.importing) {
                             item { CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) }
+                        }
+                    }
+                }
+                if (mentionHits.isNotEmpty()) {
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp),
+                        modifier = Modifier.padding(top = 2.dp, bottom = 2.dp),
+                    ) {
+                        items(mentionHits, key = { it }) { name ->
+                            androidx.compose.material3.SuggestionChip(
+                                onClick = {
+                                    val (t, c) = completeMention(field.text, field.selection.end, name)
+                                    field = TextFieldValue(t, TextRange(c))
+                                    onTextChange(t)
+                                },
+                                label = { Text("@$name", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                            )
                         }
                     }
                 }
@@ -911,8 +981,8 @@ private fun InputBar(
                         }
                     }
                     TextField(
-                        value = text,
-                        onValueChange = onTextChange,
+                        value = field,
+                        onValueChange = { field = it; if (it.text != text) onTextChange(it.text) },
                         placeholder = { Text("问 Kavi…", color = colors.outline) },
                         maxLines = 6,
                         textStyle = MaterialTheme.typography.bodyLarge,
@@ -924,7 +994,7 @@ private fun InputBar(
                             unfocusedIndicatorColor = Color.Transparent,
                             disabledIndicatorColor = Color.Transparent,
                         ),
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).focusRequester(focus),
                     )
                 }
                 // 第二行：思考、联网两个小药丸，右边是话筒 / 发送 / 停止
