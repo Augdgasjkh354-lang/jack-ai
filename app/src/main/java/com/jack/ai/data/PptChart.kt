@@ -49,8 +49,8 @@ object PptChart {
 
     private fun solid(c: String) = """<a:solidFill><a:srgbClr val="$c"/></a:solidFill>"""
 
-    private fun txPr(size: Int, color: String, bold: Boolean = false) =
-        """<c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="$size"${if (bold) " b=\"1\"" else ""}>${solid(color)}<a:latin typeface="微软雅黑"/><a:ea typeface="微软雅黑"/></a:defRPr></a:pPr><a:endParaRPr lang="zh-CN"/></a:p></c:txPr>"""
+    private fun txPr(size: Int, color: String, bold: Boolean = false, t: PptDeck.Theme? = null) =
+        """<c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="$size"${if (bold) " b=\"1\"" else ""}>${solid(color)}<a:latin typeface="${esc(t?.latin ?: "微软雅黑")}"/><a:ea typeface="${esc(t?.ea ?: "微软雅黑")}"/></a:defRPr></a:pPr><a:endParaRPr lang="zh-CN"/></a:p></c:txPr>"""
 
     /** 图表部件的 XML。workbook 关系用 rId1。 */
     fun xml(c: Chart, t: PptDeck.Theme): String {
@@ -71,18 +71,18 @@ object PptChart {
             when (c.type) {
                 "line" -> """<c:ser><c:idx val="$si"/><c:order val="$si"/>$tx<c:spPr><a:ln w="34925" cap="rnd">${solid(color)}<a:round/></a:ln></c:spPr>""" +
                     """<c:marker><c:symbol val="circle"/><c:size val="7"/><c:spPr>${solid(color)}<a:ln w="19050">${solid(t.bg)}</a:ln></c:spPr></c:marker>""" +
-                    """<c:dLbls><c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>${txPr(1200, label)}<c:dLblPos val="t"/><c:showLegendKey val="0"/><c:showVal val="${if (c.series.size <= 2) 1 else 0}"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="0"/><c:showBubbleSize val="0"/></c:dLbls>""" +
+                    """<c:dLbls><c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>${txPr(1200, label, t = t)}<c:dLblPos val="t"/><c:showLegendKey val="0"/><c:showVal val="${if (c.series.size <= 2) 1 else 0}"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="0"/><c:showBubbleSize val="0"/></c:dLbls>""" +
                     """$cat$v<c:smooth val="0"/></c:ser>"""
                 // 环形图不认 dLblPos，写了 PowerPoint 会报文件损坏
                 "pie", "doughnut" -> {
                     val pts = (0 until n).joinToString("") { i -> """<c:dPt><c:idx val="$i"/><c:bubble3D val="0"/><c:spPr>${solid(colors[i % colors.size])}<a:ln w="19050">${solid(t.bg)}</a:ln></c:spPr></c:dPt>""" }
                     """<c:ser><c:idx val="$si"/><c:order val="$si"/>$tx$pts""" +
                         // 环形图的字压在色块上，用白字；饼图的字在外面，用正文色
-                        """<c:dLbls><c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>${txPr(1300, if (c.type == "doughnut") "FFFFFF" else label, bold = c.type == "doughnut")}${if (c.type == "pie") "<c:dLblPos val=\"outEnd\"/>" else ""}<c:showLegendKey val="0"/><c:showVal val="0"/><c:showCatName val="1"/><c:showSerName val="0"/><c:showPercent val="1"/><c:showBubbleSize val="0"/><c:separator>：</c:separator><c:showLeaderLines val="1"/></c:dLbls>""" +
+                        """<c:dLbls><c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>${txPr(1300, if (c.type == "doughnut") "FFFFFF" else label, bold = c.type == "doughnut", t = t)}${if (c.type == "pie") "<c:dLblPos val=\"outEnd\"/>" else ""}<c:showLegendKey val="0"/><c:showVal val="0"/><c:showCatName val="1"/><c:showSerName val="0"/><c:showPercent val="1"/><c:showBubbleSize val="0"/><c:separator>：</c:separator><c:showLeaderLines val="1"/></c:dLbls>""" +
                         """$cat$v</c:ser>"""
                 }
                 else -> """<c:ser><c:idx val="$si"/><c:order val="$si"/>$tx<c:spPr>${solid(color)}</c:spPr><c:invertIfNegative val="0"/>""" +
-                    """<c:dLbls><c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>${txPr(1200, label)}<c:dLblPos val="outEnd"/><c:showLegendKey val="0"/><c:showVal val="${if (c.series.size <= 3 && n <= 12) 1 else 0}"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="0"/><c:showBubbleSize val="0"/></c:dLbls>""" +
+                    """<c:dLbls><c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>${txPr(1200, label, t = t)}<c:dLblPos val="outEnd"/><c:showLegendKey val="0"/><c:showVal val="${if (c.series.size <= 3 && n <= 12) 1 else 0}"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="0"/><c:showBubbleSize val="0"/></c:dLbls>""" +
                     "$cat$v</c:ser>"
             }
         }.joinToString("")
@@ -97,12 +97,12 @@ object PptChart {
         val catPos = if (c.type == "bar") "l" else "b"
         val valPos = if (c.type == "bar") "b" else "l"
         val axisXml = if (pie) "" else
-            """<c:catAx><c:axId val="11"/><c:scaling><c:orientation val="${if (c.type == "bar") "maxMin" else "minMax"}"/></c:scaling><c:delete val="0"/><c:axPos val="$catPos"/><c:numFmt formatCode="General" sourceLinked="1"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:spPr><a:ln w="9525">${solid(grid)}</a:ln></c:spPr>${txPr(1300, label)}<c:crossAx val="22"/><c:crosses val="autoZero"/><c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:noMultiLvlLbl val="0"/></c:catAx>""" +
-                """<c:valAx><c:axId val="22"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="$valPos"/><c:majorGridlines><c:spPr><a:ln w="6350">${solid(grid)}</a:ln></c:spPr></c:majorGridlines><c:numFmt formatCode="General" sourceLinked="1"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:spPr><a:ln><a:noFill/></a:ln></c:spPr>${txPr(1200, t.muted)}<c:crossAx val="11"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>"""
-        val legend = if (pie || c.series.size > 1) """<c:legend><c:legendPos val="${if (pie) "r" else "t"}"/><c:overlay val="0"/>${txPr(1300, label)}</c:legend>""" else ""
+            """<c:catAx><c:axId val="11"/><c:scaling><c:orientation val="${if (c.type == "bar") "maxMin" else "minMax"}"/></c:scaling><c:delete val="0"/><c:axPos val="$catPos"/><c:numFmt formatCode="General" sourceLinked="1"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:spPr><a:ln w="9525">${solid(grid)}</a:ln></c:spPr>${txPr(1300, label, t = t)}<c:crossAx val="22"/><c:crosses val="autoZero"/><c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:noMultiLvlLbl val="0"/></c:catAx>""" +
+                """<c:valAx><c:axId val="22"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="$valPos"/><c:majorGridlines><c:spPr><a:ln w="6350">${solid(grid)}</a:ln></c:spPr></c:majorGridlines><c:numFmt formatCode="General" sourceLinked="1"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:spPr><a:ln><a:noFill/></a:ln></c:spPr>${txPr(1200, t.muted, t = t)}<c:crossAx val="11"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>"""
+        val legend = if (pie || c.series.size > 1) """<c:legend><c:legendPos val="${if (pie) "r" else "t"}"/><c:overlay val="0"/>${txPr(1300, label, t = t)}</c:legend>""" else ""
         return """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">""" +
             """<c:date1904 val="0"/><c:lang val="zh-CN"/><c:roundedCorners val="0"/><c:chart>$BLANK_TITLE<c:autoTitleDeleted val="0"/><c:plotArea><c:layout/>$plot$axisXml<c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr></c:plotArea>$legend<c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart>""" +
-            """<c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>${txPr(1200, label)}<c:externalData r:id="rId1"><c:autoUpdate val="0"/></c:externalData></c:chartSpace>"""
+            """<c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>${txPr(1200, label, t = t)}<c:externalData r:id="rId1"><c:autoUpdate val="0"/></c:externalData></c:chartSpace>"""
     }
 
     /** 内嵌的数据表：A 列分类，后面每组一列，第一行是组名。 */

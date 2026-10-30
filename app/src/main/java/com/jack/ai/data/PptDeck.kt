@@ -20,12 +20,14 @@ object PptDeck {
     private const val FONT = "微软雅黑"
 
     val LAYOUTS = listOf("title", "section", "agenda", "content", "cards", "two_column", "timeline", "stats", "process", "chart", "quote", "image", "end")
-    val TRANSITIONS = listOf("none", "fade", "push", "wipe", "split", "cover", "zoom")
+    val TRANSITIONS = listOf("none", "fade", "push", "wipe", "split", "cover", "zoom", "morph")
     val ANIMATIONS = listOf("none", "fade", "rise", "wipe")
 
+    /** 配色和字体。latin/ea 是正文的西文、中文字体，head 开头的是标题和加粗字用的。 */
     data class Theme(
         val primary: String, val accent: String, val bg: String, val title: String, val text: String,
         val soft: String, val card: String, val muted: String, val dark: Boolean = false,
+        val latin: String = FONT, val ea: String = FONT, val headLatin: String = FONT, val headEa: String = FONT,
     )
 
     /** 配色：商务蓝、自然绿、活力橙、文艺紫、科技暗、中国红、清新青、极简黑白、暖调莫兰迪。 */
@@ -102,6 +104,8 @@ object PptDeck {
 
     /** 这一页里哪些编号是图标（画的时候记下，动画要用）。 */
     private val iconIds = ThreadLocal<MutableSet<Int>>()
+    /** 正在画的这页用的配色（字体从这里取）。 */
+    private val current = ThreadLocal<Theme>()
 
     // ---------- 字号 ----------
 
@@ -157,8 +161,12 @@ object PptDeck {
             val mar = 342900 + level * 457200
             """<a:pPr marL="$mar" indent="-342900" algn="$align"><a:lnSpc><a:spcPct val="110000"/></a:lnSpc><a:spcBef><a:spcPts val="$before"/></a:spcBef><a:buClr><a:srgbClr val="$bulletColor"/></a:buClr><a:buFont typeface="Arial"/><a:buChar char="$bullet"/></a:pPr>"""
         } else """<a:pPr algn="$align"><a:lnSpc><a:spcPct val="110000"/></a:lnSpc><a:spcBef><a:spcPts val="$before"/></a:spcBef><a:buNone/></a:pPr>"""
+        val th = current.get()
         val rs = runs.joinToString("") { r ->
-            """<a:r><a:rPr lang="zh-CN" altLang="en-US" sz="${r.size}"${if (r.bold) " b=\"1\"" else ""} dirty="0">${fill(r.color)}<a:latin typeface="$FONT"/><a:ea typeface="$FONT"/></a:rPr><a:t>${esc(r.text)}</a:t></a:r>"""
+            // 加粗的（标题、小标题）用标题字体，其余用正文字体
+            val latin = esc((if (r.bold) th?.headLatin else th?.latin) ?: FONT)
+            val ea = esc((if (r.bold) th?.headEa else th?.ea) ?: FONT)
+            """<a:r><a:rPr lang="zh-CN" altLang="en-US" sz="${r.size}"${if (r.bold) " b=\"1\"" else ""} dirty="0">${fill(r.color)}<a:latin typeface="$latin"/><a:ea typeface="$ea"/></a:rPr><a:t>${esc(r.text)}</a:t></a:r>"""
         }
         return "<a:p>$ppr$rs</a:p>"
     }
@@ -218,6 +226,7 @@ object PptDeck {
         val byPara = mutableSetOf<Int>()
         val pics = mutableSetOf<Int>()
         iconIds.set(pics)
+        current.set(t)
         val warn = mutableListOf<String>()
         var id = 2
         fun next() = id++
@@ -231,21 +240,21 @@ object PptDeck {
 
         // 浅色页右上角一个淡淡的大圆，深色页也有，只是更暗：让页面不那么空
         fun decor() {
-            out.append(shape(next(), W - 2300000, -1500000, 3600000, 3600000, "ellipse", t.soft, if (t.dark) 70 else 100, name = "Decor"))
+            out.append(shape(next(), W - 2300000, -1500000, 3600000, 3600000, "ellipse", t.soft, if (t.dark) 70 else 100, name = "!!Decor"))
         }
         fun header(title: String, iconName: String? = null) {
             var x = MX
             if (iconName != null) {
-                out.append(shape(next(), MX, 430000, 640000, 640000, "ellipse", t.soft, name = "Title icon bg"))
+                out.append(shape(next(), MX, 430000, 640000, 640000, "ellipse", t.soft, name = "!!Title icon bg"))
                 out.append(icon(next(), iconName, MX + 150000, 580000, 340000, t.accent))
                 x = MX + 820000
             }
             val size = fit(listOf(title), W - x - MX - 1800000, 800000, 3200, 2200)
-            out.append(text(next(), x, 360000, W - x - MX, 800000, listOf(para(listOf(Run(title, size, t.title, true)))), "ctr", "Title"))
-            out.append(shape(next(), MX + 40000, 1230000, 720000, 54000, "rect", t.accent, name = "Title bar"))
+            out.append(text(next(), x, 360000, W - x - MX, 800000, listOf(para(listOf(Run(title, size, t.title, true)))), "ctr", "!!Title"))
+            out.append(shape(next(), MX + 40000, 1230000, 720000, 54000, "rect", t.accent, name = "!!Title bar"))
         }
         fun pageNo() {
-            out.append(text(next(), W - MX - 1200000, H - 560000, 1200000, 380000, listOf(para(listOf(Run("$number / $total", 1100, t.muted)), "r")), name = "Page"))
+            out.append(text(next(), W - MX - 1200000, H - 560000, 1200000, 380000, listOf(para(listOf(Run("$number / $total", 1100, t.muted)), "r")), name = "!!Page"))
         }
         fun clip(list: List<String>, maxN: Int, what: String): List<String> {
             if (list.size > maxN) warn += "第 $number 页（${s.layout}）最多 $maxN 个$what，多出的 ${list.size - maxN} 个没放"
@@ -261,32 +270,32 @@ object PptDeck {
         when (s.layout) {
             "title", "end" -> {
                 bg = t.primary
-                out.append(shape(next(), W - 4200000, -1900000, 6000000, 6000000, "ellipse", t.accent, 22, name = "Decor"))
-                out.append(shape(next(), -1300000, H - 1700000, 3000000, 3000000, "ellipse", t.accent, 14, name = "Decor"))
+                out.append(shape(next(), W - 4200000, -1900000, 6000000, 6000000, "ellipse", t.accent, 22, name = "!!Decor"))
+                out.append(shape(next(), -1300000, H - 1700000, 3000000, 3000000, "ellipse", t.accent, 14, name = "!!Decor"))
                 val title = s.title.ifBlank { if (s.layout == "end") "谢谢观看" else "演示文稿" }
                 val tw = W - 2 * MX - 1200000
                 val size = fit(listOf(title), tw, 1700000, if (s.layout == "end") 6000 else 5000, 3200)
                 small(size, 3200, "标题")
                 val anchorY = if (s.layout == "end") 2000000L else 1850000L
-                out.append(text(next(), MX + 200000, anchorY, tw, 1700000, listOf(para(listOf(Run(title, size, onPrimary, true)))), "b", "Title"))
-                out.append(shape(next(), MX + 290000, anchorY + 1820000, 900000, 60000, "rect", t.accent, name = "Title bar"))
+                out.append(text(next(), MX + 200000, anchorY, tw, 1700000, listOf(para(listOf(Run(title, size, onPrimary, true)))), "b", "!!Title"))
+                out.append(shape(next(), MX + 290000, anchorY + 1820000, 900000, 60000, "rect", t.accent, name = "!!Title bar"))
                 if (items.isNotEmpty()) {
                     val sub = items.take(3)
                     out.append(text(next(), MX + 200000, anchorY + 2000000, tw, 1500000,
-                        sub.mapIndexed { i, v -> para(listOf(Run(v, if (i == 0) 2000 else 1600, if (i == 0) onPrimary else "E5E7EB")), before = if (i == 0) 0 else 300) }, name = "Subtitle"))
+                        sub.mapIndexed { i, v -> para(listOf(Run(v, if (i == 0) 2000 else 1600, if (i == 0) onPrimary else "E5E7EB")), before = if (i == 0) 0 else 300) }, name = "!!Subtitle"))
                 }
             }
             "section" -> {
                 bg = if (t.dark) t.bg else t.soft
-                out.append(shape(next(), 0, 0, 220000, H, "rect", t.primary, name = "Side bar"))
+                out.append(shape(next(), 0, 0, 220000, H, "rect", t.primary, name = "!!Side bar"))
                 val no = "%02d".format(section)
-                out.append(text(next(), MX + 300000, 1500000, 3400000, 3000000, listOf(para(listOf(Run(no, 13000, t.accent, true)))), "ctr", "Number"))
+                out.append(text(next(), MX + 300000, 1500000, 3400000, 3000000, listOf(para(listOf(Run(no, 13000, t.accent, true)))), "ctr", "!!Number"))
                 val tx = MX + 3700000
                 val tw = W - tx - MX
                 val size = fit(listOf(s.title), tw, 1400000, 4400, 2800)
-                out.append(text(next(), tx, 2000000, tw, 1400000, listOf(para(listOf(Run(s.title, size, t.title, true)))), "b", "Title"))
-                out.append(shape(next(), tx + 90000, 3500000, 900000, 60000, "rect", t.accent, name = "Title bar"))
-                items.firstOrNull()?.let { out.append(text(next(), tx, 3650000, tw, 900000, listOf(para(listOf(Run(it, 1800, t.muted)))), name = "Subtitle")) }
+                out.append(text(next(), tx, 2000000, tw, 1400000, listOf(para(listOf(Run(s.title, size, t.title, true)))), "b", "!!Title"))
+                out.append(shape(next(), tx + 90000, 3500000, 900000, 60000, "rect", t.accent, name = "!!Title bar"))
+                items.firstOrNull()?.let { out.append(text(next(), tx, 3650000, tw, 900000, listOf(para(listOf(Run(it, 1800, t.muted)))), name = "!!Subtitle")) }
             }
             "agenda" -> {
                 bg = t.bg; decor()
@@ -540,9 +549,9 @@ object PptDeck {
                     out.append(shape(next(), 0, 0, W, H, "rect", "000000", 42, name = "Shade"))
                 } else bg = t.primary
                 val size = fit(listOf(s.title), W - 2 * MX - 2000000, 1600000, 5000, 3000)
-                out.append(text(next(), MX + 200000, H - 3100000, W - 2 * MX - 2000000, 1600000, listOf(para(listOf(Run(s.title, size, onPrimary, true)))), "b", "Title"))
-                out.append(shape(next(), MX + 290000, H - 1400000, 900000, 60000, "rect", t.accent, name = "Title bar"))
-                items.firstOrNull()?.let { out.append(text(next(), MX + 200000, H - 1250000, W - 2 * MX - 2000000, 800000, listOf(para(listOf(Run(it, 1800, "F3F4F6")))), name = "Subtitle")) }
+                out.append(text(next(), MX + 200000, H - 3100000, W - 2 * MX - 2000000, 1600000, listOf(para(listOf(Run(s.title, size, onPrimary, true)))), "b", "!!Title"))
+                out.append(shape(next(), MX + 290000, H - 1400000, 900000, 60000, "rect", t.accent, name = "!!Title bar"))
+                items.firstOrNull()?.let { out.append(text(next(), MX + 200000, H - 1250000, W - 2 * MX - 2000000, 800000, listOf(para(listOf(Run(it, 1800, "F3F4F6")))), name = "!!Subtitle")) }
             }
             else -> { // content
                 bg = t.bg; decor()
@@ -573,6 +582,7 @@ object PptDeck {
             }
         }
         iconIds.remove()
+        current.remove()
         return Rendered(bg, out.toString(), steps, byPara, pics.toSet(), warn, graphics, chart)
     }
 
@@ -585,6 +595,10 @@ object PptDeck {
         "split" -> """<p:transition spd="med"><p:split orient="vert" dir="out"/></p:transition>"""
         "cover" -> """<p:transition spd="med"><p:cover dir="l"/></p:transition>"""
         "zoom" -> """<p:transition spd="med"><p:zoom/></p:transition>"""
+        // 平滑：前后两页同名（!! 开头）的形状自动移动、变形；老版本不认就退成淡入
+        "morph" -> """<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><mc:Choice xmlns:p159="http://schemas.microsoft.com/office/powerpoint/2015/09/main" Requires="p159">""" +
+            """<p:transition spd="slow" xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main" p14:dur="1250"><p159:morph option="byObject"/></p:transition></mc:Choice>""" +
+            """<mc:Fallback><p:transition spd="slow"><p:fade/></p:transition></mc:Fallback></mc:AlternateContent>"""
         else -> ""
     }
 

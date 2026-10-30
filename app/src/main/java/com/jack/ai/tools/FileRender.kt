@@ -22,6 +22,12 @@ import java.util.Locale
  */
 internal suspend fun ToolSession.renderFile(tool: String, args: JsonObject, file: File, cache: File): List<String> {
     val slides = if (tool == "create_ppt") withImages(parseSlides(args), args, cache) else null
+    // 照着用户的 PPT 做：从对话文件夹里那个 .pptx 读配色和字体
+    val style = args["style_from"].text().trim().takeIf { tool == "create_ppt" && it.isNotEmpty() }?.let { name ->
+        val f = wsFile(name)
+        if (!f.name.endsWith(".pptx", true)) throw IllegalArgumentException("style_from 要是 .pptx 文件（「${f.name}」不是）。.ppt 老格式先另存为 .pptx")
+        withContext(Dispatchers.IO) { runCatching { PptStyle.extract(f) }.getOrElse { throw IllegalArgumentException("读不出「${f.name}」的风格：${it.message}") } }
+    }
     var warnings = emptyList<String>()
     withContext(Dispatchers.IO) {
         file.parentFile?.mkdirs()
@@ -30,8 +36,9 @@ internal suspend fun ToolSession.renderFile(tool: String, args: JsonObject, file
             tmp.outputStream().buffered().use { out ->
                 when (tool) {
                     "create_word" -> OfficeWriter.writeDocx(args["markdown"].text(), out)
-                    "create_ppt" -> warnings = OfficeWriter.writePptx(slides!!, args["theme"].text().ifBlank { "blue" }, out,
-                        args["transition"].text().ifBlank { "fade" }, args["animation"].text().ifBlank { "fade" })
+                    "create_ppt" -> warnings = style?.let { listOf(INFO + it.summary) }.orEmpty() +
+                        OfficeWriter.writePptx(slides!!, args["theme"].text().ifBlank { "blue" }, out,
+                            args["transition"].text().ifBlank { "fade" }, args["animation"].text().ifBlank { "fade" }, style?.theme)
                     "create_pdf" -> PdfWriter.write(args["markdown"].text(), out)
                     "create_excel" -> OfficeWriter.writeXlsx(parseSheets(args), out)
                     "create_chart" -> renderChart(args, out)
@@ -51,10 +58,16 @@ internal suspend fun ToolSession.renderFile(tool: String, args: JsonObject, file
     return warnings
 }
 
+/** 排版说明里不是问题、只是告诉模型一声的条目（比如照着哪个 PPT 取了什么颜色）。 */
+internal const val INFO = "ℹ "
+
 /** 排版提醒写给模型看：哪页字太多、哪些图标没有。 */
-internal fun layoutNote(warnings: List<String>): String =
-    if (warnings.isEmpty()) "" else "\n【排版提醒】\n" + warnings.take(8).joinToString("\n") { "- $it" } +
-        "\n能改就用 edit_file 改底稿（精简文字、拆成两页、换个版式），改完会重新生成。"
+internal fun layoutNote(warnings: List<String>): String {
+    val (info, problems) = warnings.partition { it.startsWith(INFO) }
+    return info.joinToString("") { "\n" + it.removePrefix(INFO) } +
+        (if (problems.isEmpty()) "" else "\n【排版提醒】\n" + problems.take(8).joinToString("\n") { "- $it" } +
+            "\n能改就用 edit_file 改底稿（精简文字、拆成两页、换个版式），改完会重新生成。")
+}
 
 internal fun ToolSession.renderChart(args: JsonObject, out: java.io.OutputStream) {
     val labels = (args["labels"] as? JsonArray).orEmpty().map { it.text() }

@@ -112,6 +112,68 @@ class PptDeckTest {
         assertTrue(warnings.toString(), warnings.any { it.contains("已按分类对齐") })
     }
 
+    @Test
+    fun morphHasFallbackAndStableNames() {
+        val bos = ByteArrayOutputStream()
+        OfficeWriter.writePptx(deck, "blue", bos, transition = "morph")
+        File(System.getProperty("user.dir"), "build/office-samples/morph.pptx").writeBytes(bos.toByteArray())
+        val p = parts(bos.toByteArray())
+        val f = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
+        val xml = p.getValue("ppt/slides/slide5.xml")
+        f.newDocumentBuilder().parse(xml.byteInputStream())
+        assertTrue(xml.contains("<p159:morph option=\"byObject\"/>"))
+        assertTrue(xml.contains("<mc:Fallback><p:transition spd=\"slow\"><p:fade/></p:transition></mc:Fallback>"))
+        // 前后两页的标题、装饰同名，平滑才对得上
+        listOf(4, 5, 6).forEach { assertTrue(p.getValue("ppt/slides/slide$it.xml").contains("name=\"!!Title\"")) }
+        assertTrue(xml.contains("name=\"!!Decor\""))
+    }
+
+    private fun zipWith(bytes: ByteArray, replace: Map<String, (String) -> String>): File {
+        val out = File.createTempFile("style", ".pptx")
+        java.util.zip.ZipOutputStream(out.outputStream()).use { zo ->
+            ZipInputStream(bytes.inputStream()).use { zi ->
+                while (true) {
+                    val e = zi.nextEntry ?: break
+                    var data = zi.readBytes()
+                    replace[e.name]?.let { data = it(data.toString(Charsets.UTF_8)).toByteArray() }
+                    zo.putNextEntry(java.util.zip.ZipEntry(e.name)); zo.write(data); zo.closeEntry()
+                }
+            }
+        }
+        return out
+    }
+
+    @Test
+    fun styleIsReadFromThemeOrFromPaintedColors() {
+        // 主题里写了配色和字体：直接读主题
+        val custom = PptDeck.theme("teal").copy(ea = "思源黑体", latin = "Inter", headEa = "思源宋体", headLatin = "Georgia")
+        val bos = ByteArrayOutputStream()
+        OfficeWriter.writePptx(deck.take(6), "blue", bos, custom = custom)
+        val a = PptStyle.extract(zipWith(bos.toByteArray(), emptyMap()))
+        assertEquals("0F766E", a.theme.primary)
+        assertEquals("14B8A6", a.theme.accent)
+        assertEquals("思源黑体", a.theme.ea)
+        assertEquals("思源宋体", a.theme.headEa)
+        assertFalse(a.theme.dark)
+        assertTrue(a.summary, a.summary.contains("#0F766E"))
+        // 主题还是 Office 默认蓝橙，颜色直接涂在页面上：数页面上的颜色
+        val red = ByteArrayOutputStream().also { OfficeWriter.writePptx(deck.take(6), "red", it) }.toByteArray()
+        val office = zipWith(red, mapOf("ppt/theme/theme1.xml" to { x: String ->
+            x.replace(Regex("<a:accent1>.*?</a:accent1>"), "<a:accent1><a:srgbClr val=\"4472C4\"/></a:accent1>")
+                .replace(Regex("<a:accent2>.*?</a:accent2>"), "<a:accent2><a:srgbClr val=\"ED7D31\"/></a:accent2>")
+        }))
+        val b = PptStyle.extract(office)
+        assertEquals("B91C1C", b.theme.primary)
+        assertTrue(b.summary, b.summary.contains("页面上用得最多"))
+        // 深色背景认得出来
+        val dark = ByteArrayOutputStream().also { OfficeWriter.writePptx(deck.take(6), "dark", it) }.toByteArray()
+        assertTrue(PptStyle.extract(zipWith(dark, emptyMap())).theme.dark)
+        // 用读出来的风格再生成一份：字体用上了
+        val again = ByteArrayOutputStream()
+        OfficeWriter.writePptx(deck.take(3), "blue", again, custom = a.theme)
+        assertTrue(parts(again.toByteArray()).getValue("ppt/slides/slide2.xml").contains("typeface=\"思源黑体\""))
+    }
+
     private fun parts(bytes: ByteArray): Map<String, String> {
         val out = mutableMapOf<String, String>()
         ZipInputStream(bytes.inputStream()).use { z ->

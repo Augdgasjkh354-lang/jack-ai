@@ -206,7 +206,8 @@ object OfficeWriter {
     private const val H = PptDeck.H
     private const val NS = """xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main""""
 
-    private val PPT_THEME = XML + """<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Jack"><a:themeElements><a:clrScheme name="Jack"><a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1><a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="1F3864"/></a:dk2><a:lt2><a:srgbClr val="E7E6E6"/></a:lt2><a:accent1><a:srgbClr val="4472C4"/></a:accent1><a:accent2><a:srgbClr val="ED7D31"/></a:accent2><a:accent3><a:srgbClr val="A5A5A5"/></a:accent3><a:accent4><a:srgbClr val="FFC000"/></a:accent4><a:accent5><a:srgbClr val="5B9BD5"/></a:accent5><a:accent6><a:srgbClr val="70AD47"/></a:accent6><a:hlink><a:srgbClr val="0563C1"/></a:hlink><a:folHlink><a:srgbClr val="954F72"/></a:folHlink></a:clrScheme><a:fontScheme name="Jack"><a:majorFont><a:latin typeface="Calibri"/><a:ea typeface="$FONT"/><a:cs typeface=""/></a:majorFont><a:minorFont><a:latin typeface="Calibri"/><a:ea typeface="$FONT"/><a:cs typeface=""/></a:minorFont></a:fontScheme><a:fmtScheme name="Office"><a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:fillStyleLst><a:lnStyleLst><a:ln w="6350"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="12700"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="19050"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst><a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:bgFillStyleLst></a:fmtScheme></a:themeElements><a:objectDefaults/><a:extraClrSchemeLst/></a:theme>"""
+    /** PPT 的主题：把这份的配色和字体写进去，在 PowerPoint、WPS 里选颜色、加新页时也是这一套。 */
+    private fun pptTheme(t: PptDeck.Theme): String = XML + """<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Jack"><a:themeElements><a:clrScheme name="Jack"><a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1><a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="${t.title}"/></a:dk2><a:lt2><a:srgbClr val="${t.soft}"/></a:lt2><a:accent1><a:srgbClr val="${t.primary}"/></a:accent1><a:accent2><a:srgbClr val="${t.accent}"/></a:accent2><a:accent3><a:srgbClr val="A5A5A5"/></a:accent3><a:accent4><a:srgbClr val="FFC000"/></a:accent4><a:accent5><a:srgbClr val="5B9BD5"/></a:accent5><a:accent6><a:srgbClr val="70AD47"/></a:accent6><a:hlink><a:srgbClr val="0563C1"/></a:hlink><a:folHlink><a:srgbClr val="954F72"/></a:folHlink></a:clrScheme><a:fontScheme name="Jack"><a:majorFont><a:latin typeface="${esc(t.headLatin)}"/><a:ea typeface="${esc(t.headEa)}"/><a:cs typeface=""/></a:majorFont><a:minorFont><a:latin typeface="${esc(t.latin)}"/><a:ea typeface="${esc(t.ea)}"/><a:cs typeface=""/></a:minorFont></a:fontScheme><a:fmtScheme name="Office"><a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:fillStyleLst><a:lnStyleLst><a:ln w="6350"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="12700"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="19050"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst><a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:bgFillStyleLst></a:fmtScheme></a:themeElements><a:objectDefaults/><a:extraClrSchemeLst/></a:theme>"""
 
     private val EMPTY_TREE = """<p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr></p:spTree>"""
 
@@ -214,8 +215,12 @@ object OfficeWriter {
      * 写 PPT。每页怎么排、转场和动画见 [PptDeck]。transition 是整份默认的转场，某页自己写了就用那页的；
      * animation 是条目怎么一个个出现（none 就一次全出来）。返回排版时发现的问题（字太多、图标没有……），给模型看。
      */
-    fun writePptx(slides: List<Slide>, themeName: String, out: OutputStream, transition: String = "fade", animation: String = "fade"): List<String> {
-        val t = PptDeck.theme(themeName)
+    fun writePptx(
+        slides: List<Slide>, themeName: String, out: OutputStream, transition: String = "fade", animation: String = "fade",
+        /** 照着用户的 PPT 读出来的配色和字体（[PptStyle]），给了就不用 themeName。 */
+        custom: PptDeck.Theme? = null,
+    ): List<String> {
+        val t = custom ?: PptDeck.theme(themeName)
         val warnings = mutableListOf<String>()
         val list = slides.ifEmpty { listOf(Slide("title", "演示文稿", emptyList())) }
         val rel = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
@@ -225,7 +230,7 @@ object OfficeWriter {
         files += "ppt/presProps.xml" to """$XML<p:presentationPr $NS/>"""
         files += "ppt/viewProps.xml" to """$XML<p:viewPr $NS><p:normalViewPr><p:restoredLeft sz="15620"/><p:restoredTop sz="94660"/></p:normalViewPr><p:gridSpacing cx="72008" cy="72008"/></p:viewPr>"""
         files += "ppt/tableStyles.xml" to """$XML<a:tblStyleLst xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" def="{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}"/>"""
-        files += "ppt/theme/theme1.xml" to PPT_THEME
+        files += "ppt/theme/theme1.xml" to pptTheme(t)
         files += "ppt/slideMasters/slideMaster1.xml" to """$XML<p:sldMaster $NS><p:cSld><p:bg><p:bgRef idx="1001"><a:schemeClr val="bg1"/></p:bgRef></p:bg>$EMPTY_TREE</p:cSld><p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/><p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst><p:txStyles><p:titleStyle><a:lvl1pPr><a:defRPr sz="4400"/></a:lvl1pPr></p:titleStyle><p:bodyStyle><a:lvl1pPr><a:defRPr sz="2400"/></a:lvl1pPr></p:bodyStyle><p:otherStyle><a:lvl1pPr><a:defRPr sz="1800"/></a:lvl1pPr></p:otherStyle></p:txStyles></p:sldMaster>"""
         files += "ppt/slideMasters/_rels/slideMaster1.xml.rels" to """$XML<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="$rel/slideLayout" Target="../slideLayouts/slideLayout1.xml"/><Relationship Id="rId2" Type="$rel/theme" Target="../theme/theme1.xml"/></Relationships>"""
         files += "ppt/slideLayouts/slideLayout1.xml" to """$XML<p:sldLayout $NS type="blank" preserve="1"><p:cSld name="Blank">$EMPTY_TREE</p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>"""
@@ -271,7 +276,7 @@ object OfficeWriter {
         if (notes.isNotEmpty()) {
             files += "ppt/notesMasters/notesMaster1.xml" to NOTES_MASTER
             files += "ppt/notesMasters/_rels/notesMaster1.xml.rels" to """$XML<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="$rel/theme" Target="../theme/theme2.xml"/></Relationships>"""
-            files += "ppt/theme/theme2.xml" to PPT_THEME
+            files += "ppt/theme/theme2.xml" to pptTheme(t)
         }
         files += "[Content_Types].xml" to buildString {
             append("""$XML<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="jpeg" ContentType="image/jpeg"/><Default Extension="png" ContentType="image/png"/>""")
