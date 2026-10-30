@@ -16,8 +16,10 @@ import java.util.Locale
 
 /** 对话文件夹里的文件：读、写、局部修改，以及生成 Word/PPT/Excel/PDF/图表/流程图。 */
 
-internal suspend fun ToolSession.create(tool: String, args: JsonObject, base: String, ext: String, label: String): String =
+internal suspend fun ToolSession.create(tool: String, asked: JsonObject, base: String, ext: String, label: String): String =
     runTool("生成 $label：$base.$ext") {
+        // 新生成的：有默认模板就记进底稿
+        val args = withContext(Dispatchers.IO) { StyleTemplates.withDefault(StyleTemplates.load(app), tool, asked) }
         var warnings = emptyList<String>()
         val file = withContext(Dispatchers.IO) { Workspace.uniqueFile(wsDir, "$base.$ext") }
         try {

@@ -20,7 +20,15 @@ import java.util.Locale
  * 按工具名和参数生成文件。先写到临时文件，成功了再替换，失败不会弄坏原文件。
  * 返回排版提醒（PPT 字太多、图标没有之类），没有就是空的。
  */
-internal suspend fun ToolSession.renderFile(tool: String, args: JsonObject, file: File, cache: File): List<String> {
+internal suspend fun ToolSession.renderFile(tool: String, original: JsonObject, file: File, cache: File): List<String> {
+    // 我的模板：参数里没写的设置从模板里补
+    val (args, templateColors, template) = withContext(Dispatchers.IO) { StyleTemplates.apply(StyleTemplates.load(app), tool, original) }
+    val templateNote = when {
+        template != null -> listOf(INFO + "用了模板「${template.name}」")
+        (original["template"] as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty().let { it.isNotBlank() && it != "none" } ->
+            listOf("没有叫「${original["template"].text()}」的模板，按默认样式做的。现有模板：" + StyleTemplates.describe(StyleTemplates.load(app).filter { it.kind == StyleTemplates.kindOf(tool) }))
+        else -> emptyList()
+    }
     val slides = if (tool == "create_ppt") withImages(parseSlides(args), args, cache) else null
     // 照着用户的 PPT 做：从对话文件夹里那个 .pptx 读配色和字体
     val style = args["style_from"].text().trim().takeIf { tool == "create_ppt" && it.isNotEmpty() }?.let { name ->
@@ -40,7 +48,7 @@ internal suspend fun ToolSession.renderFile(tool: String, args: JsonObject, file
                     "create_word" -> warnings = OfficeWriter.writeDocx(args["markdown"].text(), out, wordOptions(args), wordImages!!)
                     "create_ppt" -> warnings = style?.let { listOf(INFO + it.summary) }.orEmpty() +
                         OfficeWriter.writePptx(slides!!, args["theme"].text().ifBlank { "blue" }, out,
-                            args["transition"].text().ifBlank { "fade" }, args["animation"].text().ifBlank { "fade" }, style?.theme)
+                            args["transition"].text().ifBlank { "fade" }, args["animation"].text().ifBlank { "fade" }, style?.theme ?: templateColors?.theme())
                     "create_pdf" -> PdfWriter.write(pdfMarkdown(args["markdown"].text()), out)
                     "create_excel" -> warnings = OfficeWriter.writeXlsx(parseSheets(args), out, args["theme"].text().ifBlank { "blue" })
                     "create_chart" -> renderChart(args, out)
@@ -57,7 +65,7 @@ internal suspend fun ToolSession.renderFile(tool: String, args: JsonObject, file
             tmp.delete()
         }
     }
-    return warnings
+    return templateNote + warnings
 }
 
 /** 排版说明里不是问题、只是告诉模型一声的条目（比如照着哪个 PPT 取了什么颜色）。 */

@@ -274,6 +274,7 @@ class ToolSession(
             name == "write_file" -> writeFile(args)
             name == "edit_file" -> editFile(args)
             name == "revise_file" && (SkillIds.WORD in skillIds || SkillIds.PPT in skillIds || SkillIds.EXCEL in skillIds) -> reviseFile(args)
+            name == "my_templates" && (SkillIds.WORD in skillIds || SkillIds.PPT in skillIds || SkillIds.EXCEL in skillIds) -> myTemplates(args)
             name == "delete_file" -> deleteFiles(args)
             name == "search_my_data" -> searchMyData(args)
             name == "my_savings" -> mySavings()
