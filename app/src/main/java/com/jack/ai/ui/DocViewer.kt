@@ -257,7 +257,7 @@ private fun FaithfulPage(file: File, modifier: Modifier, onFail: () -> Unit) {
 
 /**
  * 查看器网页的请求只放行三样：viewer.html 和几个库（App 自带的 assets/docview）、这一个文档（/file），别的一律拦下。
- * 点链接交给系统浏览器。截图（[SlideShots]）也用它。
+ * 点链接交给系统浏览器。截图（[PageShots]）也用它。
  */
 internal fun docViewClient(file: File) = object : WebViewClient() {
     override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
