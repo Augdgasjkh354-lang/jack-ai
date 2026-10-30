@@ -42,7 +42,7 @@ internal suspend fun ToolSession.renderFile(tool: String, args: JsonObject, file
                         OfficeWriter.writePptx(slides!!, args["theme"].text().ifBlank { "blue" }, out,
                             args["transition"].text().ifBlank { "fade" }, args["animation"].text().ifBlank { "fade" }, style?.theme)
                     "create_pdf" -> PdfWriter.write(pdfMarkdown(args["markdown"].text()), out)
-                    "create_excel" -> OfficeWriter.writeXlsx(parseSheets(args), out)
+                    "create_excel" -> warnings = OfficeWriter.writeXlsx(parseSheets(args), out, args["theme"].text().ifBlank { "blue" })
                     "create_chart" -> renderChart(args, out)
                     "create_diagram" -> renderDiagram(args, out)
                     "create_app" -> out.write(args["html"].text().toByteArray(Charsets.UTF_8))
@@ -236,7 +236,16 @@ internal fun ToolSession.parseSheets(args: JsonObject): List<OfficeWriter.Sheet>
         val rows = (o["rows"] as? JsonArray).orEmpty().map { r ->
             (r as? JsonArray)?.map { it.text() } ?: listOf(r.text())
         }
-        OfficeWriter.Sheet(o["name"].text().ifBlank { "Sheet${i + 1}" }, rows)
+        val highlights = (o["highlights"] as? JsonArray).orEmpty().mapNotNull { h ->
+            val x = h as? JsonObject ?: return@mapNotNull null
+            XlsxBook.Highlight(x["column"].text(), x["op"].text(), x["value"].text(), x["color"].text().ifBlank { "red" })
+        }
+        val charts = (o["charts"] as? JsonArray).orEmpty().mapNotNull { c ->
+            val x = c as? JsonObject ?: return@mapNotNull null
+            XlsxBook.SheetChart(x["type"].text().ifBlank { "column" }, x["title"].text(), x["category_column"].text(),
+                (x["value_columns"] as? JsonArray).orEmpty().map { it.text() }, x["unit"].text())
+        }
+        OfficeWriter.Sheet(o["name"].text().ifBlank { "Sheet${i + 1}" }, rows, o["total_row"].text() == "true", highlights, charts)
     }.ifEmpty { throw IllegalArgumentException("没有表格内容") }
 
 /** PPT 配图存一份，修改 PPT 重新生成时不用再搜一遍。 */

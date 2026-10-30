@@ -205,85 +205,15 @@ object OfficeWriter {
 
     // ======================= Excel =======================
 
-    data class Sheet(val name: String, val rows: List<List<String>>)
+    /** 一张工作表；合计行、条件格式、图表见 [XlsxBook]。 */
+    data class Sheet(
+        val name: String,
+        val rows: List<List<String>>,
+        val totalRow: Boolean = false,
+        val highlights: List<XlsxBook.Highlight> = emptyList(),
+        val charts: List<XlsxBook.SheetChart> = emptyList(),
+    )
 
-    private fun colName(i: Int): String {
-        var n = i + 1
-        val sb = StringBuilder()
-        while (n > 0) {
-            val r = (n - 1) % 26
-            sb.insert(0, ('A' + r))
-            n = (n - 1) / 26
-        }
-        return sb.toString()
-    }
-
-    private val NUMBER = Regex("""-?\d+(\.\d+)?([eE][-+]?\d+)?""")
-
-    private fun displayWidth(s: String): Int = s.fold(0) { acc, c -> acc + if (c.code > 0x2E80) 2 else 1 }
-
-    fun writeXlsx(sheets: List<Sheet>, out: OutputStream) {
-        val list = sheets.ifEmpty { listOf(Sheet("Sheet1", emptyList())) }
-        // 工作表名不能重复，不能有 []:*?/\ ，最长 31 字
-        val names = mutableListOf<String>()
-        list.forEachIndexed { i, s ->
-            var n = s.name.replace(Regex("""[\[\]:*?/\\]"""), " ").trim().take(31).ifEmpty { "Sheet${i + 1}" }
-            while (n in names) n = (n.take(28) + "_" + (i + 1))
-            names += n
-        }
-        val rel = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
-        val files = mutableListOf<Pair<String, String>>()
-        files += "[Content_Types].xml" to buildString {
-            append("""$XML<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>""")
-            list.indices.forEach { append("""<Override PartName="/xl/worksheets/sheet${it + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>""") }
-            append("</Types>")
-        }
-        files += "_rels/.rels" to """$XML<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="$rel/officeDocument" Target="xl/workbook.xml"/></Relationships>"""
-        files += "xl/workbook.xml" to buildString {
-            append("""$XML<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="$rel"><sheets>""")
-            names.forEachIndexed { i, n -> append("""<sheet name="${esc(n)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>""") }
-            append("</sheets></workbook>")
-        }
-        files += "xl/_rels/workbook.xml.rels" to buildString {
-            append("""$XML<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">""")
-            list.indices.forEach { append("""<Relationship Id="rId${it + 1}" Type="$rel/worksheet" Target="worksheets/sheet${it + 1}.xml"/>""") }
-            append("""<Relationship Id="rId${list.size + 1}" Type="$rel/styles" Target="styles.xml"/></Relationships>""")
-        }
-        // 样式 0：普通；1：表头（加粗、浅色底、边框）；2：普通带边框
-        files += "xl/styles.xml" to """$XML<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="$FONT"/></font><font><b/><sz val="11"/><name val="$FONT"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE8ECF8"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FFBFBFBF"/></left><right style="thin"><color rgb="FFBFBFBF"/></right><top style="thin"><color rgb="FFBFBFBF"/></top><bottom style="thin"><color rgb="FFBFBFBF"/></bottom><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>"""
-
-        list.forEachIndexed { si, sheet ->
-            val sb = StringBuilder("""$XML<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">""")
-            if (sheet.rows.isNotEmpty()) sb.append("""<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>""")
-            val cols = sheet.rows.maxOfOrNull { it.size } ?: 0
-            if (cols > 0) {
-                sb.append("<cols>")
-                for (c in 0 until cols) {
-                    val w = sheet.rows.maxOf { displayWidth(it.getOrElse(c) { "" }) }.coerceIn(6, 50) + 2
-                    sb.append("""<col min="${c + 1}" max="${c + 1}" width="$w" customWidth="1"/>""")
-                }
-                sb.append("</cols>")
-            }
-            sb.append("<sheetData>")
-            sheet.rows.forEachIndexed { r, row ->
-                sb.append("""<row r="${r + 1}">""")
-                row.forEachIndexed { c, raw ->
-                    val ref = colName(c) + (r + 1)
-                    val style = if (r == 0) 1 else 2
-                    val v = raw.trim()
-                    when {
-                        v.isEmpty() -> sb.append("""<c r="$ref" s="$style"/>""")
-                        v.startsWith("=") && r > 0 -> sb.append("""<c r="$ref" s="$style"><f>${esc(v.substring(1))}</f></c>""")
-                        r > 0 && NUMBER.matches(v) && !(v.length > 1 && v.startsWith("0") && !v.startsWith("0.")) ->
-                            sb.append("""<c r="$ref" s="$style"><v>$v</v></c>""")
-                        else -> sb.append("""<c r="$ref" s="$style" t="inlineStr"><is><t xml:space="preserve">${esc(v)}</t></is></c>""")
-                    }
-                }
-                sb.append("</row>")
-            }
-            sb.append("</sheetData></worksheet>")
-            files += "xl/worksheets/sheet${si + 1}.xml" to sb.toString()
-        }
-        zip(out, files)
-    }
+    /** Excel：排版交给 [XlsxBook]。返回生成时发现的问题（列名写错之类）。 */
+    fun writeXlsx(sheets: List<Sheet>, out: OutputStream, theme: String = "blue"): List<String> = XlsxBook.write(sheets, out, theme)
 }

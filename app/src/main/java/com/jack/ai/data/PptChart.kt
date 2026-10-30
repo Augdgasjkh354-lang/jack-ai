@@ -17,7 +17,7 @@ object PptChart {
      * 图表数据在表格里的位置（Excel 里的图直接指着表里的格子）。列从 0 数，行从 1 数；
      * header 是组名那一行，first..last 是数据行。
      */
-    data class Refs(val sheet: String, val catCol: Int, val valCols: List<Int>, val header: Int, val first: Int, val last: Int)
+    data class Refs(val sheet: String, val catCol: Int, val valCols: List<Int>, val header: Int, val first: Int, val last: Int, val formats: List<String> = emptyList())
 
     private fun sheetRef(name: String) = "'" + name.replace("'", "''") + "'"
 
@@ -95,7 +95,7 @@ object PptChart {
             // 饼图的系列名哪儿都不显示（图例是分类），有的查看器却拿它当标题，所以留空
             val shown = if (pie) " " else s.name
             val tx = """<c:tx><c:strRef><c:f>${esc(txF(si))}</c:f><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>${esc(shown)}</c:v></c:pt></c:strCache></c:strRef></c:tx>"""
-            val v = """<c:val><c:numRef><c:f>${esc(valF(si))}</c:f><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="$n"/>""" +
+            val v = """<c:val><c:numRef><c:f>${esc(valF(si))}</c:f><c:numCache><c:formatCode>${esc(refs?.formats?.getOrNull(si) ?: "General")}</c:formatCode><c:ptCount val="$n"/>""" +
                 s.values.mapIndexed { i, x -> """<c:pt idx="$i"><c:v>${num(x)}</c:v></c:pt>""" }.joinToString("") + "</c:numCache></c:numRef></c:val>"
             val color = colors[si % colors.size]
             when (c.type) {
