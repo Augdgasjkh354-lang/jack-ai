@@ -143,7 +143,10 @@ fun UserBubble(msg: ChatMessage, onDelete: () -> Unit, onEdit: ((String) -> Unit
             Spacer(Modifier.height(6.dp))
         }
         var reading by remember { mutableStateOf<com.jack.ai.data.Attachment?>(null) }
-        reading?.let { a ->
+        // PDF、Word 这类原文件还在就看原样；不在了再看提取出的文字
+        reading?.takeIf { isViewableDoc(it.name) && it.path.isNotEmpty() && File(it.path).exists() }?.let { a ->
+            DocViewer(File(a.path), onDismiss = { reading = null })
+        } ?: reading?.let { a ->
             // 文本文件读原文件；PDF、Word 这类看的是提取出来、交给 AI 的那份文字
             val file = File(a.path)
             val raw = com.jack.ai.data.TextPreview.isText(a.name) && a.path.isNotEmpty() && file.exists()
@@ -424,21 +427,9 @@ private fun ChartImage(f: GeneratedFile) {
 internal fun GeneratedFileCard(f: GeneratedFile) {
     val ctx = LocalContext.current
     val colors = MaterialTheme.colorScheme
-    // 网页（小工具）在 App 里全屏打开，能直接用
-    var viewingApp by remember { mutableStateOf(false) }
-    val isApp = f.name.endsWith(".html", true)
-    if (viewingApp) AppViewer(File(f.path)) { viewingApp = false }
-    // txt、md、json、代码这类直接在 App 里看（手机上多半没有能打开它们的 App）
-    var viewingText by remember { mutableStateOf(false) }
-    if (viewingText) TextViewer(f.name, load = { com.jack.ai.data.TextPreview.read(File(f.path)) }, onDismiss = { viewingText = false },
-        onShare = { shareFile(ctx, f) }, onOpenWith = { openFile(ctx, f) })
-    val open = {
-        when {
-            isApp && File(f.path).exists() -> viewingApp = true
-            com.jack.ai.data.TextPreview.isText(f.name) && File(f.path).exists() -> viewingText = true
-            else -> openFile(ctx, f)
-        }
-    }
+    // 网页（小工具）、文字、PDF、Office 都在 App 里看（手机上多半没有能打开它们的 App）
+    val opener = rememberFileOpener()
+    val open = { opener(f) }
     val (tag, tagColor) = when (f.name.substringAfterLast('.').lowercase()) {
         "docx" -> "W" to Color(0xFF2B579A)
         "pptx" -> "P" to Color(0xFFD24726)
@@ -504,7 +495,7 @@ private fun fileUri(ctx: Context, f: GeneratedFile) =
     FileProvider.getUriForFile(ctx, ctx.packageName + ".files", File(f.path))
 
 /**
- * 点开一个文件，和聊天里的文件卡片一样：网页（小工具）、txt、md、json、代码在 App 里看，别的交给手机上的 App。
+ * 点开一个文件，和聊天里的文件卡片一样：网页（小工具）、txt、md、json、代码、PDF、Word、Excel、PPT 在 App 里看，别的交给手机上的 App。
  * 手机上多半没有能打开 md 的 App，直接丢出去会一闪就退回来。查看器由它自己画，返回打开用的函数。
  */
 @Composable
@@ -512,7 +503,9 @@ internal fun rememberFileOpener(): (GeneratedFile) -> Unit {
     val ctx = LocalContext.current
     var app by remember { mutableStateOf<GeneratedFile?>(null) }
     var text by remember { mutableStateOf<GeneratedFile?>(null) }
+    var doc by remember { mutableStateOf<GeneratedFile?>(null) }
     app?.let { f -> AppViewer(File(f.path)) { app = null } }
+    doc?.let { f -> DocViewer(File(f.path), onDismiss = { doc = null }, onShare = { shareFile(ctx, f) }, onOpenWith = { openFile(ctx, f) }) }
     text?.let { f ->
         TextViewer(f.name, load = { com.jack.ai.data.TextPreview.read(File(f.path)) }, onDismiss = { text = null },
             onShare = { shareFile(ctx, f) }, onOpenWith = { openFile(ctx, f) })
@@ -522,6 +515,7 @@ internal fun rememberFileOpener(): (GeneratedFile) -> Unit {
             !File(f.path).exists() -> openFile(ctx, f)
             f.name.endsWith(".html", true) || f.name.endsWith(".htm", true) -> app = f
             com.jack.ai.data.TextPreview.isText(f.name) -> text = f
+            isViewableDoc(f.name) -> doc = f
             else -> openFile(ctx, f)
         }
     }
