@@ -28,6 +28,8 @@ internal suspend fun ToolSession.renderFile(tool: String, args: JsonObject, file
         if (!f.name.endsWith(".pptx", true)) throw IllegalArgumentException("style_from 要是 .pptx 文件（「${f.name}」不是）。.ppt 老格式先另存为 .pptx")
         withContext(Dispatchers.IO) { runCatching { PptStyle.extract(f) }.getOrElse { throw IllegalArgumentException("读不出「${f.name}」的风格：${it.message}") } }
     }
+    // Word 里的图片：对话文件夹里的图，或者按说明搜一张
+    val wordImages = if (tool == "create_word") wordImages(args["markdown"].text(), cache) else null
     var warnings = emptyList<String>()
     withContext(Dispatchers.IO) {
         file.parentFile?.mkdirs()
@@ -35,11 +37,11 @@ internal suspend fun ToolSession.renderFile(tool: String, args: JsonObject, file
         try {
             tmp.outputStream().buffered().use { out ->
                 when (tool) {
-                    "create_word" -> OfficeWriter.writeDocx(args["markdown"].text(), out, wordOptions(args))
+                    "create_word" -> warnings = OfficeWriter.writeDocx(args["markdown"].text(), out, wordOptions(args), wordImages!!)
                     "create_ppt" -> warnings = style?.let { listOf(INFO + it.summary) }.orEmpty() +
                         OfficeWriter.writePptx(slides!!, args["theme"].text().ifBlank { "blue" }, out,
                             args["transition"].text().ifBlank { "fade" }, args["animation"].text().ifBlank { "fade" }, style?.theme)
-                    "create_pdf" -> PdfWriter.write(args["markdown"].text(), out)
+                    "create_pdf" -> PdfWriter.write(pdfMarkdown(args["markdown"].text()), out)
                     "create_excel" -> OfficeWriter.writeXlsx(parseSheets(args), out)
                     "create_chart" -> renderChart(args, out)
                     "create_diagram" -> renderDiagram(args, out)
@@ -122,6 +124,65 @@ internal fun ToolSession.parseSlides(args: JsonObject): List<OfficeWriter.Slide>
             icons = icons, transition = o["transition"].text(), notes = o["notes"].text(), chart = parseChart(o["chart"] as? JsonObject))
     }.ifEmpty { throw IllegalArgumentException("没有幻灯片内容") }
 
+/**
+ * Word 里每张 ![说明](来源) 的图：来源是对话文件夹里的图片文件就用它（比如 create_chart 画的图、用户发的照片），
+ * 否则把来源当搜索词（可以写成 search:英文关键词）搜一张。最多 8 张，找不到的在排版提醒里说。
+ */
+internal suspend fun ToolSession.wordImages(markdown: String, cache: File): Map<String, WordDoc.Image> {
+    val srcs = markdown.lines().mapNotNull { WordDoc.IMAGE_LINE.find(it.trim())?.groupValues?.get(2)?.trim() }.distinct().take(8)
+    if (srcs.isEmpty()) return emptyMap()
+    val key = settings.tavilyKeys.firstOrNull { !com.jack.ai.api.KeyRest.resting(it) }
+    val out = mutableMapOf<String, WordDoc.Image>()
+    for (src in srcs) {
+        val local = withContext(Dispatchers.IO) { Workspace.find(wsDir, src)?.takeIf { Workspace.ext(it) in Workspace.IMAGE_EXT } }
+        val img = if (local != null) withContext(Dispatchers.IO) {
+            val bytes = local.readBytes()
+            // png 原样放（图表的线条、透明底不受损），别的统一转成 jpeg、缩到 1600 宽
+            if (Workspace.ext(local) == "png") {
+                val o = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, o)
+                if (o.outWidth > 0) WordDoc.Image(bytes, "png", o.outWidth, o.outHeight) else null
+            } else Attachments.toJpeg(bytes, 1600)?.let { WordDoc.Image(it.first, "jpeg", it.second, it.third) }
+        } else {
+            val q = src.removePrefix("search:").trim()
+            if (key == null || q.isEmpty() || q.contains('/')) null
+            else runCatching { cachedImage(cache, q) ?: fetchImage(key, q)?.also { saveImage(cache, q, it) } }.getOrNull()
+                ?.let { WordDoc.Image(it.first, "jpeg", it.second, it.third) }
+        }
+        if (img != null) out[src] = img
+    }
+    return out
+}
+
+/** PDF 画不了原生图表和网上的图：图表变成一张数据表，图片只留说明。 */
+internal fun pdfMarkdown(md: String): String {
+    val out = StringBuilder()
+    val lines = md.lines()
+    var i = 0
+    while (i < lines.size) {
+        val s = lines[i].trim()
+        when {
+            s.startsWith("```chart") -> {
+                val json = StringBuilder(); i++
+                while (i < lines.size && !lines[i].trim().startsWith("```")) { json.append(lines[i]).append('\n'); i++ }
+                val c = runCatching { PptChart.fromJson(kotlinx.serialization.json.Json.parseToJsonElement(json.toString()) as JsonObject) }.getOrNull()
+                if (c != null && c.categories.isNotEmpty()) {
+                    if (c.title.isNotBlank()) out.append("**").append(c.title).append(if (c.unit.isNotBlank()) "（单位：${c.unit}）" else "").append("**\n\n")
+                    out.append("| | ").append(c.series.joinToString(" | ") { it.name }).append(" |\n|---|").append(c.series.joinToString("") { "---|" }).append("\n")
+                    c.categories.forEachIndexed { k, cat ->
+                        out.append("| $cat | ").append(c.series.joinToString(" | ") { s -> s.values.getOrNull(k)?.let { v -> if (v == Math.floor(v)) v.toLong().toString() else v.toString() }.orEmpty() }).append(" |\n")
+                    }
+                    out.append("\n")
+                }
+            }
+            WordDoc.IMAGE_LINE.matches(s) -> WordDoc.IMAGE_LINE.find(s)!!.groupValues[1].takeIf { it.isNotBlank() }?.let { out.append("（图：$it）\n") }
+            else -> out.append(lines[i]).append('\n')
+        }
+        i++
+    }
+    return out.toString()
+}
+
 /** Word 的排版选项：封面、目录、页眉、页码、标题编号、首行缩进、字体风格、配色。没写的按默认。 */
 internal fun wordOptions(args: JsonObject): WordDoc.Options {
     val c = args["cover"]
@@ -143,17 +204,7 @@ internal fun wordOptions(args: JsonObject): WordDoc.Options {
     )
 }
 
-/** chart 版式的数据：type、categories、series[{name, values}]、unit。数字写成字符串也认（去掉千分位逗号）。 */
-internal fun parseChart(o: JsonObject?): PptChart.Chart? {
-    o ?: return null
-    val cats = (o["categories"] as? JsonArray).orEmpty().map { it.text() }
-    val series = (o["series"] as? JsonArray).orEmpty().mapNotNull { el ->
-        val s = el as? JsonObject ?: return@mapNotNull null
-        val values = (s["values"] as? JsonArray).orEmpty().map { it.text().replace(",", "").replace("，", "").trim().toDoubleOrNull() ?: 0.0 }
-        PptChart.Series(s["name"].text(), values)
-    }
-    return PptChart.Chart(o["type"].text().ifBlank { "column" }, cats, series, o["unit"].text())
-}
+internal fun parseChart(o: JsonObject?): PptChart.Chart? = PptChart.fromJson(o)
 
 /** 给写了 image_query 的正文页搜一张图，下载失败就不配图。最多 6 张。 */
 internal suspend fun ToolSession.withImages(slides: List<OfficeWriter.Slide>, args: JsonObject, cache: File): List<OfficeWriter.Slide> {

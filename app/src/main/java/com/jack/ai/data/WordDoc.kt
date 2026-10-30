@@ -7,6 +7,7 @@ import kotlin.math.ceil
  * Word 文档：Markdown 进来，出来的是排好版的 .docx。
  * 可选封面、自动目录（带页码，Word 打开时会请求更新成准确的）、带编号的标题样式、页眉页脚（第 X 页 / 共 Y 页）、
  * 表头着色、隔行浅底的表格。配色和 PPT 用同一套（[PptDeck.THEMES]）。
+ * 还能插原生图表（```chart 代码块写 JSON，双击能改数）和图片（![说明](来源)，来源由调用方先下好、读好放进 images）。
  */
 object WordDoc {
     data class Cover(val title: String = "", val subtitle: String = "", val author: String = "", val organization: String = "", val date: String = "")
@@ -28,8 +29,14 @@ object WordDoc {
         val fontStyle: String = "modern",
     )
 
+    /** 一张图：jpeg 或 png 的字节和像素尺寸。 */
+    class Image(val bytes: ByteArray, val ext: String, val w: Int, val h: Int)
+
+    /** Markdown 里单独一行的图片：![说明](来源)。 */
+    val IMAGE_LINE = Regex("""^!\[([^\]]*)]\(([^)]+)\)$""")
+
     private const val XML = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"""
-    private const val NS = """xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships""""
+    private const val NS = """xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture""""
     /** A4、上下左右各 2.54 厘米：正文宽 9026 缇。 */
     private const val TEXT_W = 9026
     /** 估页码用：一页大约多少行、一行大约多少个中文字（正文 11 号字、1.5 倍行距）。 */
@@ -123,7 +130,16 @@ object WordDoc {
 
     private class Heading(val level: Int, val text: String, val bookmark: String, val page: Int)
 
-    fun write(markdown: String, out: OutputStream, o: Options = Options()) {
+    /** 正文宽度能放多宽的图（EMU）：6 英寸左右，正好占满一行。 */
+    private const val MAX_W = 5486400L
+
+    /** 返回生成时发现的问题（图表数据不对、图片没找到），给模型看。 */
+    fun write(markdown: String, out: OutputStream, o: Options = Options(), images: Map<String, Image> = emptyMap()): List<String> {
+        val warnings = mutableListOf<String>()
+        val charts = mutableListOf<PptChart.Chart>()
+        val pics = mutableListOf<Image>()
+        var figure = 0
+        var drawingId = 0
         val t = PptDeck.theme(o.theme).let { if (it.dark) PptDeck.theme("blue").copy(primary = it.accent) else it }  // Word 是白纸，深色主题只借强调色
         val lines = markdown.replace("\r\n", "\n").split("\n")
         // 第一个「# 」是文档标题
@@ -157,11 +173,53 @@ object WordDoc {
             body.append(p("""<w:bookmarkStart w:id="$bm" w:name="$name"/>""" + runs(text) + """<w:bookmarkEnd w:id="$bm"/>""", "Heading$level"))
             used += if (level == 1) 3.0 else 2.2
         }
+        fun caption(text: String) {
+            figure++
+            body.append(p(runs("图 $figure" + (if (text.isNotBlank()) "  " + text.trim() else "")), "Caption"))
+            used += 1.2
+        }
+        fun inline(cx: Long, cy: Long, graphic: String) = """<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="$cx" cy="$cy"/><wp:effectExtent l="0" t="0" r="0" b="0"/>""" +
+            """<wp:docPr id="${++drawingId}" name="Drawing $drawingId"/><wp:cNvGraphicFramePr/><a:graphic>$graphic</a:graphic></wp:inline></w:drawing></w:r>"""
         var i = 0
         while (i < lines.size) {
             val line = lines[i]
             val s = line.trim()
             when {
+                // 图表：```chart 里写 JSON（type、title、categories、series、unit）
+                s.startsWith("```chart") -> {
+                    val json = StringBuilder()
+                    i++
+                    while (i < lines.size && !lines[i].trim().startsWith("```")) { json.append(lines[i]).append('\n'); i++ }
+                    val raw = runCatching { kotlinx.serialization.json.Json.parseToJsonElement(json.toString()) as kotlinx.serialization.json.JsonObject }.getOrNull()
+                    val problems = mutableListOf<String>()
+                    val c = raw?.let { PptChart.fromJson(it) }?.let { PptChart.clean(it, problems) }
+                    problems.forEach { warnings += "图表「${raw?.get("title")?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }.orEmpty()}」：$it" }
+                    if (c == null) { if (raw == null) warnings += "有个 chart 代码块不是有效的 JSON，没画出来"; i++; continue }
+                    charts += c
+                    val cy = if (c.type in setOf("pie", "doughnut")) 3000000L else 3200400L
+                    body.append(p(inline(MAX_W, cy, """<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rIdC${charts.size}"/></a:graphicData>"""),
+                        "Figure"))
+                    used += cy / 12700.0 / 17
+                    caption(c.title + if (c.unit.isNotBlank()) "（单位：${c.unit}）" else "")
+                }
+                IMAGE_LINE.matches(s) -> {
+                    val m = IMAGE_LINE.find(s)!!
+                    val alt = m.groupValues[1]; val src = m.groupValues[2].trim()
+                    val img = images[src]
+                    if (img == null) warnings += "图片「${alt.ifBlank { src }}」没找到，没放进去"
+                    else {
+                        pics += img
+                        val n = pics.size
+                        val ratio = if (img.w > 0 && img.h > 0) img.h.toDouble() / img.w else 0.66
+                        // 竖的图别太高：最高大半页
+                        var cx = MAX_W; var cy = (cx * ratio).toLong()
+                        if (cy > 5400000L) { cy = 5400000L; cx = (cy / ratio).toLong() }
+                        body.append(p(inline(cx, cy, """<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="$n" name="image$n.${img.ext}"/><pic:cNvPicPr/></pic:nvPicPr>""" +
+                            """<pic:blipFill><a:blip r:embed="rIdI$n"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="$cx" cy="$cy"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData>"""), "Figure"))
+                        used += cy / 12700.0 / 17
+                        if (alt.isNotBlank()) caption(alt)
+                    }
+                }
                 i == titleIdx -> if (cover == null && !titleOnToc && docTitle.isNotEmpty()) { body.append(p(runs(docTitle), "Title")); used += 3 }
                 s.startsWith("```") -> {
                     i++
@@ -242,10 +300,11 @@ object WordDoc {
 
         val headerXml = """$XML<w:hdr $NS>""" + p(runs(headerText, color = "8C8C8C", size = 18), "Header",
             """<w:pBdr><w:bottom w:val="single" w:sz="4" w:space="4" w:color="${t.soft}"/></w:pBdr><w:jc w:val="right"/>""") + "</w:hdr>"
+        // 有封面目录时正文从 1 数，「共几页」只有 Word 算得对（LibreOffice、WPS 不认 SECTIONPAGES），就只写「第 X 页」
+        fun gray(text: String) = """<w:r><w:rPr><w:color w:val="8C8C8C"/><w:sz w:val="18"/></w:rPr><w:t xml:space="preserve">$text</w:t></w:r>"""
         val footerXml = """$XML<w:ftr $NS>""" + p(
-            """<w:r><w:rPr><w:color w:val="8C8C8C"/><w:sz w:val="18"/></w:rPr><w:t xml:space="preserve">第 </w:t></w:r>""" + field("PAGE", "1") +
-                """<w:r><w:rPr><w:color w:val="8C8C8C"/><w:sz w:val="18"/></w:rPr><w:t xml:space="preserve"> 页 / 共 </w:t></w:r>""" + field("SECTIONPAGES", "1") +
-                """<w:r><w:rPr><w:color w:val="8C8C8C"/><w:sz w:val="18"/></w:rPr><w:t xml:space="preserve"> 页</w:t></w:r>""", "Footer", """<w:jc w:val="center"/>""") + "</w:ftr>"
+            gray("第 ") + field("PAGE", "1") + (if (front.isEmpty()) gray(" 页 / 共 ") + field("NUMPAGES", "1") + gray(" 页") else gray(" 页")),
+            "Footer", """<w:jc w:val="center"/>""") + "</w:ftr>"
 
         val classic = o.fontStyle == "classic"
         val bodyFont = if (classic) "宋体" else "微软雅黑"
@@ -265,6 +324,8 @@ object WordDoc {
             style("Quote", "Quote", """<w:pBdr><w:left w:val="single" w:sz="24" w:space="8" w:color="${t.accent}"/></w:pBdr><w:shd w:val="clear" w:color="auto" w:fill="${t.card}"/><w:spacing w:before="120" w:after="120"/><w:ind w:left="240" w:right="240"/>""", """<w:color w:val="${t.muted}"/>""") +
             style("Code", "Code", """<w:shd w:val="clear" w:color="auto" w:fill="F3F4F6"/><w:spacing w:after="0" w:line="260" w:lineRule="auto"/><w:jc w:val="left"/>""", """<w:rFonts w:ascii="Consolas" w:hAnsi="Consolas"/><w:sz w:val="19"/><w:szCs w:val="19"/>""") +
             style("Rule", "Horizontal Line", """<w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="${t.soft}"/></w:pBdr><w:spacing w:before="120" w:after="240"/>""", "") +
+            style("Figure", "Figure", """<w:keepNext/><w:spacing w:before="120" w:after="60" w:line="240" w:lineRule="auto"/><w:jc w:val="center"/>""", "") +
+            style("Caption", "caption", """<w:spacing w:before="0" w:after="200"/><w:jc w:val="center"/>""", """<w:color w:val="${t.muted}"/><w:sz w:val="19"/><w:szCs w:val="19"/>""") +
             style("TableText", "Table Text", """<w:spacing w:before="0" w:after="0" w:line="276" w:lineRule="auto"/>""", """<w:sz w:val="20"/><w:szCs w:val="20"/>""") +
             style("CoverTitle", "Cover Title", """<w:spacing w:before="240" w:after="240" w:line="240" w:lineRule="auto"/><w:jc w:val="left"/>""", """$hf<w:b/><w:sz w:val="60"/><w:szCs w:val="60"/>""") +
             style("CoverSubtitle", "Cover Subtitle", """<w:spacing w:before="0" w:after="240"/><w:jc w:val="left"/>""", """<w:sz w:val="28"/><w:szCs w:val="28"/>""") +
@@ -280,21 +341,33 @@ object WordDoc {
         val rel = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
         val settings = """$XML<w:settings $NS>${if (withToc && headings.isNotEmpty()) "<w:updateFields w:val=\"true\"/>" else ""}<w:defaultTabStop w:val="420"/><w:characterSpacingControl w:val="compressPunctuation"/><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>"""
         val core = """$XML<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>${esc(docTitle)}</dc:title>${o.cover?.author?.takeIf { it.isNotBlank() }?.let { "<dc:creator>${esc(it)}</dc:creator>" }.orEmpty()}</cp:coreProperties>"""
-        OfficeWriter.zipParts(out, listOf(
-            "[Content_Types].xml" to """$XML<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>""" +
+        val chartParts = charts.flatMapIndexed { k, c ->
+            val n = k + 1
+            listOf("word/charts/chart$n.xml" to PptChart.xml(c, t),
+                "word/charts/_rels/chart$n.xml.rels" to """$XML<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="$rel/package" Target="../embeddings/Microsoft_Excel_Worksheet$n.xlsx"/></Relationships>""")
+        }
+        val binaries = charts.mapIndexed { k, c -> "word/embeddings/Microsoft_Excel_Worksheet${k + 1}.xlsx" to PptChart.workbook(c) } +
+            pics.mapIndexed { k, img -> "word/media/image${k + 1}.${img.ext}" to img.bytes }
+        val extraRels = charts.indices.joinToString("") { """<Relationship Id="rIdC${it + 1}" Type="$rel/chart" Target="charts/chart${it + 1}.xml"/>""" } +
+            pics.indices.joinToString("") { """<Relationship Id="rIdI${it + 1}" Type="$rel/image" Target="media/image${it + 1}.${pics[it].ext}"/>""" }
+        val extraTypes = """<Default Extension="xlsx" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"/><Default Extension="jpeg" ContentType="image/jpeg"/><Default Extension="png" ContentType="image/png"/>""" +
+            charts.indices.joinToString("") { """<Override PartName="/word/charts/chart${it + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>""" }
+        OfficeWriter.zipParts(out, chartParts + listOf(
+            "[Content_Types].xml" to """$XML<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>$extraTypes""" +
                 """<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>""" +
                 """<Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>""" +
                 """<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>""" +
                 """<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/></Types>""",
             "_rels/.rels" to """$XML<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="$rel/officeDocument" Target="word/document.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/></Relationships>""",
-            "word/_rels/document.xml.rels" to """$XML<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="$rel/styles" Target="styles.xml"/><Relationship Id="rId2" Type="$rel/settings" Target="settings.xml"/><Relationship Id="rId10" Type="$rel/header" Target="header1.xml"/><Relationship Id="rId11" Type="$rel/footer" Target="footer1.xml"/></Relationships>""",
+            "word/_rels/document.xml.rels" to """$XML<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="$rel/styles" Target="styles.xml"/><Relationship Id="rId2" Type="$rel/settings" Target="settings.xml"/><Relationship Id="rId10" Type="$rel/header" Target="header1.xml"/><Relationship Id="rId11" Type="$rel/footer" Target="footer1.xml"/>$extraRels</Relationships>""",
             "word/document.xml" to document,
             "word/styles.xml" to styles,
             "word/settings.xml" to settings,
             "word/header1.xml" to headerXml,
             "word/footer1.xml" to footerXml,
             "docProps/core.xml" to core,
-        ))
+        ), binaries)
+        return warnings
     }
 
     /** 1 → 一，12 → 十二，23 → 二十三（标题编号够用就行）。 */

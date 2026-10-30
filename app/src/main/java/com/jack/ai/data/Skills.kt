@@ -85,6 +85,12 @@ val BUILTIN_SKILLS = listOf(
 2. 用 create_document 工具（format 填 word），内容用 Markdown 写：
    - 第一行用 “# 标题” 作为文档标题；章节用 ##，小节用 ###，再下一级用 ####。
    - 列表用 “- ” 或 “1. ”；表格用 Markdown 表格（表头会自动着色、隔行浅底、数字靠右）；重点用 **加粗**；引用、注意事项用 “> ”。
+   - 图表：有数据要比较、看趋势、看占比时，插原生图表（在 Word 里双击能改数），写一个 chart 代码块，里面是 JSON：
+     ```chart
+     {"type": "column", "title": "各季度营收", "categories": ["Q1", "Q2", "Q3"], "series": [{"name": "营收", "values": [120, 150, 170]}], "unit": "万元"}
+     ```
+     type 选 column（比大小）、bar（分类名长）、line（趋势）、pie / doughnut（占比，只用一组数）。图下面会自动加「图 1 标题」。数据要来自用户给的或这次查到的，不编。
+   - 配图：单独一行写 ![图片说明](来源)。来源写对话文件夹里图片的文件名（用户发的照片、create_chart 画的图），或者写 search:英文关键词 让我去搜一张（比如 ![城市夜景](search:city skyline at night)）。说明会成为图注。一份文档配两三张就够，别每节都放。
 3. 排版按文档类型挑：
    - 正式报告、方案、计划书、论文：cover 写封面（标题、副标题、作者或部门、日期），toc 加目录，heading_numbers 用 chinese（公文、国内报告）或 decimal（技术文档、论文），indent 首行缩进，font_style 用 classic。
    - 普通文档、总结、说明书：不要封面，章节多就加目录，font_style 用 modern。

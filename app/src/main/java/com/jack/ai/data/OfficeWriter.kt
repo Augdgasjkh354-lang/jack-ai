@@ -24,7 +24,7 @@ object OfficeWriter {
         }
     }
 
-    internal fun zipParts(out: OutputStream, files: List<Pair<String, String>>) = zip(out, files)
+    internal fun zipParts(out: OutputStream, files: List<Pair<String, String>>, binaries: List<Pair<String, ByteArray>> = emptyList()) = zip(out, files, binaries)
 
     private fun zip(out: OutputStream, files: List<Pair<String, String>>, binaries: List<Pair<String, ByteArray>> = emptyList()) {
         ZipOutputStream(out).use { z ->
@@ -46,7 +46,8 @@ object OfficeWriter {
     // ======================= Word =======================
 
     /** Word：排版交给 [WordDoc]（封面、目录、标题样式、页眉页脚、表格）。 */
-    fun writeDocx(markdown: String, out: OutputStream, options: WordDoc.Options = WordDoc.Options()) = WordDoc.write(markdown, out, options)
+    fun writeDocx(markdown: String, out: OutputStream, options: WordDoc.Options = WordDoc.Options(), images: Map<String, WordDoc.Image> = emptyMap()): List<String> =
+        WordDoc.write(markdown, out, options, images)
 
     // ======================= PPT =======================
 

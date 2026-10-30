@@ -88,7 +88,8 @@ budget = 800
         assertEquals(2, Regex("<w:sectPr>").findAll(doc).count())
         assertTrue(doc.contains("<w:headerReference w:type=\"default\" r:id=\"rId10\"/><w:footerReference w:type=\"default\" r:id=\"rId11\"/>"))
         assertTrue(doc.contains("<w:pgNumType w:start=\"1\"/>"))
-        assertTrue(p.getValue("word/footer1.xml").contains("SECTIONPAGES"))
+        assertTrue(p.getValue("word/footer1.xml").contains(" PAGE "))
+        assertFalse(p.getValue("word/footer1.xml").contains("PAGES"))
         // 表格：表头主色白字、表头重复、数字靠右
         assertTrue(doc.contains("w:fill=\"0F766E\""))
         assertTrue(doc.contains("<w:tblHeader/>"))
@@ -105,12 +106,51 @@ budget = 800
     }
 
     @Test
+    fun chartsAndImagesAreEmbedded() {
+        val png = java.util.Base64.getDecoder().decode("iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAIAAAB7QOjdAAAAEElEQVR4nGNgYPj/n4GBAQAI/gH/1d7sMQAAAABJRU5ErkJggg==")
+        val text = md + """
+## 数据
+```chart
+{"type": "line", "title": "用户增长", "categories": ["1月", "2月", "3月"], "series": [{"name": "用户", "values": [10, 12, "15"]}], "unit": "万"}
+```
+
+![办公室照片](office.png)
+
+![没有这张](missing.png)
+
+```chart
+{坏的 JSON
+```
+"""
+        val bos = ByteArrayOutputStream()
+        val warnings = OfficeWriter.writeDocx(text, bos, WordDoc.Options(cover = WordDoc.Cover("带图的报告")), mapOf("office.png" to WordDoc.Image(png, "png", 200, 100)))
+        File(System.getProperty("user.dir"), "build/office-samples/figures.docx").writeBytes(bos.toByteArray())
+        val p = parts(bos.toByteArray())
+        val f = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
+        f.newDocumentBuilder().parse(p.getValue("word/document.xml").byteInputStream())
+        f.newDocumentBuilder().parse(p.getValue("word/charts/chart1.xml").byteInputStream())
+        assertTrue(p.containsKey("word/embeddings/Microsoft_Excel_Worksheet1.xlsx"))
+        assertTrue(p.containsKey("word/media/image1.png"))
+        assertTrue(p.getValue("word/_rels/document.xml.rels").contains("rIdC1") && p.getValue("word/_rels/document.xml.rels").contains("rIdI1"))
+        assertTrue(p.getValue("[Content_Types].xml").contains("/word/charts/chart1.xml"))
+        val doc = p.getValue("word/document.xml")
+        assertTrue(doc.contains(">图 1  用户增长（单位：万）<"))
+        assertTrue(doc.contains(">图 2  办公室照片<"))
+        // 图片按比例：宽 2:1
+        assertTrue(doc.contains("<wp:extent cx=\"5486400\" cy=\"2743200\"/>"))
+        assertTrue(warnings.toString(), warnings.any { it.contains("没有这张") })
+        assertTrue(warnings.toString(), warnings.any { it.contains("不是有效的 JSON") })
+        assertEquals(2, warnings.size)
+    }
+
+    @Test
     fun shortDocsStayPlain() {
         val p = write(WordDoc.Options(header = ""), "# 请假条\n因家中有事，申请请假一天。\n")
         val doc = p.getValue("word/document.xml")
         assertFalse(doc.contains("TOC \\o"))
         assertFalse(doc.contains("headerReference"))
         assertTrue(doc.contains("footerReference"))
+        assertTrue(p.getValue("word/footer1.xml").contains("NUMPAGES"))
         assertTrue(doc.contains("<w:pStyle w:val=\"Title\"/>"))
         assertEquals(1, Regex("<w:sectPr>").findAll(doc).count())
         assertFalse(p.getValue("word/settings.xml").contains("updateFields"))
