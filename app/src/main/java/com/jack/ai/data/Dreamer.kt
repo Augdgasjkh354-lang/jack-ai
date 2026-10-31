@@ -218,6 +218,9 @@ Output only one JSON object, in this format:
         )
         val obj = Json.parseToJsonElement(raw.trim().removePrefix("```json").removeSuffix("```").trim()).jsonObject
         fun str(k: String) = (obj[k] as? JsonPrimitive)?.content.orEmpty()
+        // 日记是这次整理的凭证：先校验再写记忆。原来是先写完记忆、存档、清暂存，才在建条目时因日记为空抛错，
+        // 记忆已经改了、日记却没留，等于一次没凭证的整理
+        if (str("journal").isBlank()) throw IllegalStateException("做梦结果格式不对")
         // 没有新聊天时关于用户的记忆不动，自己的经历照样能整理
         val ops = MemoryOps.parse(obj["ops"] as? JsonArray).filter { it.own || transcript.isNotBlank() }
         // 一次动到太多已有的记忆：这次整个不算，第二天重新整理（日记也不写，时间点不往后挪）
@@ -236,7 +239,7 @@ Output only one JSON object, in this format:
         MemoryOps.addToArchive(ctx, result.archived)
         val ownResult = OwnMemory.applyOps(ctx, ops.filter { it.own })
         setHeld(ctx, "")
-        val entry = DreamEntry(journal = str("journal").ifBlank { throw IllegalStateException("做梦结果格式不对") }, changes = str("changes"))
+        val entry = DreamEntry(journal = str("journal"), changes = str("changes"))
         val currentDreams = store.loadDreams()
         DreamArchive.preserve(ctx, listOf(entry) + currentDreams.drop(59))
         store.saveDreams(listOf(entry) + currentDreams.take(59))
