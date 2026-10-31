@@ -96,7 +96,8 @@ async function state(url, env) {
 async function send(req, env) {
   const b = await req.json().catch(() => ({}));
   const text = String(b.text || "").slice(0, 100_000);
-  const files = Array.isArray(b.files) ? b.files.slice(0, 20) : [];
+  // 文件名是网页端传来的：斜杠换掉，免得手机端拼路径时被 ../ 带到别的目录（upload() 同款处理）
+  const files = Array.isArray(b.files) ? b.files.slice(0, 20).map(f => ({ ...f, name: String(f?.name || "file").replace(/[\\/]/g, "_").slice(0, 120) })) : [];
   if (!text.trim() && !files.length) return json({ error: "空消息" }, 400);
   let conv = String(b.conv || "");
   const t = now();
