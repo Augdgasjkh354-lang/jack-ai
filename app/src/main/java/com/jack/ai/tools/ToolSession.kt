@@ -123,7 +123,9 @@ class ToolSession(
      * strict 的操作（读过外部内容后发信给新地址）完全授权下也要问。
      */
     suspend fun approve(title: String, body: String, action: String, strict: Boolean = false): Boolean =
-        ((!strict && withContext(Dispatchers.IO) { host.store.loadSettings().fullAuth }) || ui.confirm(title, body, action))
+        ((!strict && withContext(Dispatchers.IO) { host.store.loadSettings().fullAuth }) ||
+            // 这一轮读到过疑似注入的内容：弹窗最上面先说一声
+            ui.confirm(title, injection?.let { "⚠️ 这一轮读到了疑似提示词注入的内容（$it），确认这是你想让 Kavi 做的。\n\n" }.orEmpty() + body, action))
             .also { if (!it) rejected.incrementAndGet() }
 
     /** 没被同意的次数；和 succeeded 一样，execute 前后比一比就知道这次是不是被拒了。 */
@@ -206,6 +208,9 @@ class ToolSession(
     /** 这次回答里读过外部内容（邮件、网页）没有；读过之后发信给新地址，完全授权下也要确认。 */
     @Volatile internal var sawExternal = false
 
+    /** 这一轮读到疑似提示词注入的内容没有（记着第一次是在哪读到的）：之后往外做事都要用户确认（完全授权除外）。 */
+    @Volatile internal var injection: String? = null
+
     /** 按工具名执行，返回给模型看的结果，顺便记进工具统计。 */
     suspend fun execute(name: String, argsText: String): String = perform(name, argsText).text
 
@@ -220,7 +225,15 @@ class ToolSession(
         calls.incrementAndGet()
         val before = succeeded.get()
         val refusedBefore = rejected.get()
-        val result = dispatch(name, argsText)
+        val args = runCatching { Json.parseToJsonElement(argsText).jsonObject }.getOrNull()
+        // 读到过疑似注入的内容：往外做事、自己又不会问的，先问用户（完全授权下 approve 直接放行）
+        if (injection != null && com.jack.ai.data.InjectionGuard.gated(name, args?.get("action").text()) &&
+            !approve("让 Kavi 接着做这一步？", "Kavi 接下来要：${toolLabel(name, args)}", "继续")) {
+            return ToolOutcome("用户没有同意这一步：这一轮读到过疑似提示词注入的内容，往外做事要用户确认。不要再试这个操作，继续做用户交代的、不用往外做事的部分，或者说清楚需要用户确认什么。", ToolStatus.REJECTED)
+        }
+        val raw = dispatch(name, argsText)
+        // 外部内容：查一遍有没有冲着 AI 下指令的话（纯代码，不花 token）
+        val result = if (name in SCANNED_TOOLS || name.startsWith(com.jack.ai.data.Mcp.PREFIX)) guard(name, args, raw) else raw
         val status = when {
             rejected.get() != refusedBefore -> ToolStatus.REJECTED
             succeeded.get() == before || com.jack.ai.data.Verify.failed(result) -> ToolStatus.FAILED
@@ -239,6 +252,28 @@ class ToolSession(
         val note = kind?.let { Failures.note(it, failures.merge(it, 1, Int::plus) ?: 1, result, settings) }.orEmpty()
         recordSite(name, argsText, result, status, kind)
         return ToolOutcome(result + note, status)
+    }
+
+    /** 查外部内容里的提示词注入：有就标出可疑的行、附上给 Kavi 的提醒，第一次还在回答下面告诉用户、记进统计。 */
+    private suspend fun guard(name: String, args: JsonObject?, raw: String): String {
+        val scan = com.jack.ai.data.InjectionGuard.scan(raw)
+        if (!scan.hit) return scan.text
+        val source = toolLabel(name, args)
+        val first = injection == null
+        if (first) injection = source
+        withContext(Dispatchers.IO) { runCatching { com.jack.ai.data.InjectionGuard.record(app, name, source, scan) } }
+        if (first) {
+            val full = withContext(Dispatchers.IO) { host.store.loadSettings().fullAuth }
+            ui.notice(com.jack.ai.data.InjectionGuard.notice(source, scan, full))
+        }
+        return scan.text + com.jack.ai.data.InjectionGuard.warning(scan, com.jack.ai.data.Persona.zh(settings))
+    }
+
+    /** 给用户看的这一步是什么：工具名加上网址、搜的词、文件名这类。 */
+    private fun toolLabel(name: String, args: JsonObject?): String {
+        val what = listOf("url", "query", "name", "id", "path", "action").firstNotNullOfOrNull { k -> args?.get(k).text().takeIf { it.isNotBlank() } }.orEmpty()
+        val where = if (name == "browser") com.jack.ai.ui.JackBrowser.address.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty() else ""
+        return (name + if (what.isNotEmpty()) "：${what.take(120)}" else "") + where
     }
 
     /** 按工具名分给各自的实现。没开对应技能的工具一律不可用。 */
@@ -342,6 +377,8 @@ class ToolSession(
         const val BROWSER_WAIT_MS = 5 * 60_000L
 
         /** 返回外部内容的工具：内容里可能藏着冒充用户的指令。 */
+        /** 结果要查提示词注入的：外部内容，加上读文件（文件常常是从外面来的）。 */
+        val SCANNED_TOOLS get() = EXTERNAL_TOOLS + setOf("read_file", "phone_files")
         val EXTERNAL_TOOLS = setOf("list_emails", "read_email", "web_search", "read_webpage", "notion_search", "notion_read", "browser", "github", "download_file")
 
         /** 报错尽量带上具体原因，模型才知道该重试、换方法还是去问用户。 */

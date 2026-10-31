@@ -248,6 +248,8 @@ fun UsageScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
 
             HedgeCard(state.conversations)
 
+            InjectionCard()
+
             val top = state.conversations.filter { it.spentTokens > 0 }.sortedWith(
                 compareByDescending<Conversation> { it.spentCost }.thenByDescending { it.spentTokens },
             ).take(5)
@@ -460,6 +462,30 @@ private fun HedgeCard(convs: List<Conversation>) {
                 Row {
                     Text(label, Modifier.weight(1f))
                     Text(if (r.answers == 0) "还没有回答" else "%.1f 处 · %d 条".format(r.perThousand, r.answers), color = colors.onSurfaceVariant)
+                }
+            }
+        }
+    }
+}
+
+/** 提示词注入：拦过几次、最近是在哪读到的（规则误报多的话，看这里就知道该调哪条）。 */
+@Composable
+private fun InjectionCard() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val colors = MaterialTheme.colorScheme
+    val log = androidx.compose.runtime.produceState(emptyList<com.jack.ai.data.InjectionGuard.Record>()) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.jack.ai.data.InjectionGuard.log(ctx) }
+    }.value
+    if (log.isEmpty()) return
+    val f = java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault())
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("拦下的提示词注入 · ${log.size} 次", style = MaterialTheme.typography.titleSmall)
+            log.takeLast(5).reversed().forEach { r ->
+                Column {
+                    Text("${f.format(java.util.Date(r.at))} · ${r.kind}", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
+                    Text(r.source, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("「${r.line}」", style = MaterialTheme.typography.bodySmall, color = colors.outline, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
