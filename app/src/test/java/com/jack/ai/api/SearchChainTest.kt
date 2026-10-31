@@ -84,7 +84,13 @@ class SearchChainTest {
         assertEquals("Tavily 额度用完或请求太频繁", e?.message)
         // 两个 Key 都歇着了，Key 不对的歇一天，额度用完的歇到下个月
         assertTrue(KeyRest.resting("exa1")); assertTrue(KeyRest.resting("tv1"))
-        assertTrue(KeyRest.resting("tv1", System.currentTimeMillis() + 25 * 3_600_000L))
+        // 不用「现在 + 25 小时」：月底那天加 25 小时就到下个月了，额度用完的 Key 正好歇完，测试会挂
+        val nextMonth = java.util.Calendar.getInstance().apply {
+            add(java.util.Calendar.MONTH, 1); set(java.util.Calendar.DAY_OF_MONTH, 1)
+            set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0); set(java.util.Calendar.SECOND, 0)
+        }.timeInMillis
+        assertTrue(KeyRest.resting("tv1", nextMonth - 60_000L))
+        assertTrue(!KeyRest.resting("tv1", nextMonth + 10 * 60_000L))
         assertTrue(!KeyRest.resting("exa1", System.currentTimeMillis() + 25 * 3_600_000L))
     }
 
