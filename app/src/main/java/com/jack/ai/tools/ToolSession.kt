@@ -235,15 +235,17 @@ class ToolSession(
             withContext(Dispatchers.IO) { runCatching { host.store.addToolStat(name, failed = true) } }
             return ToolOutcome(msg, ToolStatus.FAILED)
         }
-        // 连接器返回的也是外部内容
-        if (name in EXTERNAL_TOOLS || name.startsWith(com.jack.ai.data.Mcp.PREFIX)) sawExternal = true
+        // 连接器返回的也是外部内容；被扫描的来源（文件、手机文件、电话、手机数据）同样算，不能只认 EXTERNAL_TOOLS，
+        // 否则读了文件里的注入内容、再往外发信时，严格确认会被绕过
+        if (name in SCANNED_TOOLS || name.startsWith(com.jack.ai.data.Mcp.PREFIX)) sawExternal = true
         calls.incrementAndGet()
         val before = succeeded.get()
         val refusedBefore = rejected.get()
         val args = runCatching { Json.parseToJsonElement(argsText).jsonObject }.getOrNull()
-        // 读到过疑似注入的内容：往外做事、自己又不会问的，先问用户（完全授权下 approve 直接放行）
+        // 读到过疑似注入的内容：往外做事、自己又不会问的，先问用户。这里必须 strict：注入门禁本身就是为了拦住
+        // 「读了外部内容就直接往外做事」，完全授权也不能把它放行，否则门禁在完全授权下等于没有
         if (injection != null && com.jack.ai.data.InjectionGuard.gated(name, args?.get("action").text()) &&
-            !approve("让 Kavi 接着做这一步？", "Kavi 接下来要：${toolLabel(name, args)}", "继续")) {
+            !approve("让 Kavi 接着做这一步？", "Kavi 接下来要：${toolLabel(name, args)}", "继续", strict = true)) {
             return ToolOutcome("用户没有同意这一步：这一轮读到过疑似提示词注入的内容，往外做事要用户确认。不要再试这个操作，继续做用户交代的、不用往外做事的部分，或者说清楚需要用户确认什么。", ToolStatus.REJECTED)
         }
         val raw = dispatch(name, argsText)

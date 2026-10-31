@@ -80,11 +80,53 @@ object BrowserNet {
         val h = host.lowercase().trim('[', ']').trimEnd('.')
         if (h.isEmpty() || h == "localhost" || h.endsWith(".localhost") || h.endsWith(".local")) return true
         // fc00::/7、fe80:: 只认 IPv6 地址（带冒号），fc2.com、fdroid.org 这类网站不算
-        if (':' in h && (h == "::1" || h == "::" || h.startsWith("fe80:") || h.startsWith("fc") || h.startsWith("fd"))) return true
-        val p = h.split('.').mapNotNull { it.toIntOrNull() }
-        if (p.size != 4 || h.count { it == '.' } != 3) return false
-        return p[0] == 127 || p[0] == 10 || p[0] == 0 || (p[0] == 169 && p[1] == 254) ||
-            (p[0] == 172 && p[1] in 16..31) || (p[0] == 192 && p[1] == 168) || (p[0] == 100 && p[1] in 64..127)
+        if (':' in h) {
+            if (h == "::1" || h == "::" || h.startsWith("fe80:") || h.startsWith("fc") || h.startsWith("fd")) return true
+            // 展开写的回环 0:0:0:0:0:0:0:1
+            val groups = h.split(':')
+            if (groups.size == 8 && groups.dropLast(1).all { it.trimStart('0').isEmpty() } && groups.last().trimStart('0') == "1") return true
+            // IPv4 映射地址 ::ffff:127.0.0.1：按里面那个 IPv4 算
+            if (h.startsWith("::ffff:")) {
+                val ip = parseIPv4(h.removePrefix("::ffff:")) ?: return false
+                return isPrivateIPv4(ip)
+            }
+            return false
+        }
+        val ip = parseIPv4(h) ?: return false
+        return isPrivateIPv4(ip)
+    }
+
+    /**
+     * 按 inet_aton 语义解析 IPv4：每段可以是十进制、0x 十六进制、0 开头八进制；1～4 段，缺的段按大端补在后面。
+     * 只认点分十进制会让 2130706433（= 127.0.0.1）、0x7f.0.0.1、0177.0.0.1、127.1 绕过本机拦截。
+     */
+    private fun parseIPv4(h: String): Long? {
+        if (h.isEmpty() || h.count { it == '.' } > 3) return null
+        val parts = h.split('.')
+        if (parts.any { it.isEmpty() }) return null
+        val vals = parts.map { s ->
+            val (digits, radix) = when {
+                s.startsWith("0x", ignoreCase = true) && s.length > 2 -> s.drop(2) to 16
+                s.length > 1 && s[0] == '0' -> s.drop(1) to 8
+                else -> s to 10
+            }
+            if (digits.isEmpty() || digits.any { it.digitToIntOrNull(radix) == null }) return null
+            digits.toLongOrNull(radix) ?: return null
+        }
+        // 前面的段每段一个字节，最后一段吃掉剩下的所有字节
+        val lastBytes = 4 - (parts.size - 1)
+        if (vals.dropLast(1).any { it > 255 }) return null
+        if (vals.last() >= (1L shl (8 * lastBytes))) return null
+        var ip = 0L
+        for (i in 0 until parts.size - 1) ip = ip or (vals[i] shl (8 * (3 - i)))
+        return ip or vals.last()
+    }
+
+    private fun isPrivateIPv4(ip: Long): Boolean {
+        val a = (ip ushr 24) and 0xff
+        val b = (ip ushr 16) and 0xff
+        return a == 127L || a == 10L || a == 0L || (a == 169L && b == 254L) ||
+            (a == 172L && b in 16..31) || (a == 192L && b == 168L) || (a == 100L && b in 64..127)
     }
 
     /** 做了收不回的事：买、付、发、删、提交…（中英文按钮上常见的字） */

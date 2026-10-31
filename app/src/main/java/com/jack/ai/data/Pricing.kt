@@ -67,7 +67,8 @@ object Pricing {
     /** 这个模型在这个时刻的价格；不知道价格时返回 null。 */
     fun priceAt(ep: Endpoint, ms: Long): Price? {
         if (!ep.deepseek) return ep.price
-        val p = DEEPSEEK_PEAK[ep.model] ?: DEEPSEEK_PEAK[MODEL_FLASH]!!
+        // 不认识的 DeepSeek 模型不按 Flash 价估：估错比不估更糟（用量统计会系统性偏低），不知道就返回 null 让调用方记成未计价
+        val p = DEEPSEEK_PEAK[ep.model] ?: return null
         return if (isPeak(ms)) p else Price(p.hit / 2, p.miss / 2, p.out / 2)
     }
 

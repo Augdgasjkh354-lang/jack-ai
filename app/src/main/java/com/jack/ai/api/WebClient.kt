@@ -119,7 +119,8 @@ class WebClient(
         if (s.apiKey.isBlank()) {
             error?.let { throw it }
             if (s.exaKeys.isEmpty() && s.tavilyKeys.isEmpty()) throw ApiException("没有可用的联网服务", 0)
-            return empty
+            // 能走到这里说明 Key 不是没有、而是全在冷却中：返回空结果会让模型以为「搜过了，什么都没有」，必须明说
+            throw ApiException("联网 Key 都在冷却中，稍后再试", 0)
         }
         return deepseek()
     }

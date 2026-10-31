@@ -71,7 +71,8 @@ object MemoryOps {
             "。腾完再存这一条。"
     }
 
-    private fun norm(s: String) = s.lowercase().replace(Regex("[\\s，。,.；;：:！!？?「」\"'（）()]"), "")
+    private fun norm(s: String) = s.lowercase().replace(Regex("[\\s，。；;：:！!？?「」\"'（）()]"), "")
+    // 小数点和千分位逗号不能去掉：去掉后「3.5%」和「35%」会被当成同一条，纠正会被吞掉
 
     /** 在现在的记忆上执行（期间用户删掉、改过的照现在的算；找不到的编号跳过）。 */
     fun apply(live: List<MemoryItem>, ops: List<Op>, now: Long = System.currentTimeMillis(), deepNow: List<MemoryItem> = emptyList()): Result {
@@ -79,8 +80,17 @@ object MemoryOps {
         val deep = deepNow.toMutableList()
         val archived = mutableListOf<ArchivedMemory>()
         var added = 0; var updated = 0; var invalidated = 0; var skipped = 0; var demoted = 0; var promoted = 0; var merged = 0
-        fun find(id: String) = if (id.length < 4) -1 else list.indexOfFirst { it.id.startsWith(id) }
-        fun findDeep(id: String) = if (id.length < 4) -1 else deep.indexOfFirst { it.id.startsWith(id) }
+        fun find(id: String): Int {
+            if (id.length < 4) return -1
+            // 前缀撞车时不能取第一条：取错一条就是静默改错记忆；撞车就当找不到（计入 skipped），让模型给更长的编号
+            val hits = list.indices.filter { list[it].id.startsWith(id) }
+            return if (hits.size == 1) hits[0] else -1
+        }
+        fun findDeep(id: String): Int {
+            if (id.length < 4) return -1
+            val hits = deep.indices.filter { deep[it].id.startsWith(id) }
+            return if (hits.size == 1) hits[0] else -1
+        }
         for (op in ops.filterNot { it.own }) when (op.op) {
             "add" -> {
                 if (op.text.length < 4 || list.any { norm(it.text) == norm(op.text) }) { skipped++; continue }

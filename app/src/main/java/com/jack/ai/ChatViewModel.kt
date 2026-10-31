@@ -702,7 +702,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 val request = conv.messages.lastOrNull { it.role == "user" }?.content.orEmpty()
                 com.jack.ai.tools.WorkGate.reviewer(session, DeepSeekClient { e, p, h, c -> core.recordSpend(convId, e, p, h, c) }, reviewEp, request, reply.createdAt)
             } else null)
-            val myInterjections = interjectionsOf(convId).apply { clear() }
+            // 插话队列就是这条活队列本身：上一条回答收尾时还没读到的插话，由这一条接着处理（回答结束时没用上的还会重发成新消息）。
+            // 这里不能 clear()：上一条回答在收尾、新回答还没开始跑的窗口里，用户发的话会被 send() 当成插话塞进队列，clear 会把它静默丢掉
+            val myInterjections = interjectionsOf(convId)
             running[convId] = reply.id
             val reasoning = agent.reasoning
             val content = agent.content
@@ -941,18 +943,23 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 ), maxTokens = 800, jsonMode = true)
                 val ops = com.jack.ai.data.MemoryReview.parse(raw)
                 // 在现在的记忆上改（这期间 Kavi 或用户可能刚存过）
-                val now = current()
-                val (next, done) = com.jack.ai.data.MemoryReview.apply(now, ops, budget)
-                if (done.isNotEmpty()) {
-                    if (work) com.jack.ai.data.ChatMemory.write(workFile, next)
-                    else {
-                        val live = store.loadMemories()
+                // 全局记忆直接在带 id 的条目上改：改过的条目保留 id、历史和用量，不再经字符串拼回去
+                val done: List<String>
+                if (work) {
+                    val (next, d) = com.jack.ai.data.MemoryReview.apply(current(), ops, budget)
+                    done = d
+                    if (done.isNotEmpty()) com.jack.ai.data.ChatMemory.write(workFile, next)
+                } else {
+                    val live = store.loadMemories()
+                    val (next, d) = com.jack.ai.data.MemoryReview.applyItems(live, ops, budget, "聊天时回看：${conv.title}")
+                    done = d
+                    if (done.isNotEmpty()) {
                         com.jack.ai.data.MemoryOps.snapshot(app, live)
-                        val byText = live.associateBy { it.text }
-                        val updated = next.map { byText[it] ?: com.jack.ai.data.MemoryItem(text = it, source = "聊天时回看：${conv.title}") }
-                        store.saveMemories(updated)
-                        _state.update { it.copy(memories = updated) }
+                        store.saveMemories(next)
+                        _state.update { it.copy(memories = next) }
                     }
+                }
+                if (done.isNotEmpty()) {
                     val lastAnswer = conv.messages.lastOrNull { it.role == "assistant" }?.id
                     if (lastAnswer != null) patchMessage(convId, lastAnswer) { it.copy(notices = it.notices + com.jack.ai.data.MemoryReview.notice(done, work)) }
                 }

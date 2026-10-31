@@ -138,17 +138,25 @@ object PdfWriter {
         rows.forEachIndexed { r, cells ->
             val ls = (0 until cols).map { c -> layout(inline(cells.getOrElse(c) { "" }), if (r == 0) head else body, colW - 12, 1.25f) }
             val rh = ls.maxOf { it.height } + 10f
-            if (y + rh > bottom) newPage()
-            if (r == 0) canvas.drawRect(M, y, M + colW * cols, y + rh, Paint().apply { color = SOFT })
-            ls.forEachIndexed { c, l ->
-                val x = M + c * colW
-                canvas.drawRect(x, y, x + colW, y + rh, border)
-                canvas.save()
-                canvas.translate(x + 6, y + 5)
-                l.draw(canvas)
-                canvas.restore()
+            // 一行比一页还高时不能整行换页了事（超出的部分会被裁掉）：按页切开画，每页画一段，边框和表头底色跟着切
+            var drawn = 0f
+            while (drawn < rh) {
+                if (bottom - y <= 0f) { newPage(); continue }
+                val slice = minOf(bottom - y, rh - drawn)
+                if (r == 0) canvas.drawRect(M, y, M + colW * cols, y + slice, Paint().apply { color = SOFT })
+                ls.forEachIndexed { c, l ->
+                    val x = M + c * colW
+                    canvas.drawRect(x, y, x + colW, y + slice, border)
+                    canvas.save()
+                    canvas.clipRect(x, y, x + colW, y + slice)
+                    canvas.translate(x + 6, y + 5 - drawn)
+                    l.draw(canvas)
+                    canvas.restore()
+                }
+                drawn += slice
+                y += slice
+                if (drawn < rh) newPage()
             }
-            y += rh
         }
         y += 8f
     }

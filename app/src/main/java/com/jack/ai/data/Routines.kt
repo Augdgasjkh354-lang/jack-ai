@@ -242,9 +242,13 @@ object Routines {
             WorkManager.getInstance(ctx).enqueue(req)
         }
         val updated = r.copy(lastRunAt = System.currentTimeMillis(), enabled = r.repeat != "none")
-        store.saveRoutines(list.map { if (it.id == id) updated else it })
-        com.jack.ai.AskWidget.refresh(ctx)
-        schedule(ctx, updated)
+        // 下次执行一定要排上：保存或刷新小部件中途抛错也不能让重复任务静默停摆（原来是先副作用后持久化，中间一抛错 schedule 就跑不到了）
+        try {
+            store.saveRoutines(list.map { if (it.id == id) updated else it })
+            com.jack.ai.AskWidget.refresh(ctx)
+        } finally {
+            schedule(ctx, updated)
+        }
     }
 
     /**
@@ -407,7 +411,9 @@ object Routines {
 class AlarmReceiver : BroadcastReceiver() {
     override fun onReceive(ctx: Context, intent: Intent) {
         when (intent.action) {
-            Intent.ACTION_BOOT_COMPLETED, "android.intent.action.MY_PACKAGE_REPLACED" -> Routines.scheduleAll(ctx)
+            Intent.ACTION_BOOT_COMPLETED, "android.intent.action.MY_PACKAGE_REPLACED",
+            // 用户改系统时间、跨时区：原来只在开机和更新后重排，改时间后提醒会按旧时间跑偏
+            Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED -> Routines.scheduleAll(ctx)
             else -> intent.getStringExtra("id")?.let { Routines.fire(ctx, it) }
         }
     }

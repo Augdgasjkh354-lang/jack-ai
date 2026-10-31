@@ -69,6 +69,46 @@ object MemoryReview {
         return list to done
     }
 
+    /**
+     * 和 apply 一样，但直接在带 id 的记忆上改：改过的条目保留 id、历史、用量和来源，
+     * 不会因为先转成字符串、再按文字拼回去而丢掉身份，同文字的多条也不会被合并成一条。
+     * 工作记忆是纯字符串文件，继续用 apply；全局记忆（带 id）用这个。
+     */
+    fun applyItems(items: List<MemoryItem>, ops: List<Op>, budget: Int, source: String, now: Long = System.currentTimeMillis()): Pair<List<MemoryItem>, List<String>> {
+        var list = items
+        val done = mutableListOf<String>()
+        fun match(old: String): Int {
+            val key = old.trim().removePrefix("- ").trim()
+            if (key.isEmpty()) throw IllegalArgumentException("replace 要填旧记忆的原话")
+            val exact = list.indices.filter { list[it].text == key }
+            val hits = exact.ifEmpty { list.indices.filter { list[it].text.contains(key, ignoreCase = true) } }
+            if (hits.size != 1) throw IllegalArgumentException("「$key」对上了 ${hits.size} 条")
+            return hits.single()
+        }
+        for (op in ops) {
+            val next = runCatching {
+                when (op.op) {
+                    "add" -> if (list.any { it.text == op.text }) null else list + MemoryItem(text = op.text, createdAt = now, source = source)
+                    "update" -> {
+                        val i = match(op.old)
+                        val m = list[i]
+                        list.mapIndexed { j, v ->
+                            if (j == i) v.copy(text = op.text, history = m.history + MemEdit(now, m.text, op.text, "聊天时回看", source)) else v
+                        }
+                    }
+                    else -> {
+                        val i = match(op.old)
+                        list.filterIndexed { j, _ -> j != i }
+                    }
+                }
+            }.getOrNull() ?: continue
+            if (MemoryOps.fullNote(list.map { it.text }, next.map { it.text }, budget, "") != null) continue
+            list = next
+            done += when (op.op) { "add" -> "记下：${op.text}"; "update" -> "改成：${op.text}"; else -> "删掉：${op.old}" }
+        }
+        return list to done
+    }
+
     /** 给用户看的那条说明（挂在回答下面）。 */
     fun notice(done: List<String>, work: Boolean): String =
         (if (work) "顺手更新了工作记忆" else "顺手更新了记忆") + "\n" + done.joinToString("\n")
