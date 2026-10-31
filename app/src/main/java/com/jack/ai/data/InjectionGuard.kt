@@ -101,6 +101,8 @@ object InjectionGuard {
         name == "facts" -> action == "save"
         name == "browser" -> action in BROWSER_ACT
         name == "phone_files" -> action in setOf("export", "rename", "mkdir")
+        // 跑代码是最危险的往外做事（注入内容借刀的第一站）：读到注入后先问用户，真正的沙箱另行再做
+        name == "run_python" || name == "run_js" -> true
         // 操作别的 App：点、输入、划、打开都算（发送这类按钮自己还会再问）；翻列表不算
         name == "phone" -> action in setOf("open", "tap", "long_press", "type", "enter", "swipe")
         name == "github" -> action == "rerun"
