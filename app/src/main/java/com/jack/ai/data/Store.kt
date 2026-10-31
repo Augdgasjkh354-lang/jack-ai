@@ -268,22 +268,21 @@ class Store(context: Context) {
                 // 代理的订阅地址和节点里有密码，也不进备份
                 if (k == "apiKey" || k == "tavilyKey" || k == "exaKey" || k == "proxySub" || k == "proxyNodes" || k == "notionToken" || k == "githubToken" || k == "remoteKey") return@forEach
                 // 其他服务的 Key 也不进备份
-                // 存的值可能是加密的，先解密再脱敏（解密失败就按原样解，解不开会落到默认值，不会把密文原样导出）
                 val v = if (k == "providers" && v is String) runCatching {
-                    val list = json.decodeFromString(ListSerializer(Provider.serializer()), Secrets.decrypt(v) ?: v).map { it.copy(apiKey = "") }
+                    val list = json.decodeFromString(ListSerializer(Provider.serializer()), v).map { it.copy(apiKey = "") }
                     json.encodeToString(ListSerializer(Provider.serializer()), list)
                 }.getOrDefault("[]")
                 // 邮箱授权码也不进备份
                 else if (k == "mail" && v is String) runCatching {
-                    json.encodeToString(MailAccount.serializer(), json.decodeFromString(MailAccount.serializer(), Secrets.decrypt(v) ?: v).copy(password = ""))
+                    json.encodeToString(MailAccount.serializer(), json.decodeFromString(MailAccount.serializer(), v).copy(password = ""))
                 }.getOrDefault("")
                 // 连接器的 Key 也不进备份
                 else if (k == "mcpServers" && v is String) runCatching {
-                    val list = json.decodeFromString(ListSerializer(McpServer.serializer()), Secrets.decrypt(v) ?: v).map { it.copy(key = "") }
+                    val list = json.decodeFromString(ListSerializer(McpServer.serializer()), v).map { it.copy(key = "") }
                     json.encodeToString(ListSerializer(McpServer.serializer()), list)
                 }.getOrDefault("[]")
                 else if (k == "mails" && v is String) runCatching {
-                    val list = json.decodeFromString(ListSerializer(MailAccount.serializer()), Secrets.decrypt(v) ?: v).map { it.copy(password = "") }
+                    val list = json.decodeFromString(ListSerializer(MailAccount.serializer()), v).map { it.copy(password = "") }
                     json.encodeToString(ListSerializer(MailAccount.serializer()), list)
                 }.getOrDefault("[]") else v
                 val e = when (v) {
@@ -349,9 +348,9 @@ class Store(context: Context) {
             ?.let { runCatching { ThinkLevel.valueOf(it) }.getOrNull() }
             ?: if (oldModel == "deepseek-chat") ThinkLevel.OFF else ThinkLevel.AUTO
         return Settings(
-            apiKey = Secrets.decrypt(prefs.getString("apiKey", "")) ?: "",
-            tavilyKey = Secrets.decrypt(prefs.getString("tavilyKey", "")) ?: "",
-            exaKey = Secrets.decrypt(prefs.getString("exaKey", "")) ?: "",
+            apiKey = prefs.getString("apiKey", "") ?: "",
+            tavilyKey = prefs.getString("tavilyKey", "") ?: "",
+            exaKey = prefs.getString("exaKey", "") ?: "",
             webSearch = prefs.getBoolean("webSearch2", true),
             baseUrl = prefs.getString("baseUrl", DEFAULT_BASE_URL) ?: DEFAULT_BASE_URL,
             model = model,
@@ -400,18 +399,18 @@ class Store(context: Context) {
             appLock = prefs.getBoolean("appLock", false),
             monthlyBudget = prefs.getFloat("monthlyBudget", 0f).toDouble(),
             fullAuthUntil = prefs.getLong("fullAuthUntil", 0L),
-            mails = prefs.getString("mails", null)?.let { Secrets.decrypt(it) }?.let { runCatching { json.decodeFromString(ListSerializer(MailAccount.serializer()), it) }.getOrNull() }
+            mails = prefs.getString("mails", null)?.let { runCatching { json.decodeFromString(ListSerializer(MailAccount.serializer()), it) }.getOrNull() }
                 // 旧版本只有一个邮箱
-                ?: listOfNotNull(prefs.getString("mail", null)?.let { Secrets.decrypt(it) }?.let { runCatching { json.decodeFromString(MailAccount.serializer(), it) }.getOrNull() }),
-            providers = prefs.getString("providers", null)?.let { Secrets.decrypt(it) }?.let {
+                ?: listOfNotNull(prefs.getString("mail", null)?.let { runCatching { json.decodeFromString(MailAccount.serializer(), it) }.getOrNull() }),
+            providers = prefs.getString("providers", null)?.let {
                 runCatching { json.decodeFromString(ListSerializer(Provider.serializer()), it) }.getOrNull()
             } ?: emptyList(),
-            mcpServers = prefs.getString("mcpServers", null)?.let { Secrets.decrypt(it) }?.let {
+            mcpServers = prefs.getString("mcpServers", null)?.let {
                 runCatching { json.decodeFromString(ListSerializer(McpServer.serializer()), it) }.getOrNull()
             } ?: emptyList(),
             proxyEnabled = prefs.getBoolean("proxyEnabled", false),
-            proxySub = Secrets.decrypt(prefs.getString("proxySub", "")) ?: "",
-            proxyNodes = prefs.getString("proxyNodes", null)?.let { Secrets.decrypt(it) }?.let {
+            proxySub = prefs.getString("proxySub", "") ?: "",
+            proxyNodes = prefs.getString("proxyNodes", null)?.let {
                 runCatching { json.decodeFromString(ListSerializer(ProxyNode.serializer()), it) }.getOrNull()
             } ?: emptyList(),
             proxyNode = prefs.getString("proxyNode", "") ?: "",
@@ -420,8 +419,8 @@ class Store(context: Context) {
             proxyAppsOn = prefs.getBoolean("proxyAppsOn", false),
             proxyHardened = prefs.getBoolean("proxyHardened", true),
             appIcon = prefs.getString("appIcon", "k") ?: "k",
-            notionToken = Secrets.decrypt(prefs.getString("notionToken", "")) ?: "",
-            githubToken = Secrets.decrypt(prefs.getString("githubToken", "")) ?: "",
+            notionToken = prefs.getString("notionToken", "") ?: "",
+            githubToken = prefs.getString("githubToken", "") ?: "",
             autoUpdate = prefs.getBoolean("autoUpdate", true),
             updateWifiOnly = prefs.getBoolean("updateWifiOnly", false),
             wechatWatch = prefs.getBoolean("wechatWatch", false),
@@ -442,7 +441,7 @@ class Store(context: Context) {
             usageOn = prefs.getBoolean("usageOn", false),
             remoteOn = prefs.getBoolean("remoteOn", false),
             remoteUrl = prefs.getString("remoteUrl", "") ?: "",
-            remoteKey = Secrets.decrypt(prefs.getString("remoteKey", "")) ?: "",
+            remoteKey = prefs.getString("remoteKey", "") ?: "",
             remotePhone = prefs.getBoolean("remotePhone", false),
             phoneApps = prefs.getString("phoneApps", null)?.let { runCatching { json.decodeFromString(ListSerializer(String.serializer()), it) }.getOrNull() }.orEmpty(),
         ).also { com.jack.ai.api.Net.apply(it) }
@@ -450,9 +449,9 @@ class Store(context: Context) {
 
     fun saveSettings(s: Settings) {
         prefs.edit()
-            .putString("apiKey", Secrets.encrypt(s.apiKey) ?: s.apiKey)
-            .putString("tavilyKey", Secrets.encrypt(s.tavilyKey) ?: s.tavilyKey)
-            .putString("exaKey", Secrets.encrypt(s.exaKey) ?: s.exaKey)
+            .putString("apiKey", s.apiKey)
+            .putString("tavilyKey", s.tavilyKey)
+            .putString("exaKey", s.exaKey)
             .putBoolean("webSearch2", s.webSearch)
             .putString("baseUrl", s.baseUrl)
             .putString("model", s.model)
@@ -489,23 +488,23 @@ class Store(context: Context) {
             .putFloat("fontScale", s.fontScale)
             .putString("accent", s.accent)
             .putBoolean("appLock", s.appLock)
-            .putString("providers", json.encodeToString(ListSerializer(Provider.serializer()), s.providers).let { Secrets.encrypt(it) ?: it })
+            .putString("providers", json.encodeToString(ListSerializer(Provider.serializer()), s.providers))
             .putFloat("monthlyBudget", s.monthlyBudget.toFloat())
             .putLong("fullAuthUntil", s.fullAuthUntil)
             .remove("mail")
-            .putString("mails", json.encodeToString(ListSerializer(MailAccount.serializer()), s.mails).let { Secrets.encrypt(it) ?: it })
-            .putString("mcpServers", json.encodeToString(ListSerializer(McpServer.serializer()), s.mcpServers).let { Secrets.encrypt(it) ?: it })
+            .putString("mails", json.encodeToString(ListSerializer(MailAccount.serializer()), s.mails))
+            .putString("mcpServers", json.encodeToString(ListSerializer(McpServer.serializer()), s.mcpServers))
             .putBoolean("proxyEnabled", s.proxyEnabled)
-            .putString("proxySub", Secrets.encrypt(s.proxySub) ?: s.proxySub)
-            .putString("proxyNodes", json.encodeToString(ListSerializer(ProxyNode.serializer()), s.proxyNodes).let { Secrets.encrypt(it) ?: it })
+            .putString("proxySub", s.proxySub)
+            .putString("proxyNodes", json.encodeToString(ListSerializer(ProxyNode.serializer()), s.proxyNodes))
             .putString("proxyNode", s.proxyNode)
             .putString("proxyEntry", s.proxyEntry)
             .putString("proxyApps", json.encodeToString(ListSerializer(String.serializer()), s.proxyApps))
             .putBoolean("proxyAppsOn", s.proxyAppsOn)
             .putBoolean("proxyHardened", s.proxyHardened)
             .putString("appIcon", s.appIcon)
-            .putString("notionToken", Secrets.encrypt(s.notionToken) ?: s.notionToken)
-            .putString("githubToken", Secrets.encrypt(s.githubToken) ?: s.githubToken)
+            .putString("notionToken", s.notionToken)
+            .putString("githubToken", s.githubToken)
             .putBoolean("autoUpdate", s.autoUpdate)
             .putBoolean("updateWifiOnly", s.updateWifiOnly)
             .putBoolean("wechatWatch", s.wechatWatch)
@@ -525,7 +524,7 @@ class Store(context: Context) {
             .putBoolean("usageOn", s.usageOn)
             .putBoolean("remoteOn", s.remoteOn)
             .putString("remoteUrl", s.remoteUrl)
-            .putString("remoteKey", Secrets.encrypt(s.remoteKey) ?: s.remoteKey)
+            .putString("remoteKey", s.remoteKey)
             .putBoolean("remotePhone", s.remotePhone)
             .apply()
         com.jack.ai.api.Net.apply(s)

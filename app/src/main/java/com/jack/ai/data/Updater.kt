@@ -107,6 +107,9 @@ object Updater {
      * 证明不了发布者就是装机时那个签名方；签名对不上（或读不出来）就删掉，不提示安装。
      * 安卓本身装包时也会拦签名不一致，但拦在系统界面那一步之前，用户就不会被诱导去点一个冒名的包。
      */
+    /** 测试里换掉（测试用的假安装包没有签名）。 */
+    internal var verifySignature: (Context, File) -> Unit = ::checkSignature
+
     private fun checkSignature(ctx: Context, apk: File) {
         val pm = ctx.packageManager
         fun signers(info: android.content.pm.PackageInfo?): Set<android.content.pm.Signature>? {
@@ -167,7 +170,7 @@ object Updater {
             f.delete()
             throw GitHub.GitHubException("下载的安装包校验不对（可能下坏了），已删掉，下次再试")
         }
-        checkSignature(ctx, f)
+        verifySignature(ctx, f)
         val target = File(d, "Kavi-${l.tag}.apk")
         if (f != target) f.renameTo(target)
         val notes = notes(token, installed, l)

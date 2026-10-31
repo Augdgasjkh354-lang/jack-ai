@@ -12,16 +12,16 @@ import java.util.concurrent.TimeUnit
  * 跟随重定向时别把手动拼的 Cookie 带到别的站：OkHttp 只剥离跨站的 Authorization，不剥 Cookie。
  * 应用拦截器只跑一次，记下最初的站；网络拦截器每次跳转都跑，站变了、或者从 https 降级成 http，就摘掉 Cookie。
  */
-internal class CookieOriginTag
+internal data class CookieOriginTag(val host: String, val scheme: String)
 internal fun OkHttpClient.Builder.guardCookieOnRedirect(): OkHttpClient.Builder =
     addInterceptor { chain ->
         val req = chain.request()
-        chain.proceed(req.newBuilder().tag(CookieOriginTag::class.java, req.url.host + "\n" + req.url.scheme).build())
+        chain.proceed(req.newBuilder().tag(CookieOriginTag::class.java, CookieOriginTag(req.url.host, req.url.scheme)).build())
     }.addNetworkInterceptor { chain ->
         val req = chain.request()
-        val origin = req.tag(CookieOriginTag::class.java)?.split("\n")
-        val hostChanged = origin != null && origin[0] != req.url.host
-        val downgraded = origin != null && origin[1] == "https" && req.url.scheme == "http"
+        val origin = req.tag(CookieOriginTag::class.java)
+        val hostChanged = origin != null && origin.host != req.url.host
+        val downgraded = origin != null && origin.scheme == "https" && req.url.scheme == "http"
         if (hostChanged || downgraded) chain.proceed(req.newBuilder().removeHeader("Cookie").build())
         else chain.proceed(req)
     }

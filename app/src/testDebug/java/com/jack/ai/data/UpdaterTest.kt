@@ -51,6 +51,7 @@ class UpdaterTest {
             }
         }
         GitHub.api = "http://127.0.0.1:${server.localPort}"
+        Updater.verifySignature = { _, _ -> }
     }
 
     @After

@@ -40,8 +40,8 @@ object XlsxBook {
     private val GROUPED = Regex("""^[-+]?\d{1,3}(,\d{3})+(\.\d+)?$""")
     private val DATE = Regex("""^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$""")
 
-    /** 公式里不能出现的：外部引用（!、[工作簿]）、DDE/命令类、外联取数类函数。 */
-    private val DANGEROUS_FORMULA = Regex("(?i)!|\\[|\\b(WEBSERVICE|HYPERLINK|IMPORTDATA|IMPORTXML|IMPORTFEED|DDE|EXEC|REGISTER|CALL|FILTERXML)\\b")
+    /** 公式里不能出现的：外部工作簿引用（[工作簿]）、DDE（cmd|'...'!A1 的竖线）、外联取数类函数。跨表引用 Sheet2!A1 照常放行。 */
+    private val DANGEROUS_FORMULA = Regex("(?i)\\[|\\||\\b(WEBSERVICE|HYPERLINK|IMPORTDATA|IMPORTXML|IMPORTFEED|DDE|EXEC|REGISTER|CALL|FILTERXML)\\b")
 
     /** 把模型写的字看成数、日期、公式还是文字。以 0 开头的整数（编号、电话）当文字，不丢前导 0。 */
     internal fun parse(raw: String): Cell {
@@ -50,7 +50,6 @@ object XlsxBook {
         if (v.startsWith("=")) {
             // 以 = 开头的格子默认当公式是表格工具的老行为，但网页、聊天记录里抄来的内容也可能以 = 开头；
             // 带外部引用、危险函数的，一律当文字，不进公式，避免打开文件就触发外联或命令。
-            // 副作用：字符串里带 ! 的公式（比如 ="Hi!"）也会被当文字，安全方向上可以接受。
             val body = v.substring(1)
             if (!DANGEROUS_FORMULA.containsMatchIn(body)) return Cell(formula = body)
         }
