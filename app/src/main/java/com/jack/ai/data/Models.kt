@@ -15,6 +15,10 @@ data class Attachment(
     val text: String = "",
 )
 
+/** 思考过程里的一步：kind 是 note（Kavi 调工具前对用户说的一句）或 summary（一段思考的小标题）。 */
+@Serializable
+data class ThinkStep(val kind: String, val text: String, val at: Long = System.currentTimeMillis())
+
 @Serializable
 data class ChatMessage(
     val id: String = newId(),
@@ -35,6 +39,8 @@ data class ChatMessage(
     val criteria: List<PlanItem> = emptyList(),
     /** 要让用户一眼看到的事，比如「Kavi 改了自己」。 */
     val notices: List<String> = emptyList(),
+    /** 回答出来之前的进度：Kavi 调工具前说的话（note）和思考摘要（summary），按时间排。 */
+    val steps: List<ThinkStep> = emptyList(),
     /** Work 的交付清单：这一轮对话文件夹里新建、改动、删除了哪些文件（比对文件夹得出，见 [Deliverables]）。 */
     val delivered: List<Delivered> = emptyList(),
     /** Work 模式下这条回答花了多少元（当场按价格算）。 */
@@ -250,6 +256,10 @@ data class Settings(
     val workCostLimit: Double = 5.0,
     /** Work 交付前另起一次请求、不看过程只看结果，按验收标准复核一遍（多花一次请求的钱）。 */
     val workReview: Boolean = true,
+    /** 思考时把一段段思考压成小标题显示出来（另请后台模型，每段花一点点钱）。 */
+    val thinkSummary: Boolean = true,
+    /** 回答出来后思考摘要折叠起来；默认展开着。 */
+    val summaryCollapsed: Boolean = false,
     /** Work 开工前要不要先给用户确认清单：always 每次、big 大任务（步骤多或模型觉得要问）、never 从不。 */
     val workConfirmPlan: String = "big",
     /** 阅读时间：Kavi 每天自己上网读一会，把查实的事实存进事实库。readingBudget 是每天最多花多少元。 */

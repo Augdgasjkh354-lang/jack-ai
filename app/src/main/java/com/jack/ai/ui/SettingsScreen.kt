@@ -206,6 +206,23 @@ fun SettingsScreen(
                         )
                     }
                 }
+                // 思考摘要：思考时一行行小标题；回答出来后展开还是折叠
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("思考摘要")
+                        Text("思考时把每段思考压成一行小标题显示出来。另请后台模型，每段花一点点钱",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(checked = settings.thinkSummary, onCheckedChange = { on -> vm.updateSettings { it.copy(thinkSummary = on) } })
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("回答出来后折叠思考摘要")
+                        Text("关着时摘要一直展开在回答上面；原始思考总是收进「深度思考」",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(checked = settings.summaryCollapsed, onCheckedChange = { on -> vm.updateSettings { it.copy(summaryCollapsed = on) } })
+                }
             }
 
             // ---- 统计 ----

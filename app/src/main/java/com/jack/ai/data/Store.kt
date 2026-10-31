@@ -371,6 +371,8 @@ class Store(context: Context) {
             // 默认值从 1 元改成了 5 元，换个键名，旧的默认值不沿用
             workCostLimit = prefs.getFloat("workCostLimit5", 5f).toDouble(),
             workReview = prefs.getBoolean("workReview", true),
+            thinkSummary = prefs.getBoolean("thinkSummary", true),
+            summaryCollapsed = prefs.getBoolean("summaryCollapsed", false),
             workConfirmPlan = prefs.getString("workConfirmPlan", "big") ?: "big",
             readingEnabled = prefs.getBoolean("readingEnabled", true),
             readingBudget = prefs.getFloat("readingBudget", 0.5f).toDouble(),
@@ -450,6 +452,8 @@ class Store(context: Context) {
             .putString("workThinking", s.workThinking.name)
             .putFloat("workCostLimit5", s.workCostLimit.toFloat())
             .putBoolean("workReview", s.workReview)
+            .putBoolean("thinkSummary", s.thinkSummary)
+            .putBoolean("summaryCollapsed", s.summaryCollapsed)
             .putString("workConfirmPlan", s.workConfirmPlan)
             .putBoolean("readingEnabled", s.readingEnabled)
             .putFloat("readingBudget", s.readingBudget.toFloat())

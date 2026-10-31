@@ -50,6 +50,33 @@ class AgentTest {
     private fun reject() = { flow<StreamEvent> { throw ApiException("bad request", 400) } }
 
     @Test
+    fun shortToolRoundTextBecomesANoteNotPartOfTheAnswer() = runBlocking {
+        val api = FakeApi(toolCall("web_search", say = "我先搜一下天气"), text("今天晴"))
+        val agent = Agent(api::stream, splitNotes = true)
+        agent.run(mutableListOf(userMsg("天气")), someTools, { 5 }, { _, _ -> "晴" })
+        assertEquals("今天晴", agent.content.toString())
+        assertEquals(listOf("我先搜一下天气"), agent.notes.map { it.text })
+        // 发回接口的工具调用过程里还留着那句话
+        assertTrue(agent.trail.first().contains("我先搜一下天气"))
+    }
+
+    @Test
+    fun longToolRoundTextStaysInTheAnswerAndEmptyFinishGetsTheNoteBack() = runBlocking {
+        val long = "回答".repeat(200)
+        val api = FakeApi(toolCall("save_memory", say = long), text())
+        val agent = Agent(api::stream, splitNotes = true)
+        agent.run(mutableListOf(userMsg("x")), someTools, { 5 }, { _, _ -> "ok" })
+        assertTrue(agent.content.toString().contains(long))
+        assertTrue(agent.notes.isEmpty())
+        // 短的一句加存记忆、最后没话说：那句放回回答
+        val api2 = FakeApi(toolCall("save_memory", say = "好的，记住了"), text())
+        val a2 = Agent(api2::stream, splitNotes = true)
+        a2.run(mutableListOf(userMsg("记住")), someTools, { 5 }, { _, _ -> "ok" })
+        assertEquals("好的，记住了", a2.content.toString())
+        assertTrue(a2.notes.isEmpty())
+    }
+
+    @Test
     fun plainAnswer() = runBlocking {
         val api = FakeApi(text("你", "好"))
         val agent = Agent(api::stream)

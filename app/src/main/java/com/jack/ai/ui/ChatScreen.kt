@@ -298,7 +298,7 @@ fun ChatScreen(
                 if (conv == null || conv.messages.isEmpty()) {
                     Box(Modifier.padding(padding)) { EmptyState(vm, state, conv, onOpenMemory, onSuggest = { text = it; focusInput++ }) }
                 } else {
-                    MessageList(vm, conv, state.streamingHere, padding, editingId = editing?.id, onDeleted = ::onDeleted, onEdit = { m ->
+                    MessageList(vm, conv, state.streamingHere, padding, editingId = editing?.id, onDeleted = ::onDeleted, summaryCollapsed = state.settings.summaryCollapsed, onEdit = { m ->
                         if (editing == null) editBackup = text
                         editing = m
                         text = m.content
@@ -589,7 +589,8 @@ private fun Pill(
 
 @Composable
 private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolean, bars: PaddingValues,
-                        editingId: String?, onDeleted: (Int) -> Unit, onEdit: (com.jack.ai.data.ChatMessage) -> Unit) {
+                        editingId: String?, onDeleted: (Int) -> Unit, onEdit: (com.jack.ai.data.ChatMessage) -> Unit,
+                        summaryCollapsed: Boolean = false) {
     // 一打开就停在最后一条附近，不先闪一下最顶上
     val ctx = LocalContext.current
     val listState = remember(conv.id) { androidx.compose.foundation.lazy.LazyListState(firstVisibleItemIndex = (conv.messages.size - 1).coerceAtLeast(0)) }
@@ -641,6 +642,7 @@ private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolea
                                 onReport = { note -> vm.reportIssue(msg.id, note) },
                                 onFixApp = { text -> vm.send(text) },
                                 work = conv.work,
+                                stepsCollapsed = summaryCollapsed,
                                 onRestyle = if (conv.work) null else { edited ->
                                     if (streaming) Toast.makeText(ctx, "等这条答完再交给 Kavi", Toast.LENGTH_SHORT).show()
                                     else vm.send(restyleRequest(msg.content, edited))

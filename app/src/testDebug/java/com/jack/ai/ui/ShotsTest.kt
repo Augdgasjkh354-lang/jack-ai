@@ -77,7 +77,14 @@ class ShotsTest {
         val c = Conversation(title = "保持高效", messages = listOf(
             ChatMessage(role = "user", content = "如何在工作中保持长期的高效和专注？"),
             ChatMessage(role = "assistant", content = answer, model = "deepseek-v4-flash",
-                searches = listOf(SearchRecord("高效 专注 方法"), SearchRecord("番茄工作法"))),
+                searches = listOf(SearchRecord("高效 专注 方法"), SearchRecord("番茄工作法")),
+                reasoning = "用户想知道怎么长期保持高效……",
+                steps = listOf(
+                    com.jack.ai.data.ThinkStep("summary", "理清高效和专注的区别", 1),
+                    com.jack.ai.data.ThinkStep("note", "我先查一下有研究支持的方法，再挑最实用的几条。", 2),
+                    com.jack.ai.data.ThinkStep("summary", "对比番茄工作法和时间块", 3),
+                    com.jack.ai.data.ThinkStep("summary", "按精力、注意力、身体三方面组织", 4),
+                )),
         ))
         val vm = vm(listOf(c))
         vm.select(c.id)

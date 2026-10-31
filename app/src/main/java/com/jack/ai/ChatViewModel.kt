@@ -688,7 +688,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     "开始",
                 )
             }
-            val agent = Agent({ msgs, t -> client.stream(ep, msgs, thinking, settings.temperature, t) }, sendReasoning = thinkingOn)
+            val agent = Agent({ msgs, t -> client.stream(ep, msgs, thinking, settings.temperature, t) }, sendReasoning = thinkingOn, splitNotes = true)
             // Work 的收尾关卡：清单没做完不让收尾；开着「交付前复核」再另起一次请求按验收标准查一遍
             val gate = com.jack.ai.tools.WorkGate(session, review = if (work && settings.workReview) {
                 val reviewEp = settings.backgroundEndpoint() ?: ep
@@ -700,11 +700,41 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             val reasoning = agent.reasoning
             val content = agent.content
             var lastFlush = 0L
+            // 思考摘要：后台模型把一段段思考压成小标题（见 ThinkSummary）
+            val summaries = java.util.concurrent.CopyOnWriteArrayList<com.jack.ai.data.ThinkStep>()
+            fun steps() = (agent.notes + summaries).sortedBy { it.at }
+            // 摘要在另一个线程里读：存一份快照
+            val seenReasoning = java.util.concurrent.atomic.AtomicReference("")
+            val answering = java.util.concurrent.atomic.AtomicBoolean(false)
             fun flush() {
                 val r = reasoning.toString()
                 val c = content.toString()
                 val t = agent.trail.toList()
-                patchMessage(convId, reply.id) { it.copy(reasoning = r, content = c, trail = t) }
+                seenReasoning.set(r)
+                answering.set(c.isNotBlank())
+                val st = steps()
+                patchMessage(convId, reply.id) { it.copy(reasoning = r, content = c, trail = t, steps = st) }
+            }
+            val summaryEp = settings.backgroundEndpoint()
+            val summarizer = if (!settings.thinkSummary || summaryEp == null) null else viewModelScope.launch(Dispatchers.IO) {
+                var done = 0
+                while (summaries.size < com.jack.ai.chat.ThinkSummary.MAX) {
+                    delay(com.jack.ai.chat.ThinkSummary.POLL_MS)
+                    val r = seenReasoning.get()
+                    if (!com.jack.ai.chat.ThinkSummary.due(r.length - done, answering.get())) continue
+                    val chunk = r.substring(done)
+                    done = r.length
+                    val previous = summaries.map { it.text }
+                    val line = runCatching {
+                        client.complete(summaryEp, listOf(
+                            buildJsonObject { put("role", "system"); put("content", com.jack.ai.chat.ThinkSummary.SYSTEM) },
+                            buildJsonObject { put("role", "user"); put("content", com.jack.ai.chat.ThinkSummary.input(previous, chunk)) },
+                        ), maxTokens = 60)
+                    }.getOrNull()?.let { com.jack.ai.chat.ThinkSummary.clean(it, previous) } ?: continue
+                    summaries += com.jack.ai.data.ThinkStep("summary", line)
+                    val st = steps()
+                    patchMessage(convId, reply.id) { it.copy(steps = st) }
+                }
             }
             // 交付清单：先记下对话文件夹现在的样子，答完一比就知道交了哪些文件
             val wsDir = com.jack.ai.data.Workspace.dir(getApplication(), com.jack.ai.data.Workspace.key(conv))
@@ -808,6 +838,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 flush()
                 patchMessage(convId, reply.id) { it.copy(error = "出错了：${e.message}") }
             } finally {
+                summarizer?.cancel()
                 // 停止或出错时，把还在“搜索中”的标记清掉
                 patchMessage(convId, reply.id) { m ->
                     m.copy(content = m.content.trimEnd(), searches = m.searches.map { if (it.pending) it.copy(pending = false) else it })

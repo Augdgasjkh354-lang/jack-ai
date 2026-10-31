@@ -18,7 +18,14 @@ class Agent(
     private val stream: (messages: List<JsonObject>, tools: JsonArray?) -> Flow<StreamEvent>,
     /** DeepSeek 开思考时，带工具调用的回合必须附上思考内容。 */
     private val sendReasoning: Boolean = false,
+    /**
+     * 调工具那几轮说的短话（「我先搜一下价格」）不算进回答，挪进 [notes]，显示成回答上面的进度（像 GPT 的工具前说明）。
+     * 太长的不挪（可能是先把回答写完、最后才调个工具），最后回答是空的就把最后一句放回回答。
+     */
+    private val splitNotes: Boolean = false,
 ) {
+    /** 挪出来的进度说明，按先后。 */
+    val notes = java.util.concurrent.CopyOnWriteArrayList<com.jack.ai.data.ThinkStep>()
     /** 到目前为止的思考内容、正文，以及工具调用过程（JSON，之后要原样发回接口）。 */
     val reasoning = StringBuilder()
     val content = StringBuilder()
@@ -86,6 +93,7 @@ class Agent(
             val calls = sortedMapOf<Int, Call>()
             val roundReasoning = StringBuilder()
             val roundContent = StringBuilder()
+            val roundStart = content.length
             if (content.isNotEmpty() && !content.endsWith("\n")) content.append("\n\n")
             try {
                 stream(messages, currentTools).collect { ev ->
@@ -127,6 +135,11 @@ class Agent(
             lastRound = roundContent.toString()
             onRound()
             if (calls.isEmpty()) {
+                // 挪走了进度说明、最后却什么都没说（比如「好的，记住了」加一个存记忆就完了）：把最后一句放回回答
+                if (splitNotes && content.isBlank() && notes.isNotEmpty()) {
+                    content.setLength(0)
+                    content.append(notes.removeAt(notes.lastIndex).text)
+                }
                 val nudge = if (currentTools != null) beforeFinish?.invoke(content.toString()) else null
                 if (nudge == null) {
                     onFinish(buildJsonObject {
@@ -146,6 +159,12 @@ class Agent(
             }
 
             round++
+            // 这一轮说的是调工具前的一句进度：从回答里拿掉，记进 notes
+            val said = roundContent.toString().trim()
+            if (splitNotes && said.isNotEmpty() && said.length <= NOTE_MAX) {
+                content.setLength(roundStart)
+                notes += com.jack.ai.data.ThinkStep("note", said)
+            }
             // 有的服务不给工具调用编号；编号空着的话，工具结果对不上调用，下一轮会被拒
             calls.forEach { (i, c) -> if (c.id.isEmpty()) c.id = "call_${round}_$i" }
             val assistantCall = buildJsonObject {
@@ -216,6 +235,9 @@ class Agent(
     }
 
     companion object {
+        /** 调工具前说的话多长以内算进度说明（再长多半是正经回答）。 */
+        const val NOTE_MAX = 300
+
         /** 一时的故障重发前等多久：第一次 3 秒，第二次 8 秒。 */
         internal var RETRY_DELAYS = longArrayOf(3_000, 8_000)
 

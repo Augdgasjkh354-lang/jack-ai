@@ -332,6 +332,13 @@ object PromptBuilder {
                 f(" When you finish something that took several steps and will likely come up again (a procedure you worked out, a fix found by trial and error, a way {user} corrected you), save the method with save_skill so next time you can just follow it; improve your own skill rather than adding a near-duplicate.")
         }
         parts += "固定说明" to f(Capabilities.text(settings, skills, names))
+        if (names.isNotEmpty()) {
+            // 像 GPT 的工具前说明：调工具那几轮说的短话会显示成回答上面的进度，不算进回答
+            parts += "固定说明" to f("【Progress notes】When a request takes several tool steps, open with one short line on what {user} wants and how you'll go about it. " +
+                "Before a tool call {user} would want to follow (searching, reading pages or files, running code, browsing, creating or changing files), write one short sentence on what you're doing and why, " +
+                "e.g. \"先搜一下最新的价格，再和你的表对一下\" or \"报错是路径不对，改一下再跑\". Skip it for quick bookkeeping such as saving memory. " +
+                "These lines are shown as progress above your answer, not as part of it, so don't repeat them in the answer.")
+        }
         if ("web_search" in names) {
             parts += "固定说明" to "【Web】For time-sensitive questions (news, prices, weather, latest versions, recent events) or facts you're unsure of, check with web search. Common knowledge, casual chat and writing don't need a search."
         }

@@ -12,6 +12,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -235,6 +237,8 @@ fun AssistantMessage(
     work: Boolean = false,
     /** 「改成我想要的说法」：用户改好的版本交给 Kavi，让它学进「说话方式」。 */
     onRestyle: ((String) -> Unit)? = null,
+    /** 回答出来后思考摘要折叠起来（设置里改，默认展开）。 */
+    stepsCollapsed: Boolean = false,
 ) {
     var restyling by remember { mutableStateOf(false) }
     if (restyling && onRestyle != null) {
@@ -286,6 +290,11 @@ fun AssistantMessage(
         // 回答正文出来之前都算「还在忙」：思考框、工具框在这段时间里保持同一个样子，
         // 不随每次工具调用开始/结束来回切换（以前切一次高度就变一次，屏幕跟着一闪一闪）
         val busy = streaming && msg.content.isEmpty()
+        // 思考摘要和调工具前说的话：回答出来之前一直展开，之后按设置展开或折叠
+        if (msg.steps.isNotEmpty()) {
+            ProgressSteps(msg.steps, busy = busy, collapsed = stepsCollapsed)
+            Spacer(Modifier.height(12.dp))
+        }
         if (msg.searches.isNotEmpty()) {
             if (work) ToolTimeline(msg.searches, busy = busy) else SearchBox(msg.searches, busy = busy)
             Spacer(Modifier.height(14.dp))
@@ -572,6 +581,53 @@ internal fun shareFile(ctx: Context, f: GeneratedFile) {
 /** 复制后提示一下；安卓 13 起系统自己会在底下弹复制的提示，就不再重复。 */
 internal fun copiedToast(ctx: Context) {
     if (android.os.Build.VERSION.SDK_INT < 33) Toast.makeText(ctx, "已复制", Toast.LENGTH_SHORT).show()
+}
+
+/**
+ * 思考摘要：一行行小标题（思考到哪了）和 Kavi 调工具前说的话，按先后排。左边一条细线串起来，像 ChatGPT 思考时那样。
+ * 还在想的时候一直展开、最后一行带转圈；回答出来后按设置展开或收成一行，点标题切换。
+ */
+@Composable
+private fun ProgressSteps(steps: List<com.jack.ai.data.ThinkStep>, busy: Boolean, collapsed: Boolean) {
+    val colors = MaterialTheme.colorScheme
+    var open by rememberSaveable(collapsed) { mutableStateOf(!collapsed) }
+    val show = busy || open
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(enabled = !busy) { open = !open }.padding(vertical = 2.dp),
+        ) {
+            Icon(AppIcons.Brain, null, Modifier.size(15.dp), tint = colors.onSurfaceVariant)
+            Spacer(Modifier.size(6.dp))
+            Text(if (busy) "思考中" else "思考摘要 · ${steps.size} 步", style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant)
+            if (!busy) Icon(if (show) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, null, Modifier.size(18.dp), tint = colors.outline)
+        }
+        androidx.compose.animation.AnimatedVisibility(show) {
+            Column(Modifier.padding(start = 7.dp, top = 6.dp)) {
+                steps.forEachIndexed { i, s ->
+                    val last = i == steps.lastIndex
+                    Row(Modifier.height(androidx.compose.foundation.layout.IntrinsicSize.Min)) {
+                        // 左边的线和圆点：摘要是空心小点，Kavi 说的话是实心点
+                        Box(Modifier.width(12.dp).fillMaxHeight()) {
+                            Box(Modifier.align(Alignment.TopCenter).padding(top = if (i == 0) 7.dp else 0.dp)
+                                .width(1.dp).fillMaxHeight().background(colors.outlineVariant))
+                            if (busy && last) CircularProgressIndicator(Modifier.align(Alignment.TopCenter).padding(top = 3.dp).size(10.dp), strokeWidth = 1.5.dp)
+                            else Box(Modifier.align(Alignment.TopCenter).padding(top = 5.dp).size(7.dp)
+                                .background(if (s.kind == "note") colors.primary else colors.surface, CircleShape)
+                                .border(1.dp, if (s.kind == "note") colors.primary else colors.outline, CircleShape))
+                        }
+                        Spacer(Modifier.size(8.dp))
+                        Text(
+                            s.text,
+                            style = if (s.kind == "note") MaterialTheme.typography.bodyMedium else MaterialTheme.typography.labelLarge,
+                            color = if (s.kind == "note") colors.onSurface else colors.onSurfaceVariant,
+                            modifier = Modifier.padding(bottom = if (last) 0.dp else 8.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
 
 /** 回答下面的小圆按钮：浅灰底，图标灰色。 */
