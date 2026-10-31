@@ -15,13 +15,14 @@ object PyRunner {
 
     data class Result(val output: String, val changed: List<File>)
 
-    suspend fun run(ctx: Context, code: String, dir: File, timeoutSec: Int = 90): Result = lock.withLock {
+    /** [stdin]：程序里 input() 依次读到的几行。 */
+    suspend fun run(ctx: Context, code: String, dir: File, timeoutSec: Int = 90, stdin: String = ""): Result = lock.withLock {
         withContext(Dispatchers.IO) {
             if (!Python.isStarted()) Python.start(AndroidPlatform(ctx.applicationContext))
             dir.mkdirs()
             val before = snapshot(dir)
             val out = Python.getInstance().getModule("jack_runner")
-                .callAttr("run", code, dir.absolutePath, timeoutSec).toString()
+                .callAttr("run", code, dir.absolutePath, timeoutSec, stdin).toString()
             val changed = Workspace.files(dir).filter { f -> before[f.name] != f.lastModified() to f.length() }
             Result(out, changed)
         }

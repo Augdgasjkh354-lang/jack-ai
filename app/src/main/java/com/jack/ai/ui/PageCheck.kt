@@ -55,7 +55,8 @@ object PageCheck {
             "window.__jackCheck=JSON.stringify({ok:v===undefined?null:v})}catch(e){window.__jackCheck=JSON.stringify({error:String(e&&e.stack||e)})}})();"
 
     @SuppressLint("SetJavaScriptEnabled")
-    suspend fun run(ctx: Context, dir: File, page: File, script: String?, waitMs: Long = 1500): Result = withContext(Dispatchers.Main) {
+    /** [frames] 张截图、每隔 [intervalMs] 拍一张（看动画、游戏到底动没动），并排拼成一张。 */
+    suspend fun run(ctx: Context, dir: File, page: File, script: String?, waitMs: Long = 1500, frames: Int = 1, intervalMs: Long = 500): Result = withContext(Dispatchers.Main) {
         val log = mutableListOf<String>()
         val failed = mutableListOf<String>()
         val loaded = CompletableDeferred<Unit>()
@@ -122,13 +123,37 @@ object PageCheck {
                 ?.let { o -> fun v(k: String) = (o[k] as? JsonPrimitive)?.content.orEmpty()
                     "标题「${v("title")}」，页面 ${v("width")}×${v("height")}（屏幕宽 $CSS_W），正文 ${v("text")} 字" + if ((v("width").toIntOrNull() ?: 0) > CSS_W + 4) "；比屏幕宽，会出现横向滚动" else "" }
                 .orEmpty()
-            val bmp = Bitmap.createBitmap(pxW, pxH, Bitmap.Config.ARGB_8888)
-            w.draw(Canvas(bmp))
-            val blank = IntArray(9) { i -> bmp.getPixel(pxW * (i % 3 + 1) / 4, pxH * (i / 3 + 1) / 4) }.distinct().size == 1
-            val small = Bitmap.createScaledBitmap(bmp, 540, (540f * pxH / pxW).toInt(), true)
-            if (small != bmp) bmp.recycle()
-            val bytes = ByteArrayOutputStream().also { small.compress(Bitmap.CompressFormat.JPEG, 80, it) }.toByteArray()
-            small.recycle()
+            val count = frames.coerceIn(1, 4)
+            // 一张就 540 宽；几张并排时每张窄一些，拼起来不至于太大
+            val tw = if (count == 1) 540 else 300
+            val th = (tw.toFloat() * pxH / pxW).toInt()
+            val shots = mutableListOf<Bitmap>()
+            var blank = true
+            repeat(count) { k ->
+                if (k > 0) delay(intervalMs.coerceIn(100, 3000))
+                val bmp = Bitmap.createBitmap(pxW, pxH, Bitmap.Config.ARGB_8888)
+                w.draw(Canvas(bmp))
+                if (IntArray(9) { i -> bmp.getPixel(pxW * (i % 3 + 1) / 4, pxH * (i / 3 + 1) / 4) }.distinct().size > 1) blank = false
+                shots += Bitmap.createScaledBitmap(bmp, tw, th, true).also { if (it != bmp) bmp.recycle() }
+            }
+            val sheet = if (count == 1) shots[0] else {
+                val gap = 10
+                Bitmap.createBitmap(count * tw + (count + 1) * gap, th + 2 * gap, Bitmap.Config.ARGB_8888).also { out ->
+                    val c = Canvas(out)
+                    c.drawColor(Color.rgb(120, 120, 120))
+                    val tagBg = android.graphics.Paint().apply { color = Color.rgb(230, 40, 40) }
+                    val tag = android.graphics.Paint().apply { color = Color.WHITE; textSize = 24f; isAntiAlias = true; isFakeBoldText = true }
+                    shots.forEachIndexed { i, b ->
+                        val x = gap + i * (tw + gap)
+                        c.drawBitmap(b, x.toFloat(), gap.toFloat(), null)
+                        c.drawRect(x.toFloat(), gap.toFloat(), x + 34f, gap + 32f, tagBg)
+                        c.drawText("${i + 1}", x + 10f, gap + 25f, tag)
+                    }
+                    shots.forEach { it.recycle() }
+                }
+            }
+            val bytes = ByteArrayOutputStream().also { sheet.compress(Bitmap.CompressFormat.JPEG, 80, it) }.toByteArray()
+            sheet.recycle()
             Result(log, failed, info, scriptResult, "data:image/jpeg;base64," + Base64.encodeToString(bytes, Base64.NO_WRAP), blank)
         } finally {
             w.stopLoading()

@@ -264,15 +264,16 @@ internal suspend fun ToolSession.updateSelf(args: JsonObject): String {
 }
 
 /**
- * save_skill：Kavi 把做法存成自己的技能（见 KaviSkills）。用户不在、隐私项目里不能存（技能所有对话共用）；
- * 这一轮读过外部内容就先问用户，免得网页里的话被存成以后照做的规矩。
+ * save_skill：Kavi 把做法存成自己的技能（见 KaviSkills）。隐私项目里不能存（技能所有对话共用）；
+ * 这一轮读过外部内容就先问用户（用户不在就不存），免得网页里的话被存成以后照做的规矩。
  */
 internal suspend fun ToolSession.saveSkill(args: JsonObject): String {
     val name = args["name"].text().trim()
     val desc = args["description"].text().trim()
     val body = args["instructions"].text().trim()
     val old = args["replace"].text().trim()
-    if (!interactive) return "用户不在的时候不能存技能，下次聊天时再存。"
+    // 后台（自由时间）里也能存自己摸索出的做法；但读过外部内容就没人能确认，不存
+    if (!interactive && sawExternal) return "这一轮读过网页之类的外部内容，用户又不在、没法确认，先不存。下次聊天时再存。"
     if (project?.isolated == true) return "这是隐私项目，技能在所有对话里共用，不能把这里的东西存成技能。"
     val s = host.store.loadSettings()
     KaviSkills.problem(s, name, desc, body, old)?.let { return "没有存：$it" }

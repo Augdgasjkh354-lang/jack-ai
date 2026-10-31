@@ -323,6 +323,8 @@ class ToolSession(
             name == "run_js" && SkillIds.CALC in skillIds -> runJs(arg)
             name == "run_python" && SkillIds.PYTHON in skillIds -> runPython(args)
             name == "check_page" && SkillIds.CODE in skillIds -> checkPage(args)
+            name == "search_code" && SkillIds.CODE in skillIds -> searchCode(args)
+            name == "file_history" && SkillIds.CODE in skillIds -> fileHistory(args)
             name == "delete_calendar_event" && SkillIds.CALENDAR in skillIds -> deleteEvent(arg)
             name == "web_search" && web -> search(arg, args["engine"].text())
             name == "read_webpage" && web -> readPage(arg)

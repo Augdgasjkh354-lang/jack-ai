@@ -143,6 +143,8 @@ internal suspend fun ToolSession.writeFile(args: JsonObject): String {
         val file = File(wsDir, name)
         withContext(Dispatchers.IO) {
             wsDir.mkdirs()
+            // 代码文件先存一版旧的，改坏了能退回（file_history）
+            CodeHistory.save(file, "write_file")
             file.writeText(args["content"].text())
             // 覆盖了生成过的文件（比如小工具的 html）：旧底稿作废，免得 edit_file 拿旧底稿重新生成、把这次写的冲掉
             Workspace.dropSource(file)
@@ -178,6 +180,7 @@ internal suspend fun ToolSession.editFile(args: JsonObject): String {
                 }
                 Workspace.isText(file) -> {
                     val (text, count) = TextEdit.replace(file.readText(), old, new, all)
+                    CodeHistory.save(file, "edit_file")
                     file.writeText(text); count
                 }
                 else -> throw TextEdit.EditException("「${file.name}」这种文件没法直接修改")

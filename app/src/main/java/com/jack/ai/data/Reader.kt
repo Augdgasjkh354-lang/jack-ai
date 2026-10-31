@@ -54,6 +54,8 @@ object Reader {
         "list_files", "read_file", "write_file", "edit_file", "delete_file", "free_time", "own_history", "my_savings",
         "create_document", "create_excel", "create_ppt", "create_chart", "create_diagram", "create_app",
         "run_python", "run_js",
+        // 写代码：打开网页检查、在代码里搜、看旧版本和退回；摸索出的做法存成自己的技能
+        "check_page", "search_code", "file_history", "save_skill",
     )
     val KINDS = mapOf("read" to "读书", "investigate" to "调查", "build" to "做工具", "write" to "写东西", "think" to "想事情",
         "wander" to "随便逛逛", "rest" to "发呆", "other" to "别的")
@@ -332,7 +334,7 @@ Do whatever you want with it. Something useful or something pointless, for {user
 
 Each day's free time has its own conversation; within today you can continue the same conversation as often as you like. Your files and memories remain available between days. If you want to keep going now, use free_time action=continue with your own words about what you want to do next. The system will send those words back so you can continue in this same conversation. You can also finish, wait until later, or change your mind; there is no obligation to continue. If you meant to read about astronomy and a history story catches you halfway, follow it; plans are not obligations. You can also stop early: five minutes of looking around is a perfectly good free time.
 
-Your workbench is your own folder, kept between sessions. You may leave a fragment, make or change a file, read anything there, or delete your own files. There is no need to organize it, continue anything, or explain what you do. Use list_files to see the whole workbench whenever you want. 「{notes}」 is your notebook if you want one; write in it only when you want to.
+Your workbench is your own folder, kept between sessions. You may leave a fragment, make or change a file, read anything there, or delete your own files. There is no need to organize it, continue anything, or explain what you do. Use list_files to see the whole workbench whenever you want. If you build something over several sessions, a 「<name>-笔记.md」 next to it (what it is, how to run it, where you got to, what's next) lets you pick it up quickly next time; the 「写代码」 skill has the details. 「{notes}」 is your notebook if you want one; write in it only when you want to.
 Files on your workbench: {works}
 {helpers}
 Money and time are yours to arrange (free_time tool):

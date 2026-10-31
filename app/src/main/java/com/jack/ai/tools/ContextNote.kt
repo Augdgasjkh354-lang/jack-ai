@@ -56,11 +56,17 @@ object ContextNote {
         }
     }
 
+    /** 项目笔记的文件名结尾：「贪吃蛇-笔记.md」。 */
+    const val PROJECT_NOTES_SUFFIX = "-笔记.md"
+
     /** 对话文件夹里的文件，空的就不写。 */
     fun files(dir: File): String {
         val list = Workspace.files(dir)
         if (list.isEmpty()) return ""
         val shown = list.take(MAX_ITEMS).joinToString(", ") { "${it.name} (${ToolSession.sizeText(it.length())})" }
-        return "【Conversation folder】$shown" + (if (list.size > MAX_ITEMS) " (${list.size} in total)" else "") + "\n"
+        // 写代码的项目笔记：接着做哪个项目，先读它的笔记
+        val notes = list.filter { it.name.endsWith(PROJECT_NOTES_SUFFIX) }.map { it.name }
+        return "【Conversation folder】$shown" + (if (list.size > MAX_ITEMS) " (${list.size} in total)" else "") + "\n" +
+            (if (notes.isEmpty()) "" else "【Project notes】${notes.joinToString(", ")}: before continuing one of these projects, read its notes; update them before you stop.\n")
     }
 }

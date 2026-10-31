@@ -51,9 +51,11 @@ def _forget_folder_modules(cwd):
             del sys.modules[name]
 
 
-def run(code, cwd, timeout):
+def run(code, cwd, timeout, stdin=""):
     out = io.StringIO()
-    old_out, old_err, old_cwd = sys.stdout, sys.stderr, os.getcwd()
+    old_out, old_err, old_in, old_cwd = sys.stdout, sys.stderr, sys.stdin, os.getcwd()
+    # input() 读的是事先给的几行；读完了就报 EOFError，不会卡住等人
+    sys.stdin = io.StringIO(stdin or "")
     deadline = time.time() + timeout
 
     def tracer(frame, event, arg):
@@ -94,7 +96,7 @@ def run(code, cwd, timeout):
         # 去掉本文件内部的调用层，只留用户代码相关的部分
         print("\n".join(l for l in lines if "jack_runner.py" not in l)[-4000:])
     finally:
-        sys.stdout, sys.stderr = old_out, old_err
+        sys.stdout, sys.stderr, sys.stdin = old_out, old_err, old_in
         # 只在代码真用过 pyplot 时收尾；不然每次运行都要先加载一遍 matplotlib，白白慢几秒
         plt = sys.modules.get("matplotlib.pyplot")
         if plt is not None:

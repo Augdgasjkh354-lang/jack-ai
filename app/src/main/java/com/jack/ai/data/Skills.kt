@@ -403,24 +403,30 @@ val BUILTIN_SKILLS = listOf(
     ),
     Skill(
         id = SkillIds.CODE, builtin = true, name = "写代码",
-        description = "写程序、做游戏和网页、写脚本：分小步写、跑起来看结果、读报错改、写测试、打开网页检查报错和截图。",
+        description = "写程序、做游戏和网页、写脚本：项目笔记接着做、分小步写、跑起来看、读报错改、写测试、在代码里搜、改坏了退回旧版本、打开网页检查报错和截图。",
         instructions = """写代码的做法：
-1. 先想清楚：要做成什么样、做到哪一步算完。大的东西拆成几小块，一块一块做；每做完一块就跑一下，不要一口气写几百行再跑。
-2. 代码写成文件放在文件夹里（write_file），改的时候用 edit_file 只换要改的那几行，不要整个文件重写。文件多了分开写，一个文件管一件事；文件都在文件夹最外层，不能建子目录。
-3. 这里能跑的：
-   - Python 3.10（要「Python」技能开着）：标准库、numpy、pandas、matplotlib、openpyxl、PIL、pypdf，不能装别的库。run_python 用 file 运行文件（args 传参数），文件夹里的 .py 能互相 import，改过的马上生效。没有终端，不能 input() 等人输入。
-   - 网页：HTML、CSS、JavaScript，可以分成几个文件（index.html 加 .js、.css），可以从 CDN 引库。写完用 check_page 打开看。
+1. 开工前：
+   - 接着做以前的项目：先读它的笔记「项目名-笔记.md」，不用从头读一遍代码去猜做到哪了。
+   - 新项目：想清楚要做成什么样、做到哪一步算完，拆成几小块，建一份「项目名-笔记.md」。
+2. 一块一块做，每做完一块就跑一下，不要一口气写几百行再跑。
+3. 代码写成文件放在文件夹里（write_file），改的时候用 edit_file 只换要改的那几行，不要整个重写。一个文件管一件事；文件都在文件夹最外层，不能建子目录；一个文件夹里有好几个项目时，文件名带上项目名。
+4. 这里能跑的：
+   - Python 3.10（要「Python」技能开着）：标准库、numpy、pandas、matplotlib、openpyxl、PIL、pypdf，不能装别的库。run_python 用 file 运行文件，args 传参数，input 喂给 input() 的内容（一行一个）。文件夹里的 .py 能互相 import，改过的马上生效。
+   - 网页：HTML、CSS、JavaScript，可以分成几个文件，可以从 CDN 引库。用 check_page 打开看。
    - 别的语言（Java、C、Go、Node 这些）写得出但跑不了，写之前先说清楚。
-4. 测试：要紧的逻辑写测试文件 test_xxx.py，用 unittest，结尾写 unittest.main(verbosity=2)，用 run_python 的 file 跑它。改完再跑一遍，全过了才算好。网页用 check_page 的 script 模拟点击、输入，return 页面上的结果来核对。
-5. 出错时：
-   - 先把报错读完，找到是哪个文件、哪一行、什么错，想清楚原因再改，不要没想清楚就乱改再试。
+5. 找东西：项目大了，用 search_code 搜函数、变量在哪定义、哪里用到，再用 read_file 只读那几行。
+6. 测试：要紧的逻辑写测试文件 test_xxx.py，用 unittest，结尾写 unittest.main(verbosity=2)，用 run_python 的 file 跑它。改完再跑一遍，全过了才算好。网页用 check_page 的 script 模拟点击、输入，return 页面上的结果来核对；做动画、游戏时用 frames 拍几张，对比画面有没有动。
+7. 出错时：
+   - 先把报错读完，找到是哪个文件、哪一行、什么错，想清楚原因再改。
    - 拿不准原因：加几行 print（网页用 console.log）看中间的值，或者写一个最小的例子单独跑，把问题缩小。
    - 同一个错改了三次还不行，换个思路，别在一个方向上一直撞。
-6. 网页：check_page 会给控制台的报错、没加载上的文件、页面有没有比屏幕宽，还有一张手机屏幕大小的截图。报错清零、截图看着对了才算好。要用户在聊天里直接点开用的单页小工具，最后用 create_app 交付。
-7. 跑得久的（大循环、大数据）先用小数据试，再放开；一次最多 300 秒（timeout）。
-8. 做完：自己从头到尾跑一遍，确认真的能用。回答里说做了什么、文件叫什么、怎么用、还有什么没做好。不把整段代码贴出来，除非用户想看。
-9. 做不到的（要装库、要别的语言、要连某个服务）直说哪部分做不到，给能做的替代办法。
-10. 摸索出一套好用的做法、或者踩了一个以后还会踩的坑，用 save_skill 记成你自己的技能。""",
+   - 越改越乱：用 file_history 看这个文件以前的版本，diff 对比改了什么，restore 退回到还能跑的那一版，再换个改法。每次改代码文件之前都会自动存一版，放心改。
+8. 网页：报错清零、截图看着对了才算好。要用户在聊天里直接点开用的单页小工具，最后用 create_app 交付。
+9. 跑得久的（大循环、大数据）先用小数据试，再放开；一次最多 300 秒（timeout）。
+10. 停下之前（做完了，或者先做到这里）：更新笔记，写清这是什么、有哪些文件各管什么、怎么运行和测试、做到哪了、卡在哪、下一步做什么。下次只看笔记就能接上。
+11. 做完：自己从头到尾跑一遍，确认真的能用。回答里说做了什么、文件叫什么、怎么用、还有什么没做好。不把整段代码贴出来，除非用户想看。
+12. 做不到的（要装库、要别的语言、要连某个服务）直说哪部分做不到，给能做的替代办法。
+13. 摸索出一套好用的做法、或者踩了一个以后还会踩的坑，用 save_skill 记成你自己的技能。""",
     ),
     Skill(
         id = SkillIds.LIBRARY, builtin = true, name = "资料库",
@@ -534,8 +540,10 @@ object SkillTools {
 
     val CREATE_DIAGRAM = schema("""{"type":"function","function":{"name":"create_diagram","description":"画思维导图（树状图）或流程图，生成图片显示在聊天里。","parameters":{"type":"object","properties":{"type":{"type":"string","enum":["mindmap","flowchart"]},"title":{"type":"string","description":"图的标题，可以为空"},"outline":{"type":"string","description":"mindmap 用：缩进的 Markdown 列表，第一行是中心主题"},"nodes":{"type":"array","description":"flowchart 用","items":{"type":"object","properties":{"id":{"type":"string"},"label":{"type":"string"},"shape":{"type":"string","enum":["box","round","diamond"]}},"required":["id","label"]}},"edges":{"type":"array","description":"flowchart 用","items":{"type":"object","properties":{"from":{"type":"string"},"to":{"type":"string"},"label":{"type":"string"}},"required":["from","to"]}},"direction":{"type":"string","enum":["TB","LR"]}},"required":["type"]}}}""")
 
-    val CHECK_PAGE = schema("""{"type":"function","function":{"name":"check_page","description":"打开文件夹里的网页检查：控制台报错、没加载上的文件、页面大小，按手机屏幕截一张图；可以跑一段测试脚本模拟点击、输入，返回结果。","parameters":{"type":"object","properties":{"path":{"type":"string","description":"网页文件，文件夹里的相对路径，默认 index.html"},"script":{"type":"string","description":"页面加载完后跑的 JavaScript，可以 await，return 的值会返回给你。比如 document.querySelector('#start').click(); await new Promise(r=>setTimeout(r,500)); return document.querySelector('#score').textContent"},"wait_ms":{"type":"integer","description":"加载完再等多少毫秒才检查，默认 1500"}}}}}""")
-    val RUN_PYTHON = schema("""{"type":"function","function":{"name":"run_python","description":"在对话文件夹里运行 Python，返回 print 的输出和报错。可用 numpy、pandas、matplotlib、openpyxl、pypdf。要么给 code 跑一段代码，要么给 file 运行文件夹里的 .py 文件（像在命令行里 python 文件名 那样，文件夹里的 .py 能互相 import，改过的马上生效）。","parameters":{"type":"object","properties":{"code":{"type":"string","description":"Python 代码"},"file":{"type":"string","description":"要运行的 .py 文件名（文件夹里的相对路径），比如 main.py、test_game.py"},"args":{"type":"array","items":{"type":"string"},"description":"运行 file 时的命令行参数"},"timeout":{"type":"integer","description":"最多跑多少秒，默认 90，最多 300"}}}}}""")
+    val CHECK_PAGE = schema("""{"type":"function","function":{"name":"check_page","description":"打开文件夹里的网页检查：控制台报错、没加载上的文件、页面大小，按手机屏幕截一张图；可以跑一段测试脚本模拟点击、输入，返回结果。","parameters":{"type":"object","properties":{"path":{"type":"string","description":"网页文件，文件夹里的相对路径，默认 index.html"},"script":{"type":"string","description":"页面加载完后跑的 JavaScript，可以 await，return 的值会返回给你。比如 document.querySelector('#start').click(); await new Promise(r=>setTimeout(r,500)); return document.querySelector('#score').textContent"},"wait_ms":{"type":"integer","description":"加载完再等多少毫秒才检查，默认 1500"},"frames":{"type":"integer","description":"拍几张截图（1 到 4，默认 1）：做动画、游戏时拍几张对比，看画面有没有动"},"interval_ms":{"type":"integer","description":"几张截图之间隔多少毫秒，默认 500"}}}}}""")
+    val SEARCH_CODE = schema("""{"type":"function","function":{"name":"search_code","description":"在文件夹的代码和文字文件里搜，返回文件名、行号和那一行。找函数在哪定义、哪里用到了，再用 read_file 按行读。","parameters":{"type":"object","properties":{"query":{"type":"string","description":"要搜的文字"},"regex":{"type":"boolean","description":"query 是正则表达式时填 true"},"ext":{"type":"string","description":"只搜这种文件，比如 py、js"}},"required":["query"]}}}""")
+    val FILE_HISTORY = schema("""{"type":"function","function":{"name":"file_history","description":"代码文件的旧版本：每次用 write_file、edit_file 改代码文件之前会自动存一版。list 看有哪几版；diff 看某一版和现在差在哪；restore 退回某一版（退回前的样子也会存一版）。","parameters":{"type":"object","properties":{"name":{"type":"string","description":"文件名"},"action":{"type":"string","enum":["list","diff","restore"]},"version":{"type":"integer","description":"第几版，1 是最近的（改之前的样子），默认 1"}},"required":["name"]}}}""")
+    val RUN_PYTHON = schema("""{"type":"function","function":{"name":"run_python","description":"在对话文件夹里运行 Python，返回 print 的输出和报错。可用 numpy、pandas、matplotlib、openpyxl、pypdf。要么给 code 跑一段代码，要么给 file 运行文件夹里的 .py 文件（像在命令行里 python 文件名 那样，文件夹里的 .py 能互相 import，改过的马上生效）。","parameters":{"type":"object","properties":{"code":{"type":"string","description":"Python 代码"},"file":{"type":"string","description":"要运行的 .py 文件名（文件夹里的相对路径），比如 main.py、test_game.py"},"args":{"type":"array","items":{"type":"string"},"description":"运行 file 时的命令行参数"},"timeout":{"type":"integer","description":"最多跑多少秒，默认 90，最多 300"},"input":{"type":"string","description":"程序里 input() 依次读到的内容，一行一个；不给的话 input() 会直接读到结束"}}}}}""")
 
     val MY_SAVINGS = schema("""{"type":"function","function":{"name":"my_savings","description":"看你自己的积蓄：现在还有多少钱、每天存进多少、积蓄花光后今天还有没有收尾钱、最近几次自由时间各花了多少、在等回音的心愿、约好的下一次自由时间。任何时候都能看。","parameters":{"type":"object","properties":{}}}}""")
     val OWN_HISTORY = schema("""{"type":"function","function":{"name":"own_history","description":"回看你自己的自由时间、梦境、经历和记忆。先 list 或 search，再用 read 和编号分段读原文；也可以用 move 把自己的记忆放到深处或带回常记。","parameters":{"type":"object","properties":{"action":{"type":"string","enum":["list","search","read","move"]},"kind":{"type":"string","enum":["all","free","dream","experience","memory"]},"query":{"type":"string","description":"搜索关键词"},"start_date":{"type":"string","description":"开始日期，YYYY-MM-DD"},"end_date":{"type":"string","description":"结束日期，YYYY-MM-DD"},"id":{"type":"string","description":"要阅读或调整的记录编号"},"offset":{"type":"integer","description":"列表或正文的续读位置"},"layer":{"type":"string","enum":["hot","deep"]}},"required":["action"]}}}""")
