@@ -3,13 +3,13 @@ package com.jack.ai.data
 import java.io.ByteArrayOutputStream
 
 /**
- * PPT 里的原生图表：柱状、条形、折线、饼图、环形图。数据另存一份内嵌的 Excel，
+ * PPT 里的原生图表：柱状、条形、折线、饼图、环形图、散点、雷达、面积、气泡。数据另存一份内嵌的 Excel，
  * 在 PowerPoint、WPS 里双击图表就能改数，图跟着变。颜色跟着 PPT 的配色走。
  */
 object PptChart {
-    val TYPES = listOf("column", "bar", "line", "pie", "doughnut")
+    val TYPES = listOf("column", "bar", "line", "pie", "doughnut", "scatter", "radar", "area", "bubble")
 
-    data class Series(val name: String, val values: List<Double>)
+    data class Series(val name: String, val values: List<Double>, val sizes: List<Double> = emptyList()) // sizes 只给气泡图用：每点气泡大小，不给就跟 y 走
 
     data class Chart(val type: String, val categories: List<String>, val series: List<Series>, val unit: String = "", val title: String = "")
 
@@ -21,7 +21,7 @@ object PptChart {
 
     private fun sheetRef(name: String) = "'" + name.replace("'", "''") + "'"
 
-    /** 模型写的图表数据：type、title、categories、series[{name, values}]、unit。数字写成字符串也认（去掉千分位逗号）。 */
+    /** 模型写的图表数据：type、title、categories、series[{name, values, sizes?}]、unit。数字写成字符串也认（去掉千分位逗号）。sizes 只给气泡图用。 */
     fun fromJson(o: kotlinx.serialization.json.JsonObject?): Chart? {
         o ?: return null
         fun str(e: kotlinx.serialization.json.JsonElement?) = (e as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty()
@@ -29,7 +29,8 @@ object PptChart {
         val series = (o["series"] as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { el ->
             val s = el as? kotlinx.serialization.json.JsonObject ?: return@mapNotNull null
             val values = (s["values"] as? kotlinx.serialization.json.JsonArray).orEmpty().map { str(it).replace(",", "").replace("，", "").trim().toDoubleOrNull() ?: 0.0 }
-            Series(str(s["name"]), values)
+            val sizes = (s["sizes"] as? kotlinx.serialization.json.JsonArray).orEmpty().map { str(it).replace(",", "").replace("，", "").trim().toDoubleOrNull() ?: 0.0 }
+            Series(str(s["name"]), values, sizes)
         }
         return Chart(str(o["type"]).ifBlank { "column" }, cats, series, str(o["unit"]), str(o["title"]))
     }
@@ -42,13 +43,19 @@ object PptChart {
     /** 理一理模型给的数据：去掉空的、对齐长度、饼图只留第一组。返回 null 表示没法画；problems 写给模型看。 */
     fun clean(c: Chart, problems: MutableList<String>): Chart? {
         val type = c.type.takeIf { it in TYPES } ?: "column"
-        val cats = c.categories.map { it.trim() }.take(24)
+        var cats = c.categories.map { it.trim() }.take(24)
         var series = c.series.filter { it.values.isNotEmpty() }.take(8)
-        if (cats.isEmpty() || series.isEmpty()) { problems += "图表没有数据（categories 或 series 是空的）"; return null }
+        if (series.isEmpty() || (cats.isEmpty() && type !in setOf("scatter", "bubble"))) { problems += "图表没有数据（categories 或 series 是空的）"; return null }
+        // 散点、气泡可以只给 y、不给分类：分类空着就按序号 1、2、3… 当 x
+        if (type in setOf("scatter", "bubble") && cats.isEmpty()) cats = List(series.maxOf { it.values.size }) { (it + 1).toString() }.take(24)
         if (type in setOf("pie", "doughnut") && series.size > 1) { problems += "饼图、环形图只画第一组数据「${series[0].name}」"; series = series.take(1) }
+        if (type == "bubble") series.forEachIndexed { i, s ->
+            if (s.sizes.isNotEmpty() && s.sizes.size != cats.size) problems += "「${s.name.ifBlank { "第 ${i + 1} 组" }}」给了 ${s.sizes.size} 个气泡大小，分类有 ${cats.size} 个，已按分类对齐"
+        }
         series = series.mapIndexed { i, s ->
             if (s.values.size != cats.size) problems += "「${s.name.ifBlank { "第 ${i + 1} 组" }}」有 ${s.values.size} 个数，分类有 ${cats.size} 个，已按分类对齐"
-            Series(s.name.ifBlank { "系列${i + 1}" }, List(cats.size) { j -> s.values.getOrElse(j) { 0.0 } })
+            Series(s.name.ifBlank { "系列${i + 1}" }, List(cats.size) { j -> s.values.getOrElse(j) { 0.0 } },
+                if (type == "bubble") List(cats.size) { j -> s.sizes.getOrElse(j) { s.values.getOrElse(j) { 0.0 } } } else emptyList())
         }
         return Chart(type, cats, series, c.unit.trim(), c.title.trim())
     }
@@ -71,6 +78,10 @@ object PptChart {
         return sb.toString()
     }
 
+    /** 散点、气泡的 x 坐标：分类能当数字就用分类，否则按序号 1、2、3…。 */
+    private fun xValues(c: Chart): List<Double> =
+        c.categories.mapIndexed { i, v -> v.replace(",", "").replace("，", "").trim().toDoubleOrNull() ?: (i + 1).toDouble() }
+
     private fun solid(c: String) = """<a:solidFill><a:srgbClr val="$c"/></a:solidFill>"""
 
     private fun txPr(size: Int, color: String, bold: Boolean = false, t: PptDeck.Theme? = null) =
@@ -88,17 +99,37 @@ object PptChart {
         fun txF(si: Int) = refs?.let { "${sheetRef(it.sheet)}!$d${col(it.valCols[si])}$d${it.header}" } ?: "Sheet1!$d${col(si + 1)}${d}1"
         fun valF(si: Int) = refs?.let { "${sheetRef(it.sheet)}!$d${col(it.valCols[si])}$d${it.first}:$d${col(it.valCols[si])}$d${it.last}" } ?: "Sheet1!$d${col(si + 1)}${d}2:$d${col(si + 1)}$d${n + 1}"
         val pie = c.type == "pie" || c.type == "doughnut"
+        val xy = c.type == "scatter" || c.type == "bubble"
         val label = t.text
         val cat = """<c:cat><c:strRef><c:f>${esc(catF)}</c:f><c:strCache><c:ptCount val="$n"/>""" +
             c.categories.mapIndexed { i, v -> """<c:pt idx="$i"><c:v>${esc(v)}</c:v></c:pt>""" }.joinToString("") + "</c:strCache></c:strRef></c:cat>"
+        fun numRef(f: String, pts: List<Double>) = """<c:numRef><c:f>${esc(f)}</c:f><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="${pts.size}"/>""" +
+            pts.mapIndexed { i, x -> """<c:pt idx="$i"><c:v>${num(x)}</c:v></c:pt>""" }.joinToString("") + "</c:numCache></c:numRef>"
+        fun numLit(pts: List<Double>) = """<c:numLit><c:formatCode>General</c:formatCode><c:ptCount val="${pts.size}"/>""" +
+            pts.mapIndexed { i, x -> """<c:pt idx="$i"><c:v>${num(x)}</c:v></c:pt>""" }.joinToString("") + "</c:numLit>"
+        // 内嵌模式 x 指着内嵌表 A 列（workbook 里写的是数字）；Excel 直连模式分类列是文字，x 改用字面值，不指格子
+        fun xVal() = if (refs == null) """<c:xVal>${numRef("Sheet1!${d}A${d}2:${d}A$d${n + 1}", xValues(c))}</c:xVal>"""
+            else """<c:xVal>${numLit(xValues(c))}</c:xVal>"""
+        // 气泡图内嵌模式：A 列是 x，后面每组占两列（y、大小）；Excel 直连模式没有大小列，大小跟 y 走
+        // 气泡图内嵌模式组名也在两列一组的 y 列上（B、D、F…），不是 B、C、D…
+        fun txFB(si: Int) = if (c.type == "bubble" && refs == null) "Sheet1!$d${col(2 * si + 1)}${d}1" else txF(si)
+        fun yF(si: Int) = if (c.type == "bubble" && refs == null) "Sheet1!$d${col(2 * si + 1)}${d}2:$d${col(2 * si + 1)}$d${n + 1}" else valF(si)
+        fun sizeF(si: Int) = if (refs == null) "Sheet1!$d${col(2 * si + 2)}${d}2:$d${col(2 * si + 2)}$d${n + 1}" else valF(si)
         val sers = c.series.mapIndexed { si, s ->
             // 饼图的系列名哪儿都不显示（图例是分类），有的查看器却拿它当标题，所以留空
             val shown = if (pie) " " else s.name
-            val tx = """<c:tx><c:strRef><c:f>${esc(txF(si))}</c:f><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>${esc(shown)}</c:v></c:pt></c:strCache></c:strRef></c:tx>"""
+            val tx = """<c:tx><c:strRef><c:f>${esc(txFB(si))}</c:f><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>${esc(shown)}</c:v></c:pt></c:strCache></c:strRef></c:tx>"""
             val v = """<c:val><c:numRef><c:f>${esc(valF(si))}</c:f><c:numCache><c:formatCode>${esc(refs?.formats?.getOrNull(si) ?: "General")}</c:formatCode><c:ptCount val="$n"/>""" +
                 s.values.mapIndexed { i, x -> """<c:pt idx="$i"><c:v>${num(x)}</c:v></c:pt>""" }.joinToString("") + "</c:numCache></c:numRef></c:val>"
             val color = colors[si % colors.size]
             when (c.type) {
+                // 散点、气泡没有分类轴，只有 xVal/yVal；散点不贴数值标签，点本身就是数据
+                "scatter" -> """<c:ser><c:idx val="$si"/><c:order val="$si"/>$tx<c:spPr><a:ln w="34925" cap="rnd">${solid(color)}<a:round/></a:ln></c:spPr>""" +
+                    """<c:marker><c:symbol val="circle"/><c:size val="7"/><c:spPr>${solid(color)}<a:ln w="19050">${solid(t.bg)}</a:ln></c:spPr></c:marker>${xVal()}<c:yVal>${numRef(valF(si), s.values)}</c:yVal><c:smooth val="0"/></c:ser>"""
+                "bubble" -> """<c:ser><c:idx val="$si"/><c:order val="$si"/>$tx<c:spPr>${solid(color)}<a:ln w="19050">${solid(t.bg)}</a:ln></c:spPr>${xVal()}<c:yVal>${numRef(yF(si), s.values)}</c:yVal><c:bubbleSize>${numRef(sizeF(si), s.sizes)}</c:bubbleSize></c:ser>"""
+                // 雷达和折线一样是连线 + 圆点，只是不贴数值标签（轴线密集时标签易重叠）
+                "radar" -> """<c:ser><c:idx val="$si"/><c:order val="$si"/>$tx<c:spPr><a:ln w="34925" cap="rnd">${solid(color)}<a:round/></a:ln></c:spPr>""" +
+                    """<c:marker><c:symbol val="circle"/><c:size val="7"/><c:spPr>${solid(color)}<a:ln w="19050">${solid(t.bg)}</a:ln></c:spPr></c:marker>$cat$v<c:smooth val="0"/></c:ser>"""
                 "line" -> """<c:ser><c:idx val="$si"/><c:order val="$si"/>$tx<c:spPr><a:ln w="34925" cap="rnd">${solid(color)}<a:round/></a:ln></c:spPr>""" +
                     """<c:marker><c:symbol val="circle"/><c:size val="7"/><c:spPr>${solid(color)}<a:ln w="19050">${solid(t.bg)}</a:ln></c:spPr></c:marker>""" +
                     """<c:dLbls><c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>${txPr(1200, label, t = t)}<c:dLblPos val="t"/><c:showLegendKey val="0"/><c:showVal val="${if (c.series.size <= 2) 1 else 0}"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="0"/><c:showBubbleSize val="0"/></c:dLbls>""" +
@@ -118,6 +149,10 @@ object PptChart {
         }.joinToString("")
         val axes = """<c:axId val="11"/><c:axId val="22"/>"""
         val plot = when (c.type) {
+            "scatter" -> """<c:scatterChart><c:scatterStyle val="lineMarker"/><c:varyColors val="0"/>$sers<c:axId val="11"/><c:axId val="22"/></c:scatterChart>"""
+            "radar" -> """<c:radarChart><c:radarStyle val="marker"/><c:varyColors val="0"/>$sers<c:axId val="11"/><c:axId val="22"/></c:radarChart>"""
+            "area" -> """<c:areaChart><c:grouping val="standard"/><c:varyColors val="0"/>$sers<c:axId val="11"/><c:axId val="22"/></c:areaChart>"""
+            "bubble" -> """<c:bubbleChart><c:varyColors val="0"/>$sers<c:bubbleScale val="100"/><c:showNegBubbles val="0"/><c:axId val="11"/><c:axId val="22"/></c:bubbleChart>"""
             "line" -> """<c:lineChart><c:grouping val="standard"/><c:varyColors val="0"/>$sers<c:marker val="1"/>$axes</c:lineChart>"""
             "pie" -> """<c:pieChart><c:varyColors val="1"/>$sers<c:firstSliceAng val="0"/></c:pieChart>"""
             "doughnut" -> """<c:doughnutChart><c:varyColors val="1"/>$sers<c:firstSliceAng val="0"/><c:holeSize val="58"/></c:doughnutChart>"""
@@ -126,7 +161,9 @@ object PptChart {
         val grid = if (t.dark) "334155" else "E5E7EB"
         val catPos = if (c.type == "bar") "l" else "b"
         val valPos = if (c.type == "bar") "b" else "l"
-        val axisXml = if (pie) "" else
+        val xAx = """<c:valAx><c:axId val="11"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:numFmt formatCode="General" sourceLinked="1"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:spPr><a:ln w="9525">${solid(grid)}</a:ln></c:spPr>${txPr(1200, t.muted, t = t)}<c:crossAx val="22"/><c:crosses val="autoZero"/></c:valAx>"""
+        val yAx = """<c:valAx><c:axId val="22"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines><c:spPr><a:ln w="6350">${solid(grid)}</a:ln></c:spPr></c:majorGridlines><c:numFmt formatCode="General" sourceLinked="1"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:spPr><a:ln><a:noFill/></a:ln></c:spPr>${txPr(1200, t.muted, t = t)}<c:crossAx val="11"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>"""
+        val axisXml = if (pie) "" else if (xy) xAx + yAx else
             """<c:catAx><c:axId val="11"/><c:scaling><c:orientation val="${if (c.type == "bar") "maxMin" else "minMax"}"/></c:scaling><c:delete val="0"/><c:axPos val="$catPos"/><c:numFmt formatCode="General" sourceLinked="1"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:spPr><a:ln w="9525">${solid(grid)}</a:ln></c:spPr>${txPr(1300, label, t = t)}<c:crossAx val="22"/><c:crosses val="autoZero"/><c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:noMultiLvlLbl val="0"/></c:catAx>""" +
                 """<c:valAx><c:axId val="22"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="$valPos"/><c:majorGridlines><c:spPr><a:ln w="6350">${solid(grid)}</a:ln></c:spPr></c:majorGridlines><c:numFmt formatCode="General" sourceLinked="1"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:spPr><a:ln><a:noFill/></a:ln></c:spPr>${txPr(1200, t.muted, t = t)}<c:crossAx val="11"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>"""
         val legend = if (pie || c.series.size > 1) """<c:legend><c:legendPos val="${if (pie) "r" else "t"}"/><c:overlay val="0"/>${txPr(1300, label, t = t)}</c:legend>""" else ""
@@ -138,8 +175,16 @@ object PptChart {
     /** 内嵌的数据表：A 列分类，后面每组一列，第一行是组名。 */
     fun workbook(c: Chart): ByteArray {
         val pie = c.type == "pie" || c.type == "doughnut"
-        val rows = listOf(listOf(c.unit) + c.series.map { if (pie) " " else it.name }) +
-            c.categories.mapIndexed { i, cat -> listOf(cat) + c.series.map { num(it.values[i]) } }
+        val rows = when (c.type) {
+            // 散点：A 列是 x（数字），后面每组一列 y
+            "scatter" -> listOf(listOf(c.unit) + c.series.map { it.name }) +
+                xValues(c).mapIndexed { i, x -> listOf(num(x)) + c.series.map { num(it.values[i]) } }
+            // 气泡：A 列是 x，后面每组两列（y、大小）
+            "bubble" -> listOf(listOf(c.unit) + c.series.flatMap { listOf(it.name, it.name + "大小") }) +
+                xValues(c).mapIndexed { i, x -> listOf(num(x)) + c.series.flatMap { listOf(num(it.values[i]), num(it.sizes[i])) } }
+            else -> listOf(listOf(c.unit) + c.series.map { if (pie) " " else it.name }) +
+                c.categories.mapIndexed { i, cat -> listOf(cat) + c.series.map { num(it.values[i]) } }
+        }
         return ByteArrayOutputStream().also { OfficeWriter.writeXlsx(listOf(OfficeWriter.Sheet("Sheet1", rows)), it) }.toByteArray()
     }
 }
