@@ -126,7 +126,12 @@
   function describe(el, n, r, frame) {
     var item = { n: n, kind: kind(el), label: (frame ? '[嵌入] ' : '') + label(el), x: r.left, y: r.top, w: r.width, h: r.height };
     if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
-      if (el.type === 'password') item.value = el.value ? '（已填）' : '';
+      // 密码、电话、邮箱、验证码、卡号、身份证这类框只报「已填」，原值不进模型上下文（快照会连同对话发给模型）
+      var sensitive = el.type === 'password' || el.type === 'tel' || el.type === 'email' ||
+        el.autocomplete === 'one-time-code' || el.autocomplete === 'cc-number' ||
+        /(验证码|校验码|动态码|短信码|otp|code|卡号|身份证|银行卡|信用卡)/i.test(
+          (label(el) || '') + ' ' + (el.placeholder || '') + ' ' + (el.name || '') + ' ' + (el.autocomplete || ''));
+      if (sensitive) item.value = el.value ? '（已填）' : '';
       else if (el.type === 'checkbox' || el.type === 'radio') item.checked = el.checked;
       else if (el.type !== 'submit' && el.type !== 'button' && el.type !== 'file') item.value = (el.value || '').slice(0, 100);
       if (el.type === 'range') item.value = (el.value || '') + '（' + (el.min || 0) + '–' + (el.max || 100) + '）';
