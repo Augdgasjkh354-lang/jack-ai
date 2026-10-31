@@ -72,7 +72,7 @@ object ChartWriter {
         c.drawColor(Color.WHITE)
         c.drawText(ellipsize(title, text(40f, bold = true), W - 96f), 48f, 76f, text(40f, bold = true))
         if (unit.isNotBlank() && type != "pie") c.drawText("单位：$unit", 48f, 118f, text(24f, GRAY))
-        if (type == "pie") pie(c, labels, series.first()) else axes(c, type, labels, series)
+        if (type == "pie") pie(c, labels, series.firstOrNull { it.values.any { v -> v > 0 } } ?: series.first()) else axes(c, type, labels, series)
         bmp.compress(Bitmap.CompressFormat.PNG, 100, out)
         bmp.recycle()
     }
