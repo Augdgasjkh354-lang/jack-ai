@@ -321,7 +321,8 @@ class ToolSession(
             arg.isBlank() -> "参数缺失"
             name == "use_skill" -> useSkill(arg)
             name == "run_js" && SkillIds.CALC in skillIds -> runJs(arg)
-            name == "run_python" && SkillIds.PYTHON in skillIds -> runPython(arg)
+            name == "run_python" && SkillIds.PYTHON in skillIds -> runPython(args)
+            name == "check_page" && SkillIds.CODE in skillIds -> checkPage(args)
             name == "delete_calendar_event" && SkillIds.CALENDAR in skillIds -> deleteEvent(arg)
             name == "web_search" && web -> search(arg, args["engine"].text())
             name == "read_webpage" && web -> readPage(arg)

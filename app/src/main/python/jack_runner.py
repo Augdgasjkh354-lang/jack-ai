@@ -42,6 +42,15 @@ def _setup_matplotlib():
         pass
 
 
+def _forget_folder_modules(cwd):
+    """解释器一直开着：文件夹里的 .py 改过之后，import 拿到的还是上次的旧版本。每次运行前把它们从缓存里清掉。"""
+    root = os.path.realpath(cwd) + os.sep
+    for name, mod in list(sys.modules.items()):
+        f = getattr(mod, "__file__", None)
+        if f and os.path.realpath(f).startswith(root):
+            del sys.modules[name]
+
+
 def run(code, cwd, timeout):
     out = io.StringIO()
     old_out, old_err, old_cwd = sys.stdout, sys.stderr, os.getcwd()
@@ -55,6 +64,10 @@ def run(code, cwd, timeout):
     sys.stdout = sys.stderr = out
     try:
         os.chdir(cwd)
+        # 文件夹里的几个 .py 能互相 import，而且总是最新的
+        _forget_folder_modules(cwd)
+        if cwd not in sys.path:
+            sys.path.insert(0, cwd)
         if "matplotlib" in code or "plt." in code:
             _setup_matplotlib()
         tree = ast.parse(code, "<code>", "exec")
@@ -72,6 +85,10 @@ def run(code, cwd, timeout):
                     print(repr(value))
         finally:
             sys.settrace(None)
+    except SystemExit as e:
+        # 脚本自己调 exit() / sys.exit()、unittest.main()：正常结束，只说一下退出码
+        if e.code not in (None, 0):
+            print("（程序退出，退出码 %s）" % e.code)
     except BaseException:
         lines = traceback.format_exc().splitlines()
         # 去掉本文件内部的调用层，只留用户代码相关的部分
@@ -86,6 +103,8 @@ def run(code, cwd, timeout):
             except Exception:
                 pass
         os.chdir(old_cwd)
+        if cwd in sys.path:
+            sys.path.remove(cwd)
     text = out.getvalue()
     if len(text) > 20000:
         text = text[:20000] + "\n…（输出太长，后面省略）"

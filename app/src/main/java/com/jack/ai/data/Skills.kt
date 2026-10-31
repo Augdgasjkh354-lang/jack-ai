@@ -56,13 +56,14 @@ object SkillIds {
     const val SALES_REVIEW = "builtin-sales-review"
     const val FLOWS = "builtin-browser-flows"
     const val RECEIPTS = "builtin-receipts"
+    const val CODE = "builtin-code"
 
     /**
      * 这些技能的工具不在开场就给，等模型用 use_skill 读了做法才加进来（本对话之后一直带着）：
      * 平时用得少、工具说明又长，每次都摆在面前既占上下文，也让模型更容易选错工具。
      * 计算与图表只有画图（create_chart / create_diagram）算在这里，算数一直能用。
      */
-    val ON_DEMAND = setOf(WORD, PDF, PPT, EXCEL, CALENDAR, MAIL, TRAIN, APP, GITHUB, BROWSER, NOTION, LEARN, CALC, FLOWS)
+    val ON_DEMAND = setOf(WORD, PDF, PPT, EXCEL, CALENDAR, MAIL, TRAIN, APP, GITHUB, BROWSER, NOTION, LEARN, CALC, FLOWS, CODE)
 }
 
 private fun schema(s: String): JsonObject = Json.parseToJsonElement(s).jsonObject
@@ -395,9 +396,31 @@ val BUILTIN_SKILLS = listOf(
 2. 可用的库：Python 3.10 标准库、numpy、pandas、matplotlib、openpyxl、PIL。没有别的第三方库，也不能 pip 安装（手机上装不了）。读 PDF、Word、PPT 里的文字用 read_file，不用 Python。
 3. 用 print() 输出结果；最后一行是表达式时会自动打印它的值。数据量大时只打印摘要（head()、describe()、统计结果），不要把整张表打印出来。
 4. 要给用户的结果存成文件放在当前目录：图表用 plt.savefig("名字.png", bbox_inches="tight")，表格用 df.to_excel("名字.xlsx", index=False) 或 to_csv。新建或改动的文件会自动显示在聊天里。图里可以直接写中文。
-5. 单次运行最多 90 秒。出错就看报错改代码再试，最多 3 次。
+5. 单次运行默认最多 90 秒（timeout 能放到 300）。出错就看报错改代码再试；同一个错改了三次还不行，换个思路。
 6. 回答时说结论和生成了什么文件，不要把代码贴给用户（除非用户想看）。
-7. 只是画个简单的柱状图、折线图、饼图，用 create_chart 更快。""",
+7. 只是画个简单的柱状图、折线图、饼图，用 create_chart 更快。
+8. 正经写程序（多个文件、要调试、要测试）先读「写代码」技能。""",
+    ),
+    Skill(
+        id = SkillIds.CODE, builtin = true, name = "写代码",
+        description = "写程序、做游戏和网页、写脚本：分小步写、跑起来看结果、读报错改、写测试、打开网页检查报错和截图。",
+        instructions = """写代码的做法：
+1. 先想清楚：要做成什么样、做到哪一步算完。大的东西拆成几小块，一块一块做；每做完一块就跑一下，不要一口气写几百行再跑。
+2. 代码写成文件放在文件夹里（write_file），改的时候用 edit_file 只换要改的那几行，不要整个文件重写。文件多了分开写，一个文件管一件事；文件都在文件夹最外层，不能建子目录。
+3. 这里能跑的：
+   - Python 3.10（要「Python」技能开着）：标准库、numpy、pandas、matplotlib、openpyxl、PIL、pypdf，不能装别的库。run_python 用 file 运行文件（args 传参数），文件夹里的 .py 能互相 import，改过的马上生效。没有终端，不能 input() 等人输入。
+   - 网页：HTML、CSS、JavaScript，可以分成几个文件（index.html 加 .js、.css），可以从 CDN 引库。写完用 check_page 打开看。
+   - 别的语言（Java、C、Go、Node 这些）写得出但跑不了，写之前先说清楚。
+4. 测试：要紧的逻辑写测试文件 test_xxx.py，用 unittest，结尾写 unittest.main(verbosity=2)，用 run_python 的 file 跑它。改完再跑一遍，全过了才算好。网页用 check_page 的 script 模拟点击、输入，return 页面上的结果来核对。
+5. 出错时：
+   - 先把报错读完，找到是哪个文件、哪一行、什么错，想清楚原因再改，不要没想清楚就乱改再试。
+   - 拿不准原因：加几行 print（网页用 console.log）看中间的值，或者写一个最小的例子单独跑，把问题缩小。
+   - 同一个错改了三次还不行，换个思路，别在一个方向上一直撞。
+6. 网页：check_page 会给控制台的报错、没加载上的文件、页面有没有比屏幕宽，还有一张手机屏幕大小的截图。报错清零、截图看着对了才算好。要用户在聊天里直接点开用的单页小工具，最后用 create_app 交付。
+7. 跑得久的（大循环、大数据）先用小数据试，再放开；一次最多 300 秒（timeout）。
+8. 做完：自己从头到尾跑一遍，确认真的能用。回答里说做了什么、文件叫什么、怎么用、还有什么没做好。不把整段代码贴出来，除非用户想看。
+9. 做不到的（要装库、要别的语言、要连某个服务）直说哪部分做不到，给能做的替代办法。
+10. 摸索出一套好用的做法、或者踩了一个以后还会踩的坑，用 save_skill 记成你自己的技能。""",
     ),
     Skill(
         id = SkillIds.LIBRARY, builtin = true, name = "资料库",
@@ -511,7 +534,8 @@ object SkillTools {
 
     val CREATE_DIAGRAM = schema("""{"type":"function","function":{"name":"create_diagram","description":"画思维导图（树状图）或流程图，生成图片显示在聊天里。","parameters":{"type":"object","properties":{"type":{"type":"string","enum":["mindmap","flowchart"]},"title":{"type":"string","description":"图的标题，可以为空"},"outline":{"type":"string","description":"mindmap 用：缩进的 Markdown 列表，第一行是中心主题"},"nodes":{"type":"array","description":"flowchart 用","items":{"type":"object","properties":{"id":{"type":"string"},"label":{"type":"string"},"shape":{"type":"string","enum":["box","round","diamond"]}},"required":["id","label"]}},"edges":{"type":"array","description":"flowchart 用","items":{"type":"object","properties":{"from":{"type":"string"},"to":{"type":"string"},"label":{"type":"string"}},"required":["from","to"]}},"direction":{"type":"string","enum":["TB","LR"]}},"required":["type"]}}}""")
 
-    val RUN_PYTHON = schema("""{"type":"function","function":{"name":"run_python","description":"在对话文件夹里运行一段 Python 代码，返回 print 的输出和报错。可用 numpy、pandas、matplotlib、openpyxl、pypdf。","parameters":{"type":"object","properties":{"code":{"type":"string","description":"Python 代码"}},"required":["code"]}}}""")
+    val CHECK_PAGE = schema("""{"type":"function","function":{"name":"check_page","description":"打开文件夹里的网页检查：控制台报错、没加载上的文件、页面大小，按手机屏幕截一张图；可以跑一段测试脚本模拟点击、输入，返回结果。","parameters":{"type":"object","properties":{"path":{"type":"string","description":"网页文件，文件夹里的相对路径，默认 index.html"},"script":{"type":"string","description":"页面加载完后跑的 JavaScript，可以 await，return 的值会返回给你。比如 document.querySelector('#start').click(); await new Promise(r=>setTimeout(r,500)); return document.querySelector('#score').textContent"},"wait_ms":{"type":"integer","description":"加载完再等多少毫秒才检查，默认 1500"}}}}}""")
+    val RUN_PYTHON = schema("""{"type":"function","function":{"name":"run_python","description":"在对话文件夹里运行 Python，返回 print 的输出和报错。可用 numpy、pandas、matplotlib、openpyxl、pypdf。要么给 code 跑一段代码，要么给 file 运行文件夹里的 .py 文件（像在命令行里 python 文件名 那样，文件夹里的 .py 能互相 import，改过的马上生效）。","parameters":{"type":"object","properties":{"code":{"type":"string","description":"Python 代码"},"file":{"type":"string","description":"要运行的 .py 文件名（文件夹里的相对路径），比如 main.py、test_game.py"},"args":{"type":"array","items":{"type":"string"},"description":"运行 file 时的命令行参数"},"timeout":{"type":"integer","description":"最多跑多少秒，默认 90，最多 300"}}}}}""")
 
     val MY_SAVINGS = schema("""{"type":"function","function":{"name":"my_savings","description":"看你自己的积蓄：现在还有多少钱、每天存进多少、积蓄花光后今天还有没有收尾钱、最近几次自由时间各花了多少、在等回音的心愿、约好的下一次自由时间。任何时候都能看。","parameters":{"type":"object","properties":{}}}}""")
     val OWN_HISTORY = schema("""{"type":"function","function":{"name":"own_history","description":"回看你自己的自由时间、梦境、经历和记忆。先 list 或 search，再用 read 和编号分段读原文；也可以用 move 把自己的记忆放到深处或带回常记。","parameters":{"type":"object","properties":{"action":{"type":"string","enum":["list","search","read","move"]},"kind":{"type":"string","enum":["all","free","dream","experience","memory"]},"query":{"type":"string","description":"搜索关键词"},"start_date":{"type":"string","description":"开始日期，YYYY-MM-DD"},"end_date":{"type":"string","description":"结束日期，YYYY-MM-DD"},"id":{"type":"string","description":"要阅读或调整的记录编号"},"offset":{"type":"integer","description":"列表或正文的续读位置"},"layer":{"type":"string","enum":["hot","deep"]}},"required":["action"]}}}""")

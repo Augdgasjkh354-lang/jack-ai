@@ -211,6 +211,7 @@ object PromptBuilder {
             if (SkillIds.CALC in skillIds) { add(SkillTools.CREATE_CHART); add(SkillTools.CREATE_DIAGRAM) }
             if (SkillIds.LEARN in skillIds) add(SkillTools.SAVE_FLASHCARDS)
             if (SkillIds.PYTHON in skillIds) add(SkillTools.RUN_PYTHON)
+            if (SkillIds.CODE in skillIds) add(SkillTools.CHECK_PAGE)
             if (SkillIds.ROUTINE in skillIds) { add(SkillTools.SCHEDULE); add(SkillTools.CANCEL_SCHEDULE) }
             if (SkillIds.CALENDAR in skillIds) { add(SkillTools.ADD_EVENT); add(SkillTools.LIST_EVENTS); add(SkillTools.DELETE_EVENT) }
             if (SkillIds.TABLES in skillIds) { add(SkillTools.ADD_ROWS); add(SkillTools.QUERY_TABLE); add(SkillTools.EDIT_TABLE) }
