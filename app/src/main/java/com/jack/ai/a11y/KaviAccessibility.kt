@@ -33,6 +33,7 @@ import android.widget.TextView
 import com.jack.ai.data.Settings
 import com.jack.ai.data.Store
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -63,7 +64,9 @@ class KaviAccessibility : AccessibilityService() {
         }
 
         /** 设置变了：只收勾过的 App 的事件。 */
-        fun apply(s: Settings) { instance?.let { svc -> Handler(Looper.getMainLooper()).post { svc.filter(s.phoneApps) } } }
+        fun apply(s: Settings) {
+            instance?.let { svc -> Handler(Looper.getMainLooper()).post { svc.filter(s.phoneApps); if (s.floatBall) svc.showBall() else svc.hideBall() } }
+        }
 
         /** 现在前台是别的 App（不是 Kavi 自己）：要确认的事得用悬浮卡片问。 */
         fun othersInFront(ctx: Context): Boolean = instance?.foreground()?.let { it != ctx.packageName } == true
@@ -79,7 +82,9 @@ class KaviAccessibility : AccessibilityService() {
 
     override fun onServiceConnected() {
         instance = this
-        filter(runCatching { Store(this).loadSettings().phoneApps }.getOrDefault(emptyList()))
+        val s = runCatching { Store(this).loadSettings() }.getOrNull()
+        filter(s?.phoneApps.orEmpty())
+        if (s?.floatBall == true) showBall()
     }
 
     private fun filter(apps: List<String>) {
@@ -246,8 +251,14 @@ class KaviAccessibility : AccessibilityService() {
      * 返回 data URL 和缩放比例（截图上的 1 像素 = 屏幕上多少像素）。
      */
     suspend fun screenshot(marks: List<Element>): Pair<String, Float>? {
+        val shot = rawShot() ?: return null
+        return mark(shot, marks)
+    }
+
+    /** 截一张原样的屏幕（安卓 11 以上；太频繁会失败，返回 null）。 */
+    suspend fun rawShot(): Bitmap? {
         if (Build.VERSION.SDK_INT < 30) return null
-        val shot: Bitmap = suspendCancellableCoroutine { c ->
+        return suspendCancellableCoroutine { c ->
             takeScreenshot(Display.DEFAULT_DISPLAY, mainExecutor, object : TakeScreenshotCallback {
                 override fun onSuccess(r: ScreenshotResult) {
                     val hb = r.hardwareBuffer
@@ -257,7 +268,10 @@ class KaviAccessibility : AccessibilityService() {
                 }
                 override fun onFailure(code: Int) { if (c.isActive) c.resume(null) }
             })
-        } ?: return null
+        }
+    }
+
+    private fun mark(shot: Bitmap, marks: List<Element>): Pair<String, Float> {
         val scale = minOf(1f, 720f / shot.width)
         val out = Bitmap.createBitmap((shot.width * scale).toInt(), (shot.height * scale).toInt(), Bitmap.Config.ARGB_8888)
         val c = Canvas(out)
@@ -320,7 +334,64 @@ class KaviAccessibility : AccessibilityService() {
 
     private fun removeBar() { bar?.let { runCatching { wm.removeView(it) } }; bar = null; barText = null }
 
-    private fun clearOverlays() = main.post { removeBar(); panel?.let { runCatching { wm.removeView(it) } }; panel = null }
+    private fun clearOverlays() = main.post { removeBar(); hideBall(); panel?.let { runCatching { wm.removeView(it) } }; panel = null }
+
+    // ---------- 悬浮球：问这一屏 ----------
+
+    private var ball: View? = null
+
+    /** 屏幕边上一个小圆球，点一下把当前屏幕带进 Kavi 问；按住能拖。 */
+    fun showBall() {
+        if (ball != null) return
+        val size = dp(44)
+        val v = TextView(this).apply {
+            text = "K"; textSize = 18f; typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER; setTextColor(Color.WHITE)
+            background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Color.argb(170, 32, 33, 36)) }
+            alpha = 0.85f
+        }
+        val (w, h) = screenSize()
+        val lp = WindowManager.LayoutParams(size, size, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT,
+        ).apply { gravity = Gravity.TOP or Gravity.START; x = w - size - dp(4); y = h * 2 / 5 }
+        var downX = 0f; var downY = 0f; var startX = 0; var startY = 0; var moved = false
+        v.setOnTouchListener { _, e ->
+            when (e.action) {
+                android.view.MotionEvent.ACTION_DOWN -> { downX = e.rawX; downY = e.rawY; startX = lp.x; startY = lp.y; moved = false }
+                android.view.MotionEvent.ACTION_MOVE -> {
+                    val dx = e.rawX - downX; val dy = e.rawY - downY
+                    if (moved || dx * dx + dy * dy > dp(8) * dp(8)) {
+                        moved = true
+                        lp.x = (startX + dx).toInt().coerceIn(0, w - size); lp.y = (startY + dy).toInt().coerceIn(0, h - size)
+                        runCatching { wm.updateViewLayout(v, lp) }
+                    }
+                }
+                android.view.MotionEvent.ACTION_UP -> {
+                    // 松手贴到最近的一边
+                    if (moved) { lp.x = if (lp.x + size / 2 < w / 2) dp(4) else w - size - dp(4); runCatching { wm.updateViewLayout(v, lp) } }
+                    else askScreen()
+                }
+            }
+            true
+        }
+        if (runCatching { wm.addView(v, lp) }.isSuccess) ball = v
+    }
+
+    fun hideBall() { ball?.let { runCatching { wm.removeView(it) } }; ball = null }
+
+    /** 读当前屏幕（截图时先把球藏起来），带进 Kavi 新对话。 */
+    private fun askScreen() {
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+            val (pkg, root) = snapshot() ?: run { ScreenAsk.toast(this@KaviAccessibility, "读不到这一屏"); return@launch }
+            val label = appLabel(pkg)
+            ScreenAsk.refuse(this@KaviAccessibility, pkg, label)?.let { ScreenAsk.toast(this@KaviAccessibility, it); return@launch }
+            val text = ScreenText.plain(Screen(pkg, label, ScreenText.elements(root)))
+            ball?.visibility = View.INVISIBLE
+            delay(120)
+            val shot = rawShot()
+            ball?.visibility = View.VISIBLE
+            ScreenAsk.launch(this@KaviAccessibility, label, text, shot)
+        }
+    }
 
     /** 在屏幕下方问用户一件事（三分钟没回就算不同意）。一次只问一件。 */
     suspend fun confirm(title: String, body: String, action: String): Boolean = asking.withLock {

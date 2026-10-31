@@ -1005,6 +1005,14 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun consumeCameraRequest() = _state.update { it.copy(cameraRequest = false) }
 
     /** 别的 App 分享过来的内容：开一个新对话，文字放进输入框，图片和文件作为附件。 */
+    /** 问这一屏：新对话带上屏幕截图和屏幕上的字，用户接着问。 */
+    fun askScreen(app: String, textPath: String?, shotPath: String?) {
+        newChat()
+        shotPath?.let { addImages(listOf(Uri.fromFile(java.io.File(it)))) }
+        textPath?.let { addFiles(listOf(Uri.fromFile(java.io.File(it)))) }
+        core.toast("带上了「$app」这一屏，问吧")
+    }
+
     fun handleShare(text: String?, uris: List<Uri>, mime: String?) {
         // 只是填进新对话的输入框、不发出去：正在写的回答不用停，让它在后台写完
         newChat()

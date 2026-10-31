@@ -134,6 +134,18 @@ object ScreenText {
         return if (s.length > MERGED_MAX) s.take(MERGED_MAX) + "…" else s
     }
 
+    /** 「问这一屏」带进对话的：屏幕上的字按顺序一行一行，不编号（用户问的是内容，不是要点哪里）。 */
+    fun plain(s: Screen): String = buildString {
+        append("「${s.app}」屏幕上的内容：\n")
+        s.elements.filter { it.role != "列表" }.forEach { e ->
+            when {
+                e.role == "输入框" && !e.password && e.value.isNotEmpty() -> append("（输入框）${e.value}\n")
+                e.role == "输入框" -> {}
+                e.label.isNotEmpty() -> append(e.label).append('\n')
+            }
+        }
+    }
+
     /** 给 Kavi 看的一屏。 */
     fun format(s: Screen, maxChars: Int = 6000): String {
         val sb = StringBuilder("【手机屏幕】${s.app}（${s.pkg}）\n")

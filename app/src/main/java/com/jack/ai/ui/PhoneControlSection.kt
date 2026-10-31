@@ -107,3 +107,40 @@ fun PhoneControlSection(vm: ChatViewModel, settings: Settings) {
         vm.updateSettings { it.copy(phoneApps = chosen.sorted()) }
     }
 }
+
+/**
+ * 设置页的「问这一屏」：悬浮球（要开无障碍）和默认数字助理（长按电源键叫出来，不用开无障碍）。
+ * 叫出来时把当前屏幕的字和截图带进新对话；涉及钱的 App 不读。
+ */
+@Composable
+fun AskScreenSection(vm: ChatViewModel, settings: Settings) {
+    val ctx = LocalContext.current
+    val colors = MaterialTheme.colorScheme
+    val a11y = KaviAccessibility.enabled(ctx)
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("悬浮球")
+                Text(
+                    if (a11y) "屏幕边上一个小球，点一下就带上当前屏幕问 Kavi；按住能拖到别处" else "要先打开上面「操作其他 App」里的无障碍服务",
+                    style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
+                )
+            }
+            androidx.compose.material3.Switch(checked = settings.floatBall, enabled = a11y || settings.floatBall,
+                onCheckedChange = { on -> vm.updateSettings { it.copy(floatBall = on) } })
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("设成默认数字助理")
+                Text("在「默认应用 → 数字助理应用」里选 Kavi，并打开「使用屏幕上的文字」「使用屏幕截图」。之后长按电源键（或各家手机的助理手势）就能叫出 Kavi 问这一屏",
+                    style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+            }
+            OutlinedButton(onClick = {
+                runCatching { ctx.startActivity(Intent(SysSettings.ACTION_VOICE_INPUT_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                    .onFailure { runCatching { ctx.startActivity(Intent(SysSettings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } }
+            }) { Text("去设置") }
+        }
+        Text("这是你自己叫的，所以任何 App 都能读（不限于上面勾的），涉及钱的 App 不读。屏幕的字和截图只放进这个新对话。",
+            style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+    }
+}

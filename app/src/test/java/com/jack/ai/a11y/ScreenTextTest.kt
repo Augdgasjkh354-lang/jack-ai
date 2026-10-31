@@ -48,6 +48,16 @@ class ScreenTextTest {
     }
 
     @Test
+    fun plainTextForAskingAboutTheScreen() {
+        val text = ScreenText.plain(Screen("p", "微信", ScreenText.elements(root)))
+        assertTrue(text, text.startsWith("「微信」屏幕上的内容"))
+        assertTrue(text, "张三 明天见\n" in text)
+        assertTrue(text, "（输入框）你好" in text)
+        assertFalse(text, "[" in text)
+        assertFalse(text, "••••" in text)
+    }
+
+    @Test
     fun findsByNumberTextAndPoint() {
         val s = Screen("p", "微信", ScreenText.elements(root))
         assertEquals("发送", s.byText("发送")!!.label)

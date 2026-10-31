@@ -190,6 +190,10 @@ fun SettingsScreen(
                 PhoneControlSection(vm, settings)
             }
 
+            Section("问这一屏", icon = AppIcons.Phone, hint = "随时叫出 Kavi，带上当前屏幕问：「这是什么」「帮我回这条」「这个值不值」。") {
+                AskScreenSection(vm, settings)
+            }
+
             Section("手机文件夹", icon = AppIcons.Folder, hint = "授权给 Kavi 的文件夹：它能在里面找文件、拷进对话处理、把做好的文件存回去，搬和删之前先问你。别的地方它碰不到。") {
                 PhoneFoldersSection(vm, settings)
             }

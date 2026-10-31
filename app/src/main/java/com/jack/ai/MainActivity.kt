@@ -139,6 +139,11 @@ class MainActivity : FragmentActivity() {
                 intent.getStringExtra("prefill")?.let { vm.receiveText(it) }
             }
             ACTION_NEW_WORK -> { stack.clear(); vm.newChat(); vm.setWork(true) }
+            // 悬浮球或长按电源键叫出来：带上当前屏幕开个新对话
+            com.jack.ai.a11y.ScreenAsk.ACTION -> {
+                stack.clear()
+                vm.askScreen(intent.getStringExtra("app").orEmpty(), intent.getStringExtra("text"), intent.getStringExtra("shot"))
+            }
             ACTION_CAMERA -> { stack.clear(); vm.newChat(); vm.requestCamera() }
             ACTION_OPEN_CHAT -> { stack.clear(); vm.mergeInbox(intent.getStringExtra("convId")) }
             ACTION_VOICE -> { stack.clear(); vm.newChat(); vm.requestVoice() }

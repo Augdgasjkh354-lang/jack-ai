@@ -200,6 +200,31 @@
                 android:name="android.accessibilityservice"
                 android:resource="@xml/accessibility_service" />
         </service>
+        <!-- 默认数字助理：长按电源键等叫出 Kavi，带上当前屏幕问它（用户在系统「默认应用 → 数字助理」里选了 Kavi 才生效） -->
+        <service
+            android:name=".a11y.KaviVoiceService"
+            android:exported="true"
+            android:label="Kavi"
+            android:permission="android.permission.BIND_VOICE_INTERACTION">
+            <intent-filter>
+                <action android:name="android.service.voice.VoiceInteractionService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.voice_interaction"
+                android:resource="@xml/voice_interaction" />
+        </service>
+        <service
+            android:name=".a11y.KaviVoiceSessionService"
+            android:exported="true"
+            android:permission="android.permission.BIND_VOICE_INTERACTION" />
+        <service
+            android:name=".a11y.KaviRecognitionService"
+            android:exported="true"
+            android:label="Kavi">
+            <intent-filter>
+                <action android:name="android.speech.RecognitionService" />
+            </intent-filter>
+        </service>
         <!-- 读微信通知：设置里打开「微信消息交给 Kavi」并给了通知使用权才会收到 -->
         <service
             android:name=".WeChatListener"

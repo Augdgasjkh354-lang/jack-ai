@@ -329,6 +329,8 @@ data class Settings(
     val localClassify: Boolean = true,
     /** 操作其他 App（无障碍）：Kavi 能操作的 App（包名），只有勾过的才能碰；涉及钱的和系统设置勾不了。 */
     val phoneApps: List<String> = emptyList(),
+    /** 悬浮球：点一下把当前屏幕带进 Kavi 问（要开无障碍）。 */
+    val floatBall: Boolean = false,
 )
 
 /** 一个授权过的手机文件夹：uri 是系统给的树形地址，name 是给 Kavi 和用户看的名字。 */
