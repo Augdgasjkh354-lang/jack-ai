@@ -40,11 +40,20 @@ object XlsxBook {
     private val GROUPED = Regex("""^[-+]?\d{1,3}(,\d{3})+(\.\d+)?$""")
     private val DATE = Regex("""^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$""")
 
+    /** 公式里不能出现的：外部引用（!、[工作簿]）、DDE/命令类、外联取数类函数。 */
+    private val DANGEROUS_FORMULA = Regex("(?i)!|\\[|\\b(WEBSERVICE|HYPERLINK|IMPORTDATA|IMPORTXML|IMPORTFEED|DDE|EXEC|REGISTER|CALL|FILTERXML)\\b")
+
     /** 把模型写的字看成数、日期、公式还是文字。以 0 开头的整数（编号、电话）当文字，不丢前导 0。 */
     internal fun parse(raw: String): Cell {
         val v = raw.trim()
         if (v.isEmpty()) return Cell(text = "")
-        if (v.startsWith("=")) return Cell(formula = v.substring(1))
+        if (v.startsWith("=")) {
+            // 以 = 开头的格子默认当公式是表格工具的老行为，但网页、聊天记录里抄来的内容也可能以 = 开头；
+            // 带外部引用、危险函数的，一律当文字，不进公式，避免打开文件就触发外联或命令。
+            // 副作用：字符串里带 ! 的公式（比如 ="Hi!"）也会被当文字，安全方向上可以接受。
+            val body = v.substring(1)
+            if (!DANGEROUS_FORMULA.containsMatchIn(body)) return Cell(formula = body)
+        }
         DATE.find(v)?.let { m ->
             runCatching { LocalDate.of(m.groupValues[1].toInt(), m.groupValues[2].toInt(), m.groupValues[3].toInt()) }.getOrNull()?.let { d ->
                 return Cell(ChronoUnit.DAYS.between(LocalDate.of(1899, 12, 30), d).toDouble(), "date")
@@ -169,11 +178,13 @@ object XlsxBook {
                 val range = "${colName(c)}2:${colName(c)}$lastData"
                 val dxf = when (h.color.lowercase()) { "green", "绿" -> 1; "yellow", "黄" -> 2; else -> 0 }
                 val v = h.value.trim()
-                val formulaValue = if (NUM.matches(v.replace(",", ""))) v.replace(",", "") else "\"" + esc(v).replace("\"", "\"\"") + "\""
+                // 公式里的字符串要先 doubling 再 XML 转义：顺序反了，Excel 读到的引号就不配对。
+                val vq = v.replace("\"", "\"\"")
+                val formulaValue = if (NUM.matches(v.replace(",", ""))) v.replace(",", "") else "\"" + esc(vq) + "\""
                 val op = mapOf(">" to "greaterThan", "<" to "lessThan", ">=" to "greaterThanOrEqual", "<=" to "lessThanOrEqual", "=" to "equal", "==" to "equal", "!=" to "notEqual")
                 val rule = when (h.op.trim().lowercase()) {
                     in op.keys -> """<cfRule type="cellIs" dxfId="$dxf" priority="${priority++}" operator="${op[h.op.trim()]}"><formula>$formulaValue</formula></cfRule>"""
-                    "contains" -> """<cfRule type="containsText" dxfId="$dxf" priority="${priority++}" operator="containsText" text="${esc(v)}"><formula>NOT(ISERROR(SEARCH("${esc(v)}",${colName(c)}2)))</formula></cfRule>"""
+                    "contains" -> """<cfRule type="containsText" dxfId="$dxf" priority="${priority++}" operator="containsText" text="${esc(v)}"><formula>NOT(ISERROR(SEARCH("${esc(vq)}",${colName(c)}2)))</formula></cfRule>"""
                     "top", "bottom" -> """<cfRule type="top10" dxfId="$dxf" priority="${priority++}" rank="${v.toIntOrNull()?.coerceIn(1, 500) ?: 3}"${if (h.op.trim().lowercase() == "bottom") " bottom=\"1\"" else ""}/>"""
                     "databar" -> """<cfRule type="dataBar" priority="${priority++}"><dataBar><cfvo type="min"/><cfvo type="max"/><color rgb="FF${t.accent}"/></dataBar></cfRule>"""
                     else -> { warnings += "「${names[si]}」：不认识的条件「${h.op}」（能用 > < >= <= = != contains top bottom databar）"; null }
