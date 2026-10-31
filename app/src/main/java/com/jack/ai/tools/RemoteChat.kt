@@ -72,7 +72,8 @@ object RemoteChat {
         // 用户传的文件：取下来，和手机上发图、发文件一样处理
         val atts = m.files.mapNotNull { f ->
             runCatching {
-                val local = client.download(f, File(ctx.cacheDir, "remote_in/${System.nanoTime()}/${f.name}"))
+                // 文件名是网页端传来的：先清洗，免得 ../ 把文件写到 remote_in 之外（比如 shared_prefs）
+                val local = client.download(f, File(ctx.cacheDir, "remote_in/${System.nanoTime()}/${com.jack.ai.data.Workspace.safeName(f.name)}"))
                 val image = f.type.startsWith("image/") || Regex("\\.(png|jpe?g|gif|webp)$", RegexOption.IGNORE_CASE).containsMatchIn(f.name)
                 if (image) Attachments.importImage(ctx, Uri.fromFile(local)) else Attachments.importFile(ctx, Uri.fromFile(local), keepOriginal = true)
             }.onFailure { notices += "文件「${f.name}」没取到：${it.message}" }.getOrNull()
