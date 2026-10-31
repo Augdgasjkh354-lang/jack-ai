@@ -126,6 +126,8 @@ object MediaMux {
                         sb.get(shorts, 0, len)
                         val frames = AudioPcm.mono(shorts, len, channels, mono)
                         resampler.push(mono, frames) { chunks.write(it); written++ }
+                        // 元数据里没写时长时上面的上限拦不住：按实际解出来的采样数算，超了就停（已写的文件由外层 catch 删掉）
+                        if (written > maxSec * AudioPcm.RATE) throw IllegalStateException("转出来已超过 ${AudioPcm.stamp(maxSec)} 的上限")
                         progress(info.presentationTimeUs, total)
                     }
                     c.releaseOutputBuffer(o, false)
