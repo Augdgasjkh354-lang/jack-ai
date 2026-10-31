@@ -121,7 +121,11 @@ object Updater {
         d.deleteRecursively()
         d.mkdirs()
         val f = GitHub.downloadAsset(token, REPO, l.asset, d, limit = 1L shl 30)
-        if (l.sha256.isNotBlank() && !sha256(f).equals(l.sha256, true)) {
+        if (l.sha256.isBlank()) {
+            f.delete()
+            throw GitHub.GitHubException("下载的安装包没有校验信息，已删掉，下次再试")
+        }
+        if (!sha256(f).equals(l.sha256, true)) {
             f.delete()
             throw GitHub.GitHubException("下载的安装包校验不对（可能下坏了），已删掉，下次再试")
         }
