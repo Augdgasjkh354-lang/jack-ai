@@ -110,7 +110,13 @@ object Backup {
                 if (relative == "prefs.json") return@forEach
                 val target = File(dir, relative)
                 target.parentFile?.mkdirs()
-                incoming.copyTo(target, overwrite = true)
+                // 先写临时文件再改名：同目录改名是原子的，写一半崩了也不会留半截目标文件；
+                // 临时文件名前缀和导出过滤（.tmp-）一致，崩后残留也不会被再导出
+                val tmp = File(target.parentFile, ".tmp-restore-${target.name}-${System.nanoTime()}")
+                try {
+                    incoming.copyTo(tmp, overwrite = true)
+                    if (!tmp.renameTo(target)) { tmp.delete(); throw java.io.IOException("恢复「$relative」失败") }
+                } catch (e: Exception) { tmp.delete(); throw e }
             }
             File(staging, "prefs.json").takeIf { it.exists() }?.let { Store(ctx).importPrefs(it.readText()) }
             KaviSelf.invalidate()
@@ -119,5 +125,27 @@ object Backup {
         } finally {
             staging.deleteRecursively()
         }
+    }
+
+    /**
+     * 把最近一次恢复前备份的旧文件写回去（恢复后发现不对时反悔用）。返回恢复的文件数，没有回滚目录时返回 0。
+     * 原来回滚目录只写不读：恢复错了也找不到旧文件。这个函数把读的那一半补上，界面入口（设置里加一个「恢复到上次恢复前」）留给合分支时接。
+     */
+    fun restoreRollback(ctx: Context): Int {
+        val dir = ctx.filesDir
+        val rollback = File(dir, "last-restore-rollback")
+        if (!rollback.isDirectory) return 0
+        var count = 0
+        rollback.walkTopDown().filter { it.isFile }.forEach { old ->
+            val relative = old.relativeTo(rollback).invariantSeparatorsPath
+            val target = File(dir, relative)
+            target.parentFile?.mkdirs()
+            val tmp = File(target.parentFile, ".tmp-rollback-${target.name}-${System.nanoTime()}")
+            try {
+                old.copyTo(tmp, overwrite = true)
+                if (tmp.renameTo(target)) count++ else tmp.delete()
+            } catch (_: Exception) { tmp.delete() }
+        }
+        return count
     }
 }
