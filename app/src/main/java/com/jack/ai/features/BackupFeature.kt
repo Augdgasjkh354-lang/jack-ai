@@ -78,7 +78,11 @@ class BackupFeature(core: AppCore, private val knowledge: KnowledgeFeature) : Fe
                     // 代理的订阅和节点不在备份里，沿用手机上现有的
                     proxySub = old.proxySub, proxyNodes = old.proxyNodes, notionToken = old.notionToken, githubToken = old.githubToken,
                     // 完全授权不跟着备份走，沿用手机上现在的
-                    fullAuthUntil = old.fullAuthUntil)
+                    fullAuthUntil = old.fullAuthUntil,
+                    // 安全相关的设置也不跟着备份走：模型地址、远程通道、应用锁、隐私采集开关，备份里带了也一律还原
+                    baseUrl = old.baseUrl, remoteOn = old.remoteOn, remoteUrl = old.remoteUrl, remoteKey = old.remoteKey,
+                    appLock = old.appLock, contactsOn = old.contactsOn, locationOn = old.locationOn, usageOn = old.usageOn,
+                    wechatWatch = old.wechatWatch, noticeWatch = old.noticeWatch)
                 store.saveSettings(s)
                 // 备份里的桌面图标选择：恢复后马上换过去，不用等下次启动
                 runCatching { com.jack.ai.ui.AppIcon.ensure(app, s.appIcon) }
