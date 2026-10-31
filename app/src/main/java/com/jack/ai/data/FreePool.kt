@@ -133,6 +133,7 @@ object FreePool {
             if (providers.isEmpty()) return@withContext old
             val found = mutableListOf<FreeModel>()
             val errors = mutableListOf<String>()
+            var anyListed = false
             val client = DeepSeekClient()
             for (p in providers) {
                 val freePrices = if (isSiliconFlow(p.baseUrl)) {
@@ -141,6 +142,7 @@ object FreePool {
                 } else null
                 val listed = try { client.listModels(p.baseUrl, p.apiKey, p.workspaceId) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { errors += "${p.name}：${e.message ?: "获取模型列表失败"}"; null }
                 if (listed == null) { found += old.models.filter { it.providerId == p.id && it.exhaustedAt != 0L }; continue }
+                anyListed = true
                 for ((model, _) in listed.second.filter { isChatModel(it.first) && (freePrices == null || it.first in freePrices) }) {
                     val body = buildJsonObject {
                         // Qwen3 这类开源模型非流式调用要关掉思考，否则报错，会被误判成不能用
@@ -152,8 +154,10 @@ object FreePool {
                         sharedHttp.newCall(request).execute().use { resp ->
                             val text = resp.body?.string()
                             when (probeResult(resp.isSuccessful, text)) {
+                                // 只有价格页能核对的服务（硅基流动）才把「调通了」当免费；没价格页核对的服务，
+                                // 调通了也可能是付费模型在扣余额，只有明确标着「仅免费额度」的才算免费
                                 2 -> FreeModel(p.id, model, now, listed.first)
-                                1 -> FreeModel(p.id, model, baseUrl = listed.first)
+                                1 -> if (freePrices != null) FreeModel(p.id, model, baseUrl = listed.first) else null
                                 else -> null
                             }
                         }
@@ -163,6 +167,8 @@ object FreePool {
                 }
             }
             synchronized(lock) {
+                // 一家都没列出来（全失败）：不保存当天的 checkedAt，否则当天不再重试，免费池会静默停摆一整天
+                if (!anyListed) return@withContext old
                 val latest = load(context)
                 val merged = found.map { m -> latest.models.firstOrNull { it.providerId == m.providerId && it.model == m.model && it.exhaustedAt > now } ?: m }
                 FreePoolState(now, merged, errors.joinToString("；")).also { save(context, it) }
