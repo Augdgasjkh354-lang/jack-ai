@@ -115,6 +115,8 @@ data class Conversation(
     val updatedAt: Long = System.currentTimeMillis(),
     /** 开场时记下的「最近几场对话」（第一条消息发出时定下，之后不变，缓存才稳）。 */
     val recap: String = "",
+    /** 后台回看记忆（[MemoryReview]）看到哪了：这之后的消息还没回看过。 */
+    val memReviewedAt: Long = 0,
 )
 
 /** 项目：一组对话共享同一份说明和资料。 */

@@ -326,7 +326,8 @@ fun AssistantMessage(
                     Text("✏️ " + lines.first(), style = MaterialTheme.typography.labelLarge, color = colors.onPrimaryContainer)
                     if (lines.size > 1) Text(lines.drop(1).joinToString("\n"), style = MaterialTheme.typography.bodySmall,
                         color = colors.onPrimaryContainer.copy(alpha = 0.85f), modifier = Modifier.padding(top = 4.dp))
-                    Text("可以在「记忆与梦」里恢复上一版", style = MaterialTheme.typography.labelSmall,
+                    // 后台回看记下的：不对就去记忆页改；Kavi 改自己设定的：能恢复上一版
+                    Text(if (n.startsWith(com.jack.ai.data.MemoryReview.NOTICE_PREFIX)) "不对的话在「记忆与梦」里改或删" else "可以在「记忆与梦」里恢复上一版", style = MaterialTheme.typography.labelSmall,
                         color = colors.onPrimaryContainer.copy(alpha = 0.6f), modifier = Modifier.padding(top = 4.dp))
                 }
             }
