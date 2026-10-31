@@ -120,7 +120,12 @@ object MediaGrab {
     private fun hex(s: String): ByteArray? {
         val h = s.removePrefix("0x").removePrefix("0X")
         if (h.length != 32) return null
-        return ByteArray(16) { h.substring(it * 2, it * 2 + 2).toInt(16).toByte() }
+        // 非十六进制字符不能抛未检查异常（整个 HLS 下载会被掀翻）：认不出来就返回 null，让调用方按缺密钥处理
+        val bytes = ByteArray(16)
+        for (i in 0 until 16) {
+            bytes[i] = h.substring(i * 2, i * 2 + 2).toIntOrNull(16)?.toByte() ?: return null
+        }
+        return bytes
     }
 
     /** 挑清晰度：不超过 maxHeight（0 = 不限）里最高的；都超过就要最低的那个。 */
@@ -185,6 +190,7 @@ object MediaGrab {
         .proxySelector(Net.selectorFor(route))
         .readTimeout(60, TimeUnit.SECONDS)
         .callTimeout(0, TimeUnit.SECONDS)
+        .guardCookieOnRedirect()
         .build()
 
     private fun request(r: Req, url: String, range: String? = null) = Request.Builder().url(url)
@@ -199,7 +205,9 @@ object MediaGrab {
         if (!resp.isSuccessful) throw IOException("网站拒绝了（${resp.code}）")
         val body = resp.body ?: throw IOException("没有内容")
         if (body.contentLength() > 5L * 1024 * 1024) throw IOException("播放列表太大")
-        body.string()
+        // 分块传输时 contentLength 是 -1，上面那行拦不住：边读边数，超了就停
+        val bytes = readBoundedBytes(body, 5L * 1024 * 1024) ?: throw IOException("播放列表太大")
+        String(bytes, body.contentType()?.charset() ?: Charsets.UTF_8)
     }
 
     fun bytes(r: Req, url: String, limit: Long = 64L * 1024 * 1024, range: String? = null): ByteArray {
@@ -210,7 +218,7 @@ object MediaGrab {
                     if (!resp.isSuccessful) throw BrowserDownload.DownloadException("网站拒绝了（${resp.code}）")
                     val body = resp.body ?: throw IOException("没有内容")
                     if (body.contentLength() > limit) throw BrowserDownload.DownloadException("一段就超过了 ${BrowserDownload.sizeText(limit)}")
-                    body.bytes()
+                    readBoundedBytes(body, limit) ?: throw BrowserDownload.DownloadException("一段就超过了 ${BrowserDownload.sizeText(limit)}")
                 }
             } catch (e: IOException) { last = e }
         }
