@@ -81,7 +81,9 @@ class TavilyClient {
                 if (!resp.isSuccessful || (type.isNotEmpty() && !type.startsWith("image/"))) return@use null
                 val len = resp.body?.contentLength() ?: -1
                 if (len > maxBytes) return@use null
-                resp.body?.bytes()?.takeIf { it.size in 1..maxBytes }
+                // 分块传输时 contentLength 是 -1，上面那行拦不住：边读边数，超了就当没下到
+                val body = resp.body ?: return@use null
+                readBoundedBytes(body, maxBytes.toLong())?.takeIf { it.isNotEmpty() }
             }
         }.getOrNull()
     }
