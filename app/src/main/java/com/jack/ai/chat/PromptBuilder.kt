@@ -441,7 +441,8 @@ object PromptBuilder {
         append("- project (project memory): inside a project, settings and decisions useful to every conversation in it.\n")
         if (work) append("- global (in Work this is the work memory, shared by every Work conversation and kept apart from chats): lessons that will help future tasks, such as how {user} likes work delivered, sources and methods that worked or failed, and paths, formats and conventions {user} uses. One self-contained sentence each; nothing that only matters to this task.\n")
         else append("- global (global memory): only when {user} explicitly says \"remember\" and it's long-term information about {user} themselves (identity, preferences, habits, important people and events). Write it about {user} by name.\n")
-        append("When a memory is outdated or wrong, or {user} asks you to forget it, use save_memory with replace set to the old memory's exact text: new content updates it, empty content deletes it. No need to mention saving or updating in your reply.")
+        append("When a memory is outdated or wrong, or {user} asks you to forget it, use save_memory with replace set to the old memory's exact text: new content updates it, empty content deletes it. No need to mention saving or updating in your reply. ")
+        append("The memories shown in this prompt are a snapshot taken when this conversation started or resumed: what you save now is stored at once and shows up there later; you already know it from saving it.")
     }
 
     /** 跟这个对话有关的记忆限制，放在系统提示词后面。 */

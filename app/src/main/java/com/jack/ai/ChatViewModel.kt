@@ -139,6 +139,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val backup = BackupFeature(core, knowledge)
     private val feedback = com.jack.ai.features.FeedbackFeature(core)
     private val compression = CompressFeature(core)
+    private val snapshots = com.jack.ai.chat.MemorySnapshots()
 
     init {
         com.jack.ai.data.KaviSelf.ensure(getApplication())
@@ -571,20 +572,29 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         // 思考内容只有 DeepSeek 要求原样发回；其他服务不发，免得不认识这个字段报错
         val thinkingOn = ep.deepseek && thinking.effort != null
         val images = ep.vision
-        val memories = if (settings.memoryEnabled) store.loadMemories() else emptyList()
+        // 记忆按对话拍快照，聊天中途不变，保住前缀缓存（见 MemorySnapshots）
+        val snap = snapshots.get(conv.id, conv.summaryUntilId, System.currentTimeMillis()) {
+            val (chat, proj) = knowledge.memoryTexts(conv)
+            com.jack.ai.chat.MemorySnapshots.Snap(
+                memories = if (settings.memoryEnabled) store.loadMemories() else emptyList(),
+                chatMemory = chat, projectMemory = proj,
+                journal = Dreamer.recentJournals(_state.value.dreams),
+                story = com.jack.ai.data.SelfStory.bio(getApplication()).text,
+                lately = com.jack.ai.data.FreeTime.latelyNote(getApplication()),
+                workMemory = if (conv.work) knowledge.workMemoryText() else "",
+                summaryUntilId = conv.summaryUntilId, usedAt = 0,
+            )
+        }
+        val memories = if (settings.memoryEnabled) snap.memories else emptyList()
         // 工具按需出现的技能：这个对话以前打开过的，加上这条消息里 @ 到的，开场就带着它们的工具
         val asked = lastUser?.content.orEmpty()
         val unlockedStart = conv.skillTools + skills.filter { it.id in com.jack.ai.data.SkillIds.ON_DEMAND && "@${it.name}" in asked }.map { it.id }
         val toolSet = PromptBuilder.toolSet(settings, skills, conv, project, unlockedStart)
 
-        val (chatMemory, projectMemory) = knowledge.memoryTexts(conv)
         var promptInput = PromptBuilder.Input(settings, conv, project, memories, skills, vision = images, sendReasoning = thinkingOn,
             appVersion = reply.appVersion,
-            extraUser = extraUser, chatMemory = chatMemory, projectMemory = projectMemory,
-            journal = Dreamer.recentJournals(_state.value.dreams),
-            story = com.jack.ai.data.SelfStory.bio(getApplication()).text,
-            lately = com.jack.ai.data.FreeTime.latelyNote(getApplication()),
-            workMemory = if (conv.work) knowledge.workMemoryText() else "")
+            extraUser = extraUser, chatMemory = snap.chatMemory, projectMemory = snap.projectMemory,
+            journal = snap.journal, story = snap.story, lately = snap.lately, workMemory = snap.workMemory)
         fun buildHistory(withTools: Boolean, flat: Boolean = false): MutableList<JsonObject> =
             PromptBuilder.history(promptInput, if (withTools) toolSet else null, flat)
 
@@ -1074,7 +1084,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun exportFeedback(onReady: (File) -> Unit) = feedback.export(onReady)
     fun clearFeedback() = feedback.clear()
     fun exportBackup(uri: Uri) = backup.exportBackup(uri)
-    fun importBackup(uri: Uri) = backup.importBackup(uri)
+    fun importBackup(uri: Uri) { snapshots.clear(); backup.importBackup(uri) }
 
     // 设置和模型服务
     fun updateSettings(transform: (Settings) -> Settings) = settingsFeature.updateSettings(transform)
@@ -1104,25 +1114,26 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteDeck(deck: String) = knowledge.deleteDeck(deck)
     fun reloadMemory() = knowledge.reloadMemory()
     fun reloadLibrary() = knowledge.reloadLibrary()
-    fun addMemory(text: String) = knowledge.addMemory(text)
-    fun updateMemory(id: String, text: String) = knowledge.updateMemory(id, text)
-    fun deleteMemory(id: String) = knowledge.deleteMemory(id)
-    fun clearMemories() = knowledge.clearMemories()
-    fun promoteMemory(id: String) = knowledge.promoteMemory(id)
-    fun demoteMemory(id: String) = knowledge.demoteMemory(id)
+    // 用户自己在界面上改记忆：快照作废，下一轮就用改过的（Kavi 用工具存的不算，等下一张快照）
+    fun addMemory(text: String) { snapshots.clear(); knowledge.addMemory(text) }
+    fun updateMemory(id: String, text: String) { snapshots.clear(); knowledge.updateMemory(id, text) }
+    fun deleteMemory(id: String) { snapshots.clear(); knowledge.deleteMemory(id) }
+    fun clearMemories() { snapshots.clear(); knowledge.clearMemories() }
+    fun promoteMemory(id: String) { snapshots.clear(); knowledge.promoteMemory(id) }
+    fun demoteMemory(id: String) { snapshots.clear(); knowledge.demoteMemory(id) }
     fun markDreamsSeen() = knowledge.markDreamsSeen()
     fun dreamNow() = knowledge.dreamNow()
-    fun editJournal(id: String, text: String) = knowledge.editJournal(id, text)
-    fun deleteDream(id: String) = knowledge.deleteDream(id)
+    fun editJournal(id: String, text: String) { snapshots.clear(); knowledge.editJournal(id, text) }
+    fun deleteDream(id: String) { snapshots.clear(); knowledge.deleteDream(id) }
 
     // 对话记忆和项目记忆（存在文件夹里的 Markdown 文件）
     fun chatMemory(conv: Conversation) = knowledge.chatMemory(conv)
-    fun setChatMemory(conv: Conversation, items: List<String>) = knowledge.setChatMemory(conv, items)
-    fun moveToGlobal(conv: Conversation, item: String) = knowledge.moveToGlobal(conv, item)
+    fun setChatMemory(conv: Conversation, items: List<String>) { snapshots.clear(); knowledge.setChatMemory(conv, items) }
+    fun moveToGlobal(conv: Conversation, item: String) { snapshots.clear(); knowledge.moveToGlobal(conv, item) }
     fun projectMemory(projectId: String) = knowledge.projectMemory(projectId)
     fun workMemory() = knowledge.workMemory()
-    fun setWorkMemory(items: List<String>) = knowledge.setWorkMemory(items)
-    fun setProjectMemory(projectId: String, items: List<String>) = knowledge.setProjectMemory(projectId, items)
+    fun setWorkMemory(items: List<String>) { snapshots.clear(); knowledge.setWorkMemory(items) }
+    fun setProjectMemory(projectId: String, items: List<String>) { snapshots.clear(); knowledge.setProjectMemory(projectId, items) }
     fun setMemoryFlags(id: String, useGlobal: Boolean, inDream: Boolean) {
         updateConvQuiet(id) { it.copy(useGlobalMemory = useGlobal, inDream = inDream) }
         persist()
