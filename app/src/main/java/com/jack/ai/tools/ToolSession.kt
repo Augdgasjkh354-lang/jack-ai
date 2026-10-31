@@ -57,6 +57,8 @@ interface ToolHost {
     fun refreshWidget()
     /** 存一份笔记：projectId 不为空就加进那个项目的资料，否则进资料库。 */
     fun saveNote(projectId: String?, title: String, content: String)
+    /** 改设置（存技能用）。 */
+    fun updateSettings(transform: (com.jack.ai.data.Settings) -> com.jack.ai.data.Settings) = store.saveSettings(transform(store.loadSettings()))
 }
 
 /** 一次工具调用成没成：OK 做成了；FAILED 出错或读回核实没通过；REJECTED 要确认的操作没被同意（后台一律不同意）。 */
@@ -290,6 +292,7 @@ class ToolSession(
             name == "list_calendar_events" && SkillIds.CALENDAR in skillIds -> listEvents(args)
             name == "save_memory" -> remember(args)
             name == "update_self" -> updateSelf(args)
+            name == "save_skill" -> saveSkill(args)
             name == "save_note" -> saveNote(args)
             name == "add_rows" && SkillIds.TABLES in skillIds -> addRows(args)
             name == "query_table" && SkillIds.TABLES in skillIds -> queryTable(args)

@@ -1070,6 +1070,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         override fun libraryIndex() = knowledge.index()
         override fun projectIndex(p: Project) = projects.projectIndex(p)
         override fun refreshWidget() = core.refreshWidget()
+        override fun updateSettings(transform: (Settings) -> Settings) = this@ChatViewModel.updateSettings(transform)
         override fun saveNote(projectId: String?, title: String, content: String) {
             val p = projectId?.let { id -> _state.value.project(id) }
             if (p == null) knowledge.addNote(title, content)

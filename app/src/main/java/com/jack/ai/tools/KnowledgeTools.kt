@@ -262,3 +262,33 @@ internal suspend fun ToolSession.updateSelf(args: JsonObject): String {
         ("已改好「$title」（读回核对一致）。现在是：$got\n在回答里告诉用户改了哪段、为什么。用户可以在「记忆与梦」里恢复上一版。") to SearchRecord("改自己：$title")
     }
 }
+
+/**
+ * save_skill：Kavi 把做法存成自己的技能（见 KaviSkills）。用户不在、隐私项目里不能存（技能所有对话共用）；
+ * 这一轮读过外部内容就先问用户，免得网页里的话被存成以后照做的规矩。
+ */
+internal suspend fun ToolSession.saveSkill(args: JsonObject): String {
+    val name = args["name"].text().trim()
+    val desc = args["description"].text().trim()
+    val body = args["instructions"].text().trim()
+    val old = args["replace"].text().trim()
+    if (!interactive) return "用户不在的时候不能存技能，下次聊天时再存。"
+    if (project?.isolated == true) return "这是隐私项目，技能在所有对话里共用，不能把这里的东西存成技能。"
+    val s = host.store.loadSettings()
+    KaviSkills.problem(s, name, desc, body, old)?.let { return "没有存：$it" }
+    val deleting = body.isEmpty()
+    val label = if (deleting) "删掉技能：$old" else if (old.isNotEmpty()) "改技能：$name" else "存技能：$name"
+    return runTool(label) {
+        if (sawExternal && !deleting && !approve("让 Kavi 存一个技能？", "这一轮读过网页、邮件之类的外部内容，所以先问你。\n\n「$name」：$desc\n\n$body", "存", strict = true)) {
+            return@runTool "用户没有同意，没有存。" to SearchRecord("存技能：已取消")
+        }
+        val targetId = KaviSkills.target(s, old)?.id
+        val (list, skill) = KaviSkills.apply(s, name, desc, body, old)
+        withContext(Dispatchers.Main) { host.updateSettings { it.copy(customSkills = list) } }
+        val back = withContext(Dispatchers.IO) { host.store.loadSettings().customSkills }
+        val ok = if (skill == null) back.none { it.id == targetId } else back.any { it.id == skill.id && it.instructions == skill.instructions }
+        if (skill != null) ui.notice("${KaviSkills.NOTICE_PREFIX}「${skill.name}」\n${skill.description}")
+        val done = if (skill == null) "已删掉技能「$old」。" else "已存好技能「${skill.name}」，以后的对话里能用 use_skill 读出来（这个对话里技能清单不变）。"
+        done + Verify.note(listOfNotNull("存完后读回来对不上".takeIf { !ok }), "已读回核对") to SearchRecord(label)
+    }
+}

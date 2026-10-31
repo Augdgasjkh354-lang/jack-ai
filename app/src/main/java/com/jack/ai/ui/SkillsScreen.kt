@@ -83,7 +83,7 @@ fun SkillsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit) {
                     Row(Modifier.padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 12.dp),
                         verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text(s.name + if (s.builtin) "" else "（自定义）", style = MaterialTheme.typography.titleSmall)
+                            Text(s.name + if (s.builtin) "" else if (s.byKavi) "（Kavi 写的）" else "（自定义）", style = MaterialTheme.typography.titleSmall)
                             if (s.id == SkillIds.WEB && !settings.webReady()) {
                                 Text("需要先在 设置 → 连接 → 联网搜索 里填 Exa 或 Tavily 的 Key（或者填 DeepSeek Key）", style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.error)

@@ -225,6 +225,7 @@ object PromptBuilder {
             // 本对话记忆随时能存，所以记忆工具一直带着
             add(SkillTools.SAVE_MEMORY)
             add(SkillTools.UPDATE_SELF)
+            add(SkillTools.SAVE_SKILL)
             if (conv.id == com.jack.ai.data.INBOX_ID) add(SkillTools.SAVE_NOTE)
             // 连接器的工具放最后：增删连接器时前面那一大段工具说明不变，缓存照样命中
             com.jack.ai.data.Mcp.toolDefs(com.jack.ai.data.Mcp.active(settings)).forEach { add(it) }
@@ -326,7 +327,8 @@ object PromptBuilder {
             parts += "固定说明" to "【Skills】\nYou have these skills:\n" + skills.joinToString("\n") { "- ${it.name}: ${it.description}" } +
                 f("\n\nWhen a request from {user} could use one of these skills, first read its detailed instructions with use_skill, then follow them (no need to re-read one already read in this conversation).") +
                 onDemandNote(skills) +
-                f(" If no skill fits, just answer. Only produce files when {user} wants a file; don't generate them unprompted.")
+                f(" If no skill fits, just answer. Only produce files when {user} wants a file; don't generate them unprompted.") +
+                f(" When you finish something that took several steps and will likely come up again (a procedure you worked out, a fix found by trial and error, a way {user} corrected you), save the method with save_skill so next time you can just follow it; improve your own skill rather than adding a near-duplicate.")
         }
         parts += "固定说明" to f(Capabilities.text(settings, skills, names))
         if ("web_search" in names) {
