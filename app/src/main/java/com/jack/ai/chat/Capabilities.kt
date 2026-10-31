@@ -19,6 +19,7 @@ object Capabilities {
         if ("convert_file" in tools) lines += "Images to PDF, merge or split PDFs, compress images, trim or compress video, extract audio, transcribe recordings and video (transcribe; when {user} sends a recording or video and wants its content, transcribe it first): convert_file" +
             if (Transcriber.engine(settings.providers) == null) " (transcription has no service set up yet; when it's needed, ask {user} to add SiliconFlow under 设置 → 其他模型服务)" else ""
         if ("phone_files" in tools) lines += "Phone folders (authorized: ${settings.phoneFolders.joinToString(", ") { it.name }}): phone_files; import a file into the conversation folder before reading or editing it"
+        if ("phone" in tools) lines += "Operate other apps on {user}'s phone for them (only the apps {user} ticked; never payment, bank or brokerage apps): phone"
         if ("run_python" in tools) lines += "Arithmetic, processing tabular data, plotting: run_python"
         else if ("run_js" in tools) lines += "Exact calculation: run_js"
         skill(SkillIds.TABLES)?.let { lines += "Bookkeeping, lists, clients and other tables: 「$it」" }
@@ -28,7 +29,8 @@ object Capabilities {
             .mapNotNull { skill(it) }.takeIf { it.isNotEmpty() }?.let { lines += "Other skills: " + it.joinToString(", ") { n -> "「$n」" } }
         // App 里用户自己点的入口：用得上时告诉用户
         lines += "Entry points on {user}'s side: 「+ → 录音纪要」 in the input box (you'll receive the recording; transcribe it and write up notes); 「分享 → 用 Kavi 下载 / 用 Kavi 总结」 in other apps; 「下载」 in the side menu for downloaded files" +
-            if ("phone_files" !in tools) "; 设置 → 手机文件夹 (you can only read and write the phone's files after {user} authorizes a folder there)" else ""
+            (if ("phone_files" !in tools) "; 设置 → 手机文件夹 (you can only read and write the phone's files after {user} authorizes a folder there)" else "") +
+            (if ("phone" !in tools) "; 设置 → 操作其他 App (you can only operate other apps after {user} turns it on and ticks the apps)" else "")
         if ("self_check" in tools) lines += "Unsure whether you can do something, or why a tool failed: check the real state with self_check before saying you can't"
         return "【What you can do】\n" + lines.joinToString("\n") { "- $it" }
     }

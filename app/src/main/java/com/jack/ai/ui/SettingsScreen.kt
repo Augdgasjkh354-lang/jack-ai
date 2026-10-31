@@ -186,6 +186,10 @@ fun SettingsScreen(
                 OutlinedButton(onClick = onOpenSkills) { Text("管理技能") }
             }
 
+            Section("操作其他 App", icon = AppIcons.Phone, hint = "让 Kavi 替你在别的 App 里点、输入、翻页（比如在微信里找聊天记录、在淘宝里搜东西）。只能操作你勾过的 App。") {
+                PhoneControlSection(vm, settings)
+            }
+
             Section("手机文件夹", icon = AppIcons.Folder, hint = "授权给 Kavi 的文件夹：它能在里面找文件、拷进对话处理、把做好的文件存回去，搬和删之前先问你。别的地方它碰不到。") {
                 PhoneFoldersSection(vm, settings)
             }

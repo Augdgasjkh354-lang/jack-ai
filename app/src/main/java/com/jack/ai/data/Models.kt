@@ -327,6 +327,8 @@ data class Settings(
     val localPrefer: Boolean = false,
     /** 「思考·自动」用本地模型判断问题难不难（不花钱，规则没认出来的再看一眼）。 */
     val localClassify: Boolean = true,
+    /** 操作其他 App（无障碍）：Kavi 能操作的 App（包名），只有勾过的才能碰；涉及钱的和系统设置勾不了。 */
+    val phoneApps: List<String> = emptyList(),
 )
 
 /** 一个授权过的手机文件夹：uri 是系统给的树形地址，name 是给 Kavi 和用户看的名字。 */

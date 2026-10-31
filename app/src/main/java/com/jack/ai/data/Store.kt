@@ -429,6 +429,7 @@ class Store(context: Context) {
             localModel = prefs.getString("localModel", "") ?: "",
             localPrefer = prefs.getBoolean("localPrefer", false),
             localClassify = prefs.getBoolean("localClassify", true),
+            phoneApps = prefs.getString("phoneApps", null)?.let { runCatching { json.decodeFromString(ListSerializer(String.serializer()), it) }.getOrNull() }.orEmpty(),
         ).also { com.jack.ai.api.Net.apply(it) }
     }
 
@@ -499,7 +500,9 @@ class Store(context: Context) {
             .putString("localModel", s.localModel)
             .putBoolean("localPrefer", s.localPrefer)
             .putBoolean("localClassify", s.localClassify)
+            .putString("phoneApps", json.encodeToString(ListSerializer(String.serializer()), s.phoneApps))
             .apply()
         com.jack.ai.api.Net.apply(s)
+        com.jack.ai.a11y.KaviAccessibility.apply(s)
     }
 }

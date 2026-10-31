@@ -10,4 +10,5 @@
     <string name="sc_voice">语音提问</string>
     <string name="sc_record">录音纪要</string>
     <string name="sc_camera">拍照提问</string>
+    <string name="a11y_desc">让 Kavi 替你操作手机上的其他 App：读屏幕上的文字和按钮、点、输入、滑动。只能操作你在 Kavi 设置 → 操作其他 App 里勾过的 App；支付宝、银行、证券和付款页面一律不碰；发送、删除这类操作先问你；密码框不读不填。操作时屏幕上方有一条「Kavi 正在操作 · 停止」，随时能停。</string>
 </resources>

@@ -125,8 +125,20 @@ class ToolSession(
     suspend fun approve(title: String, body: String, action: String, strict: Boolean = false): Boolean =
         ((!strict && withContext(Dispatchers.IO) { host.store.loadSettings().fullAuth }) ||
             // 这一轮读到过疑似注入的内容：弹窗最上面先说一声
-            ui.confirm(title, injection?.let { "⚠️ 这一轮读到了疑似提示词注入的内容（$it），确认这是你想让 Kavi 做的。\n\n" }.orEmpty() + body, action))
+            ask(title, injection?.let { "⚠️ 这一轮读到了疑似提示词注入的内容（$it），确认这是你想让 Kavi 做的。\n\n" }.orEmpty() + body, action))
             .also { if (!it) rejected.incrementAndGet() }
+
+    /** 正在替用户操作别的 App 时，Kavi 的弹窗用户看不到：改在屏幕下方的悬浮卡片里问。 */
+    private suspend fun ask(title: String, body: String, action: String): Boolean {
+        val svc = com.jack.ai.a11y.KaviAccessibility.instance
+        if (phoneSeen != null && svc != null && com.jack.ai.a11y.KaviAccessibility.othersInFront(app)) return svc.confirm(title, body, action)
+        return ui.confirm(title, body, action)
+    }
+
+    /** 操作手机（phone 工具）：最近读到的一屏、截图的缩放比例、开始操作时「停止」按过几次（变了就是用户叫停了）。 */
+    @Volatile internal var phoneSeen: com.jack.ai.a11y.Screen? = null
+    @Volatile internal var phoneScale = 1f
+    @Volatile internal var phoneStops = -1
 
     /** 没被同意的次数；和 succeeded 一样，execute 前后比一比就知道这次是不是被拒了。 */
     internal val rejected = java.util.concurrent.atomic.AtomicInteger()
@@ -298,6 +310,7 @@ class ToolSession(
             name == "convert_file" -> convertFile(args)
             name == "self_check" -> selfCheck(args)
             name == "phone_files" -> phoneFiles(args)
+            name == "phone" -> phone(args)
             name == "notion_search" && SkillIds.NOTION in skillIds -> notionSearch(args)
             name == "notion_read" && SkillIds.NOTION in skillIds -> notionRead(args)
             name == "notion_write" && SkillIds.NOTION in skillIds -> notionWrite(args)
@@ -378,7 +391,7 @@ class ToolSession(
 
         /** 返回外部内容的工具：内容里可能藏着冒充用户的指令。 */
         /** 结果要查提示词注入的：外部内容，加上读文件（文件常常是从外面来的）。 */
-        val SCANNED_TOOLS get() = EXTERNAL_TOOLS + setOf("read_file", "phone_files")
+        val SCANNED_TOOLS get() = EXTERNAL_TOOLS + setOf("read_file", "phone_files", "phone")
         val EXTERNAL_TOOLS = setOf("list_emails", "read_email", "web_search", "read_webpage", "notion_search", "notion_read", "browser", "github", "download_file")
 
         /** 报错尽量带上具体原因，模型才知道该重试、换方法还是去问用户。 */

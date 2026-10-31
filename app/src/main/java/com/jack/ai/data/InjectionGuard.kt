@@ -101,6 +101,8 @@ object InjectionGuard {
         name == "facts" -> action == "save"
         name == "browser" -> action in BROWSER_ACT
         name == "phone_files" -> action in setOf("export", "rename", "mkdir")
+        // 操作别的 App：点、输入、划、打开都算（发送这类按钮自己还会再问）；翻列表不算
+        name == "phone" -> action in setOf("open", "tap", "long_press", "type", "enter", "swipe")
         name == "github" -> action == "rerun"
         else -> false
     }

@@ -99,7 +99,7 @@ fun ProxyAppsSection(vm: ChatViewModel, s: Settings) {
         Text("开着时状态栏会有钥匙图标；同一时间只能开一个 VPN。没选的 App（比如抖音）照常用手机网络。",
             style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
     }
-    if (picking) AppPicker(s.proxyApps.toSet(), onDismiss = { picking = false }) { chosen ->
+    if (picking) AppPicker("走代理的 App", s.proxyApps.toSet(), onDismiss = { picking = false }) { chosen ->
         picking = false
         vm.updateSettings { it.copy(proxyApps = chosen.sorted()) }
         // 正在跑：重启一下，新的名单才生效
@@ -111,9 +111,17 @@ fun ProxyAppsSection(vm: ChatViewModel, s: Settings) {
     }
 }
 
+/** 选 App 的对话框。blocked 给出不能勾的原因（能勾返回 null），这些排在最后、灰着。 */
 @Composable
-private fun AppPicker(selected: Set<String>, onDismiss: () -> Unit, onDone: (Set<String>) -> Unit) {
+internal fun AppPicker(
+    title: String,
+    selected: Set<String>,
+    blocked: (pkg: String, label: String) -> String? = { _, _ -> null },
+    onDismiss: () -> Unit,
+    onDone: (Set<String>) -> Unit,
+) {
     val ctx = LocalContext.current
+    val colors = MaterialTheme.colorScheme
     var chosen by remember { mutableStateOf(selected) }
     var query by remember { mutableStateOf("") }
     val apps by produceState<List<PhoneApp>?>(null) {
@@ -123,13 +131,13 @@ private fun AppPicker(selected: Set<String>, onDismiss: () -> Unit, onDone: (Set
                 .map { PhoneApp(it.activityInfo.packageName, it.loadLabel(pm).toString()) }
                 .filter { it.pkg != ctx.packageName }
                 .distinctBy { it.pkg }
-                // 选过的排前面，其余按名字
-                .sortedWith(compareByDescending<PhoneApp> { it.pkg in selected }.thenBy { it.label })
+                // 选过的排前面，不能选的排最后，其余按名字
+                .sortedWith(compareByDescending<PhoneApp> { it.pkg in selected }.thenBy { blocked(it.pkg, it.label) != null }.thenBy { it.label })
         }
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("走代理的 App") },
+        title = { Text(title) },
         text = {
             Column {
                 OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), placeholder = { Text("搜 App 名字") }, singleLine = true)
@@ -137,20 +145,24 @@ private fun AppPicker(selected: Set<String>, onDismiss: () -> Unit, onDone: (Set
                 if (list == null) Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                 else LazyColumn(Modifier.heightIn(max = 420.dp)) {
                     items(list.filter { query.isBlank() || it.label.contains(query.trim(), true) || it.pkg.contains(query.trim(), true) }, key = { it.pkg }) { a ->
+                        val why = blocked(a.pkg, a.label)
                         Row(
-                            Modifier.fillMaxWidth().clickable { chosen = if (a.pkg in chosen) chosen - a.pkg else chosen + a.pkg }.padding(vertical = 4.dp),
+                            Modifier.fillMaxWidth().clickable(enabled = why == null) { chosen = if (a.pkg in chosen) chosen - a.pkg else chosen + a.pkg }.padding(vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             AppIcon(a.pkg)
                             Spacer(Modifier.size(10.dp))
-                            Text(a.label, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Checkbox(a.pkg in chosen, { on -> chosen = if (on) chosen + a.pkg else chosen - a.pkg })
+                            Column(Modifier.weight(1f)) {
+                                Text(a.label, maxLines = 1, overflow = TextOverflow.Ellipsis, color = if (why != null) colors.onSurfaceVariant else colors.onSurface)
+                                if (why != null) Text(why, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                            }
+                            Checkbox(a.pkg in chosen && why == null, { on -> chosen = if (on) chosen + a.pkg else chosen - a.pkg }, enabled = why == null)
                         }
                     }
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { onDone(chosen) }) { Text("好（${chosen.size}）") } },
+        confirmButton = { TextButton(onClick = { onDone(chosen.filter { p -> apps?.firstOrNull { it.pkg == p }?.let { blocked(it.pkg, it.label) } == null }.toSet()) }) { Text("好（${chosen.size}）") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
     )
 }
