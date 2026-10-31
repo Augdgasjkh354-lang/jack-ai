@@ -118,7 +118,7 @@ object Attachments {
 
     private fun readPdf(ctx: Context, uri: Uri): String =
         ctx.contentResolver.openInputStream(uri)?.use { input ->
-            PDDocument.load(input).use { doc -> PDFTextStripper().getText(doc) }
+            PDDocument.load(LimitedInputStream(input, MAX_ORIGINAL_BYTES)).use { doc -> PDFTextStripper().getText(doc) }
         } ?: ""
 
     private fun readDocx(ctx: Context, uri: Uri): String {
@@ -127,7 +127,18 @@ object Attachments {
                 while (true) {
                     val entry = zip.nextEntry ?: break
                     if (entry.name == "word/document.xml") {
-                        val xml = zip.readBytes().toString(Charsets.UTF_8)
+                        // 解压后的大小不看压缩包标的大小（可能谎报）：边读边数，超了就停，不等 OOM。
+                        val out = java.io.ByteArrayOutputStream()
+                        val buf = ByteArray(8192)
+                        var total = 0L
+                        while (true) {
+                            val n = zip.read(buf)
+                            if (n < 0) break
+                            total += n
+                            if (total > MAX_TEXT_BYTES) throw IllegalArgumentException("文件太大，没法当文字读")
+                            out.write(buf, 0, n)
+                        }
+                        val xml = String(out.toByteArray(), Charsets.UTF_8)
                         return xml
                             .replace(Regex("</w:p>"), "\n")
                             .replace(Regex("<w:tab/>"), "\t")
@@ -190,4 +201,25 @@ object Attachments {
         while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxSide) sample *= 2
         BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = sample })
     }.getOrNull()
+}
+
+/** 只放行前 max 个字节的输入流：解析器会把整个文件读进内存，超了就直接报错，不等 OOM。 */
+private class LimitedInputStream(input: java.io.InputStream, private val max: Long) : java.io.FilterInputStream(input) {
+    private var count = 0L
+    override fun read(b: ByteArray, off: Int, len: Int): Int {
+        val n = super.read(b, off, len)
+        if (n > 0) {
+            count += n
+            if (count > max) throw java.io.IOException("文件太大，没法当文字读")
+        }
+        return n
+    }
+    override fun read(): Int {
+        val n = super.read()
+        if (n >= 0) {
+            count++
+            if (count > max) throw java.io.IOException("文件太大，没法当文字读")
+        }
+        return n
+    }
 }
