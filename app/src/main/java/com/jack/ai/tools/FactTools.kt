@@ -1,5 +1,6 @@
 package com.jack.ai.tools
 
+import com.jack.ai.api.EmbedUse
 import com.jack.ai.api.Embedder
 import com.jack.ai.data.Fact
 import com.jack.ai.data.FactEdit
@@ -19,13 +20,22 @@ internal suspend fun ToolSession.recallFacts(args: JsonObject): String {
     if (query.isEmpty()) return "要给出 query（想查的事）。"
     val top = args["top"].text().toIntOrNull()?.coerceIn(1, 20) ?: 8
     return runTool("查事实库：$query") {
-        val engine = Embedder.engine(settings.providers)
+        val engines = Embedder.engines(app, settings)
         val text = withContext(Dispatchers.IO) {
-            val qv = engine?.let { e -> runCatching { Embedder.embed(e, listOf(query)).first() }.getOrNull() }
-            val hits = Facts.search(Facts.load(app), query, qv, if (qv != null) Facts.vectors(app) else emptyMap(), top)
+            val list = Facts.load(app)
+            // 按先后试：哪个来源算出了问题的向量，就和它存的那份比
+            var used: Embedder.Engine? = null
+            var qv: FloatArray? = null
+            for (e in engines) {
+                qv = runCatching { Embedder.embed(e, listOf(query), use = EmbedUse.QUERY).first() }.getOrNull()
+                if (qv != null) { used = e; break }
+            }
+            // 本地模型不花钱：还没有向量的事实顺手补上
+            if (used is Embedder.Local) Facts.backfill(app, used, list)
+            val hits = Facts.search(list, query, qv, used?.let { Facts.vectors(app, it.id) } ?: emptyMap(), top, used?.floor ?: 1f)
             if (hits.isEmpty()) "事实库里没有相关的。需要的话联网查证；查不到就如实说不知道，不要猜。"
             else hits.joinToString("\n") { Facts.line(it) } +
-                (if (qv == null) "\n（这次只按关键词找" + (if (engine == null) "：没配硅基流动，向量检索没开" else "：向量服务没连上") + "）" else "")
+                (if (qv == null) "\n（这次只按关键词找" + (if (engines.isEmpty()) "：没配硅基流动、也没下本地模型，向量检索没开" else "：向量服务没连上") + "）" else "")
         }
         text to SearchRecord("查事实库：$query")
     }
@@ -67,9 +77,18 @@ private fun ToolSession.storeFacts(items: List<JsonObject>): String {
     }
     if (news.isEmpty()) return out.joinToString("\n")
     val list = Facts.load(app).toMutableList()
-    val engine = Embedder.engine(settings.providers)
-    val vecs = engine?.let { e -> runCatching { Embedder.embed(e, news.map { it.text }) }.getOrNull() }
-    val existing = if (vecs != null) Facts.vectors(app) else emptyMap()
+    val engines = Embedder.engines(app, settings)
+    var engine: Embedder.Engine? = null
+    var vecs: List<FloatArray>? = null
+    for (e in engines) {
+        vecs = runCatching { Embedder.embed(e, news.map { it.text }) }.getOrNull()
+        if (vecs != null) { engine = e; break }
+    }
+    // 本地模型：先把已有事实的向量补齐，查重才查得全
+    if (engine is Embedder.Local) Facts.backfill(app, engine, list, limit = 500)
+    val existing = engine?.let { Facts.vectors(app, it.id) } ?: emptyMap()
+    val same = engine?.same ?: 1f
+    val similar = engine?.similar ?: 1f
     fun find(prefix: String) = if (prefix.length < 4) -1 else list.indexOfFirst { it.id.startsWith(prefix) }
     fun norm(s: String) = s.lowercase().replace(Regex("[\\s，。,.；;：:！!？?「」\"'（）()]"), "")
     news.forEachIndexed { k, n ->
@@ -80,10 +99,10 @@ private fun ToolSession.storeFacts(items: List<JsonObject>): String {
             val sim = if (norm(f.text) == norm(n.text)) 1f else q?.let { existing[f.id]?.let { e -> Facts.cosine(q, e) } } ?: 0f
             i to sim
         }.sortedByDescending { it.second }
-        val same = ranked.firstOrNull()?.takeIf { it.second >= Facts.SAME && n.replaces.isEmpty() && n.conflicts.isEmpty() }
-        if (same != null) {
-            val merged = Facts.mergeSources(list[same.first], n.sources, now)
-            list[same.first] = merged
+        val dup = ranked.firstOrNull()?.takeIf { it.second >= same && n.replaces.isEmpty() && n.conflicts.isEmpty() }
+        if (dup != null) {
+            val merged = Facts.mergeSources(list[dup.first], n.sources, now)
+            list[dup.first] = merged
             out += "＝ 已有 [f:${merged.id.take(8)}]，合并出处，现在 ${merged.sources.size} 个来源（${if (merged.status == "verified") "已核对" else "单一来源"}）"
             return@forEachIndexed
         }
@@ -103,14 +122,14 @@ private fun ToolSession.storeFacts(items: List<JsonObject>): String {
             out += "⚠ 和 [f:${old.id.take(8)}] 对不上，两条都标成有冲突"
         }
         list += fact
-        v?.let { Facts.putVector(app, fact.id, it) }
+        v?.let { engine?.let { e -> Facts.putVector(app, fact.id, it, e.id) } }
         out += "＋ [f:${fact.id.take(8)}] ${fact.text.take(40)}（${if (fact.status == "verified") "已核对" else if (fact.status == "conflict") "有冲突" else "单一来源"}）"
         // 相近但不完全一样的：可能说的是同一件事、说法不同，让模型看一眼
-        ranked.filter { it.second in Facts.SIMILAR..Facts.SAME }.take(2).forEach { (i, _) ->
+        ranked.filter { it.second in similar..same }.take(2).forEach { (i, _) ->
             out += "  相近的已有：[f:${list[i].id.take(8)}] ${list[i].text.take(60)}（是同一件事但说法不同，就用 replaces 或 conflicts_with 标出来）"
         }
     }
     Facts.save(app, list)
-    if (engine == null) out += "（没配硅基流动，这几条没有向量，只能按关键词找到）"
+    if (engine == null) out += if (engines.isEmpty()) "（没配硅基流动、也没下本地模型，这几条没有向量，只能按关键词找到）" else "（向量服务没连上，这几条没有向量，只能按关键词找到）"
     return out.joinToString("\n")
 }

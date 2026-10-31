@@ -426,6 +426,9 @@ class Store(context: Context) {
             phoneFolders = prefs.getString("phoneFolders", null)?.let {
                 runCatching { json.decodeFromString(ListSerializer(PhoneFolder.serializer()), it) }.getOrNull()
             }.orEmpty(),
+            localModel = prefs.getString("localModel", "") ?: "",
+            localPrefer = prefs.getBoolean("localPrefer", false),
+            localClassify = prefs.getBoolean("localClassify", true),
         ).also { com.jack.ai.api.Net.apply(it) }
     }
 
@@ -493,6 +496,9 @@ class Store(context: Context) {
             .putString("wechatSkip", s.wechatSkip)
             .putBoolean("linksInApp", s.linksInApp)
             .putString("phoneFolders", json.encodeToString(ListSerializer(PhoneFolder.serializer()), s.phoneFolders))
+            .putString("localModel", s.localModel)
+            .putBoolean("localPrefer", s.localPrefer)
+            .putBoolean("localClassify", s.localClassify)
             .apply()
         com.jack.ai.api.Net.apply(s)
     }

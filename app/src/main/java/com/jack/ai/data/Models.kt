@@ -322,6 +322,11 @@ data class Settings(
     val linksInApp: Boolean = true,
     /** 用户授权 Kavi 读写的手机文件夹（系统文件选择器给的地址）。 */
     val phoneFolders: List<PhoneFolder> = emptyList(),
+    /** 本地向量模型（设置 → 本地模型）：用哪个（LocalModels 里的 id，空 = 不用）。默认只在没配硅基流动或连不上时用；localPrefer 是优先用本地。 */
+    val localModel: String = "",
+    val localPrefer: Boolean = false,
+    /** 「思考·自动」用本地模型判断问题难不难（不花钱，规则没认出来的再看一眼）。 */
+    val localClassify: Boolean = true,
 )
 
 /** 一个授权过的手机文件夹：uri 是系统给的树形地址，name 是给 Kavi 和用户看的名字。 */

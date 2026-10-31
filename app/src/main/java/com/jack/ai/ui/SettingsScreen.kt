@@ -174,6 +174,10 @@ fun SettingsScreen(
                 FreePoolCard(settings)
             }
 
+            Section("本地模型", icon = AppIcons.Chip, hint = "装在手机上的向量模型：按意思找记忆、查事实库，判断问题难不难。不联网、不花钱；默认在硅基流动没配或连不上时用。") {
+                LocalModelsSection(vm, settings)
+            }
+
             Section("连接", icon = AppIcons.Share, hint = "点开一项设置；连好之后只显示一行状态。") {
                 ConnectionsSection(vm, settings)
             }

@@ -43,20 +43,20 @@ data class Fact(
 
 /**
  * 事实库：只放带外部来源的事实，Kavi 自己推出来的结论不进来（免得错的被当成事实越滚越大）。
- * 事实存 facts/facts.json；向量单独存 facts/vectors.bin（只追加，定期整理），一条约 1KB。
- * 检索是关键词（BM25）和向量（bge-m3）一起排（RRF 合并）；没配向量服务就只用关键词。
+ * 事实存 facts/facts.json；向量单独存，每个向量来源一份（只追加，定期整理），一条约 1KB：
+ * vectors.bin 是硅基流动 bge-m3 的，vectors-<来源>.bin 是本地模型的（不同模型的向量不能混着比）。
+ * 检索是关键词（BM25）和向量一起排（RRF 合并）；没有向量来源就只用关键词。
  */
 object Facts {
-    const val SAME = 0.93f
-    const val SIMILAR = 0.80f
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val lock = Any()
-    @Volatile private var vectors: HashMap<String, ByteArray>? = null
-    @Volatile private var vecRecords = 0
+    /** 一个来源的向量：编号 → 向量，records 是文件里的记录数（含删掉的旧记录）。 */
+    private class VecStore(val map: HashMap<String, ByteArray>, var records: Int)
+    private val stores = HashMap<String, VecStore>()
 
     private fun dir(ctx: Context) = File(ctx.filesDir, "facts").apply { mkdirs() }
     private fun factFile(ctx: Context) = File(dir(ctx), "facts.json")
-    private fun vecFile(ctx: Context) = File(dir(ctx), "vectors.bin")
+    private fun vecFile(ctx: Context, engine: String) = File(dir(ctx), if (engine == Embedder.REMOTE_ID) "vectors.bin" else "vectors-$engine.bin")
 
     fun load(ctx: Context): List<Fact> = synchronized(lock) {
         runCatching { json.decodeFromString(ListSerializer(Fact.serializer()), factFile(ctx).readText()) }.getOrDefault(emptyList())
@@ -84,55 +84,74 @@ object Facts {
         return if (na == 0L || nb == 0L) 0f else (dot / (kotlin.math.sqrt(na.toDouble()) * kotlin.math.sqrt(nb.toDouble()))).toFloat()
     }
 
-    fun vectors(ctx: Context): Map<String, ByteArray> = synchronized(lock) {
-        vectors ?: HashMap<String, ByteArray>().also { map ->
-            var n = 0
-            runCatching {
-                DataInputStream(vecFile(ctx).inputStream().buffered()).use { s ->
-                    while (true) {
-                        val id = runCatching { s.readUTF() }.getOrNull() ?: break
-                        val dim = s.readInt()
-                        if (dim == 0) map.remove(id) else map[id] = ByteArray(dim).also { s.readFully(it) }
-                        n++
-                    }
+    /** 某个来源（Embedder.Engine.id）存下的向量。 */
+    fun vectors(ctx: Context, engine: String = Embedder.REMOTE_ID): Map<String, ByteArray> = synchronized(lock) { HashMap(store(ctx, engine).map) }
+
+    private fun store(ctx: Context, engine: String): VecStore = stores.getOrPut(engine) {
+        val map = HashMap<String, ByteArray>()
+        var n = 0
+        runCatching {
+            DataInputStream(vecFile(ctx, engine).inputStream().buffered()).use { s ->
+                while (true) {
+                    val id = runCatching { s.readUTF() }.getOrNull() ?: break
+                    val dim = s.readInt()
+                    if (dim == 0) map.remove(id) else map[id] = ByteArray(dim).also { s.readFully(it) }
+                    n++
                 }
             }
-            vecRecords = n
-            vectors = map
+        }
+        VecStore(map, n)
+    }
+
+    fun putVector(ctx: Context, id: String, v: FloatArray, engine: String = Embedder.REMOTE_ID) = synchronized(lock) {
+        val q = quantize(v)
+        store(ctx, engine).map[id] = q
+        append(ctx, engine) { it.writeUTF(id); it.writeInt(q.size); it.write(q) }
+    }
+
+    /**
+     * 本地模型不花钱：还没有它的向量的事实补算上（换了模型、或以前是用硅基流动存的）。一次最多 limit 条，剩下的下次再补。
+     * 手机上算，要在后台线程调用。
+     */
+    fun backfill(ctx: Context, e: Embedder.Local, list: List<Fact> = load(ctx), limit: Int = 64) {
+        val have = vectors(ctx, e.id)
+        val missing = list.filter { it.status != "retired" && it.id !in have }.take(limit)
+        missing.chunked(16).forEach { part ->
+            val vecs = runCatching { Embedder.embed(e, part.map { it.text }) }.getOrNull() ?: return
+            part.forEachIndexed { i, f -> putVector(ctx, f.id, vecs[i], e.id) }
         }
     }
 
-    fun putVector(ctx: Context, id: String, v: FloatArray) = synchronized(lock) {
-        val q = quantize(v)
-        val map = vectors(ctx) as HashMap
-        map[id] = q
-        append(ctx) { it.writeUTF(id); it.writeInt(q.size); it.write(q) }
-    }
-
+    /** 删掉一条事实的向量（每个来源的都删）。 */
     fun removeVector(ctx: Context, id: String) = synchronized(lock) {
-        val map = vectors(ctx) as HashMap
-        if (map.remove(id) != null) append(ctx) { it.writeUTF(id); it.writeInt(0) }
+        val engines = dir(ctx).listFiles().orEmpty().mapNotNull { f ->
+            when {
+                f.name == "vectors.bin" -> Embedder.REMOTE_ID
+                f.name.startsWith("vectors-") && f.name.endsWith(".bin") -> f.name.removePrefix("vectors-").removeSuffix(".bin")
+                else -> null
+            }
+        }
+        engines.forEach { e -> if (store(ctx, e).map.remove(id) != null) append(ctx, e) { it.writeUTF(id); it.writeInt(0) } }
     }
 
-    private fun append(ctx: Context, write: (DataOutputStream) -> Unit) {
-        DataOutputStream(FileOutputStream(vecFile(ctx), true).buffered()).use(write)
-        vecRecords++
+    private fun append(ctx: Context, engine: String, write: (DataOutputStream) -> Unit) {
+        DataOutputStream(FileOutputStream(vecFile(ctx, engine), true).buffered()).use(write)
+        val st = store(ctx, engine)
+        st.records++
         // 删改多了文件里攒了很多旧记录：整份重写一遍
-        val live = vectors?.size ?: 0
-        if (vecRecords > 200 && vecRecords > live * 2) compact(ctx)
+        if (st.records > 200 && st.records > st.map.size * 2) compact(ctx, engine, st)
     }
 
-    private fun compact(ctx: Context) {
-        val map = vectors ?: return
-        val f = vecFile(ctx)
+    private fun compact(ctx: Context, engine: String, st: VecStore) {
+        val f = vecFile(ctx, engine)
         val tmp = File(f.parentFile, f.name + ".tmp")
-        DataOutputStream(FileOutputStream(tmp).buffered()).use { s -> map.forEach { (id, q) -> s.writeUTF(id); s.writeInt(q.size); s.write(q) } }
+        DataOutputStream(FileOutputStream(tmp).buffered()).use { s -> st.map.forEach { (id, q) -> s.writeUTF(id); s.writeInt(q.size); s.write(q) } }
         if (!tmp.renameTo(f)) { f.delete(); tmp.renameTo(f) }
-        vecRecords = map.size
+        st.records = st.map.size
     }
 
     /** 测试用：清掉内存里的向量缓存。 */
-    internal fun resetForTest() { vectors = null; vecRecords = 0 }
+    internal fun resetForTest() = synchronized(lock) { stores.clear() }
 
     // ---------- 规则（纯函数，单测） ----------
 
@@ -159,14 +178,14 @@ object Facts {
     }
 
     /** 检索：返回最相关的有效事实（作废的不算）。qv 是问题的向量，没有就只用关键词。 */
-    fun search(list: List<Fact>, query: String, qv: FloatArray?, vecs: Map<String, ByteArray>, top: Int = 8): List<Fact> {
+    fun search(list: List<Fact>, query: String, qv: FloatArray?, vecs: Map<String, ByteArray>, top: Int = 8, floor: Float = 0.35f): List<Fact> {
         val live = list.filter { it.status != "retired" }
         if (live.isEmpty()) return emptyList()
         val byId = live.associateBy { it.id }
         val bm25 = LibraryIndex(live.map { it.id to (it.text + " " + it.topic) }).search(query, 30).map { it.doc }
         val vec = qv?.let { q ->
             val qq = quantize(q)
-            live.mapNotNull { f -> vecs[f.id]?.let { f.id to cosine(qq, it) } }.filter { it.second > 0.35f }
+            live.mapNotNull { f -> vecs[f.id]?.let { f.id to cosine(qq, it) } }.filter { it.second > floor }
                 .sortedByDescending { it.second }.take(30).map { it.first }
         }.orEmpty()
         return fuse(bm25, vec).mapNotNull { byId[it] }.take(top)

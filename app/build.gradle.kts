@@ -140,6 +140,8 @@ dependencies {
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     // 照片里的表格转 Excel：离线中文文字识别，模型打包在 App 里，不需要谷歌服务
     implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
+    // 本地向量模型（设置 → 本地模型）：ONNX Runtime 在手机上跑，模型文件另外下载，不打进安装包
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.31.1")
 }
 
 // ---------- 文档查看器的前端库 ----------

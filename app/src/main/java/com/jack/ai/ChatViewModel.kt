@@ -162,6 +162,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(routines = store.loadRoutines(), library = store.loadLibrary(), cards = store.loadCards()) }
         Routines.scheduleAll(app)
         runCatching { com.jack.ai.data.Updater.schedule(app, _state.value.settings) }
+        // 选了本地模型：开 App 后稍等一会在后台加载好，聊天时不用现等
+        com.jack.ai.chat.LocalBrain.warmUp(app, _state.value.settings, delayMs = 5_000)
         mergeInbox()
         core.refreshWidget()
         // 数据文件坏了被自动恢复过，告诉用户一声
@@ -688,7 +690,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     "开始",
                 )
             }
-            val agent = Agent({ msgs, t -> client.stream(ep, msgs, thinking, settings.temperature, t) }, sendReasoning = thinkingOn, splitNotes = true)
+            // 思考·自动：规则看着不难的，再让本地模型看一眼（选了本地模型才有，最多等 1.5 秒，不花钱）
+            val level = if (settings.thinking == ThinkLevel.AUTO && modelOverride == null && thinking == ThinkLevel.LOW &&
+                com.jack.ai.chat.LocalBrain.isHard(getApplication(), settings, lastUser?.content.orEmpty()) == true) ThinkLevel.HIGH else thinking
+            val agent = Agent({ msgs, t -> client.stream(ep, msgs, level, settings.temperature, t) }, sendReasoning = thinkingOn, splitNotes = true)
             // Work 的收尾关卡：清单没做完不让收尾；开着「交付前复核」再另起一次请求按验收标准查一遍
             val gate = com.jack.ai.tools.WorkGate(session, review = if (work && settings.workReview) {
                 val reviewEp = settings.backgroundEndpoint() ?: ep

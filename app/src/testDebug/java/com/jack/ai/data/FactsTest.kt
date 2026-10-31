@@ -85,6 +85,23 @@ class FactsTest {
     }
 
     @Test
+    fun vectorsAreKeptPerEngine() {
+        val a = FloatArray(8) { if (it == 0) 1f else 0f }
+        val b = FloatArray(4) { 1f }
+        Facts.putVector(ctx, "fa", a)
+        Facts.putVector(ctx, "fa", b, "local-x")
+        Facts.putVector(ctx, "fc", b, "local-x")
+        Facts.resetForTest()
+        assertEquals(8, Facts.vectors(ctx)["fa"]!!.size)
+        assertEquals(setOf("fa", "fc"), Facts.vectors(ctx, "local-x").keys)
+        // 删掉一条：每个来源的都删
+        Facts.removeVector(ctx, "fa")
+        Facts.resetForTest()
+        assertTrue(Facts.vectors(ctx).isEmpty())
+        assertEquals(setOf("fc"), Facts.vectors(ctx, "local-x").keys)
+    }
+
+    @Test
     fun vectorsRoundTripAndRank() {
         val a = FloatArray(8) { if (it == 0) 1f else 0f }
         val b = FloatArray(8) { if (it == 1) 1f else 0f }

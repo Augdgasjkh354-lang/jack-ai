@@ -75,7 +75,10 @@ internal suspend fun ToolSession.selfCheck(args: JsonObject): String = runTool("
             com.jack.ai.data.Facts.load(ctx).let { fs ->
                 val live = fs.filter { it.status != "retired" }
                 append("【事实库】${live.size} 条（已核对 ${live.count { it.status == "verified" }}，有冲突 ${live.count { it.status == "conflict" }}）；向量检索：" +
-                    (if (com.jack.ai.api.Embedder.engine(settings.providers) != null) "开着（硅基流动 bge-m3）" else "没开，只按关键词找（要在 设置 → 其他模型服务 加硅基流动）") + "\n")
+                    com.jack.ai.api.Embedder.engines(ctx, settings).let { es ->
+                        if (es.isNotEmpty()) "开着（" + es.joinToString("，没连上时用") { it.label } + "）"
+                        else "没开，只按关键词找（在 设置 → 本地模型 下一个，或在 其他模型服务 加硅基流动）"
+                    } + "\n")
             }
             com.jack.ai.data.BrowserStats.summary(com.jack.ai.data.BrowserStats.load(ctx)).takeIf { it.isNotEmpty() }?.let { append("【浏览器实测】$it\n") }
 
