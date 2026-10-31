@@ -2,10 +2,42 @@ package com.jack.ai.api
 
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okio.Buffer
 import java.io.IOException
 import java.io.OutputStream
 import java.net.URLDecoder
 import java.util.concurrent.TimeUnit
+
+/**
+ * 跟随重定向时别把手动拼的 Cookie 带到别的站：OkHttp 只剥离跨站的 Authorization，不剥 Cookie。
+ * 应用拦截器只跑一次，记下最初的站；网络拦截器每次跳转都跑，站变了、或者从 https 降级成 http，就摘掉 Cookie。
+ */
+internal class CookieOriginTag
+internal fun OkHttpClient.Builder.guardCookieOnRedirect(): OkHttpClient.Builder =
+    addInterceptor { chain ->
+        val req = chain.request()
+        chain.proceed(req.newBuilder().tag(CookieOriginTag::class.java, req.url.host + "\n" + req.url.scheme).build())
+    }.addNetworkInterceptor { chain ->
+        val req = chain.request()
+        val origin = req.tag(CookieOriginTag::class.java)?.split("\n")
+        val hostChanged = origin != null && origin[0] != req.url.host
+        val downgraded = origin != null && origin[1] == "https" && req.url.scheme == "http"
+        if (hostChanged || downgraded) chain.proceed(req.newBuilder().removeHeader("Cookie").build())
+        else chain.proceed(req)
+    }
+
+/** 有长度上限地读完：分块传输时 contentLength 是 -1，不能只看头；超了返回 null，让调用方按自己的错处理。 */
+internal fun readBoundedBytes(body: okhttp3.ResponseBody, limit: Long): ByteArray? {
+    val buf = Buffer()
+    body.source().use { src ->
+        while (true) {
+            val n = src.read(buf, 8192)
+            if (n == -1L) break
+            if (buf.size > limit) return null
+        }
+    }
+    return buf.readByteArray()
+}
 
 /**
  * Kavi 浏览器里点下载链接：用网页的 Cookie（登录过的网站照样能下）和浏览器同一条线路（自动 / 走代理 / 直连）去下。
@@ -58,6 +90,7 @@ object BrowserDownload {
         .proxySelector(Net.selectorFor(route))
         .readTimeout(120, TimeUnit.SECONDS)
         .callTimeout(0, TimeUnit.SECONDS)
+        .guardCookieOnRedirect()
         .build()
 
     /**
