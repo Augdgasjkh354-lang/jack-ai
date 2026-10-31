@@ -91,6 +91,7 @@ internal suspend fun ToolSession.searchMyData(args: JsonObject): String {
 internal suspend fun ToolSession.remember(args: JsonObject): String {
     val text = args["content"].text().trim()
     val old = args["replace"].text().trim()
+    val toDeep = args["to_deep"].text() == "true"
     val globalOn = settings.memoryEnabled && conv.globalAllowed(project)
     val workOn = settings.memoryEnabled && conv.workMemoryAllowed(project)
     val scope = when (val s = args["scope"].text()) {
@@ -100,6 +101,7 @@ internal suspend fun ToolSession.remember(args: JsonObject): String {
     }
     val where = when (scope) { "global" -> "全局"; "work" -> "工作"; "project" -> "项目"; else -> "本对话" }
     val label = when {
+        toDeep && scope == "global" && old.isNotEmpty() -> "放到深处：$old"
         old.isEmpty() -> "记住（$where）：$text"
         text.isEmpty() -> "忘掉（$where）：$old"
         else -> "改记忆（$where）：$text"
@@ -109,12 +111,25 @@ internal suspend fun ToolSession.remember(args: JsonObject): String {
         when (scope) {
             "global" -> {
                 val list = host.store.loadMemories()
+                if (toDeep && old.isNotEmpty()) {
+                    // 放到深处：常记里拿掉，深处留着，聊到相关的会浮上来
+                    val keep = ChatMemory.replace(list.map { it.text }, old, "")
+                    val moved = list.filter { it.text !in keep }
+                    withContext(Dispatchers.IO) { com.jack.ai.data.MemoryOps.saveDeep(app, com.jack.ai.data.MemoryOps.deep(app) + moved) }
+                    val rest = list.filter { it.text in keep }
+                    host.store.saveMemories(rest)
+                    host.setMemories(rest)
+                    return@runTool "已放到深处（常记现在约 ${com.jack.ai.data.MemoryOps.hotTokens(rest)} / ${com.jack.ai.data.MemoryOps.HOT_BUDGET}）。" to SearchRecord(label)
+                }
+                if (old.isEmpty() && list.any { it.text == text }) return@runTool "已经有一模一样的这条，没有重复存。" to SearchRecord(label)
                 val updated = if (old.isEmpty()) list + MemoryItem(text = text) else {
                     // 按文字改，没动的条目保留原来的编号和时间
                     val texts = ChatMemory.replace(list.map { it.text }, old, text)
                     val byText = list.associateBy { it.text }
                     texts.map { byText[it] ?: MemoryItem(text = it) }
                 }
+                com.jack.ai.data.MemoryOps.fullNote(list.map { it.text }, updated.map { it.text }, com.jack.ai.data.MemoryOps.HOT_BUDGET, where, canDeep = true)
+                    ?.let { throw IllegalArgumentException(it) }
                 host.store.saveMemories(updated)
                 host.setMemories(updated)
             }
@@ -124,8 +139,10 @@ internal suspend fun ToolSession.remember(args: JsonObject): String {
                     "work" -> ChatMemory.workFile(app)
                     else -> ChatMemory.chatFile(app, conv)
                 }
-                if (old.isEmpty()) ChatMemory.add(file, text)
-                else ChatMemory.write(file, ChatMemory.replace(ChatMemory.items(ChatMemory.read(file)), old, text))
+                val before = ChatMemory.items(ChatMemory.read(file))
+                val after = if (old.isEmpty()) (if (text in before) before else before + text) else ChatMemory.replace(before, old, text)
+                com.jack.ai.data.MemoryOps.fullNote(before, after, com.jack.ai.data.MemoryOps.FILE_BUDGET, where)?.let { throw IllegalArgumentException(it) }
+                if (old.isEmpty()) ChatMemory.add(file, text) else ChatMemory.write(file, after)
             }
         }
         val done = when {

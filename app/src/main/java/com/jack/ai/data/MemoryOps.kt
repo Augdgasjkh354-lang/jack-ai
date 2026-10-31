@@ -52,6 +52,25 @@ object MemoryOps {
 
     fun hotTokens(live: List<MemoryItem>) = live.sumOf { estTokens(it.text) + 4 }
 
+    /** 本对话、项目、工作记忆文件各自的上限（token）。全局记忆用 [HOT_BUDGET]。 */
+    const val FILE_BUDGET = 1500
+
+    fun tokensOf(items: List<String>) = items.sumOf { estTokens(it) + 4 }
+
+    /**
+     * 写满了（借鉴 Hermes Agent）：这次写入会让总量超过 [budget]、而且比原来更多，就不写，返回给模型的说明：
+     * 现在的每一条、还差多少、怎么腾地方。变短、删除、改得一样长的都放行；本来就超了也只拦变多的。
+     */
+    fun fullNote(before: List<String>, after: List<String>, budget: Int, where: String, canDeep: Boolean = false): String? {
+        val used = tokensOf(after)
+        if (used <= budget || used <= tokensOf(before)) return null
+        return "${where}记忆满了：写进去会到约 $used / $budget，要先腾出约 ${used - budget} 的地方。现在的：\n" +
+            before.joinToString("\n") { "- $it" } +
+            "\n腾地方的办法：把说同一件事的几条合成一句（replace 其中一条换成合并后的话，其余的 replace 后 content 留空删掉）；删掉过时的" +
+            (if (canDeep) "；不常用但还成立的用 replace 加 to_deep=true 放到深处（聊到相关的会自己浮上来）" else "") +
+            "。腾完再存这一条。"
+    }
+
     private fun norm(s: String) = s.lowercase().replace(Regex("[\\s，。,.；;：:！!？?「」\"'（）()]"), "")
 
     /** 在现在的记忆上执行（期间用户删掉、改过的照现在的算；找不到的编号跳过）。 */

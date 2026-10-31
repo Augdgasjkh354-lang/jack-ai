@@ -372,7 +372,7 @@ object PromptBuilder {
         }.trim()
         if (profile.isNotEmpty()) parts += "个人设定" to f("【{User}'s personal settings】\n") + profile
         if (globalOn && memories.isNotEmpty()) {
-            parts += "长期记忆" to f("【Long-term memories about {user}】\nThings you remembered about {user} earlier. Use them naturally; don't make a point of saying \"I remember\".\n") +
+            parts += "长期记忆" to f("【Long-term memories about {user}】(~${com.jack.ai.data.MemoryOps.hotTokens(memories)} of ${com.jack.ai.data.MemoryOps.HOT_BUDGET} tokens)\nThings you remembered about {user} earlier. Use them naturally; don't make a point of saying \"I remember\".\n") +
                 memories.joinToString("\n") { "- ${it.text}" }
         }
         if (globalOn && journal.isNotBlank()) {
@@ -389,7 +389,7 @@ object PromptBuilder {
                 f("\nThis is your own life, from your free time. Bring it up only when {user} asks how you are or what you've been up to, or when it's genuinely relevant; don't steer conversations toward yourself.")
         }
         if (settings.memoryEnabled && conv.workMemoryAllowed(project) && workMemory.isNotBlank()) {
-            parts += "工作记忆" to f("【Work memory】(shared by every Work conversation, kept apart from your chats with {user})\n") + workMemory.trim()
+            parts += "工作记忆" to f("【Work memory】(shared by every Work conversation, kept apart from your chats with {user}; ~${com.jack.ai.data.MemoryOps.tokensOf(ChatMemory.items(workMemory))} of ${com.jack.ai.data.MemoryOps.FILE_BUDGET} tokens)\n") + workMemory.trim()
         }
         // ---- 以上所有对话都一样（缓存能跨对话命中），以下每个对话自己的 ----
         memoryScopeNote(project != null, globalOn, project?.isolated == true, conv.separateWork).takeIf { "save_memory" in names && it.isNotEmpty() }?.let { parts += "固定说明" to it }
@@ -442,6 +442,7 @@ object PromptBuilder {
         if (work) append("- global (in Work this is the work memory, shared by every Work conversation and kept apart from chats): lessons that will help future tasks, such as how {user} likes work delivered, sources and methods that worked or failed, and paths, formats and conventions {user} uses. One self-contained sentence each; nothing that only matters to this task.\n")
         else append("- global (global memory): only when {user} explicitly says \"remember\" and it's long-term information about {user} themselves (identity, preferences, habits, important people and events). Write it about {user} by name.\n")
         append("When a memory is outdated or wrong, or {user} asks you to forget it, use save_memory with replace set to the old memory's exact text: new content updates it, empty content deletes it. No need to mention saving or updating in your reply. ")
+        append("Each memory store has a size limit. If a save comes back saying it's full, make room first, in the same turn: merge entries about the same thing into one sentence, delete outdated ones, and for global memory move rarely needed ones to deep with to_deep; then save again. ")
         append("The memories shown in this prompt are a snapshot taken when this conversation started or resumed: what you save now is stored at once and shows up there later; you already know it from saving it.")
     }
 
