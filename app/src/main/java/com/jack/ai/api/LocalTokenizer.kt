@@ -5,13 +5,19 @@ import java.io.Reader
 import java.util.PriorityQueue
 
 /**
- * 本地向量模型的分词：读 Hugging Face 的 tokenizer.json，把文字切成编号，结果和 Python 的 tokenizers 一致（单测对过）。
- * 只认两种：WordPiece（bge 这类 BERT 模型）和带字节兜底的 BPE（Gemma 这类 SentencePiece 模型）。
- * 文字里写着的特殊记号（比如「<bos>」）当普通文字切，不当控制符。
+ * 本地模型的分词：读 Hugging Face 的 tokenizer.json，把文字切成编号，结果和 Python 的 tokenizers 一致（单测对过）。
+ * 认三种：WordPiece（bge 这类 BERT 模型）、带字节兜底的 BPE（Gemma 这类 SentencePiece 模型）、字节级 BPE（Qwen、GPT 这类）。
+ * 文字里写着的特殊记号（比如「<bos>」「<|im_end|>」）当普通文字切，不当控制符；要特殊记号用 id() 单独拿。
  */
 interface LocalTokenizer {
     /** 切成编号，开头结尾带上模型要的特殊记号；总长不超过 maxLen。 */
     fun encode(text: String, maxLen: Int): IntArray
+
+    /** 某个记号（含特殊记号）的编号。 */
+    fun id(token: String): Int? = null
+
+    /** 编号 → 文字（生成模型用；向量模型用不着）。 */
+    fun decode(ids: IntArray): String = throw UnsupportedOperationException("这种分词不支持还原文字")
 
     companion object {
         /** 读 tokenizer.json（边读边解析，32MB 的也不会整个进内存）。 */
@@ -24,8 +30,12 @@ interface LocalTokenizer {
             var vocab: HashMap<String, Int>? = null
             var merges: List<Pair<String, String>>? = null
             var byteFallback = false
+            // 预切分：字节级 BPE 用一个正则先把文字切成词
+            var splitRegex = ""
+            var byteLevel = false
             p.obj { key ->
                 when (key) {
+                    "pre_tokenizer" -> p.walk { k, v -> if (k == "Regex") splitRegex = v; if (k == "type" && v == "ByteLevel") byteLevel = true }
                     "added_tokens" -> p.arr {
                         var id = -1; var content = ""
                         p.obj { k -> when (k) { "id" -> id = p.int(); "content" -> content = p.str(); else -> p.skip() } }
@@ -55,7 +65,11 @@ interface LocalTokenizer {
             added.forEach { (k, id) -> v.putIfAbsent(k, id) }
             return when (type) {
                 "WordPiece" -> WordPiece(v)
-                "BPE" -> { require(byteFallback) { "只支持带字节兜底的 BPE（Gemma 这类）" }; SentencePieceBpe(v, merges.orEmpty()) }
+                "BPE" -> when {
+                    byteFallback -> SentencePieceBpe(v, merges.orEmpty())
+                    byteLevel && splitRegex.isNotEmpty() -> ByteLevelBpe(v, merges.orEmpty(), splitRegex)
+                    else -> error("只支持带字节兜底的 BPE（Gemma 这类）和字节级 BPE（Qwen 这类）")
+                }
                 else -> error("不认识的分词方式：$type")
             }
         }
@@ -153,20 +167,12 @@ internal class SentencePieceBpe(private val vocab: Map<String, Int>, merges: Lis
     private val eos = vocab.getValue("<eos>")
     private val unk = vocab["<unk>"] ?: -1
     private val bytes = IntArray(256) { b -> vocab["<0x%02X>".format(b)] ?: unk }
-    /** (左, 右) → 排名和合并后的编号。 */
-    private val table = PairTable(merges.size)
+    private val merger = BpeMerger(vocab, merges)
 
-    init {
-        merges.forEachIndexed { rank, (a, b) ->
-            val ia = vocab[a] ?: return@forEachIndexed
-            val ib = vocab[b] ?: return@forEachIndexed
-            val merged = vocab[a + b] ?: return@forEachIndexed
-            table.putIfAbsent(ia, ib, rank, merged)
-        }
-    }
+    override fun id(token: String): Int? = vocab[token]
 
     override fun encode(text: String, maxLen: Int): IntArray {
-        val ids = bpe(symbols(text.replace(' ', '▁')))
+        val ids = merger.merge(symbols(text.replace(' ', '\u2581')))
         val n = minOf(ids.size, maxLen - 2).coerceAtLeast(0)
         return IntArray(n + 2).also { out ->
             out[0] = bos
@@ -192,9 +198,88 @@ internal class SentencePieceBpe(private val vocab: Map<String, Int>, merges: Lis
         }
         return out.toIntArray()
     }
+}
 
-    /** 合并：每次挑排名最前（一样就挑最靠左）的相邻一对，用链表 + 优先队列，长文也快。 */
-    private fun bpe(sym: IntArray): IntArray {
+/**
+ * 字节级 BPE（Qwen、GPT 这类）：先 NFC 规整，按 tokenizer.json 里的正则切成词，每个词的 UTF-8 字节换成 GPT-2 的「可见字符」，
+ * 再按合并表合并。不加开头结尾记号（对话格式由调用的地方拼）。
+ */
+internal class ByteLevelBpe(private val vocab: Map<String, Int>, merges: List<Pair<String, String>>, pattern: String) : LocalTokenizer {
+    private val merger = BpeMerger(vocab, merges)
+    // \s 要按 Unicode 算（Python 那边的正则就是这样）
+    private val split = java.util.regex.Pattern.compile(pattern, java.util.regex.Pattern.UNICODE_CHARACTER_CLASS)
+    private val byteIds = IntArray(256) { b -> vocab.getValue(BYTE_CHARS[b].toString()) }
+    /** 常见的词切过一次就记住。 */
+    private val cache = object : LinkedHashMap<String, IntArray>(512, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, IntArray>?) = size > 4096
+    }
+
+    override fun id(token: String): Int? = vocab[token]
+
+    /** 编号 → 记号（还原文字用，第一次用时才建）。 */
+    private val tokens: Array<String?> by lazy {
+        Array<String?>((vocab.values.maxOrNull() ?: 0) + 1) { null }.also { a -> vocab.forEach { (t, i) -> a[i] = t } }
+    }
+    private val charToByte: Map<Char, Int> by lazy { BYTE_CHARS.withIndex().associate { (b, c) -> c to b } }
+
+    /** 记号里的「可见字符」换回字节，再按 UTF-8 拼成文字；特殊记号（不在字节表里的字符）原样留着。 */
+    override fun decode(ids: IntArray): String {
+        val bytes = java.io.ByteArrayOutputStream()
+        ids.forEach { i ->
+            val t = tokens.getOrNull(i) ?: return@forEach
+            val bs = t.map { charToByte[it] }
+            if (bs.all { it != null }) bs.forEach { bytes.write(it!!) } else bytes.write(t.toByteArray(Charsets.UTF_8))
+        }
+        return bytes.toString(Charsets.UTF_8.name())
+    }
+
+    override fun encode(text: String, maxLen: Int): IntArray {
+        val norm = java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFC)
+        val out = ArrayList<Int>()
+        val m = split.matcher(norm)
+        var last = 0
+        fun word(w: String) {
+            if (w.isEmpty()) return
+            val ids = synchronized(cache) { cache[w] } ?: merger.merge(w.toByteArray(Charsets.UTF_8).map { byteIds[it.toInt() and 0xFF] }.toIntArray())
+                .also { synchronized(cache) { cache[w] = it } }
+            ids.forEach { out += it }
+        }
+        // Isolated：匹配到的各成一个词，中间没匹配上的也各成一个词
+        while (m.find()) {
+            if (m.start() > last) word(norm.substring(last, m.start()))
+            word(m.group())
+            last = m.end()
+            if (out.size >= maxLen) break
+        }
+        if (last < norm.length && out.size < maxLen) word(norm.substring(last))
+        return (if (out.size > maxLen) out.subList(0, maxLen) else out).toIntArray()
+    }
+
+    companion object {
+        /** GPT-2 的字节 → 字符表：能打印的字节用自己，其余的挪到 256 以后。 */
+        val BYTE_CHARS: CharArray = run {
+            val keep = (('!'.code..'~'.code) + ('¡'.code..'¬'.code) + ('®'.code..'ÿ'.code)).toSet()
+            var extra = 0
+            CharArray(256) { b -> if (b in keep) b.toChar() else (256 + extra++).toChar() }
+        }
+    }
+}
+
+/** BPE 合并：每次挑排名最前（一样就挑最靠左）的相邻一对，用链表 + 优先队列，长文也快。 */
+internal class BpeMerger(vocab: Map<String, Int>, merges: List<Pair<String, String>>) {
+    /** (左, 右) → 排名和合并后的编号。 */
+    private val table = PairTable(merges.size)
+
+    init {
+        merges.forEachIndexed { rank, (a, b) ->
+            val ia = vocab[a] ?: return@forEachIndexed
+            val ib = vocab[b] ?: return@forEachIndexed
+            val merged = vocab[a + b] ?: return@forEachIndexed
+            table.putIfAbsent(ia, ib, rank, merged)
+        }
+    }
+
+    fun merge(sym: IntArray): IntArray {
         val n = sym.size
         if (n < 2) return sym
         val id = sym.copyOf()
@@ -328,6 +413,19 @@ internal class JsonPull(private val r: Reader) {
 
     fun int(): Int = scalar().toDouble().toInt()
     fun bool(): Boolean = scalar() == "true"
+
+    /** 走一遍一个值（对象、数组嵌套都走到），每个「键: 字符串」报一次。 */
+    fun walk(onString: (key: String, value: String) -> Unit) {
+        fun value(key: String) {
+            when (ws()) {
+                '{'.code -> obj { k -> value(k) }
+                '['.code -> arr { value(key) }
+                '"'.code -> onString(key, str())
+                else -> scalar()
+            }
+        }
+        value("")
+    }
 
     fun skip() {
         when (ws()) {

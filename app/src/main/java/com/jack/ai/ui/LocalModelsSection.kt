@@ -50,7 +50,7 @@ fun LocalModelsSection(vm: ChatViewModel, settings: Settings) {
     val scope = rememberCoroutineScope()
     val downloads by LocalModels.state.collectAsState()
     // 下载状态变了（下完、删了）就重新看一眼文件
-    val ready = remember(downloads, settings.localModel) { LocalModels.ALL.associate { it.id to LocalModels.ready(ctx, it) } }
+    val ready = remember(downloads, settings.localModel) { (LocalModels.ALL + LocalModels.LLMS).associate { it.id to LocalModels.ready(ctx, it) } }
     val used = remember(downloads) { LocalModels.usedBytes(ctx) }
     val ramGb = remember { totalRamGb(ctx) }
     val bench = remember { mutableStateMapOf<String, String>() }
@@ -71,7 +71,9 @@ fun LocalModelsSection(vm: ChatViewModel, settings: Settings) {
             Text("不用本地模型")
         }
 
-        LocalModels.ALL.forEach { m ->
+        (LocalModels.ALL + LocalModels.LLMS).forEach { m ->
+            if (m == LocalModels.LLMS.first()) Text("生成模型", style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
             val d = downloads[m.id]
             val isReady = ready[m.id] == true
             Column(
@@ -81,8 +83,10 @@ fun LocalModelsSection(vm: ChatViewModel, settings: Settings) {
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Row(verticalAlignment = Alignment.Top) {
-                    RadioButton(selected = settings.localModel == m.id, enabled = isReady, onClick = { select(m.id) })
-                    Column(Modifier.weight(1f).padding(top = 10.dp)) {
+                    // 向量模型选一个用；生成模型下面另有开关
+                    if (m.spec != null) RadioButton(selected = settings.localModel == m.id, enabled = isReady, onClick = { select(m.id) })
+                    else androidx.compose.foundation.layout.Spacer(Modifier.padding(start = 12.dp))
+                    Column(Modifier.weight(1f).padding(top = if (m.spec != null) 10.dp else 0.dp)) {
                         Text(m.name, fontWeight = FontWeight.SemiBold)
                         Text(m.blurb, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text("下载 ${LocalModels.mb(m.bytes)}，用的时候占内存约 ${m.ramMb} MB",
@@ -108,7 +112,10 @@ fun LocalModelsSection(vm: ChatViewModel, settings: Settings) {
                                 scope.launch {
                                     bench[m.id] = withContext(Dispatchers.IO) {
                                         runCatching { LocalModels.benchmark(ctx, m) }.fold(
-                                            { (load, each) -> (if (load > 50) "加载 ${"%.1f".format(load / 1000.0)} 秒，" else "") + "每条约 $each 毫秒" },
+                                            { (load, each, line) ->
+                                                (if (load > 50) "加载 ${"%.1f".format(load / 1000.0)} 秒，" else "") +
+                                                    if (line.isNotEmpty()) "写一行摘要 ${"%.1f".format(each / 1000.0)} 秒：「$line」" else "每条约 $each 毫秒"
+                                            },
                                             { "跑不起来：${it.message?.take(80)}" },
                                         )
                                     }
@@ -132,6 +139,15 @@ fun LocalModelsSection(vm: ChatViewModel, settings: Settings) {
                     }
                 }
             }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("思考摘要用本地生成模型")
+                Text(if (ready[LocalModels.QWEN.id] == true) "思考时的一行行小标题由手机上的 Qwen3.5 写，不调后台模型、不花钱；比后台模型慢一点"
+                    else "先下载上面的 Qwen3.5-0.8B", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Switch(checked = settings.localLlm, enabled = ready[LocalModels.QWEN.id] == true || settings.localLlm,
+                onCheckedChange = { on -> vm.updateSettings { it.copy(localLlm = on) } })
         }
         if (used > 0) Text("本地模型一共占了 ${LocalModels.mb(used)}", style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -163,6 +179,7 @@ fun LocalModelsSection(vm: ChatViewModel, settings: Settings) {
                 TextButton(onClick = {
                     LocalModels.delete(ctx, m)
                     if (settings.localModel == m.id) vm.updateSettings { it.copy(localModel = "") }
+                    if (m.llm != null && settings.localLlm) vm.updateSettings { it.copy(localLlm = false) }
                     bench.remove(m.id)
                     confirmDelete = null
                 }) { Text("删除") }

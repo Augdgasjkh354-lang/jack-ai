@@ -82,7 +82,7 @@ object Embedder {
     /** 一批文字的向量（顺序和输入一样）。use 只对本地模型有用（问题和资料加的前缀不同）。出错抛异常。 */
     fun embed(e: Engine, texts: List<String>, quick: Boolean = false, use: EmbedUse = EmbedUse.DOC): List<FloatArray> = when (e) {
         is Remote -> remoteEmbed(e, texts, quick)
-        is Local -> LocalEmbed.embed(e.dir, e.model.spec, texts.map { it.take(4000) }, use)
+        is Local -> LocalEmbed.embed(e.dir, e.model.spec!!, texts.map { it.take(4000) }, use)
     }
 
     private fun remoteEmbed(e: Remote, texts: List<String>, quick: Boolean): List<FloatArray> = texts.chunked(BATCH).flatMap { part ->

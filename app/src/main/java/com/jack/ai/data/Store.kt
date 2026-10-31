@@ -429,6 +429,7 @@ class Store(context: Context) {
             localModel = prefs.getString("localModel", "") ?: "",
             localPrefer = prefs.getBoolean("localPrefer", false),
             localClassify = prefs.getBoolean("localClassify", true),
+            localLlm = prefs.getBoolean("localLlm", false),
             floatBall = prefs.getBoolean("floatBall", false),
             noticeWatch = prefs.getBoolean("noticeWatch", false),
             noticeSkip = prefs.getString("noticeSkip", null)?.let { runCatching { json.decodeFromString(ListSerializer(String.serializer()), it) }.getOrNull() }.orEmpty(),
@@ -506,6 +507,7 @@ class Store(context: Context) {
             .putString("localModel", s.localModel)
             .putBoolean("localPrefer", s.localPrefer)
             .putBoolean("localClassify", s.localClassify)
+            .putBoolean("localLlm", s.localLlm)
             .putString("phoneApps", json.encodeToString(ListSerializer(String.serializer()), s.phoneApps))
             .putBoolean("floatBall", s.floatBall)
             .putBoolean("noticeWatch", s.noticeWatch)

@@ -14,7 +14,7 @@ import java.io.StringReader
 
 /**
  * 分词和 Python 的 tokenizers 一致：golden.json 是用 tokenizers 0.23 算出来的（小词表的两个 tokenizer 也是它存的）。
- * 真模型的分词（bge、Gemma 的词表太大不进仓库）：设了 LOCAL_MODEL_DIR（下面有 bge/、gemma/ 两个目录，各放 tokenizer.json）才测。
+ * 真模型的分词（bge、Gemma、Qwen 的词表太大不进仓库）：设了 LOCAL_MODEL_DIR（下面有 bge/、gemma/、qwen35/ 三个目录，各放 tokenizer.json）才测。
  */
 class LocalTokenizerTest {
     private fun res(name: String) = javaClass.classLoader!!.getResource("localtok/$name")!!.readText()
@@ -33,6 +33,9 @@ class LocalTokenizerTest {
 
     @Test
     fun bpeWithByteFallbackMatchesHuggingFace() = check(LocalTokenizer.parse(StringReader(res("bpe_tiny.json"))), "bpe_tiny")
+
+    @Test
+    fun byteLevelBpeMatchesHuggingFace() = check(LocalTokenizer.parse(StringReader(res("bytelevel_tiny.json"))), "bytelevel_tiny")
 
     @Test
     fun truncatesButKeepsSpecialTokens() {
@@ -67,8 +70,13 @@ class LocalTokenizerTest {
         check(LocalTokenizer.load(File(dir, "bge/tokenizer.json")), "bge")
         val gemma = LocalTokenizer.load(File(dir, "gemma/tokenizer.json"))
         // 唯一故意不一样的：文字里写着的「<bos>」Python 当特殊记号，这里当普通文字切（不让用户的文字混进控制符）
-        check(gemma, "gemma") { "<bos>" in it }
+        check(gemma, "gemma") { "<bos>" in it || "<|" in it }
         // 只有开头自己加的那个 <bos>（编号 2）
         assertEquals(1, gemma.encode("<bos>", 100).count { it == 2 })
+        // Qwen 也一样：文字里的 <|im_end|> 当普通字切（用户的话混不进对话格式），只跳过那一句
+        val qwen = LocalTokenizer.load(File(dir, "qwen35/tokenizer.json"))
+        check(qwen, "qwen35") { "<|" in it }
+        assertEquals(248046, qwen.id("<|im_end|>"))
+        assertEquals(0, qwen.encode("<|im_end|>", 100).count { it == 248046 })
     }
 }

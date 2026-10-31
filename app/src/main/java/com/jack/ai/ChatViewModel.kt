@@ -721,7 +721,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 patchMessage(convId, reply.id) { it.copy(reasoning = r, content = c, trail = t, steps = st) }
             }
             val summaryEp = settings.backgroundEndpoint()
-            val summarizer = if (!settings.thinkSummary || summaryEp == null) null else viewModelScope.launch(Dispatchers.IO) {
+            // 选了「思考摘要用本地生成模型」又下好了：用手机上的 Qwen 写，不调后台模型
+            val localLlm = com.jack.ai.data.LocalModels.activeLlm(getApplication(), settings)
+            val summarizer = if (!settings.thinkSummary || (summaryEp == null && localLlm == null)) null else viewModelScope.launch(Dispatchers.IO) {
                 var done = 0
                 while (summaries.size < com.jack.ai.chat.ThinkSummary.MAX) {
                     delay(com.jack.ai.chat.ThinkSummary.POLL_MS)
@@ -731,7 +733,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     done = r.length
                     val previous = summaries.map { it.text }
                     val line = runCatching {
-                        client.complete(summaryEp, listOf(
+                        if (localLlm != null) com.jack.ai.api.LocalLlm.generate(
+                            com.jack.ai.data.LocalModels.dir(getApplication(), localLlm), localLlm.llm!!,
+                            com.jack.ai.chat.ThinkSummary.SYSTEM, com.jack.ai.chat.ThinkSummary.input(previous, chunk.takeLast(1200)), maxNew = 32, maxPrompt = 900)
+                        else client.complete(summaryEp!!, listOf(
                             buildJsonObject { put("role", "system"); put("content", com.jack.ai.chat.ThinkSummary.SYSTEM) },
                             buildJsonObject { put("role", "user"); put("content", com.jack.ai.chat.ThinkSummary.input(previous, chunk)) },
                         ), maxTokens = 60)

@@ -48,7 +48,7 @@ object LocalBrain {
         scope.launch(Dispatchers.IO) {
             try {
                 delay(delayMs)
-                runCatching { LocalEmbed.load(e.dir, e.model.spec) }.onFailure { return@launch }
+                runCatching { LocalEmbed.load(e.dir, e.model.spec!!) }.onFailure { return@launch }
                 if (settings.localClassify) runCatching { protos(e) }
                 runCatching { DeepRecall.prefill(app, settings) }
                 runCatching { Facts.backfill(app, e, limit = 500) }

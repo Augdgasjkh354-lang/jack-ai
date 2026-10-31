@@ -327,6 +327,8 @@ data class Settings(
     val localPrefer: Boolean = false,
     /** 「思考·自动」用本地模型判断问题难不难（不花钱，规则没认出来的再看一眼）。 */
     val localClassify: Boolean = true,
+    /** 思考摘要用手机上的生成模型（Qwen3.5-0.8B，要先下载）写，不调后台模型、不花钱。 */
+    val localLlm: Boolean = false,
     /** 操作其他 App（无障碍）：Kavi 能操作的 App（包名），只有勾过的才能碰；涉及钱的和系统设置勾不了。 */
     val phoneApps: List<String> = emptyList(),
     /** 悬浮球：点一下把当前屏幕带进 Kavi 问（要开无障碍）。 */

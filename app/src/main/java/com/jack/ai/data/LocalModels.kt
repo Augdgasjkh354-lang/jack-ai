@@ -36,13 +36,15 @@ data class LocalModel(
     val repo: String,
     val hfRevision: String,
     val files: List<ModelFile>,
-    val spec: LocalEmbed.Spec,
+    /** 向量模型的用法；生成模型是 null，用 llm。 */
+    val spec: LocalEmbed.Spec? = null,
+    val llm: com.jack.ai.api.LocalLlm.Spec? = null,
     /** 加载后大约占多少内存（MB）。 */
     val ramMb: Int,
-    val recall: Float,
-    val same: Float,
-    val similar: Float,
-    val floor: Float,
+    val recall: Float = 1f,
+    val same: Float = 1f,
+    val similar: Float = 1f,
+    val floor: Float = 1f,
 ) {
     val bytes: Long get() = files.sumOf { it.size }
 }
@@ -100,9 +102,39 @@ object LocalModels {
         recall = 0.45f, same = 0.88f, similar = 0.72f, floor = 0.30f,
     )
 
-    val ALL = listOf(GEMMA, BGE_SMALL)
+    /** 生成模型：写思考摘要这类短活。 */
+    val QWEN = LocalModel(
+        id = "qwen3.5-0.8b",
+        name = "Qwen3.5-0.8B",
+        blurb = "阿里的小生成模型（4 位量化）。用来写思考摘要的小标题，不花钱；手机上每秒几个到十几个字",
+        repo = "onnx-community/Qwen3.5-0.8B-ONNX",
+        hfRevision = "8fe9dbe3fb39fe902e18df9be84b6a0ac77ae0f6",
+        files = listOf(
+            ModelFile("tokenizer.json", 19_226_111, "89da80cc6689bef4d90cc1028249436975ffb0814618f1d93c65310e05801a9b"),
+            ModelFile("onnx/embed_tokens_q4.onnx", 857, "8773dcf4858f855bfce13def4356ca17e0bc516a477154496b6ffb6dd6d084dc"),
+            ModelFile("onnx/embed_tokens_q4.onnx_data", 162_897_920, "9210b1d26eb14136d3522584d17da14cc5f4b82b6f5607e6d80d59424a8cbe99"),
+            ModelFile("onnx/decoder_model_merged_q4.onnx", 876_359, "cfb338c5112e11e2a123d6d03d8870cd800883ee333ec0a25289482b609a16f8"),
+            ModelFile("onnx/decoder_model_merged_q4.onnx_data", 485_425_152, "fb38200610a2206aa4c10f4c5f41c08107e2b0b44968166943b3937a1eb11f84"),
+        ),
+        llm = com.jack.ai.api.LocalLlm.Spec(
+            embed = "onnx/embed_tokens_q4.onnx",
+            decoder = "onnx/decoder_model_merged_q4.onnx",
+            convShape = longArrayOf(6144, 4),
+            recurrentShape = longArrayOf(16, 128, 128),
+            kvHeads = 2, kvDim = 256,
+        ),
+        ramMb = 900,
+    )
 
-    fun byId(id: String): LocalModel? = ALL.firstOrNull { it.id == id }
+    /** 向量模型（设置里选一个）。 */
+    val ALL = listOf(GEMMA, BGE_SMALL)
+    /** 生成模型。 */
+    val LLMS = listOf(QWEN)
+
+    /** 下好了、设置里打开了「思考摘要用本地模型」的生成模型。 */
+    fun activeLlm(ctx: Context, s: Settings): LocalModel? = QWEN.takeIf { s.localLlm && ready(ctx, it) }
+
+    fun byId(id: String): LocalModel? = ALL.firstOrNull { it.id == id }?.takeIf { it.spec != null }
 
     fun dir(ctx: Context, m: LocalModel) = File(ctx.noBackupFilesDir, "local_models/${m.id}")
     private fun okFile(ctx: Context, m: LocalModel) = File(dir(ctx, m), ".ok")
@@ -152,6 +184,7 @@ object LocalModels {
     fun delete(ctx: Context, m: LocalModel) {
         pause(m)
         if (LocalEmbed.isLoaded(dir(ctx, m))) LocalEmbed.release()
+        if (com.jack.ai.api.LocalLlm.isLoaded(dir(ctx, m))) com.jack.ai.api.LocalLlm.release()
         dir(ctx, m).deleteRecursively()
         _state.update { it - m.id }
     }
@@ -238,16 +271,25 @@ object LocalModels {
 
     // ---------- 测速 ----------
 
-    /** 在这台手机上试一下：加载要多久、算一条要多久（毫秒）。 */
-    fun benchmark(ctx: Context, m: LocalModel): Pair<Long, Long> {
+    /** 在这台手机上试一下：加载要多久、算一条要多久（毫秒）；生成模型是写一行摘要要多久，顺便给出写的那行。 */
+    fun benchmark(ctx: Context, m: LocalModel): Triple<Long, Long, String> {
         val d = dir(ctx, m)
+        m.llm?.let { spec ->
+            val t0 = System.currentTimeMillis()
+            com.jack.ai.api.LocalLlm.load(d, spec)
+            val t1 = System.currentTimeMillis()
+            val line = com.jack.ai.api.LocalLlm.generate(d, spec, "把用户给的一段思考压成一个小标题：不超过 12 个字，只输出标题。",
+                "用户问深圳到大阪的机票，我先查最近一周的航班价格，再比较直飞和转机，还要看行李额度。", maxNew = 24)
+            return Triple(t1 - t0, System.currentTimeMillis() - t1, line)
+        }
+        val spec = m.spec!!
         val t0 = System.currentTimeMillis()
-        LocalEmbed.load(d, m.spec)
+        LocalEmbed.load(d, spec)
         val t1 = System.currentTimeMillis()
         val samples = listOf("今天下午三点和王总开会", "帮我推荐几本好看的科幻小说", "Jack 喜欢喝不加糖的冰美式", "深圳到大阪的机票多少钱",
             "这段代码为什么报空指针", "周末去哪里徒步比较好")
-        LocalEmbed.embed(d, m.spec, samples, EmbedUse.DOC)
+        LocalEmbed.embed(d, spec, samples, EmbedUse.DOC)
         val t2 = System.currentTimeMillis()
-        return (t1 - t0) to (t2 - t1) / samples.size
+        return Triple(t1 - t0, (t2 - t1) / samples.size, "")
     }
 }
