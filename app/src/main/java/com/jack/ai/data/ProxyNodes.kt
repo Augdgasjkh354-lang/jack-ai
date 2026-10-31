@@ -11,6 +11,8 @@ import kotlinx.serialization.json.put
 import java.net.URI
 import java.net.URLDecoder
 import java.util.Base64
+import org.yaml.snakeyaml.LoaderOptions
+import org.yaml.snakeyaml.constructor.SafeConstructor
 
 /** 一个代理节点：名字 + 写好的 sing-box 出站配置（JSON）。节点里有密码，只存在手机上，不进备份。 */
 @Serializable
@@ -203,7 +205,8 @@ object ProxyNodes {
 
     /** Clash 订阅：proxies 列表里每一项是一个节点。 */
     fun parseClash(yaml: String): List<ProxyNode> {
-        val root = runCatching { org.yaml.snakeyaml.Yaml().load<Any?>(yaml) }.getOrNull() as? Map<*, *> ?: return emptyList()
+        // 订阅内容不可信：必须用 SafeConstructor，默认构造器能实例化任意类（CWE-502）
+        val root = runCatching { org.yaml.snakeyaml.Yaml(SafeConstructor(LoaderOptions())).load<Any?>(yaml) }.getOrNull() as? Map<*, *> ?: return emptyList()
         val list = root["proxies"] as? List<*> ?: return emptyList()
         return list.mapNotNull { p -> runCatching { clashNode(p as Map<*, *>) }.getOrNull() }.distinctNames()
     }
