@@ -164,6 +164,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         runCatching { com.jack.ai.data.Updater.schedule(app, _state.value.settings) }
         // 选了本地模型：开 App 后稍等一会在后台加载好，聊天时不用现等
         com.jack.ai.chat.LocalBrain.warmUp(app, _state.value.settings, delayMs = 5_000)
+        // 开着远程连接：进程被收掉过的话重新连上
+        RemoteService.sync(app)
         mergeInbox()
         core.refreshWidget()
         // 数据文件坏了被自动恢复过，告诉用户一声

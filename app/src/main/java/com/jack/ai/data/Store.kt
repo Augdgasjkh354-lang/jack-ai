@@ -83,6 +83,9 @@ class Store(context: Context) {
 
     fun loadConversations() = load("conversations.json", Conversation.serializer())
     fun saveConversations(list: List<Conversation>) = save("conversations.json", Conversation.serializer(), list)
+    /** 远程连接的对话（从站点来的）：单独存一份，带着工具调用过程，下一轮接着用；App 里看到的是收件箱合进来的副本。 */
+    fun loadRemoteConvs() = load("remote_convs.json", Conversation.serializer())
+    fun saveRemoteConvs(list: List<Conversation>) = save("remote_convs.json", Conversation.serializer(), list)
     fun loadProjects() = load("projects.json", Project.serializer())
     fun saveProjects(list: List<Project>) = save("projects.json", Project.serializer(), list)
 
@@ -263,7 +266,7 @@ class Store(context: Context) {
         val obj = kotlinx.serialization.json.buildJsonObject {
             prefs.all.forEach { (k, v) ->
                 // 代理的订阅地址和节点里有密码，也不进备份
-                if (k == "apiKey" || k == "tavilyKey" || k == "exaKey" || k == "proxySub" || k == "proxyNodes" || k == "notionToken" || k == "githubToken") return@forEach
+                if (k == "apiKey" || k == "tavilyKey" || k == "exaKey" || k == "proxySub" || k == "proxyNodes" || k == "notionToken" || k == "githubToken" || k == "remoteKey") return@forEach
                 // 其他服务的 Key 也不进备份
                 val v = if (k == "providers" && v is String) runCatching {
                     val list = json.decodeFromString(ListSerializer(Provider.serializer()), v).map { it.copy(apiKey = "") }
@@ -436,6 +439,10 @@ class Store(context: Context) {
             contactsOn = prefs.getBoolean("contactsOn", false),
             locationOn = prefs.getBoolean("locationOn", false),
             usageOn = prefs.getBoolean("usageOn", false),
+            remoteOn = prefs.getBoolean("remoteOn", false),
+            remoteUrl = prefs.getString("remoteUrl", "") ?: "",
+            remoteKey = prefs.getString("remoteKey", "") ?: "",
+            remotePhone = prefs.getBoolean("remotePhone", false),
             phoneApps = prefs.getString("phoneApps", null)?.let { runCatching { json.decodeFromString(ListSerializer(String.serializer()), it) }.getOrNull() }.orEmpty(),
         ).also { com.jack.ai.api.Net.apply(it) }
     }
@@ -515,6 +522,10 @@ class Store(context: Context) {
             .putBoolean("contactsOn", s.contactsOn)
             .putBoolean("locationOn", s.locationOn)
             .putBoolean("usageOn", s.usageOn)
+            .putBoolean("remoteOn", s.remoteOn)
+            .putString("remoteUrl", s.remoteUrl)
+            .putString("remoteKey", s.remoteKey)
+            .putBoolean("remotePhone", s.remotePhone)
             .apply()
         com.jack.ai.api.Net.apply(s)
         com.jack.ai.a11y.KaviAccessibility.apply(s)

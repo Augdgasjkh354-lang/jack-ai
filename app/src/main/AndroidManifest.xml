@@ -9,6 +9,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- 录音纪要：在前台服务里录音 -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
@@ -204,6 +206,11 @@
                 android:name="android.accessibilityservice"
                 android:resource="@xml/accessibility_service" />
         </service>
+        <!-- 远程连接：常驻通知里隔几秒去站点取别的设备发来的消息（设置 → 远程连接 打开才有） -->
+        <service
+            android:name=".RemoteService"
+            android:exported="false"
+            android:foregroundServiceType="remoteMessaging|dataSync" />
         <!-- 默认数字助理：长按电源键等叫出 Kavi，带上当前屏幕问它（用户在系统「默认应用 → 数字助理」里选了 Kavi 才生效） -->
         <service
             android:name=".a11y.KaviVoiceService"

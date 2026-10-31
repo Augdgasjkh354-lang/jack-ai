@@ -131,9 +131,12 @@ class ToolSession(
     /** 正在替用户操作别的 App 时，Kavi 的弹窗用户看不到：改在屏幕下方的悬浮卡片里问。 */
     private suspend fun ask(title: String, body: String, action: String): Boolean {
         val svc = com.jack.ai.a11y.KaviAccessibility.instance
-        if (phoneSeen != null && svc != null && com.jack.ai.a11y.KaviAccessibility.othersInFront(app)) return svc.confirm(title, body, action)
+        if (!remote && phoneSeen != null && svc != null && com.jack.ai.a11y.KaviAccessibility.othersInFront(app)) return svc.confirm(title, body, action)
         return ui.confirm(title, body, action)
     }
+
+    /** 用户在别的设备上远程问的（站点）：确认一律在那边网页上问，不弹在手机上。 */
+    @Volatile var remote = false
 
     /** 操作手机（phone 工具）：最近读到的一屏、截图的缩放比例、开始操作时「停止」按过几次（变了就是用户叫停了）。 */
     @Volatile internal var phoneSeen: com.jack.ai.a11y.Screen? = null

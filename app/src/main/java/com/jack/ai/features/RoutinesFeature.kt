@@ -49,14 +49,14 @@ class RoutinesFeature(core: AppCore) : Feature(core) {
                     var convs = s.conversations
                     items.forEach { item ->
                         val msgs = listOfNotNull(
-                            ChatMessage(role = "user", content = "⏰ " + item.prompt.ifBlank { item.title }, createdAt = item.at).takeUnless { item.aside },
+                            ChatMessage(role = "user", content = (if (item.remote) "" else "⏰ ") + item.prompt.ifBlank { item.title }, createdAt = item.at).takeUnless { item.aside },
                             ChatMessage(role = "assistant", content = item.result, model = MODEL_FLASH, files = item.files,
                                 appVersion = com.jack.ai.data.appVersion(app), createdAt = item.at + 1),
                         )
                         convs = if (convs.any { it.id == item.convId }) {
                             convs.map { c -> if (c.id == item.convId) c.copy(messages = c.messages + msgs, updatedAt = item.at) else c }
                         } else {
-                            listOf(Conversation(id = item.convId, title = if (item.aside) item.title else "⏰ " + item.title, messages = msgs, updatedAt = item.at, work = item.work)) + convs
+                            listOf(Conversation(id = item.convId, title = if (item.aside) item.title else (if (item.remote) "📱 " else "⏰ ") + item.title, messages = msgs, updatedAt = item.at, work = item.work)) + convs
                         }
                     }
                     s.copy(conversations = convs.sortedByDescending { it.updatedAt })

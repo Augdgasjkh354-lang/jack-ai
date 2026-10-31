@@ -339,6 +339,11 @@ data class Settings(
     val contactsOn: Boolean = false,
     val locationOn: Boolean = false,
     val usageOn: Boolean = false,
+    /** 远程连接（设置 → 远程连接）：开没开、站点地址、密钥（不进备份）、远程能不能操作其他 App。 */
+    val remoteOn: Boolean = false,
+    val remoteUrl: String = "",
+    val remoteKey: String = "",
+    val remotePhone: Boolean = false,
 )
 
 /** 开了哪样手机数据（phone_data 工具有没有）。 */

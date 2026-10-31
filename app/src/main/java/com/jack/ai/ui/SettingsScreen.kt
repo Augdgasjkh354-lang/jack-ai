@@ -178,6 +178,10 @@ fun SettingsScreen(
                 LocalModelsSection(vm, settings)
             }
 
+            Section("远程连接", icon = AppIcons.Share, hint = "在 iPhone、电脑上通过你自己的 ChatGPT 站点用这台手机上的 Kavi：记忆、文件、邮件、浏览器都在手机上。") {
+                RemoteSection(vm, settings)
+            }
+
             Section("连接", icon = AppIcons.Share, hint = "点开一项设置；连好之后只显示一行状态。") {
                 ConnectionsSection(vm, settings)
             }
