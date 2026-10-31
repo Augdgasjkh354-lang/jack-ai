@@ -6,3 +6,8 @@ local.properties
 .DS_Store
 .kotlin/
 app/src/main/jniLibs/
+
+# 签名密钥：只放在 GitHub Secrets 和 Jack 自己手里，永远不进仓库
+.signing/
+*.keystore
+*.jks
