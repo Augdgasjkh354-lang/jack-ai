@@ -48,7 +48,9 @@ object PptChart {
         if (type in setOf("pie", "doughnut") && series.size > 1) { problems += "饼图、环形图只画第一组数据「${series[0].name}」"; series = series.take(1) }
         series = series.mapIndexed { i, s ->
             if (s.values.size != cats.size) problems += "「${s.name.ifBlank { "第 ${i + 1} 组" }}」有 ${s.values.size} 个数，分类有 ${cats.size} 个，已按分类对齐"
-            Series(s.name.ifBlank { "系列${i + 1}" }, List(cats.size) { j -> s.values.getOrElse(j) { 0.0 } })
+            // 算不出来的数（NaN、Infinity）写进 XML 会让 Office 判文件损坏：当成 0，并告诉用户
+            if (s.values.any { !it.isFinite() }) problems += "「${s.name.ifBlank { "第 ${i + 1} 组" }}」里有算不出来的数，已当成 0"
+            Series(s.name.ifBlank { "系列${i + 1}" }, List(cats.size) { j -> s.values.getOrElse(j) { 0.0 }.let { if (it.isFinite()) it else 0.0 } })
         }
         return Chart(type, cats, series, c.unit.trim(), c.title.trim())
     }
