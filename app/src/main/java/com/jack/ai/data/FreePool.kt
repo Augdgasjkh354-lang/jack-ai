@@ -154,8 +154,10 @@ object FreePool {
                         sharedHttp.newCall(request).execute().use { resp ->
                             val text = resp.body?.string()
                             when (probeResult(resp.isSuccessful, text)) {
+                                // 只有价格页能核对的服务（硅基流动）才把「调通了」当免费；没价格页核对的服务，
+                                // 调通了也可能是付费模型在扣余额，只有明确标着「仅免费额度」的才算免费
                                 2 -> FreeModel(p.id, model, now, listed.first)
-                                1 -> FreeModel(p.id, model, baseUrl = listed.first)
+                                1 -> if (freePrices != null) FreeModel(p.id, model, baseUrl = listed.first) else null
                                 else -> null
                             }
                         }

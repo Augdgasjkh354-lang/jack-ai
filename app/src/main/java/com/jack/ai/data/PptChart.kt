@@ -127,12 +127,14 @@ object PptChart {
             val color = colors[si % colors.size]
             when (c.type) {
                 // 散点、气泡没有分类轴，只有 xVal/yVal；散点不贴数值标签，点本身就是数据
-                "scatter" -> """<c:ser><c:idx val="$si"/><c:order val="$si"/>$tx<c:spPr><a:ln w="34925" cap="rnd">${solid(color)}<a:round/></a:ln></c:spPr>""" +
+                "scatter" -> """<c:ser><c:idx val="$si"/><c:order val="$si"/>$tx<c:spPr><a:ln><a:noFill/></a:ln></c:spPr>""" +
                     """<c:marker><c:symbol val="circle"/><c:size val="7"/><c:spPr>${solid(color)}<a:ln w="19050">${solid(t.bg)}</a:ln></c:spPr></c:marker>${xVal()}<c:yVal>${numRef(valF(si), s.values)}</c:yVal><c:smooth val="0"/></c:ser>"""
                 "bubble" -> """<c:ser><c:idx val="$si"/><c:order val="$si"/>$tx<c:spPr>${solid(color)}<a:ln w="19050">${solid(t.bg)}</a:ln></c:spPr>${xVal()}<c:yVal>${numRef(yF(si), s.values)}</c:yVal><c:bubbleSize>${numRef(sizeF(si), s.sizes)}</c:bubbleSize></c:ser>"""
                 // 雷达和折线一样是连线 + 圆点，只是不贴数值标签（轴线密集时标签易重叠）
                 "radar" -> """<c:ser><c:idx val="$si"/><c:order val="$si"/>$tx<c:spPr><a:ln w="34925" cap="rnd">${solid(color)}<a:round/></a:ln></c:spPr>""" +
-                    """<c:marker><c:symbol val="circle"/><c:size val="7"/><c:spPr>${solid(color)}<a:ln w="19050">${solid(t.bg)}</a:ln></c:spPr></c:marker>$cat$v<c:smooth val="0"/></c:ser>"""
+                    """<c:marker><c:symbol val="circle"/><c:size val="7"/><c:spPr>${solid(color)}<a:ln w="19050">${solid(t.bg)}</a:ln></c:spPr></c:marker>$cat$v</c:ser>"""
+                // 面积图的系列不认 invertIfNegative、dLblPos（落到柱状那条会被 PowerPoint 判损坏）；半透明，几组叠着也看得见
+                "area" -> """<c:ser><c:idx val="$si"/><c:order val="$si"/>$tx<c:spPr><a:solidFill><a:srgbClr val="$color"><a:alpha val="70000"/></a:srgbClr></a:solidFill></c:spPr>$cat$v</c:ser>"""
                 "line" -> """<c:ser><c:idx val="$si"/><c:order val="$si"/>$tx<c:spPr><a:ln w="34925" cap="rnd">${solid(color)}<a:round/></a:ln></c:spPr>""" +
                     """<c:marker><c:symbol val="circle"/><c:size val="7"/><c:spPr>${solid(color)}<a:ln w="19050">${solid(t.bg)}</a:ln></c:spPr></c:marker>""" +
                     """<c:dLbls><c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>${txPr(1200, label, t = t)}<c:dLblPos val="t"/><c:showLegendKey val="0"/><c:showVal val="${if (c.series.size <= 2) 1 else 0}"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="0"/><c:showBubbleSize val="0"/></c:dLbls>""" +

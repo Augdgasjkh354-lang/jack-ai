@@ -41,16 +41,12 @@ object PptDeck {
         "teal" to Theme("0F766E", "14B8A6", "FFFFFF", "134E4A", "334155", "F0FDFA", "F8FAFC", "64748B"),
         "ink" to Theme("18181B", "2563EB", "FFFFFF", "18181B", "3F3F46", "F4F4F5", "FAFAFA", "71717A"),
         "warm" to Theme("7C6A5A", "C9A27E", "FAF7F2", "4A3F35", "5C5248", "F1EBE3", "FFFFFF", "8C8279"),
-    /** 新增：形状、年度、太平洋、液滴、玛奇朵、头条、科学、城市、浅蓝、音乐（均取自微软 Create 官方模板，见 tools/ms-templates.json）。 */
+        // 以下取自微软 Create 官方模板（见 tools/ms-templates.json）：形状、年度、太平洋、头条、城市、音乐。主色太浅、封面白字看不清的几套没收
         "shapes" to Theme("445464", "80AF97", "FFFFFF", "2C3741", "000000", "ECEEF0", "F8F9FA", "737373"),
         "impact" to Theme("4495A2", "7CA655", "FFFFFF", "2C6169", "000000", "ECF4F6", "F8FBFC", "737373"),
         "pacific" to Theme("AC5B4C", "A09D79", "FFFFFF", "703B31", "543E34", "F7EFED", "FCF9F9", "A1958F"),
-        "droplet" to Theme("F19E17", "054E9D", "FFFFFF", "9D670F", "000000", "FEF5E8", "FFFCF7", "737373"),
-        "macchiato" to Theme("A9D4DB", "FBE284", "FFFFFF", "6E8A8E", "000000", "F6FBFB", "FCFDFE", "737373"),
         "headlines" to Theme("474134", "87847B", "FFFFFF", "59512B", "000000", "EDECEB", "F9F8F8", "737373"),
-        "scientific" to Theme("70AAC4", "8B6A94", "FFFFFF", "496E7F", "374C81", "F1F6F9", "FAFCFD", "919DBA"),
         "city" to Theme("4A5EE6", "62D382", "FFFFFF", "303D96", "36393B", "EDEFFC", "F9F9FE", "909293"),
-        "ms11-blue" to Theme("96D3ED", "688EBD", "FFFFFF", "44546A", "000000", "F4FBFD", "FBFDFE", "737373"),
         "music" to Theme("0F263F", "4472C4", "FFFFFF", "0F253E", "000000", "E7E9EC", "F7F7F8", "737373"),
     )
 
@@ -58,11 +54,19 @@ object PptDeck {
 
     // ---------- 图标 ----------
 
-    /** 图标名 → 每条路径（M/L/C/Z，坐标 0..2400）。从 Lucide 转来，见 tools/lucide2json.py。 */
+    /** 图标名 → 每条路径（M/L/C/Z，坐标 0..2400）。Lucide 加 Tabler 补充，都用 tools/lucide2json.py 转。 */
+    private var lucideNames: Set<String> = emptySet()
+
     val ICONS: Map<String, List<String>> by lazy {
         runCatching {
-            val text = PptDeck::class.java.getResourceAsStream("/ppt/icons.json")!!.use { it.readBytes().toString(Charsets.UTF_8) }
-            (Json.parseToJsonElement(text) as JsonObject).mapValues { (_, v) -> (v as JsonArray).map { it.jsonPrimitive.content } }
+            fun load(name: String): Map<String, List<String>> = runCatching {
+                val text = PptDeck::class.java.getResourceAsStream(name)!!.use { it.readBytes().toString(Charsets.UTF_8) }
+                (Json.parseToJsonElement(text) as JsonObject).mapValues { (_, v) -> (v as JsonArray).map { it.jsonPrimitive.content } }
+            }.getOrDefault(emptyMap())
+            // Lucide 在前、重名以它为准（现有效果不变）；Tabler 只补 Lucide 没有的名字
+            val lucide = load("/ppt/icons.json")
+            lucideNames = lucide.keys
+            LinkedHashMap(lucide).apply { load("/ppt/tabler-icons.json").forEach { (k, v) -> putIfAbsent(k, v) } }
         }.getOrDefault(emptyMap())
     }
 
@@ -70,8 +74,10 @@ object PptDeck {
     fun iconName(raw: String): String? {
         val n = raw.trim().lowercase().replace(' ', '-').replace('_', '-')
         if (n.isEmpty()) return null
-        if (n in ICONS) return n
+        // 先认 Lucide 原名、再认别名，最后才认 Tabler 补充的名字（Tabler 有 home 这种，不能抢了别名指向的 house）
+        if (ICONS.isNotEmpty() && n in lucideNames) return n
         ALIASES[n]?.let { return it }
+        if (n in ICONS) return n
         return ICONS.keys.firstOrNull { it.startsWith("$n-") || it.endsWith("-$n") } ?: ICONS.keys.firstOrNull { n.contains(it) && it.length >= 4 }
     }
 
