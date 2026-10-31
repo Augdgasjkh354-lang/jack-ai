@@ -430,6 +430,11 @@ class Store(context: Context) {
             localPrefer = prefs.getBoolean("localPrefer", false),
             localClassify = prefs.getBoolean("localClassify", true),
             floatBall = prefs.getBoolean("floatBall", false),
+            noticeWatch = prefs.getBoolean("noticeWatch", false),
+            noticeSkip = prefs.getString("noticeSkip", null)?.let { runCatching { json.decodeFromString(ListSerializer(String.serializer()), it) }.getOrNull() }.orEmpty(),
+            contactsOn = prefs.getBoolean("contactsOn", false),
+            locationOn = prefs.getBoolean("locationOn", false),
+            usageOn = prefs.getBoolean("usageOn", false),
             phoneApps = prefs.getString("phoneApps", null)?.let { runCatching { json.decodeFromString(ListSerializer(String.serializer()), it) }.getOrNull() }.orEmpty(),
         ).also { com.jack.ai.api.Net.apply(it) }
     }
@@ -503,6 +508,11 @@ class Store(context: Context) {
             .putBoolean("localClassify", s.localClassify)
             .putString("phoneApps", json.encodeToString(ListSerializer(String.serializer()), s.phoneApps))
             .putBoolean("floatBall", s.floatBall)
+            .putBoolean("noticeWatch", s.noticeWatch)
+            .putString("noticeSkip", json.encodeToString(ListSerializer(String.serializer()), s.noticeSkip))
+            .putBoolean("contactsOn", s.contactsOn)
+            .putBoolean("locationOn", s.locationOn)
+            .putBoolean("usageOn", s.usageOn)
             .apply()
         com.jack.ai.api.Net.apply(s)
         com.jack.ai.a11y.KaviAccessibility.apply(s)

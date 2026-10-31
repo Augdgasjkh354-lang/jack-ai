@@ -151,3 +151,83 @@ fun AskScreenSection(vm: ChatViewModel, settings: Settings) {
             style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
     }
 }
+
+/**
+ * 设置页的「手机数据」：通知、联系人、位置、使用时长，每样单独开关、默认关；打开时按需要申请系统权限。
+ * Kavi 用 phone_data 查，「主动找你」回看时带上最近的通知和今天的使用时长。
+ */
+@Composable
+fun PhoneDataSection(vm: ChatViewModel, settings: Settings) {
+    val ctx = LocalContext.current
+    val colors = MaterialTheme.colorScheme
+    var tick by remember { mutableIntStateOf(0) }
+    val owner = LocalLifecycleOwner.current
+    DisposableEffect(owner) {
+        val obs = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_RESUME) tick++ }
+        owner.lifecycle.addObserver(obs)
+        onDispose { owner.lifecycle.removeObserver(obs) }
+    }
+    val noticeOk = remember(tick) { com.jack.ai.WeChatListener.granted(ctx) }
+    val usageOk = remember(tick) { com.jack.ai.data.PhoneData.canUsage(ctx) }
+    var pickingSkip by remember { mutableStateOf(false) }
+    val askContacts = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { ok ->
+        vm.updateSettings { it.copy(contactsOn = ok) }
+    }
+    val askLocation = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { ok ->
+        vm.updateSettings { it.copy(locationOn = ok) }
+    }
+
+    @Composable
+    fun row(title: String, hint: String, on: Boolean, warn: Boolean = false, onChange: (Boolean) -> Unit) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(title)
+                Text(hint, style = MaterialTheme.typography.bodySmall, color = if (warn) colors.error else colors.onSurfaceVariant)
+            }
+            androidx.compose.material3.Switch(checked = on, onCheckedChange = onChange)
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        row("通知",
+            when {
+                settings.noticeWatch && !noticeOk -> "还没给「通知使用权」，点下面去授权"
+                else -> "记下各 App 最近三天的通知（快递、外卖、日程……），Kavi 能查，「主动找你」会看。验证码遮掉；涉及钱的 App、微信私聊不记"
+            },
+            settings.noticeWatch, warn = settings.noticeWatch && !noticeOk,
+        ) { on ->
+            vm.updateSettings { it.copy(noticeWatch = on) }
+            if (on && noticeOk) com.jack.ai.WeChatListener.rebind(ctx)
+        }
+        if (settings.noticeWatch) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (!noticeOk) OutlinedButton(onClick = {
+                runCatching { ctx.startActivity(Intent(SysSettings.ACTION_NOTIFICATION_LISTENER_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            }) { Text("去授权") }
+            OutlinedButton(onClick = { pickingSkip = true }) { Text(if (settings.noticeSkip.isEmpty()) "不记哪些 App" else "不记 ${settings.noticeSkip.size} 个 App") }
+        }
+        row("联系人", "Kavi 能按名字查电话、邮箱（比如「给张三发邮件」）", settings.contactsOn) { on ->
+            if (!on) vm.updateSettings { it.copy(contactsOn = false) }
+            else if (com.jack.ai.data.PhoneData.canContacts(ctx)) vm.updateSettings { it.copy(contactsOn = true) }
+            else askContacts.launch(android.Manifest.permission.READ_CONTACTS)
+        }
+        row("位置", "问到附近、天气、路线时，Kavi 能知道你大概在哪（只用粗略定位，问的时候才定一次，不在后台跟踪）", settings.locationOn) { on ->
+            if (!on) vm.updateSettings { it.copy(locationOn = false) }
+            else if (com.jack.ai.data.PhoneData.canLocate(ctx)) vm.updateSettings { it.copy(locationOn = true) }
+            else askLocation.launch(android.Manifest.permission.ACCESS_COARSE_LOCATION)
+        }
+        row("使用时长",
+            if (settings.usageOn && !usageOk) "还没给「使用情况访问权限」，点下面去授权" else "Kavi 能看今天、这几天各 App 用了多久，「主动找你」也会看",
+            settings.usageOn, warn = settings.usageOn && !usageOk,
+        ) { on -> vm.updateSettings { it.copy(usageOn = on) } }
+        if (settings.usageOn && !usageOk) OutlinedButton(onClick = {
+            runCatching { ctx.startActivity(Intent(SysSettings.ACTION_USAGE_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        }) { Text("去授权") }
+        Text("这些都只存在手机上；Kavi 查的时候才会把查到的那几条发给模型。",
+            style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+    }
+
+    if (pickingSkip) AppPicker("不记这些 App 的通知", settings.noticeSkip.toSet(), onDismiss = { pickingSkip = false }) { chosen ->
+        pickingSkip = false
+        vm.updateSettings { it.copy(noticeSkip = chosen.sorted()) }
+    }
+}

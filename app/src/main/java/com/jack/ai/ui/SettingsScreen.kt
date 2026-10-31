@@ -194,6 +194,10 @@ fun SettingsScreen(
                 AskScreenSection(vm, settings)
             }
 
+            Section("手机数据", icon = AppIcons.Phone, hint = "每样单独开，默认都关着。") {
+                PhoneDataSection(vm, settings)
+            }
+
             Section("手机文件夹", icon = AppIcons.Folder, hint = "授权给 Kavi 的文件夹：它能在里面找文件、拷进对话处理、把做好的文件存回去，搬和删之前先问你。别的地方它碰不到。") {
                 PhoneFoldersSection(vm, settings)
             }

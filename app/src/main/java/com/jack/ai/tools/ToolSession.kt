@@ -311,6 +311,7 @@ class ToolSession(
             name == "self_check" -> selfCheck(args)
             name == "phone_files" -> phoneFiles(args)
             name == "phone" -> phone(args)
+            name == "phone_data" -> phoneData(args)
             name == "notion_search" && SkillIds.NOTION in skillIds -> notionSearch(args)
             name == "notion_read" && SkillIds.NOTION in skillIds -> notionRead(args)
             name == "notion_write" && SkillIds.NOTION in skillIds -> notionWrite(args)
@@ -391,7 +392,7 @@ class ToolSession(
 
         /** 返回外部内容的工具：内容里可能藏着冒充用户的指令。 */
         /** 结果要查提示词注入的：外部内容，加上读文件（文件常常是从外面来的）。 */
-        val SCANNED_TOOLS get() = EXTERNAL_TOOLS + setOf("read_file", "phone_files", "phone")
+        val SCANNED_TOOLS get() = EXTERNAL_TOOLS + setOf("read_file", "phone_files", "phone", "phone_data")
         val EXTERNAL_TOOLS = setOf("list_emails", "read_email", "web_search", "read_webpage", "notion_search", "notion_read", "browser", "github", "download_file")
 
         /** 报错尽量带上具体原因，模型才知道该重试、换方法还是去问用户。 */

@@ -20,6 +20,9 @@ object Capabilities {
             if (Transcriber.engine(settings.providers) == null) " (transcription has no service set up yet; when it's needed, ask {user} to add SiliconFlow under 设置 → 其他模型服务)" else ""
         if ("phone_files" in tools) lines += "Phone folders (authorized: ${settings.phoneFolders.joinToString(", ") { it.name }}): phone_files; import a file into the conversation folder before reading or editing it"
         if ("phone" in tools) lines += "Operate other apps on {user}'s phone for them (only the apps {user} ticked; never payment, bank or brokerage apps): phone"
+        if ("phone_data" in tools) lines += "{User}'s phone data, only what they turned on (" + listOfNotNull(
+            "recent notifications".takeIf { settings.noticeWatch }, "contacts".takeIf { settings.contactsOn },
+            "location".takeIf { settings.locationOn }, "app usage time".takeIf { settings.usageOn }).joinToString(", ") + "): phone_data"
         if ("run_python" in tools) lines += "Arithmetic, processing tabular data, plotting: run_python"
         else if ("run_js" in tools) lines += "Exact calculation: run_js"
         skill(SkillIds.TABLES)?.let { lines += "Bookkeeping, lists, clients and other tables: 「$it」" }

@@ -331,7 +331,16 @@ data class Settings(
     val phoneApps: List<String> = emptyList(),
     /** 悬浮球：点一下把当前屏幕带进 Kavi 问（要开无障碍）。 */
     val floatBall: Boolean = false,
+    /** 手机数据（设置 → 手机数据），每样单独开、默认关：通知（不记的 App 在 noticeSkip）、联系人、位置、使用时长。 */
+    val noticeWatch: Boolean = false,
+    val noticeSkip: List<String> = emptyList(),
+    val contactsOn: Boolean = false,
+    val locationOn: Boolean = false,
+    val usageOn: Boolean = false,
 )
+
+/** 开了哪样手机数据（phone_data 工具有没有）。 */
+val Settings.phoneDataOn: Boolean get() = noticeWatch || contactsOn || locationOn || usageOn
 
 /** 一个授权过的手机文件夹：uri 是系统给的树形地址，name 是给 Kavi 和用户看的名字。 */
 @Serializable
