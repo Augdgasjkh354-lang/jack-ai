@@ -75,7 +75,12 @@ object OwnMemory {
     /** 做梦的修改单里针对 [o:] 的那些：修改、合并、放到深处、拿回来、作废（原文还在工作台里，用 own_history 找得回来）。 */
     fun applyOps(ctx: Context, ops: List<MemoryOps.Op>, now: Long = System.currentTimeMillis()): Applied = synchronized(lock) {
         val list = load(ctx).toMutableList()
-        fun find(id: String) = if (id.length < 4) -1 else list.indexOfFirst { it.id.startsWith(id) }
+        fun find(id: String): Int {
+            if (id.length < 4) return -1
+            // 前缀撞车时不能取第一条：撞车就当找不到，让模型给更长的编号（和 MemoryOps.apply 里同一道理）
+            val hits = list.indices.filter { list[it].id.startsWith(id) }
+            return if (hits.size == 1) hits[0] else -1
+        }
         var demoted = 0; var promoted = 0; var merged = 0; var updated = 0; var removed = 0
         for (op in ops) when (op.op) {
             "demote", "promote" -> {
