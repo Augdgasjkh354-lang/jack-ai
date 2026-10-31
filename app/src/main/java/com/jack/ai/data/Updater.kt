@@ -102,6 +102,44 @@ object Updater {
         return md.digest().joinToString("") { "%02x".format(it) }
     }
 
+    /**
+     * 安装包的签名要和已装的 App 一致：只验 SHA-256 只能证明文件是发布者原样，
+     * 证明不了发布者就是装机时那个签名方；签名对不上（或读不出来）就删掉，不提示安装。
+     * 安卓本身装包时也会拦签名不一致，但拦在系统界面那一步之前，用户就不会被诱导去点一个冒名的包。
+     */
+    private fun checkSignature(ctx: Context, apk: File) {
+        val pm = ctx.packageManager
+        fun signers(info: android.content.pm.PackageInfo?): Set<android.content.pm.Signature>? {
+            if (info == null) return null
+            return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                info.signingInfo?.apkContentsSigners?.toSet()
+            } else {
+                @Suppress("DEPRECATION")
+                info.signatures?.toSet()
+            }
+        }
+        val installed = runCatching {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                pm.getPackageInfo(ctx.packageName, android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES)
+            } else {
+                @Suppress("DEPRECATION")
+                pm.getPackageInfo(ctx.packageName, android.content.pm.PackageManager.GET_SIGNATURES)
+            }
+        }.getOrNull().let(::signers)
+        val archive = runCatching {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                pm.getPackageArchiveInfo(apk.path, android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES)
+            } else {
+                @Suppress("DEPRECATION")
+                pm.getPackageArchiveInfo(apk.path, android.content.pm.PackageManager.GET_SIGNATURES)
+            }
+        }.getOrNull().let(::signers)
+        if (installed.isNullOrEmpty() || archive.isNullOrEmpty() || installed != archive) {
+            apk.delete()
+            throw GitHub.GitHubException("下载的安装包签名和已装应用对不上（可能是别人冒名发的包），已删掉，不会提示安装")
+        }
+    }
+
     sealed class Result {
         object UpToDate : Result()
         data class Downloaded(val ready: Ready) : Result()
@@ -125,6 +163,7 @@ object Updater {
             f.delete()
             throw GitHub.GitHubException("下载的安装包校验不对（可能下坏了），已删掉，下次再试")
         }
+        checkSignature(ctx, f)
         val target = File(d, "Kavi-${l.tag}.apk")
         if (f != target) f.renameTo(target)
         val notes = notes(token, installed, l)
