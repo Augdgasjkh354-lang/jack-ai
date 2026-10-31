@@ -143,9 +143,17 @@ object WordDoc {
         val t = PptDeck.theme(o.theme).let { if (it.dark) PptDeck.theme("blue").copy(primary = it.accent) else it }  // Word 是白纸，深色主题只借强调色
         val lines = markdown.replace("\r\n", "\n").split("\n")
         // 第一个「# 」是文档标题
-        val titleIdx = lines.indexOfFirst { it.trim().startsWith("# ") }
+        // 标题只认围栏外的「# 」：代码块里的「# 注释」不能当标题，否则正文第一行会被吞掉。
+        // 另外 headingCount 不能用 lines.indexOf(it)（同文字的行会指到同一处），必须用下标算
+        val fence = BooleanArray(lines.size)
+        var inFence = false
+        for (i in lines.indices) {
+            val s = lines[i].trim()
+            if (s.startsWith("```")) { inFence = !inFence; fence[i] = true } else fence[i] = inFence
+        }
+        val titleIdx = lines.withIndex().indexOfFirst { (i, l) -> l.trim().startsWith("# ") && !fence[i] }
         val docTitle = (if (titleIdx >= 0) lines[titleIdx].trim().removePrefix("# ").trim() else "").ifEmpty { o.cover?.title.orEmpty() }
-        val headingCount = lines.count { val s = it.trim(); s.startsWith("## ") || (s.startsWith("# ") && lines.indexOf(it) != titleIdx) }
+        val headingCount = lines.withIndex().count { (i, l) -> val s = l.trim(); !fence[i] && (s.startsWith("## ") || (s.startsWith("# ") && i != titleIdx)) }
         val withToc = o.toc ?: (headingCount >= 4)
         val cover = o.cover
         // 没有封面但有目录：标题放在目录那页顶上，正文里就不再写一遍
