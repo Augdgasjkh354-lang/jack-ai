@@ -26,20 +26,23 @@ android {
         ndk { abiFilters += listOf("arm64-v8a") }
     }
 
+    // 签名密钥不在仓库里：打包时由 GitHub Actions 从 Secrets 还原成文件，路径和密码经环境变量传进来。
+    // 本地没有这几个变量时 release 不签名（本地只编译、跑测试，用不到）
+    val keystore = System.getenv("KAVI_KEYSTORE_FILE")
     signingConfigs {
-        create("release") {
+        if (keystore != null) create("release") {
             // 固定签名，保证每次新版本都能直接覆盖安装，聊天记录不丢
-            storeFile = file("jack-ai.keystore")
-            storePassword = "jackai2026"
-            keyAlias = "jackai"
-            keyPassword = "jackai2026"
+            storeFile = file(keystore)
+            storePassword = System.getenv("KAVI_KEYSTORE_PASSWORD")
+            keyAlias = "kavi"
+            keyPassword = System.getenv("KAVI_KEYSTORE_PASSWORD")
         }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("release")
+            if (keystore != null) signingConfig = signingConfigs.getByName("release")
         }
     }
 

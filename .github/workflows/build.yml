@@ -74,6 +74,20 @@ jobs:
           n=${{ github.run_number }}
           if [ "$n" -ge 100 ]; then echo "VERSION=1.1.$((n - 100))" >> "$GITHUB_ENV"; else echo "VERSION=1.0.$n" >> "$GITHUB_ENV"; fi
 
+      # 签名密钥从 Secrets 还原到仓库外面的临时目录，打完包就随机器一起销毁；缺了就不打包，免得发出签名不对、装不上的包
+      - name: Signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KAVI_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KAVI_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ]; then
+            echo "::error::缺少签名密钥：在仓库 Settings → Secrets and variables → Actions 里加 KAVI_KEYSTORE_BASE64 和 KAVI_KEYSTORE_PASSWORD"
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/kavi.keystore"
+          echo "KAVI_KEYSTORE_FILE=$RUNNER_TEMP/kavi.keystore" >> "$GITHUB_ENV"
+          echo "KAVI_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+
       - name: Build
         run: |
           chmod +x gradlew

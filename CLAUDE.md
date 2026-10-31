@@ -9,6 +9,7 @@
   会话指定了别的开发分支时，那个分支也照常推一份，但 `main` 一定要推。
 - 推之前先编译、跑相关单测；推到 `main` 会自动打包发版（GitHub Actions「打包 APK」）。推完直接收工，不用等打包结果（Jack 明确要求）；只告诉他「已推送，打包在跑」，打包失败他会回来说。
 - 提交说明用英文写清改了什么、为什么。
+- 签名密钥不进仓库（仓库是公开的）：打包时从 GitHub Secrets 的 `KAVI_KEYSTORE_BASE64`、`KAVI_KEYSTORE_PASSWORD` 还原，别名 `kavi`。别把 keystore、密码写进代码或提交。
 
 ## 和 Jack 沟通
 
