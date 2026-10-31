@@ -139,7 +139,7 @@ class RecordService : Service() {
 
     companion object {
         private const val CHANNEL = "record"
-        private const val ID = 7401
+        private const val ID = 7402
         /** 最长录 3 小时（转文字的上限）。 */
         const val MAX_MS = 3L * 3600 * 1000
         const val START = "com.jack.ai.record.START"
