@@ -18,8 +18,12 @@ object FreeConversation {
     fun load(ctx: Context): State {
         val f = file(ctx)
         val text = try { String(f.readFully()) } catch (_: java.io.FileNotFoundException) { return State() }
-        // 坏了就从头开始（原文的归档还在），不让自由时间从此起不来
-        val o = runCatching { json.parseToJsonElement(text).jsonObject }.getOrElse { return State() }
+        // 坏了先把原文归档再从头开始：不归档的话，下一次 save 会直接覆盖掉这个坏文件，原文就再也找不回来了。
+        // 归档的不挂待整理标记（坏文件整理不出来，只留着给人看）
+        val o = runCatching { json.parseToJsonElement(text).jsonObject }.getOrElse {
+            runCatching { File(dir(ctx), "free_corrupt_${System.currentTimeMillis()}.json").writeText(text) }
+            return State()
+        }
         return State((o["messages"] as? JsonArray).orEmpty().map { it.jsonObject },
             (o["lastTokens"] as? JsonPrimitive)?.intOrNull ?: 0,
             (o["lastEstimate"] as? JsonPrimitive)?.intOrNull ?: 0,
