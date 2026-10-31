@@ -132,8 +132,16 @@ private class PdfDoc(file: File) {
     suspend fun render(i: Int, width: Int): Bitmap = lock.withLock {
         withContext(Dispatchers.IO) {
             renderer.openPage(i).use { p ->
-                val h = (width * p.height.toFloat() / p.width.coerceAtLeast(1)).toInt().coerceAtLeast(1)
-                Bitmap.createBitmap(width, h, Bitmap.Config.ARGB_8888).also { b ->
+                var w = width
+                var h = (w * p.height.toFloat() / p.width.coerceAtLeast(1)).toInt().coerceAtLeast(1)
+                // 超长页（小票、长图）按总像素封顶：等比缩小，免得一张位图吃掉几百 MB 内存
+                val maxPx = 16_000_000L
+                if (w.toLong() * h > maxPx) {
+                    val s = kotlin.math.sqrt(maxPx.toDouble() / (w.toLong() * h))
+                    w = (w * s).toInt().coerceAtLeast(1)
+                    h = (h * s).toInt().coerceAtLeast(1)
+                }
+                Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).also { b ->
                     b.eraseColor(android.graphics.Color.WHITE)
                     p.render(b, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
                 }
