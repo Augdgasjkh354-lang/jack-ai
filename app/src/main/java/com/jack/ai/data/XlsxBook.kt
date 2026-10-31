@@ -52,18 +52,26 @@ object XlsxBook {
         }
         if (v.endsWith("%")) {
             val n = v.removeSuffix("%").replace(",", "")
-            if (NUM.matches(n)) return Cell(n.toDouble() / 100, if (n.contains('.')) "pct1" else "pct")
+            if (NUM.matches(n)) {
+                val d = n.toDouble() / 100
+                if (d.isFinite()) return Cell(d, if (n.contains('.')) "pct1" else "pct")
+            }
         }
         val money = v.startsWith("¥") || v.startsWith("￥")
         val body = v.removePrefix("¥").removePrefix("￥").trim()
-        if (GROUPED.matches(body)) return Cell(body.replace(",", "").toDouble(), if (money) "money" else if (body.contains('.')) "dec" else "int")
+        if (GROUPED.matches(body)) {
+            val d = body.replace(",", "").toDouble()
+            if (d.isFinite()) return Cell(d, if (money) "money" else if (body.contains('.')) "dec" else "int")
+        }
         if (NUM.matches(body) && !(body.length > 1 && body.startsWith("0") && !body.startsWith("0."))) {
-            return Cell(body.toDouble(), if (money) "money" else "general")
+            val d = body.toDouble()
+            // 1e999 这类数 toDouble() 是 Infinity，写进 XML 会让 Office 判文件损坏：算不出来的数当文字留着
+            if (d.isFinite()) return Cell(d, if (money) "money" else "general")
         }
         return Cell(text = v)
     }
 
-    private fun num(v: Double) = if (v == Math.floor(v) && kotlin.math.abs(v) < 1e15) v.toLong().toString() else v.toString()
+    private fun num(v: Double) = if (!v.isFinite()) "0" else if (v == Math.floor(v) && kotlin.math.abs(v) < 1e15) v.toLong().toString() else v.toString()
 
     // ---------- 整本 ----------
 
@@ -75,7 +83,13 @@ object XlsxBook {
         val names = mutableListOf<String>()
         list.forEachIndexed { i, s ->
             var n = s.name.replace(Regex("""[\[\]:*?/\\]"""), " ").trim().take(31).ifEmpty { "Sheet${i + 1}" }
-            while (n in names) n = (n.take(28) + "_" + (i + 1))
+            // 去重后缀必须每次都不一样：原来固定用 (i + 1)，28 个 A + "_2" 这种名字会原地不动死循环
+            var k = i + 1
+            while (n in names) {
+                val suf = "_$k"
+                n = n.take(31 - suf.length) + suf
+                k++
+            }
             names += n
         }
 
@@ -186,7 +200,10 @@ object XlsxBook {
             val anchors = StringBuilder()
             val drawingRels = StringBuilder()
             sheet.charts.forEachIndexed { k, ch ->
-                val cat = colIndex(ch.categoryColumn) ?: 0
+                val catRaw = colIndex(ch.categoryColumn)
+                // 分类列可以是「ZZ」这种字母：字母超出表宽时不能直接当下标用，否则下面 it[cat] 越界崩溃
+                val cat = catRaw?.takeIf { it < cols } ?: 0
+                if (catRaw != null && catRaw >= cols) warnings += "「${names[si]}」的图「${ch.title}」：分类列「${ch.categoryColumn}」超出表宽"
                 val vals = ch.valueColumns.mapNotNull { name -> colIndex(name).also { if (it == null) warnings += "「${names[si]}」的图「${ch.title}」：列「$name」没找到" } }
                     .filter { it < cols && it != cat }.ifEmpty { (0 until cols).filter { it != cat && numericCol[it] }.take(3) }
                 if (vals.isEmpty() || data.isEmpty()) { warnings += "「${names[si]}」的图「${ch.title}」没有能画的数"; return@forEachIndexed }
