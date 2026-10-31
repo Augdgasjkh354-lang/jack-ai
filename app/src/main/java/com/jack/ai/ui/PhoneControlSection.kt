@@ -90,6 +90,13 @@ fun PhoneControlSection(vm: ChatViewModel, settings: Settings) {
         OutlinedButton(onClick = { picking = true }, modifier = Modifier.fillMaxWidth()) {
             Text(if (settings.phoneApps.isEmpty()) "选 App" else "选 App（${settings.phoneApps.size} 个）")
         }
+        OutlinedButton(
+            onClick = { KaviAccessibility.instance?.startTeach() },
+            enabled = KaviAccessibility.instance != null && settings.phoneApps.isNotEmpty(),
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("教 Kavi 一个手机流程") }
+        Text("点了回到桌面，你在勾过的 App 里做一遍，上方的条点「完成」，Kavi 把步骤整理成流程存下来，以后照着做、也能定时跑。",
+            style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
         Text(
             "支付宝、银行、证券、钱包和付款页面一律不碰；发送、删除、提交这类操作先问你（开着完全授权时直接做、事后告诉你）；密码框不读不填。" +
                 "操作时屏幕上方有一条「Kavi 正在操作 · 停止」，随时能停。有的手机会自己关掉无障碍，用不了时回来看一眼。",

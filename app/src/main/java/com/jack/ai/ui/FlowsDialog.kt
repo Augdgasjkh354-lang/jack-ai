@@ -95,7 +95,7 @@ fun FlowsDialog(vm: ChatViewModel, onDismiss: () -> Unit) {
                     Card(Modifier.fillMaxWidth().clickable { editing = f }) {
                         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(f.name, style = MaterialTheme.typography.titleSmall)
-                            Text(f.site + (f.whenToUse.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""),
+                            Text(BrowserFlows.siteLabel(f.site) + (f.whenToUse.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""),
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 2, overflow = TextOverflow.Ellipsis)
                             Text(if (f.uses > 0) "用过 ${f.uses} 次，上次 " + SimpleDateFormat("M月d日", Locale.CHINA).format(Date(f.usedAt)) else "还没用过",

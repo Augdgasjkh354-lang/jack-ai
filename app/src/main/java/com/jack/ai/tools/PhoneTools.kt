@@ -24,6 +24,16 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
     val svc = KaviAccessibility.instance
         ?: return if (KaviAccessibility.enabled(app)) "无障碍服务开着但还没连上（可能刚被系统关掉又重开），过几秒再试一次；还不行请用户到 设置 → 操作其他 App 关掉再打开。"
         else "无障碍服务没开，Kavi 碰不到别的 App。请用户到 设置 → 操作其他 App 点「去打开」（安卓 13 以上要先在应用信息里「允许受限制的设置」）。"
+    // 存流程、读流程不用碰屏幕
+    if (action == "flow" || action == "save_flow") return phoneFlow(action, args)
+    // 手机锁着（多半是定时任务在后台跑）：推送请用户解锁，等两分钟
+    if (locked()) {
+        if (interactive) return "手机锁着屏，Kavi 没法操作。请用户解锁后再说一声。"
+        com.jack.ai.data.Routines.notify(app, "phone-unlock", "Kavi 要用一下手机", "后台任务要操作手机上的 App，解锁后它会接着做（两分钟内）。")
+        val end = System.currentTimeMillis() + 120_000
+        while (locked() && System.currentTimeMillis() < end) delay(2000)
+        if (locked()) return "手机一直锁着屏，没法操作，已推送通知提醒用户。任务到这里停下，结果里写明「需要解锁手机才能做」。"
+    }
     // 用户按了停止：这一轮不再操作
     val stopsNow = KaviAccessibility.stops.get()
     if (phoneStops < 0) phoneStops = stopsNow
@@ -100,7 +110,7 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
                 // 冷启动慢：等它到前台
                 repeat(20) { if (svc.foreground() != pkg) delay(250) }
                 svc.settle(4000)
-                read().second
+                flowHint(pkg) + read().second
             }
             "read" -> read().second
             "screenshot" -> {
@@ -195,4 +205,57 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
         }
         text to SearchRecord(toolLabel)
     }
+}
+
+/** 手机锁着屏或屏幕灭着。 */
+private fun ToolSession.locked(): Boolean {
+    val km = app.getSystemService(android.content.Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
+    val pm = app.getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
+    return km.isKeyguardLocked || !pm.isInteractive
+}
+
+/** 打开一个存过流程的 App 时提醒一句（这一轮每个 App 只提醒一次）。 */
+private suspend fun ToolSession.flowHint(pkg: String): String {
+    val site = com.jack.ai.data.BrowserFlows.APP_PREFIX + pkg
+    if (!flowHinted.add(site)) return ""
+    val flows = withContext(Dispatchers.IO) { host.store.loadFlows() }.filter { it.site == site }
+    if (flows.isEmpty()) return ""
+    return "【这个 App 存了流程】" + flows.joinToString("；") { f -> "「${f.name}」" + f.whenToUse.takeIf { it.isNotBlank() }?.let { "（$it）" }.orEmpty() } +
+        "。和用户要做的事对得上，就先用 action=flow 填 name 读出步骤照着做；对不上就照常做。\n\n"
+}
+
+/** 读一个手机流程的步骤（记一次使用），或者存 / 更新一个（存的是文字步骤，照着做时发送、付款照样要用户确认）。 */
+private suspend fun ToolSession.phoneFlow(action: String, args: JsonObject): String {
+    val store = host.store
+    val prefix = com.jack.ai.data.BrowserFlows.APP_PREFIX
+    val flows = withContext(Dispatchers.IO) { store.loadFlows() }
+    val mine = flows.filter { it.site.startsWith(prefix) }
+    val name = args["name"].text().trim()
+    if (name.isEmpty()) return "要填 name（流程名）。现有手机流程：\n" + com.jack.ai.data.BrowserFlows.index(mine)
+    if (action == "flow") {
+        val f = com.jack.ai.data.BrowserFlows.find(mine, name)
+            ?: return "没有叫「$name」的手机流程。现有手机流程：\n" + com.jack.ai.data.BrowserFlows.index(mine)
+        withContext(Dispatchers.IO) {
+            store.saveFlows(store.loadFlows().map { if (it.id == f.id) it.copy(uses = it.uses + 1, usedAt = System.currentTimeMillis()) else it })
+        }
+        val blanks = com.jack.ai.data.BrowserFlows.blanks(f.steps)
+        return "【手机流程「${f.name}」】App：${f.site.removePrefix(prefix)}" + f.whenToUse.takeIf { it.isNotBlank() }?.let { "\n什么时候用：$it" }.orEmpty() +
+            (if (blanks.isNotEmpty()) "\n要填的空：" + blanks.joinToString("、") { "{$it}" } + "（换成这次用户给的值；必须有又没给的先问用户）" else "") +
+            "\n步骤：\n${f.steps}\n\n先 open 这个 App，再照着做；界面和步骤对不上就按意思灵活处理，做完告诉用户哪一步变了、问要不要更新流程。"
+    }
+    val appArg = args["app"].text().trim()
+    val pkg = settings.phoneApps.firstOrNull { it == appArg }
+        ?: settings.phoneApps.firstOrNull { p -> com.jack.ai.a11y.KaviAccessibility.instance?.appLabel(p)?.let { it == appArg || appArg in it } == true }
+        ?: return "app 要填用户勾过的 App（名字或包名）。勾了：" + settings.phoneApps.joinToString("、")
+    val steps = args["steps"].text().trim().take(6000)
+    if (steps.isEmpty()) return "steps 要填编号的文字步骤。"
+    val site = prefix + pkg
+    val old = flows.firstOrNull { it.name == name }
+    val saved = (old ?: com.jack.ai.data.BrowserFlow(name = name, site = site, steps = steps)).copy(name = name, site = site, whenToUse = args["when"].text().trim().take(200), steps = steps)
+    withContext(Dispatchers.IO) {
+        val now = store.loadFlows()
+        store.saveFlows(if (now.any { it.id == saved.id }) now.map { if (it.id == saved.id) saved else it } else now + saved)
+    }
+    ui.notice((if (old != null) "已更新" else "已存成") + "手机流程「$name」，在 技能 → 浏览器流程 里能改、能删")
+    return (if (old != null) "已更新" else "已存下") + "手机流程「$name」。下次打开这个 App 时会提醒，用 action=flow 读出步骤照着做；也能用 schedule 定时让 Kavi 照着跑。"
 }

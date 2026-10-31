@@ -94,7 +94,82 @@ class KaviAccessibility : AccessibilityService() {
         serviceInfo = info
     }
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) { lastEventAt = System.currentTimeMillis() }
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        lastEventAt = System.currentTimeMillis()
+        if (teaching && event != null) record(event)
+    }
+
+    // ---------- 教 Kavi 一个手机流程：记下用户点了什么、输入了什么（只在勾过的 App 里，事件本来就只收这些） ----------
+
+    @Volatile var teaching = false
+        private set
+    private var teachSteps = listOf<String>()
+    private var teachPkg = ""
+
+    /** 开始记：回到桌面，用户自己打开 App 做一遍；上方的条显示记了几步，点「完成」交给 Kavi。 */
+    fun startTeach() = main.post {
+        teaching = true; teachSteps = emptyList(); teachPkg = ""
+        showTeachBar()
+        home()
+    }
+
+    private fun record(e: AccessibilityEvent) {
+        val pkg = e.packageName?.toString().orEmpty()
+        if (pkg.isEmpty() || pkg == packageName) return
+        if (pkg != teachPkg && e.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            teachPkg = pkg
+            teachSteps = PhoneTeach.append(teachSteps, PhoneTeach.opened(appLabel(pkg)))
+        }
+        val text = e.text.joinToString(" ").trim()
+        val step = when (e.eventType) {
+            AccessibilityEvent.TYPE_VIEW_CLICKED -> PhoneTeach.click(text.ifEmpty { e.contentDescription?.toString().orEmpty() }
+                .ifEmpty { e.source?.let { ScreenText.merged(UiNode(children = listOfNotNull(snapshotOf(it)))) }.orEmpty() })
+            AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED -> PhoneTeach.typed(e.source?.hintText?.toString().orEmpty(), text, e.isPassword)
+            else -> null
+        } ?: return
+        teachSteps = PhoneTeach.append(teachSteps, step)
+        main.post { barText?.text = "正在记你的操作 · ${teachSteps.size} 步 · ${teachSteps.last().take(16)}" }
+    }
+
+    /** 一个控件（和它里面的）拷成 UiNode，取字用。 */
+    private fun snapshotOf(n: AccessibilityNodeInfo, depth: Int = 0): UiNode? {
+        if (depth > 6) return null
+        return UiNode(text = n.text?.toString().orEmpty(), desc = n.contentDescription?.toString().orEmpty(), password = n.isPassword,
+            children = (0 until n.childCount).mapNotNull { i -> n.getChild(i)?.let { snapshotOf(it, depth + 1) } })
+    }
+
+    private fun showTeachBar() {
+        removeBar()
+        main.removeCallbacks(hideBar)
+        val label = TextView(this).apply { setTextColor(Color.WHITE); textSize = 13f; maxLines = 1; maxWidth = dp(220); text = "正在记你的操作 · 打开要用的 App 做一遍" }
+        fun action(t: String, onClick: () -> Unit) = TextView(this).apply {
+            text = t; setTextColor(Color.rgb(255, 180, 171)); textSize = 13f; typeface = Typeface.DEFAULT_BOLD
+            setPadding(dp(14), 0, 0, 0); setOnClickListener { onClick() }
+        }
+        val v = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(14), dp(8), dp(14), dp(8))
+            background = GradientDrawable().apply { cornerRadius = dp(20).toFloat(); setColor(Color.argb(230, 32, 33, 36)) }
+            addView(label)
+            addView(action("取消") { teaching = false; removeBar() })
+            addView(action("完成") { finishTeach() })
+        }
+        val lp = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT,
+        ).apply { gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL; y = dp(40) }
+        if (runCatching { wm.addView(v, lp) }.isSuccess) { bar = v; barText = label }
+    }
+
+    /** 记完：开个新对话，把步骤填进输入框，用户看一眼发出去，Kavi 整理成流程存下。 */
+    private fun finishTeach() {
+        teaching = false
+        removeBar()
+        if (teachSteps.size < 2) { ScreenAsk.toast(this, "没记到操作（只记勾过的 App 里的）"); return }
+        val i = Intent(this, com.jack.ai.MainActivity::class.java).setAction(com.jack.ai.MainActivity.ACTION_NEW_CHAT)
+            .putExtra("prefill", PhoneTeach.request(teachSteps)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        runCatching { startActivity(i) }
+    }
     override fun onInterrupt() {}
 
     override fun onUnbind(intent: Intent?): Boolean {
@@ -301,6 +376,7 @@ class KaviAccessibility : AccessibilityService() {
 
     /** 屏幕上方的小条：「Kavi 正在操作：……  停止」。一段时间没有新操作就自己收起来。 */
     fun showBar(text: String, keepMs: Long = 20_000) = main.post {
+        if (teaching) return@post
         if (bar == null) {
             val label = TextView(this).apply { setTextColor(Color.WHITE); textSize = 13f; maxLines = 1; maxWidth = dp(240) }
             val stop = TextView(this).apply {

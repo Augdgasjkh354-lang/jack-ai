@@ -32,6 +32,12 @@ data class SiteNote(
 )
 
 object BrowserFlows {
+    /** 手机流程（操作其他 App 的）也存在这里，site 写成 app:包名。 */
+    const val APP_PREFIX = "app:"
+
+    /** 给人看的「在哪用」：网站名，或「手机 App」。 */
+    fun siteLabel(site: String): String = if (site.startsWith(APP_PREFIX)) "手机 App（${site.removePrefix(APP_PREFIX)}）" else site
+
     /** 每个网站最多记几条备忘（新的挤掉旧的）。 */
     const val NOTES_PER_SITE = 8
 
@@ -66,6 +72,8 @@ object BrowserFlows {
     fun siteOf(input: String): String {
         val t = input.trim()
         if (t.isEmpty()) return ""
+        // 手机流程：app:包名，原样留着
+        if (t.startsWith(APP_PREFIX)) return t
         return BrowserPages.site(if (Regex("^https?://", RegexOption.IGNORE_CASE).containsMatchIn(t)) t else "https://$t")
     }
 
