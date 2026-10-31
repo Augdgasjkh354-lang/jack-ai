@@ -22,8 +22,10 @@ object ContextSlim {
     fun slim(messages: MutableList<JsonObject>, spill: ((String) -> String?)? = null): Int {
         val tools = messages.indices.filter { (messages[it]["role"] as? JsonPrimitive)?.content == "tool" }
         if (tools.sumOf { text(messages[it]).length } <= BUDGET) return 0
+        // 最近的留着，但至少留一条：原来 dropLast(KEEP_RECENT) 在工具消息 ≤6 条时返回空，永远压不到
+        val keep = minOf(KEEP_RECENT, (tools.size - 1).coerceAtLeast(1))
         var n = 0
-        tools.dropLast(KEEP_RECENT).forEach { i ->
+        tools.dropLast(keep).forEach { i ->
             val c = text(messages[i])
             if (c.length <= MIN_LEN || c.startsWith(MARK)) return@forEach
             messages[i] = JsonObject(messages[i] + ("content" to JsonPrimitive(shrink(c, spill?.invoke(c)))))
