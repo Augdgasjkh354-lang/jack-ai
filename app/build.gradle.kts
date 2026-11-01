@@ -60,7 +60,11 @@ android {
     testOptions {
         unitTests.isIncludeAndroidResources = true
         // Robolectric 运行时要下载安卓系统包；设了 ROBOLECTRIC_REPO 就从这个镜像下（本机 Maven Central 被限流时用）
-        unitTests.all { t -> System.getenv("ROBOLECTRIC_REPO")?.let { t.systemProperty("robolectric.dependency.repo.url", it) } }
+        unitTests.all { t ->
+            System.getenv("ROBOLECTRIC_REPO")?.let { t.systemProperty("robolectric.dependency.repo.url", it) }
+            // 测试里有中文文件名：系统语言不是 UTF-8 的机器上（比如云端容器）会被写成「????」，固定成 UTF-8
+            t.environment("LC_ALL", "C.UTF-8")
+        }
     }
     packaging {
         // 代理内核是个可执行程序，伪装成 .so 放进 jniLibs；要解压到安装目录才能运行

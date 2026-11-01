@@ -20,4 +20,11 @@ for ws in wb.worksheets:
     print("sheet", ws.title, [[c.value for c in r] for r in ws.iter_rows()])
 assert wb.worksheets[0]["D2"].value == "=B2*C2" and wb.worksheets[0]["B2"].value == 3.5
 assert wb.worksheets[0]["B3"].value == "007"
+from pptx.enum.chart import XL_CHART_TYPE as T
+import os
+extra = f"{d}/charts-extra.pptx"
+if os.path.exists(extra):
+    kinds = [sh.chart.chart_type for s in Presentation(extra).slides for sh in s.shapes if sh.has_chart]
+    print("extra charts:", kinds)
+    assert len(kinds) == 4 and kinds[0] == T.AREA and kinds[1] == T.RADAR_MARKERS, kinds
 print("OK")

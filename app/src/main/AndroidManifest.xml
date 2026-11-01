@@ -35,6 +35,7 @@
     </queries>
 
     <application
+        android:name=".KaviApp"
         android:allowBackup="true"
         android:fullBackupContent="@xml/backup_rules"
         android:dataExtractionRules="@xml/data_extraction_rules"

@@ -1,0 +1,50 @@
+name: 检查分支
+
+# main 以外的分支（muse、Codex 等推的）：只编译 + 跑单测 + 校验生成的 Office 文件，不打包、不发版。
+# 合进 main 之前先看这里是不是绿的。
+on:
+  push:
+    branches-ignore: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Compile and unit tests
+        run: |
+          chmod +x gradlew
+          set -o pipefail
+          # 出错时把关键报错写成注释，方便在网页上直接看到
+          ./gradlew testDebugUnitTest --tests "com.jack.ai.*" 2>&1 | tee test.log || {
+            grep -E "^e: |What went wrong|Exception|FAILED" -A3 test.log | head -40 | while IFS= read -r l; do echo "::error::$l"; done
+            exit 1
+          }
+
+      - name: Check Office files
+        run: |
+          pip install -q python-docx==1.2.0 python-pptx==1.0.2 openpyxl==3.1.5
+          python scripts/check_office.py app/build/office-samples

@@ -64,6 +64,36 @@ class PptDeckTest {
     )
 
     @Test
+    fun newChartTypesAreWellFormed() {
+        val extra = listOf(
+            OfficeWriter.Slide("chart", "季度累计", emptyList(),
+                chart = PptChart.Chart("area", listOf("Q1", "Q2", "Q3", "Q4"), listOf(PptChart.Series("线上", listOf(10.0, 20.0, 35.0, 50.0)), PptChart.Series("线下", listOf(30.0, 32.0, 31.0, 36.0))))),
+            OfficeWriter.Slide("chart", "能力评估", emptyList(),
+                chart = PptChart.Chart("radar", listOf("沟通", "技术", "协作", "创新", "执行"), listOf(PptChart.Series("小王", listOf(4.0, 5.0, 3.0, 4.0, 5.0))))),
+            OfficeWriter.Slide("chart", "广告费和销量", emptyList(),
+                chart = PptChart.Chart("scatter", listOf("1", "2", "3.5", "5"), listOf(PptChart.Series("销量", listOf(12.0, 18.0, 30.0, 41.0))))),
+            OfficeWriter.Slide("chart", "市场规模", emptyList(),
+                chart = PptChart.Chart("bubble", listOf("10", "20", "30"), listOf(PptChart.Series("产品", listOf(5.0, 9.0, 4.0), listOf(30.0, 80.0, 20.0))))),
+        )
+        val bos = ByteArrayOutputStream()
+        val warnings = OfficeWriter.writePptx(extra, "city", bos)
+        File(System.getProperty("user.dir"), "build/office-samples/charts-extra.pptx").writeBytes(bos.toByteArray())
+        assertTrue(warnings.toString(), warnings.isEmpty())
+        val p = parts(bos.toByteArray())
+        val f = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
+        (1..4).forEach { n -> f.newDocumentBuilder().parse(p.getValue("ppt/charts/chart$n.xml").byteInputStream()) }
+        val area = p.getValue("ppt/charts/chart1.xml")
+        assertTrue(area.contains("<c:areaChart>"))
+        // 面积图的系列不认这两个，写了 PowerPoint 判损坏
+        assertFalse(area.contains("invertIfNegative") || area.contains("dLblPos"))
+        assertTrue(p.getValue("ppt/charts/chart2.xml").contains("<c:radarChart>"))
+        assertFalse(p.getValue("ppt/charts/chart2.xml").contains("<c:smooth"))
+        assertTrue(p.getValue("ppt/charts/chart3.xml").contains("<c:scatterChart>"))
+        assertTrue(p.getValue("ppt/charts/chart3.xml").contains("<c:v>3.5</c:v>"))
+        assertTrue(p.getValue("ppt/charts/chart4.xml").contains("<c:bubbleSize>"))
+    }
+
+    @Test
     fun chartsAndNotesArePackaged() {
         val all = deck.mapIndexed { i, s -> s.copy(notes = "第 ${i + 1} 页的演讲稿。\n第二句话。") }.take(3) + charts
         val bos = ByteArrayOutputStream()
