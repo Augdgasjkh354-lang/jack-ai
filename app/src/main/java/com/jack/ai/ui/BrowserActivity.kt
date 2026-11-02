@@ -231,6 +231,7 @@ class BrowserActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         JackBrowser.userViewing = true
+        JackBrowser.reclaim(this)
     }
 
     override fun onPause() {
@@ -358,7 +359,7 @@ class BrowserActivity : ComponentActivity() {
         // 网页跳转后地址栏跟着变（用户正在改的时候除外：改完按前往才算）
         LaunchedEffect(b.address) { editing = b.address }
         // 切到恢复回来、还没加载的标签页：这时才打开
-        LaunchedEffect(b.current, b.tabs.size) { b.tab.restore?.let { url -> b.tab.restore = null; open(url) } }
+        LaunchedEffect(b.current, b.tabs.size) { b.tab.restore?.let { url -> open(url) } }
         var typing by remember { mutableStateOf(false) }
         val focus = LocalFocusManager.current
         // 视频全屏时藏起状态栏和导航栏

@@ -1088,6 +1088,15 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         return w
     }
 
+    /**
+     * 浏览器页回到前台：网页窗口在它不在前台时被聊天里的小窗拿走了（浏览器页是 singleTask，切走不销毁），
+     * 它的框里就空了、只剩灰底。让所有放网页的地方重新来要，前台这个会拿回来。
+     */
+    fun reclaim(ctx: Context) {
+        val w = web ?: return
+        if (w.parent == null || wrapper.baseContext !== ctx) hostGen++
+    }
+
     /** 那个界面不用了：Context 换回 App；handBack 时让别的地方（聊天小窗）重新来要。 */
     fun release(ctx: Context, handBack: Boolean = true) {
         if (::wrapper.isInitialized && wrapper.baseContext === ctx) wrapper.baseContext = app
@@ -1147,7 +1156,8 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
     suspend fun load(ctx: Context, url: String, timeoutMs: Long = 25_000): String? {
         // 并行抓取时在指定的标签页里开，平时在当前页
         val t = withContext(Dispatchers.Main) { pinned() ?: webView(ctx).let { tab } }
-        withContext(Dispatchers.Main) { t.clearError(); t.restore = null }
+        // 恢复的标签页等真开始加载了才算恢复完：半路被打断（页面关掉、代理没起来）下次切过来还会再开，不会一直空白
+        withContext(Dispatchers.Main) { t.clearError() }
         when (BrowserNet.classify(url)) {
             BrowserNet.Kind.OPEN -> {}
             BrowserNet.Kind.EXTERNAL -> return "这是打开别的 App 的链接，浏览器里打不开：$url"
@@ -1155,7 +1165,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         }
         prepare(ctx)?.let { reason -> withContext(Dispatchers.Main) { t.error = reason; t.pageFailed = true }; return reason }
         val done = withContext(Dispatchers.Main) {
-            CompletableDeferred<Unit>().also { t.pageDone = it; t.web!!.let { w -> applyUa(w, url); w.loadUrl(url) } }
+            CompletableDeferred<Unit>().also { t.pageDone = it; t.restore = null; t.web!!.let { w -> applyUa(w, url); w.loadUrl(url) } }
         }
         withTimeoutOrNull(timeoutMs) { done.await() }
         return withContext(Dispatchers.Main) { t.error }
