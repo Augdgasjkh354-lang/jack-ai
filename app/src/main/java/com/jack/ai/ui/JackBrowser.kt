@@ -106,6 +106,8 @@ object JackBrowser {
         var teachScript: androidx.webkit.ScriptHandler? = null
         /** 防 IP 泄漏的脚本（关着 WebRTC 时装上）。 */
         var rtcScript: androidx.webkit.ScriptHandler? = null
+        /** 电脑版脚本（按放大比例装的，换比例时重装）。 */
+        var deskScript: androidx.webkit.ScriptHandler? = null
         /** 这一页里播放器拉过的视频、音频地址（拦截请求时记下，最新的在后面），存视频时从这里挑。 */
         val media = java.util.concurrent.ConcurrentLinkedDeque<MediaGrab.Hit>()
         /** 标签页名字前面的标记：隐身、分身几。 */
@@ -400,6 +402,25 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
     /** 所有网站默认用电脑版（默认开：很多报名、办事网站手机上打不开或缺功能）；开着时 [mobileSites] 里的网站例外用手机版。 */
     var desktopAll by mutableStateOf(true)
         private set
+    /** 电脑版放大多少（百分比，见 BrowserPages.desktopWidth）。 */
+    var desktopZoom by mutableIntStateOf(100)
+        private set
+
+    private fun desktopWidth() = BrowserPages.desktopWidth(desktopZoom)
+
+    /** 换电脑版放大比例：每个标签页的电脑版脚本按新宽度重装，当前是电脑版就重新打开。 */
+    fun changeDesktopZoom(zoom: Int) {
+        if (zoom == desktopZoom) return
+        desktopZoom = zoom
+        prefs().edit().putInt("deskzoom", zoom).apply()
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) tabs.forEach { t ->
+            val w = t.web ?: return@forEach
+            runCatching { t.deskScript?.remove() }
+            t.deskScript = runCatching { androidx.webkit.WebViewCompat.addDocumentStartJavaScript(w, BrowserPages.desktopJs(desktopWidth()), setOf("*")) }.getOrNull()
+        }
+        val w = web ?: return
+        if (address.isNotEmpty() && isDesktopAt(address)) { clearError(); w.reload() }
+    }
     var mobileSites by mutableStateOf(setOf<String>())
         private set
 
@@ -531,7 +552,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
             if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
                 runCatching { androidx.webkit.WebViewCompat.addDocumentStartJavaScript(this, KEEP_BLOB_JS, setOf("*")) }
                 // 电脑版：网页一开始就当自己在电脑上（只在电脑版标识下起作用）
-                runCatching { androidx.webkit.WebViewCompat.addDocumentStartJavaScript(this, BrowserPages.DESKTOP_JS, setOf("*")) }
+                t.deskScript = runCatching { androidx.webkit.WebViewCompat.addDocumentStartJavaScript(this, BrowserPages.desktopJs(desktopWidth()), setOf("*")) }.getOrNull()
                 // 数着后台请求：动作做完等它们回来再读页面，失败的告诉模型（只在主页面装）
                 t.netScript = runCatching { androidx.webkit.WebViewCompat.addDocumentStartJavaScript(this, BrowserNetWatch.JS, setOf("*")) }.getOrNull()
                 // 不让网页靠 WebRTC 查到真实 IP（每个嵌入框也装）
@@ -646,6 +667,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         visits = read("visits"); marks = read("marks")
         desktopSites = prefs().getStringSet("desktop", emptySet()).orEmpty().toSet()
         desktopAll = prefs().getBoolean("desktopall", true)
+        desktopZoom = prefs().getInt("deskzoom", 100)
         mobileSites = prefs().getStringSet("mobile", emptySet()).orEmpty().toSet()
         proxySites = prefs().getStringSet("proxysites", emptySet()).orEmpty().toSet()
         webrtcAllowed = prefs().getBoolean("webrtc", false)
@@ -706,7 +728,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         if (!isDesktopAt(url)) return
         w.evaluateJavascript(
             "(function(){var m=document.querySelector('meta[name=viewport]');if(!m){m=document.createElement('meta');m.name='viewport';" +
-                "(document.head||document.documentElement).appendChild(m);}m.content='width=${BrowserPages.DESKTOP_WIDTH}';})();", null,
+                "(document.head||document.documentElement).appendChild(m);}m.content='width=${desktopWidth()}';})();", null,
         )
     }
 

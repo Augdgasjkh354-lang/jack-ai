@@ -112,6 +112,8 @@ class BrowserActivity : ComponentActivity() {
     private var blockList by mutableStateOf(false)
     /** 自动填密码的说明。 */
     private var autofillInfo by mutableStateOf(false)
+    /** 选电脑版放大多少。 */
+    private var zoomPick by mutableStateOf(false)
     /** 选开哪个分身。 */
     private var accountPick by mutableStateOf(false)
     /** 阅读模式：(标题, 正文 Markdown)。 */
@@ -380,6 +382,7 @@ class BrowserActivity : ComponentActivity() {
                             enabled = has, onClick = { menu = false; b.toggleDesktop() })
                         DropdownMenuItem(text = { Text((if (b.desktopAll) "✓ " else "") + "所有网站都用电脑版") },
                             onClick = { menu = false; b.toggleDesktopAll() })
+                        DropdownMenuItem(text = { Text("电脑版放大：${b.desktopZoom}%") }, onClick = { menu = false; zoomPick = true })
                         DropdownMenuItem(text = { Text("分享") }, enabled = has, onClick = { menu = false; share(b.address, b.title) })
                         DropdownMenuItem(text = { Text("存成 PDF") }, enabled = has, onClick = { menu = false; savePdf() })
                         DropdownMenuItem(text = { Text("页内查找") }, enabled = has, onClick = { menu = false; finding = "" })
@@ -536,6 +539,22 @@ class BrowserActivity : ComponentActivity() {
         }
         b.pressed?.let { p -> PressMenu(p) }
         b.permAsk?.let { a -> PermDialog(a) }
+        if (zoomPick) AlertDialog(
+            onDismissRequest = { zoomPick = false },
+            title = { Text("电脑版放大") },
+            text = {
+                Column {
+                    Text("电脑版的字和按钮太小时放大一点。和电脑上按 Ctrl + 加号一样，页面会按窄一点排，所有网站都用这个比例。",
+                        style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                    BrowserPages.DESKTOP_ZOOMS.forEach { z ->
+                        Text((if (z == b.desktopZoom) "✓ " else "    ") + "$z%" + if (z == 100) "（原样）" else "",
+                            Modifier.fillMaxWidth().clickable { zoomPick = false; b.changeDesktopZoom(z) }.padding(vertical = 10.dp),
+                            style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { zoomPick = false }) { Text("关闭") } },
+        )
         // 面板开着时在面板里问；收着时弹窗问
         BrowserChat.asking?.takeIf { !BrowserChat.open }?.let { a ->
             AlertDialog(

@@ -125,8 +125,14 @@ class BrowserPagesTest {
 
     @Test
     fun desktopScriptOnlyActsUnderDesktopUserAgentAndUsesDesktopWidth() {
-        assertTrue(BrowserPages.DESKTOP_JS.contains("/Windows NT/.test(navigator.userAgent)"))
-        assertTrue(BrowserPages.DESKTOP_JS.contains("width=${BrowserPages.DESKTOP_WIDTH}"))
+        assertTrue(BrowserPages.desktopJs().contains("/Windows NT/.test(navigator.userAgent)"))
+        assertTrue(BrowserPages.desktopJs().contains("width=${BrowserPages.DESKTOP_WIDTH}"))
+        // 放大：页面按窄一点排，但不窄到网站换手机排版
+        assertEquals(1200, BrowserPages.desktopWidth(100))
+        assertEquals(923, BrowserPages.desktopWidth(130))
+        assertEquals(800, BrowserPages.desktopWidth(150))
+        assertEquals(760, BrowserPages.desktopWidth(200))
+        assertTrue(BrowserPages.desktopJs(800).contains("width=800"))
         assertTrue(BrowserPages.desktopUserAgent("Mozilla/5.0 (Linux; Android 14) Chrome/131.0.1.2 Mobile Safari/537.36").contains("Windows NT"))
     }
 }

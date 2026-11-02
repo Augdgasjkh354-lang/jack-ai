@@ -106,18 +106,27 @@ object BrowserPages {
         return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/$v Safari/537.36"
     }
 
-    /** 电脑版页面按多宽排（和网页里假装的屏幕尺寸配套）。 */
+    /** 电脑版页面按多宽排（不放大时；和网页里假装的屏幕尺寸配套）。 */
     const val DESKTOP_WIDTH = 1200
+
+    /** 电脑版能选的放大比例（百分比）。 */
+    val DESKTOP_ZOOMS = listOf(100, 115, 130, 150)
+
+    /**
+     * 电脑版放大：和电脑 Chrome 的页面缩放一样，放大多少，页面就按窄多少排，字、图、按钮一起变大。
+     * 最窄不低于 760，免得网站换成手机排版。
+     */
+    fun desktopWidth(zoom: Int): Int = (DESKTOP_WIDTH * 100 / zoom.coerceIn(100, 200)).coerceAtLeast(760)
 
     /**
      * 电脑版：网页一开始加载就装上（每个嵌入框也装），只在浏览器标识是 Windows 时起作用（标识按网站在打开前换好）。
      * 网站除了标识还看这些来认手机：系统平台、能不能多点触控、屏幕多宽、是手指还是鼠标、新式设备标识（userAgentData），
      * 都改成电脑的；页面宽度在网页自己的 viewport 一出来就改，不等加载完，免得先排成手机版。
      */
-    const val DESKTOP_JS = """(function(){if(window.__kaviDesk||!/Windows NT/.test(navigator.userAgent))return;window.__kaviDesk=1;
+    fun desktopJs(width: Int = DESKTOP_WIDTH): String = """(function(){if(window.__kaviDesk||!/Windows NT/.test(navigator.userAgent))return;window.__kaviDesk=1;
 function d(o,k,v){try{Object.defineProperty(o,k,{get:function(){return v;},configurable:true});}catch(e){}}
 try{var N=Navigator.prototype;d(N,'platform','Win32');d(N,'maxTouchPoints',0);
-var S=Screen.prototype;d(S,'width',1280);d(S,'height',800);d(S,'availWidth',1280);d(S,'availHeight',760);
+var S=Screen.prototype;d(S,'width',${width + 80});d(S,'height',${(width + 80) * 5 / 8});d(S,'availWidth',${width + 80});d(S,'availHeight',${(width + 80) * 5 / 8 - 40});
 ['ontouchstart','ontouchmove','ontouchend','ontouchcancel'].forEach(function(k){try{delete Window.prototype[k];delete Document.prototype[k];delete HTMLElement.prototype[k];delete window[k];}catch(e){}});
 try{delete window.TouchEvent;}catch(e){}
 var ud=navigator.userAgentData;if(ud&&ud.mobile){var v=(navigator.userAgent.match(/Chrome\/([\d.]+)/)||[0,'130.0.0.0'])[1],m=v.split('.')[0];
@@ -127,7 +136,7 @@ getHighEntropyValues:function(){return Promise.resolve({brands:brands,mobile:fal
 fullVersionList:brands.map(function(b){return{brand:b.brand,version:b.brand==='Not.A/Brand'?'99.0.0.0':v};})});}});}
 var mm=window.matchMedia;window.matchMedia=function(q){q=String(q).replace(/(any-)?pointer\s*:\s*(coarse|fine)/g,function(_,a,x){return (a||'')+'pointer: '+(x==='coarse'?'fine':'coarse');})
 .replace(/(any-)?hover\s*:\s*(none|hover)/g,function(_,a,x){return (a||'')+'hover: '+(x==='none'?'hover':'none');});return mm.call(window,q);};}catch(e){}
-var W='width=${DESKTOP_WIDTH}';function fix(m){if(m&&m.name==='viewport'&&m.content!==W)m.content=W;}
+var W='width=$width';function fix(m){if(m&&m.name==='viewport'&&m.content!==W)m.content=W;}
 try{new MutationObserver(function(rs){rs.forEach(function(r){r.addedNodes.forEach(function(n){if(n.tagName==='META')fix(n);});if(r.type==='attributes')fix(r.target);});})
 .observe(document,{childList:true,subtree:true,attributes:true,attributeFilter:['content','name']});}catch(e){}
 document.addEventListener('DOMContentLoaded',function(){var m=document.querySelector('meta[name=viewport]');if(!m){m=document.createElement('meta');m.name='viewport';(document.head||document.documentElement).appendChild(m);}fix(m);});})();"""
