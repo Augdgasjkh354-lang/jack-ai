@@ -71,7 +71,17 @@ class BrowserPlaybackService : Service() {
             .setStyle(MediaStyle().setMediaSession(session.sessionToken).setShowActionsInCompactView(0, 1)).build()
         ServiceCompat.startForeground(this, ID, n, if (Build.VERSION.SDK_INT >= 29) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK else 0)
     }
+    /** 系统要求一启动就进前台：先挂一个简单的通知，tick 里再换成带标题和按钮的。 */
+    private var foreground = false
+    private fun ensureForeground() {
+        if (foreground) return
+        val n = NotificationCompat.Builder(this, CHANNEL).setSmallIcon(R.drawable.ic_widget_chat).setContentTitle("网页播放").build()
+        ServiceCompat.startForeground(this, ID, n, if (Build.VERSION.SDK_INT >= 29) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK else 0)
+        foreground = true
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        ensureForeground()
         MediaButtonReceiver.handleIntent(session, intent)
         intent?.action?.takeIf { it in listOf("play", "pause", "stop") }?.let { control(it) }
         handler.removeCallbacks(tick)
@@ -95,6 +105,7 @@ class BrowserPlaybackService : Service() {
             if (current != null) return
             runCatching { androidx.core.content.ContextCompat.startForegroundService(ctx, Intent(ctx, BrowserPlaybackService::class.java)) }
         }
-        fun stop(ctx: Context) { ctx.stopService(Intent(ctx, BrowserPlaybackService::class.java)) }
+        /** 只停已经在跑的；还没起来的会在 tick 里发现没在放、自己停。 */
+        fun stop() { current?.stopSelf() }
     }
 }

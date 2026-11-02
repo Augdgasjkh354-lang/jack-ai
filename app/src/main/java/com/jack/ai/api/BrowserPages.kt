@@ -138,9 +138,9 @@ window.addEventListener('visibilitychange',on,true);window.addEventListener('web
     const val MEDIA_PREFIX = "KAVI_MEDIA:"
     /** 每个框架单独报声音状态，动态加入的播放器也能收到事件。 */
     const val MEDIA_JS = """(function(){if(window.__kaviMedia)return;window.__kaviMedia=1;
-var id=Math.random().toString(36).slice(2);
+var id=Math.random().toString(36).slice(2),last=false;
 function report(){var on=false;[].forEach.call(document.querySelectorAll('video,audio'),function(m){if(!m.paused&&!m.ended&&!m.muted&&m.volume>0){on=true;m.__kaviResume=true;}});
-console.log('KAVI_MEDIA:'+JSON.stringify({id:id,on:on}));}
+if(on||on!==last)console.log('KAVI_MEDIA:'+JSON.stringify({id:id,on:on}));last=on;}
 ['play','pause','ended','volumechange','emptied'].forEach(function(e){document.addEventListener(e,report,true);});
 function cmd(op){document.querySelectorAll('video,audio').forEach(function(m){if(op==='play'){if(m.__kaviResume){var p=m.play();if(p)p.catch(function(){});}}
 else {if(!m.paused&&!m.ended)m.__kaviResume=true;if(op==='stop')m.__kaviResume=false;m.pause();}});

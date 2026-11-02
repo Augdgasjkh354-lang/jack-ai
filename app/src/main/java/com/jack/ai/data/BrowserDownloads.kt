@@ -84,7 +84,6 @@ object BrowserDownloads {
             }
         }
         JackBrowser.downloading = active.takeIf { it > 0 }?.let { "正在下载 $it 个 · 点这里看" }
-        if (active == 0) BrowserDownloadService.stop(app)
     }
     fun pause(t: Task) {
         if (!t.pausable) return

@@ -530,7 +530,7 @@ class BrowserActivity : ComponentActivity() {
             if (b.loading < 100) LinearProgressIndicator(progress = { b.loading / 100f }, Modifier.fillMaxWidth().height(2.dp))
             finding?.let { FindBar(it) }
             b.tab.translating?.let { msg ->
-                Text(msg, Modifier.fillMaxWidth().clickable { showDownloads = true }.background(colors.secondaryContainer).padding(horizontal = 12.dp, vertical = 6.dp),
+                Text(msg, Modifier.fillMaxWidth().background(colors.secondaryContainer).padding(horizontal = 12.dp, vertical = 6.dp),
                     style = MaterialTheme.typography.labelSmall, color = colors.onSecondaryContainer)
             }
             b.error?.takeIf { !b.pageFailed }?.let { msg ->

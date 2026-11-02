@@ -15,27 +15,32 @@ class BrowserDownloadService : Service() {
     private val tick = object : Runnable {
         override fun run() {
             if (BrowserDownloads.active == 0) { stopSelf(); return }
-            val list = BrowserDownloads.tasks.filter { it.state == BrowserQueue.State.RUNNING }
-            val known = list.isNotEmpty() && list.all { it.total > 0 }
-            val total = list.sumOf { it.total.coerceAtLeast(0) }
-            val percent = if (known) (list.sumOf { it.got } * 100 / total).toInt().coerceIn(0, 100) else 0
-            val open = PendingIntent.getActivity(this@BrowserDownloadService, 0,
-                Intent(this@BrowserDownloadService, MainActivity::class.java).setAction(MainActivity.ACTION_DOWNLOADS)
-                    .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-            val n = NotificationCompat.Builder(this@BrowserDownloadService, CHANNEL).setSmallIcon(R.drawable.ic_widget_chat)
-                .setContentTitle("正在下载 ${list.size} 个文件" + if (known) "，$percent%" else "")
-                .setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true).setProgress(100, percent, !known).build()
-            ServiceCompat.startForeground(this@BrowserDownloadService, ID, n,
-                if (Build.VERSION.SDK_INT >= 29) ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0)
+            show()
             handler.postDelayed(this, 1000)
         }
+    }
+
+    /** 进度通知。系统要求一启动就进前台，所以下载已经结束也要先显示一次再停。 */
+    private fun show() {
+        val list = BrowserDownloads.tasks.filter { it.state == BrowserQueue.State.RUNNING }
+        val known = list.isNotEmpty() && list.all { it.total > 0 }
+        val total = list.sumOf { it.total.coerceAtLeast(0) }
+        val percent = if (known) (list.sumOf { it.got } * 100 / total).toInt().coerceIn(0, 100) else 0
+        val open = PendingIntent.getActivity(this@BrowserDownloadService, 0,
+            Intent(this@BrowserDownloadService, MainActivity::class.java).setAction(MainActivity.ACTION_DOWNLOADS)
+                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val n = NotificationCompat.Builder(this@BrowserDownloadService, CHANNEL).setSmallIcon(R.drawable.ic_widget_chat)
+            .setContentTitle("正在下载 ${list.size} 个文件" + if (known) "，$percent%" else "")
+            .setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true).setProgress(100, percent, !known).build()
+        ServiceCompat.startForeground(this@BrowserDownloadService, ID, n,
+            if (Build.VERSION.SDK_INT >= 29) ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0)
     }
     override fun onCreate() {
         super.onCreate()
         getSystemService(NotificationManager::class.java).createNotificationChannel(NotificationChannel(CHANNEL, "网页下载", NotificationManager.IMPORTANCE_LOW))
     }
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        handler.removeCallbacks(tick); tick.run(); return START_NOT_STICKY
+        handler.removeCallbacks(tick); show(); tick.run(); return START_NOT_STICKY
     }
     override fun onTimeout(startId: Int, fgsType: Int) {
         BrowserDownloads.tasks.filter { it.state == BrowserQueue.State.RUNNING }.forEach { if (it.pausable) BrowserDownloads.pause(it) else BrowserDownloads.cancel(it) }
@@ -47,6 +52,5 @@ class BrowserDownloadService : Service() {
         private const val CHANNEL = "browser_downloads"
         private const val ID = 7311
         fun start(ctx: Context) { runCatching { androidx.core.content.ContextCompat.startForegroundService(ctx, Intent(ctx, BrowserDownloadService::class.java)) } }
-        fun stop(ctx: Context) { ctx.stopService(Intent(ctx, BrowserDownloadService::class.java)) }
     }
 }

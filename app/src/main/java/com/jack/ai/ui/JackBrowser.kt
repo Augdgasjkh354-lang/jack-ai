@@ -455,7 +455,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
     /** 暂停所有标签页里在放的声音和视频。 */
     fun pauseAll() {
         tabs.forEach { mediaControl(it.id, "stop"); it.mediaFrames.clear() }
-        if (::app.isInitialized) com.jack.ai.BrowserPlaybackService.stop(app)
+        com.jack.ai.BrowserPlaybackService.stop()
     }
     fun mediaControl(id: Int, action: String) {
         if (action == "stop") tabs.find { it.id == id }?.mediaFromUser = false
