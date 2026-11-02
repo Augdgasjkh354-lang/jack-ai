@@ -29,7 +29,11 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.ui.graphics.Color
 import com.jack.ai.api.BrowserPages
 import com.jack.ai.data.ThemeMode
+import android.Manifest
+import android.app.role.RoleManager
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -78,6 +82,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -125,6 +131,32 @@ class BrowserActivity : ComponentActivity() {
         fileCallback = null
     }
 
+    /** 网页要的手机权限（相机、麦克风、位置）：用户在弹窗里允许后，再向系统要。 */
+    private val askSystem = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        val (kinds, done) = permWaiting ?: return@registerForActivityResult
+        permWaiting = null
+        val ok = kinds.all { k -> systemNames(k).any { has(it) } }
+        if (!ok) JackBrowser.notice = "手机没给 Kavi ${BrowserPages.kindsText(kinds)}权限，网页用不了。可以到系统设置 → 应用 → Kavi → 权限里打开。"
+        done(ok)
+    }
+    private var permWaiting: Pair<Set<String>, (Boolean) -> Unit>? = null
+
+    private fun systemNames(kind: String) = when (kind) {
+        BrowserPages.CAMERA -> listOf(Manifest.permission.CAMERA)
+        BrowserPages.MIC -> listOf(Manifest.permission.RECORD_AUDIO)
+        else -> listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+    }
+
+    private fun has(p: String) = checkSelfPermission(p) == PackageManager.PERMISSION_GRANTED
+
+    private fun systemPerms(kinds: Set<String>, done: (Boolean) -> Unit) {
+        if (kinds.all { k -> systemNames(k).any { has(it) } }) { done(true); return }
+        permWaiting?.second?.invoke(false)
+        permWaiting = kinds to done
+        runCatching { askSystem.launch(kinds.flatMap { systemNames(it) }.toTypedArray()) }
+            .onFailure { permWaiting = null; done(false) }
+    }
+
     private fun chooseFiles(cb: ValueCallback<Array<Uri>>, params: WebChromeClient.FileChooserParams): Boolean {
         fileCallback?.onReceiveValue(null)
         val (type, more) = BrowserPages.pickTypes(params.acceptTypes)
@@ -144,6 +176,7 @@ class BrowserActivity : ComponentActivity() {
         settings = Store(applicationContext).loadSettings()
         JackBrowser.userViewing = true
         JackBrowser.chooser = ::chooseFiles
+        JackBrowser.systemPerms = ::systemPerms
         JackBrowser.askSelection = ::askAboutSelection
         JackBrowser.setDark(settings.themeMode != ThemeMode.LIGHT)
         setContent {
@@ -151,9 +184,16 @@ class BrowserActivity : ComponentActivity() {
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { Screen() }
             }
         }
-        // 被系统回收后回来：只记网址，先按线路设好代理再打开（直接恢复网页会在代理设好之前就直连出去）
-        val url = savedInstanceState?.getString(EXTRA_URL) ?: intent?.getStringExtra(EXTRA_URL)
-        if (url != null) open(url)
+        // App 重开后第一次进来：把上次的标签页建回来（当前页由 Screen 里打开，别的切过去时再加载）
+        val restored = JackBrowser.restoreTabs(this)
+        JackBrowser.warmHistory()
+        val linked = intent?.getStringExtra(EXTRA_URL).takeIf { savedInstanceState == null }
+        if (restored) { if (linked != null) openInNewTab(linked) }
+        else {
+            // 被系统回收后回来：只记网址，先按线路设好代理再打开（直接恢复网页会在代理设好之前就直连出去）
+            val url = savedInstanceState?.getString(EXTRA_URL) ?: intent?.getStringExtra(EXTRA_URL)
+            if (url != null) open(url)
+        }
     }
 
     /** 浏览器已经开着时，从聊天里又点了一个链接：换成新网址。 */
@@ -176,6 +216,8 @@ class BrowserActivity : ComponentActivity() {
         JackBrowser.userViewing = false
         // 刚登录完 App 就被系统杀掉也不丢登录：离开浏览器时把 Cookie 写到磁盘
         JackBrowser.flushCookies()
+        // 标签页也记下来，下次打开 App 还在
+        JackBrowser.saveTabs()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -186,6 +228,9 @@ class BrowserActivity : ComponentActivity() {
     override fun onDestroy() {
         JackBrowser.userViewing = false
         if (JackBrowser.chooser == ::chooseFiles) JackBrowser.chooser = null
+        if (JackBrowser.systemPerms == ::systemPerms) JackBrowser.systemPerms = null
+        JackBrowser.permAsk?.answer?.invoke(false, false)
+        permWaiting?.second?.invoke(false); permWaiting = null
         if (JackBrowser.askSelection == ::askAboutSelection) JackBrowser.askSelection = null
         fileCallback?.onReceiveValue(null); fileCallback = null
         JackBrowser.fullscreen?.second?.onCustomViewHidden(); JackBrowser.fullscreen = null
@@ -259,6 +304,10 @@ class BrowserActivity : ComponentActivity() {
         var menu by remember { mutableStateOf(false) }
         // 网页跳转后地址栏跟着变（用户正在改的时候除外：改完按前往才算）
         LaunchedEffect(b.address) { editing = b.address }
+        // 切到恢复回来、还没加载的标签页：这时才打开
+        LaunchedEffect(b.current, b.tabs.size) { b.tab.restore?.let { url -> b.tab.restore = null; open(url) } }
+        var typing by remember { mutableStateOf(false) }
+        val focus = LocalFocusManager.current
         // 视频全屏时藏起状态栏和导航栏
         val full = b.fullscreen
         LaunchedEffect(full != null) {
@@ -294,9 +343,9 @@ class BrowserActivity : ComponentActivity() {
                     placeholder = { Text("输入网址或要搜的内容") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
-                    keyboardActions = KeyboardActions(onGo = { open(editing) }),
+                    keyboardActions = KeyboardActions(onGo = { focus.clearFocus(); open(editing) }),
                     textStyle = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).onFocusChanged { typing = it.isFocused },
                 )
                 Box {
                     IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "更多") }
@@ -383,8 +432,22 @@ class BrowserActivity : ComponentActivity() {
                         DropdownMenuItem(text = { Text((if (b.adBlock) "✓ " else "    ") + "去广告") }, onClick = { menu = false; b.changeAdBlock(!b.adBlock) })
                         if (b.adBlock && has) DropdownMenuItem(text = { Text((if (b.adAllowedHere()) "✓ " else "    ") + "这个网站不去广告") },
                             onClick = { menu = false; b.toggleAdAllow() })
+                        if (has && b.permsHere()) DropdownMenuItem(text = { Text("重置这个网站的权限") }, onClick = {
+                            menu = false; b.resetPermsHere(); b.notice = "这个网站下次要用相机、麦克风或位置时会再问你。"
+                        })
                         HorizontalDivider()
                         DropdownMenuItem(text = { Text("清除浏览数据", color = colors.error) }, onClick = { menu = false; b.clearData(); editing = "" })
+                    }
+                }
+            }
+            // 地址栏打字时：书签、最近访问、浏览记录里对得上的
+            if (typing && editing.isNotBlank() && editing != b.address) {
+                b.suggest(editing).forEach { v ->
+                    Column(Modifier.fillMaxWidth().clickable { focus.clearFocus(); open(v.url) }.padding(horizontal = 16.dp, vertical = 6.dp)) {
+                        Text((if (b.marks.any { it.url == v.url }) "★ " else "") + BrowserPages.label(v),
+                            style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(v.url.substringAfter("://").removePrefix("www."), style = MaterialTheme.typography.labelSmall,
+                            color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }
@@ -472,6 +535,7 @@ class BrowserActivity : ComponentActivity() {
         }
         }
         b.pressed?.let { p -> PressMenu(p) }
+        b.permAsk?.let { a -> PermDialog(a) }
         // 面板开着时在面板里问；收着时弹窗问
         BrowserChat.asking?.takeIf { !BrowserChat.open }?.let { a ->
             AlertDialog(
@@ -1022,6 +1086,49 @@ class BrowserActivity : ComponentActivity() {
         )
     }
 
+    /** 网页要用相机、麦克风、位置：问用户。允许 / 不允许会按网站记住（隐身页不记），「只这次」不记。 */
+    @Composable
+    private fun PermDialog(a: JackBrowser.PermAsk) {
+        val notes = buildList {
+            if (BrowserPages.LOCATION in a.kinds) add("网站会知道你在哪，走代理也挡不住。")
+            if ((BrowserPages.CAMERA in a.kinds || BrowserPages.MIC in a.kinds) && JackBrowser.rtcBlocked())
+                add("要视频、语音通话，还得在菜单里打开「允许网页视频通话」。")
+            if (!a.incognito) add("选了会记住，以后不再问；菜单里能重置。")
+        }
+        AlertDialog(
+            onDismissRequest = { a.answer(false, false) },
+            title = { Text("「${a.site}」想用你的${BrowserPages.kindsText(a.kinds)}") },
+            text = { Text(notes.joinToString("\n"), style = MaterialTheme.typography.bodyMedium) },
+            confirmButton = {
+                Row {
+                    if (!a.incognito) TextButton(onClick = { a.answer(true, false) }) { Text("只这次") }
+                    TextButton(onClick = { a.answer(true, true) }) { Text("允许") }
+                }
+            },
+            dismissButton = { TextButton(onClick = { a.answer(false, true) }) { Text("不允许") } },
+        )
+    }
+
+    /** Kavi 是不是手机的默认浏览器。 */
+    private fun isDefaultBrowser(): Boolean =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) getSystemService(RoleManager::class.java)?.isRoleHeld(RoleManager.ROLE_BROWSER) == true
+        else packageManager.resolveActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://example.com")), PackageManager.MATCH_DEFAULT_ONLY)
+            ?.activityInfo?.packageName == packageName
+
+    private val askDefault = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        defaultBrowser = isDefaultBrowser()
+        if (defaultBrowser) JackBrowser.notice = "好了：别的 App 里点网页链接，会直接用 Kavi 浏览器打开。"
+    }
+    private var defaultBrowser by mutableStateOf(true)
+
+    /** 设成默认浏览器：新系统弹系统自己的确认框，旧系统打开「默认应用」设置。 */
+    private fun makeDefault() {
+        val role = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) getSystemService(RoleManager::class.java)
+            ?.takeIf { it.isRoleAvailable(RoleManager.ROLE_BROWSER) }?.createRequestRoleIntent(RoleManager.ROLE_BROWSER) else null
+        val intent = role ?: Intent(android.provider.Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)
+        runCatching { askDefault.launch(intent) }.onFailure { JackBrowser.notice = "打不开系统设置。可以到 设置 → 应用 → 默认应用 → 浏览器 里选 Kavi。" }
+    }
+
     @OptIn(ExperimentalLayoutApi::class)
     @Composable
     private fun StartPage() {
@@ -1038,6 +1145,12 @@ class BrowserActivity : ComponentActivity() {
                             "这里的登录状态和手机浏览器不共用。不能用来登录 Google 账号（Google 不允许）。",
                         style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
                     )
+                    LaunchedEffect(Unit) { defaultBrowser = isDefaultBrowser() }
+                    if (!defaultBrowser) Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("别的 App 里点网页链接时直接用 Kavi 打开", Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                        TextButton(onClick = { makeDefault() }) { Text("设为默认浏览器") }
+                    }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         listOf("Google" to "https://www.google.com", "维基百科" to "https://zh.wikipedia.org", "GitHub" to "https://github.com",
                             "YouTube" to "https://m.youtube.com", "Notion" to "https://www.notion.so").forEach { (name, url) ->

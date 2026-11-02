@@ -34,6 +34,65 @@ object BrowserPages {
 
     fun host(url: String): String = runCatching { java.net.URI(url).host }.getOrNull()?.removePrefix("www.") ?: url
 
+    /** 网址去掉 http(s):// 和 www.，地址栏联想按这个比。 */
+    private fun bare(url: String) = url.substringAfter("://").removePrefix("www.").lowercase()
+
+    /**
+     * 地址栏联想：从书签、最近访问、浏览记录里挑和输入对得上的（每个词都要在标题或网址里出现）。
+     * 网址开头就对上的排最前，书签其次，再按列表原来的先后（越近的越靠前）。同一个网址只出一次。
+     */
+    fun suggest(query: String, marks: List<Visit>, pages: List<Visit>, max: Int = 6): List<Visit> {
+        val words = query.trim().lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
+        if (words.isEmpty()) return emptyList()
+        val first = words.first()
+        val seen = HashSet<String>()
+        return (marks.map { it to true } + pages.map { it to false })
+            .filter { (v, _) -> isWeb(v.url) && seen.add(v.url) }
+            .filter { (v, _) -> val b = bare(v.url); val t = v.title.lowercase(); words.all { b.contains(it) || t.contains(it) } }
+            .withIndex()
+            .sortedWith(compareBy({ (_, p) -> if (bare(p.first.url).startsWith(first)) 0 else 1 }, { (_, p) -> if (p.second) 0 else 1 }, { it.index }))
+            .take(max)
+            .map { it.value.first }
+    }
+
+    // ---- 网页要用相机、麦克风、位置 ----
+
+    const val CAMERA = "camera"
+    const val MIC = "mic"
+    const val LOCATION = "location"
+
+    /** 网页组件的权限名 → 我们的叫法（相机、麦克风）；别的（MIDI 之类）不认。 */
+    fun mediaKinds(resources: Array<String>): Set<String> = resources.mapNotNull {
+        when (it) {
+            "android.webkit.resource.VIDEO_CAPTURE" -> CAMERA
+            "android.webkit.resource.AUDIO_CAPTURE" -> MIC
+            else -> null
+        }
+    }.toSet()
+
+    fun kindsText(kinds: Set<String>): String =
+        listOf(CAMERA to "相机", MIC to "麦克风", LOCATION to "位置").filter { it.first in kinds }.joinToString("和") { it.second }
+
+    /** 记住的网站权限存成「网站|权限」。 */
+    fun permKey(site: String, kind: String) = "$site|$kind"
+
+    // ---- 关掉 App 再打开时恢复标签页 ----
+
+    /** 存下来的一个标签页（隐身的不存）。 */
+    @Serializable
+    data class SavedTab(val url: String, val title: String = "", val account: Int = 0)
+
+    @Serializable
+    data class SavedTabs(val tabs: List<SavedTab> = emptyList(), val current: Int = 0)
+
+    /** 要存的标签页：只要网页的、不要隐身的；current 跟着换算（当前页是隐身或空白时取它前面最近的一个）。 */
+    fun tabsToSave(all: List<Pair<SavedTab, Boolean>>, current: Int, max: Int): SavedTabs {
+        // Pair：(标签页, 是不是隐身)
+        val kept = all.withIndex().filter { (_, t) -> !t.second && isWeb(t.first.url) }.take(max)
+        val at = kept.indexOfLast { it.index <= current }.coerceAtLeast(0)
+        return SavedTabs(kept.map { it.value.first }, if (kept.isEmpty()) 0 else at)
+    }
+
     /**
      * 去掉网页组件自带的「App 内嵌」标记（`; wv` 和 `Version/4.0`），让网站当成普通手机 Chrome。
      * 带着这个标记，有的网站会给简化版页面，或者不让登录。

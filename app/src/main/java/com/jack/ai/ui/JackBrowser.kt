@@ -110,6 +110,8 @@ object JackBrowser {
         val media = java.util.concurrent.ConcurrentLinkedDeque<MediaGrab.Hit>()
         /** 标签页名字前面的标记：隐身、分身几。 */
         val badge get() = if (incognito) "隐身 · " else if (account > 0) "分身$account · " else ""
+        /** 关掉 App 前存下的标签页刚建回来、还没加载：切到它时再打开这个网址（省得一开 App 十个网页一起加载）。 */
+        var restore: String? = null
 
         fun clearError() { error = null; pageFailed = false }
     }
@@ -181,6 +183,17 @@ object JackBrowser {
     var fullscreen by mutableStateOf<Pair<View, WebChromeClient.CustomViewCallback>?>(null)
     /** 浏览器页开着时由它接手「网页要选文件」；返回 false 表示没接。 */
     var chooser: ((android.webkit.ValueCallback<Array<android.net.Uri>>, WebChromeClient.FileChooserParams) -> Boolean)? = null
+    /**
+     * 网页要用相机、麦克风或位置，等用户点头（只在用户自己看着浏览器时问；Kavi 操作时一律不给）。
+     * answer(给不给, 记不记住)。
+     */
+    class PermAsk(val site: String, val kinds: Set<String>, val incognito: Boolean, val answer: (Boolean, Boolean) -> Unit)
+    var permAsk by mutableStateOf<PermAsk?>(null)
+    /** 浏览器页开着时由它向系统要手机权限（相机、麦克风、位置），回调给没给。 */
+    var systemPerms: ((Set<String>, (Boolean) -> Unit) -> Unit)? = null
+    /** 记住的网站权限：允许的、不允许的（「网站|权限」）。 */
+    private var permYes = setOf<String>()
+    private var permNo = setOf<String>()
     /** 用户长按了链接或图片，等浏览器页弹菜单。 */
     var pressed by mutableStateOf<Pressed?>(null)
     data class Pressed(val link: String?, val image: String?)
@@ -474,7 +487,8 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
                 // 允许网页弹新窗口（「用 Google / 微软 / Apple 登录」这类），开在新标签页里；网页自己乱弹的在 onCreateWindow 里拦掉
                 javaScriptCanOpenWindowsAutomatically = true
                 setSupportMultipleWindows(true)
-                setGeolocationEnabled(false)
+                // 网页要位置时弹窗问（见 askPerm）
+                setGeolocationEnabled(true)
                 mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
                 mediaPlaybackRequiresUserGesture = true
                 builtInZoomControls = true
@@ -524,6 +538,79 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         return t
     }
 
+    // ---------- 网页要用相机、麦克风、位置 ----------
+
+    /**
+     * 先看记住的：不允许过就直接拒；都允许过就只向系统要手机权限。没记过的弹窗问用户。
+     * Kavi 在操作（用户没看着）、隐身页记住的不算数，也不记。
+     */
+    private fun askPerm(t: Tab, origin: String, kinds: Set<String>, done: (Boolean) -> Unit) {
+        val site = BrowserPages.site(origin)
+        val system = systemPerms
+        if (!userViewing || system == null || site.isEmpty() || permAsk != null) { done(false); return }
+        val keys = kinds.map { BrowserPages.permKey(site, it) }
+        if (!t.incognito && keys.any { it in permNo }) { done(false); return }
+        if (!t.incognito && keys.all { it in permYes }) { system(kinds, done); return }
+        permAsk = PermAsk(site, kinds, t.incognito) { ok, remember ->
+            permAsk = null
+            if (remember && !t.incognito) {
+                if (ok) { permYes = permYes + keys; permNo = permNo - keys.toSet() } else { permNo = permNo + keys; permYes = permYes - keys.toSet() }
+                prefs().edit().putStringSet("permyes", permYes).putStringSet("permno", permNo).apply()
+            }
+            if (ok) system(kinds, done) else done(false)
+        }
+    }
+
+    /** 当前网站记住了哪些权限（给菜单「重置网站权限」用）。 */
+    fun permsHere(): Boolean = BrowserPages.site(address).let { s -> s.isNotEmpty() && (permYes + permNo).any { it.startsWith("$s|") } }
+
+    fun resetPermsHere() {
+        val s = BrowserPages.site(address).ifEmpty { return }
+        permYes = permYes.filterNot { it.startsWith("$s|") }.toSet(); permNo = permNo.filterNot { it.startsWith("$s|") }.toSet()
+        prefs().edit().putStringSet("permyes", permYes).putStringSet("permno", permNo).apply()
+    }
+
+    // ---------- 关掉 App 再打开时恢复标签页 ----------
+
+    private val savedTabs = BrowserPages.SavedTabs.serializer()
+
+    /** 记下现在开着的标签页（隐身的不记），离开浏览器页时调。 */
+    fun saveTabs() {
+        if (!::app.isInitialized || tabs.isEmpty()) return
+        val s = BrowserPages.tabsToSave(tabs.map { BrowserPages.SavedTab(it.restore ?: it.address, it.title, it.account) to it.incognito }, current, MAX_TABS)
+        prefs().edit().putString("tabs", listJson.encodeToString(savedTabs, s)).apply()
+    }
+
+    /**
+     * App 重开后第一次进浏览器：把上次的标签页建回来（只建窗口，切过去时才加载，见 [Tab.restore]）。
+     * 已经有标签页（比如 Kavi 先用过浏览器）就不动。返回有没有恢复。
+     */
+    fun restoreTabs(ctx: Context): Boolean {
+        if (tabs.isNotEmpty()) return false
+        webView(ctx)
+        val s = prefs().getString("tabs", null)?.let { runCatching { listJson.decodeFromString(savedTabs, it) }.getOrNull() }
+        if (s == null || s.tabs.isEmpty()) return false
+        s.tabs.take(MAX_TABS).forEach { st ->
+            newTab(switch = false, account = st.account).apply { address = st.url; title = st.title; restore = st.url }
+        }
+        // 第一个空白页是 webView() 建的，不要了
+        closeTab(0)
+        switchTo(s.current.coerceIn(0, tabs.lastIndex))
+        return true
+    }
+
+    // ---------- 地址栏联想 ----------
+
+    /** 长的浏览记录先读进来，打字联想时用。 */
+    fun warmHistory() {
+        if (!::app.isInitialized || historyList != null) return
+        scope.launch(historyIo) { if (historyList == null) historyList = com.jack.ai.data.Store(app).loadHistory() }
+    }
+
+    /** 地址栏输入时的联想：书签、最近访问、浏览记录里对得上的。 */
+    fun suggest(query: String): List<BrowserPages.Visit> =
+        BrowserPages.suggest(query, marks, visits + historyList.orEmpty().map { BrowserPages.Visit(it.url, it.title, it.at) })
+
     /** 最多开几个标签页（每个都是一个网页窗口，占内存）。 */
     const val MAX_TABS = 10
 
@@ -559,6 +646,8 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         webrtcAllowed = prefs().getBoolean("webrtc", false)
         adBlock = prefs().getBoolean("adblock", true); adBlockNow = adBlock
         adAllow = prefs().getStringSet("adallow", emptySet()).orEmpty().toSet(); adAllowNow = adAllow
+        permYes = prefs().getStringSet("permyes", emptySet()).orEmpty().toSet()
+        permNo = prefs().getStringSet("permno", emptySet()).orEmpty().toSet()
         blocks = prefs().getString("blocks", null)?.let { runCatching { listJson.decodeFromString(blockMap, it) }.getOrNull() }.orEmpty()
     }
 
@@ -658,7 +747,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
 
     // ---- 长的浏览记录 ----
     private val historyIo = Dispatchers.IO.limitedParallelism(1)
-    private var historyList: List<com.jack.ai.data.HistoryEntry>? = null
+    @Volatile private var historyList: List<com.jack.ai.data.HistoryEntry>? = null
     private var historySave: kotlinx.coroutines.Job? = null
 
     private fun recordHistory(url: String, title: String) {
@@ -791,6 +880,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
     fun home() {
         val w = web ?: return
         clearError()
+        tab.restore = null
         w.loadUrl("about:blank")
         address = ""; title = ""
     }
@@ -890,7 +980,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
     suspend fun load(ctx: Context, url: String, timeoutMs: Long = 25_000): String? {
         // 并行抓取时在指定的标签页里开，平时在当前页
         val t = withContext(Dispatchers.Main) { pinned() ?: webView(ctx).let { tab } }
-        withContext(Dispatchers.Main) { t.clearError() }
+        withContext(Dispatchers.Main) { t.clearError(); t.restore = null }
         when (BrowserNet.classify(url)) {
             BrowserNet.Kind.OPEN -> {}
             BrowserNet.Kind.EXTERNAL -> return "这是打开别的 App 的链接，浏览器里打不开：$url"
@@ -922,12 +1012,15 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         w.clearHistory()
         w.clearFormData()
         w.loadUrl("about:blank")
-        address = ""; title = ""
+        address = ""; title = ""; tab.restore = null
         visits = emptyList(); saveLists()
+        // 记住的网站权限（相机、麦克风、位置）也清掉
+        permYes = emptySet(); permNo = emptySet()
+        prefs().edit().remove("permyes").remove("permno").remove("tabs").apply()
         // 长的浏览记录也清掉
         historySave?.cancel()
         scope.launch(historyIo) { historyList = emptyList(); com.jack.ai.data.Store(app).saveHistory(emptyList()) }
-        notice = "已清除：Cookie（登录状态）、缓存、网页存储、浏览记录和最近访问（书签留着）。"
+        notice = "已清除：Cookie（登录状态）、缓存、网页存储、浏览记录、最近访问和网站权限（书签留着）。"
     }
 
     private fun describe(code: Int, desc: String): String = when {
@@ -1119,9 +1212,22 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
             val c = chooser
             return if (userViewing && c != null) c(callback, params) else false
         }
-        // 不给网页任何手机权限（相机、麦克风、位置）
-        override fun onPermissionRequest(request: PermissionRequest) = request.deny()
-        override fun onGeolocationPermissionsShowPrompt(origin: String?, callback: GeolocationPermissions.Callback) = callback.invoke(origin, false, false)
+        // 网页要相机、麦克风：用户看着时问一次（按网站记住）；受保护视频（DRM）的播放许可直接给，和手机浏览器一样
+        override fun onPermissionRequest(request: PermissionRequest) {
+            val drm = request.resources.filter { it == PermissionRequest.RESOURCE_PROTECTED_MEDIA_ID }
+            val kinds = BrowserPages.mediaKinds(request.resources)
+            val media = request.resources.filter { BrowserPages.mediaKinds(arrayOf(it)).isNotEmpty() }
+            fun finish(ok: Boolean) {
+                val give = drm + (if (ok) media else emptyList())
+                if (give.isEmpty()) request.deny() else request.grant(give.toTypedArray())
+            }
+            if (kinds.isEmpty()) { finish(false); return }
+            askPerm(t, request.origin.toString(), kinds) { ok -> finish(ok) }
+        }
+        override fun onPermissionRequestCanceled(request: PermissionRequest) { permAsk = null }
+        override fun onGeolocationPermissionsShowPrompt(origin: String?, callback: GeolocationPermissions.Callback) =
+            askPerm(t, origin.orEmpty(), setOf(BrowserPages.LOCATION)) { ok -> callback.invoke(origin, ok, false) }
+        override fun onGeolocationPermissionsHidePrompt() { permAsk = null }
         // 网页弹的 alert/confirm：Kavi 操作时没人点，直接按「确定」的默认处理会卡住页面，所以都按取消
         override fun onJsAlert(view: WebView, url: String?, message: String?, result: android.webkit.JsResult): Boolean {
             if (!userViewing) { lastDialog = message; result.confirm(); return true }

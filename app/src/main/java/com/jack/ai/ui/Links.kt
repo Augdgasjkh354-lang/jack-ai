@@ -1,7 +1,9 @@
 package com.jack.ai.ui
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.ui.platform.UriHandler
@@ -23,7 +25,12 @@ object Links {
 
     /** 不管设置，交给手机（系统浏览器或对应的 App）。 */
     fun system(ctx: Context, url: String) {
-        runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        val view = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+        // Kavi 自己是默认浏览器时，直接打开会又回到 Kavi：让用户在别的浏览器里挑一个
+        val self = ctx.packageManager.resolveActivity(view, PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo?.packageName == ctx.packageName
+        val intent = if (self) Intent.createChooser(view, "用哪个浏览器打开")
+            .putExtra(Intent.EXTRA_EXCLUDE_COMPONENTS, arrayOf(ComponentName(ctx, LinkActivity::class.java))) else view
+        runCatching { ctx.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
             .onFailure { Toast.makeText(ctx, "手机上没有能打开它的 App", Toast.LENGTH_SHORT).show() }
     }
 }

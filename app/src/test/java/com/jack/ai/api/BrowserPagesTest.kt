@@ -84,4 +84,42 @@ class BrowserPagesTest {
         assertEquals("报价_方案.txt", BrowserPages.fileName("报价/方案", "https://a.com"))
         assertEquals("a.com.txt", BrowserPages.fileName("", "https://www.a.com/x"))
     }
+
+    @Test
+    fun suggestMatchesEveryWordAndPutsPrefixAndMarksFirst() {
+        val marks = listOf(Visit("https://news.example.com/a", "每日新闻"))
+        val pages = listOf(
+            Visit("https://www.github.com/jack/ai", "Jack AI 仓库"),
+            Visit("https://example.org/github-tips", "GitHub tips"),
+            Visit("https://news.example.com/a", "重复的"),
+            Visit("about:blank", "github"),
+        )
+        // 网址开头对上的排前面；about: 这类不出
+        assertEquals(listOf("https://www.github.com/jack/ai", "https://example.org/github-tips"),
+            BrowserPages.suggest("git", marks, pages).map { it.url })
+        // 每个词都要对上；书签和最近访问里同一个网址只出一次
+        assertEquals(listOf("https://www.github.com/jack/ai"), BrowserPages.suggest("jack 仓库", marks, pages).map { it.url })
+        assertEquals(1, BrowserPages.suggest("news", marks, pages).size)
+        // 都没开头对上时书签排前
+        assertEquals("https://news.example.com/a", BrowserPages.suggest("com", marks, pages).first().url)
+        assertTrue(BrowserPages.suggest("   ", marks, pages).isEmpty())
+    }
+
+    @Test
+    fun mediaKindsKnowsCameraAndMicOnly() {
+        assertEquals(setOf(BrowserPages.CAMERA, BrowserPages.MIC),
+            BrowserPages.mediaKinds(arrayOf("android.webkit.resource.VIDEO_CAPTURE", "android.webkit.resource.AUDIO_CAPTURE", "android.webkit.resource.MIDI_SYSEX")))
+        assertEquals("相机和麦克风", BrowserPages.kindsText(setOf(BrowserPages.MIC, BrowserPages.CAMERA)))
+    }
+
+    @Test
+    fun tabsToSaveSkipsIncognitoAndBlankAndKeepsCurrent() {
+        fun t(url: String, incognito: Boolean = false) = BrowserPages.SavedTab(url) to incognito
+        val all = listOf(t("https://a.com"), t("https://secret.com", true), t(""), t("https://b.com", false))
+        assertEquals(listOf("https://a.com", "https://b.com"), BrowserPages.tabsToSave(all, 3, 10).tabs.map { it.url })
+        assertEquals(1, BrowserPages.tabsToSave(all, 3, 10).current)
+        // 当前是隐身页：退到前面最近的一个
+        assertEquals(0, BrowserPages.tabsToSave(all, 1, 10).current)
+        assertEquals(0, BrowserPages.tabsToSave(listOf(t("", false)), 0, 10).tabs.size)
+    }
 }
