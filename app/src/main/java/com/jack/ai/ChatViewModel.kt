@@ -53,6 +53,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -149,6 +150,14 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             memories = store.loadMemories(),
             dreams = store.loadDreams(),
         )
+        // 思路来自 deepseek-ai/deepseek-harness packages/goal/goal/，MIT。后台只更新目标字段，不替换正在生成的消息。
+        viewModelScope.launch {
+            com.jack.ai.data.Goals.changes.collect { id ->
+                val disk = withContext(Dispatchers.IO) { store.loadConversations().firstOrNull { it.id == id } }
+                if (disk != null) updateConvQuiet(id) { it.copy(goal = disk.goal, goalChangedAt = disk.goalChangedAt) }
+                mergeInbox()
+            }
+        }
         Dreamer.schedule(app, _state.value.settings.dreamEnabled)
         // 上次录音中途被系统杀掉：救回录到的，放进输入框等用户发（不自动发，免得隔了几天突然开始整理花钱）
         viewModelScope.launch {
@@ -378,10 +387,19 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             var cleared = false
             val done = { if (!cleared) { cleared = true; _state.update { it.copy(streamingIds = it.streamingIds - convId) } } }
             try {
+                // 思路来自 deepseek-ai/deepseek-harness packages/goal/goal-round-driver/，MIT。人类发言先接回执行权，持久保留一个后续调度。
+                com.jack.ai.data.Goals.foreground.add(convId)
+                if (com.jack.ai.data.Goals.current(getApplication(), convId)?.status == "active")
+                    com.jack.ai.data.Goals.schedule(getApplication(), convId, replace = true)
+                com.jack.ai.data.Goals.workers[convId]?.cancelAndJoin()
+                if (com.jack.ai.data.Goals.current(getApplication(), convId)?.status == "active")
+                    com.jack.ai.data.Goals.change(getApplication(), convId) { it?.copy(autoRounds = 0) }
                 block(done)
             } finally {
                 done()
                 jobs.remove(convId, coroutineContext[Job])
+                com.jack.ai.data.Goals.foreground.remove(convId)
+                if (com.jack.ai.data.Goals.current(getApplication(), convId)?.status == "active") com.jack.ai.data.Goals.schedule(getApplication(), convId)
             }
         }
         jobs[convId] = j
@@ -478,6 +496,22 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 )
             }
             startReply(conv.id)
+        }
+    }
+
+    /** 思路来自 deepseek-ai/deepseek-harness packages/goal/goal/，MIT。顶部操作只改本地状态，不调用模型。 */
+    fun goalAction(convId: String, action: String) {
+        viewModelScope.launch(core.ioSerial) {
+            com.jack.ai.data.Goals.change(getApplication(), convId) { g -> when (action) {
+                "clear" -> null
+                "resume" -> g?.copy(status = "active", autoRounds = 0)
+                else -> g?.update("paused", "用户暂停了目标。")
+            } }
+            if (action != "resume") {
+                stop(convId)
+                com.jack.ai.data.Goals.workers[convId]?.cancelAndJoin()
+                androidx.work.WorkManager.getInstance(getApplication()).cancelUniqueWork(com.jack.ai.data.Goals.workId(convId))
+            }
         }
     }
 
@@ -780,6 +814,13 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                             patchMessage(convId, reply.id) { it.copy(cost = total) }
                         }
                     },
+                    // 思路来自 deepseek-ai/deepseek-harness packages/goal/goal-round-driver/，MIT。前台也存相同断点，进程被杀后后台能接。
+                    onTools = {
+                        com.jack.ai.data.Goals.current(getApplication(), convId)?.let { g ->
+                            if (g.status == "active") com.jack.ai.tools.TaskCheckpoint.save(
+                                com.jack.ai.tools.TaskCheckpoint.file(getApplication<Application>().filesDir, com.jack.ai.data.Goals.workId(convId)), g.id, history, spent)
+                        }
+                    },
                     onRound = { flush() },
                     // 带工具的请求被拒（比如旧记录格式接口不认）：先去掉旧的工具调用过程再试，工具照样能用；
                     // 还不行就不用工具，改成“先搜再答”
@@ -868,7 +909,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 // Work 一时出错停下（网络断了、服务忙）：等一会儿自动接着做，连着最多 AUTO_RESUME_MAX 次；用户停下、花费到上限、复核的不接
                 if (failure == null) autoResumes.remove(convId)
                 val resumes = autoResumes[convId] ?: 0
-                if (work && leftover.isEmpty() && extraUser != REVIEW_PROMPT && session.maxRounds != 0 &&
+                if (work && com.jack.ai.data.Goals.current(getApplication(), convId) == null && leftover.isEmpty() && extraUser != REVIEW_PROMPT && session.maxRounds != 0 &&
                     failure?.let(::transient) == true && resumes < AUTO_RESUME_MAX) {
                     autoResumes[convId] = resumes + 1
                     val wait = AUTO_RESUME_DELAY_S * (resumes + 1)

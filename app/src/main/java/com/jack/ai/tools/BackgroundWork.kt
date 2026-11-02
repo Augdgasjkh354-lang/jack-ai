@@ -26,6 +26,7 @@ import com.jack.ai.data.endpoint
 import com.jack.ai.data.globalAllowed
 import com.jack.ai.data.workMemoryAllowed
 import com.jack.ai.data.fullAuth
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.io.File
@@ -95,6 +96,8 @@ suspend fun runBackgroundWork(
     /** 自由时间的钱：花到今天的预算时提醒一次、到上限就停，Kavi 能从积蓄里拿（见 FreeBudget）。不给就用 Work 的单次上限。 */
     budget: com.jack.ai.data.FreeBudget? = null,
     resumePrompt: String = "",
+    /** 思路来自 deepseek-ai/deepseek-harness packages/goal/goal-round-driver/，MIT。目标续做使用同一份断点。 */
+    goalId: String? = null,
     onProgress: (String) -> Unit = {},
 ): TaskResult {
     com.jack.ai.data.KaviSelf.ensure(ctx)
@@ -158,7 +161,7 @@ suspend fun runBackgroundWork(
         return TaskResult("上次自由时间的预算已用完。", status = TaskStatus.FAILED, spent = spent)
     // 上次半路被打断了：从断点接着做（系统提示换成这次的，时间是新的）
     val checkpoint = TaskCheckpoint.file(ctx.filesDir, r.id)
-    val cpKey = TaskCheckpoint.keyOf((brief ?: "") + r.prompt.ifBlank { r.title })
+    val cpKey = goalId ?: TaskCheckpoint.keyOf((brief ?: "") + r.prompt.ifBlank { r.title })
     var resumed = false
     (if (free) null else TaskCheckpoint.load(checkpoint, cpKey))?.let { saved ->
         resumed = true
@@ -178,9 +181,13 @@ suspend fun runBackgroundWork(
             files.removeAll { it.path == file.absolutePath }
             files += GeneratedFile(file.name, file.absolutePath, ToolSession.mimeOf(file.name), file.length())
         }
-        override suspend fun confirm(title: String, body: String, action: String) = false
+        override suspend fun confirm(title: String, body: String, action: String): Boolean {
+            if (goalId != null) com.jack.ai.data.Goals.change(ctx, conv.id) { it?.update("blocked", "$title：$body") }
+            return false
+        }
     })
     session.interactive = false
+    session.goalRun = goalId != null
     budget?.let { b -> b.spentNow = { spent }; session.freeBudget = b }
     if (free) session.freeNext = freeState.next
     session.unlocked.addAll(conv.skillTools)
@@ -211,6 +218,18 @@ suspend fun runBackgroundWork(
     val gate = if (brief == null) WorkGate(session, review = if (s.workReview) {
         WorkGate.reviewer(session, DeepSeekClient(store::addUsage), s.backgroundEndpoint() ?: ep, r.prompt.ifBlank { r.title }, startedAt)
     } else null) else null
+    // 思路来自 deepseek-ai/deepseek-harness packages/goal/goal-round-driver/，MIT。只观察本次会话占用的手机端口。
+    val goalMonitor = if (goalId != null) kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.currentCoroutineContext()).launch {
+        while (true) {
+            val phone = session.phoneControl
+            if (phone?.background?.paused?.value == true || phone?.background?.stopped == true ||
+                (phone != null && session.phoneStops >= 0 && com.jack.ai.a11y.KaviAccessibility.stops.get() != session.phoneStops)) {
+                com.jack.ai.data.Goals.change(ctx, conv.id) { it?.update("blocked", "用户已接管或停止手机操作，请查看后手动继续。") }
+                break
+            }
+            kotlinx.coroutines.delay(200)
+        }
+    } else null
     try {
         agent.run(
             messages = messages,
@@ -222,6 +241,11 @@ suspend fun runBackgroundWork(
                 if (limit > 0 && spent >= limit) {
                     session.maxRounds = 0
                     "花费到了上限，不要再调用工具，直接写出目前的结果，并说明还差什么。"
+                } else if (goalId != null && (com.jack.ai.data.Goals.current(ctx, conv.id)?.let { it.id != goalId || it.status != "active" } != false ||
+                        com.jack.ai.data.Goals.pauseForBudget(ctx, conv.id))) "目标已停止，不要再调用工具。"
+                else if (goalId != null && name == "phone" && (ctx.getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager).isKeyguardLocked) {
+                    com.jack.ai.data.Goals.change(ctx, conv.id) { it?.update("blocked", "需要用户解锁手机，请解锁后手动继续。") }
+                    "手机已锁定，目标受阻，已通知用户。"
                 } else if (!allow(name, args)) "这个工具这次不能用。"
                 else session.perform(name, args).also { log(com.jack.ai.data.RunLog.stepOf(name, it.status, it.text)) }.text + (gate?.reminder(name) ?: "")
             },
@@ -240,6 +264,11 @@ suspend fun runBackgroundWork(
             } else gate?.let { g -> { answer -> g.beforeFinish(answer) } },
             slim = if (free) null else { msgs -> com.jack.ai.chat.ContextSlim.slim(msgs) },
             beforeRequest = { msgs, requestTools ->
+                // 思路来自 deepseek-ai/deepseek-harness packages/goal/goal-round-driver/，MIT。每次模型请求前现读状态与月度预算。
+                if (goalId != null) {
+                    val g = com.jack.ai.data.Goals.current(ctx, conv.id)
+                    if (g?.id != goalId || g.status != "active" || com.jack.ai.data.Goals.pauseForBudget(ctx, conv.id)) throw com.jack.ai.data.GoalStopped()
+                }
                 if (free) {
                     val f = com.jack.ai.data.FreeConversation
                     val recentAssistant = msgs.lastOrNull { (it["role"] as? kotlinx.serialization.json.JsonPrimitive)?.content == "assistant" }
@@ -264,7 +293,12 @@ suspend fun runBackgroundWork(
                     saveFree()
                 }
             },
-            onFinish = { final -> if (free) {
+            onFinish = { final ->
+                if (goalId != null) {
+                    messages += final
+                    TaskCheckpoint.save(checkpoint, cpKey, messages, spent)
+                }
+                if (free) {
                 if ((final["content"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.isNotBlank() == true || final["reasoning_content"] != null) messages += final
                 saveFree()
             } },
@@ -276,11 +310,16 @@ suspend fun runBackgroundWork(
                 if (free) saveFree()
             },
         )
+    } catch (e: com.jack.ai.data.GoalStopped) {
+        val g = com.jack.ai.data.Goals.current(ctx, conv.id)
+        if (g?.status == "complete") TaskCheckpoint.clear(checkpoint)
+        return TaskResult("目标${g?.label.orEmpty()}：${g?.objective.orEmpty()}\n${g?.progress?.lastOrNull().orEmpty()}", files, spent = spent)
     } finally {
+        goalMonitor?.cancel()
         // 占着浏览器的话放出来，聊天里等着用的回答接着用
         session.releaseBrowser()
     }
-    if (!free) TaskCheckpoint.clear(checkpoint)
+    if (!free && (goalId == null || com.jack.ai.data.Goals.current(ctx, conv.id)?.status == "complete")) TaskCheckpoint.clear(checkpoint)
     val text = agent.lastRound.trim().ifBlank { agent.content.toString().trim() }
     return if (text.isBlank()) TaskResult("（这次没有生成内容）", files, TaskStatus.FAILED, spent) else TaskResult(text, files, spent = spent)
 }

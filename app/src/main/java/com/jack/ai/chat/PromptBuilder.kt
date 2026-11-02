@@ -185,6 +185,8 @@ object PromptBuilder {
                 add(SkillTools.LIST_WORKBENCH); add(SkillTools.DELETE_WORKBENCH)
             } else add(SkillTools.DELETE_FILE)
             if (skills.isNotEmpty()) add(SkillTools.USE_SKILL)
+            SkillTools.GOAL_TOOLS.forEach { add(it) } // 思路来自 deepseek-ai/deepseek-harness packages/goal/tool-goal/，MIT。
+            add(SkillTools.RUN_CODE) // 思路来自 deepseek-ai/deepseek-harness packages/ptc-runtime/，MIT。
             add(SkillTools.UPDATE_PLAN); add(SkillTools.DELEGATE_TASKS)
             if (web) { add(SkillTools.WEB_SEARCH); add(SkillTools.READ_WEBPAGE); add(SkillTools.DOWNLOAD_FILE) }
             val word = SkillIds.WORD in skillIds
@@ -343,6 +345,8 @@ object PromptBuilder {
                 "e.g. \"先搜一下最新的价格，再和你的表对一下\" or \"报错是路径不对，改一下再跑\". Skip it for quick bookkeeping such as saving memory. " +
                 "These lines are shown as progress above your answer, not as part of it, so don't repeat them in the answer.")
         }
+        // 思路来自 deepseek-ai/deepseek-harness packages/ptc-runtime/，MIT。固定说明不随时间、消息或目标变化。
+        if ("run_code" in names) parts += "固定说明" to "【Batch reads】Use run_code for repeating the same read over many items, such as reading many emails or comparing many webpages. For one or two steps call tools directly. Use await tools.name(args), print or return selected results; only read-only calls are allowed, at most 30 calls and 60 seconds. Use ordinary tool calls for sending, deleting, writing, submitting or operating the phone."
         if ("web_search" in names) {
             parts += "固定说明" to "【Web】For time-sensitive questions (news, prices, weather, latest versions, recent events) or facts you're unsure of, check with web search. Common knowledge, casual chat and writing don't need a search."
         }

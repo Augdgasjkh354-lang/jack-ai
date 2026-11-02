@@ -308,8 +308,12 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
         if (action != "wait_user" && looksLikeChallenge(page)) {
             val cleared = waitUntil(15_000, 1_500) { !looksLikeChallenge(it) }
             if (cleared != null) { page = cleared; note.append("网站做了一下人机验证，等了几秒自己过了。\n") }
-            else note.append(if (interactive) "⚠ 网站要人机验证（「确认您是真人」之类），等了 15 秒没过。不要自己去点或滑：用 action=wait_user，text 写「点一下网页上的验证」，用户做完会自动接着来。\n"
+            else {
+                // 思路来自 deepseek-ai/deepseek-harness packages/goal/goal-round-driver/，MIT。需要人工验证时目标停止。
+                if (goalRun) ui.confirm("网站需要人机验证", "请打开 Kavi 浏览器完成验证后继续目标。", "继续")
+                note.append(if (interactive) "⚠ 网站要人机验证（「确认您是真人」之类），等了 15 秒没过。不要自己去点或滑：用 action=wait_user，text 写「点一下网页上的验证」，用户做完会自动接着来。\n"
                 else "⚠ 网站要人机验证，后台过不去。任务到这里停下，结果里写明「网站要人机验证，请在 Kavi 浏览器里打开 ${com.jack.ai.api.BrowserPages.site(page.url)} 过一次」。\n")
+            }
         }
         // 跳到了登录页：可能还没登录或登录过期了，停下来请用户登录（后台任务就推送通知）
         loginNote(page)?.let { note.append(it) }
@@ -546,6 +550,7 @@ private suspend fun ToolSession.loginNote(p: JackBrowser.Page): String? {
     val site = com.jack.ai.api.BrowserPages.site(p.url)
     if (!loginFlagged.add(site)) return null
     if (!interactive) {
+        if (goalRun) ui.confirm("需要登录 $site", "请打开 Kavi 浏览器登录后继续目标。", "继续")
         com.jack.ai.data.Routines.notify(app, "login-$site", "Kavi 需要你登录 $site",
             "后台任务做到一半，网站要求登录。打开 Kavi 浏览器登录一次，下次就能照常跑。")
         return "⚠ 这一页是 $site 的登录页，说明还没登录或登录过期了。用户不在，不要尝试登录；任务到这里停下，结果里写明「需要先在 Kavi 浏览器里登录 $site」（已经推送通知提醒用户）。\n"
@@ -579,6 +584,7 @@ private const val WAIT_USER_MS = 5 * 60_000L
  * 登录页、验证页没了（或用户本来要做的那页换了网址）就算做完。
  */
 private suspend fun ToolSession.waitUser(what: String): String {
+    if (goalRun) ui.confirm("目标需要你接管", what, "继续")
     if (!interactive) return "后台任务里用户不在，等不了。任务到这里停下，结果里写明要用户自己做的事：$what。\n"
     val ctx = app
     val start = JackBrowser.read(ctx)

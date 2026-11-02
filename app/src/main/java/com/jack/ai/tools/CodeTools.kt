@@ -118,3 +118,16 @@ internal suspend fun ToolSession.fileHistory(args: JsonObject): String {
         text to SearchRecord(if (action == "restore") "退回 ${file.name} 第 $n 版" else "查看 ${file.name} 的旧版本")
     }
 }
+
+/** 思路来自 deepseek-ai/deepseek-harness packages/ptc-runtime/，MIT。子调用走完整的普通工具检查与记录。 */
+internal suspend fun ToolSession.runCode(args: JsonObject): String {
+    val description = args["description"].text().trim()
+    if (description.isBlank() || args["code"].text().isBlank()) return "run_code 必须提供 code 和 description（一句话说明用途）"
+    return runTool(description) {
+        val full = CodeRunner.run(args["code"].text()) { name, params -> execute(name, params) }
+        val text = if (full.length > 16_000) withContext(Dispatchers.IO) {
+            Spill.save(wsDir, full)?.let { full.take(12_000) + "\n完整输出：$it（用 read_file 读取）" } ?: full
+        } else full
+        text to SearchRecord(description)
+    }
+}
