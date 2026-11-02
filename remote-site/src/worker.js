@@ -496,85 +496,174 @@ const MANIFEST = { name: "Kavi", short_name: "Kavi", start_url: "/", display: "s
 const PAGE = `<!doctype html>
 <html lang="zh-CN"><head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Kavi">
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#1d212b" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#0c0e13" media="(prefers-color-scheme: dark)">
 <link rel="manifest" href="/manifest.json">
 <title>Kavi</title>
 <style>
-:root{--bg:#fff;--fg:#1c1c1e;--sub:#6b7280;--line:#e5e7eb;--bubble:#f3f4f6;--accent:#1c1c1e;--card:#fff;--err:#c0392b}
-@media (prefers-color-scheme: dark){:root{--bg:#1d212b;--fg:#f3f4f6;--sub:#9ca3af;--line:#343a46;--bubble:#2a303c;--accent:#f3f4f6;--card:#252a35}}
-*{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font:16px/1.55 -apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",sans-serif}
-button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
-#app{display:flex;flex-direction:column;height:100%;max-width:820px;margin:0 auto}
-header{display:flex;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top) + 10px) 14px 10px;border-bottom:1px solid var(--line)}
-header h1{font-size:17px;margin:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.dot{width:8px;height:8px;border-radius:50%;background:#9ca3af;display:inline-block;margin-right:6px}.dot.on{background:#22c55e}
-#status{font-size:12px;color:var(--sub);white-space:nowrap}
-#list{flex:1;overflow-y:auto;padding:14px;-webkit-overflow-scrolling:touch}
-.msg{margin:10px 0;display:flex;flex-direction:column}
-.user{align-items:flex-end}.user .b{background:var(--bubble);border-radius:18px;padding:9px 14px;max-width:85%;white-space:pre-wrap;word-break:break-word}
+/* 配色跟 App 一样：浅色黑白，深色是带一点蓝的深灰 */
+:root{--bg:#fff;--fg:#0a0a0a;--sub:#6b6b6b;--line:#e5e5e5;--soft:#f2f2f2;--softer:#f8f8f8;--accent:#0a0a0a;--on-accent:#fff;--card:#fff;--err:#d92d20;--ok:#22a06b;--shadow:0 1px 2px #0000000d,0 8px 24px #0000000a}
+@media (prefers-color-scheme: dark){:root{--bg:#0c0e13;--fg:#f0f2f5;--sub:#9ea4b0;--line:#232833;--soft:#1b1f28;--softer:#12151c;--accent:#f0f2f5;--on-accent:#0c0e13;--card:#12151c;--err:#f87171;--ok:#34d399;--shadow:0 1px 2px #0000004d}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font:16px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue","Microsoft YaHei",sans-serif;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+svg{display:block}
+#app{display:flex;flex-direction:column;height:100%;height:100dvh;max-width:860px;margin:0 auto}
+
+/* 顶栏 */
+header{display:flex;align-items:center;gap:6px;padding:calc(env(safe-area-inset-top) + 8px) 10px 8px}
+header h1{font-size:17px;font-weight:650;margin:0 4px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.icon{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex:none;color:var(--fg)}
+.icon:active{background:var(--soft)}
+.pill{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--sub);background:var(--soft);border-radius:99px;padding:5px 10px;white-space:nowrap}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--sub)}.dot.on{background:var(--ok);box-shadow:0 0 0 3px color-mix(in srgb,var(--ok) 25%,transparent)}
+
+/* 消息 */
+#list{flex:1;overflow-y:auto;padding:8px 16px 16px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.msg{margin:18px 0;display:flex;flex-direction:column}.fresh{animation:in .25s ease-out}
+@keyframes in{from{opacity:0;transform:translateY(6px)}}
+.user{align-items:flex-end}
+.user .b{background:var(--soft);border-radius:20px 20px 6px 20px;padding:9px 15px;max-width:82%;white-space:pre-wrap;word-break:break-word}
 .bot .b{max-width:100%;word-break:break-word}
-.bot .b p{margin:.5em 0}.bot pre{background:var(--bubble);padding:10px;border-radius:10px;overflow-x:auto;font-size:13px}
-.bot code{font-family:ui-monospace,Menlo,monospace;font-size:.9em}
-.steps{font-size:13px;color:var(--sub);border-left:2px solid var(--line);padding-left:10px;margin:4px 0 6px}
-.files{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
-.files a{font-size:13px;border:1px solid var(--line);border-radius:10px;padding:6px 10px;color:var(--fg);text-decoration:none}
-.files img{max-width:220px;max-height:220px;border-radius:12px;display:block}
-.err{color:var(--err);font-size:14px}.wait{color:var(--sub);font-size:14px}
-.confirm{border:1px solid var(--line);border-radius:16px;padding:14px;margin:10px 0;background:var(--card)}
-.confirm h3{margin:0 0 6px;font-size:16px}.confirm p{margin:0 0 10px;white-space:pre-wrap;font-size:14px}
+.bot .b>:first-child{margin-top:0}.bot .b>:last-child{margin-bottom:0}
+.bot .b p{margin:.6em 0}.bot .b ul,.bot .b ol{margin:.5em 0;padding-left:1.4em}.bot .b li{margin:.2em 0}
+.bot .b h3{font-size:1.05em;margin:1em 0 .4em}
+.bot pre{background:var(--softer);border:1px solid var(--line);padding:12px;border-radius:12px;overflow-x:auto;font-size:13px;line-height:1.5}
+.bot code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.88em;background:var(--soft);padding:.1em .35em;border-radius:5px}
+.bot pre code{background:none;padding:0}
+.bot a{color:inherit;text-underline-offset:3px}
+.steps{margin:0 0 10px;font-size:13px;color:var(--sub)}
+.steps summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:99px;background:var(--soft)}
+.steps summary::-webkit-details-marker{display:none}
+.steps ol{margin:8px 0 0;padding:0 0 0 4px;list-style:none;border-left:2px solid var(--line)}
+.steps li{padding:2px 0 2px 12px}
+.spin{width:12px;height:12px;border:2px solid var(--line);border-top-color:var(--sub);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.typing{display:inline-flex;gap:4px;padding:10px 0}.typing i{width:7px;height:7px;border-radius:50%;background:var(--sub);opacity:.4;animation:blink 1.2s infinite}
+.typing i:nth-child(2){animation-delay:.2s}.typing i:nth-child(3){animation-delay:.4s}
+@keyframes blink{40%{opacity:1}}
+.meta{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--sub);margin-top:4px}
+.chip{border:1px solid var(--line);border-radius:99px;padding:3px 12px;font-size:13px;color:var(--sub)}
+.err{color:var(--err);font-size:14px;margin-top:6px}
+
+/* 文件 */
+.files{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.user .files{justify-content:flex-end}
+.file{display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--card);border-radius:14px;padding:8px 12px 8px 8px;color:var(--fg);text-decoration:none;max-width:260px}
+.file .fi{width:34px;height:34px;border-radius:9px;background:var(--soft);display:flex;align-items:center;justify-content:center;flex:none;font-size:10px;font-weight:700;color:var(--sub)}
+.file span{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.files img{max-width:240px;max-height:240px;border-radius:14px;display:block;border:1px solid var(--line)}
+
+/* 确认卡片 */
+.confirm{border:1px solid var(--line);border-radius:18px;padding:16px;margin:16px 0;background:var(--card);box-shadow:var(--shadow)}
+.confirm h3{margin:0 0 6px;font-size:16px}.confirm p{margin:0 0 14px;white-space:pre-wrap;font-size:14px;color:var(--sub)}
 .row{display:flex;gap:10px;justify-content:flex-end}
-.btn{border:1px solid var(--line);border-radius:20px;padding:7px 16px}.btn.main{background:var(--accent);color:var(--bg);border-color:var(--accent)}
-footer{border-top:1px solid var(--line);padding:8px 10px calc(env(safe-area-inset-bottom) + 8px)}
-#pending{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}#pending span{font-size:12px;background:var(--bubble);border-radius:8px;padding:3px 8px}
-.in{display:flex;align-items:flex-end;gap:8px}
-textarea{flex:1;resize:none;border:1px solid var(--line);border-radius:20px;padding:9px 14px;font:inherit;background:var(--bg);color:var(--fg);max-height:160px}
-.icon{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;flex:none}
-#send{background:var(--accent);color:var(--bg)}
-#drawer{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;z-index:5}#drawer.open{display:block}
-#drawer nav{background:var(--bg);width:80%;max-width:320px;height:100%;padding:calc(env(safe-area-inset-top) + 14px) 10px 14px;overflow-y:auto}
-#drawer nav button{display:block;width:100%;text-align:left;padding:10px;border-radius:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#drawer nav button.cur{background:var(--bubble)}
-.hint{font-size:13px;color:var(--sub)}
+.btn{border:1px solid var(--line);border-radius:99px;padding:8px 18px;font-size:15px}
+.btn.main{background:var(--accent);color:var(--on-accent);border-color:var(--accent);font-weight:600}
+
+/* 空白页：和 App 一样的问候和建议卡片 */
+.empty{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 4px 12px;text-align:center}
+.logo{width:60px;height:60px;border-radius:18px;background:var(--accent);color:var(--on-accent);display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:800;letter-spacing:-.02em;box-shadow:var(--shadow)}
+.empty h2{font-size:26px;margin:20px 0 6px;font-weight:700}
+.empty .sub{color:var(--sub);margin:0 0 28px}
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:12px;width:100%;max-width:520px}
+.card{display:flex;flex-direction:column;align-items:flex-start;gap:14px;text-align:left;padding:14px;border-radius:20px;background:var(--softer);border:1px solid var(--line)}
+.card:active{transform:scale(.98)}
+.card .ci{width:34px;height:34px;border-radius:11px;display:flex;align-items:center;justify-content:center}
+.card b{font-weight:600;font-size:15px}
+.offline{margin:0 0 12px;font-size:13px;color:var(--sub);background:var(--soft);border-radius:12px;padding:10px 12px;text-align:left}
+
+/* 输入框 */
+footer{padding:6px 12px calc(env(safe-area-inset-bottom) + 10px)}
+.box{border:1px solid var(--line);background:var(--card);border-radius:26px;padding:6px;box-shadow:var(--shadow)}
+#pending{display:flex;flex-wrap:wrap;gap:6px;padding:4px 6px 6px}#pending:empty{display:none}
+#pending span{display:flex;align-items:center;gap:6px;font-size:12px;background:var(--soft);border-radius:10px;padding:4px 6px 4px 10px}
+#pending button{width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--sub)}
+.in{display:flex;align-items:flex-end;gap:4px}
+textarea{flex:1;resize:none;border:0;outline:0;padding:8px 6px;font:inherit;background:transparent;color:var(--fg);max-height:180px;line-height:1.5}
+textarea::placeholder{color:var(--sub)}
+#send{width:38px;height:38px;border-radius:50%;background:var(--accent);color:var(--on-accent);display:flex;align-items:center;justify-content:center;flex:none;transition:opacity .15s}
+#send:disabled{opacity:.3}
+#attach{width:38px;height:38px;border-radius:50%;color:var(--sub)}
+
+/* 侧边的对话列表 */
+#drawer{position:fixed;inset:0;z-index:5;pointer-events:none}
+#drawer .shade{position:absolute;inset:0;background:#0006;opacity:0;transition:opacity .2s}
+#drawer nav{position:absolute;top:0;bottom:0;left:0;background:var(--bg);width:84%;max-width:320px;padding:calc(env(safe-area-inset-top) + 12px) 10px 14px;overflow-y:auto;transform:translateX(-100%);transition:transform .25s ease;border-right:1px solid var(--line)}
+#drawer.open{pointer-events:auto}#drawer.open .shade{opacity:1}#drawer.open nav{transform:none}
+.navhead{display:flex;align-items:center;gap:10px;padding:4px 6px 14px}
+.navhead .logo{width:32px;height:32px;border-radius:10px;font-size:17px;box-shadow:none}
+.navhead b{flex:1;font-size:17px}
+.newbtn{display:flex;align-items:center;gap:10px;width:100%;padding:11px 12px;border-radius:14px;background:var(--soft);font-weight:600;margin-bottom:12px}
+.label{font-size:12px;color:var(--sub);padding:6px 12px}
+.conv{display:flex;align-items:center;border-radius:12px}
+.conv.cur{background:var(--soft)}
+.conv>button:first-child{flex:1;min-width:0;text-align:left;padding:10px 12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.conv .del{width:34px;height:34px;border-radius:10px;color:var(--sub);display:flex;align-items:center;justify-content:center;opacity:.6}
 </style></head>
 <body>
 <div id="app" hidden>
   <header>
-    <button class="icon" id="menu" aria-label="对话列表">☰</button>
+    <button class="icon" id="menu" aria-label="对话列表"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h10M4 17h16"/></svg></button>
     <h1 id="title">Kavi</h1>
-    <span id="status"><span class="dot"></span>…</span>
-    <button class="icon" id="new" aria-label="新对话">＋</button>
+    <span class="pill" id="status"><span class="dot"></span>…</span>
+    <button class="icon" id="new" aria-label="新对话"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
   </header>
   <div id="list"></div>
   <footer>
-    <div id="pending"></div>
-    <div class="in">
-      <button class="icon" id="attach" aria-label="附件">📎</button>
-      <input type="file" id="fileIn" multiple hidden>
-      <textarea id="text" rows="1" placeholder="问 Kavi"></textarea>
-      <button class="icon" id="send" aria-label="发送">↑</button>
+    <div class="box">
+      <div id="pending"></div>
+      <div class="in">
+        <button id="attach" class="icon" aria-label="附件"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+        <input type="file" id="fileIn" multiple hidden>
+        <textarea id="text" rows="1" placeholder="问 Kavi"></textarea>
+        <button id="send" aria-label="发送" disabled><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
+      </div>
     </div>
   </footer>
 </div>
-<div id="drawer"><nav id="convs"></nav></div>
+<div id="drawer"><div class="shade"></div><nav>
+  <div class="navhead"><div class="logo">K</div><b>Kavi</b></div>
+  <button class="newbtn" onclick="pick('')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>新对话</button>
+  <div id="convs"></div>
+</nav></div>
 <script>
 const $ = (id) => document.getElementById(id);
-let conv = localStorage.getItem("conv") || "", since = 0, msgs = new Map(), confirms = [], convs = [], files = [], timer = null, busy = false;
+let conv = localStorage.getItem("conv") || "", since = 0, msgs = new Map(), confirms = [], convs = [], files = [], timer = null, busy = false, device = null, openSteps = new Set(), shown = new Set();
+// 只有第一次出现的消息、卡片才淡入：每几秒刷新一次整页重画，不能每次都重播动画
+const fresh = (k) => shown.has(k) ? "" : (shown.add(k), " fresh");
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+// 和 App 空白页一样的四张建议卡片
+const SUGGEST = [
+  ["今天有什么新闻", "今天有什么值得关注的新闻？", "#3b82f6", '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>'],
+  ["帮我记一件事", "提醒我", "#ef5a5a", '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/>'],
+  ["读个网页给我听", "帮我打开这个网页，读完告诉我重点：", "#8b5cf6", '<path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>'],
+  ["整理成表格", "帮我把下面的内容整理成表格：\\n", "#22a06b", '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M10 4v16"/>'],
+];
+function greeting() {
+  const h = new Date().getHours();
+  return h >= 5 && h <= 10 ? "早上好" : h <= 12 && h > 10 ? "中午好" : h >= 13 && h <= 17 ? "下午好" : h >= 18 && h <= 22 ? "晚上好" : "夜深了";
+}
+function inline(s) {
+  return s.replace(/\`([^\`]+)\`/g, "<code>$1</code>")
+    .replace(/\\*\\*([^*]+)\\*\\*/g, "<b>$1</b>")
+    .replace(/(https?:\\/\\/[^\\s<]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+}
 function md(src) {
   // 先转义再排版：Kavi 写的字不会变成网页上能跑的东西
-  const blocks = String(src).split(/\`\`\`/);
-  return blocks.map((b, i) => {
+  return String(src).split(/\`\`\`/).map((b, i) => {
     if (i % 2) return "<pre><code>" + esc(b.replace(/^[\\w-]*\\n/, "")) + "</code></pre>";
-    return esc(b).split(/\\n{2,}/).map((p) => "<p>" + p
-      .replace(/\`([^\`]+)\`/g, "<code>$1</code>")
-      .replace(/\\*\\*([^*]+)\\*\\*/g, "<b>$1</b>")
-      .replace(/^#{1,6} (.+)$/gm, "<b>$1</b>")
-      .replace(/(https?:\\/\\/[^\\s<]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>')
-      .replace(/\\n/g, "<br>") + "</p>").join("");
+    return esc(b).split(/\\n{2,}/).map((p) => {
+      const lines = p.split("\\n");
+      if (lines.every((l) => /^\\s*[-*•] /.test(l))) return "<ul>" + lines.map((l) => "<li>" + inline(l.replace(/^\\s*[-*•] /, "")) + "</li>").join("") + "</ul>";
+      if (lines.every((l) => /^\\s*\\d+[.、)] /.test(l))) return "<ol>" + lines.map((l) => "<li>" + inline(l.replace(/^\\s*\\d+[.、)] /, "")) + "</li>").join("") + "</ol>";
+      if (lines.length === 1 && /^#{1,6} /.test(p)) return "<h3>" + inline(p.replace(/^#{1,6} /, "")) + "</h3>";
+      return "<p>" + inline(p).replace(/^#{1,6} (.+)$/gm, "<b>$1</b>").replace(/\\n/g, "<br>") + "</p>";
+    }).join("");
   }).join("");
 }
 async function api(path, opt = {}) {
@@ -584,14 +673,31 @@ async function api(path, opt = {}) {
   if (!r.ok) throw new Error(j.error || r.status);
   return j;
 }
+const size = (n) => !n ? "" : n < 1024 ? n + " B" : n < 1048576 ? (n / 1024).toFixed(0) + " KB" : (n / 1048576).toFixed(1) + " MB";
+const ext = (name) => ((String(name).match(/\\.([a-z0-9]{1,4})$/i) || [])[1] || "文件").toUpperCase();
 function fileLinks(fs) {
   if (!fs || !fs.length) return "";
   return '<div class="files">' + fs.map((f) => {
     const u = "/api/file?key=" + encodeURIComponent(f.key);
-    return /^image\\//.test(f.type || "") || /\\.(png|jpe?g|gif|webp)$/i.test(f.name) ? '<a href="' + u + '" target="_blank"><img src="' + u + '" alt="' + esc(f.name) + '"></a>'
-      : '<a href="' + u + '" target="_blank">📄 ' + esc(f.name) + "</a>";
+    return /^image\\//.test(f.type || "") || /\\.(png|jpe?g|gif|webp)$/i.test(f.name) ? '<a href="' + u + '" target="_blank"><img src="' + u + '" alt="' + esc(f.name) + '" loading="lazy"></a>'
+      : '<a class="file" href="' + u + '" target="_blank"><div class="fi">' + esc(ext(f.name)) + '</div><span>' + esc(f.name) + (f.size ? " · " + size(f.size) : "") + "</span></a>";
   }).join("") + "</div>";
 }
+function steps(m, running) {
+  if (!m.steps || !m.steps.length) return "";
+  const open = running || openSteps.has(m.id);
+  return '<details class="steps"' + (open ? " open" : "") + '><summary onclick="toggleSteps(' + m.id + ',!this.parentNode.open)">' + (running ? '<span class="spin"></span>' : "") +
+    (running ? esc(m.steps[m.steps.length - 1]) : "做了 " + m.steps.length + " 步") + "</summary><ol>" + m.steps.map((s) => "<li>" + esc(s) + "</li>").join("") + "</ol></details>";
+}
+window.toggleSteps = (id, open) => { open ? openSteps.add(id) : openSteps.delete(id); };
+function emptyPage() {
+  const off = device && !device.online;
+  return '<div class="empty"><div class="logo">K</div><h2>' + greeting() + '</h2><p class="sub">想聊点什么？</p>' +
+    (off ? '<div class="offline">手机上的 Kavi 现在没连着' + (device.lastSeen ? "（" + ago(Date.now() - device.lastSeen) + "还在）" : "") + '。消息照样能发，它连上后就会回。</div>' : "") +
+    '<div class="cards">' + SUGGEST.map((s, i) => '<button class="card" onclick="suggest(' + i + ')"><div class="ci" style="background:' + s[2] + '22;color:' + s[2] +
+      '"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + s[3] + "</svg></div><b>" + s[0] + "</b></button>").join("") + "</div></div>";
+}
+window.suggest = (i) => { ta.value = SUGGEST[i][1]; ta.oninput(); ta.focus(); };
 function render() {
   const list = $("list");
   const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 80;
@@ -601,30 +707,32 @@ function render() {
   busy = false;
   for (const m of sorted) {
     if (m.role !== "user") continue;
-    html += '<div class="msg user"><div class="b">' + esc(m.text) + "</div>" + fileLinks(m.files) + "</div>";
+    html += '<div class="msg user' + fresh("u" + m.id) + '">' + (m.text ? '<div class="b">' + esc(m.text) + "</div>" : "") + fileLinks(m.files) + "</div>";
     const r = replies.get(m.id);
+    const stopBtn = '<button class="chip" onclick="stopIt(' + m.id + ')">停止</button>';
     if (!r) {
       busy = true;
-      html += '<div class="msg bot"><div class="wait">' + (m.state === "pending" ? "等手机上的 Kavi 来取…" : "Kavi 在想…") +
-        ' <button class="btn" onclick="stopIt(' + m.id + ')">停止</button></div></div>';
+      html += '<div class="msg bot' + fresh("w" + m.id) + '"><div class="meta"><span class="typing"><i></i><i></i><i></i></span>' +
+        (m.state === "pending" ? (device && !device.online ? "等手机上的 Kavi 连上…" : "等手机上的 Kavi 来取…") : "在想…") + stopBtn + "</div></div>";
       continue;
     }
-    if (r.state === "running") busy = true;
-    html += '<div class="msg bot">' + (r.steps && r.steps.length ? '<div class="steps">' + r.steps.map(esc).join("<br>") + "</div>" : "") +
-      '<div class="b">' + md(r.text || "") + "</div>" + fileLinks(r.files) +
-      (r.state === "error" ? '<div class="err">出错了</div>' : "") +
-      (r.state === "running" ? '<div class="wait">…<button class="btn" onclick="stopIt(' + m.id + ')">停止</button></div>' : "") + "</div>";
+    const running = r.state === "running";
+    if (running) busy = true;
+    html += '<div class="msg bot' + fresh("r" + m.id) + '">' + steps(r, running) + '<div class="b">' + md(r.text || "") + "</div>" + fileLinks(r.files) +
+      (r.state === "error" ? '<div class="err">出错了，没答完</div>' : "") +
+      (running ? '<div class="meta"><span class="typing"><i></i><i></i><i></i></span>' + stopBtn + "</div>" : "") + "</div>";
   }
   for (const c of confirms) {
-    html += '<div class="confirm"><h3>' + esc(c.title) + "</h3><p>" + esc(c.body) + '</p><div class="row"><button class="btn" onclick="answer(\\'' + c.id + '\\',false)">不要</button><button class="btn main" onclick="answer(\\'' + c.id + '\\',true)">' + esc(c.action) + "</button></div></div>";
+    html += '<div class="confirm' + fresh("c" + c.id) + '"><h3>' + esc(c.title) + "</h3><p>" + esc(c.body) + '</p><div class="row"><button class="btn" onclick="answer(\\'' + c.id + '\\',false)">不要</button><button class="btn main" onclick="answer(\\'' + c.id + '\\',true)">' + esc(c.action) + "</button></div></div>";
   }
-  if (!sorted.length) html = '<p class="hint" style="text-align:center;margin-top:30vh">在 iPhone、电脑上用手机里的 Kavi：记忆、文件、邮件、浏览器都在。</p>';
+  if (!sorted.length) html = emptyPage();
   list.innerHTML = html;
-  if (atBottom) list.scrollTop = list.scrollHeight;
+  if (atBottom || !sorted.length) list.scrollTop = list.scrollHeight;
   const c = convs.find((x) => x.id === conv);
   $("title").textContent = c ? c.title : "Kavi";
-  $("convs").innerHTML = '<button onclick="pick(\\'\\')">＋ 新对话</button>' + convs.map((x) =>
-    '<button class="' + (x.id === conv ? "cur" : "") + '" onclick="pick(\\'' + x.id + '\\')">' + esc(x.title) + "</button>").join("");
+  $("convs").innerHTML = (convs.length ? '<div class="label">最近</div>' : "") + convs.map((x) =>
+    '<div class="conv' + (x.id === conv ? " cur" : "") + '"><button onclick="pick(\\'' + x.id + '\\')">' + esc(x.title) + '</button><button class="del" aria-label="删除" onclick="del(\\'' + x.id + '\\')">' +
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg></button></div>').join("");
 }
 async function refresh() {
   clearTimeout(timer);
@@ -633,42 +741,61 @@ async function refresh() {
     for (const m of s.msgs) { msgs.set(m.id, m); since = Math.max(since, m.updated); }
     confirms = s.confirms; convs = s.convs;
     const d = s.device;
-    $("status").innerHTML = '<span class="dot ' + (d.online ? "on" : "") + '"></span>' + (d.online ? "手机在线" : d.lastSeen ? "手机离线 " + ago(s.now - d.lastSeen) : "手机还没连上");
+    device = { online: d.online, lastSeen: d.lastSeen ? Date.now() - (s.now - d.lastSeen) : 0 };
+    $("status").innerHTML = '<span class="dot ' + (d.online ? "on" : "") + '"></span>' + (d.online ? "在线" : d.lastSeen ? "离线 · " + ago(s.now - d.lastSeen) : "没连上");
     render();
   } catch (e) { if (e.message === "401") return; }
   timer = setTimeout(refresh, busy || confirms.length ? 1500 : 4000);
 }
-const ago = (ms) => ms < 3600e3 ? Math.round(ms / 60e3) + " 分钟前" : ms < 86400e3 ? Math.round(ms / 3600e3) + " 小时前" : Math.round(ms / 86400e3) + " 天前";
-window.pick = (id) => { conv = id; localStorage.setItem("conv", id); since = 0; msgs.clear(); confirms = []; $("drawer").classList.remove("open"); render(); refresh(); };
+const ago = (ms) => ms < 60e3 ? "刚刚" : ms < 3600e3 ? Math.round(ms / 60e3) + " 分钟前" : ms < 86400e3 ? Math.round(ms / 3600e3) + " 小时前" : Math.round(ms / 86400e3) + " 天前";
+window.pick = (id) => { conv = id; localStorage.setItem("conv", id); since = 0; msgs.clear(); confirms = []; openSteps.clear(); shown.clear(); $("drawer").classList.remove("open"); render(); refresh(); };
+window.del = async (id) => {
+  if (!confirm("删掉这个对话？网页上的记录和文件会一起删掉（手机上 Kavi 里的不受影响）。")) return;
+  await api("/api/delete", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ conv: id }) });
+  convs = convs.filter((c) => c.id !== id);
+  if (id === conv) pick(""); else render();
+};
 window.answer = async (id, ok) => { await api("/api/confirm", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id, ok }) }); confirms = confirms.filter((c) => c.id !== id); render(); refresh(); };
 window.stopIt = async (id) => { await api("/api/stop", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id }) }); };
 $("menu").onclick = () => $("drawer").classList.add("open");
-$("drawer").onclick = (e) => { if (e.target.id === "drawer") $("drawer").classList.remove("open"); };
+$("drawer").onclick = (e) => { if (e.target.classList.contains("shade")) $("drawer").classList.remove("open"); };
 $("new").onclick = () => pick("");
 $("attach").onclick = () => $("fileIn").click();
+const ta = $("text");
+function canSend() { $("send").disabled = !ta.value.trim() && !files.length; }
+function pendingChips() {
+  $("pending").innerHTML = files.map((f, i) => "<span>" + esc(f.uploading ? "上传中 " + f.name : f.name) + (f.uploading ? "" : '<button aria-label="去掉" onclick="unattach(' + i + ')">×</button>') + "</span>").join("");
+  canSend();
+}
+window.unattach = (i) => { files.splice(i, 1); pendingChips(); };
 $("fileIn").onchange = async (e) => {
   for (const f of e.target.files) {
-    const tag = document.createElement("span"); tag.textContent = "上传中 " + f.name; $("pending").appendChild(tag);
+    const slot = { name: f.name, uploading: true };
+    files.push(slot); pendingChips();
     try {
       const r = await api("/api/upload?name=" + encodeURIComponent(f.name) + "&type=" + encodeURIComponent(f.type || ""), { method: "POST", body: f });
-      files.push(r); tag.textContent = "📄 " + f.name;
-    } catch (err) { tag.textContent = "没传上 " + f.name + "：" + err.message; }
+      Object.assign(slot, r, { uploading: false });
+    } catch (err) { files.splice(files.indexOf(slot), 1); alert("没传上 " + f.name + "：" + err.message); }
+    pendingChips();
   }
   e.target.value = "";
 };
-const ta = $("text");
-ta.oninput = () => { ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 160) + "px"; };
+ta.oninput = () => { ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 180) + "px"; canSend(); };
+// 电脑上回车直接发，Shift+回车换行；手机上回车照常换行
+ta.onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing && matchMedia("(hover: hover)").matches) { e.preventDefault(); $("send").click(); } };
 $("send").onclick = async () => {
   const text = ta.value.trim();
-  if (!text && !files.length) return;
+  if ((!text && !files.length) || files.some((f) => f.uploading)) return;
   $("send").disabled = true;
   try {
-    const r = await api("/api/send", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ conv, text, files }) });
+    const sendFiles = files.map(({ key, name, size, type }) => ({ key, name, size, type }));
+    const r = await api("/api/send", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ conv, text, files: sendFiles }) });
     if (!conv) { conv = r.conv; localStorage.setItem("conv", conv); }
-    ta.value = ""; ta.oninput(); files = []; $("pending").innerHTML = "";
+    ta.value = ""; files = []; ta.oninput(); pendingChips();
+    $("list").scrollTop = $("list").scrollHeight;
     refresh();
   } catch (e) { alert("没发出去：" + e.message); }
-  $("send").disabled = false;
+  canSend();
 };
 function start() { $("app").hidden = false; since = 0; msgs.clear(); refresh(); }
 api("/api/state").then(start).catch(() => {});
