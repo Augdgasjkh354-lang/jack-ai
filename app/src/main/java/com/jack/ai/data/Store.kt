@@ -434,6 +434,7 @@ class Store(context: Context) {
             localClassify = prefs.getBoolean("localClassify", true),
             localLlm = prefs.getBoolean("localLlm", false),
             floatBall = prefs.getBoolean("floatBall", false),
+            phoneBackground = prefs.getBoolean("phoneBackground", false),
             noticeWatch = prefs.getBoolean("noticeWatch", false),
             noticeSkip = prefs.getString("noticeSkip", null)?.let { runCatching { json.decodeFromString(ListSerializer(String.serializer()), it) }.getOrNull() }.orEmpty(),
             contactsOn = prefs.getBoolean("contactsOn", false),
@@ -517,6 +518,7 @@ class Store(context: Context) {
             .putBoolean("localLlm", s.localLlm)
             .putString("phoneApps", json.encodeToString(ListSerializer(String.serializer()), s.phoneApps))
             .putBoolean("floatBall", s.floatBall)
+            .putBoolean("phoneBackground", s.phoneBackground)
             .putBoolean("noticeWatch", s.noticeWatch)
             .putString("noticeSkip", json.encodeToString(ListSerializer(String.serializer()), s.noticeSkip))
             .putBoolean("contactsOn", s.contactsOn)

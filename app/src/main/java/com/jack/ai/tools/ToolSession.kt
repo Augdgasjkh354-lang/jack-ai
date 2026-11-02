@@ -142,6 +142,25 @@ class ToolSession(
     @Volatile internal var phoneSeen: com.jack.ai.a11y.Screen? = null
     @Volatile internal var phoneScale = 1f
     @Volatile internal var phoneStops = -1
+    internal var phoneControl: com.jack.ai.a11y.PhoneControl? = null
+
+    internal suspend fun claimPhone(service: com.jack.ai.a11y.KaviAccessibility): com.jack.ai.a11y.PhoneControl {
+        phoneControl?.let { it.ready(); return it }
+        val lock = com.jack.ai.a11y.PhoneControl.lock
+        try {
+            if (!lock.tryLock(this)) {
+                ui.progress("等另一个手机操作任务结束")
+                if (kotlinx.coroutines.withTimeoutOrNull(120_000) { lock.lock(this); true } != true) {
+                    throw java.io.IOException("另一个任务仍在操作手机，请稍后继续。")
+                }
+            }
+            val background = if (settings.phoneBackground) com.jack.ai.a11y.BackgroundPhone.create(app, conv.title) else null
+            return com.jack.ai.a11y.PhoneControl(service, background).also { phoneControl = it }
+        } catch (t: Throwable) {
+            if (lock.holdsLock(this)) lock.unlock(this)
+            throw t
+        }
+    }
 
     /** 没被同意的次数；和 succeeded 一样，execute 前后比一比就知道这次是不是被拒了。 */
     internal val rejected = java.util.concurrent.atomic.AtomicInteger()
@@ -218,7 +237,15 @@ class ToolSession(
     }
 
     /** 回答结束时调：占着浏览器就放出来。 */
-    fun releaseBrowser() = BrowserLock.unlock(this)
+    suspend fun releaseBrowser() {
+        BrowserLock.unlock(this)
+        // 所有调用方都在 finally 收尾，取消任务时也要释放虚拟屏和手机操作锁。
+        withContext(kotlinx.coroutines.NonCancellable + Dispatchers.IO) {
+            val control = phoneControl ?: return@withContext
+            phoneControl = null
+            try { control.close() } finally { com.jack.ai.a11y.PhoneControl.lock.unlock(this@ToolSession) }
+        }
+    }
 
     /** 这次回答里读过外部内容（邮件、网页）没有；读过之后发信给新地址，完全授权下也要确认。 */
     @Volatile internal var sawExternal = false

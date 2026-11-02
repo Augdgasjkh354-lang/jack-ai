@@ -3,6 +3,7 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- 自己更新：下好新版本后打开系统安装界面（装不装由用户确认） -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
@@ -44,6 +45,15 @@
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.JackAI">
+        <!-- Mika 助手以 shell 身份交接 Binder；普通 App 无权调用。 -->
+        <provider
+            android:name="com.wangzan101.mika.shell.HelperHandoffProvider"
+            android:authorities="${applicationId}.helper"
+            android:exported="true"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL"
+            tools:ignore="ExportedContentProvider" />
+        <receiver android:name=".a11y.PhonePairingReceiver" android:exported="false" />
+        <activity android:name=".ui.BackgroundPhoneActivity" android:exported="false" />
         <activity
             android:name=".MainActivity"
             android:exported="true"
