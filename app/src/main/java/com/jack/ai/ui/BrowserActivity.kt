@@ -327,8 +327,10 @@ class BrowserActivity : ComponentActivity() {
                             menu = false
                             if (b.tab.translated) b.showOriginal() else lifecycleScope.launch { b.translate(this@BrowserActivity)?.let { b.notice = it } }
                         })
-                        DropdownMenuItem(text = { Text((if (b.address.isNotEmpty() && BrowserPages.isDesktop(b.desktopSites, b.address)) "✓ " else "") + "电脑版") },
+                        DropdownMenuItem(text = { Text((if (b.address.isNotEmpty() && b.isDesktopAt(b.address)) "✓ " else "") + "这个网站用电脑版") },
                             enabled = has, onClick = { menu = false; b.toggleDesktop() })
+                        DropdownMenuItem(text = { Text((if (b.desktopAll) "✓ " else "") + "所有网站都用电脑版") },
+                            onClick = { menu = false; b.toggleDesktopAll() })
                         DropdownMenuItem(text = { Text("分享") }, enabled = has, onClick = { menu = false; share(b.address, b.title) })
                         DropdownMenuItem(text = { Text("存成 PDF") }, enabled = has, onClick = { menu = false; savePdf() })
                         DropdownMenuItem(text = { Text("页内查找") }, enabled = has, onClick = { menu = false; finding = "" })

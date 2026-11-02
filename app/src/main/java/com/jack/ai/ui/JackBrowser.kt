@@ -248,7 +248,7 @@ object JackBrowser {
         val header = listOf(
             "App $ver，安卓 ${android.os.Build.VERSION.RELEASE}，${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}",
             "网页组件 ${pkg?.packageName.orEmpty()} ${pkg?.versionName.orEmpty()}",
-            "线路 $route，代理" + (if (Net.config.enabled) "开" else "关") + "，电脑版" + (if (BrowserPages.isDesktop(desktopSites, url)) "开" else "关") +
+            "线路 $route，代理" + (if (Net.config.enabled) "开" else "关") + "，电脑版" + (if (isDesktopAt(url)) "开" else "关") + (if (desktopAll) "（默认全开）" else "") +
                 "，去广告" + (if (blocksAds(BrowserPages.site(url))) "开（这页拦了 ${t.blocked} 个）" else "关") + "，标签页 ${tabs.size} 个",
         )
         val page = withContext(Dispatchers.Main) {
@@ -382,8 +382,17 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         w.evaluateJavascript(BrowserTranslate.RESTORE_JS, null)
     }
 
-    /** 用电脑版打开的网站（网站名，不带 www.）。 */
+    /** 用电脑版打开的网站（网站名，不带 www.）。只在没开「所有网站用电脑版」时用。 */
     var desktopSites by mutableStateOf(setOf<String>())
+    /** 所有网站默认用电脑版（默认开：很多报名、办事网站手机上打不开或缺功能）；开着时 [mobileSites] 里的网站例外用手机版。 */
+    var desktopAll by mutableStateOf(true)
+        private set
+    var mobileSites by mutableStateOf(setOf<String>())
+        private set
+
+    /** 这个网址用不用电脑版。 */
+    fun isDesktopAt(url: String): Boolean =
+        if (desktopAll) BrowserPages.site(url).isNotEmpty() && !BrowserPages.isDesktop(mobileSites, url) else BrowserPages.isDesktop(desktopSites, url)
     /** 用户设了「总走代理」的网站（自动线路下也不直连，真实 IP 不暴露给它）。 */
     var proxySites by mutableStateOf(setOf<String>())
         private set
@@ -544,6 +553,8 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         fun read(k: String) = prefs().getString(k, null)?.let { runCatching { listJson.decodeFromString(visitList, it) }.getOrNull() }.orEmpty()
         visits = read("visits"); marks = read("marks")
         desktopSites = prefs().getStringSet("desktop", emptySet()).orEmpty().toSet()
+        desktopAll = prefs().getBoolean("desktopall", true)
+        mobileSites = prefs().getStringSet("mobile", emptySet()).orEmpty().toSet()
         proxySites = prefs().getStringSet("proxysites", emptySet()).orEmpty().toSet()
         webrtcAllowed = prefs().getBoolean("webrtc", false)
         adBlock = prefs().getBoolean("adblock", true); adBlockNow = adBlock
@@ -551,7 +562,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         blocks = prefs().getString("blocks", null)?.let { runCatching { listJson.decodeFromString(blockMap, it) }.getOrNull() }.orEmpty()
     }
 
-    private fun uaFor(url: String) = if (BrowserPages.isDesktop(desktopSites, url)) BrowserPages.desktopUserAgent(mobileUa) else mobileUa
+    private fun uaFor(url: String) = if (isDesktopAt(url)) BrowserPages.desktopUserAgent(mobileUa) else mobileUa
 
     /** 换网页前按网站选手机版还是电脑版的标识。返回有没有换。 */
     private fun applyUa(w: WebView, url: String): Boolean {
@@ -561,21 +572,29 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         return true
     }
 
-    /** 当前网站切换电脑版 / 手机版（按网站记住），然后重新打开。 */
+    /** 当前网站切换电脑版 / 手机版（按网站记住），然后重新打开。默认全用电脑版时，记的是哪些网站例外用手机版。 */
     fun toggleDesktop() {
         val w = web ?: return
         val site = BrowserPages.site(address).ifEmpty { return }
-        desktopSites = if (BrowserPages.isDesktop(desktopSites, address)) desktopSites.filterNot { site == it || site.endsWith(".$it") }.toSet()
-        else desktopSites + site
-        prefs().edit().putStringSet("desktop", desktopSites).apply()
+        fun flip(set: Set<String>) = if (BrowserPages.isDesktop(set, address)) set.filterNot { site == it || site.endsWith(".$it") }.toSet() else set + site
+        if (desktopAll) { mobileSites = flip(mobileSites); prefs().edit().putStringSet("mobile", mobileSites).apply() }
+        else { desktopSites = flip(desktopSites); prefs().edit().putStringSet("desktop", desktopSites).apply() }
         applyUa(w, address)
         clearError()
         w.loadUrl(address)
     }
 
+    /** 所有网站都用电脑版：开关，然后按新设置重新打开当前网页。 */
+    fun toggleDesktopAll() {
+        desktopAll = !desktopAll
+        prefs().edit().putBoolean("desktopall", desktopAll).apply()
+        val w = web ?: return
+        if (address.isNotEmpty() && applyUa(w, address)) { clearError(); w.loadUrl(address) }
+    }
+
     /** 电脑版：自适应的网站会按手机宽度排，把可视宽度改成电脑的，再缩到屏幕上。 */
     private fun widenIfDesktop(w: WebView, url: String) {
-        if (!BrowserPages.isDesktop(desktopSites, url)) return
+        if (!isDesktopAt(url)) return
         w.evaluateJavascript(
             "(function(){var m=document.querySelector('meta[name=viewport]');if(!m){m=document.createElement('meta');m.name='viewport';" +
                 "(document.head||document.documentElement).appendChild(m);}m.content='width=1200';})();", null,
