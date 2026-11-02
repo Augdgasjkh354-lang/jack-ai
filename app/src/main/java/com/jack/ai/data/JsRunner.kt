@@ -1,6 +1,7 @@
 package com.jack.ai.data
 
 import org.mozilla.javascript.Context
+import kotlinx.coroutines.ensureActive
 import org.mozilla.javascript.ContextFactory
 import org.mozilla.javascript.Undefined
 
@@ -8,9 +9,10 @@ import org.mozilla.javascript.Undefined
 object JsRunner {
     private const val TIMEOUT_MS = 8_000L
 
-    private class TimeoutError : Error("运行超时（超过 8 秒），代码可能死循环了")
+    private class TimeoutError(ms: Long) : Error("运行超时（超过 ${ms / 1000} 秒），代码可能死循环了")
 
-    private object Factory : ContextFactory() {
+    // 思路来自 deepseek-ai/deepseek-harness packages/ptc-runtime/，MIT：批处理复用此执行环境，允许取消与单独时限。
+    internal object Factory : ContextFactory() {
         override fun makeContext(): Context = super.makeContext().apply {
             optimizationLevel = -1
             languageVersion = Context.VERSION_ES6
@@ -18,12 +20,14 @@ object JsRunner {
         }
 
         override fun observeInstructionCount(cx: Context, instructionCount: Int) {
+            (cx.getThreadLocal("job") as? kotlinx.coroutines.Job)?.ensureActive()
             val start = cx.getThreadLocal("start") as? Long ?: return
-            if (System.currentTimeMillis() - start > TIMEOUT_MS) throw TimeoutError()
+            val limit = cx.getThreadLocal("timeout") as? Long ?: TIMEOUT_MS
+            if (System.currentTimeMillis() - start > limit) throw TimeoutError(limit)
         }
     }
 
-    private const val PRELUDE = """
+    internal const val PRELUDE = """
 var __out = [];
 var console = { log: function () {
   var a = [];

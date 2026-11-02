@@ -352,6 +352,7 @@ class ToolSession(
             name == "create_diagram" && SkillIds.CALC in skillIds -> makeDiagram(args)
             name == "update_plan" -> updatePlan(args)
             name == "delegate_tasks" -> delegateTasks(args)
+            name == "run_code" -> runCode(args)
             name == "read_file" -> readFile(args)
             name == "write_file" -> writeFile(args)
             name == "edit_file" -> editFile(args)
