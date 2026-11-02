@@ -206,8 +206,12 @@ internal class SentencePieceBpe(private val vocab: Map<String, Int>, merges: Lis
  */
 internal class ByteLevelBpe(private val vocab: Map<String, Int>, merges: List<Pair<String, String>>, pattern: String) : LocalTokenizer {
     private val merger = BpeMerger(vocab, merges)
-    // \s 要按 Unicode 算（Python 那边的正则就是这样）
-    private val split = java.util.regex.Pattern.compile(pattern, java.util.regex.Pattern.UNICODE_CHARACTER_CLASS)
+    // \s 要按 Unicode 算（Python 那边的正则就是这样）。安卓的正则（ICU）本来就按 Unicode 算，也不认这个开关，加了会报错
+    private val split = try {
+        java.util.regex.Pattern.compile(pattern, java.util.regex.Pattern.UNICODE_CHARACTER_CLASS)
+    } catch (_: IllegalArgumentException) {
+        java.util.regex.Pattern.compile(pattern)
+    }
     private val byteIds = IntArray(256) { b -> vocab.getValue(BYTE_CHARS[b].toString()) }
     /** 常见的词切过一次就记住。 */
     private val cache = object : LinkedHashMap<String, IntArray>(512, 0.75f, true) {
