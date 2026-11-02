@@ -612,7 +612,11 @@ async function submitPair(payload){
   const result=await response.json().catch(()=>({}));
   if(!response.ok)throw new Error(result.error||"配对失败，请重试");
   message.textContent="配对成功，正在打开…"; location.replace("/");
- }catch(error){message.classList.add("error");message.textContent=error.message;button.disabled=false;}
+ }catch(error){
+  message.classList.add("error");message.textContent=error.message;button.disabled=false;
+  // 扫码配对没成：把输码的框露出来，可以改用 6 位码
+  document.querySelector('label[for="code"]').hidden=false; $("code").hidden=false;
+ }
 }
 $("form").addEventListener("submit",event=>{
  event.preventDefault();
