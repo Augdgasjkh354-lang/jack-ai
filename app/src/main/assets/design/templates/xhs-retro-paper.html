@@ -26,6 +26,11 @@ html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
 .bottom{display:flex;align-items:center;justify-content:space-between;margin-top:18px;padding-top:16px;border-top:2px solid color-mix(in srgb,var(--primary) 48%,var(--bg));color:var(--muted);font-family:var(--font-serif);font-size:20px}
 .bottom-stamp{color:var(--accent);font-size:17px;font-weight:700;letter-spacing:.14em}
 span[data-slot]{display:inline-block}
+
+/* 项少的时候不把每一项撑成大空框：每项最高 240px，整组在中间；只有 3 项时字放大一档 */
+.notes{justify-content:center}
+.note{flex:1 1 0;max-height:240px}
+.notes:not(:has(> [data-item]:nth-child(4))) .note-text{font-size:34px}
 </style>
 </head>
 <body style="margin:0"><div class="canvas">

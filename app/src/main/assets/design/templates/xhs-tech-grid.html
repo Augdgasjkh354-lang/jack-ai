@@ -29,6 +29,11 @@ html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
 .bottom-mark{display:flex;align-items:center;gap:10px;color:var(--primary);font-weight:700;letter-spacing:.12em}
 .signal{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 6px color-mix(in srgb,var(--accent) 18%,transparent)}
 span[data-slot]{display:inline-block}
+
+/* 项少的时候不把每一项撑成大空框：每项最高 240px，整组在中间；只有 3 项时字放大一档 */
+.metrics{justify-content:center}
+.metric{flex:1 1 0;max-height:240px}
+.metrics:not(:has(> [data-item]:nth-child(4))) .metric-text{font-size:32px}
 </style>
 </head>
 <body style="margin:0"><div class="canvas">

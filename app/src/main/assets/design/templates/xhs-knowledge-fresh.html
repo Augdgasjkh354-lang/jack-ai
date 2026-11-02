@@ -28,6 +28,11 @@ html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
 .bottom-mark{display:flex;align-items:center;gap:12px;color:var(--primary);font-weight:700}
 .dot{width:13px;height:13px;border-radius:50%;background:var(--accent)}
 span[data-slot]{display:inline-block}
+
+/* 项少的时候不把每一项撑成大空框：每项最高 240px，整组在中间；只有 3 项时字放大一档 */
+.points{justify-content:center}
+.point{flex:1 1 0;max-height:240px}
+.points:not(:has(> [data-item]:nth-child(4))) .point-text{font-size:34px}
 </style>
 </head>
 <body style="margin:0"><div class="canvas">

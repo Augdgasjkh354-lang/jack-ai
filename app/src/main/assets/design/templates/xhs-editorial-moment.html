@@ -26,6 +26,10 @@ html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
 .bottom-mark{display:flex;align-items:center;gap:12px;color:var(--primary);font-weight:700}
 .line{width:38px;height:2px;background:var(--accent)}
 span[data-slot]{display:inline-block}
+
+/* 照片吃掉多出来的高度，不让下半截空着；正文大一点 */
+.photo{flex:1 1 410px;min-height:410px}
+.bodycopy{font-size:30px}
 </style>
 </head>
 <body style="margin:0"><div class="canvas">
