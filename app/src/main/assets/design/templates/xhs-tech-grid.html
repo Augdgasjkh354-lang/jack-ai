@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-tech-grid","name":"未来效率图鉴","category":"xhs","size":[1080,1440],"style":"科技信息图","description":"深海蓝底色搭配网格和数据卡片，适合效率方法、工具盘点与数字知识合集","slots":[{"name":"tag","label":"主题标签","max":12},{"name":"title","label":"标题","max":16},{"name":"subtitle","label":"副标题","max":22},{"name":"footer","label":"落款","max":18}],"lists":[{"name":"metrics","label":"方法卡片","min":3,"max":5,"slots":[{"name":"label","label":"关键词","max":8},{"name":"text","label":"说明","max":22}]}],"images":[],"colors":{"bg":"#071E33","fg":"#EAF6FF","primary":"#37C8C5","secondary":"#173B55","accent":"#F0BA5E","muted":"#A9C4D4"}}'>
+<title>未来效率图鉴</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--font-sans:"Noto Sans CJK SC","Source Han Sans SC","PingFang SC",sans-serif;--font-serif:"Noto Serif CJK SC","Source Han Serif SC","Songti SC",serif;--bg:#071E33;--fg:#EAF6FF;--primary:#37C8C5;--secondary:#173B55;--accent:#F0BA5E;--muted:#A9C4D4;position:relative;display:flex;flex-direction:column;width:1080px;height:1440px;overflow:hidden;padding:72px;background:var(--bg);color:var(--fg);font-family:var(--font-sans);font-weight:400}
+.canvas:before{content:"";position:absolute;inset:0;background-image:linear-gradient(color-mix(in srgb,var(--primary) 10%,transparent) 1px,transparent 1px),linear-gradient(90deg,color-mix(in srgb,var(--primary) 10%,transparent) 1px,transparent 1px);background-size:48px 48px;mask-image:linear-gradient(to bottom,var(--fg),transparent 54%)}
+.canvas:after{content:"";position:absolute;right:-140px;top:210px;width:450px;height:450px;border:1px solid color-mix(in srgb,var(--primary) 30%,transparent);border-radius:50%;box-shadow:0 0 0 36px color-mix(in srgb,var(--primary) 6%,transparent),0 0 0 72px color-mix(in srgb,var(--primary) 4%,transparent)}
+.canvas>*{position:relative;z-index:1}
+.top{display:flex;align-items:center;justify-content:space-between;height:46px}
+.tag{display:inline-flex;align-items:center;padding:10px 17px;border:1px solid color-mix(in srgb,var(--primary) 60%,transparent);border-radius:8px;color:var(--primary);font-size:19px;font-weight:700;letter-spacing:.12em}
+.edition{color:var(--muted);font-size:17px;letter-spacing:.16em}
+.hero{margin-top:42px}
+.eyebrow{display:flex;align-items:center;gap:12px;margin-bottom:14px;color:var(--accent);font-size:18px;font-weight:700;letter-spacing:.18em}
+.eyebrow:before{content:"";width:28px;height:2px;background:var(--accent)}
+.title{max-width:900px;margin:0;font-size:76px;line-height:1.2;font-weight:700;letter-spacing:.015em}
+.subtitle{margin:14px 0 0;color:var(--muted);font-size:28px;line-height:1.45}
+.metrics{display:flex;flex:1;flex-direction:column;gap:13px;min-height:0;margin-top:31px;counter-reset:metric}
+.metric{display:grid;flex:1;grid-template-columns:174px 1fr 34px;align-items:center;gap:20px;min-height:116px;padding:18px 23px;border:1px solid color-mix(in srgb,var(--primary) 28%,transparent);border-radius:13px;background:color-mix(in srgb,var(--secondary) 82%,var(--bg));counter-increment:metric}
+.metric-label{display:flex;align-items:center;min-height:50px;padding-left:16px;border-left:3px solid var(--primary);color:var(--primary);font-size:23px;line-height:1.25;font-weight:700}
+.metric-text{display:block;color:var(--fg);font-size:26px;line-height:1.42}
+.metric:after{content:counter(metric,decimal-leading-zero);color:var(--accent);font-size:16px;font-weight:700;letter-spacing:.08em}
+.bottom{display:flex;align-items:center;justify-content:space-between;margin-top:19px;padding-top:18px;border-top:1px solid color-mix(in srgb,var(--primary) 32%,transparent);color:var(--muted);font-size:18px}
+.bottom-mark{display:flex;align-items:center;gap:10px;color:var(--primary);font-weight:700;letter-spacing:.12em}
+.signal{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 6px color-mix(in srgb,var(--accent) 18%,transparent)}
+span[data-slot]{display:inline-block}
+
+/* 项少的时候不把每一项撑成大空框：每项最高 240px，整组在中间；只有 3 项时字放大一档 */
+.metrics{justify-content:center}
+.metric{flex:1 1 0;max-height:240px}
+.metrics:not(:has(> [data-item]:nth-child(4))) .metric-text{font-size:32px}
+</style>
+</head>
+<body style="margin:0"><div class="canvas">
+<header class="top"><span class="tag" data-slot="tag" data-max="12">效率研究所</span><span class="edition">FIELD GUIDE · 05</span></header>
+<section class="hero"><div class="eyebrow">SYSTEM FOR BETTER DAYS</div><h1 class="title" data-slot="title" data-max="16">让专注回到日常</h1><p class="subtitle" data-slot="subtitle" data-max="22">四个轻量方法，找回不被打断的节奏</p></section>
+<section class="metrics" data-list="metrics" data-min="3" data-max="5">
+<article class="metric" data-item><span class="metric-label" data-slot="label" data-max="8">先做一件</span><span class="metric-text" data-slot="text" data-max="22">把最重要的任务放在精力最好的时段</span></article>
+<article class="metric" data-item><span class="metric-label" data-slot="label" data-max="8">减少切换</span><span class="metric-text" data-slot="text" data-max="22">同类消息集中处理，给大脑留出连续时间</span></article>
+<article class="metric" data-item><span class="metric-label" data-slot="label" data-max="8">留白休息</span><span class="metric-text" data-slot="text" data-max="22">每完成一段专注，就起身走动几分钟</span></article>
+</section>
+<footer class="bottom"><span data-slot="footer" data-max="18">实用方法，随手收藏</span><span class="bottom-mark"><i class="signal"></i>READY TO FOCUS</span></footer>
+</div></body>
+</html>

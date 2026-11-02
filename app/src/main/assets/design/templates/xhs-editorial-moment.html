@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-editorial-moment","name":"午后编辑部","category":"xhs","size":[1080,1440],"style":"杂志编辑感","description":"像生活杂志内页一样用大幅留白和柔和配图讲述一个日常瞬间","slots":[{"name":"tag","label":"栏目","max":10},{"name":"date","label":"日期","max":16},{"name":"title","label":"标题","max":18},{"name":"subtitle","label":"副标题","max":24},{"name":"body","label":"正文","max":42},{"name":"footer","label":"落款","max":18}],"lists":[],"images":[{"name":"photo","label":"配图","optional":true}],"colors":{"bg":"#F3EFE7","fg":"#31261F","primary":"#8B3F38","secondary":"#D9C6A9","accent":"#B17B36","muted":"#68584A"}}'>
+<title>午后编辑部</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--font-sans:"Noto Sans CJK SC","Source Han Sans SC","PingFang SC",sans-serif;--font-serif:"Noto Serif CJK SC","Source Han Serif SC","Songti SC",serif;--bg:#F3EFE7;--fg:#31261F;--primary:#8B3F38;--secondary:#D9C6A9;--accent:#B17B36;--muted:#68584A;position:relative;display:flex;flex-direction:column;width:1080px;height:1440px;overflow:hidden;padding:64px;background:var(--bg);color:var(--fg);font-family:var(--font-sans);font-weight:400}
+.canvas:before{content:"";position:absolute;right:-86px;top:560px;width:250px;height:250px;border:1px solid color-mix(in srgb,var(--primary) 25%,transparent);border-radius:50%}
+.canvas>*{position:relative;z-index:1}
+.masthead{display:flex;align-items:center;justify-content:space-between;padding-bottom:17px;border-bottom:1px solid color-mix(in srgb,var(--muted) 45%,var(--bg));font-size:20px}
+.tag{color:var(--primary);font-weight:700;letter-spacing:.16em}
+.date{color:var(--muted);font-size:19px}
+.photo{position:relative;flex:0 0 410px;overflow:hidden;margin-top:26px;border-radius:4px;background:linear-gradient(135deg,color-mix(in srgb,var(--secondary) 78%,var(--bg)),color-mix(in srgb,var(--accent) 30%,var(--bg)) 54%,color-mix(in srgb,var(--primary) 28%,var(--bg)))}
+.photo:before{content:"";position:absolute;width:380px;height:380px;right:75px;top:66px;border-radius:50%;background:color-mix(in srgb,var(--bg) 68%,transparent)}
+.photo:after{content:"";position:absolute;width:540px;height:160px;left:60px;bottom:48px;border-radius:50% 50% 0 0;background:color-mix(in srgb,var(--primary) 22%,var(--secondary));transform:rotate(-8deg)}
+.photo-shape{position:absolute;z-index:1;width:170px;height:170px;left:140px;top:72px;border-radius:50%;background:color-mix(in srgb,var(--accent) 64%,var(--bg))}
+.copy{margin-top:31px}
+.title{margin:0;color:var(--fg);font-family:var(--font-serif);font-size:72px;line-height:1.2;font-weight:700;letter-spacing:.02em}
+.subtitle{margin:13px 0 0;color:var(--primary);font-size:29px;line-height:1.42;font-weight:700}
+.bodycopy{max-width:900px;margin:23px 0 0;color:var(--muted);font-size:27px;line-height:1.55}
+.bottom{display:flex;align-items:center;justify-content:space-between;margin-top:auto;padding-top:20px;border-top:1px solid color-mix(in srgb,var(--muted) 35%,var(--bg));color:var(--muted);font-size:20px}
+.bottom-mark{display:flex;align-items:center;gap:12px;color:var(--primary);font-weight:700}
+.line{width:38px;height:2px;background:var(--accent)}
+span[data-slot]{display:inline-block}
+
+/* 照片吃掉多出来的高度，不让下半截空着；正文大一点 */
+.photo{flex:1 1 410px;min-height:410px}
+.bodycopy{font-size:30px}
+</style>
+</head>
+<body style="margin:0"><div class="canvas">
+<header class="masthead"><span class="tag" data-slot="tag" data-max="10">日常切片</span><span class="date" data-slot="date" data-max="16">2025年春 · VOL.07</span></header>
+<div class="photo" data-slot="photo" data-kind="image" aria-label="可选生活配图"><span class="photo-shape"></span></div>
+<section class="copy"><h1 class="title" data-slot="title" data-max="18">给平常日子一点光</h1><p class="subtitle" data-slot="subtitle" data-max="24">一杯咖啡，也可以是认真生活的开始</p><p class="bodycopy" data-slot="body" data-max="42">不赶时间的午后，把窗户打开，让光落在桌面。小小的停顿，也能把人重新带回生活里。</p></section>
+<footer class="bottom"><span data-slot="footer" data-max="18">把今天过成喜欢的样子</span><span class="bottom-mark"><i class="line"></i>生活专刊</span></footer>
+</div></body>
+</html>

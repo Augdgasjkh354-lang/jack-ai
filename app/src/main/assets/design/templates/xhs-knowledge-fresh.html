@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-knowledge-fresh","name":"清新知识卡","category":"xhs","size":[1080,1440],"style":"清新自然","description":"清爽留白配薄荷绿要点卡，适合知识整理、经验分享与收藏清单","slots":[{"name":"tag","label":"栏目标签","max":12},{"name":"title","label":"标题","max":16},{"name":"subtitle","label":"副标题","max":24},{"name":"footer","label":"落款","max":16}],"lists":[{"name":"points","label":"要点","min":3,"max":5,"slots":[{"name":"text","label":"要点","max":28}]}],"images":[],"colors":{"bg":"#F5F8F0","fg":"#23372D","primary":"#3D725A","secondary":"#DCEBDD","accent":"#D29B3E","muted":"#596B60"}}'>
+<title>清新知识卡</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--font-sans:"Noto Sans CJK SC","Source Han Sans SC","PingFang SC",sans-serif;--font-serif:"Noto Serif CJK SC","Source Han Serif SC","Songti SC",serif;--bg:#F5F8F0;--fg:#23372D;--primary:#3D725A;--secondary:#DCEBDD;--accent:#D29B3E;--muted:#596B60;position:relative;display:flex;flex-direction:column;width:1080px;height:1440px;overflow:hidden;padding:72px;background:var(--bg);color:var(--fg);font-family:var(--font-sans);font-weight:400}
+.canvas:before{content:"";position:absolute;width:330px;height:330px;right:-115px;top:-120px;border-radius:50%;background:color-mix(in srgb,var(--secondary) 75%,var(--bg))}
+.canvas:after{content:"";position:absolute;width:120px;height:120px;left:-54px;bottom:120px;border-radius:50%;border:2px solid color-mix(in srgb,var(--primary) 24%,transparent)}
+.canvas>*{position:relative;z-index:1}
+.topline{display:flex;align-items:center;justify-content:space-between;height:50px}
+.tag{display:inline-flex;align-items:center;min-height:44px;padding:0 20px;border-radius:24px;background:color-mix(in srgb,var(--primary) 12%,var(--bg));color:var(--primary);font-size:23px;font-weight:700;letter-spacing:.04em}
+.series{color:var(--muted);font-size:20px;letter-spacing:.14em;font-weight:700}
+.hero{margin-top:40px}
+.eyebrow{margin-bottom:13px;color:var(--primary);font-size:21px;font-weight:700;letter-spacing:.18em}
+.title{margin:0;font-size:82px;line-height:1.18;font-weight:700;letter-spacing:.01em}
+.subtitle{margin:14px 0 0;color:var(--muted);font-size:31px;line-height:1.4}
+.rule{height:2px;margin-top:27px;background:color-mix(in srgb,var(--primary) 28%,var(--bg))}
+.points{display:flex;flex:1;flex-direction:column;gap:14px;min-height:0;margin-top:25px;counter-reset:point}
+.point{display:grid;flex:1;grid-template-columns:72px 1fr;align-items:center;gap:19px;min-height:112px;padding:18px 24px;border:1px solid color-mix(in srgb,var(--primary) 12%,var(--bg));border-radius:26px;background:color-mix(in srgb,var(--secondary) 62%,var(--bg));counter-increment:point}
+.point:before{content:counter(point,decimal-leading-zero);display:flex;align-items:center;justify-content:center;width:64px;height:64px;border-radius:50%;background:var(--primary);color:var(--bg);font-size:23px;font-weight:700}
+.point-text{display:block;font-size:28px;line-height:1.42;font-weight:400}
+.bottom{display:flex;align-items:center;justify-content:space-between;margin-top:22px;padding-top:18px;border-top:1px solid color-mix(in srgb,var(--muted) 35%,var(--bg));color:var(--muted);font-size:21px}
+.bottom-mark{display:flex;align-items:center;gap:12px;color:var(--primary);font-weight:700}
+.dot{width:13px;height:13px;border-radius:50%;background:var(--accent)}
+span[data-slot]{display:inline-block}
+
+/* 项少的时候不把每一项撑成大空框：每项最高 240px，整组在中间；只有 3 项时字放大一档 */
+.points{justify-content:center}
+.point{flex:1 1 0;max-height:240px}
+.points:not(:has(> [data-item]:nth-child(4))) .point-text{font-size:34px}
+</style>
+</head>
+<body style="margin:0"><div class="canvas">
+<header class="topline"><span class="tag" data-slot="tag" data-max="12">慢慢变好</span><span class="series">KAVI NOTE · 01</span></header>
+<section class="hero"><div class="eyebrow">把复杂的事，说简单一点</div><h1 class="title" data-slot="title" data-max="16">把日子过轻一点</h1><p class="subtitle" data-slot="subtitle" data-max="24">留给重要的事，也留一点时间给自己</p></section>
+<div class="rule"></div>
+<section class="points" data-list="points" data-min="3" data-max="5">
+<article class="point" data-item><span class="point-text" data-slot="text" data-max="28">先做最重要的一件事，别让清单替你安排一天</span></article>
+<article class="point" data-item><span class="point-text" data-slot="text" data-max="28">给消息设定时间，不必每次响起都立刻回应</span></article>
+<article class="point" data-item><span class="point-text" data-slot="text" data-max="28">每天留一段空白，让想法和心情都有地方安放</span></article>
+</section>
+<footer class="bottom"><span data-slot="footer" data-max="16">收藏起来，慢慢练习</span><span class="bottom-mark"><i class="dot"></i>给自己一点余地</span></footer>
+</div></body>
+</html>
