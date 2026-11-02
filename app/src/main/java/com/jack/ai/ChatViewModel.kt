@@ -389,17 +389,17 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 // 思路来自 deepseek-ai/deepseek-harness packages/goal/goal-round-driver/，MIT。人类发言先接回执行权，持久保留一个后续调度。
                 com.jack.ai.data.Goals.foreground.add(convId)
-                if (com.jack.ai.data.Goals.current(getApplication(), convId)?.status == "active")
+                if (goalOf(convId)?.status == "active")
                     com.jack.ai.data.Goals.schedule(getApplication(), convId, replace = true)
                 com.jack.ai.data.Goals.workers[convId]?.cancelAndJoin()
-                if (com.jack.ai.data.Goals.current(getApplication(), convId)?.status == "active")
-                    com.jack.ai.data.Goals.change(getApplication(), convId) { it?.copy(autoRounds = 0) }
+                if (goalOf(convId)?.status == "active")
+                    withContext(Dispatchers.IO) { com.jack.ai.data.Goals.change(getApplication(), convId) { it?.copy(autoRounds = 0) } }
                 block(done)
             } finally {
                 done()
                 jobs.remove(convId, coroutineContext[Job])
                 com.jack.ai.data.Goals.foreground.remove(convId)
-                if (com.jack.ai.data.Goals.current(getApplication(), convId)?.status == "active") com.jack.ai.data.Goals.schedule(getApplication(), convId)
+                if (goalOf(convId)?.status == "active") com.jack.ai.data.Goals.schedule(getApplication(), convId)
             }
         }
         jobs[convId] = j
@@ -816,7 +816,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     },
                     // 思路来自 deepseek-ai/deepseek-harness packages/goal/goal-round-driver/，MIT。前台也存相同断点，进程被杀后后台能接。
                     onTools = {
-                        com.jack.ai.data.Goals.current(getApplication(), convId)?.let { g ->
+                        goalOf(convId)?.let { g ->
                             if (g.status == "active") com.jack.ai.tools.TaskCheckpoint.save(
                                 com.jack.ai.tools.TaskCheckpoint.file(getApplication<Application>().filesDir, com.jack.ai.data.Goals.workId(convId)), g.id, history, spent)
                         }
@@ -909,7 +909,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 // Work 一时出错停下（网络断了、服务忙）：等一会儿自动接着做，连着最多 AUTO_RESUME_MAX 次；用户停下、花费到上限、复核的不接
                 if (failure == null) autoResumes.remove(convId)
                 val resumes = autoResumes[convId] ?: 0
-                if (work && com.jack.ai.data.Goals.current(getApplication(), convId) == null && leftover.isEmpty() && extraUser != REVIEW_PROMPT && session.maxRounds != 0 &&
+                if (work && goalOf(convId) == null && leftover.isEmpty() && extraUser != REVIEW_PROMPT && session.maxRounds != 0 &&
                     failure?.let(::transient) == true && resumes < AUTO_RESUME_MAX) {
                     autoResumes[convId] = resumes + 1
                     val wait = AUTO_RESUME_DELAY_S * (resumes + 1)
@@ -1188,6 +1188,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private fun updateConv(id: String, transform: (Conversation) -> Conversation) = core.updateConv(id, transform)
     private fun patchMessage(convId: String, msgId: String, transform: (ChatMessage) -> ChatMessage) = core.patchMessage(convId, msgId, transform)
     private fun updateConvQuiet(id: String, transform: (Conversation) -> Conversation) = core.updateConvQuiet(id, transform)
+
+    /** 这个对话的持久目标：读内存里的（后台改了会经 Goals.changes 同步过来），不在主线程上整份读盘。 */
+    private fun goalOf(convId: String) = _state.value.conversations.firstOrNull { it.id == convId }?.goal
     /** 让 Kavi 现在就去过一次自由时间（不管开没开，预算照算）。 */
     fun readNow() {
         com.jack.ai.data.Reader.runNow(getApplication())
