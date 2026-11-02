@@ -636,6 +636,7 @@ private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolea
                         } else {
                             val isLast = msg.id == lastId
                             AssistantMessage(
+                                convId = conv.id,
                                 msg = msg,
                                 streaming = streaming && isLast,
                                 isLast = isLast,

@@ -166,6 +166,7 @@ object BrowserChat {
             }
         })
         session.canSee = ep.vision
+        session.browserVisible = true
         val client = DeepSeekClient()
         val agent = Agent({ msgs, t -> client.stream(ep, msgs, ThinkLevel.OFF, s.temperature, t) })
         var last = 0L

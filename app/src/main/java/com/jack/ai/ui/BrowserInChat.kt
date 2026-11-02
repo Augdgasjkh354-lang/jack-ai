@@ -55,9 +55,13 @@ import kotlinx.coroutines.withContext
  * 点一下进完整浏览器接手（比如自己登录）。它在的时候，聊天页右上角的小窗就不出来。
  */
 @Composable
-fun BrowserLive() {
+fun BrowserLive(convId: String = "") {
     val ctx = LocalContext.current
     val b = JackBrowser
+    // 这个对话的回答在自己的后台标签页里做事：画面放那一页，不放用户眼前的（别的回答可能正用着那页）
+    val agentTab by androidx.compose.runtime.produceState<JackBrowser.Tab?>(null, convId) {
+        while (true) { value = com.jack.ai.tools.BrowserLock.tabForConv(convId)?.takeIf { it.web != null }; kotlinx.coroutines.delay(500) }
+    }
     val dm = ctx.resources.displayMetrics
     val density = LocalDensity.current
     val fullW = with(density) { dm.widthPixels.toDp() }
@@ -76,15 +80,21 @@ fun BrowserLive() {
             val scale = maxWidth / fullW
             // 只露出上面一部分（大约半屏），够看清在干什么，不占满整个对话
             Box(Modifier.fillMaxWidth().height(fullH * scale * 0.55f).clipToBounds()) {
-                key(b.hostGen) {
+                val own = agentTab
+                key(b.hostGen, own) {
                     AndroidView(
-                        factory = { b.claim(ctx) },
+                        factory = {
+                            own?.web?.let { w -> (w.parent as? android.view.ViewGroup)?.removeView(w); w } ?: b.claim(ctx)
+                        },
                         modifier = Modifier.wrapContentSize(Alignment.TopStart, unbounded = true).requiredSize(fullW, fullH)
                             .graphicsLayer { scaleX = scale; scaleY = scale; transformOrigin = TransformOrigin(0f, 0f) },
                     )
                 }
-                // 盖一层：这里不让点网页，点了进完整浏览器
-                Box(Modifier.fillMaxSize().clickable { ctx.startActivity(Intent(ctx, BrowserActivity::class.java)) })
+                // 盖一层：这里不让点网页，点了进完整浏览器（在后台标签页里做的就先切到那一页）
+                Box(Modifier.fillMaxSize().clickable {
+                    own?.let { t -> b.tabs.indexOf(t).takeIf { it >= 0 }?.let { b.switchTo(it) } }
+                    ctx.startActivity(Intent(ctx, BrowserActivity::class.java))
+                })
                 Text(
                     b.waitingUser?.let { "Kavi 在等你：$it · 点这里去做，做完它会自己接着来" } ?: "Kavi 正在操作网页 · 点这里接手",
                     Modifier.align(Alignment.BottomStart).fillMaxWidth()

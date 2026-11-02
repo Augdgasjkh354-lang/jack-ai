@@ -27,8 +27,10 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
         return "工具调用失败：浏览器一直被另一个回答占着（等了 ${ToolSession.BROWSER_WAIT_MS / 60_000} 分钟）。先做别的步骤，或者告诉用户等那边做完再试。"
     }
     val lost = BrowserLock.takeLost(this)
+    // 分到的是后台标签页：这次的操作都钉在它上面（读页面、点、开网址都在这一页，不碰用户眼前的）
+    val pin = BrowserLock.pinOf(this)
     return try {
-        val r = browseNow(args, action)
+        val r = if (pin != null) withContext(pin) { browseNow(args, action) } else browseNow(args, action)
         if (lost) "（你停下没用浏览器的时候，它被别的任务接手用过，页面可能变了：以这次读到的为准，要用的网页没了就重新打开。）\n$r" else r
     } finally { BrowserLock.exit(this) }
 }
@@ -599,7 +601,8 @@ private suspend fun ToolSession.waitUser(what: String): String {
     val ctx = app
     val start = JackBrowser.read(ctx)
     val blocked = looksLikeLogin(start) || looksLikeChallenge(start)
-    withContext(kotlinx.coroutines.Dispatchers.Main) { JackBrowser.waitingUser = what }
+    // 在后台标签页里做的：先把用户眼前的换成这一页，用户一打开浏览器就是要处理的地方
+    withContext(kotlinx.coroutines.Dispatchers.Main) { JackBrowser.showToUser(); JackBrowser.waitingUser = what }
     try {
         if (!appVisible(ctx)) com.jack.ai.data.Routines.notify(ctx, "wait-user", "Kavi 在等你", "$what。打开 Kavi，在网页上做完它会自己接着来。")
         val done = waitUntil(WAIT_USER_MS, 2_000) { p ->

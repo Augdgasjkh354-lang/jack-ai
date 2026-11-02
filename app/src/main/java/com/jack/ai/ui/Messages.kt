@@ -239,6 +239,8 @@ fun AssistantMessage(
     onRestyle: ((String) -> Unit)? = null,
     /** 回答出来后思考摘要折叠起来（设置里改，默认展开）。 */
     stepsCollapsed: Boolean = false,
+    /** 这条回答所在的对话：它在后台标签页里用浏览器时，实时画面放那一页。 */
+    convId: String = "",
 ) {
     var restyling by remember { mutableStateOf(false) }
     if (restyling && onRestyle != null) {
@@ -302,7 +304,7 @@ fun AssistantMessage(
         // Kavi 在操作网页：回答写完之前，实时画面就放在这条回答里；每一步的截图排成一行
         val browsing = msg.searches.any { it.query.startsWith("浏览器") }
         if (browsing && busy) {
-            BrowserLive()
+            BrowserLive(convId)
             Spacer(Modifier.height(8.dp))
         }
         val shots = msg.searches.filter { it.shot.isNotEmpty() }

@@ -162,7 +162,12 @@ object JackBrowser {
     private var nextTabId = 0
     /** 还没建网页窗口时，界面读到的空白页。 */
     private val blank = Tab(-1)
-    val tab: Tab get() = tabs.getOrNull(current) ?: blank
+    /**
+     * 当前这一页。Kavi 在自己的后台标签页里做事时（[PinTab] 钉住的那段操作里），读到的是它那一页，
+     * 下面的 address、title、error 这些也跟着是那一页；界面和用户看的始终是 tabs[current]。
+     */
+    private val pinLocal = ThreadLocal<PinTab?>()
+    val tab: Tab get() = pinLocal.get()?.t ?: tabs.getOrNull(current) ?: blank
 
     // 下面这些都是当前这一页的，界面和 browser 工具照旧这样读
     var address: String get() = tab.address; set(v) { tab.address = v }
@@ -670,7 +675,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
     /** 记下现在开着的标签页（隐身的不记），离开浏览器页时调。 */
     fun saveTabs() {
         if (!::app.isInitialized || tabs.isEmpty()) return
-        val s = BrowserPages.tabsToSave(tabs.map { BrowserPages.SavedTab(it.restore ?: it.address, it.title, it.account) to it.incognito }, current, MAX_TABS)
+        val s = BrowserPages.tabsToSave(tabs.map { BrowserPages.SavedTab(it.restore ?: it.address, it.title, it.account) to (it.incognito || com.jack.ai.tools.BrowserLock.isAgentTab(it)) }, current, MAX_TABS)
         prefs().edit().putString("tabs", listJson.encodeToString(savedTabs, s)).apply()
     }
 
@@ -733,6 +738,8 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
     /** 切到第 i 个标签页：网页窗口换了，让浏览器页重新来要。 */
     fun switchTo(i: Int) {
         if (i !in tabs.indices) return
+        // Kavi 在自己的后台标签页里切标签：只换它钉住的那页，不动用户眼前的
+        pinLocal.get()?.let { it.t = tabs[i]; return }
         if (i != current) snap()
         barsHidden = false
         current = i
@@ -747,7 +754,18 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         (t.web?.parent as? ViewGroup)?.removeView(t.web)
         t.web?.destroy()
         if (t.incognito && tabs.none { it.incognito }) runCatching { clearIncognito() }
-        switchTo(if (i < current) current - 1 else current.coerceAtMost(tabs.lastIndex))
+        val stay = if (i < current) current - 1 else current.coerceAtMost(tabs.lastIndex)
+        // 在 Kavi 的后台操作里关的：用户眼前那页只挪位置，不跟着切
+        if (pinLocal.get() != null) { current = stay; hostGen++ } else switchTo(stay)
+        // 关的是哪个 Kavi 正用着的后台标签页：给它换一页（弹出的登录窗口关了就回到打开它的那页）
+        com.jack.ai.tools.BrowserLock.tabClosed(t) { tabs.firstOrNull { it.id == t.openedBy } ?: newTab(switch = false) }
+    }
+
+    /** Kavi 在后台标签页里要用户接手（登录、验证）：把用户眼前的换成它那页，打开浏览器就能看到。 */
+    fun showToUser() {
+        val p = pinLocal.get() ?: return
+        val i = tabs.indexOf(p.t).takeIf { it >= 0 } ?: return
+        if (i != current) { snap(); current = i; barsHidden = false; hostGen++ }
     }
 
     private fun prefs() = app.getSharedPreferences("browser", Context.MODE_PRIVATE)
@@ -1375,7 +1393,10 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
             if (!isUserGesture && now - agentAt > 5_000 && now - touchedAt > 5_000) { t.diag.add("网页要弹新窗口，不是点出来的，没开"); return false }
             t.diag.add("网页弹新窗口，开成新标签页")
             if (tabs.size >= MAX_TABS) { notice = "标签页开满了，网页要弹的窗口没打开。先关掉几个标签页再试。"; return false }
-            val nt = newTab(switch = true, incognito = t.incognito, account = t.account)
+            // 弹它的是 Kavi 的后台标签页：新窗口也开在后台、交给那个回答，不换掉用户眼前的
+            val agentTab = com.jack.ai.tools.BrowserLock.isAgentTab(t)
+            val nt = newTab(switch = !agentTab, incognito = t.incognito, account = t.account)
+            if (agentTab) com.jack.ai.tools.BrowserLock.repin(t, nt)
             if (teaching) installTeach(nt)
             nt.openedBy = t.id
             (resultMsg.obj as? WebView.WebViewTransport)?.webView = nt.web ?: return false
@@ -1387,8 +1408,9 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         override fun onCloseWindow(window: WebView) {
             val closed = tabs.firstOrNull { it.web === window } ?: return
             val back = tabs.firstOrNull { it.id == closed.openedBy }
+            val agentTab = com.jack.ai.tools.BrowserLock.isAgentTab(closed)
             closeTab(closed)
-            back?.let { b -> tabs.indexOf(b).takeIf { it >= 0 }?.let { switchTo(it) } }
+            if (!agentTab) back?.let { b -> tabs.indexOf(b).takeIf { it >= 0 }?.let { switchTo(it) } }
         }
 
         // 视频全屏：交给浏览器页盖满屏幕
@@ -1800,9 +1822,16 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
         }
     }
 
-    /** 把一段操作钉在某个标签页上（并行抓取时各干各的）：eval、load、等加载都用这个标签页。 */
-    class PinTab(val t: Tab) : kotlin.coroutines.AbstractCoroutineContextElement(PinTab) {
+    /**
+     * 把一段操作钉在某个标签页上（并行抓取、几个回答同时用浏览器时各干各的）：这段协程跑着的时候，
+     * [tab] 和跟着它的 address、title、网页窗口都是这一页。t 会变：在钉住的操作里切标签、网页弹登录窗口时换过去。
+     */
+    class PinTab(@Volatile var t: Tab) : kotlinx.coroutines.ThreadContextElement<PinTab?> {
         companion object Key : kotlin.coroutines.CoroutineContext.Key<PinTab>
+        override val key: kotlin.coroutines.CoroutineContext.Key<*> get() = Key
+        override fun updateThreadContext(context: kotlin.coroutines.CoroutineContext): PinTab? =
+            pinLocal.get().also { pinLocal.set(this) }
+        override fun restoreThreadContext(context: kotlin.coroutines.CoroutineContext, oldState: PinTab?) = pinLocal.set(oldState)
     }
     fun pin(t: Tab) = PinTab(t)
     private suspend fun pinned(): Tab? = kotlin.coroutines.coroutineContext[PinTab]?.t

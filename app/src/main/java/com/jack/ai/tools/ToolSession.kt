@@ -143,6 +143,9 @@ class ToolSession(
         return ui.confirm(title, body, action)
     }
 
+    /** 浏览器里的 Kavi：用户问的就是眼前这一页，浏览器要用当前页，不开后台标签页。 */
+    @Volatile var browserVisible = false
+
     /** 用户在别的设备上远程问的（站点）：确认一律在那边网页上问，不弹在手机上。 */
     @Volatile var remote = false
 
@@ -236,18 +239,27 @@ class ToolSession(
      * 拿到后调用方要在 finally 里 BrowserLock.exit。
      */
     internal suspend fun claimBrowser(): Boolean {
-        if (BrowserLock.enter(this)) return true
-        val label = "等浏览器空出来（" + (BrowserLock.holderTitle()?.let { "「${it.take(20)}」" } ?: "另一个回答") + "正在用）"
-        ui.started(label)
-        ui.progress(label)
-        val got = BrowserLock.lock(this, BROWSER_WAIT_MS)
-        ui.finished(label, SearchRecord(label, error = if (got) null else "等了 ${BROWSER_WAIT_MS / 60_000} 分钟还没空出来"))
-        return got
+        val viewing = com.jack.ai.ui.JackBrowser.userViewing
+        if (!BrowserLock.enter(this, browserVisible, viewing)) {
+            val label = "等浏览器空出来（" + (BrowserLock.holderTitle() ?: "别的回答") + "正在用）"
+            ui.started(label)
+            ui.progress(label)
+            val got = BrowserLock.lock(this, BROWSER_WAIT_MS, browserVisible, viewing)
+            ui.finished(label, SearchRecord(label, error = if (got) null else "等了 ${BROWSER_WAIT_MS / 60_000} 分钟还没空出来"))
+            if (!got) return false
+        }
+        // 分到后台位子：开一个自己的标签页（被用户关掉了就再开一个）
+        withContext(Dispatchers.Main) {
+            val b = com.jack.ai.ui.JackBrowser
+            b.webView(app)
+            if (BrowserLock.needsTab(this@ToolSession) { it in b.tabs && it.web != null }) BrowserLock.setTab(this@ToolSession, b.newTab(switch = false))
+        }
+        return true
     }
 
     /** 回答结束时调：占着浏览器就放出来。 */
     suspend fun releaseBrowser() {
-        BrowserLock.unlock(this)
+        BrowserLock.unlock(this)?.let { BrowserLock.closeQuietly(it) }
         // 所有调用方都在 finally 收尾，取消任务时也要释放虚拟屏和手机操作锁。
         withContext(kotlinx.coroutines.NonCancellable + Dispatchers.IO) {
             val control = phoneControl ?: return@withContext
@@ -332,7 +344,7 @@ class ToolSession(
     /** 给用户看的这一步是什么：工具名加上网址、搜的词、文件名这类。 */
     private fun toolLabel(name: String, args: JsonObject?): String {
         val what = listOf("url", "query", "name", "id", "path", "action").firstNotNullOfOrNull { k -> args?.get(k).text().takeIf { it.isNotBlank() } }.orEmpty()
-        val where = if (name == "browser") com.jack.ai.ui.JackBrowser.address.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty() else ""
+        val where = if (name == "browser") (BrowserLock.pinOf(this)?.t?.address ?: com.jack.ai.ui.JackBrowser.address).takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty() else ""
         return (name + if (what.isNotEmpty()) "：${what.take(120)}" else "") + where
     }
 
@@ -605,43 +617,102 @@ internal suspend fun ToolSession.updatePlan(args: JsonObject): String {
 }
 
 /** 浏览器的占用：谁占着（一个 ToolSession），没人占时排队的按先后拿到。 */
+/**
+ * 浏览器分给几个回答同时用：每个回答占一个位子，最多 [MAX] 个。第一个（用户没在看浏览器时）用用户眼前那一页，
+ * 和以前一样能在聊天里看到它在做什么、随时接手；再来的各开一个后台标签页，各干各的（见 [JackBrowser.PinTab]），
+ * 回答结束就关掉。位子满了才排队；占着位子的闲了 [idleMs] 没碰浏览器，排队的就接手它的位子。
+ */
 internal object BrowserLock {
-    private val mutex = kotlinx.coroutines.sync.Mutex()
-    /** 占着的那个回答、它正在跑的浏览器动作数、最后一次碰浏览器的时间。 */
-    private var holder: Any? = null
-    private var busy = 0
-    private var lastUsed = 0L
-    /** 被别人接手过的（下次再用时提醒它页面可能变了）。 */
+    const val MAX = 3
+
+    private class Slot(val owner: Any, val visible: Boolean) {
+        var pin: com.jack.ai.ui.JackBrowser.PinTab? = null
+        var busy = 0
+        var lastUsed = System.currentTimeMillis()
+    }
+
+    private val slots = mutableListOf<Slot>()
+    /** 被别人接手过、或者用着的标签页被关掉换过的（下次再用时提醒它页面可能变了）。 */
     private val lost = java.util.Collections.newSetFromMap(java.util.WeakHashMap<Any, Boolean>())
 
-    /** 占着的回答这么久没碰浏览器（在想、在写、在做别的），排队的就接手：不再整个回答占到底。 */
+    /** 占着位子的回答这么久没碰浏览器（在想、在写、在做别的），排队的就接手。 */
     @Volatile var idleMs = 20_000L
 
-    fun holds(owner: Any) = mutex.holdsLock(owner)
+    private fun slotOf(owner: Any) = slots.firstOrNull { it.owner === owner }
 
-    /** 占住（已经占着也行）并记一次「正在用」；被别人占着就返回 false。用完调 [exit]。 */
     @Synchronized
-    fun enter(owner: Any): Boolean {
-        if (!mutex.holdsLock(owner) && !mutex.tryLock(owner)) return false
-        holder = owner; busy++; lastUsed = System.currentTimeMillis()
+    fun holds(owner: Any) = slotOf(owner) != null
+
+    /**
+     * 占一个位子（已经占着也行）并记一次「正在用」；没位子就返回 false。用完调 [exit]。
+     * wantsVisible：非要用户眼前那一页不可（浏览器里的 Kavi，用户问的就是这一页）；userViewing：用户正开着浏览器自己翻，
+     * 这时新来的回答开后台标签页，不抢用户在看的那页。
+     */
+    @Synchronized
+    fun enter(owner: Any, wantsVisible: Boolean = false, userViewing: Boolean = false): Boolean {
+        slotOf(owner)?.let { it.busy++; it.lastUsed = System.currentTimeMillis(); return true }
+        if (slots.size >= MAX) return false
+        val visibleTaken = slots.any { it.visible }
+        if (wantsVisible && visibleTaken) return false
+        slots += Slot(owner, visible = wantsVisible || (!visibleTaken && !userViewing)).also { it.busy = 1 }
         return true
     }
 
     @Synchronized
     fun exit(owner: Any) {
-        if (holder !== owner) return
-        if (busy > 0) busy--
-        lastUsed = System.currentTimeMillis()
+        val s = slotOf(owner) ?: return
+        if (s.busy > 0) s.busy--
+        s.lastUsed = System.currentTimeMillis()
     }
 
-    /** 占着的那个闲了够久：放掉它的占用，记下它被接手过。 */
+    /** 这个回答该钉在哪个后台标签页上；用户眼前那页的位子是 null（照旧跟着当前页）。 */
     @Synchronized
-    private fun takeOverIdle() {
-        val h = holder ?: return
-        if (busy > 0 || System.currentTimeMillis() - lastUsed < idleMs || !mutex.holdsLock(h)) return
-        mutex.unlock(h)
-        holder = null
-        lost += h
+    fun pinOf(owner: Any): com.jack.ai.ui.JackBrowser.PinTab? = slotOf(owner)?.pin
+
+    /** 后台位子还没有标签页（或者它的被关了）：要开一个。 */
+    @Synchronized
+    fun needsTab(owner: Any, alive: (com.jack.ai.ui.JackBrowser.Tab) -> Boolean): Boolean {
+        val s = slotOf(owner) ?: return false
+        return !s.visible && s.pin?.t?.let(alive) != true
+    }
+
+    @Synchronized
+    fun setTab(owner: Any, t: com.jack.ai.ui.JackBrowser.Tab) {
+        val s = slotOf(owner) ?: return
+        if (s.pin != null) lost += owner
+        s.pin = s.pin?.also { it.t = t } ?: com.jack.ai.ui.JackBrowser.pin(t)
+    }
+
+    /** 是不是哪个回答正用着的后台标签页。 */
+    @Synchronized
+    fun isAgentTab(t: com.jack.ai.ui.JackBrowser.Tab) = slots.any { it.pin?.t === t }
+
+    /** 后台标签页里网页弹了新窗口：那个回答接着在新窗口里做。 */
+    @Synchronized
+    fun repin(from: com.jack.ai.ui.JackBrowser.Tab, to: com.jack.ai.ui.JackBrowser.Tab) {
+        slots.forEach { s -> s.pin?.takeIf { it.t === from }?.t = to }
+    }
+
+    /** 某个标签页被关了：钉在它上面的回答换到 replacement 给的那页。在主线程调。 */
+    @Synchronized
+    fun tabClosed(t: com.jack.ai.ui.JackBrowser.Tab, replacement: () -> com.jack.ai.ui.JackBrowser.Tab) {
+        slots.filter { it.pin?.t === t }.forEach { s -> s.pin?.t = replacement(); lost += s.owner }
+    }
+
+    /** 这个对话的回答正用着的后台标签页（聊天里的实时画面放它）。 */
+    @Synchronized
+    fun tabForConv(convId: String): com.jack.ai.ui.JackBrowser.Tab? =
+        slots.firstOrNull { (it.owner as? ToolSession)?.conv?.id == convId }?.pin?.t
+
+    /** 闲够了的位子让出来（wantsVisible 时只看用户眼前那页的位子）。返回它开的后台标签页，调用方在主线程关掉。 */
+    @Synchronized
+    private fun takeOverIdle(wantsVisible: Boolean): com.jack.ai.ui.JackBrowser.Tab? {
+        val now = System.currentTimeMillis()
+        val victim = slots.filter { it.busy == 0 && now - it.lastUsed >= idleMs && (!wantsVisible || it.visible) }
+            .minByOrNull { it.lastUsed } ?: return null
+        slots.remove(victim)
+        lost += victim.owner
+        return victim.pin?.t
     }
 
     @Synchronized
@@ -649,19 +720,32 @@ internal object BrowserLock {
 
     /** 正占着浏览器的对话名（排队时告诉用户在等谁）。 */
     @Synchronized
-    fun holderTitle(): String? = (holder as? ToolSession)?.conv?.title?.takeIf { it.isNotBlank() }
+    fun holderTitle(): String? = slots.mapNotNull { (it.owner as? ToolSession)?.conv?.title?.takeIf { t -> t.isNotBlank() } }
+        .distinct().takeIf { it.isNotEmpty() }?.joinToString("、") { "「${it.take(20)}」" }
 
-    /** 等到占住为止（同 [enter]），最多等 timeoutMs；对方闲够 [idleMs] 就接手。 */
-    suspend fun lock(owner: Any, timeoutMs: Long): Boolean =
+    /** 等到占上位子为止（同 [enter]），最多等 timeoutMs；有位子闲够 [idleMs] 就接手。 */
+    suspend fun lock(owner: Any, timeoutMs: Long, wantsVisible: Boolean = false, userViewing: Boolean = false): Boolean =
         kotlinx.coroutines.withTimeoutOrNull(timeoutMs) {
-            while (!enter(owner)) { takeOverIdle(); kotlinx.coroutines.delay(500) }
+            while (!enter(owner, wantsVisible, userViewing)) {
+                takeOverIdle(wantsVisible)?.let { closeQuietly(it) }
+                kotlinx.coroutines.delay(500)
+            }
             true
         } ?: false
 
+    /** 让出位子；返回它开的后台标签页（调用方在主线程关掉）。 */
     @Synchronized
-    fun unlock(owner: Any) {
-        if (!mutex.holdsLock(owner)) return
-        mutex.unlock(owner)
-        if (holder === owner) { holder = null; busy = 0 }
+    fun unlock(owner: Any): com.jack.ai.ui.JackBrowser.Tab? {
+        val s = slotOf(owner) ?: return null
+        slots.remove(s)
+        return s.pin?.t
+    }
+
+    /** 关掉回答用完的后台标签页；用户已经切过去在看的留着。 */
+    suspend fun closeQuietly(t: com.jack.ai.ui.JackBrowser.Tab) {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable + Dispatchers.Main) {
+            val b = com.jack.ai.ui.JackBrowser
+            if (b.tab !== t && t in b.tabs) b.closeTab(t)
+        }
     }
 }

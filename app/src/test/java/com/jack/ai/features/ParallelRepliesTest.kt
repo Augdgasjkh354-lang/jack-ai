@@ -45,25 +45,26 @@ class ParallelRepliesTest {
     }
 
     @Test
-    fun browserIsUsedByOneReplyAtATime() = runBlocking {
-        val first = Any()
-        val second = Any()
-        assertTrue(BrowserLock.enter(first))
-        assertTrue(BrowserLock.holds(first))
-        assertFalse(BrowserLock.enter(second))
-        // 等不到就超时，不会一直卡着
-        assertFalse(BrowserLock.lock(second, 50))
-        val waiting = async(Dispatchers.Default) { BrowserLock.lock(second, 5_000) }
+    fun browserIsSharedByAtMostThreeReplies() = runBlocking {
+        val owners = List(4) { Any() }
+        // 第一个用用户眼前那页，再来两个各开后台标签页，第四个排队
+        owners.take(3).forEach { assertTrue(BrowserLock.enter(it)) }
+        assertTrue(BrowserLock.holds(owners[0]))
+        assertFalse(BrowserLock.enter(owners[3]))
+        // 等不到就超时，不会一直卡着（占着的都在用，不接手）
+        assertFalse(BrowserLock.lock(owners[3], 50))
+        val waiting = async(Dispatchers.Default) { BrowserLock.lock(owners[3], 5_000) }
         delay(50)
-        BrowserLock.unlock(first)
+        BrowserLock.unlock(owners[0])
         assertTrue(waiting.await())
-        assertTrue(BrowserLock.holds(second))
+        assertTrue(BrowserLock.holds(owners[3]))
         // 不是自己占着的放不掉别人的
-        BrowserLock.unlock(first)
-        assertTrue(BrowserLock.holds(second))
-        BrowserLock.unlock(second)
-        assertTrue(BrowserLock.enter(first))
-        BrowserLock.unlock(first)
+        BrowserLock.unlock(owners[0])
+        assertTrue(BrowserLock.holds(owners[3]))
+        owners.forEach { BrowserLock.unlock(it) }
+        assertTrue(BrowserLock.enter(owners[0]))
+        BrowserLock.unlock(owners[0])
+        Unit
     }
 
     @Test
