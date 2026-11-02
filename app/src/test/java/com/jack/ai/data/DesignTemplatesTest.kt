@@ -50,4 +50,20 @@ class DesignTemplatesTest {
         assertTrue(icons["calendar"]!!.startsWith("<svg") && "<path" in icons["calendar"]!!)
         assertFalse("no-such-icon-zz" in icons)
     }
+
+    @Test
+    fun installedTemplatesMatchTheIndex() {
+        // 打进 App 的模板：目录里每一项都有文件、文件里的元数据 id 对得上、用到的图标都认得
+        val dir = java.io.File("src/main/assets/design")
+        val list = DesignTemplates.parseIndex(java.io.File(dir, "index.json").readText())
+        assertTrue(list.isNotEmpty())
+        list.forEach { t ->
+            val html = java.io.File(dir, "templates/${t.id}.html").readText()
+            assertTrue(t.id, "\"id\":\"${t.id}\"" in html.replace(" ", ""))
+            assertTrue(t.id, t.category in DesignTemplates.CATEGORIES)
+            assertFalse(t.id, Regex("""(src|href)\s*=\s*["']https?:""").containsMatchIn(html))
+            val used = Regex("""data-icon\s*=\s*["']([^"']+)["']""").findAll(html).map { it.groupValues[1] }.toSet()
+            assertEquals(t.id, used, DesignTemplates.icons(html).keys)
+        }
+    }
 }
