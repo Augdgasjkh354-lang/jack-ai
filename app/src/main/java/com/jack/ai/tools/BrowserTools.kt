@@ -823,7 +823,8 @@ private suspend fun ToolSession.noteSite(args: JsonObject): String {
     if (site.isEmpty() || text.isEmpty()) return "note_site 要填 note（一句话），site 不填就是当前网页的网站"
     val store = host.store
     withContext(kotlinx.coroutines.Dispatchers.IO) { store.saveSiteNotes(com.jack.ai.data.BrowserFlows.addNote(store.loadSiteNotes(), site, text)) }
-    return "记下了（$site）：$text。下次打开这个网站时会提醒。"
+    val place = if (site.startsWith(com.jack.ai.data.BrowserFlows.APP_PREFIX)) " App " else "网站"
+    return "记下了（$site）：$text。下次打开这个${place}时会提醒。"
 }
 
 /** 存成 CSV（带 BOM，Excel 打开中文不乱码），挂到回答上。返回文件名。 */

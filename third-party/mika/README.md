@@ -9,6 +9,8 @@
 
 移植范围：无线调试 ADB 配对、密钥加密保存、本机发现与连接、辅助进程、Binder 交接、虚拟屏幕、画面采集及其直接依赖。未移植 Mika 的聊天、记忆、模型服务和浏览器。
 
+另移植同一提交的 `core/src/main/resources/knowledge/apps/` 共 23 份 `APP.md`，原文保存在 `app/src/main/resources/knowledge/apps/`，未改动知识内容。自建 `index.txt` 用于枚举资源。它们遵循本目录的 Apache-2.0 与 NOTICE，在 Kavi 中按包名转换为内置 App 备忘，与用户备忘、手机流程一起在首次读屏时提供，不进入系统提示词。
+
 Jack AI 适配（2026-11-02）：
 
 - ADB 配对客户端显示名改为 Kavi；删去两个与后台助手无关的上游 UI/Agent 类型转换，避免引入整套 Agent 依赖。
