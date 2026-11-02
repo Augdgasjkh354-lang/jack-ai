@@ -683,6 +683,10 @@ internal object BrowserLock {
         s.pin = s.pin?.also { it.t = t } ?: com.jack.ai.ui.JackBrowser.pin(t)
     }
 
+    /** 有回答正用着用户眼前那一页。 */
+    @Synchronized
+    fun visibleInUse() = slots.any { it.visible }
+
     /** 是不是哪个回答正用着的后台标签页。 */
     @Synchronized
     fun isAgentTab(t: com.jack.ai.ui.JackBrowser.Tab) = slots.any { it.pin?.t === t }

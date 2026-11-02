@@ -541,7 +541,8 @@ class BrowserActivity : ComponentActivity() {
                     TextButton(onClick = { b.clearError() }) { Text("知道了") }
                 }
             }
-            if (b.agentActive()) {
+            // 只在 Kavi 用的就是眼前这一页时提示（它在自己的后台标签页里做事时，这一页随便用）
+            if (b.agentActive() && (com.jack.ai.tools.BrowserLock.visibleInUse() || com.jack.ai.tools.BrowserLock.isAgentTab(b.tab))) {
                 Text("Kavi 正在用这个浏览器。你可以直接接手操作，比如自己登录。",
                     Modifier.fillMaxWidth().background(colors.secondaryContainer).padding(horizontal = 12.dp, vertical = 6.dp),
                     style = MaterialTheme.typography.labelSmall, color = colors.onSecondaryContainer)

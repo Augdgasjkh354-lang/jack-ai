@@ -192,6 +192,8 @@ object JackBrowser {
         private set
     /** 网页要下载、还没决定下不下的文件。 */
     var pending by mutableStateOf<BrowserDownload.Pending?>(null)
+    /** 这一页（Kavi 钉住的那页，或当前页）要下载的文件；别的标签页的不算（几个回答同时用浏览器时各管各的）。 */
+    fun pendingHere(): BrowserDownload.Pending? = pending?.takeIf { it.tab < 0 || it.tab == tab.id }
     /** 正在下载的进度文字（null = 没在下）。 */
     var downloading by mutableStateOf<String?>(null)
     /** 刚存到手机「下载」文件夹的文件，浏览器页给个「打开」按钮。 */
@@ -1699,7 +1701,7 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
         val dialog = lastDialog.also { lastDialog = null }
         return Page(o.s("url"), o.s("title"), items, o.f("above").toInt(), o.f("below").toInt(), o.f("scroll").toInt(),
             o.f("height").toInt(), o.f("vh").toInt(), o.s("text"), o.f("vx"), o.f("vy"), o.f("vw"),
-            withContext(Dispatchers.Main) { error }, dialog, pending, o.f("frames").toInt())
+            withContext(Dispatchers.Main) { error }, dialog, pendingHere(), o.f("frames").toInt())
     }
 
     /** 某个编号的元素是什么（决定要不要先问用户）。找不到返回 null。 */
@@ -1875,7 +1877,7 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
 
     /** 标签页清单（给 Kavi 看）：第几个、标题、网址、是不是当前。 */
     fun tabList(): String = tabs.mapIndexed { i, t ->
-        "${i + 1}. ${t.badge}${t.title.ifBlank { if (t.address.isEmpty()) "起始页" else BrowserPages.host(t.address) }} ${t.address}" + if (i == current) "（当前）" else ""
+        "${i + 1}. ${t.badge}${t.title.ifBlank { if (t.address.isEmpty()) "起始页" else BrowserPages.host(t.address) }} ${t.address}" + if (t === tab) "（当前）" else ""
     }.joinToString("\n")
 
     /** 关掉挡着网页的弹窗（下 App、领券、Cookie 提示），返回关掉了什么。 */

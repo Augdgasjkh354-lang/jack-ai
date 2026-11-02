@@ -72,7 +72,7 @@ private suspend fun ToolSession.browseNow(args: JsonObject, action: String): Str
         "new_tab" -> "浏览器新标签页 " + args["url"].text().take(60)
         "switch_tab" -> "浏览器切到标签页 ${args["index"].text()}"
         "close_tab" -> "浏览器关标签页 ${args["index"].text()}"
-        "download" -> "浏览器下载 " + JackBrowser.pending?.name.orEmpty()
+        "download" -> "浏览器下载 " + JackBrowser.pendingHere()?.name.orEmpty()
         "fill" -> "浏览器填表"
         "hover" -> "浏览器悬停 $n"
         "flow" -> "读浏览器流程「${args["name"].text().take(30)}」"
@@ -96,7 +96,7 @@ private suspend fun ToolSession.browseNow(args: JsonObject, action: String): Str
         "fill" -> if ((args["fields"] as? JsonObject).isNullOrEmpty()) return need("fields（{编号: 要填的值}）")
         "save_flow" -> if (listOf("name", "site", "steps").any { args[it].text().isBlank() }) return need("name、site、steps（when 也最好写上）")
         "read", "scroll", "back", "look", "wait", "extract", "tabs", "wait_user", "" -> {}
-        "download" -> if (JackBrowser.pending == null) return "现在没有等着下载的文件。先点网页上的下载链接或按钮，读回来的页面里会写「网页要下载」。"
+        "download" -> if (JackBrowser.pendingHere() == null) return "现在没有等着下载的文件。先点网页上的下载链接或按钮，读回来的页面里会写「网页要下载」。"
         else -> return "action 要填 open、read、click、type、delete、select、key、scroll、back、look、tap、swipe、wait、extract、upload、tabs、new_tab、switch_tab、close_tab、download、download_all、download_media、fill、hover、flow、save_flow、wait_user、steps、parallel 或 note_site"
     }
     if (action == "flow" || action == "save_flow") return runTool(label) { flowAction(action, args) to SearchRecord(label) }
@@ -276,7 +276,7 @@ private suspend fun ToolSession.browseNow(args: JsonObject, action: String): Str
                 else withContext(kotlinx.coroutines.Dispatchers.Main) { if (action == "switch_tab") JackBrowser.switchTo(i) else JackBrowser.closeTab(i) }
             }
             "download" -> {
-                val p = JackBrowser.pending!!
+                val p = JackBrowser.pendingHere()!!
                 if (p.size > com.jack.ai.api.BrowserDownload.HARD_LIMIT) {
                     JackBrowser.pending = null
                     return@runTool "「${p.name}」有 ${com.jack.ai.api.BrowserDownload.sizeText(p.size)}，超过 2 GB 的上限，没有下载。" to SearchRecord("$label：太大")
