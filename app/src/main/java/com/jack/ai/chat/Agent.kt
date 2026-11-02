@@ -88,6 +88,7 @@ class Agent(
         var toolCalls = 0
         var attempts = 0
         var hiccups = 0
+        var imageRetried = false
         while (true) {
             beforeRequest(messages, currentTools)
             val calls = sortedMapOf<Int, Call>()
@@ -122,6 +123,14 @@ class Agent(
                     continue
                 }
                 if (e !is ApiException) throw e
+                // 思路来自 deepseek-ai/deepseek-harness packages/compaction/compaction-image-offload/，MIT。
+                if (!imageRetried && roundContent.isEmpty() && roundReasoning.isEmpty() && calls.isEmpty() &&
+                    ImageOffload.rejected(e) && ImageOffload.reduce(messages)) {
+                    imageRetried = true
+                    content.setLength(roundStart)
+                    continue
+                }
+                if (imageRetried && ImageOffload.rejected(e)) throw e
                 if (recovery != null && round == 0 && e.code == 400 && roundContent.isEmpty()) {
                     val fix = recovery.recover(++attempts)
                     if (fix != null) {
@@ -134,6 +143,7 @@ class Agent(
             }
             lastRound = roundContent.toString()
             onRound()
+            imageRetried = false
             if (calls.isEmpty()) {
                 // 挪走了进度说明、最后却什么都没说（比如「好的，记住了」加一个存记忆就完了）：把最后一句放回回答
                 if (splitNotes && content.isBlank() && notes.isNotEmpty()) {
