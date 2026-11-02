@@ -73,6 +73,9 @@ object JackBrowser {
     /** incognito：隐身标签页，Cookie、登录状态、网页存储和别的标签页分开，关掉最后一个隐身页就全清掉，也不记最近访问。 */
     /** account：分身（1 到 [ACCOUNTS]），和主账号、别的分身的登录状态分开，同一个网站能登不同的账号；0 是平常的。 */
     class Tab(val id: Int, val incognito: Boolean = false, val account: Int = 0) {
+        var mediaFromUser = false
+        val mediaFrames = mutableMapOf<String, Pair<Boolean, Long>>()
+        val audible get() = mediaFrames.values.any { it.first && System.currentTimeMillis() - it.second < 5000 }
         var web: WebView? = null
         var address by mutableStateOf("")
         var title by mutableStateOf("")
@@ -174,6 +177,12 @@ object JackBrowser {
     /** 网页想打开别的 App，等用户点头（只在用户自己看着浏览器时问）。 */
     var external by mutableStateOf<String?>(null)
     var notice by mutableStateOf<String?>(null)
+    var searchEngine by mutableStateOf(BrowserNet.AUTO)
+        private set
+    fun changeSearchEngine(engine: String) {
+        searchEngine = engine
+        prefs().edit().putString("searchEngine", engine).apply()
+    }
     var route by mutableStateOf(BrowserNet.AUTO)
         private set
     /** 网页要下载、还没决定下不下的文件。 */
@@ -203,6 +212,7 @@ object JackBrowser {
     data class Pressed(val link: String?, val image: String?)
     /** 最近访问（只记用户自己看的）和书签，存在 browser 偏好里。 */
     var visits by mutableStateOf(listOf<BrowserPages.Visit>())
+    var later by mutableStateOf(listOf<BrowserPages.Later>())
     var marks by mutableStateOf(listOf<BrowserPages.Visit>())
     /** 网页跟着 App 变深色（浅色主题时不变）。 */
     private var darkAllowed = true
@@ -443,7 +453,18 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
     }
 
     /** 暂停所有标签页里在放的声音和视频。 */
-    fun pauseAll() { tabs.forEach { it.web?.evaluateJavascript(BrowserPages.PAUSE_ALL_JS, null) } }
+    fun pauseAll() {
+        tabs.forEach { mediaControl(it.id, "stop"); it.mediaFrames.clear() }
+        com.jack.ai.BrowserPlaybackService.stop()
+    }
+    fun mediaControl(id: Int, action: String) {
+        if (action == "stop") tabs.find { it.id == id }?.mediaFromUser = false
+        val fallback = if (action == "play") "" else BrowserPages.PAUSE_ALL_JS
+        tabs.find { it.id == id }?.web?.evaluateJavascript("if(window.__kaviMediaCommand){window.__kaviMediaCommand('$action');}else{$fallback}", null)
+    }
+    fun backgroundPlayback() {
+        if (::app.isInitialized) tabs.lastOrNull { it.audible && it.mediaFromUser }?.let { com.jack.ai.BrowserPlaybackService.start(app, it) }
+    }
 
     /** 电脑版放大多少（百分比，见 BrowserPages.desktopWidth）。 */
     var desktopZoom by mutableIntStateOf(100)
@@ -596,7 +617,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
             if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
                 runCatching { androidx.webkit.WebViewCompat.addDocumentStartJavaScript(this, KEEP_BLOB_JS, setOf("*")) }
                 // 切出浏览器时正在放的声音接着放
-                runCatching { androidx.webkit.WebViewCompat.addDocumentStartJavaScript(this, BrowserPages.KEEP_PLAYING_JS, setOf("*")) }
+                runCatching { androidx.webkit.WebViewCompat.addDocumentStartJavaScript(this, BrowserPages.KEEP_PLAYING_JS + BrowserPages.MEDIA_JS, setOf("*")) }
                 // 电脑版：网页一开始就当自己在电脑上（只在电脑版标识下起作用）
                 t.deskScript = runCatching { androidx.webkit.WebViewCompat.addDocumentStartJavaScript(this, BrowserPages.desktopJs(desktopWidth()), setOf("*")) }.getOrNull()
                 // 数着后台请求：动作做完等它们回来再读页面，失败的告诉模型（只在主页面装）
@@ -731,11 +752,43 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
 
     private fun prefs() = app.getSharedPreferences("browser", Context.MODE_PRIVATE)
     private val listJson = Json { ignoreUnknownKeys = true }
+    private val laterList = kotlinx.serialization.builtins.ListSerializer(BrowserPages.Later.serializer())
+    private fun laterFile(url: String): java.io.File {
+        val hash = java.security.MessageDigest.getInstance("SHA-1").digest(url.toByteArray()).joinToString("") { "%02x".format(it) }
+        return java.io.File(app.filesDir, "readlater/$hash.md")
+    }
+    private fun saveLater() { prefs().edit().putString("readlater", listJson.encodeToString(laterList, later)).apply() }
+    fun removeLater(url: String) {
+        later = BrowserPages.removeLater(later, url); saveLater()
+        scope.launch(Dispatchers.IO) { laterFile(url).delete() }
+    }
+    fun markLaterRead(url: String) { later = BrowserPages.readLater(later, url); saveLater() }
+    fun addLater(url: String, name: String = "") {
+        if (tab.incognito || !userViewing) return
+        val before = later
+        later = BrowserPages.addLater(later, url, name, System.currentTimeMillis()); saveLater()
+        val kept = later.map { it.url }.toSet()
+        scope.launch(Dispatchers.IO) { before.filterNot { it.url in kept }.forEach { laterFile(it.url).delete() } }
+        val t = tabs.firstOrNull { !it.incognito && it.address == url } ?: return
+        scope.launch(pin(t)) {
+            val body = readable(app)?.second ?: return@launch
+            withContext(Dispatchers.IO) {
+                if (later.any { it.url == url }) laterFile(url).apply { parentFile?.mkdirs(); writeText(body) }
+            }
+        }
+    }
+    suspend fun offlineLater(url: String): Pair<String, String>? = withContext(Dispatchers.IO) {
+        val entry = later.find { it.url == url } ?: return@withContext null
+        runCatching { entry.title to laterFile(url).readText() }.getOrNull()
+    }
+
     private val visitList = kotlinx.serialization.builtins.ListSerializer(BrowserPages.Visit.serializer())
 
     private fun loadLists() {
         fun read(k: String) = prefs().getString(k, null)?.let { runCatching { listJson.decodeFromString(visitList, it) }.getOrNull() }.orEmpty()
         visits = read("visits"); marks = read("marks")
+        later = prefs().getString("readlater", null)?.let { runCatching { listJson.decodeFromString(laterList, it) }.getOrNull() }.orEmpty()
+        searchEngine = prefs().getString("searchEngine", BrowserNet.AUTO) ?: BrowserNet.AUTO
         desktopSites = prefs().getStringSet("desktop", emptySet()).orEmpty().toSet()
         desktopAll = prefs().getBoolean("desktopall", true)
         desktopZoom = prefs().getInt("deskzoom", 100)
@@ -1230,6 +1283,8 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
             if (t.pageDone?.isCompleted != false) t.pageDone = CompletableDeferred()
             t.translated = false
             t.media.clear()
+            t.mediaFrames.clear()
+            t.mediaFromUser = false
             t.address = url
             t.site = BrowserPages.site(url)
             t.blockedNow.set(0); t.blocked = 0
@@ -1242,12 +1297,14 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
             // 不支持开头注入的旧网页组件：页面露出来时补装钩子
             if (t.diagOn && t.diagScript == null) view.evaluateJavascript(BrowserDiag.HOOK_JS, null)
             if (t.netScript == null) view.evaluateJavascript(BrowserNetWatch.JS, null)
+            view.evaluateJavascript(BrowserPages.KEEP_PLAYING_JS + BrowserPages.MEDIA_JS, null)
             widenIfDesktop(view, url)
             if (blocksAds(t.site)) view.evaluateJavascript(BrowserAds.INJECT_JS, null)
             applyBlocks(view, t.site)
         }
 
         override fun onPageFinished(view: WebView, url: String) {
+            view.evaluateJavascript(BrowserPages.KEEP_PLAYING_JS + BrowserPages.MEDIA_JS, null)
             widenIfDesktop(view, url)
             if (blocksAds(t.site)) view.evaluateJavascript(BrowserAds.INJECT_JS, null)
             t.pageDone?.complete(Unit)
@@ -1278,6 +1335,16 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         override fun onConsoleMessage(m: android.webkit.ConsoleMessage): Boolean {
             val text = m.message().orEmpty()
             when {
+                text.startsWith(BrowserPages.MEDIA_PREFIX) -> {
+                    runCatching { json.parseToJsonElement(text.removePrefix(BrowserPages.MEDIA_PREFIX)).jsonObject }.getOrNull()?.let { o ->
+                        val id = (o["id"] as? JsonPrimitive)?.content ?: return@let
+                        val wasPlaying = t.audible
+                        t.mediaFrames.entries.removeAll { System.currentTimeMillis() - it.value.second > 5000 }
+                        t.mediaFrames[id] = ((o["on"] as? JsonPrimitive)?.content == "true") to System.currentTimeMillis()
+                        if (t.audible && userViewing && t === tab) t.mediaFromUser = true
+                        if (!wasPlaying && t.audible && t.mediaFromUser && !userViewing) com.jack.ai.BrowserPlaybackService.start(app, t)
+                    }
+                }
                 text.startsWith(BrowserDiag.PREFIX) -> t.diag.add(text.removePrefix(BrowserDiag.PREFIX))
                 text.startsWith(BrowserBlocks.PREFIX) -> if (picking && t === tab) BrowserBlocks.parsePick(text)?.let { picked = it }
                 text.startsWith(BrowserTeach.PREFIX) -> if (teaching) BrowserTeach.stepOf(text)?.let { teachSteps = BrowserTeach.append(teachSteps, it) }
@@ -1446,11 +1513,11 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
      * 存一个网页要下载的文件到 target（对话文件夹或手机「下载」）：普通网址带 Cookie 下（能断点续传），
      * 网页生成的（blob:）从网页里读，data: 直接解。progress 报进度文字。
      */
-    suspend fun store(p: BrowserDownload.Pending, target: (String, String) -> Downloads.Target, progress: (String) -> Unit = {}): Downloads.Saved {
+    internal suspend fun storeDirect(p: BrowserDownload.Pending, target: (String, String) -> Downloads.Target, progress: (String) -> Unit = {}, control: BrowserDownload.Control? = null, privateDownload: Boolean = false, requestCookie: String? = null, requestRoute: String = route, onBytes: (Long, Long) -> Unit = { _, _ -> }): Downloads.Saved {
         var finish: (() -> Downloads.Saved)? = null
         fun sink(name: String, mime: String) = target(name, mime).also { finish = it.finish }.sink
         if (p.url.startsWith("blob:", true)) {
-            val (mime0, bytes) = blobBytes(p) { got, total -> progress(progressText(p.name, got, total)) }
+            val (mime0, bytes) = blobBytes(p) { got, total -> onBytes(got, total); progress(progressText(p.name, got, total)) }
             val mime = mime0.ifBlank { p.mime }.ifBlank { "application/octet-stream" }
             val name = p.name.ifBlank { "下载" }.let { n -> if ('.' !in n) BrowserDownload.extFor(mime)?.let { "$n.$it" } ?: n else n }
             withContext(Dispatchers.IO) {
@@ -1458,14 +1525,12 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
                 try { s.open(false).use { it.write(bytes) } } catch (e: Exception) { s.discard(); throw e }
             }
         } else {
-            val t = tabById(p.tab) ?: tab
-            val cookie = if (BrowserPages.isWeb(p.url)) cookieFor(p.url, t) else null
             withContext(Dispatchers.IO) {
-                BrowserDownload.download(p, cookie, route, BrowserDownload.HARD_LIMIT, ::sink,
-                    progress = { got, total -> progress(progressText(p.name, got, total)) })
+                BrowserDownload.download(p, requestCookie, requestRoute, BrowserDownload.HARD_LIMIT, ::sink,
+                    progress = { got, total -> onBytes(got, total); progress(progressText(p.name, got, total)) }, control = control)
             }
         }
-        return withContext(Dispatchers.IO) { finish!!().also { s -> if (::app.isInitialized) Downloads.log(app, s, p.url) } }
+        return withContext(Dispatchers.IO) { finish!!().also { s -> if (::app.isInitialized && !privateDownload) Downloads.log(app, s, p.url) } }
     }
 
     /**
@@ -1473,31 +1538,19 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
      * 更老的系统存到 App 自己的下载目录。在后台下，进度和结果显示在浏览器页。
      */
     fun saveToPhone(ctx: Context, p: BrowserDownload.Pending) {
-        val app = ctx.applicationContext
+        val context = ctx.applicationContext
         pending = null
-        downloading = progressText(p.name, 0, p.size)
-        scope.launch {
-            try {
-                saved = store(p, { name, mime -> Downloads.toPhone(app, name, mime) }) { downloading = it }
-            } catch (e: Exception) {
-                notice = "「${p.name}」没下载成功：" + (e.message ?: e.javaClass.simpleName) + Net.hint()
-            } finally {
-                downloading = null
-            }
-        }
+        com.jack.ai.data.BrowserDownloads.enqueue(context, p, { name, mime -> Downloads.toPhone(context, name, mime) })
     }
 
-    /** Kavi 确认下载：存进对话文件夹（同名加编号）或手机「下载/Kavi」，返回存好的文件。 */
+    /** Kavi 的确认流程照旧，确认后也进入同一个队列。 */
+    suspend fun store(p: BrowserDownload.Pending, target: (String, String) -> Downloads.Target, progress: (String) -> Unit = {}): Downloads.Saved =
+        withContext(Dispatchers.Main) { com.jack.ai.data.BrowserDownloads.enqueue(app, p, target, progress) }.result.await()
+
     suspend fun saveTo(ctx: Context, dir: java.io.File?, p: BrowserDownload.Pending, progress: (String) -> Unit = {}): Downloads.Saved {
-        try {
-            downloading = progressText(p.name, 0, p.size)
-            return store(p, { name, mime -> if (dir != null) Downloads.toDir(ctx, dir, name, mime) else Downloads.toPhone(ctx, name, mime) }) {
-                downloading = it; progress(it)
-            }
-        } finally {
-            downloading = null
-            if (pending == p) pending = null
-        }
+        val context = ctx.applicationContext
+        if (pending == p) pending = null
+        return store(p, { name, mime -> if (dir != null) Downloads.toDir(context, dir, name, mime) else Downloads.toPhone(context, name, mime) }, progress)
     }
 
     /** 当前页面上能批量下的东西：images 图片、files 附件链接（PDF、文档、压缩包……）、all 都要。返回 (共几个, 前 max 个的 (网址, 名字))。 */

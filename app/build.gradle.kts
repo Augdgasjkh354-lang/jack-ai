@@ -111,6 +111,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.core:core-ktx:1.15.0")
     // Jack 浏览器单独设代理（ProxyController）
+    // 网页后台播放通知和耳机控制，固定版本
+    implementation("androidx.media:media:1.7.0")
     implementation("androidx.webkit:webkit:1.12.1")
     // Jack 浏览器下拉刷新
     implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")

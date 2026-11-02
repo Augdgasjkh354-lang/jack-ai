@@ -122,6 +122,15 @@ class BrowserActivity : ComponentActivity() {
     /** 选网页字号。 */
     private var textPick by mutableStateOf(false)
     /** 历史记录页开着。 */
+    private var shotJob: kotlinx.coroutines.Job? = null
+    private var shooting by mutableStateOf(false)
+    private var longShot by mutableStateOf<com.jack.ai.data.Downloads.Saved?>(null)
+    private val shotPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) takeLongShot() else JackBrowser.notice = "没有相册存储权限，无法保存长截图"
+    }
+    private var showDownloads by mutableStateOf(false)
+    private var showLater by mutableStateOf(false)
+    private var searchPick by mutableStateOf(false)
     private var showHistory by mutableStateOf(false)
     /** 选电脑版放大多少。 */
     private var zoomPick by mutableStateOf(false)
@@ -227,6 +236,7 @@ class BrowserActivity : ComponentActivity() {
     override fun onPause() {
         super.onPause()
         JackBrowser.userViewing = false
+        JackBrowser.backgroundPlayback()
         // 刚登录完 App 就被系统杀掉也不丢登录：离开浏览器时把 Cookie 写到磁盘
         JackBrowser.flushCookies()
         // 标签页也记下来，下次打开 App 还在
@@ -283,7 +293,7 @@ class BrowserActivity : ComponentActivity() {
     }
 
     private fun open(input: String) {
-        val url = BrowserNet.normalize(input, proxiedNow())
+        val url = BrowserNet.normalize(input, proxiedNow(), JackBrowser.searchEngine)
         if (url.isEmpty()) return
         editing = url
         when (BrowserNet.classify(url)) {
@@ -366,6 +376,8 @@ class BrowserActivity : ComponentActivity() {
                 b.fullscreen != null -> exitFullscreen()
                 finding != null -> closeFind()
                 showTabs -> showTabs = false
+                showDownloads -> showDownloads = false
+                showLater -> showLater = false
                 showHistory -> showHistory = false
                 else -> {
                     val w = b.webView(this)
@@ -416,6 +428,11 @@ class BrowserActivity : ComponentActivity() {
                             menu = false
                             if (b.blocksHere().isNotEmpty()) blockList = true else b.startPick()
                         })
+                        DropdownMenuItem(text = { Text(if (b.later.any { it.url == b.address }) "移出阅读列表" else "加入阅读列表") }, enabled = has && !b.tab.incognito, onClick = {
+                            menu = false
+                            if (b.later.any { it.url == b.address }) b.removeLater(b.address) else b.addLater(b.address, b.title)
+                        })
+                        DropdownMenuItem(text = { Text("阅读列表") }, onClick = { menu = false; showLater = true })
                         DropdownMenuItem(text = { Text("阅读模式") }, enabled = has, onClick = {
                             menu = false
                             lifecycleScope.launch { b.readable(this@BrowserActivity)?.let { reader = it } ?: run { b.notice = "这一页找不出正文（可能不是文章页，或者还没加载完）" } }
@@ -430,8 +447,11 @@ class BrowserActivity : ComponentActivity() {
                             onClick = { menu = false; b.toggleDesktopAll() })
                         DropdownMenuItem(text = { Text("电脑版放大：${b.desktopZoom}%") }, onClick = { menu = false; zoomPick = true })
                         DropdownMenuItem(text = { Text("分享") }, enabled = has, onClick = { menu = false; share(b.address, b.title) })
+                        DropdownMenuItem(text = { Text("长截图") }, enabled = has && !shooting, onClick = { menu = false; takeLongShot() })
                         DropdownMenuItem(text = { Text("存成 PDF") }, enabled = has, onClick = { menu = false; savePdf() })
                         DropdownMenuItem(text = { Text("页内查找") }, enabled = has, onClick = { menu = false; finding = "" })
+                        DropdownMenuItem(text = { Text("搜索引擎") }, onClick = { menu = false; searchPick = true })
+                        DropdownMenuItem(text = { Text("下载管理") }, onClick = { menu = false; showDownloads = true })
                         DropdownMenuItem(text = { Text("历史记录") }, onClick = { menu = false; showHistory = true })
                         DropdownMenuItem(text = { Text("网页字号：${b.textZoom}%") }, onClick = { menu = false; textPick = true })
                         DropdownMenuItem(text = { Text(if (b.marks.any { it.url == b.address }) "移出书签" else "加入书签") }, enabled = has, onClick = {
@@ -554,7 +574,7 @@ class BrowserActivity : ComponentActivity() {
                 }
             }
             b.downloading?.let { msg ->
-                Text(msg, Modifier.fillMaxWidth().background(colors.secondaryContainer).padding(horizontal = 12.dp, vertical = 6.dp),
+                Text(msg, Modifier.fillMaxWidth().clickable { showDownloads = true }.background(colors.secondaryContainer).padding(horizontal = 12.dp, vertical = 6.dp),
                     style = MaterialTheme.typography.labelSmall, color = colors.onSecondaryContainer, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             if (b.picking) PickBar()
@@ -595,6 +615,11 @@ class BrowserActivity : ComponentActivity() {
             }
         }
         if (showTabs) Box(Modifier.fillMaxSize().safeDrawingPadding()) { TabsPanel() }
+        if (showDownloads && b.userViewing) Box(Modifier.fillMaxSize().safeDrawingPadding()) { BrowserDownloadsPanel { showDownloads = false } }
+        if (showLater && b.userViewing) Box(Modifier.fillMaxSize().safeDrawingPadding()) { LaterPanel() }
+        LaunchedEffect(b.pageFailed, b.address) {
+            if (b.pageFailed && b.userViewing && !b.tab.incognito) b.offlineLater(b.address)?.let { reader = it; b.notice = "网络打不开，显示已保存的正文" }
+        }
         if (showHistory) Box(Modifier.fillMaxSize().safeDrawingPadding()) { HistoryPanel() }
         // 视频全屏：盖满整个屏幕
         full?.let { (view, _) ->
@@ -605,6 +630,30 @@ class BrowserActivity : ComponentActivity() {
         }
         b.pressed?.let { p -> PressMenu(p) }
         b.permAsk?.let { a -> PermDialog(a) }
+        if (shooting && b.userViewing) AlertDialog(
+            onDismissRequest = { shotJob?.cancel() }, title = { Text("正在截图…") },
+            text = { Text("正在逐屏加载并拼接，最多二十屏。") },
+            confirmButton = { TextButton(onClick = { shotJob?.cancel() }) { Text("取消") } },
+        )
+        longShot?.takeIf { b.userViewing }?.let { saved -> AlertDialog(
+            onDismissRequest = { longShot = null }, title = { Text("长截图已存到相册") }, text = { Text(saved.where) },
+            confirmButton = { TextButton(onClick = {
+                runCatching { startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(saved.uri, saved.mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)) }
+                    .onFailure { b.notice = "手机上没有能打开图片的 App" }
+            }) { Text("打开") } },
+            dismissButton = { Row {
+                TextButton(onClick = { runCatching { startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType(saved.mime).putExtra(Intent.EXTRA_STREAM, saved.uri)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION), "分享长截图")) } }) { Text("分享") }
+                TextButton(onClick = { longShot = null }) { Text("关闭") }
+            } },
+        ) }
+        if (searchPick && b.userViewing) AlertDialog(
+            onDismissRequest = { searchPick = false }, title = { Text("搜索引擎") },
+            text = { Column { listOf("auto" to "自动", "google" to "Google", "bing" to "必应", "baidu" to "百度", "duckduckgo" to "DuckDuckGo").forEach { (key, label) ->
+                Text((if (b.searchEngine == key) "✓ " else "    ") + label,
+                    Modifier.fillMaxWidth().clickable { b.changeSearchEngine(key); searchPick = false }.padding(vertical = 12.dp))
+            } } }, confirmButton = { TextButton(onClick = { searchPick = false }) { Text("关闭") } },
+        )
         if (textPick) ZoomDialog("网页字号", "网页里的字太大或太小时调一下，所有网页都用这个字号。排版不变，只改字。",
             BrowserPages.TEXT_ZOOMS, b.textZoom, { textPick = false }) { b.changeTextZoom(it) }
         if (zoomPick) AlertDialog(
@@ -1015,6 +1064,28 @@ class BrowserActivity : ComponentActivity() {
     }
 
     /** 存成 PDF：用系统的打印，选「另存为 PDF」，存在哪由用户定。 */
+    private fun takeLongShot() {
+        if (!JackBrowser.userViewing || shooting) return
+        if (Build.VERSION.SDK_INT < 29 && !has(Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+            shotPermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE); return
+        }
+        val w = JackBrowser.tab.web ?: return
+        shooting = true
+        shotJob = lifecycleScope.launch {
+            try {
+                val (saved, cut) = BrowserLongShot.capture(this@BrowserActivity, w)
+                longShot = saved
+                JackBrowser.notice = if (cut) "页面太长，只截了前面一部分" else "长截图已存到相册 Pictures/Kavi"
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: OutOfMemoryError) {
+                JackBrowser.notice = "页面图片太大，手机内存不够，没能完成截图"
+            } catch (e: Exception) {
+                JackBrowser.notice = "截图没完成：${e.message ?: "图片太大"}"
+            } finally { shooting = false; shotJob = null }
+        }
+    }
+
     private fun savePdf() {
         val b = JackBrowser
         val name = b.title.ifBlank { BrowserPages.host(b.address) }.ifBlank { "网页" }
@@ -1154,6 +1225,39 @@ class BrowserActivity : ComponentActivity() {
         )
     }
 
+    private fun openLater(e: BrowserPages.Later) {
+        showLater = false
+        JackBrowser.markLaterRead(e.url)
+        open(e.url)
+    }
+
+    @Composable
+    private fun LaterPanel() {
+        val b = JackBrowser
+        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { showLater = false }) { Icon(Icons.Default.Close, "收起") }
+                    Text("阅读列表", style = MaterialTheme.typography.titleMedium)
+                }
+                LazyColumn {
+                    listOf(false to "未读", true to "已读").forEach { (read, label) ->
+                        item { Box(Modifier.padding(horizontal = 16.dp)) { Section(label) } }
+                        items(b.later.filter { it.read == read }, key = { it.url }) { e ->
+                            Row(Modifier.fillMaxWidth().clickable { openLater(e) }.padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(e.title.ifBlank { BrowserPages.host(e.url) }, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(BrowserPages.host(e.url), style = MaterialTheme.typography.labelSmall)
+                                }
+                                IconButton(onClick = { b.removeLater(e.url) }) { Icon(Icons.Default.Close, "删掉这条") }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     /** 完整的历史记录：按天分组、能搜、能删单条、能清空。 */
     @Composable
     private fun HistoryPanel() {
@@ -1238,6 +1342,8 @@ class BrowserActivity : ComponentActivity() {
                     @Composable
                     fun item(label: String, action: () -> Unit) = Text(label, Modifier.fillMaxWidth().clickable { close(); action() }.padding(vertical = 12.dp))
                     p.link?.let { link ->
+                        Text("稍后读", Modifier.fillMaxWidth().clickable(enabled = !b.tab.incognito) { close(); b.addLater(link) }.padding(vertical = 12.dp),
+                            color = if (b.tab.incognito) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f) else MaterialTheme.colorScheme.onSurface)
                         item("打开") { open(link) }
                         item("在新标签页打开") { openInNewTab(link) }
                         item("复制链接") { copy(link); b.notice = "已复制链接" }
@@ -1326,6 +1432,16 @@ class BrowserActivity : ComponentActivity() {
                             OutlinedButton(onClick = { open(url) }) { Text(name) }
                         }
                     }
+                }
+            }
+            item { Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(1f)) { Section("阅读列表") }
+                TextButton(onClick = { showLater = true }) { Text("全部") }
+            } }
+            items(b.later.filterNot { it.read }.take(10), key = { "l" + it.url }) { e ->
+                Column(Modifier.fillMaxWidth().clickable { openLater(e) }.padding(vertical = 8.dp)) {
+                    Text(e.title.ifBlank { BrowserPages.host(e.url) }, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(BrowserPages.host(e.url), style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
                 }
             }
             if (b.marks.isNotEmpty()) {

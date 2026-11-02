@@ -8,6 +8,16 @@ object BrowserPages {
     @Serializable
     data class Visit(val url: String, val title: String = "", val at: Long = 0)
 
+    @Serializable
+    data class Later(val url: String, val title: String = "", val at: Long = 0, val read: Boolean = false)
+
+    fun addLater(list: List<Later>, url: String, title: String, now: Long): List<Later> =
+        if (!isWeb(url) || list.any { it.url == url }) list
+        else (listOf(Later(url, title.trim(), now)) + list).take(200)
+
+    fun removeLater(list: List<Later>, url: String) = list.filterNot { it.url == url }
+    fun readLater(list: List<Later>, url: String) = list.map { if (it.url == url) it.copy(read = true) else it }
+
     const val RECENT_MAX = 30
 
     /** 记一次访问：同一个网址只留最新的一条，排最前；只记 http/https。 */
@@ -124,6 +134,19 @@ try{Object.defineProperty(P,'hidden',{get:function(){return keep?false:dh.get.ca
 Object.defineProperty(P,'visibilityState',{get:function(){return keep?'visible':dv.get.call(this);},configurable:true});}catch(e){return;}
 function on(e){if(dh.get.call(document)){if(!keep&&playing())keep=true;if(keep)e.stopImmediatePropagation();}else if(keep){keep=false;e.stopImmediatePropagation();}}
 window.addEventListener('visibilitychange',on,true);window.addEventListener('webkitvisibilitychange',on,true);})();"""
+
+    const val MEDIA_PREFIX = "KAVI_MEDIA:"
+    /** 每个框架单独报声音状态，动态加入的播放器也能收到事件。 */
+    const val MEDIA_JS = """(function(){if(window.__kaviMedia)return;window.__kaviMedia=1;
+var id=Math.random().toString(36).slice(2),last=false;
+function report(){var on=false;[].forEach.call(document.querySelectorAll('video,audio'),function(m){if(!m.paused&&!m.ended&&!m.muted&&m.volume>0){on=true;m.__kaviResume=true;}});
+if(on||on!==last)console.log('KAVI_MEDIA:'+JSON.stringify({id:id,on:on}));last=on;}
+['play','pause','ended','volumechange','emptied'].forEach(function(e){document.addEventListener(e,report,true);});
+function cmd(op){document.querySelectorAll('video,audio').forEach(function(m){if(op==='play'){if(m.__kaviResume){var p=m.play();if(p)p.catch(function(){});}}
+else {if(!m.paused&&!m.ended)m.__kaviResume=true;if(op==='stop')m.__kaviResume=false;m.pause();}});
+for(var i=0;i<frames.length;i++)frames[i].postMessage({kaviMedia:op},'*');report();}
+window.__kaviMediaCommand=cmd;window.addEventListener('message',function(e){if(e.source===parent&&e.data&&e.data.kaviMedia)cmd(e.data.kaviMedia);});
+setInterval(report,1000);})();"""
 
     /** 暂停网页里所有在放的声音和视频（关掉浏览器、关掉画中画时）。 */
     const val PAUSE_ALL_JS = "(function(){try{document.querySelectorAll('video,audio').forEach(function(m){m.pause();});}catch(e){}})();"
