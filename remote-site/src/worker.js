@@ -1,6 +1,6 @@
 // Kavi 远程：iPhone、电脑等别的设备通过这个站点用安卓手机上的 Kavi。
 // 站点只当中转：网页把消息存进数据库（D1），手机上的 Kavi 隔几秒来取，处理完把回答写回来。文件放在 R2。
-// 需要的绑定：D1 数据库 DB、R2 存储桶 FILES、密钥 KAVI_KEY（在 Kavi 设置 → 远程连接 里生成，填进站点的 Secrets）。
+// 需要的绑定：D1 数据库 DB、R2 存储桶 FILES。Kavi 首次连接时会认领站点。
 // 表在第一次请求时自动建好。
 
 const SCHEMA = [
@@ -13,16 +13,32 @@ const SCHEMA = [
      answer INTEGER, sent INTEGER DEFAULT 0, created INTEGER)`,
   `CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT)`,
   `CREATE TABLE IF NOT EXISTS fails (ip TEXT, at INTEGER)`,
+  `CREATE TABLE IF NOT EXISTS owner (id INTEGER PRIMARY KEY CHECK (id = 1), key_hash TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS devices (id TEXT PRIMARY KEY, name TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, created INTEGER NOT NULL, last_seen INTEGER NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS pairing (id INTEGER PRIMARY KEY CHECK (id = 1), code TEXT NOT NULL, token_hash TEXT NOT NULL, expires INTEGER NOT NULL, failures INTEGER NOT NULL DEFAULT 0)`,
 ];
 let ready = false;
 async function init(env) {
   if (ready) return;
   await env.DB.batch(SCHEMA.map((s) => env.DB.prepare(s)));
+  if (env.KAVI_KEY) {
+    const keyHash = await sha256(env.KAVI_KEY);
+    const owner = await env.DB.prepare("SELECT key_hash FROM owner WHERE id = 1").first();
+    if (!owner) {
+      await env.DB.prepare("INSERT OR IGNORE INTO owner (id, key_hash) VALUES (1, ?)").bind(keyHash).run();
+    } else if (!same(owner.key_hash, keyHash)) {
+      await env.DB.batch([
+        env.DB.prepare("UPDATE owner SET key_hash = ? WHERE id = 1").bind(keyHash),
+        env.DB.prepare("DELETE FROM devices"),
+        env.DB.prepare("DELETE FROM pairing"),
+      ]);
+    }
+  }
   ready = true;
 }
 
 /** 站点代码的版本：Kavi 测试连接时看得到，接口改了要升。 */
-const VERSION = 1;
+const VERSION = 2;
 const MAX_UPLOAD = 25 * 1024 * 1024;
 const ONLINE_MS = 30_000;
 
@@ -30,45 +46,118 @@ const json = (data, status = 200, headers = {}) =>
   new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...headers } });
 const now = () => Date.now();
 
-async function hmac(key, text) {
-  const k = await crypto.subtle.importKey("raw", new TextEncoder().encode(key), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const sig = await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(text));
-  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
+async function sha256(text) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 function same(a, b) {
-  if (typeof a !== "string" || typeof b !== "string" || a.length !== b.length) return false;
-  let d = 0;
-  for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  if (typeof a !== "string" || typeof b !== "string") return false;
+  let d = a.length ^ b.length;
+  for (let i = 0; i < Math.max(a.length, b.length); i++) d |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
   return d === 0;
 }
 function cookie(req, name) {
   const m = (req.headers.get("cookie") || "").match(new RegExp("(?:^|;\\s*)" + name + "=([^;]+)"));
   return m ? m[1] : "";
 }
-/** 手机上的 Kavi：Authorization: Bearer <KAVI_KEY>。 */
-function isDevice(req, env) {
-  const h = req.headers.get("authorization") || "";
-  return !!env.KAVI_KEY && h.startsWith("Bearer ") && same(h.slice(7), env.KAVI_KEY);
+/** 手机上的 Kavi 用认领密钥；数据库只保存它的 SHA-256。 */
+async function ownerHash(env) {
+  const row = await env.DB.prepare("SELECT key_hash FROM owner WHERE id = 1").first();
+  return row?.key_hash || "";
 }
-/** 网页：登录后的 cookie（密钥算出来的签名，换了密钥就全部失效）。 */
+async function isDevice(req, env) {
+  const auth = req.headers.get("authorization") || "";
+  if (!auth.startsWith("Bearer ")) return false;
+  const stored = await ownerHash(env);
+  return !!stored && same(await sha256(auth.slice(7)), stored);
+}
+/** 网页 cookie 是设备令牌；只在数据库保存它的 SHA-256。 */
 async function isWeb(req, env) {
-  const c = cookie(req, "kavi_session");
-  return !!c && !!env.KAVI_KEY && same(c, await hmac(env.KAVI_KEY, "web-v1"));
+  const token = cookie(req, "kavi_device");
+  if (!token) return null;
+  const tokenHash = await sha256(token);
+  const device = await env.DB.prepare("SELECT id, token_hash, last_seen FROM devices WHERE token_hash = ?").bind(tokenHash).first();
+  if (!device || !same(tokenHash, device.token_hash)) return null;
+  const t = now();
+  if (Number(device.last_seen) <= t - 60_000) {
+    await env.DB.prepare("UPDATE devices SET last_seen = ? WHERE id = ? AND last_seen <= ?").bind(t, device.id, t - 60_000).run();
+  }
+  return device;
 }
 
-async function login(req, env) {
-  const ip = req.headers.get("cf-connecting-ip") || "?";
-  const recent = await env.DB.prepare("SELECT COUNT(*) AS n FROM fails WHERE ip = ? AND at > ?").bind(ip, now() - 10 * 60_000).first();
-  if ((recent?.n || 0) >= 10) return json({ error: "试错太多次，十分钟后再试" }, 429);
+async function claim(req, env) {
+  if (env.KAVI_KEY) return json({ error: "站点由 KAVI_KEY 管理，不能在线认领" }, 409);
+  const auth = req.headers.get("authorization") || "";
+  if (!auth.startsWith("Bearer ") || !auth.slice(7)) return json({ error: "请提供认领密钥" }, 401);
+  const keyHash = await sha256(auth.slice(7));
+  const result = await env.DB.prepare("INSERT OR IGNORE INTO owner (id, key_hash) VALUES (1, ?)").bind(keyHash).run();
+  const owner = await ownerHash(env);
+  if (!same(keyHash, owner)) return json({ error: "站点已被另一把密钥认领" }, 409);
+  return result.meta?.changes ? json({ ok: true, claimed: true }) : json({ ok: true });
+}
+
+async function rekey(req, env) {
+  if (env.KAVI_KEY) return json({ error: "站点由 KAVI_KEY 管理，不能在线换密钥" }, 409);
   const body = await req.json().catch(() => ({}));
-  if (!env.KAVI_KEY) return json({ error: "站点还没设置密钥 KAVI_KEY" }, 500);
-  if (!same(String(body.key || "").trim(), env.KAVI_KEY)) {
-    await env.DB.prepare("INSERT INTO fails (ip, at) VALUES (?, ?)").bind(ip, now()).run();
-    await env.DB.prepare("DELETE FROM fails WHERE at < ?").bind(now() - 86_400_000).run();
-    return json({ error: "密钥不对" }, 401);
+  if (typeof body.new_key !== "string" || !body.new_key || body.new_key.length > 256) return json({ error: "新密钥无效" }, 400);
+  const keyHash = await sha256(body.new_key);
+  await env.DB.batch([
+    env.DB.prepare("UPDATE owner SET key_hash = ? WHERE id = 1").bind(keyHash),
+    env.DB.prepare("DELETE FROM devices"),
+    env.DB.prepare("DELETE FROM pairing"),
+  ]);
+  return json({ ok: true });
+}
+
+function randomToken() {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  let binary = "";
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+function guessDeviceName(ua) {
+  const s = String(ua || "");
+  const os = /iPhone/i.test(s) ? "iPhone" : /iPad/i.test(s) ? "iPad" : /Android/i.test(s) ? "Android" : /Macintosh|Mac OS/i.test(s) ? "Mac" : /Windows/i.test(s) ? "Windows" : "网页设备";
+  const browser = /Edg\//i.test(s) ? "Edge" : /CriOS|Chrome/i.test(s) ? "Chrome" : /Firefox|FxiOS/i.test(s) ? "Firefox" : /Safari/i.test(s) ? "Safari" : "浏览器";
+  return `${os} ${browser}`;
+}
+async function startPair(env) {
+  const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000).padStart(6, "0");
+  const token = randomToken();
+  const expires = Math.floor(now() / 1000) + 5 * 60;
+  await env.DB.prepare("INSERT INTO pairing (id, code, token_hash, expires, failures) VALUES (1, ?, ?, ?, 0) ON CONFLICT(id) DO UPDATE SET code = excluded.code, token_hash = excluded.token_hash, expires = excluded.expires, failures = 0")
+    .bind(code, await sha256(token), expires).run();
+  return json({ code, token, expires });
+}
+async function pair(req, env) {
+  const body = await req.json().catch(() => ({}));
+  const ip = `pair:${req.headers.get("cf-connecting-ip") || "?"}`;
+  const t = now();
+  const recent = await env.DB.prepare("SELECT COUNT(*) AS n FROM fails WHERE ip = ? AND at > ?").bind(ip, t - 10 * 60_000).first();
+  if ((recent?.n || 0) >= 5) return json({ error: "尝试次数太多，请十分钟后再试" }, 429);
+
+  const active = await env.DB.prepare("SELECT code, token_hash, expires FROM pairing WHERE id = 1 AND expires > ?").bind(Math.floor(t / 1000)).first();
+  const tokenHash = typeof body.token === "string" && body.token.length <= 256 ? await sha256(body.token) : "";
+  const valid = !!active && ((typeof body.code === "string" && same(body.code, active.code)) || (tokenHash && same(tokenHash, active.token_hash)));
+  if (!valid) {
+    await env.DB.prepare("INSERT INTO fails (ip, at) VALUES (?, ?)").bind(ip, t).run();
+    if (active) {
+      const failures = await env.DB.prepare("UPDATE pairing SET failures = failures + 1 WHERE id = 1 AND token_hash = ? AND expires > ? RETURNING failures").bind(active.token_hash, Math.floor(t / 1000)).first();
+      if (failures && Number(failures.failures) >= 10) await env.DB.prepare("DELETE FROM pairing WHERE id = 1 AND token_hash = ?").bind(active.token_hash).run();
+    }
+    await env.DB.prepare("DELETE FROM fails WHERE ip LIKE 'pair:%' AND at < ?").bind(t - 86_400_000).run();
+    return json({ error: "配对码无效或已过期" }, 401);
   }
-  const v = await hmac(env.KAVI_KEY, "web-v1");
-  return json({ ok: true }, 200, { "set-cookie": `kavi_session=${v}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=31536000` });
+
+  const consumed = await env.DB.prepare("DELETE FROM pairing WHERE id = 1 AND code = ? AND token_hash = ? AND expires > ? RETURNING id")
+    .bind(active.code, active.token_hash, Math.floor(t / 1000)).first();
+  if (!consumed) return json({ error: "配对码已使用或已过期" }, 401);
+  const deviceToken = randomToken();
+  const deviceId = crypto.randomUUID();
+  const name = String(body.name || guessDeviceName(req.headers.get("user-agent"))).trim().slice(0, 60) || "网页设备";
+  await env.DB.prepare("INSERT INTO devices (id, name, token_hash, created, last_seen) VALUES (?, ?, ?, ?, ?)")
+    .bind(deviceId, name, await sha256(deviceToken), t, t).run();
+  return json({ ok: true }, 200, { "set-cookie": `kavi_device=${deviceToken}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=31536000` });
 }
 
 const parseMsg = (r) => r && ({ ...r, files: JSON.parse(r.files || "[]"), steps: JSON.parse(r.steps || "[]") });
@@ -232,15 +321,30 @@ export default {
     const url = new URL(req.url);
     const p = url.pathname;
     try {
+      await init(env);
       if (p === "/" || p === "/index.html") return new Response(PAGE, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", ...SECURITY } });
+      if (p === "/pair") return new Response(PAIR_PAGE, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", ...SECURITY } });
       if (p === "/manifest.json") return json(MANIFEST);
       if (!p.startsWith("/api/")) return new Response("Not found", { status: 404 });
-      await init(env);
-      if (p === "/api/login" && req.method === "POST") return login(req, env);
+      if (p === "/api/device/claim" && req.method === "POST") return claim(req, env);
+      const owner = await ownerHash(env);
+      if (!owner) return json({ error: "站点尚未认领" }, 401);
+      if (p === "/api/pair" && req.method === "POST") return pair(req, env);
       if (p.startsWith("/api/device/")) {
-        if (!isDevice(req, env)) return json({ error: "密钥不对" }, 401);
+        if (!(await isDevice(req, env))) return json({ error: "认领密钥无效" }, 401);
         if (p === "/api/device/poll") return poll(env);
-        if (p === "/api/device/ping") return json({ ok: true, version: VERSION });
+        if (p === "/api/device/ping") return json({ ok: true, version: VERSION, features: ["claim", "pairing"] });
+        if (p === "/api/device/rekey" && req.method === "POST") return rekey(req, env);
+        if (p === "/api/device/pair/start" && req.method === "POST") return startPair(env);
+        if (p === "/api/device/devices" && req.method === "GET") {
+          const devices = (await env.DB.prepare("SELECT id, name, created, last_seen FROM devices ORDER BY created DESC").all()).results;
+          return json(devices);
+        }
+        if (p === "/api/device/devices/revoke" && req.method === "POST") {
+          const body = await req.json().catch(() => ({}));
+          await env.DB.prepare("DELETE FROM devices WHERE id = ?").bind(String(body.id || "")).run();
+          return json({ ok: true });
+        }
         if (p === "/api/device/reply" && req.method === "POST") return reply(req, env);
         if (p === "/api/device/ask" && req.method === "POST") return ask(req, env);
         if (p === "/api/device/cancel" && req.method === "POST") return cancelAsk(req, env);
@@ -248,7 +352,7 @@ export default {
         if (p === "/api/device/file") return file(url, env);
         return json({ error: "没有这个接口" }, 404);
       }
-      if (!(await isWeb(req, env))) return json({ error: "请先登录" }, 401);
+      if (!(await isWeb(req, env))) return json({ error: "这台设备尚未配对，请先配对" }, 401);
       if (p === "/api/state") return state(url, env);
       if (p === "/api/send" && req.method === "POST") return send(req, env);
       if (p === "/api/upload" && req.method === "POST") return upload(req, env, url, "u");
@@ -256,7 +360,6 @@ export default {
       if (p === "/api/confirm" && req.method === "POST") return answer(req, env);
       if (p === "/api/stop" && req.method === "POST") return stop(req, env);
       if (p === "/api/delete" && req.method === "POST") return removeConv(req, env);
-      if (p === "/api/logout" && req.method === "POST") return json({ ok: true }, 200, { "set-cookie": "kavi_session=; Path=/; Max-Age=0" });
       return json({ error: "没有这个接口" }, 404);
     } catch (e) {
       return json({ error: String(e && e.message || e) }, 500);
@@ -317,18 +420,9 @@ textarea{flex:1;resize:none;border:1px solid var(--line);border-radius:20px;padd
 #drawer nav{background:var(--bg);width:80%;max-width:320px;height:100%;padding:calc(env(safe-area-inset-top) + 14px) 10px 14px;overflow-y:auto}
 #drawer nav button{display:block;width:100%;text-align:left;padding:10px;border-radius:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #drawer nav button.cur{background:var(--bubble)}
-#login{display:flex;flex-direction:column;gap:12px;padding:40px 24px;max-width:420px;margin:0 auto}
-#login input{border:1px solid var(--line);border-radius:12px;padding:12px;font:inherit;background:var(--bg);color:var(--fg)}
 .hint{font-size:13px;color:var(--sub)}
 </style></head>
 <body>
-<div id="login" hidden>
-  <h2>Kavi</h2>
-  <p class="hint">填 Kavi 设置 →「远程连接」里的密钥。这台设备会记住一年。</p>
-  <input id="key" type="password" autocomplete="current-password" placeholder="密钥">
-  <button class="btn main" id="go">进入</button>
-  <div class="err" id="loginErr"></div>
-</div>
 <div id="app" hidden>
   <header>
     <button class="icon" id="menu" aria-label="对话列表">☰</button>
@@ -367,17 +461,11 @@ function md(src) {
 }
 async function api(path, opt = {}) {
   const r = await fetch(path, { credentials: "same-origin", ...opt });
-  if (r.status === 401 && !path.includes("login")) { showLogin(); throw new Error("401"); }
+  if (r.status === 401) { location.replace("/pair"); throw new Error("401"); }
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.error || r.status);
   return j;
 }
-function showLogin() { $("app").hidden = true; $("login").hidden = false; clearTimeout(timer); }
-$("go").onclick = async () => {
-  $("loginErr").textContent = "";
-  try { await api("/api/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key: $("key").value }) }); start(); }
-  catch (e) { $("loginErr").textContent = e.message; }
-};
 function fileLinks(fs) {
   if (!fs || !fs.length) return "";
   return '<div class="files">' + fs.map((f) => {
@@ -464,8 +552,78 @@ $("send").onclick = async () => {
   } catch (e) { alert("没发出去：" + e.message); }
   $("send").disabled = false;
 };
-function start() { $("login").hidden = true; $("app").hidden = false; since = 0; msgs.clear(); refresh(); }
+function start() { $("app").hidden = false; since = 0; msgs.clear(); refresh(); }
 api("/api/state").then(start).catch(() => {});
 document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
 </script>
 </body></html>`;
+
+const PAIR_PAGE = `<!doctype html>
+<html lang="zh-CN"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1d212b" media="(prefers-color-scheme: dark)">
+<title>配对设备 · Kavi</title>
+<style>
+:root{color-scheme:light dark;--bg:#fff;--fg:#1c1c1e;--sub:#6b7280;--line:#e5e7eb;--bubble:#f3f4f6;--accent:#1c1c1e;--card:#fff;--err:#c0392b}
+@media(prefers-color-scheme:dark){:root{--bg:#1d212b;--fg:#f3f4f6;--sub:#9ca3af;--line:#343a46;--bubble:#2a303c;--accent:#f3f4f6;--card:#252a35;--err:#f87171}}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:var(--bg);color:var(--fg);font:16px/1.55 -apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",sans-serif}
+main{min-height:100svh;display:grid;place-items:center;padding:calc(env(safe-area-inset-top) + 20px) 18px calc(env(safe-area-inset-bottom) + 20px)}
+.card{width:100%;max-width:430px;border:1px solid var(--line);border-radius:24px;padding:26px 22px;background:var(--card);box-shadow:0 12px 36px #0000000d}
+.brand{font-weight:700;letter-spacing:.04em;color:var(--sub);font-size:14px}
+h1{font-size:24px;line-height:1.25;margin:10px 0}
+p{color:var(--sub);margin:8px 0 22px}
+label{display:block;font-size:14px;font-weight:600;margin:16px 0 6px}
+input{width:100%;height:52px;border:1px solid var(--line);border-radius:14px;padding:0 14px;background:var(--bg);color:var(--fg);font:inherit}
+#code{text-align:center;font-variant-numeric:tabular-nums;letter-spacing:.28em;font-size:25px;font-weight:650}
+button{width:100%;min-height:52px;border:0;border-radius:15px;margin-top:20px;background:var(--accent);color:var(--bg);font:inherit;font-weight:650;cursor:pointer}
+button:disabled{opacity:.55}
+#message{min-height:24px;margin:12px 2px 0;font-size:14px;color:var(--sub)}
+#message.error{color:var(--err)}
+</style></head>
+<body><main><section class="card">
+  <div class="brand">KAVI · 远程连接</div>
+  <h1>配对这台设备</h1>
+  <p>请在手机 Kavi 的「设置 → 远程连接」中开始配对，然后扫描二维码，或输入手机显示的 6 位配对码。</p>
+  <form id="form">
+    <label for="code">6 位配对码</label>
+    <input id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="000000" required>
+    <label for="name">设备名称（可选）</label>
+    <input id="name" name="name" type="text" maxlength="60" autocomplete="off">
+    <button id="submit" type="submit">配对并进入</button>
+  </form>
+  <div id="message" role="status" aria-live="polite"></div>
+</section></main>
+<script>
+const $=id=>document.getElementById(id);
+function guessName(){
+ const ua=navigator.userAgent||"";
+ const os=/iPhone/i.test(ua)?"iPhone":/iPad/i.test(ua)?"iPad":/Android/i.test(ua)?"Android":/Macintosh|Mac OS/i.test(ua)?"Mac":/Windows/i.test(ua)?"Windows":"网页设备";
+ const browser=/Edg\\//i.test(ua)?"Edge":/CriOS|Chrome/i.test(ua)?"Chrome":/Firefox|FxiOS/i.test(ua)?"Firefox":/Safari/i.test(ua)?"Safari":"浏览器";
+ return os+" "+browser;
+}
+$("name").value=guessName();
+async function submitPair(payload){
+ const button=$("submit"), message=$("message");
+ button.disabled=true; message.classList.remove("error"); message.textContent="正在配对…";
+ try{
+  const response=await fetch("/api/pair",{method:"POST",credentials:"same-origin",headers:{"content-type":"application/json"},body:JSON.stringify({...payload,name:$("name").value.trim()})});
+  const result=await response.json().catch(()=>({}));
+  if(!response.ok)throw new Error(result.error||"配对失败，请重试");
+  message.textContent="配对成功，正在打开…"; location.replace("/");
+ }catch(error){message.classList.add("error");message.textContent=error.message;button.disabled=false;}
+}
+$("form").addEventListener("submit",event=>{
+ event.preventDefault();
+ const code=$("code").value.trim();
+ if(!/^[0-9]{6}$/.test(code)){ $("message").classList.add("error"); $("message").textContent="请输入 6 位数字配对码"; return; }
+ submitPair({code});
+});
+const token=new URLSearchParams(location.hash.slice(1)).get("t");
+if(token){
+ history.replaceState(null,"",location.pathname+location.search);
+ document.querySelector('label[for="code"]').hidden=true; $("code").hidden=true;
+ submitPair({token});
+}
+</script></body></html>`;
