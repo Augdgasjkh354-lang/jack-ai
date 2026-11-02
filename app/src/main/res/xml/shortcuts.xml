@@ -5,10 +5,6 @@
         android:shortcutShortLabel="@string/sc_chat" android:shortcutLongLabel="@string/sc_chat">
         <intent android:action="com.jack.ai.NEW_CHAT" android:targetPackage="com.jack.ai" android:targetClass="com.jack.ai.MainActivity" />
     </shortcut>
-    <shortcut android:shortcutId="new_work" android:enabled="true" android:icon="@drawable/ic_sc_work"
-        android:shortcutShortLabel="@string/sc_work" android:shortcutLongLabel="@string/sc_work">
-        <intent android:action="com.jack.ai.NEW_WORK" android:targetPackage="com.jack.ai" android:targetClass="com.jack.ai.MainActivity" />
-    </shortcut>
     <shortcut android:shortcutId="voice" android:enabled="true" android:icon="@drawable/ic_sc_mic"
         android:shortcutShortLabel="@string/sc_voice" android:shortcutLongLabel="@string/sc_voice">
         <intent android:action="com.jack.ai.VOICE" android:targetPackage="com.jack.ai" android:targetClass="com.jack.ai.MainActivity" />

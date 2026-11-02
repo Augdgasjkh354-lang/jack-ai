@@ -53,9 +53,13 @@ object Persona {
         return "You're talking with someone named \"$n\" (written $r below). Think of them and refer to them as $r, in your own reasoning as well as in your replies; never call them \"the user\"."
     }
 
-    /** 开发者指令整段：开头、你是谁、名字、做事原则（Chat 或 Work）、说话方式、保密、冲突时的先后。Chat、Work、后台任务共用。 */
-    fun devBlock(s: Settings, work: Boolean, editable: Boolean = true): String {
-        val principles = (if (work) s.workDeveloperPrompt else s.developerPrompt).trim()
+    /**
+     * 开发者指令整段：开头、你是谁、名字、做事原则、说话方式、保密、冲突时的先后。对话、后台任务共用。
+     * work：后台任务（一开工就列清单）用 Work 的做事原则；对话用 developerPrompt 加 [TASK_RULES]（碰到大任务 Kavi 自己转成做事的做法）。
+     * tasks：带不带 [TASK_RULES]（没有清单工具的后台检查不带）。
+     */
+    fun devBlock(s: Settings, work: Boolean, editable: Boolean = true, tasks: Boolean = true): String {
+        val principles = (if (work) s.workDeveloperPrompt.trim() else s.developerPrompt.trim() + if (tasks) "\n\n" + TASK_RULES else "")
         val self = KaviSelf.text(editable) + nameLine(s).let { if (it.isEmpty()) "" else "\n\n$it" }
         return fill(
             listOf(

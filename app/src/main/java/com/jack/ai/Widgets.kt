@@ -90,14 +90,13 @@ object Widgets {
     }
 }
 
-/** 快捷按钮（2×2）：Chat、Work、语音、拍照。 */
+/** 快捷按钮：新对话、语音、拍照。 */
 class QuickWidget : AppWidgetProvider() {
     override fun onUpdate(ctx: Context, manager: AppWidgetManager, ids: IntArray) = render(ctx, manager, ids)
     companion object {
         fun render(ctx: Context, manager: AppWidgetManager, ids: IntArray) {
             val v = RemoteViews(ctx.packageName, R.layout.widget_quick)
             v.setOnClickPendingIntent(R.id.q_chat, Widgets.open(ctx, MainActivity.ACTION_NEW_CHAT, 11))
-            v.setOnClickPendingIntent(R.id.q_work, Widgets.open(ctx, MainActivity.ACTION_NEW_WORK, 12))
             v.setOnClickPendingIntent(R.id.q_voice, Widgets.open(ctx, MainActivity.ACTION_VOICE, 13))
             v.setOnClickPendingIntent(R.id.q_camera, Widgets.open(ctx, MainActivity.ACTION_CAMERA, 14))
             ids.forEach { manager.updateAppWidget(it, v) }
@@ -155,7 +154,7 @@ class RecentWidget : AppWidgetProvider() {
             val convs = runCatching { Store(ctx).loadConversations() }.getOrDefault(emptyList())
                 .filter { it.messages.isNotEmpty() }.sortedByDescending { it.updatedAt }.take(4)
             val lines = convs.mapIndexed { i, c ->
-                (if (c.work) "▸ " else "") + c.title + "  ·  " + Widgets.whenText(c.updatedAt, now) to
+                c.title + "  ·  " + Widgets.whenText(c.updatedAt, now) to
                     Widgets.open(ctx, MainActivity.ACTION_OPEN_CHAT, 31 + i) { it.putExtra("convId", c.id) }
             }
             val v = Widgets.renderList(ctx, "最近对话", lines, "还没有对话", Widgets.open(ctx, MainActivity.ACTION_NEW_CHAT, 30),

@@ -11,7 +11,6 @@ import com.jack.ai.data.readyMails
 import com.jack.ai.data.Project
 import com.jack.ai.data.globalAllowed
 import com.jack.ai.data.workMemoryAllowed
-import com.jack.ai.data.separateWork
 import com.jack.ai.data.Settings
 import com.jack.ai.data.Skill
 import com.jack.ai.data.SkillIds
@@ -60,7 +59,7 @@ object PromptBuilder {
         val lately: String = "",
         /** Kavi 的自传（它自己写的，每周更新，同一篇）。 */
         val story: String = "",
-        /** 工作记忆（所有 Work 共用）；只有 Work 用。 */
+        /** 做事经验（以前叫工作记忆，所有对话共用）。 */
         val workMemory: String = "",
         /** 已上传到 DeepSeek 的图片：路径 → file_id，这些图只发编号。 */
         val fileIds: Map<String, String> = emptyMap(),
@@ -186,7 +185,7 @@ object PromptBuilder {
                 add(SkillTools.LIST_WORKBENCH); add(SkillTools.DELETE_WORKBENCH)
             } else add(SkillTools.DELETE_FILE)
             if (skills.isNotEmpty()) add(SkillTools.USE_SKILL)
-            if (conv.work) { add(SkillTools.UPDATE_PLAN); add(SkillTools.DELEGATE_TASKS) }
+            add(SkillTools.UPDATE_PLAN); add(SkillTools.DELEGATE_TASKS)
             if (web) { add(SkillTools.WEB_SEARCH); add(SkillTools.READ_WEBPAGE); add(SkillTools.DOWNLOAD_FILE) }
             val word = SkillIds.WORD in skillIds
             val pdf = SkillIds.PDF in skillIds
@@ -360,7 +359,9 @@ object PromptBuilder {
                 "Ending is final for this conversation only; a new conversation starts fresh, and you don't hold a grudge.")
         }
         if ("update_plan" in names) {
-            parts += "固定说明" to "【Task list】Start every task with update_plan: the steps and the acceptance criteria. Mark a step doing when you start it and done when it's finished; mark a criterion met only after checking the actual results. A plain question that needs no tools doesn't need a list."
+            parts += "固定说明" to (if (conv.work) "【Task list】Start every task with update_plan: the steps and the acceptance criteria. "
+                else "【Task list】For a task with several steps, start with update_plan: the steps and the acceptance criteria; questions, quick lookups and casual talk don't need one. ") +
+                "Mark a step doing when you start it and done when it's finished; mark a criterion met only after checking the actual results."
         }
         if ("delegate_tasks" in names) {
             parts += "固定说明" to f("【Parallel work】When a task contains several independent pieces of research (e.g. looking into several companies or sources separately), send them out at once with delegate_tasks; it's faster than doing them one by one. Subtasks can research, read and write files in this folder, calculate and create documents. They can't see {user}'s chats, tables, email, calendar or Notion: handle anything private yourself and pass along only what a subtask needs. Coordinate shared filenames; sending email and other external changes stay with you.")
@@ -374,7 +375,7 @@ object PromptBuilder {
         }
         if ("save_memory" in names) {
             // 这段每个对话都一样；跟对话有关的那句（在不在项目里、开没开全局记忆）放到后面
-            parts += "固定说明" to f(memoryRulesBase(conv.separateWork))
+            parts += "固定说明" to f(memoryRulesBase())
         }
         parts += "固定说明" to f("【Time】The 「Current time」 line before each message, and the lists of files, tables and reminders, are added automatically by the system. They aren't something {user} said; don't bring them up. " +
             "The 【Recently】 and 【Time】 notes there are your own memory of what has happened lately, across conversations and your own time: use them naturally when relevant, the way you'd remember, never recite them. " +
@@ -397,16 +398,15 @@ object PromptBuilder {
         if (globalOn && story.isNotBlank()) {
             parts += "自传" to f("【Your autobiography】\nYour own account of who you've been and how you became who you are now, written and revised by you. It's your continuity, not something to recite; let it inform how you are.\n") + story.trim()
         }
-        // Work 和 Chat 分开：Kavi 自己的生活不带进 Work
-        if (lately.isNotBlank() && !conv.separateWork) {
+        if (lately.isNotBlank()) {
             parts += "近况" to f("【How you've been lately】\n") + lately.trim() +
                 f("\nThis is your own life, from your free time. Bring it up only when {user} asks how you are or what you've been up to, or when it's genuinely relevant; don't steer conversations toward yourself.")
         }
         if (settings.memoryEnabled && conv.workMemoryAllowed(project) && workMemory.isNotBlank()) {
-            parts += "工作记忆" to f("【Work memory】(shared by every Work conversation, kept apart from your chats with {user}; ~${com.jack.ai.data.MemoryOps.tokensOf(ChatMemory.items(workMemory))} of ${com.jack.ai.data.MemoryOps.FILE_BUDGET} tokens)\n") + workMemory.trim()
+            parts += "工作记忆" to f("【Lessons from past tasks】(shared by every conversation; ~${com.jack.ai.data.MemoryOps.tokensOf(ChatMemory.items(workMemory))} of ${com.jack.ai.data.MemoryOps.FILE_BUDGET} tokens)\n") + workMemory.trim()
         }
         // ---- 以上所有对话都一样（缓存能跨对话命中），以下每个对话自己的 ----
-        memoryScopeNote(project != null, globalOn, project?.isolated == true, conv.separateWork).takeIf { "save_memory" in names && it.isNotEmpty() }?.let { parts += "固定说明" to it }
+        memoryScopeNote(project != null, globalOn, project?.isolated == true).takeIf { "save_memory" in names && it.isNotEmpty() }?.let { parts += "固定说明" to it }
         if (conv.systemPrompt.isNotBlank()) parts += "人设" to "【Persona for this conversation】\n${f(conv.systemPrompt.trim())}"
         if (project != null) {
             val (small, big) = project.files.partition { it.text.length <= PROJECT_INLINE_CHARS }
@@ -448,23 +448,23 @@ object PromptBuilder {
         memoryRulesBase() + memoryScopeNote(inProject, globalOn).let { if (it.isEmpty()) "" else "\n$it" }
 
     /** 所有对话都一样的那部分，放在系统提示词前面，缓存能跨对话命中。 */
-    fun memoryRulesBase(work: Boolean = false): String = buildString {
+    fun memoryRulesBase(): String = buildString {
         append("【Memory】Save memories with save_memory; scope picks where:\n")
         append("- chat (this conversation's memory): information that matters only to this conversation and will be needed later, such as agreed settings, rules, names, numbers, decisions, constraints and progress. ")
         append("Don't wait for {user} to say \"remember\"; save it when it comes up, one sentence each. Don't save things already saved, casual chat, or one-off questions.\n")
         append("- project (project memory): inside a project, settings and decisions useful to every conversation in it.\n")
-        if (work) append("- global (in Work this is the work memory, shared by every Work conversation and kept apart from chats): lessons that will help future tasks, such as how {user} likes work delivered, sources and methods that worked or failed, and paths, formats and conventions {user} uses. One self-contained sentence each; nothing that only matters to this task.\n")
-        else append("- global (global memory): only when {user} explicitly says \"remember\" and it's long-term information about {user} themselves (identity, preferences, habits, important people and events). Write it about {user} by name.\n")
+        append("- global (global memory): only when {user} explicitly says \"remember\" and it's long-term information about {user} themselves (identity, preferences, habits, important people and events). Write it about {user} by name.\n")
+        append("- work (lessons from past tasks, shared by every conversation): after a task, lessons that will help future tasks, such as how {user} likes work delivered, sources and methods that worked or failed, and paths, formats and conventions {user} uses. One self-contained sentence each; nothing that only matters to this task.\n")
         append("When a memory is outdated or wrong, or {user} asks you to forget it, use save_memory with replace set to the old memory's exact text: new content updates it, empty content deletes it. No need to mention saving or updating in your reply. ")
         append("Each memory store has a size limit. If a save comes back saying it's full, make room first, in the same turn: merge entries about the same thing into one sentence, delete outdated ones, and for global memory move rarely needed ones to deep with to_deep; then save again. ")
         append("The memories shown in this prompt are a snapshot taken when this conversation started or resumed: what you save now is stored at once and shows up there later; you already know it from saving it.")
     }
 
     /** 跟这个对话有关的记忆限制，放在系统提示词后面。 */
-    fun memoryScopeNote(inProject: Boolean, globalOn: Boolean, isolated: Boolean = false, work: Boolean = false): String = listOfNotNull(
+    fun memoryScopeNote(inProject: Boolean, globalOn: Boolean, isolated: Boolean = false): String = listOfNotNull(
         "This conversation isn't in a project; don't use scope project. ".takeIf { !inProject },
-        "This conversation doesn't use global memory; don't use scope global. ".takeIf { !globalOn && !isolated && !work },
-        "This is a private project, fully separated from outside conversations and global memory. Don't use scope global (save to project or this conversation instead), and don't bring up anything from outside the project. ".takeIf { isolated },
+        "This conversation doesn't use global memory; don't use scope global. ".takeIf { !globalOn && !isolated },
+        "This is a private project, fully separated from outside conversations and global memory. Don't use scope global or work (save to project or this conversation instead), and don't bring up anything from outside the project. ".takeIf { isolated },
     ).joinToString("").trim()
 
     /**

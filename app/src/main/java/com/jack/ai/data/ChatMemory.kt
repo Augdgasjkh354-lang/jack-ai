@@ -24,7 +24,7 @@ object ChatMemory {
     fun projectFile(ctx: Context, projectId: String): File =
         File(Workspace.dir(ctx, "p_$projectId"), PROJECT_FILE)
 
-    /** 工作记忆：所有 Work 对话共用，和 Chat 的全局记忆不相通。 */
+    /** 做事经验（以前叫工作记忆，文件名不改）：所有对话共用，记踩过的坑、交付习惯、常用路径。 */
     fun workFile(ctx: Context): File = File(Workspace.dir(ctx, WORK_DIR), WORK_FILE)
 
     fun read(file: File): String = runCatching { if (file.exists()) file.readText() else "" }.getOrDefault("")
@@ -39,7 +39,7 @@ object ChatMemory {
     fun render(title: String, items: List<String>): String =
         if (items.isEmpty()) "" else "# $title\n\n" + items.joinToString("\n") { "- $it" } + "\n"
 
-    fun titleOf(file: File) = when (file.name) { PROJECT_FILE -> "项目记忆"; WORK_FILE -> "工作记忆"; else -> "本对话记忆" }
+    fun titleOf(file: File) = when (file.name) { PROJECT_FILE -> "项目记忆"; WORK_FILE -> "做事经验"; else -> "本对话记忆" }
 
     /** 加一条；已经有一模一样的就不重复加。返回 false 表示没加。 */
     fun add(file: File, item: String): Boolean {

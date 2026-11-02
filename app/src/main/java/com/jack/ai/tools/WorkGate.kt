@@ -16,7 +16,8 @@ import kotlinx.serialization.json.put
 import java.io.File
 
 /**
- * Work 的收尾关卡，不靠提示词自觉，靠代码看清单：
+ * 做任务的收尾关卡，不靠提示词自觉，靠代码看清单。后台任务（conv.work）一开工就要列清单；
+ * 对话里由 Kavi 自己判断，列了清单（调过 update_plan）才算在做任务、才管下面这些：
  * - 开工后第一次调别的工具时还没列清单，在工具结果后面提醒一次；
  * - 模型想收尾时：没列清单、还有没做完的步骤、验收标准没写或没核对，就推回去接着做（最多 [MAX_NUDGES] 次，免得死循环）；
  * - 连着调了 [STALL_CALLS] 次工具、清单一步没动，多半在原地绕，提醒停下重新判断；
@@ -44,8 +45,8 @@ class WorkGate(
 
     /** 加在每个工具结果后面：开工了还没列清单提醒一次；清单好久没动提醒重新判断。 */
     fun reminder(name: String): String {
-        if (!session.conv.work) return ""
         if (session.steps.isEmpty()) {
+            if (!session.conv.work) return ""
             if (reminded || name in NO_REMINDER) return ""
             reminded = true
             return "\n\n(Work mode goes step by step: write the step list and acceptance criteria with update_plan now, before going further.)"
@@ -61,7 +62,9 @@ class WorkGate(
 
     /** 模型这一轮想直接收尾：返回 null 就让它收；返回一段话就塞回去让它接着做。 */
     suspend fun beforeFinish(answer: String): String? {
-        if (!session.conv.work || session.maxRounds == 0) return null
+        if (session.maxRounds == 0) return null
+        // 对话里没列清单的：是问答或小事，不拦
+        if (!session.conv.work && session.steps.isEmpty()) return null
         // 一个工具都没调过的，是问答不是任务，不拦
         if (session.calls.get() == 0 && session.steps.isEmpty()) return null
         if (nudges < MAX_NUDGES) {

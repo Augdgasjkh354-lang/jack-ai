@@ -76,6 +76,18 @@ class WorkStrengthTest {
     }
 
     @Test
+    fun chatOnlyGatesOnceKaviMakesAPlan() = runBlocking {
+        // Chat 和 Work 合并后：对话里没列清单就是问答或小事，不提醒、不拦收尾；列了清单才按清单收尾
+        val chat = ToolSession(BackgroundToolHost(ctx), Settings(apiKey = "k"), conv.copy(work = false), null, emptyList(), ui)
+        val gate = WorkGate(chat)
+        chat.calls.incrementAndGet()
+        assertEquals("", gate.reminder("web_search"))
+        assertNull(gate.beforeFinish("好的"))
+        chat.execute("update_plan", plan(3))
+        assertTrue(gate.beforeFinish("做完了")!!.contains("plan isn't complete"))
+    }
+
+    @Test
     fun stallIsNoticedWhenThePlanDoesntMove() = runBlocking {
         val s = session()
         val gate = WorkGate(s)

@@ -68,9 +68,9 @@ fun FilesSheet(vm: ChatViewModel, conv: Conversation, inProject: Boolean, onDism
                     Text("添加")
                 }
             }
-            // Work：这次对话里 AI 做出来的文件放最上面
-            val made = if (conv.work) conv.messages.flatMap { it.files }.reversed().distinctBy { it.path }
-                .filter { File(it.path).exists() } else emptyList()
+            // 这次对话里 AI 做出来的文件放最上面
+            val made = conv.messages.flatMap { it.files }.reversed().distinctBy { it.path }
+                .filter { File(it.path).exists() }
             if (made.isNotEmpty()) {
                 Text("做出来的（${made.size}）", style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 12.dp, bottom = 6.dp))

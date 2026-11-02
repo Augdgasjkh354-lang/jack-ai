@@ -92,12 +92,12 @@ data class Conversation(
     /** 这个对话带不带全局记忆；参不参与每晚的「做梦」整理。 */
     val useGlobalMemory: Boolean = true,
     val inDream: Boolean = true,
-    /** Work 模式：工具调用不限轮数。Chat 模式最多 20 轮。 */
-    val work: Boolean = false,
     /**
-     * 后台任务都借 Work 的做法跑（清单、分身），但原来不是 Work 的对话（Chat 里设的定时任务、自由时间）照旧带记忆和近况。
-     * 只在后台任务里临时设，不存盘。
+     * 一开工就必须列清单、按验收标准收尾（见 WorkGate）：只有后台任务跑的时候临时设。
+     * 以前是用户选的 Work 模式；Chat 和 Work 合并后，用户的对话都是 false（读盘时旧的 Work 对话也改掉），要不要列清单由 Kavi 自己判断。
      */
+    val work: Boolean = false,
+    /** Kavi 自己在后台跑的对话（定时任务、自由时间）：不做聊天后的记忆回看。只在后台任务里临时设，不存盘。 */
     @kotlinx.serialization.Transient
     val ownLife: Boolean = false,
     val messages: List<ChatMessage> = emptyList(),
@@ -140,17 +140,14 @@ data class Project(
     val isolated: Boolean = false,
 )
 
+/** 这个对话能不能用全局记忆和日记：自己关了、在隐私项目里，都不能。 */
+fun Conversation.globalAllowed(project: Project?): Boolean = useGlobalMemory && project?.isolated != true
+
 /**
- * 这个对话能不能用全局记忆和日记：自己关了、在隐私项目里、是 Work，都不能。
- * Work 和 Chat 分开：Work 不带记忆、日记、自传、近况，它的记录也不进经历流和做梦；它有自己的工作记忆（[ChatMemory.workFile]）。
+ * 这个对话能不能用「做事经验」（以前叫工作记忆，[ChatMemory.workFile]，所有对话共用：踩过的坑、交付习惯、常用路径）。
+ * 隐私项目里不用（它和外面完全隔开）。
  */
-fun Conversation.globalAllowed(project: Project?): Boolean = useGlobalMemory && !separateWork && project?.isolated != true
-
-/** 和 Chat 分开的 Work：用户开的 Work 对话（后台借 Work 做法跑的 Chat 任务不算，见 [Conversation.ownLife]）。 */
-val Conversation.separateWork: Boolean get() = work && !ownLife
-
-/** 这个对话能不能用工作记忆：Work 才有；隐私项目里的 Work 也不用（它和外面完全隔开）。 */
-fun Conversation.workMemoryAllowed(project: Project?): Boolean = separateWork && project?.isolated != true
+fun Conversation.workMemoryAllowed(project: Project?): Boolean = project?.isolated != true
 
 /** 这个对话在不在隐私项目里。 */
 fun Conversation.isolatedIn(projects: List<Project>): Boolean = projectId != null && projects.any { it.id == projectId && it.isolated }
@@ -214,7 +211,7 @@ enum class ThinkLevel(val label: String, val effort: String?) {
 
     /**
      * 自动档：简单问题用低档（1017 版低档已经够用，耗的 token 少一半以上），
-     * 编程、计算、分析、长问题、带文件的、Work 任务用高档。
+     * 编程、计算、分析、长问题、带文件的、后台任务用高档。
      */
     fun resolve(text: String, work: Boolean, hasFiles: Boolean): ThinkLevel = when {
         this != AUTO -> this
@@ -242,9 +239,9 @@ data class Settings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val presets: List<Preset> = DEFAULT_PRESETS,
     val developerPrompt: String = DEFAULT_DEV_PROMPT,
-    /** Work 模式的底层提示词（Chat 用 developerPrompt）。 */
+    /** 后台任务的底层提示词（对话用 developerPrompt + TASK_RULES）。 */
     val workDeveloperPrompt: String = DEFAULT_WORK_PROMPT,
-    /** 当前用的是哪个模式的模型和思考设置；另一个模式的存在下面。 */
+    /** 以前 Chat、Work 各记一套模型和思考强度；合并后只用 model、thinking，这几个只为读旧设置时迁移。 */
     val activeWork: Boolean = false,
     val chatModel: String = "",
     val chatThinking: ThinkLevel? = null,
@@ -630,6 +627,19 @@ const val WORK_RULES = """Work mode: you are completing a task on {user}'s behal
 5. If the same operation fails twice, change approach, or stop and explain where you're stuck. Never say "let me..." without doing it.
 6. End with a few lines: what you did, which files you produced (by name), what didn't get done and why, and anything {user} needs to confirm or decide. No pleasantries, no recap of the process.
 7. Irreversible actions only when the task explicitly calls for them; if unsure, ask first."""
+
+/**
+ * Chat 和 Work 合并后，对话里的做事原则：平常照常聊，碰到要好几步才能做完的事，Kavi 自己转成 Work 的做法
+ * （列清单和验收标准、做完核对、收尾交代清楚），语气跟着收一收。
+ */
+const val TASK_RULES = """Tasks: most messages are questions or conversation; just answer them. When {user} asks you to get something done that takes several steps (producing or editing files, research across several sources, a multi-step job likely to need more than three or four tool calls), switch into task mode:
+
+1. Start with update_plan: break the goal into steps (usually 3 to 8) and write 2 to 6 checkable acceptance criteria (e.g. "5 suppliers found", "every row has a price and a source link", "the Excel opens with no empty rows"). Update it each time you start or finish a step; {user} sees each finished step crossed off. Mark a criterion met only after checking it against the actual results. Once you have a plan you can't finish while steps are open or criteria are unchecked: if something truly can't be done, mark the step skipped or the criterion failed and explain why.
+2. Do the work yourself with tools rather than leaving it to {user}. Stop to ask only when key information is missing and you can't reasonably assume it; otherwise state the assumption and carry on.
+3. Deliver what {user} meant: no features, pages or sections nobody asked for, and don't quietly swap the goal for an easier one. When editing existing files, change just the part that needs changing and keep everything {user} said to keep.
+4. Check once before delivering: re-check numbers, confirm files were actually generated, cite only links you actually found or read in this task (the system checks), and go through {user}'s hard requirements one by one. If a step's result is thin (too few sources, missing data), change the search terms, source or method instead of settling. If the same operation fails twice, change approach or say where you're stuck.
+5. End with a few lines: what you did, which files you produced (by name), what didn't get done and why, and anything {user} needs to decide. No recap of the process.
+6. While on a task, stay on it: keep the voice low-key, skip the jokes and tangents. Irreversible actions only when the task explicitly calls for them."""
 
 /** 默认的说话方式：用户在设置里写的「回复风格」和 Kavi 的「说话方式」都能盖过它。 */
 const val TALK_PROMPT = """Default way of talking ({user}'s reply-style setting and your "voice" section override this):

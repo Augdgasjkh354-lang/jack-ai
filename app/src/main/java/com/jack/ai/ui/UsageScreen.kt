@@ -138,19 +138,19 @@ fun UsageScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         val wl = state.settings.workCostLimit
-                        Text("Work 单次任务上限" + if (wl > 0) " ${yuan(wl)}" else "：不限",
+                        Text("单次回答花费上限" + if (wl > 0) " ${yuan(wl)}" else "：不限",
                             style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                         TextButton(onClick = { editWorkLimit = true }) { Text("修改") }
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text("Work 交付前复核", style = MaterialTheme.typography.bodyMedium)
+                            Text("任务交付前复核", style = MaterialTheme.typography.bodyMedium)
                             Text("做完后另请一次模型，只看结果、按验收标准查一遍，不合格打回去改。每个任务多花一次请求",
                                 style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                         }
                         Switch(checked = state.settings.workReview, onCheckedChange = { on -> vm.updateSettings { it.copy(workReview = on) } })
                     }
-                    Text("Work 开工前确认清单", style = MaterialTheme.typography.bodyMedium)
+                    Text("任务开工前确认清单", style = MaterialTheme.typography.bodyMedium)
                     Text("Kavi 列好步骤和验收标准后先给你看，你点「开始」才动手。大任务：6 步以上，或 Kavi 觉得要求含糊、花费大时",
                         style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -297,7 +297,7 @@ fun UsageScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
         var text by remember { mutableStateOf(state.settings.workCostLimit.takeIf { it > 0 }?.toString().orEmpty()) }
         AlertDialog(
             onDismissRequest = { editWorkLimit = false },
-            title = { Text("Work 单次任务上限") },
+            title = { Text("单次回答花费上限") },
             text = {
                 OutlinedTextField(
                     value = text, onValueChange = { text = it.filter { ch -> ch.isDigit() || ch == '.' } },

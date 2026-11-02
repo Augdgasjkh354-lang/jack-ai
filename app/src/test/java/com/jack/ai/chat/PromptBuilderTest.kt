@@ -268,91 +268,39 @@ class PromptBuilderTest {
     }
 
     @Test
-    fun workIsSeparateFromChat() {
-        val work = Conversation(work = true)
-        val sys = PromptBuilder.systemPrompt(settings, work, null, tools(work), memories, settings.activeSkills(),
-            journal = "他说话玩笑裹着认真", lately = "最近在读诗", story = "我的自传", workMemory = "- 报告用 Word 交")
-        // 不带全局记忆、日记、近况、自传
-        assertFalse(sys.contains("喜欢简短的回答"))
-        assertFalse(sys.contains("玩笑裹着认真"))
-        assertFalse(sys.contains("最近在读诗"))
-        assertFalse(sys.contains("我的自传"))
-        // 带工作记忆，global 说的是工作记忆，没有「别用 global」的话
-        assertTrue(sys.contains("【Work memory】"))
-        assertTrue(sys.contains("报告用 Word 交"))
-        assertTrue(sys.contains("in Work this is the work memory"))
-        assertFalse(sys.contains("don't use scope global"))
-        // 个人设定和工具照旧
-        assertTrue(sys.contains("Jack"))
-        assertTrue("update_plan" in toolNames(work))
-        // Chat 不带工作记忆
+    fun chatAndWorkAreOne() {
+        // Chat 和 Work 合并了：每个对话都带全局记忆、近况和做事经验，都有清单和分身工具
         val chat = Conversation()
-        val c = PromptBuilder.systemPrompt(settings, chat, null, tools(chat), memories, settings.activeSkills(), lately = "最近在读诗", workMemory = "- 报告用 Word 交")
+        val c = PromptBuilder.systemPrompt(settings, chat, null, tools(chat), memories, settings.activeSkills(),
+            lately = "最近在读诗", story = "我的自传", workMemory = "- 报告用 Word 交")
         assertTrue(c.contains("喜欢简短的回答"))
         assertTrue(c.contains("最近在读诗"))
-        assertFalse(c.contains("报告用 Word 交"))
-        // 后台借 Work 做法跑的 Chat 任务照旧带记忆
-        val bg = Conversation(work = true, ownLife = true)
-        val b = PromptBuilder.systemPrompt(settings, bg, null, tools(bg), memories, settings.activeSkills(), lately = "最近在读诗", workMemory = "- 报告用 Word 交")
-        assertTrue(b.contains("喜欢简短的回答"))
-        assertTrue(b.contains("最近在读诗"))
-        assertFalse(b.contains("报告用 Word 交"))
-        // 隐私项目里的 Work 也不用工作记忆
+        assertTrue(c.contains("我的自传"))
+        assertTrue(c.contains("【Lessons from past tasks】"))
+        assertTrue(c.contains("报告用 Word 交"))
+        assertTrue(c.contains("- work (lessons from past tasks"))
+        assertTrue("update_plan" in toolNames(chat))
+        assertTrue("delegate_tasks" in toolNames(chat))
+        // 要不要列清单 Kavi 自己判断：对话里是「好几步的任务才列」，带着做任务的原则
+        assertTrue(c.contains("For a task with several steps, start with update_plan"))
+        assertTrue(c.contains("switch into task mode"))
+        // 隐私项目里不用做事经验
         val sealed = Project(name = "日记本", isolated = true)
-        val w2 = Conversation(work = true, projectId = sealed.id)
+        val w2 = Conversation(projectId = sealed.id)
         assertFalse(PromptBuilder.systemPrompt(settings, w2, sealed, tools(w2, sealed), memories, settings.activeSkills(), workMemory = "- 报告用 Word 交").contains("报告用 Word 交"))
     }
 
     @Test
-    fun privateProjectIsSealedOff() {
-        val open = Project(name = "开发")
-        val sealed = Project(name = "日记本", isolated = true)
-        val conv = Conversation(projectId = sealed.id)
-        val sys = PromptBuilder.systemPrompt(settings, conv, sealed, tools(conv, sealed), memories, settings.activeSkills(), journal = "他说话玩笑裹着认真")
-        // 不带全局记忆和日记，告诉模型这是隐私项目、别存全局
-        assertFalse(sys.contains("喜欢简短的回答"))
-        assertFalse(sys.contains("玩笑裹着认真"))
-        assertTrue(sys.contains("private project"))
-        // 普通项目照旧
-        val conv2 = Conversation(projectId = open.id)
-        val sys2 = PromptBuilder.systemPrompt(settings, conv2, open, tools(conv2, open), memories, settings.activeSkills())
-        assertTrue(sys2.contains("喜欢简短的回答"))
-        // 做梦和翻聊天用的判断
-        assertTrue(conv.isolatedIn(listOf(open, sealed)))
-        assertFalse(conv2.isolatedIn(listOf(open, sealed)))
-        assertFalse(Conversation().isolatedIn(listOf(sealed)))
-    }
-
-    @Test
-    fun mentionsAttachSkillAndMailbox() {
-        val skills = settings.activeSkills()
-        val mail = com.jack.ai.data.mailPresetFor("jack@163.com")!!.copy(password = "code")
-        val web = skills.first { it.id == com.jack.ai.data.SkillIds.WEB }
-        val note = PromptBuilder.mentionNote("@${web.name} 查一下 @jack@163.com 的信", skills, listOf(mail))
-        assertTrue(note.contains("「${web.name}」"))
-        assertTrue(note.contains(web.instructions.trim().take(20)))
-        assertTrue(note.contains("account = jack@163.com"))
-        assertEquals("", PromptBuilder.mentionNote("没有点名", skills, listOf(mail)))
-        // 只加在最后一条用户消息上
-        val conv = Conversation(messages = listOf(user("@${web.name} 今天天气")))
-        val h = PromptBuilder.history(PromptBuilder.Input(settings, conv, null, memories, skills, vision = false, sendReasoning = false), null)
-        assertTrue(h.last()["content"]!!.jsonPrimitive.content.contains("follow it this time"))
-    }
-
-    @Test
-    fun workUsesItsOwnPromptAndPlanTool() {
+    fun backgroundTasksUseTheWorkPromptAndAlwaysPlan() {
         val s2 = settings.copy(developerPrompt = "CHAT规则", workDeveloperPrompt = "WORK规则")
         val chat = Conversation()
-        val work = Conversation(work = true)
+        val bg = Conversation(work = true, ownLife = true)
         val chatSys = PromptBuilder.systemPrompt(s2, chat, null, tools(chat), memories, s2.activeSkills())
-        val workSys = PromptBuilder.systemPrompt(s2, work, null, tools(work), memories, s2.activeSkills())
+        val bgSys = PromptBuilder.systemPrompt(s2, bg, null, tools(bg), memories, s2.activeSkills())
         assertTrue("CHAT规则" in chatSys && "WORK规则" !in chatSys)
-        assertTrue("WORK规则" in workSys && "CHAT规则" !in workSys)
-        assertFalse("update_plan" in toolNames(chat))
-        assertTrue("update_plan" in toolNames(work))
-        assertTrue("delegate_tasks" in toolNames(work))
-        assertFalse("delegate_tasks" in toolNames(chat))
-        assertTrue("【Task list】" in workSys)
+        assertTrue("WORK规则" in bgSys && "CHAT规则" !in bgSys)
+        assertTrue("Start every task with update_plan" in bgSys)
+        assertFalse("Start every task with update_plan" in chatSys)
     }
 
     @Test

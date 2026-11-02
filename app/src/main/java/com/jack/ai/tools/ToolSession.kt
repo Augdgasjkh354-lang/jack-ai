@@ -37,8 +37,7 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 
 /** 工具要改 App 里的数据时找它（由 ChatViewModel 提供）。 */
-/** Chat 模式一次回答最多调用几轮工具。 */
-const val CHAT_MAX_ROUNDS = 50
+/** 一次回答最多调用几轮工具。 */
 const val WORK_MAX_ROUNDS = 200
 
 interface ToolHost {
@@ -101,8 +100,8 @@ class ToolSession(
     val wsDir: File = Workspace.dir(host.app, Workspace.key(conv))
     val wsCache = File(wsDir, ".cache")
 
-    /** 最多调用工具：Chat 50 次，Work 200 次。 */
-    var maxRounds = if (conv.work) WORK_MAX_ROUNDS else CHAT_MAX_ROUNDS
+    /** 最多调用工具 200 次（Chat 和 Work 合并了，每个对话都可能接长任务）。 */
+    var maxRounds = WORK_MAX_ROUNDS
     /** 用户在不在（后台任务里是 false）：不在的时候 Kavi 不能改自己。 */
     var interactive = true
     /** 当前模型能不能看图（浏览器截图要用）。 */
@@ -350,8 +349,8 @@ class ToolSession(
             name in FILE_TOOLS && FILE_TOOLS[name] in skillIds -> makeFile(name, args)
             name == "create_chart" && SkillIds.CALC in skillIds -> makeChart(args)
             name == "create_diagram" && SkillIds.CALC in skillIds -> makeDiagram(args)
-            name == "update_plan" && conv.work -> updatePlan(args)
-            name == "delegate_tasks" && conv.work -> delegateTasks(args)
+            name == "update_plan" -> updatePlan(args)
+            name == "delegate_tasks" -> delegateTasks(args)
             name == "read_file" -> readFile(args)
             name == "write_file" -> writeFile(args)
             name == "edit_file" -> editFile(args)

@@ -254,8 +254,8 @@ fun ChatScreen(
                     actions = {
                         if (conv != null && conv.messages.isNotEmpty()) {
                             IconButton(onClick = { showFiles = true }) {
-                                // Work：文件夹图标上标出做出来的文件数
-                                val made = if (conv.work) conv.messages.flatMap { it.files }.distinctBy { it.path }.size else 0
+                                // 文件夹图标上标出做出来的文件数
+                                val made = conv.messages.flatMap { it.files }.distinctBy { it.path }.size
                                 if (made > 0) {
                                     androidx.compose.material3.BadgedBox(badge = { androidx.compose.material3.Badge { Text("$made") } }) {
                                         Icon(AppIcons.Folder, contentDescription = "交付物", Modifier.size(22.dp))
@@ -485,7 +485,6 @@ private fun EmptyState(
             .verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        ModeSwitch(work = conv?.work ?: state.draftWork, onChange = vm::setWork)
         Spacer(Modifier.height(36.dp))
         LogoMark(64.dp)
         Spacer(Modifier.height(22.dp))
@@ -505,14 +504,16 @@ private fun EmptyState(
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(32.dp))
-        if (conv?.work ?: state.draftWork) {
-            WorkTemplates(vm, state.settings.workTemplates, onSuggest)
-        } else SUGGESTIONS.chunked(2).forEach { row ->
+        SUGGESTIONS.chunked(2).forEach { row ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 row.forEach { sg -> SuggestionCard(sg.icon, Color(sg.tint), sg.title, Modifier.weight(1f)) { onSuggest(sg.prompt) } }
             }
             Spacer(Modifier.height(12.dp))
         }
+        // Chat 和 Work 合并了：常做的任务模板也放在空白页，在建议下面
+        Text("常做的任务", style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant,
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 10.dp))
+        WorkTemplates(vm, state.settings.workTemplates, onSuggest)
     }
 }
 
@@ -637,13 +638,14 @@ private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolea
                                 onRegenerate = vm::regenerate,
                                 onDelete = { vm.deleteFrom(msg.id).let { if (it > 0) onDeleted(it) } },
                                 onReview = vm::reviewLast,
-                                onContinue = if (conv.work && isLast && !msg.truncated && vm.canContinue(msg)) ({ vm.continueWork() }) else null,
+                                onContinue = if (isLast && !msg.truncated && vm.canContinue(msg)) ({ vm.continueWork() }) else null,
                                 onContinueWriting = vm::continueWriting,
                                 onReport = { note -> vm.reportIssue(msg.id, note) },
                                 onFixApp = { text -> vm.send(text) },
-                                work = conv.work,
+                                // 列了清单的（在做任务）工具步骤按时间线显示
+                                work = msg.plan.isNotEmpty(),
                                 stepsCollapsed = summaryCollapsed,
-                                onRestyle = if (conv.work) null else { edited ->
+                                onRestyle = if (msg.plan.isNotEmpty()) null else { edited ->
                                     if (streaming) Toast.makeText(ctx, "等这条答完再交给 Kavi", Toast.LENGTH_SHORT).show()
                                     else vm.send(restyleRequest(msg.content, edited))
                                 },
@@ -1239,33 +1241,7 @@ private fun withMention(text: String, name: String): String {
 }
 
 /** 新对话顶部的 Chat / Work 切换。Work 不限工具轮数。 */
-@Composable
-private fun ModeSwitch(work: Boolean, onChange: (Boolean) -> Unit) {
-    val colors = MaterialTheme.colorScheme
-    Surface(shape = CircleShape, color = colors.surfaceVariant) {
-        Row(Modifier.padding(3.dp)) {
-            listOf(false to "Chat", true to "Work").forEach { (w, label) ->
-                val on = w == work
-                Surface(
-                    onClick = { onChange(w) },
-                    shape = CircleShape,
-                    color = if (on) colors.surface else Color.Transparent,
-                    shadowElevation = if (on) 1.dp else 0.dp,
-                ) {
-                    Text(
-                        label,
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = if (on) FontWeight.SemiBold else null,
-                        color = if (on) colors.onSurface else colors.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 26.dp, vertical = 9.dp),
-                    )
-                }
-            }
-        }
-    }
-}
-
-/** Work 空白页的模板：点一下填进输入框，长按修改或删除，最后一格新建。 */
+/** 空白页的任务模板：点一下填进输入框，长按修改或删除，最后一格新建。 */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun WorkTemplates(vm: ChatViewModel, templates: List<com.jack.ai.data.Preset>, onUse: (String) -> Unit) {

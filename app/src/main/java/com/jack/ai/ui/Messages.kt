@@ -803,7 +803,7 @@ private fun SearchBox(searches: List<SearchRecord>, busy: Boolean = false) {
 
 private fun isOther(label: String) = listOf("读取", "翻阅", "记住", "使用技能", "生成", "运行", "设置", "查看", "删除", "写入", "修改", "设闹钟", "关闹钟", "读邮件", "发邮件", "已发邮件", "标为", "添加日程", "打开日历").any { label.startsWith(it) }
 
-/** Work 模式的任务清单：做完的打勾变灰，正在做的整行高亮、转圈，没做的空心圆；右上角是进度和花费。 */
+/** 任务清单（Kavi 列了清单时）：做完的打勾变灰，正在做的整行高亮、转圈，没做的空心圆；右上角是进度和花费。 */
 @Composable
 private fun PlanCard(items: List<com.jack.ai.data.PlanItem>, cost: Double = 0.0, criteria: List<com.jack.ai.data.PlanItem> = emptyList()) {
     val colors = MaterialTheme.colorScheme

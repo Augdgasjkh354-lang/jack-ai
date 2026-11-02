@@ -75,8 +75,6 @@ data class UiState(
     val currentId: String? = null,
     /** 还没发出去的新对话属于哪个项目。 */
     val draftProjectId: String? = null,
-    /** 新对话开始前选的模式：false = Chat，true = Work。 */
-    val draftWork: Boolean = false,
     val settings: Settings = Settings(),
     val pending: List<Attachment> = emptyList(),
     val importing: Boolean = false,
@@ -194,35 +192,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun newChat(projectId: String? = null) {
         // 不打断别的对话里正在写的回答：它在后台写完，回去就能看到
         _state.update { it.copy(currentId = null, draftProjectId = projectId, pending = emptyList()) }
-        applyMode(_state.value.draftWork)
-    }
-
-    /** 新对话开始前切换 Chat / Work。 */
-    fun setWork(on: Boolean) {
-        _state.update { it.copy(draftWork = on) }
-        _state.value.current?.takeIf { it.messages.isEmpty() }?.let { c -> updateConvQuiet(c.id) { it.copy(work = on) } }
-        applyMode(on)
-    }
-
-    /**
-     * Chat 和 Work 各记一套模型和思考强度：切模式时把当前的存进旧模式，换上新模式的。
-     * 新模式的模型用不了（比如没填 DeepSeek Key）就保持现在的模型。
-     */
-    private fun applyMode(work: Boolean) {
-        if (_state.value.settings.activeWork == work) return
-        updateSettings { st ->
-            val saved = if (st.activeWork) st.copy(workModel = st.model, workThinking = st.thinking)
-                else st.copy(chatModel = st.model, chatThinking = st.thinking)
-            val model = if (work) saved.workModel else saved.chatModel.ifBlank { st.model }
-            val thinking = if (work) saved.workThinking else saved.chatThinking ?: st.thinking
-            val usable = saved.endpoint(model)?.apiKey?.isNotBlank() == true
-            saved.copy(activeWork = work, model = if (usable) model else st.model, thinking = thinking)
-        }
     }
 
     fun select(id: String) {
         _state.update { it.copy(currentId = id, pending = emptyList()) }
-        _state.value.current?.let { applyMode(it.work) }
     }
 
     fun delete(id: String) {
@@ -296,7 +269,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
         var conv = _state.value.current
         if (conv == null) {
-            conv = Conversation(projectId = _state.value.draftProjectId, work = _state.value.draftWork)
+            conv = Conversation(projectId = _state.value.draftProjectId)
             val c = conv
             _state.update { it.copy(conversations = listOf(c) + it.conversations, currentId = c.id) }
         }
@@ -352,7 +325,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val convId = conv.id
         patchMessage(convId, m.id) { it.copy(truncated = false) }
         launchReply(convId) { done ->
-            WorkService.start(getApplication(), convId, conv.title, conv.work)
+            WorkService.start(getApplication(), convId, conv.title, false)
             try {
                 val (chatMemory, projectMemory) = knowledge.memoryTexts(conv)
                 val input = PromptBuilder.Input(settings, conv, _state.value.project(conv.projectId),
@@ -387,7 +360,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             } finally {
                 done()
                 persist()
-                WorkService.finish(getApplication(), convId, conv.title, "接着写完了", conv.work)
+                WorkService.finish(getApplication(), convId, conv.title, "接着写完了", false)
             }
         }
     }
@@ -568,7 +541,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val model = modelOverride ?: settings.model
         val lastUser = conv.messages.lastOrNull { it.role == "user" }
         val thinking = (if (modelOverride != null && settings.thinking == ThinkLevel.OFF) ThinkLevel.HIGH else settings.thinking)
-            .resolve(lastUser?.content.orEmpty(), conv.work, lastUser?.attachments?.isNotEmpty() == true)
+            .resolve(lastUser?.content.orEmpty(), false, lastUser?.attachments?.isNotEmpty() == true)
         val reply = ChatMessage(role = "assistant", model = model, appVersion = com.jack.ai.data.appVersion(getApplication()))
         updateConv(convId) { it.copy(messages = it.messages + reply) }
 
@@ -594,7 +567,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 journal = Dreamer.recentJournals(_state.value.dreams),
                 story = com.jack.ai.data.SelfStory.bio(getApplication()).text,
                 lately = com.jack.ai.data.FreeTime.latelyNote(getApplication()),
-                workMemory = if (conv.work) knowledge.workMemoryText() else "",
+                workMemory = if (conv.workMemoryAllowed(project)) knowledge.workMemoryText() else "",
                 summaryUntilId = conv.summaryUntilId, usedAt = 0,
             )
         }
@@ -622,9 +595,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 runCatching { com.jack.ai.data.FreePool.probe(getApplication(), settings) }
             }
             promptInput = promptInput.copy(contextNote = withContext(Dispatchers.IO) {
-                // Work 里才能分头做：有免费模型时说一声
-                (if (conv.work) com.jack.ai.data.freeCandidates(com.jack.ai.data.FreePool.load(getApplication()), settings, 0).size.takeIf { it > 0 }
-                    ?.let { "【Free sub-agents】$it free models available for delegate_tasks (no cost).\n" }.orEmpty() else "") +
+                // 能分头做：有免费模型时说一声
+                com.jack.ai.data.freeCandidates(com.jack.ai.data.FreePool.load(getApplication()), settings, 0).size.takeIf { it > 0 }
+                    ?.let { "【Free sub-agents】$it free models available for delegate_tasks (no cost).\n" }.orEmpty() +
                 runCatching { com.jack.ai.tools.ContextNote.build(getApplication(), store, conv, skills.map { it.id }.toSet()) }.getOrDefault("") +
                     // Kavi 的连续性：最近的经历、上次见用户是什么时候（每轮变，放这里不影响缓存）
                     runCatching { com.jack.ai.data.Timeline.noteFor(getApplication(), settings, _state.value.conversations, _state.value.projects, conv) }.getOrDefault("") +
@@ -643,11 +616,14 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 persist()
             }
             var filesDropped = false
-            // Work：开前台服务，切到后台也接着干；花费到上限先问一声
-            val work = conv.work
+            // Chat 和 Work 合并了：每个对话都能接长任务（花费到上限先问一声、断了自动接着做、压掉旧的大段工具结果）。
+            // 要不要列清单、复核由 Kavi 自己判断（调了 update_plan 就算在做任务，见 WorkGate）
+            val work = true
+            /** Kavi 列了清单，算在做任务：通知上写「正在工作」「完成了」。 */
+            var tasked = false
             val workTitle = conv.title
-            // 不管 Chat 还是 Work，回答期间都开前台服务，切到后台也接着跑
-            WorkService.start(getApplication(), convId, workTitle, work)
+            // 回答期间开前台服务，切到后台也接着跑
+            WorkService.start(getApplication(), convId, workTitle, false)
             /** 几个对话同时在答时，弹窗上写明是哪个对话在问。 */
             suspend fun ask(title: String, body: String, action: String) =
                 core.confirm(title, (if (_state.value.streamingIds.size > 1) "对话「$workTitle」：\n" else "") + body, action)
@@ -657,21 +633,22 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             val session = ToolSession(toolHost, settings, conv, project, skills, object : ToolUi {
                 override fun started(label: String) {
                     patchMessage(convId, reply.id) { it.copy(searches = it.searches + SearchRecord(label, pending = true, at = System.currentTimeMillis())) }
-                    WorkService.progress(getApplication(), convId, workTitle, label, work)
+                    WorkService.progress(getApplication(), convId, workTitle, label, tasked)
                 }
 
                 override fun plan(items: List<com.jack.ai.data.PlanItem>, criteria: List<com.jack.ai.data.PlanItem>) {
                     patchMessage(convId, reply.id) { it.copy(plan = items, criteria = criteria) }
+                    tasked = items.isNotEmpty()
                     val doing = items.firstOrNull { it.status == "doing" }?.text
                     WorkService.progress(getApplication(), convId, workTitle,
-                        "${items.count { it.status == "done" || it.status == "skipped" }}/${items.size}" + (doing?.let { " · $it" } ?: ""), work)
+                        "${items.count { it.status == "done" || it.status == "skipped" }}/${items.size}" + (doing?.let { " · $it" } ?: ""), true)
                 }
 
                 override fun notice(text: String) = patchMessage(convId, reply.id) { it.copy(notices = it.notices + text) }
 
                 override fun endConversation(reason: String) = updateConv(convId) { it.copy(closedReason = reason) }
 
-                override fun progress(text: String) = WorkService.progress(getApplication(), convId, workTitle, text, work)
+                override fun progress(text: String) = WorkService.progress(getApplication(), convId, workTitle, text, tasked)
 
                 override fun finished(label: String, record: SearchRecord) = patchMessage(convId, reply.id) { m ->
                     m.copy(searches = m.searches.map { if (it.query == label && it.pending) record.copy(at = it.at) else it })
@@ -689,7 +666,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             session.modelName = com.jack.ai.data.modelLabel(model)
             session.unlocked.addAll(unlockedStart)
             // 开工前确认清单：只在新任务里问（接着做、复核时不问）
-            if (work && extraUser == null) session.planConfirm = { steps, criteria ->
+            if (extraUser == null) session.planConfirm = { steps, criteria ->
                 if (!MainActivity.visible) com.jack.ai.data.Routines.notify(getApplication(), "work-ask-$convId",
                     "需要你确认：$workTitle", "Kavi 列好了清单，等你点开始", openChat = convId)
                 ask(
@@ -705,7 +682,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 com.jack.ai.chat.LocalBrain.isHard(getApplication(), settings, lastUser?.content.orEmpty()) == true) ThinkLevel.HIGH else thinking
             val agent = Agent({ msgs, t -> client.stream(ep, msgs, level, settings.temperature, t) }, sendReasoning = thinkingOn, splitNotes = true)
             // Work 的收尾关卡：清单没做完不让收尾；开着「交付前复核」再另起一次请求按验收标准查一遍
-            val gate = com.jack.ai.tools.WorkGate(session, review = if (work && settings.workReview) {
+            val gate = com.jack.ai.tools.WorkGate(session, review = if (settings.workReview) {
                 val reviewEp = settings.backgroundEndpoint() ?: ep
                 val request = conv.messages.lastOrNull { it.role == "user" }?.content.orEmpty()
                 com.jack.ai.tools.WorkGate.reviewer(session, DeepSeekClient { e, p, h, c -> core.recordSpend(convId, e, p, h, c) }, reviewEp, request, reply.createdAt)
@@ -907,7 +884,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 run {
                     val m = _state.value.conversations.firstOrNull { it.id == convId }?.messages?.firstOrNull { it.id == reply.id }
                     val result = m?.error ?: m?.content?.takeLast(200)?.trim().orEmpty().ifBlank { "已停止" }
-                    WorkService.finish(getApplication(), convId, workTitle, result, work)
+                    WorkService.finish(getApplication(), convId, workTitle, result, tasked)
                 }
                 compression.maybeAutoCompress(convId)
                 if (failure == null) maybeReviewMemory(convId)
@@ -918,7 +895,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val reviewing = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
     /**
-     * 每聊几轮在后台回看一下，有值得长期记住的就记下（见 MemoryReview）。Chat 记进全局记忆，Work 记进工作记忆；
+     * 每聊几轮在后台回看一下，有值得长期记住的就记下（见 MemoryReview）。平常聊天记进全局记忆，做任务（列过清单）记进做事经验；
      * 关了记忆、关了「参与做梦」、隐私项目、Kavi 自己的后台对话不回看。出错就算了，下次再看。
      */
     private fun maybeReviewMemory(convId: String) {
@@ -926,13 +903,15 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val conv = st.conversations.firstOrNull { it.id == convId } ?: return
         val settings = st.settings
         val project = st.project(conv.projectId)
-        val work = conv.workMemoryAllowed(project)
-        val chat = !conv.work && conv.globalAllowed(project)
-        if (!settings.memoryEnabled || !conv.inDream || conv.ownLife || !(work || chat)) return
         if (conv.id == com.jack.ai.data.INBOX_ID || conv.id == com.jack.ai.data.Reader.CONV_ID) return
-        if (!com.jack.ai.data.MemoryReview.due(conv) || !reviewing.add(convId)) return
-        val ep = settings.backgroundEndpoint() ?: run { reviewing.remove(convId); return }
+        if (!com.jack.ai.data.MemoryReview.due(conv)) return
         val unseen = com.jack.ai.data.MemoryReview.unseen(conv)
+        // 这几轮里 Kavi 列过清单（在做任务）：回看记进做事经验；平常聊天记进全局记忆
+        val work = unseen.any { it.plan.isNotEmpty() } && conv.workMemoryAllowed(project)
+        val chat = !work && conv.globalAllowed(project)
+        if (!settings.memoryEnabled || !conv.inDream || conv.ownLife || !(work || chat)) return
+        if (!reviewing.add(convId)) return
+        val ep = settings.backgroundEndpoint() ?: run { reviewing.remove(convId); return }
         val app = getApplication<Application>()
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -1162,7 +1141,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val (chatMemory, projectMemory) = knowledge.memoryTexts(c)
         return PromptBuilder.contextBreakdown(st.settings, c, st.project(c.projectId), memories, st.settings.activeSkills(),
             chatMemory, projectMemory, Dreamer.recentJournals(st.dreams), com.jack.ai.data.FreeTime.latelyNote(getApplication()),
-            com.jack.ai.data.SelfStory.bio(getApplication()).text, if (c.work) knowledge.workMemoryText() else "")
+            com.jack.ai.data.SelfStory.bio(getApplication()).text, if (c.workMemoryAllowed(st.project(c.projectId))) knowledge.workMemoryText() else "")
     }
 
     private fun updateConv(id: String, transform: (Conversation) -> Conversation) = core.updateConv(id, transform)

@@ -9,7 +9,7 @@ import kotlinx.serialization.json.jsonObject
 /**
  * 聊着聊着就回看一下（借鉴 Hermes Agent 每轮之后的后台复盘）：每 [EVERY] 轮，用后台模型看看刚聊的几轮，
  * 有没有值得长期记住的（用户的偏好、纠正 Kavi 的话、关于他的稳定事实、哪条旧记忆说错了），有就记下。
- * Chat 记进全局记忆，Work 记进工作记忆。夜里做梦整理全天的，这个补上白天的空档：纠正过的话当场记住。
+ * 平常聊天记进全局记忆，做任务时记进做事经验。夜里做梦整理全天的，这个补上白天的空档：纠正过的话当场记住。
  * 大多数时候什么都不改。写满了就不写（做梦时会腾地方），一次最多 [MAX_OPS] 条。
  */
 object MemoryReview {
@@ -111,7 +111,7 @@ object MemoryReview {
 
     /** 给用户看的那条说明（挂在回答下面）。 */
     fun notice(done: List<String>, work: Boolean): String =
-        (if (work) "顺手更新了工作记忆" else "顺手更新了记忆") + "\n" + done.joinToString("\n")
+        (if (work) "顺手更新了做事经验" else "顺手更新了记忆") + "\n" + done.joinToString("\n")
 
     const val NOTICE_PREFIX = "顺手更新了"
 

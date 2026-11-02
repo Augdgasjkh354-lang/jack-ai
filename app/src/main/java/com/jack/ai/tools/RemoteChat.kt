@@ -56,9 +56,8 @@ object RemoteChat {
         val steps = java.util.concurrent.CopyOnWriteArrayList<String>()
         val notices = java.util.concurrent.CopyOnWriteArrayList<String>()
         val made = java.util.concurrent.CopyOnWriteArrayList<File>()
-        // 远程问用 Chat 的模型和思考设置
-        val model = if (s.activeWork) s.chatModel.ifBlank { s.model } else s.model
-        val level = if (s.activeWork) s.chatThinking ?: s.thinking else s.thinking
+        val model = s.model
+        val level = s.thinking
         val ep = s.endpoint(model)?.takeIf { it.apiKey.isNotBlank() }
         if (ep == null) {
             client.reply(m.id, "手机上的 Kavi 还没配好模型的 Key，到手机的 设置 里填好再来。", emptyList(), emptyList(), "error")

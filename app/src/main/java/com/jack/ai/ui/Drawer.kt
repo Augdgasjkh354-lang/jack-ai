@@ -426,16 +426,6 @@ fun ChatItem(
                 Box(Modifier.padding(start = 8.dp).size(7.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Color(0xFF3B82F6)))
                 Text("回答中", style = MaterialTheme.typography.labelSmall, color = Color(0xFF3B82F6), modifier = Modifier.padding(start = 4.dp))
             }
-            if (c.work) {
-                Text(
-                    "Work",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = colors.primary,
-                    modifier = Modifier.padding(start = 6.dp)
-                        .border(1.dp, colors.primary.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
-                        .padding(horizontal = 5.dp, vertical = 1.dp),
-                )
-            }
             if (showMore) {
                 IconButton(onClick = { menu = true }, modifier = Modifier.size(36.dp)) {
                     Icon(Icons.Default.MoreVert, "更多", Modifier.size(18.dp), tint = colors.outline)

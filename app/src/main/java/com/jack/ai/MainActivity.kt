@@ -135,10 +135,11 @@ class MainActivity : FragmentActivity() {
         }
         when (intent?.action) {
             ACTION_NEW_CHAT -> {
-                stack.clear(); vm.newChat(); vm.setWork(false)
+                stack.clear(); vm.newChat()
                 intent.getStringExtra("prefill")?.let { vm.receiveText(it) }
             }
-            ACTION_NEW_WORK -> { stack.clear(); vm.newChat(); vm.setWork(true) }
+            // Chat 和 Work 合并了：以前钉在桌面上的「新 Work」也开新对话
+            ACTION_NEW_WORK -> { stack.clear(); vm.newChat() }
             // 悬浮球或长按电源键叫出来：带上当前屏幕开个新对话
             com.jack.ai.a11y.ScreenAsk.ACTION -> {
                 stack.clear()

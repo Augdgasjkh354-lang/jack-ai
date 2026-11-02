@@ -25,9 +25,8 @@ private fun ToolSession.findOld(query: String) = Compression.searchHistory(Compr
 private suspend fun ToolSession.findChats(query: String): String {
     // 隐私项目和外面互不相通：在隐私项目里只翻这个项目的对话；在外面翻不到任何隐私项目的对话
     val projects = host.store.loadProjects()
-    // Chat 和 Work 也互不相通：各自只翻各自的
-    val all = (if (project?.isolated == true) host.conversations().filter { it.projectId == project.id }
-        else host.conversations().filterNot { it.isolatedIn(projects) }).filter { it.separateWork == conv.separateWork }
+    val all = if (project?.isolated == true) host.conversations().filter { it.projectId == project.id }
+        else host.conversations().filterNot { it.isolatedIn(projects) }
     return withContext(Dispatchers.Default) { Compression.searchAllChats(all, query, conv.id) }
 }
 
@@ -85,7 +84,7 @@ internal suspend fun ToolSession.searchMyData(args: JsonObject): String {
 
 /**
  * 存记忆：本对话、项目、全局三种。不该存全局的（这个对话关了全局记忆）就存进本对话。
- * Work 里的 global 是工作记忆（所有 Work 共用，和 Chat 的全局记忆不相通）。
+ * work 是做事经验（所有对话共用）。
  * 填了 replace 就是改旧的那条，content 留空就是删掉它。
  */
 internal suspend fun ToolSession.remember(args: JsonObject): String {
@@ -95,11 +94,12 @@ internal suspend fun ToolSession.remember(args: JsonObject): String {
     val globalOn = settings.memoryEnabled && conv.globalAllowed(project)
     val workOn = settings.memoryEnabled && conv.workMemoryAllowed(project)
     val scope = when (val s = args["scope"].text()) {
-        "global" -> if (globalOn) s else if (workOn) "work" else "chat"
+        "global" -> if (globalOn) s else "chat"
+        "work" -> if (workOn) s else "chat"
         "project" -> if (project != null) s else "chat"
         else -> "chat"
     }
-    val where = when (scope) { "global" -> "全局"; "work" -> "工作"; "project" -> "项目"; else -> "本对话" }
+    val where = when (scope) { "global" -> "全局"; "work" -> "做事经验"; "project" -> "项目"; else -> "本对话" }
     val label = when {
         toDeep && scope == "global" && old.isNotEmpty() -> "放到深处：$old"
         old.isEmpty() -> "记住（$where）：$text"

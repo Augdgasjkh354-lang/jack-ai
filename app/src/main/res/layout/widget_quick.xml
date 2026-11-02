@@ -5,15 +5,9 @@
     <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:orientation="horizontal">
         <LinearLayout android:id="@+id/q_chat" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
             android:layout_margin="4dp" android:background="@drawable/widget_tile_bg" android:gravity="center" android:orientation="vertical">
-            <ImageView android:layout_width="26dp" android:layout_height="26dp" android:src="@drawable/ic_w_chat" android:contentDescription="Chat" />
+            <ImageView android:layout_width="26dp" android:layout_height="26dp" android:src="@drawable/ic_w_chat" android:contentDescription="新对话" />
             <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp"
-                android:text="Chat" android:textColor="@color/widget_on_chip" android:textSize="13sp" />
-        </LinearLayout>
-        <LinearLayout android:id="@+id/q_work" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
-            android:layout_margin="4dp" android:background="@drawable/widget_tile_bg" android:gravity="center" android:orientation="vertical">
-            <ImageView android:layout_width="26dp" android:layout_height="26dp" android:src="@drawable/ic_w_work" android:contentDescription="Work" />
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp"
-                android:text="Work" android:textColor="@color/widget_on_chip" android:textSize="13sp" />
+                android:text="新对话" android:textColor="@color/widget_on_chip" android:textSize="13sp" />
         </LinearLayout>
     </LinearLayout>
     <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:orientation="horizontal">

@@ -235,7 +235,7 @@ private fun RoutineCard(r: Routine, onClick: () -> Unit, onToggle: (Boolean) -> 
                 Spacer(Modifier.size(10.dp))
                 Column(Modifier.weight(1f).padding(top = 2.dp)) {
                     Text(
-                        r.describe() + (if (r.then.isNotBlank()) " · 满足后接着做" else "") + (if (r.work) " · Work" else "") + (if (r.offPeak) " · 避开高峰" else ""),
+                        r.describe() + (if (r.then.isNotBlank()) " · 满足后接着做" else "") + (if (r.work) " · 做事模式" else "") + (if (r.offPeak) " · 避开高峰" else ""),
                         style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
                     )
                     Text(r.title, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
@@ -299,7 +299,7 @@ private fun RoutineDialog(r: Routine, isNew: Boolean, onDismiss: () -> Unit, onS
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text("Work 模式")
+                            Text("做事模式")
                             Text("能用全部技能（邮箱、生成文件…），不限步数", style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }

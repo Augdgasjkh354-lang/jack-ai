@@ -81,7 +81,8 @@ class Store(context: Context) {
         atomicWrite(name, json.encodeToString(ListSerializer(ser), list))
     }
 
-    fun loadConversations() = load("conversations.json", Conversation.serializer())
+    /** Chat 和 Work 合并了：旧的 Work 对话读出来就当普通对话。 */
+    fun loadConversations() = load("conversations.json", Conversation.serializer()).map { if (it.work) it.copy(work = false) else it }
     fun saveConversations(list: List<Conversation>) = save("conversations.json", Conversation.serializer(), list)
     /** 远程连接的对话（从站点来的）：单独存一份，带着工具调用过程，下一轮接着用；App 里看到的是收件箱合进来的副本。 */
     fun loadRemoteConvs() = load("remote_convs.json", Conversation.serializer())
@@ -347,14 +348,18 @@ class Store(context: Context) {
         val thinking = prefs.getString("thinking", null)
             ?.let { runCatching { ThinkLevel.valueOf(it) }.getOrNull() }
             ?: if (oldModel == "deepseek-chat") ThinkLevel.OFF else ThinkLevel.AUTO
+        // Chat 和 Work 合并成一套模型：上次停在 Work 时，当前的是 Work 的那套，换回 Chat 的（下次存设置时 activeWork 就写成 false）
+        val wasWork = prefs.getBoolean("activeWork", false)
+        val chatModel = (prefs.getString("chatModel", "") ?: "").let { if (proToFlash && it == MODEL_PRO) MODEL_FLASH else it }
+        val chatThinking = prefs.getString("chatThinking", null)?.let { runCatching { ThinkLevel.valueOf(it) }.getOrNull() }
         return Settings(
             apiKey = prefs.getString("apiKey", "") ?: "",
             tavilyKey = prefs.getString("tavilyKey", "") ?: "",
             exaKey = prefs.getString("exaKey", "") ?: "",
             webSearch = prefs.getBoolean("webSearch2", true),
             baseUrl = prefs.getString("baseUrl", DEFAULT_BASE_URL) ?: DEFAULT_BASE_URL,
-            model = model,
-            thinking = thinking,
+            model = if (wasWork && chatModel.isNotBlank()) chatModel else model,
+            thinking = if (wasWork) chatThinking ?: thinking else thinking,
             // 温度和压缩门槛不再给调（滑条容易误碰，压缩被拖到 50k 都没发现）：固定用默认值，以前存的不读
             temperature = 1.0f,
             themeMode = runCatching { ThemeMode.valueOf(prefs.getString("themeMode", "SYSTEM")!!) }
@@ -366,9 +371,9 @@ class Store(context: Context) {
                 // 自检模板总是用最新版（工具变了它也要跟着变）；用户删掉过也补回来
                 list.filterNot { it.id == SELF_CHECK.id } + SELF_CHECK
             },
-            activeWork = prefs.getBoolean("activeWork", false),
-            chatModel = (prefs.getString("chatModel", "") ?: "").let { if (proToFlash && it == MODEL_PRO) MODEL_FLASH else it },
-            chatThinking = prefs.getString("chatThinking", null)?.let { runCatching { ThinkLevel.valueOf(it) }.getOrNull() },
+            activeWork = false,
+            chatModel = chatModel,
+            chatThinking = chatThinking,
             workModel = (prefs.getString("workModel", MODEL_FLASH) ?: MODEL_FLASH).let { if (proToFlash && it == MODEL_PRO) MODEL_FLASH else it },
             workThinking = prefs.getString("workThinking", null)?.let { runCatching { ThinkLevel.valueOf(it) }.getOrNull() } ?: ThinkLevel.HIGH,
             // 默认值从 1 元改成了 5 元，换个键名，旧的默认值不沿用
