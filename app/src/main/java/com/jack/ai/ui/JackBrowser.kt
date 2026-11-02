@@ -1513,11 +1513,11 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
      * 存一个网页要下载的文件到 target（对话文件夹或手机「下载」）：普通网址带 Cookie 下（能断点续传），
      * 网页生成的（blob:）从网页里读，data: 直接解。progress 报进度文字。
      */
-    suspend fun store(p: BrowserDownload.Pending, target: (String, String) -> Downloads.Target, progress: (String) -> Unit = {}): Downloads.Saved {
+    internal suspend fun storeDirect(p: BrowserDownload.Pending, target: (String, String) -> Downloads.Target, progress: (String) -> Unit = {}, control: BrowserDownload.Control? = null, privateDownload: Boolean = false, requestCookie: String? = null, requestRoute: String = route, onBytes: (Long, Long) -> Unit = { _, _ -> }): Downloads.Saved {
         var finish: (() -> Downloads.Saved)? = null
         fun sink(name: String, mime: String) = target(name, mime).also { finish = it.finish }.sink
         if (p.url.startsWith("blob:", true)) {
-            val (mime0, bytes) = blobBytes(p) { got, total -> progress(progressText(p.name, got, total)) }
+            val (mime0, bytes) = blobBytes(p) { got, total -> onBytes(got, total); progress(progressText(p.name, got, total)) }
             val mime = mime0.ifBlank { p.mime }.ifBlank { "application/octet-stream" }
             val name = p.name.ifBlank { "下载" }.let { n -> if ('.' !in n) BrowserDownload.extFor(mime)?.let { "$n.$it" } ?: n else n }
             withContext(Dispatchers.IO) {
@@ -1525,14 +1525,12 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
                 try { s.open(false).use { it.write(bytes) } } catch (e: Exception) { s.discard(); throw e }
             }
         } else {
-            val t = tabById(p.tab) ?: tab
-            val cookie = if (BrowserPages.isWeb(p.url)) cookieFor(p.url, t) else null
             withContext(Dispatchers.IO) {
-                BrowserDownload.download(p, cookie, route, BrowserDownload.HARD_LIMIT, ::sink,
-                    progress = { got, total -> progress(progressText(p.name, got, total)) })
+                BrowserDownload.download(p, requestCookie, requestRoute, BrowserDownload.HARD_LIMIT, ::sink,
+                    progress = { got, total -> onBytes(got, total); progress(progressText(p.name, got, total)) }, control = control)
             }
         }
-        return withContext(Dispatchers.IO) { finish!!().also { s -> if (::app.isInitialized) Downloads.log(app, s, p.url) } }
+        return withContext(Dispatchers.IO) { finish!!().also { s -> if (::app.isInitialized && !privateDownload) Downloads.log(app, s, p.url) } }
     }
 
     /**
@@ -1540,31 +1538,19 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
      * 更老的系统存到 App 自己的下载目录。在后台下，进度和结果显示在浏览器页。
      */
     fun saveToPhone(ctx: Context, p: BrowserDownload.Pending) {
-        val app = ctx.applicationContext
+        val context = ctx.applicationContext
         pending = null
-        downloading = progressText(p.name, 0, p.size)
-        scope.launch {
-            try {
-                saved = store(p, { name, mime -> Downloads.toPhone(app, name, mime) }) { downloading = it }
-            } catch (e: Exception) {
-                notice = "「${p.name}」没下载成功：" + (e.message ?: e.javaClass.simpleName) + Net.hint()
-            } finally {
-                downloading = null
-            }
-        }
+        com.jack.ai.data.BrowserDownloads.enqueue(context, p, { name, mime -> Downloads.toPhone(context, name, mime) })
     }
 
-    /** Kavi 确认下载：存进对话文件夹（同名加编号）或手机「下载/Kavi」，返回存好的文件。 */
+    /** Kavi 的确认流程照旧，确认后也进入同一个队列。 */
+    suspend fun store(p: BrowserDownload.Pending, target: (String, String) -> Downloads.Target, progress: (String) -> Unit = {}): Downloads.Saved =
+        withContext(Dispatchers.Main) { com.jack.ai.data.BrowserDownloads.enqueue(app, p, target, progress) }.result.await()
+
     suspend fun saveTo(ctx: Context, dir: java.io.File?, p: BrowserDownload.Pending, progress: (String) -> Unit = {}): Downloads.Saved {
-        try {
-            downloading = progressText(p.name, 0, p.size)
-            return store(p, { name, mime -> if (dir != null) Downloads.toDir(ctx, dir, name, mime) else Downloads.toPhone(ctx, name, mime) }) {
-                downloading = it; progress(it)
-            }
-        } finally {
-            downloading = null
-            if (pending == p) pending = null
-        }
+        val context = ctx.applicationContext
+        if (pending == p) pending = null
+        return store(p, { name, mime -> if (dir != null) Downloads.toDir(context, dir, name, mime) else Downloads.toPhone(context, name, mime) }, progress)
     }
 
     /** 当前页面上能批量下的东西：images 图片、files 附件链接（PDF、文档、压缩包……）、all 都要。返回 (共几个, 前 max 个的 (网址, 名字))。 */

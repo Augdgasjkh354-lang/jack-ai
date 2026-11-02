@@ -122,6 +122,7 @@ class BrowserActivity : ComponentActivity() {
     /** 选网页字号。 */
     private var textPick by mutableStateOf(false)
     /** 历史记录页开着。 */
+    private var showDownloads by mutableStateOf(false)
     private var showLater by mutableStateOf(false)
     private var searchPick by mutableStateOf(false)
     private var showHistory by mutableStateOf(false)
@@ -369,6 +370,8 @@ class BrowserActivity : ComponentActivity() {
                 b.fullscreen != null -> exitFullscreen()
                 finding != null -> closeFind()
                 showTabs -> showTabs = false
+                showDownloads -> showDownloads = false
+                showLater -> showLater = false
                 showHistory -> showHistory = false
                 else -> {
                     val w = b.webView(this)
@@ -441,6 +444,7 @@ class BrowserActivity : ComponentActivity() {
                         DropdownMenuItem(text = { Text("存成 PDF") }, enabled = has, onClick = { menu = false; savePdf() })
                         DropdownMenuItem(text = { Text("页内查找") }, enabled = has, onClick = { menu = false; finding = "" })
                         DropdownMenuItem(text = { Text("搜索引擎") }, onClick = { menu = false; searchPick = true })
+                        DropdownMenuItem(text = { Text("下载管理") }, onClick = { menu = false; showDownloads = true })
                         DropdownMenuItem(text = { Text("历史记录") }, onClick = { menu = false; showHistory = true })
                         DropdownMenuItem(text = { Text("网页字号：${b.textZoom}%") }, onClick = { menu = false; textPick = true })
                         DropdownMenuItem(text = { Text(if (b.marks.any { it.url == b.address }) "移出书签" else "加入书签") }, enabled = has, onClick = {
@@ -519,7 +523,7 @@ class BrowserActivity : ComponentActivity() {
             if (b.loading < 100) LinearProgressIndicator(progress = { b.loading / 100f }, Modifier.fillMaxWidth().height(2.dp))
             finding?.let { FindBar(it) }
             b.tab.translating?.let { msg ->
-                Text(msg, Modifier.fillMaxWidth().background(colors.secondaryContainer).padding(horizontal = 12.dp, vertical = 6.dp),
+                Text(msg, Modifier.fillMaxWidth().clickable { showDownloads = true }.background(colors.secondaryContainer).padding(horizontal = 12.dp, vertical = 6.dp),
                     style = MaterialTheme.typography.labelSmall, color = colors.onSecondaryContainer)
             }
             b.error?.takeIf { !b.pageFailed }?.let { msg ->
@@ -563,7 +567,7 @@ class BrowserActivity : ComponentActivity() {
                 }
             }
             b.downloading?.let { msg ->
-                Text(msg, Modifier.fillMaxWidth().background(colors.secondaryContainer).padding(horizontal = 12.dp, vertical = 6.dp),
+                Text(msg, Modifier.fillMaxWidth().clickable { showDownloads = true }.background(colors.secondaryContainer).padding(horizontal = 12.dp, vertical = 6.dp),
                     style = MaterialTheme.typography.labelSmall, color = colors.onSecondaryContainer, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             if (b.picking) PickBar()
@@ -604,6 +608,7 @@ class BrowserActivity : ComponentActivity() {
             }
         }
         if (showTabs) Box(Modifier.fillMaxSize().safeDrawingPadding()) { TabsPanel() }
+        if (showDownloads && b.userViewing) Box(Modifier.fillMaxSize().safeDrawingPadding()) { BrowserDownloadsPanel { showDownloads = false } }
         if (showLater && b.userViewing) Box(Modifier.fillMaxSize().safeDrawingPadding()) { LaterPanel() }
         LaunchedEffect(b.pageFailed, b.address) {
             if (b.pageFailed && b.userViewing && !b.tab.incognito) b.offlineLater(b.address)?.let { reader = it; b.notice = "网络打不开，显示已保存的正文" }

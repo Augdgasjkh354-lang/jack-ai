@@ -157,13 +157,25 @@ object BrowserDownload {
     /** 网址是网页（HTML）不是文件时抛这个，调用方据此告诉模型换办法。 */
     class PageException(val url: String) : Exception("这个网址打开是网页，不是文件")
 
+    /** 暂停时保留去处、偏移和校验标识，取消时由队列删文件。 */
+    class Control {
+        @Volatile var interrupted = false
+        @Volatile var call: okhttp3.Call? = null
+        var offset = 0L
+        var total = -1L
+        var validator: String? = null
+        var restart: () -> Unit = {}
+        fun interrupt() { interrupted = true; call?.cancel() }
+    }
+    class Interrupted : Exception()
+
     /**
      * 下载一个文件，断了从断的地方接着下（网站支持的话，最多接 3 次；不支持就从头再来一次）。
      * name 不为空就用它，否则按网站给的名字起。rejectPage：拿到的是网页就停下（抛 PageException）。
      * sink(文件名, 类型) 在拿到第一个回应后才调，只调一次。
      */
     fun download(req: Pending, cookie: String?, route: String, limit: Long, sink: (String, String) -> Sink,
-                 rejectPage: Boolean = false, progress: (Long, Long) -> Unit = { _, _ -> }): Result {
+                 rejectPage: Boolean = false, progress: (Long, Long) -> Unit = { _, _ -> }, control: Control? = null): Result {
         if (req.url.startsWith("data:", true)) {
             val d = decodeData(req.url) ?: throw DownloadException("这个 data: 地址解不开")
             if (d.second.size > limit) throw DownloadException("文件有 ${sizeText(d.second.size.toLong())}，超过了 ${sizeText(limit)} 的上限")
@@ -179,14 +191,15 @@ object BrowserDownload {
         var out: Sink? = null
         var name = ""
         var mime = ""
-        var got = 0L
-        var total = -1L
+        var got = control?.offset ?: 0L
+        var total = control?.total ?: -1L
         // 续传时用来确认文件没变（网站给了才有）
-        var validator: String? = null
+        var validator: String? = control?.validator
         var resumes = 0
         var restarted = false
         while (true) {
             val r = Request.Builder().url(req.url)
+                .header("Accept-Encoding", "identity")
                 .header("User-Agent", req.userAgent.ifBlank { "Mozilla/5.0" })
                 .apply {
                     if (!cookie.isNullOrBlank()) header("Cookie", cookie)
@@ -194,7 +207,11 @@ object BrowserDownload {
                     if (got > 0) { header("Range", "bytes=$got-"); validator?.let { header("If-Range", it) } }
                 }.build()
             try {
-                client(route).newCall(r).execute().use { resp ->
+                if (control?.interrupted == true) throw Interrupted()
+                val call = client(route).newCall(r)
+                control?.call = call
+                if (control?.interrupted == true) { call.cancel(); throw Interrupted() }
+                call.execute().use { resp ->
                     if (!resp.isSuccessful) throw DownloadException("网站拒绝了下载（${resp.code}）" + if (resp.code == 403 || resp.code == 401) "，可能要先在浏览器里登录" else "")
                     val body = resp.body ?: throw IOException("没有内容")
                     val partial = got > 0 && resp.code == 206
@@ -208,22 +225,26 @@ object BrowserDownload {
                     }
                     validator = resp.header("ETag")?.takeUnless { it.startsWith("W/") } ?: resp.header("Last-Modified")
                     if (!partial) {
+                        if (got > 0) control?.restart?.invoke()
                         got = 0
                         total = body.contentLength()
                     } else if (total < 0) {
                         total = resp.header("Content-Range")?.substringAfter('/')?.toLongOrNull() ?: -1
                     }
+                    control?.let { it.offset = got; it.total = total; it.validator = validator }
                     if (total > limit) throw DownloadException("文件有 ${sizeText(total)}，超过了 ${sizeText(limit)} 的上限")
                     var lastReport = got
                     body.byteStream().use { input ->
                         out!!.open(partial).use { o ->
                             val buf = ByteArray(64 * 1024)
                             while (true) {
+                                if (control?.interrupted == true) throw Interrupted()
                                 val n = input.read(buf)
                                 if (n < 0) break
                                 got += n
                                 if (got > limit) throw DownloadException("下载超过了 ${sizeText(limit)} 的上限，已停下")
                                 o.write(buf, 0, n)
+                                control?.offset = got
                                 if (got - lastReport > 256 * 1024) { lastReport = got; progress(got, total) }
                             }
                         }
@@ -233,7 +254,10 @@ object BrowserDownload {
                     progress(got, total)
                     return Result(name, mime, got)
                 }
+            } catch (e: Interrupted) {
+                throw e
             } catch (e: IOException) {
+                if (control?.interrupted == true) throw Interrupted()
                 // 还没开始写就断了，或者已经接过 3 次：从头再来一次，再不行就算了
                 if (got > 0 && resumes < 3) { resumes++; continue }
                 if (!restarted) { restarted = true; got = 0; continue }

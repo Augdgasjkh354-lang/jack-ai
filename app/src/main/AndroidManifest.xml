@@ -81,6 +81,7 @@
             </intent-filter>
         </activity>
         <!-- 万能收件箱：分享菜单里的「存进 Kavi 收件箱」，进来后自动归档，不用再按发送 -->
+        <service android:name=".BrowserDownloadService" android:exported="false" android:foregroundServiceType="dataSync" />
         <service android:name=".BrowserPlaybackService" android:exported="false" android:foregroundServiceType="mediaPlayback">
             <intent-filter><action android:name="android.intent.action.MEDIA_BUTTON" /></intent-filter>
         </service>

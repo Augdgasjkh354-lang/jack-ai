@@ -146,6 +146,7 @@ class MainActivity : FragmentActivity() {
                 vm.askScreen(intent.getStringExtra("app").orEmpty(), intent.getStringExtra("text"), intent.getStringExtra("shot"))
             }
             ACTION_CAMERA -> { stack.clear(); vm.newChat(); vm.requestCamera() }
+            ACTION_DOWNLOADS -> { stack.clear(); stack.add(Screen.Downloads) }
             ACTION_OPEN_CHAT -> { stack.clear(); vm.mergeInbox(intent.getStringExtra("convId")) }
             ACTION_VOICE -> { stack.clear(); vm.newChat(); vm.requestVoice() }
             ACTION_RECORD -> { stack.clear(); if (RecordService.current == null) { vm.newChat(); vm.requestRecord() } }
@@ -330,6 +331,7 @@ class MainActivity : FragmentActivity() {
         const val ACTION_RECORD_STOP = "com.jack.ai.RECORD_STOP"
         const val ACTION_NEW_WORK = "com.jack.ai.NEW_WORK"
         const val ACTION_CAMERA = "com.jack.ai.CAMERA"
+        const val ACTION_DOWNLOADS = "com.jack.ai.DOWNLOADS"
         const val ACTION_OPEN_CHAT = "com.jack.ai.OPEN_CHAT"
     }
 }
