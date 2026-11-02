@@ -8,11 +8,15 @@
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="sharedpref" path="settings.xml" />
+        <exclude domain="sharedpref" path="builtin_helper.xml" />
+        <exclude domain="sharedpref" path="builtin_shell.xml" />
         <exclude domain="root" path="app_webview/" />
         <exclude domain="file" path="runlogs.json" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="sharedpref" path="settings.xml" />
+        <exclude domain="sharedpref" path="builtin_helper.xml" />
+        <exclude domain="sharedpref" path="builtin_shell.xml" />
         <exclude domain="root" path="app_webview/" />
         <exclude domain="file" path="runlogs.json" />
     </device-transfer>

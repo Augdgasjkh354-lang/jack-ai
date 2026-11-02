@@ -2,6 +2,8 @@
 <!-- Android 11 及以下的同一套规则，见 data_extraction_rules.xml -->
 <full-backup-content>
     <exclude domain="sharedpref" path="settings.xml" />
+        <exclude domain="sharedpref" path="builtin_helper.xml" />
+        <exclude domain="sharedpref" path="builtin_shell.xml" />
     <exclude domain="root" path="app_webview/" />
     <exclude domain="file" path="runlogs.json" />
 </full-backup-content>

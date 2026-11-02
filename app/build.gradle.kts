@@ -55,6 +55,7 @@ android {
     }
     buildFeatures {
         compose = true
+        aidl = true
     }
     // 界面测试（Robolectric）要用到 Android 资源
     testOptions {
@@ -73,6 +74,9 @@ android {
         resources.excludes += listOf("/META-INF/LICENSE.md", "/META-INF/NOTICE.md", "/META-INF/LICENSE.txt", "/META-INF/NOTICE.txt")
     }
 }
+
+// Mika 的无线调试、辅助进程和虚拟屏幕源码，保留原作者命名空间。
+android.sourceSets["main"].java.srcDir("src/main/mika")
 
 chaquopy {
     defaultConfig {

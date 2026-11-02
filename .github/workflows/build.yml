@@ -2,7 +2,7 @@ name: 打包 APK
 
 on:
   push:
-    branches: [main]
+    branches: [main, codex/mika-background-display]
   workflow_dispatch:
 
 permissions:
@@ -126,6 +126,7 @@ jobs:
           path: Kavi-*.apk
 
       - name: Publish release
+        if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.VERSION }}

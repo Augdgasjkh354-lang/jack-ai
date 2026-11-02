@@ -54,6 +54,7 @@ fun PhoneControlSection(vm: ChatViewModel, settings: Settings) {
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        BackgroundPhoneSection(vm, settings)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("无障碍服务")

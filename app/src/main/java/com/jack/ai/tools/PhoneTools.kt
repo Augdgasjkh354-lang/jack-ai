@@ -21,11 +21,16 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
     val action = args["action"].text().trim()
     val allowed = settings.phoneApps
     if (allowed.isEmpty()) return "用户还没勾 Kavi 能操作的 App。请用户到 设置 → 操作其他 App 里勾上要用的 App（涉及钱的勾不了）。"
-    val svc = KaviAccessibility.instance
+    val accessibility = KaviAccessibility.instance
         ?: return if (KaviAccessibility.enabled(app)) "无障碍服务开着但还没连上（可能刚被系统关掉又重开），过几秒再试一次；还不行请用户到 设置 → 操作其他 App 关掉再打开。"
         else "无障碍服务没开，Kavi 碰不到别的 App。请用户到 设置 → 操作其他 App 点「去打开」（安卓 13 以上要先在应用信息里「允许受限制的设置」）。"
     // 存流程、读流程不用碰屏幕
     if (action == "flow" || action == "save_flow") return phoneFlow(action, args)
+    // 列 App 不建虚拟屏，其余操作在这一轮固定到同一个操作端口。
+    val svc = try {
+        (if (action == "apps") com.jack.ai.a11y.PhoneControl(accessibility, null) else claimPhone(accessibility)).also { it.ready() }
+    } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+    catch (e: Exception) { return "手机操作未开始：${ToolSession.errorText(e)}" }
     // 手机锁着（多半是定时任务在后台跑）：推送请用户解锁，等两分钟
     if (locked()) {
         if (interactive) return "手机锁着屏，Kavi 没法操作。请用户解锁后再说一声。"
@@ -184,7 +189,10 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
                 svc.back()
                 after("已返回。")
             }
-            "home" -> { svc.home(); phoneSeen = null; delay(500); "已回到桌面。" }
+            "home" -> {
+                if (svc.background != null) "后台屏幕没有手机桌面。要换 App 请用 open；不要操作主屏。"
+                else { svc.home(); phoneSeen = null; delay(500); "已回到桌面。" }
+            }
             "wait" -> {
                 val want = args["text"].text().trim()
                 val secs = args["seconds"].text().toFloatOrNull()?.coerceIn(0.5f, 15f) ?: if (want.isNotEmpty()) 10f else 2f

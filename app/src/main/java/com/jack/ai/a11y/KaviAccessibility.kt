@@ -72,6 +72,7 @@ class KaviAccessibility : AccessibilityService() {
         fun othersInFront(ctx: Context): Boolean = instance?.foreground()?.let { it != ctx.packageName } == true
     }
 
+    private val displayEvents = java.util.concurrent.ConcurrentHashMap<Int, Long>()
     private val main = Handler(Looper.getMainLooper())
     private val wm by lazy { getSystemService(WINDOW_SERVICE) as WindowManager }
     private var bar: View? = null
@@ -96,6 +97,13 @@ class KaviAccessibility : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         lastEventAt = System.currentTimeMillis()
+        if (event != null && Build.VERSION.SDK_INT >= 30) {
+            val display = if (Build.VERSION.SDK_INT >= 33) event.displayId else {
+                val all = windowsOnAllDisplays
+                (0 until all.size()).firstOrNull { i -> all.valueAt(i).any { it.id == event.windowId } }?.let { all.keyAt(it) }
+            }
+            display?.let { displayEvents[it] = lastEventAt }
+        }
         if (teaching && event != null) record(event)
     }
 
@@ -187,13 +195,24 @@ class KaviAccessibility : AccessibilityService() {
     // ---------- 读 ----------
 
     /** 前台 App 的包名。 */
-    fun foreground(): String? = runCatching { rootInActiveWindow?.packageName?.toString() }.getOrNull()
+    fun foreground(displayId: Int = Display.DEFAULT_DISPLAY): String? =
+        runCatching { rootOn(displayId)?.packageName?.toString() }.getOrNull()
+
+    /** 后台操作只读指定的屏；读不到时绝不退回主屏。 */
+    private fun rootOn(displayId: Int): AccessibilityNodeInfo? {
+        if (displayId == Display.DEFAULT_DISPLAY) return rootInActiveWindow
+        if (Build.VERSION.SDK_INT < 30) return null
+        return windowsOnAllDisplays[displayId].orEmpty()
+            .filter { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION }
+            .sortedByDescending { it.layer }
+            .firstNotNullOfOrNull { it.root }
+    }
 
     fun appLabel(pkg: String): String = runCatching { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg)
 
     /** 把前台窗口的控件树拷出来（最多两千个控件）。 */
-    fun snapshot(): Pair<String, UiNode>? {
-        val root = rootInActiveWindow ?: return null
+    fun snapshot(displayId: Int = Display.DEFAULT_DISPLAY): Pair<String, UiNode>? {
+        val root = rootOn(displayId) ?: return null
         val pkg = root.packageName?.toString() ?: return null
         var count = 0
         val r = Rect()
@@ -219,8 +238,8 @@ class KaviAccessibility : AccessibilityService() {
     private fun placeholder() = UiNode()
 
     /** 照路径在现在的控件树里找回那个控件；对不上返回 null。 */
-    private fun find(path: List<Int>): AccessibilityNodeInfo? {
-        var n = rootInActiveWindow ?: return null
+    private fun find(path: List<Int>, displayId: Int): AccessibilityNodeInfo? {
+        var n = rootOn(displayId) ?: return null
         for (i in path) n = (if (i < n.childCount) n.getChild(i) else null) ?: return null
         return n
     }
@@ -228,16 +247,16 @@ class KaviAccessibility : AccessibilityService() {
     // ---------- 做 ----------
 
     /** 点一个控件：它自己或往上最近的能点的控件执行点击；不行就在它中间按一下。 */
-    suspend fun click(e: Element, long: Boolean = false): Boolean {
+    suspend fun click(e: Element, long: Boolean = false, displayId: Int = Display.DEFAULT_DISPLAY): Boolean {
         val action = if (long) AccessibilityNodeInfo.ACTION_LONG_CLICK else AccessibilityNodeInfo.ACTION_CLICK
-        var n = find(e.path)
+        var n = find(e.path, displayId)
         if (n != null && sameSpot(n, e)) {
             while (n != null) {
                 if ((if (long) n.isLongClickable else n.isClickable) && n.performAction(action)) return true
                 n = n.parent
             }
         }
-        return tap(e.centerX, e.centerY, long)
+        return tap(e.centerX, e.centerY, long, displayId)
     }
 
     private fun sameSpot(n: AccessibilityNodeInfo, e: Element): Boolean {
@@ -246,14 +265,16 @@ class KaviAccessibility : AccessibilityService() {
     }
 
     /** 在屏幕上按一下（long：长按）。 */
-    suspend fun tap(x: Int, y: Int, long: Boolean = false): Boolean =
-        gesture(Path().apply { moveTo(x.toFloat(), y.toFloat()) }, if (long) 700 else 60)
+    suspend fun tap(x: Int, y: Int, long: Boolean = false, displayId: Int = Display.DEFAULT_DISPLAY): Boolean =
+        gesture(Path().apply { moveTo(x.toFloat(), y.toFloat()) }, if (long) 700 else 60, displayId)
 
-    suspend fun swipe(x1: Int, y1: Int, x2: Int, y2: Int, ms: Long = 350): Boolean =
-        gesture(Path().apply { moveTo(x1.toFloat(), y1.toFloat()); lineTo(x2.toFloat(), y2.toFloat()) }, ms)
+    suspend fun swipe(x1: Int, y1: Int, x2: Int, y2: Int, ms: Long = 350, displayId: Int = Display.DEFAULT_DISPLAY): Boolean =
+        gesture(Path().apply { moveTo(x1.toFloat(), y1.toFloat()); lineTo(x2.toFloat(), y2.toFloat()) }, ms, displayId)
 
-    private suspend fun gesture(path: Path, ms: Long): Boolean = suspendCancellableCoroutine { c ->
-        val g = GestureDescription.Builder().addStroke(GestureDescription.StrokeDescription(path, 0, ms)).build()
+    private suspend fun gesture(path: Path, ms: Long, displayId: Int): Boolean = suspendCancellableCoroutine { c ->
+        val builder = GestureDescription.Builder().addStroke(GestureDescription.StrokeDescription(path, 0, ms))
+        if (Build.VERSION.SDK_INT >= 30) builder.setDisplayId(displayId)
+        val g = builder.build()
         val ok = dispatchGesture(g, object : GestureResultCallback() {
             override fun onCompleted(d: GestureDescription?) { if (c.isActive) c.resume(true) }
             override fun onCancelled(d: GestureDescription?) { if (c.isActive) c.resume(false) }
@@ -262,39 +283,41 @@ class KaviAccessibility : AccessibilityService() {
     }
 
     /** 在输入框里填字（替换原来的）：先直接设，不行就点一下再粘贴。 */
-    suspend fun type(e: Element, text: String): Boolean {
-        val n = find(e.path)?.takeIf { it.isEditable } ?: run { click(e); delay(300); rootInActiveWindow?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) } ?: return false
+    suspend fun type(e: Element, text: String, displayId: Int = Display.DEFAULT_DISPLAY, clipboard: ((String) -> Boolean)? = null): Boolean {
+        val n = find(e.path, displayId)?.takeIf { it.isEditable } ?: run { click(e, displayId = displayId); delay(300); rootOn(displayId)?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) } ?: return false
         n.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
         val args = Bundle().apply { putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text) }
         if (n.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) return true
-        (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Kavi", text))
+        if (clipboard != null) {
+            if (!clipboard(text)) return false
+        } else (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Kavi", text))
         n.performAction(AccessibilityNodeInfo.ACTION_CLICK)
         return n.performAction(AccessibilityNodeInfo.ACTION_PASTE)
     }
 
     /** 按输入法上的「回车 / 发送 / 搜索」键（安卓 11 以上）。 */
-    fun imeEnter(): Boolean {
+    fun imeEnter(displayId: Int = Display.DEFAULT_DISPLAY): Boolean {
         if (Build.VERSION.SDK_INT < 30) return false
-        val n = rootInActiveWindow?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: return false
+        val n = rootOn(displayId)?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: return false
         return n.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)
     }
 
     /** 滑动一个列表（down：看下面的内容）；没指定列表或列表滑不动，就在屏幕中间划一下。 */
-    suspend fun scroll(e: Element?, direction: String): Boolean {
+    suspend fun scroll(e: Element?, direction: String, displayId: Int = Display.DEFAULT_DISPLAY): Boolean {
         if (e != null && direction in setOf("down", "up")) {
-            val n = find(e.path)
+            val n = find(e.path, displayId)
             if (n != null && n.isScrollable && n.performAction(
                     if (direction == "down") AccessibilityNodeInfo.ACTION_SCROLL_FORWARD else AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)) return true
         }
-        val (w, h) = screenSize()
+        val (w, h) = screenSize(displayId)
         val box = e?.bounds ?: intArrayOf(0, 0, w, h)
         val cx = (box[0] + box[2]) / 2; val cy = (box[1] + box[3]) / 2
         val dx = (box[2] - box[0]) * 3 / 10; val dy = (box[3] - box[1]) * 3 / 10
         return when (direction) {
-            "up" -> swipe(cx, cy - dy, cx, cy + dy)
-            "left" -> swipe(cx + dx, cy, cx - dx, cy)
-            "right" -> swipe(cx - dx, cy, cx + dx, cy)
-            else -> swipe(cx, cy + dy, cx, cy - dy)
+            "up" -> swipe(cx, cy - dy, cx, cy + dy, displayId = displayId)
+            "left" -> swipe(cx + dx, cy, cx - dx, cy, displayId = displayId)
+            "right" -> swipe(cx - dx, cy, cx + dx, cy, displayId = displayId)
+            else -> swipe(cx, cy + dy, cx, cy - dy, displayId = displayId)
         }
     }
 
@@ -309,15 +332,18 @@ class KaviAccessibility : AccessibilityService() {
     }
 
     /** 等界面停下来：动完之后 0.4 秒没变化，最多等 maxMs。 */
-    suspend fun settle(maxMs: Long = 3000) {
+    suspend fun settle(maxMs: Long = 3000, displayId: Int = Display.DEFAULT_DISPLAY) {
         delay(250)
         val start = System.currentTimeMillis()
-        while (System.currentTimeMillis() - start < maxMs && System.currentTimeMillis() - lastEventAt < 400) delay(100)
+        while (System.currentTimeMillis() - start < maxMs && System.currentTimeMillis() -
+            (if (displayId == Display.DEFAULT_DISPLAY) lastEventAt else displayEvents[displayId] ?: 0L) < 400) delay(100)
     }
 
-    fun screenSize(): Pair<Int, Int> {
+    fun screenSize(displayId: Int = Display.DEFAULT_DISPLAY): Pair<Int, Int> {
         val m = android.util.DisplayMetrics()
-        @Suppress("DEPRECATION") wm.defaultDisplay.getRealMetrics(m)
+        val display = (getSystemService(DISPLAY_SERVICE) as android.hardware.display.DisplayManager).getDisplay(displayId)
+        @Suppress("DEPRECATION")
+        if (display != null) display.getRealMetrics(m) else wm.defaultDisplay.getRealMetrics(m)
         return m.widthPixels to m.heightPixels
     }
 
@@ -346,7 +372,7 @@ class KaviAccessibility : AccessibilityService() {
         }
     }
 
-    private fun mark(shot: Bitmap, marks: List<Element>): Pair<String, Float> {
+    internal fun mark(shot: Bitmap, marks: List<Element>): Pair<String, Float> {
         val scale = minOf(1f, 720f / shot.width)
         val out = Bitmap.createBitmap((shot.width * scale).toInt(), (shot.height * scale).toInt(), Bitmap.Config.ARGB_8888)
         val c = Canvas(out)
@@ -384,6 +410,7 @@ class KaviAccessibility : AccessibilityService() {
                 setPadding(dp(14), 0, 0, 0)
                 setOnClickListener {
                     stops.incrementAndGet()
+                    BackgroundPhone.current.value?.stop()
                     barText?.text = "已停止，Kavi 不会再操作"
                     main.removeCallbacks(hideBar); main.postDelayed(hideBar, 2500)
                 }

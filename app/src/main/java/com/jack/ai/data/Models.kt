@@ -331,6 +331,8 @@ data class Settings(
     val localLlm: Boolean = false,
     /** 操作其他 App（无障碍）：Kavi 能操作的 App（包名），只有勾过的才能碰；涉及钱的和系统设置勾不了。 */
     val phoneApps: List<String> = emptyList(),
+    /** 用 Mika 的后台虚拟屏幕操作 App，不占用主屏。 */
+    val phoneBackground: Boolean = false,
     /** 悬浮球：点一下把当前屏幕带进 Kavi 问（要开无障碍）。 */
     val floatBall: Boolean = false,
     /** 手机数据（设置 → 手机数据），每样单独开、默认关：通知（不记的 App 在 noticeSkip）、联系人、位置、使用时长。 */
