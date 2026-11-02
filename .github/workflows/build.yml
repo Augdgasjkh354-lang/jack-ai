@@ -2,7 +2,7 @@ name: 打包 APK
 
 on:
   push:
-    branches: [main, codex/mika-background-display]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
