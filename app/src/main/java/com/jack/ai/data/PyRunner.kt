@@ -22,7 +22,7 @@ object PyRunner {
             dir.mkdirs()
             val before = snapshot(dir)
             val out = Python.getInstance().getModule("jack_runner")
-                .callAttr("run", code, dir.absolutePath, timeoutSec, stdin).toString()
+                .callAttr("run", code, dir.absolutePath, timeoutSec, stdin, ctx.applicationInfo.dataDir, ctx.cacheDir.absolutePath).toString()
             val changed = Workspace.files(dir).filter { f -> before[f.name] != f.lastModified() to f.length() }
             Result(out, changed)
         }
