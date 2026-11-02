@@ -39,9 +39,13 @@ import kotlinx.coroutines.delay
  * 网页窗口放在这里也让截图能画出来（没放进任何界面的网页窗口截不出图）。
  */
 @Composable
-fun BrowserPeek(modifier: Modifier = Modifier, working: Boolean = true) {
+fun BrowserPeek(modifier: Modifier = Modifier, working: Boolean = true, convId: String = "") {
     val ctx = LocalContext.current
     val b = JackBrowser
+    // 这个对话的回答在自己的后台标签页里做事：小窗放那一页
+    val agentTab by androidx.compose.runtime.produceState<JackBrowser.Tab?>(null, convId) {
+        while (true) { value = com.jack.ai.tools.BrowserLock.tabForConv(convId)?.takeIf { it.web != null }; delay(500) }
+    }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(b.agentAt) {
         while (true) { now = System.currentTimeMillis(); delay(5_000) }
@@ -59,16 +63,20 @@ fun BrowserPeek(modifier: Modifier = Modifier, working: Boolean = true) {
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Box(Modifier.clipToBounds()) {
-            key(b.hostGen) {
+            val own = agentTab
+            key(b.hostGen, own) {
                 AndroidView(
-                    factory = { b.claim(ctx) },
+                    factory = { own?.web?.let { w -> (w.parent as? android.view.ViewGroup)?.removeView(w); w } ?: b.claim(ctx) },
                     modifier = Modifier.wrapContentSize(Alignment.TopStart, unbounded = true).requiredSize(fullW, fullH)
                         .graphicsLayer { scaleX = scale; scaleY = scale; transformOrigin = TransformOrigin(0f, 0f) },
                 )
                 DisposableEffect(Unit) { onDispose { b.release(ctx, handBack = false) } }
             }
             // 盖一层：小窗里不让点网页，点了就进完整浏览器
-            Box(Modifier.matchParentSize().clickable { ctx.startActivity(Intent(ctx, BrowserActivity::class.java)) })
+            Box(Modifier.matchParentSize().clickable {
+                own?.let { t -> b.tabs.indexOf(t).takeIf { it >= 0 }?.let { b.switchTo(it) } }
+                ctx.startActivity(Intent(ctx, BrowserActivity::class.java))
+            })
             Text(
                 "Kavi 在用浏览器",
                 Modifier.align(Alignment.BottomStart).fillMaxWidth()

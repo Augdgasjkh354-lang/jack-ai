@@ -310,7 +310,7 @@ fun ChatScreen(
                     })
                 }
                 // 只在 Kavi 还在回答时出来；答完就收起，免得盖住回答
-                BrowserPeek(Modifier.align(Alignment.TopEnd).padding(top = padding.calculateTopPadding() + 4.dp, end = 12.dp), working = state.streaming)
+                BrowserPeek(Modifier.align(Alignment.TopEnd).padding(top = padding.calculateTopPadding() + 4.dp, end = 12.dp), working = state.streaming, convId = conv?.id.orEmpty())
             }
         }
     }
