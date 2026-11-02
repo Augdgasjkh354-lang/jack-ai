@@ -1,7 +1,11 @@
 // Kavi 远程：iPhone、电脑等别的设备通过这个站点用安卓手机上的 Kavi。
 // 站点只当中转：网页把消息存进数据库（D1），手机上的 Kavi 隔几秒来取，处理完把回答写回来。文件放在 R2。
-// 需要的绑定：D1 数据库 DB、R2 存储桶 FILES。Kavi 首次连接时会认领站点。
-// 表在第一次请求时自动建好。
+// 需要的绑定：D1 数据库 DB、R2 存储桶 FILES。表在第一次请求时自动建好。
+//
+// 好几台手机能共用一个站点，各自一块、互相看不到：
+// - 第一台来认领的手机是站长（admin）；之后的手机要拿站长在 Kavi 里生成的邀请码才能加入。
+// - 每台手机用自己的密钥（只存 SHA-256）；它配对的网页设备、对话、确认、文件都记在它名下。
+// - 站长能看成员列表、把成员移出（连同他的对话和文件一起删掉）。
 
 const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS convs (id TEXT PRIMARY KEY, title TEXT, updated INTEGER)`,
@@ -11,36 +15,52 @@ const SCHEMA = [
   `CREATE INDEX IF NOT EXISTS msgs_state ON msgs(state)`,
   `CREATE TABLE IF NOT EXISTS confirms (id TEXT PRIMARY KEY, conv TEXT, msg INTEGER, title TEXT, body TEXT, action TEXT,
      answer INTEGER, sent INTEGER DEFAULT 0, created INTEGER)`,
-  `CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT)`,
   `CREATE TABLE IF NOT EXISTS fails (ip TEXT, at INTEGER)`,
-  `CREATE TABLE IF NOT EXISTS owner (id INTEGER PRIMARY KEY CHECK (id = 1), key_hash TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS devices (id TEXT PRIMARY KEY, name TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, created INTEGER NOT NULL, last_seen INTEGER NOT NULL)`,
-  `CREATE TABLE IF NOT EXISTS pairing (id INTEGER PRIMARY KEY CHECK (id = 1), code TEXT NOT NULL, token_hash TEXT NOT NULL, expires INTEGER NOT NULL, failures INTEGER NOT NULL DEFAULT 0)`,
+  `CREATE TABLE IF NOT EXISTS owners (id TEXT PRIMARY KEY, key_hash TEXT NOT NULL UNIQUE, name TEXT NOT NULL DEFAULT '', admin INTEGER NOT NULL DEFAULT 0,
+     created INTEGER NOT NULL, last_seen INTEGER NOT NULL DEFAULT 0)`,
+  `CREATE TABLE IF NOT EXISTS invites (code_hash TEXT PRIMARY KEY, by_owner TEXT NOT NULL, expires INTEGER NOT NULL, used_by TEXT)`,
+  `CREATE TABLE IF NOT EXISTS pairings (owner TEXT PRIMARY KEY, code TEXT NOT NULL, token_hash TEXT NOT NULL, expires INTEGER NOT NULL, failures INTEGER NOT NULL DEFAULT 0)`,
 ];
+/** 老站点（只认一台手机）的表加上「属于谁」这一列；已经有了就报错，忽略。 */
+const OWNER_COLUMNS = ["convs", "msgs", "confirms", "devices"];
+
 let ready = false;
 async function init(env) {
   if (ready) return;
   await env.DB.batch(SCHEMA.map((s) => env.DB.prepare(s)));
+  for (const t of OWNER_COLUMNS) await env.DB.prepare(`ALTER TABLE ${t} ADD COLUMN owner TEXT`).run().catch(() => {});
+  await env.DB.batch([
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS msgs_owner ON msgs(owner, role, state)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS convs_owner ON convs(owner, updated)"),
+  ]);
+  // 老站点的主人（owner 表那一行）搬成站长，原来的对话、设备都归他
+  const legacy = await env.DB.prepare("SELECT key_hash FROM owner WHERE id = 1").first().catch(() => null);
+  if (legacy && !(await env.DB.prepare("SELECT id FROM owners LIMIT 1").first())) await adopt(env, legacy.key_hash);
+  // 用 Secrets 里 KAVI_KEY 管的老站点：那把密钥就是站长
   if (env.KAVI_KEY) {
-    const keyHash = await sha256(env.KAVI_KEY);
-    const owner = await env.DB.prepare("SELECT key_hash FROM owner WHERE id = 1").first();
-    if (!owner) {
-      await env.DB.prepare("INSERT OR IGNORE INTO owner (id, key_hash) VALUES (1, ?)").bind(keyHash).run();
-    } else if (!same(owner.key_hash, keyHash)) {
-      await env.DB.batch([
-        env.DB.prepare("UPDATE owner SET key_hash = ? WHERE id = 1").bind(keyHash),
-        env.DB.prepare("DELETE FROM devices"),
-        env.DB.prepare("DELETE FROM pairing"),
-      ]);
+    const h = await sha256(env.KAVI_KEY);
+    if (!(await env.DB.prepare("SELECT id FROM owners WHERE key_hash = ?").bind(h).first())) {
+      const admin = await env.DB.prepare("SELECT id FROM owners WHERE admin = 1").first();
+      if (admin) await env.DB.prepare("UPDATE owners SET key_hash = ? WHERE id = ?").bind(h, admin.id).run();
+      else await adopt(env, h);
     }
   }
   ready = true;
 }
+/** 建站长，把还没主人的旧数据都记到他名下。 */
+async function adopt(env, keyHash) {
+  const id = crypto.randomUUID();
+  await env.DB.prepare("INSERT OR IGNORE INTO owners (id, key_hash, name, admin, created) VALUES (?, ?, '站长', 1, ?)").bind(id, keyHash, now()).run();
+  const row = await env.DB.prepare("SELECT id FROM owners WHERE key_hash = ?").bind(keyHash).first();
+  await env.DB.batch(OWNER_COLUMNS.map((t) => env.DB.prepare(`UPDATE ${t} SET owner = ? WHERE owner IS NULL`).bind(row.id)));
+}
 
 /** 站点代码的版本：Kavi 测试连接时看得到，接口改了要升。 */
-const VERSION = 2;
+const VERSION = 3;
 const MAX_UPLOAD = 25 * 1024 * 1024;
 const ONLINE_MS = 30_000;
+const INVITE_DAYS = 7;
 
 const json = (data, status = 200, headers = {}) =>
   new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...headers } });
@@ -60,53 +80,36 @@ function cookie(req, name) {
   const m = (req.headers.get("cookie") || "").match(new RegExp("(?:^|;\\s*)" + name + "=([^;]+)"));
   return m ? m[1] : "";
 }
-/** 手机上的 Kavi 用认领密钥；数据库只保存它的 SHA-256。 */
-async function ownerHash(env) {
-  const row = await env.DB.prepare("SELECT key_hash FROM owner WHERE id = 1").first();
-  return row?.key_hash || "";
+const ip = (req, kind) => `${kind}:${req.headers.get("cf-connecting-ip") || "?"}`;
+async function tooMany(env, key, max) {
+  const r = await env.DB.prepare("SELECT COUNT(*) AS n FROM fails WHERE ip = ? AND at > ?").bind(key, now() - 10 * 60_000).first();
+  return (r?.n || 0) >= max;
 }
-async function isDevice(req, env) {
+async function failed(env, key) {
+  await env.DB.batch([
+    env.DB.prepare("INSERT INTO fails (ip, at) VALUES (?, ?)").bind(key, now()),
+    env.DB.prepare("DELETE FROM fails WHERE at < ?").bind(now() - 86_400_000),
+  ]);
+}
+
+/** 手机上的 Kavi：Bearer 密钥对上哪台手机（owners 一行），对不上返回 null。 */
+async function deviceOwner(req, env) {
   const auth = req.headers.get("authorization") || "";
-  if (!auth.startsWith("Bearer ")) return false;
-  const stored = await ownerHash(env);
-  return !!stored && same(await sha256(auth.slice(7)), stored);
+  if (!auth.startsWith("Bearer ") || !auth.slice(7)) return null;
+  const h = await sha256(auth.slice(7));
+  const row = await env.DB.prepare("SELECT * FROM owners WHERE key_hash = ?").bind(h).first();
+  return row && same(row.key_hash, h) ? row : null;
 }
-/** 网页 cookie 是设备令牌；只在数据库保存它的 SHA-256。 */
-async function isWeb(req, env) {
+/** 网页：cookie 里的设备令牌对上哪台配过对的设备（只存 SHA-256），返回它属于哪台手机。 */
+async function webOwner(req, env) {
   const token = cookie(req, "kavi_device");
   if (!token) return null;
-  const tokenHash = await sha256(token);
-  const device = await env.DB.prepare("SELECT id, token_hash, last_seen FROM devices WHERE token_hash = ?").bind(tokenHash).first();
-  if (!device || !same(tokenHash, device.token_hash)) return null;
+  const h = await sha256(token);
+  const d = await env.DB.prepare("SELECT id, token_hash, last_seen, owner FROM devices WHERE token_hash = ?").bind(h).first();
+  if (!d || !d.owner || !same(h, d.token_hash)) return null;
   const t = now();
-  if (Number(device.last_seen) <= t - 60_000) {
-    await env.DB.prepare("UPDATE devices SET last_seen = ? WHERE id = ? AND last_seen <= ?").bind(t, device.id, t - 60_000).run();
-  }
-  return device;
-}
-
-async function claim(req, env) {
-  if (env.KAVI_KEY) return json({ error: "站点由 KAVI_KEY 管理，不能在线认领" }, 409);
-  const auth = req.headers.get("authorization") || "";
-  if (!auth.startsWith("Bearer ") || !auth.slice(7)) return json({ error: "请提供认领密钥" }, 401);
-  const keyHash = await sha256(auth.slice(7));
-  const result = await env.DB.prepare("INSERT OR IGNORE INTO owner (id, key_hash) VALUES (1, ?)").bind(keyHash).run();
-  const owner = await ownerHash(env);
-  if (!same(keyHash, owner)) return json({ error: "站点已被另一把密钥认领" }, 409);
-  return result.meta?.changes ? json({ ok: true, claimed: true }) : json({ ok: true });
-}
-
-async function rekey(req, env) {
-  if (env.KAVI_KEY) return json({ error: "站点由 KAVI_KEY 管理，不能在线换密钥" }, 409);
-  const body = await req.json().catch(() => ({}));
-  if (typeof body.new_key !== "string" || !body.new_key || body.new_key.length > 256) return json({ error: "新密钥无效" }, 400);
-  const keyHash = await sha256(body.new_key);
-  await env.DB.batch([
-    env.DB.prepare("UPDATE owner SET key_hash = ? WHERE id = 1").bind(keyHash),
-    env.DB.prepare("DELETE FROM devices"),
-    env.DB.prepare("DELETE FROM pairing"),
-  ]);
-  return json({ ok: true });
+  if (Number(d.last_seen) <= t - 60_000) await env.DB.prepare("UPDATE devices SET last_seen = ? WHERE id = ?").bind(t, d.id).run();
+  return d.owner;
 }
 
 function randomToken() {
@@ -115,108 +118,213 @@ function randomToken() {
   for (const b of bytes) binary += String.fromCharCode(b);
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
+/** 邀请码：8 个好认的字符（去掉 0O1IL），中间一个横杠，方便口头或微信发。 */
+function inviteCode() {
+  const abc = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+  const r = crypto.getRandomValues(new Uint8Array(8));
+  const s = [...r].map((b) => abc[b % abc.length]).join("");
+  return s.slice(0, 4) + "-" + s.slice(4);
+}
+const normInvite = (s) => String(s || "").toUpperCase().replace(/[^0-9A-Z]/g, "");
+
+// ---------- 认领、邀请、成员 ----------
+
+/**
+ * 认领：密钥已经是成员的，直接认；站点还没有人的，第一个来的是站长；
+ * 其他人要带站长给的邀请码（一次性、7 天有效）。没邀请码或不对返回 403。
+ */
+async function claim(req, env) {
+  const auth = req.headers.get("authorization") || "";
+  if (!auth.startsWith("Bearer ") || !auth.slice(7)) return json({ error: "请提供密钥" }, 401);
+  const keyHash = await sha256(auth.slice(7));
+  const b = await req.json().catch(() => ({}));
+  const name = String(b.name || "").trim().slice(0, 40);
+  if (await env.DB.prepare("SELECT id FROM owners WHERE key_hash = ?").bind(keyHash).first()) return json({ ok: true });
+  const t = now();
+  if (!(await env.DB.prepare("SELECT id FROM owners LIMIT 1").first())) {
+    // 两台手机同时来抢：INSERT 只成功一个，另一个再查一遍就知道自己不是站长
+    await env.DB.prepare("INSERT INTO owners (id, key_hash, name, admin, created) SELECT ?, ?, ?, 1, ? WHERE NOT EXISTS (SELECT 1 FROM owners)")
+      .bind(crypto.randomUUID(), keyHash, name || "站长", t).run();
+    if (await env.DB.prepare("SELECT id FROM owners WHERE key_hash = ?").bind(keyHash).first()) return json({ ok: true, claimed: true, admin: true });
+  }
+  const limit = ip(req, "invite");
+  if (await tooMany(env, limit, 10)) return json({ error: "试错太多次，十分钟后再试" }, 429);
+  const code = normInvite(b.invite);
+  if (!code) return json({ error: "need_invite", message: "这个站点已经有站长了，加入要邀请码" }, 403);
+  const codeHash = await sha256(code);
+  const id = crypto.randomUUID();
+  // 邀请码用掉（一次性）和建成员放一起：两台手机拿同一个码同时来，只有一台成
+  const used = await env.DB.prepare("UPDATE invites SET used_by = ? WHERE code_hash = ? AND used_by IS NULL AND expires > ? RETURNING code_hash")
+    .bind(id, codeHash, Math.floor(t / 1000)).first();
+  if (!used) { await failed(env, limit); return json({ error: "bad_invite", message: "邀请码不对、用过了或过期了" }, 403); }
+  await env.DB.prepare("INSERT INTO owners (id, key_hash, name, admin, created) VALUES (?, ?, ?, 0, ?)").bind(id, keyHash, name || "成员", t).run();
+  return json({ ok: true, claimed: true, admin: false });
+}
+
+async function invite(owner, env) {
+  if (!owner.admin) return json({ error: "只有站长能邀请" }, 403);
+  const code = inviteCode();
+  const expires = Math.floor(now() / 1000) + INVITE_DAYS * 86400;
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM invites WHERE expires < ?").bind(Math.floor(now() / 1000)),
+    env.DB.prepare("INSERT INTO invites (code_hash, by_owner, expires) VALUES (?, ?, ?)").bind(await sha256(normInvite(code)), owner.id, expires),
+  ]);
+  return json({ code, expires });
+}
+
+async function members(owner, env) {
+  if (!owner.admin) return json({ error: "只有站长能看成员" }, 403);
+  const rows = (await env.DB.prepare("SELECT id, name, admin, created, last_seen FROM owners ORDER BY created").all()).results;
+  return json(rows.map((r) => ({ ...r, admin: r.admin === 1, me: r.id === owner.id })));
+}
+
+/** 站长把一个成员移出：他的密钥作废，配过的设备、对话、文件一起删。 */
+async function removeMember(req, owner, env) {
+  if (!owner.admin) return json({ error: "只有站长能移出成员" }, 403);
+  const id = String((await req.json().catch(() => ({}))).id || "");
+  if (!id || id === owner.id) return json({ error: "不能移出自己" }, 400);
+  await deleteFiles(env, `${id}/`);
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM owners WHERE id = ? AND admin = 0").bind(id),
+    env.DB.prepare("DELETE FROM devices WHERE owner = ?").bind(id),
+    env.DB.prepare("DELETE FROM pairings WHERE owner = ?").bind(id),
+    env.DB.prepare("DELETE FROM confirms WHERE owner = ?").bind(id),
+    env.DB.prepare("DELETE FROM msgs WHERE owner = ?").bind(id),
+    env.DB.prepare("DELETE FROM convs WHERE owner = ?").bind(id),
+  ]);
+  return json({ ok: true });
+}
+async function deleteFiles(env, prefix) {
+  let cursor;
+  do {
+    const list = await env.FILES.list({ prefix, cursor });
+    if (list.objects.length) await env.FILES.delete(list.objects.map((o) => o.key));
+    cursor = list.truncated ? list.cursor : undefined;
+  } while (cursor);
+}
+
+async function rekey(req, owner, env) {
+  if (env.KAVI_KEY && owner.admin) return json({ error: "站长密钥由站点的 KAVI_KEY 管，不能在线换" }, 409);
+  const b = await req.json().catch(() => ({}));
+  if (typeof b.new_key !== "string" || !b.new_key || b.new_key.length > 256) return json({ error: "新密钥无效" }, 400);
+  await env.DB.batch([
+    env.DB.prepare("UPDATE owners SET key_hash = ? WHERE id = ?").bind(await sha256(b.new_key), owner.id),
+    env.DB.prepare("DELETE FROM devices WHERE owner = ?").bind(owner.id),
+    env.DB.prepare("DELETE FROM pairings WHERE owner = ?").bind(owner.id),
+  ]);
+  return json({ ok: true });
+}
+
+// ---------- 配对网页设备 ----------
+
 function guessDeviceName(ua) {
   const s = String(ua || "");
   const os = /iPhone/i.test(s) ? "iPhone" : /iPad/i.test(s) ? "iPad" : /Android/i.test(s) ? "Android" : /Macintosh|Mac OS/i.test(s) ? "Mac" : /Windows/i.test(s) ? "Windows" : "网页设备";
   const browser = /Edg\//i.test(s) ? "Edge" : /CriOS|Chrome/i.test(s) ? "Chrome" : /Firefox|FxiOS/i.test(s) ? "Firefox" : /Safari/i.test(s) ? "Safari" : "浏览器";
   return `${os} ${browser}`;
 }
-async function startPair(env) {
-  const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000).padStart(6, "0");
+/** 发起配对：每台手机同时只留一个，新的出来旧的作废；6 位码在全站有效的码里不重复。 */
+async function startPair(owner, env) {
+  const t = Math.floor(now() / 1000);
+  let code;
+  for (let i = 0; i < 20; i++) {
+    code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000).padStart(6, "0");
+    if (!(await env.DB.prepare("SELECT owner FROM pairings WHERE code = ? AND expires > ? AND owner != ?").bind(code, t, owner.id).first())) break;
+  }
   const token = randomToken();
-  const expires = Math.floor(now() / 1000) + 5 * 60;
-  await env.DB.prepare("INSERT INTO pairing (id, code, token_hash, expires, failures) VALUES (1, ?, ?, ?, 0) ON CONFLICT(id) DO UPDATE SET code = excluded.code, token_hash = excluded.token_hash, expires = excluded.expires, failures = 0")
-    .bind(code, await sha256(token), expires).run();
+  const expires = t + 5 * 60;
+  await env.DB.prepare("INSERT INTO pairings (owner, code, token_hash, expires, failures) VALUES (?, ?, ?, ?, 0) ON CONFLICT(owner) DO UPDATE SET code = excluded.code, token_hash = excluded.token_hash, expires = excluded.expires, failures = 0")
+    .bind(owner.id, code, await sha256(token), expires).run();
   return json({ code, token, expires });
 }
 async function pair(req, env) {
   const body = await req.json().catch(() => ({}));
-  const ip = `pair:${req.headers.get("cf-connecting-ip") || "?"}`;
+  const limit = ip(req, "pair");
+  if (await tooMany(env, limit, 5)) return json({ error: "尝试次数太多，请十分钟后再试" }, 429);
   const t = now();
-  const recent = await env.DB.prepare("SELECT COUNT(*) AS n FROM fails WHERE ip = ? AND at > ?").bind(ip, t - 10 * 60_000).first();
-  if ((recent?.n || 0) >= 5) return json({ error: "尝试次数太多，请十分钟后再试" }, 429);
-
-  const active = await env.DB.prepare("SELECT code, token_hash, expires FROM pairing WHERE id = 1 AND expires > ?").bind(Math.floor(t / 1000)).first();
-  const tokenHash = typeof body.token === "string" && body.token.length <= 256 ? await sha256(body.token) : "";
-  const valid = !!active && ((typeof body.code === "string" && same(body.code, active.code)) || (tokenHash && same(tokenHash, active.token_hash)));
-  if (!valid) {
-    await env.DB.prepare("INSERT INTO fails (ip, at) VALUES (?, ?)").bind(ip, t).run();
-    if (active) {
-      const failures = await env.DB.prepare("UPDATE pairing SET failures = failures + 1 WHERE id = 1 AND token_hash = ? AND expires > ? RETURNING failures").bind(active.token_hash, Math.floor(t / 1000)).first();
-      if (failures && Number(failures.failures) >= 10) await env.DB.prepare("DELETE FROM pairing WHERE id = 1 AND token_hash = ?").bind(active.token_hash).run();
-    }
-    await env.DB.prepare("DELETE FROM fails WHERE ip LIKE 'pair:%' AND at < ?").bind(t - 86_400_000).run();
-    return json({ error: "配对码无效或已过期" }, 401);
-  }
-
-  const consumed = await env.DB.prepare("DELETE FROM pairing WHERE id = 1 AND code = ? AND token_hash = ? AND expires > ? RETURNING id")
-    .bind(active.code, active.token_hash, Math.floor(t / 1000)).first();
+  const sec = Math.floor(t / 1000);
+  let active = null;
+  if (typeof body.token === "string" && body.token && body.token.length <= 256)
+    active = await env.DB.prepare("SELECT * FROM pairings WHERE token_hash = ? AND expires > ?").bind(await sha256(body.token), sec).first();
+  else if (typeof body.code === "string" && /^[0-9]{6}$/.test(body.code))
+    active = await env.DB.prepare("SELECT * FROM pairings WHERE code = ? AND expires > ?").bind(body.code, sec).first();
+  if (!active) { await failed(env, limit); return json({ error: "配对码无效或已过期" }, 401); }
+  // 用掉（一次性）：两边同时拿同一个码来，只有一边删得掉
+  const consumed = await env.DB.prepare("DELETE FROM pairings WHERE owner = ? AND token_hash = ? RETURNING owner").bind(active.owner, active.token_hash).first();
   if (!consumed) return json({ error: "配对码已使用或已过期" }, 401);
   const deviceToken = randomToken();
-  const deviceId = crypto.randomUUID();
   const name = String(body.name || guessDeviceName(req.headers.get("user-agent"))).trim().slice(0, 60) || "网页设备";
-  await env.DB.prepare("INSERT INTO devices (id, name, token_hash, created, last_seen) VALUES (?, ?, ?, ?, ?)")
-    .bind(deviceId, name, await sha256(deviceToken), t, t).run();
+  await env.DB.prepare("INSERT INTO devices (id, name, token_hash, created, last_seen, owner) VALUES (?, ?, ?, ?, ?, ?)")
+    .bind(crypto.randomUUID(), name, await sha256(deviceToken), t, t, active.owner).run();
   return json({ ok: true }, 200, { "set-cookie": `kavi_device=${deviceToken}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=31536000` });
 }
 
 const parseMsg = (r) => r && ({ ...r, files: JSON.parse(r.files || "[]"), steps: JSON.parse(r.steps || "[]") });
 
-async function lastSeen(env) {
-  const r = await env.DB.prepare("SELECT v FROM kv WHERE k = 'last_seen'").first();
-  return r ? Number(r.v) : 0;
-}
+// ---------- 网页用的接口（都只看这台手机名下的） ----------
 
-// ---------- 网页用的接口 ----------
-
-async function state(url, env) {
+async function state(url, owner, env) {
   const conv = url.searchParams.get("conv") || "";
   const since = Number(url.searchParams.get("since") || 0);
-  const seen = await lastSeen(env);
-  const convs = (await env.DB.prepare("SELECT id, title, updated FROM convs ORDER BY updated DESC LIMIT 100").all()).results;
+  const o = await env.DB.prepare("SELECT last_seen FROM owners WHERE id = ?").bind(owner).first();
+  const seen = Number(o?.last_seen || 0);
+  const convs = (await env.DB.prepare("SELECT id, title, updated FROM convs WHERE owner = ? ORDER BY updated DESC LIMIT 100").bind(owner).all()).results;
   let msgs = [], confirms = [];
   if (conv) {
-    msgs = (await env.DB.prepare("SELECT * FROM msgs WHERE conv = ? AND updated > ? ORDER BY id").bind(conv, since).all()).results.map(parseMsg);
-    confirms = (await env.DB.prepare("SELECT id, msg, title, body, action FROM confirms WHERE conv = ? AND answer IS NULL ORDER BY created").bind(conv).all()).results;
+    msgs = (await env.DB.prepare("SELECT * FROM msgs WHERE conv = ? AND owner = ? AND updated > ? ORDER BY id").bind(conv, owner, since).all()).results.map(parseMsg);
+    confirms = (await env.DB.prepare("SELECT id, msg, title, body, action FROM confirms WHERE conv = ? AND owner = ? AND answer IS NULL ORDER BY created").bind(conv, owner).all()).results;
   }
   return json({ now: now(), device: { online: now() - seen < ONLINE_MS, lastSeen: seen }, convs, msgs, confirms });
 }
 
-async function send(req, env) {
+/** 文件只能是这台手机名下的：网页、Kavi 传的都在「手机 id/」下面；老站点搬过来的（u/、k/ 开头）归站长。 */
+async function ownsFile(env, owner, key) {
+  if (key.startsWith(`${owner}/`)) return true;
+  if (!/^[uk]\//.test(key)) return false;
+  return !!(await env.DB.prepare("SELECT 1 FROM owners WHERE id = ? AND admin = 1").bind(owner).first());
+}
+
+async function send(req, owner, env) {
   const b = await req.json().catch(() => ({}));
   const text = String(b.text || "").slice(0, 100_000);
   // 文件名是网页端传来的：斜杠换掉，免得手机端拼路径时被 ../ 带到别的目录（upload() 同款处理）
-  const files = Array.isArray(b.files) ? b.files.slice(0, 20).map(f => ({ ...f, name: String(f?.name || "file").replace(/[\\/]/g, "_").slice(0, 120) })) : [];
+  const raw = Array.isArray(b.files) ? b.files.slice(0, 20) : [];
+  const files = [];
+  for (const f of raw) {
+    if (!(await ownsFile(env, owner, String(f?.key || "")))) return json({ error: "文件不对" }, 400);
+    files.push({ ...f, name: String(f?.name || "file").replace(/[\\/]/g, "_").slice(0, 120) });
+  }
   if (!text.trim() && !files.length) return json({ error: "空消息" }, 400);
   let conv = String(b.conv || "");
   const t = now();
   if (!conv) {
     conv = crypto.randomUUID();
     const title = (text.trim() || files[0]?.name || "新对话").replace(/\s+/g, " ").slice(0, 30);
-    await env.DB.prepare("INSERT INTO convs (id, title, updated) VALUES (?, ?, ?)").bind(conv, title, t).run();
+    await env.DB.prepare("INSERT INTO convs (id, title, updated, owner) VALUES (?, ?, ?, ?)").bind(conv, title, t, owner).run();
   } else {
-    await env.DB.prepare("UPDATE convs SET updated = ? WHERE id = ?").bind(t, conv).run();
+    const r = await env.DB.prepare("UPDATE convs SET updated = ? WHERE id = ? AND owner = ?").bind(t, conv, owner).run();
+    if (!r.meta?.changes) return json({ error: "没有这个对话" }, 404);
   }
-  const r = await env.DB.prepare("INSERT INTO msgs (conv, role, text, files, steps, state, created, updated) VALUES (?, 'user', ?, ?, '[]', 'pending', ?, ?)")
-    .bind(conv, text, JSON.stringify(files), t, t).run();
+  const r = await env.DB.prepare("INSERT INTO msgs (conv, role, text, files, steps, state, created, updated, owner) VALUES (?, 'user', ?, ?, '[]', 'pending', ?, ?, ?)")
+    .bind(conv, text, JSON.stringify(files), t, t, owner).run();
   return json({ conv, id: r.meta.last_row_id });
 }
 
-async function upload(req, env, url, prefix) {
+async function upload(req, env, url, owner, prefix) {
   const name = (url.searchParams.get("name") || "file").replace(/[\\/]/g, "_").slice(0, 120);
   const type = url.searchParams.get("type") || req.headers.get("content-type") || "application/octet-stream";
   const len = Number(req.headers.get("content-length") || 0);
   if (len > MAX_UPLOAD) return json({ error: "文件太大（最多 25MB）" }, 413);
-  const key = `${prefix}/${crypto.randomUUID()}/${name}`;
+  const key = `${owner}/${prefix}/${crypto.randomUUID()}/${name}`;
   const body = await req.arrayBuffer();
   if (body.byteLength > MAX_UPLOAD) return json({ error: "文件太大（最多 25MB）" }, 413);
   await env.FILES.put(key, body, { httpMetadata: { contentType: type } });
   return json({ key, name, size: body.byteLength, type });
 }
 
-async function file(url, env) {
+async function file(url, owner, env) {
   const key = url.searchParams.get("key") || "";
-  const obj = key ? await env.FILES.get(key) : null;
+  const obj = key && (await ownsFile(env, owner, key)) ? await env.FILES.get(key) : null;
   if (!obj) return new Response("找不到文件", { status: 404 });
   const name = key.split("/").pop();
   const h = new Headers();
@@ -230,43 +338,44 @@ async function file(url, env) {
   return new Response(obj.body, { headers: h });
 }
 
-async function answer(req, env) {
+async function answer(req, owner, env) {
   const b = await req.json().catch(() => ({}));
-  await env.DB.prepare("UPDATE confirms SET answer = ? WHERE id = ? AND answer IS NULL").bind(b.ok ? 1 : 0, String(b.id || "")).run();
+  await env.DB.prepare("UPDATE confirms SET answer = ? WHERE id = ? AND owner = ? AND answer IS NULL").bind(b.ok ? 1 : 0, String(b.id || ""), owner).run();
   return json({ ok: true });
 }
 
-async function stop(req, env) {
+async function stop(req, owner, env) {
   const b = await req.json().catch(() => ({}));
-  await env.DB.prepare("UPDATE msgs SET stop = 1, updated = ? WHERE id = ? AND role = 'user'").bind(now(), Number(b.id || 0)).run();
+  await env.DB.prepare("UPDATE msgs SET stop = 1, updated = ? WHERE id = ? AND owner = ? AND role = 'user'").bind(now(), Number(b.id || 0), owner).run();
   return json({ ok: true });
 }
 
-async function removeConv(req, env) {
+async function removeConv(req, owner, env) {
   const b = await req.json().catch(() => ({}));
   const conv = String(b.conv || "");
-  const rows = (await env.DB.prepare("SELECT files FROM msgs WHERE conv = ?").bind(conv).all()).results;
-  const keys = rows.flatMap((r) => JSON.parse(r.files || "[]").map((f) => f.key)).filter(Boolean);
+  const rows = (await env.DB.prepare("SELECT files FROM msgs WHERE conv = ? AND owner = ?").bind(conv, owner).all()).results;
+  const keys = [];
+  for (const r of rows) for (const f of JSON.parse(r.files || "[]")) if (f.key && (await ownsFile(env, owner, f.key))) keys.push(f.key);
   for (let i = 0; i < keys.length; i += 500) await env.FILES.delete(keys.slice(i, i + 500));
   await env.DB.batch([
-    env.DB.prepare("DELETE FROM msgs WHERE conv = ?").bind(conv),
-    env.DB.prepare("DELETE FROM confirms WHERE conv = ?").bind(conv),
-    env.DB.prepare("DELETE FROM convs WHERE id = ?").bind(conv),
+    env.DB.prepare("DELETE FROM msgs WHERE conv = ? AND owner = ?").bind(conv, owner),
+    env.DB.prepare("DELETE FROM confirms WHERE conv = ? AND owner = ?").bind(conv, owner),
+    env.DB.prepare("DELETE FROM convs WHERE id = ? AND owner = ?").bind(conv, owner),
   ]);
   return json({ ok: true });
 }
 
-// ---------- 手机上的 Kavi 用的接口 ----------
+// ---------- 手机上的 Kavi 用的接口（都只动自己名下的） ----------
 
 /** 来取活：新消息（取走就标成 taken）、用户回了的确认、要停的回答。顺便记一下 Kavi 在线。 */
-async function poll(env) {
+async function poll(owner, env) {
   const t = now();
-  await env.DB.prepare("INSERT INTO kv (k, v) VALUES ('last_seen', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v").bind(String(t)).run();
-  const msgs = (await env.DB.prepare("SELECT id, conv, text, files FROM msgs WHERE role = 'user' AND state = 'pending' ORDER BY id LIMIT 5").all()).results;
+  await env.DB.prepare("UPDATE owners SET last_seen = ? WHERE id = ?").bind(t, owner).run();
+  const msgs = (await env.DB.prepare("SELECT id, conv, text, files FROM msgs WHERE owner = ? AND role = 'user' AND state = 'pending' ORDER BY id LIMIT 5").bind(owner).all()).results;
   if (msgs.length) await env.DB.prepare(`UPDATE msgs SET state = 'taken', updated = ? WHERE id IN (${msgs.map(() => "?").join(",")})`).bind(t, ...msgs.map((m) => m.id)).run();
-  const answers = (await env.DB.prepare("SELECT id, answer FROM confirms WHERE answer IS NOT NULL AND sent = 0").all()).results;
+  const answers = (await env.DB.prepare("SELECT id, answer FROM confirms WHERE owner = ? AND answer IS NOT NULL AND sent = 0").bind(owner).all()).results;
   if (answers.length) await env.DB.prepare(`UPDATE confirms SET sent = 1 WHERE id IN (${answers.map(() => "?").join(",")})`).bind(...answers.map((a) => a.id)).run();
-  const stops = (await env.DB.prepare("SELECT id FROM msgs WHERE role = 'user' AND stop = 1 AND stop_sent = 0").all()).results;
+  const stops = (await env.DB.prepare("SELECT id FROM msgs WHERE owner = ? AND role = 'user' AND stop = 1 AND stop_sent = 0").bind(owner).all()).results;
   if (stops.length) await env.DB.prepare(`UPDATE msgs SET stop_sent = 1 WHERE id IN (${stops.map(() => "?").join(",")})`).bind(...stops.map((s) => s.id)).run();
   return json({
     now: t,
@@ -277,42 +386,44 @@ async function poll(env) {
 }
 
 /** 写回答（同一条用户消息的回答一直更新同一行）。state：running 还在写、done 写完、error 出错。 */
-async function reply(req, env) {
+async function reply(req, owner, env) {
   const b = await req.json().catch(() => ({}));
   const to = Number(b.reply_to || 0);
-  const user = await env.DB.prepare("SELECT conv FROM msgs WHERE id = ? AND role = 'user'").bind(to).first();
+  const user = await env.DB.prepare("SELECT conv FROM msgs WHERE id = ? AND owner = ? AND role = 'user'").bind(to, owner).first();
   if (!user) return json({ error: "没有这条消息" }, 404);
   const t = now();
   const text = String(b.text || "").slice(0, 200_000);
-  const files = JSON.stringify(Array.isArray(b.files) ? b.files : []);
+  const list = Array.isArray(b.files) ? b.files : [];
+  for (const f of list) if (!(await ownsFile(env, owner, String(f?.key || "")))) return json({ error: "文件不对" }, 400);
+  const files = JSON.stringify(list);
   const steps = JSON.stringify(Array.isArray(b.steps) ? b.steps.slice(-40) : []);
   const st = ["running", "done", "error"].includes(b.state) ? b.state : "running";
-  const old = await env.DB.prepare("SELECT id FROM msgs WHERE reply_to = ? AND role = 'assistant'").bind(to).first();
+  const old = await env.DB.prepare("SELECT id FROM msgs WHERE reply_to = ? AND owner = ? AND role = 'assistant'").bind(to, owner).first();
   if (old) await env.DB.prepare("UPDATE msgs SET text = ?, files = ?, steps = ?, state = ?, updated = ? WHERE id = ?").bind(text, files, steps, st, t, old.id).run();
-  else await env.DB.prepare("INSERT INTO msgs (conv, role, text, files, steps, state, reply_to, created, updated) VALUES (?, 'assistant', ?, ?, ?, ?, ?, ?, ?)")
-    .bind(user.conv, text, files, steps, st, to, t, t).run();
+  else await env.DB.prepare("INSERT INTO msgs (conv, role, text, files, steps, state, reply_to, created, updated, owner) VALUES (?, 'assistant', ?, ?, ?, ?, ?, ?, ?, ?)")
+    .bind(user.conv, text, files, steps, st, to, t, t, owner).run();
   if (st !== "running") await env.DB.prepare("UPDATE msgs SET state = 'done', updated = ? WHERE id = ?").bind(t, to).run();
-  await env.DB.prepare("UPDATE convs SET updated = ? WHERE id = ?").bind(t, user.conv).run();
+  await env.DB.prepare("UPDATE convs SET updated = ? WHERE id = ? AND owner = ?").bind(t, user.conv, owner).run();
   return json({ ok: true });
 }
 
 /** Kavi 要用户确认一件事：网页上弹出来，用户点了以后 Kavi 下次来取时拿到。 */
-async function ask(req, env) {
+async function ask(req, owner, env) {
   const b = await req.json().catch(() => ({}));
   const to = Number(b.msg || 0);
-  const user = await env.DB.prepare("SELECT conv FROM msgs WHERE id = ?").bind(to).first();
+  const user = await env.DB.prepare("SELECT conv FROM msgs WHERE id = ? AND owner = ?").bind(to, owner).first();
   if (!user) return json({ error: "没有这条消息" }, 404);
   const id = crypto.randomUUID();
-  await env.DB.prepare("INSERT INTO confirms (id, conv, msg, title, body, action, created) VALUES (?, ?, ?, ?, ?, ?, ?)")
-    .bind(id, user.conv, to, String(b.title || "").slice(0, 200), String(b.body || "").slice(0, 4000), String(b.action || "确定").slice(0, 20), now()).run();
-  await env.DB.prepare("UPDATE convs SET updated = ? WHERE id = ?").bind(now(), user.conv).run();
+  await env.DB.prepare("INSERT INTO confirms (id, conv, msg, title, body, action, created, owner) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+    .bind(id, user.conv, to, String(b.title || "").slice(0, 200), String(b.body || "").slice(0, 4000), String(b.action || "确定").slice(0, 20), now(), owner).run();
+  await env.DB.prepare("UPDATE convs SET updated = ? WHERE id = ? AND owner = ?").bind(now(), user.conv, owner).run();
   return json({ id });
 }
 
 /** 确认超时（Kavi 不等了）：从网页上撤掉。 */
-async function cancelAsk(req, env) {
+async function cancelAsk(req, owner, env) {
   const b = await req.json().catch(() => ({}));
-  await env.DB.prepare("UPDATE confirms SET answer = 0, sent = 1 WHERE id = ? AND answer IS NULL").bind(String(b.id || "")).run();
+  await env.DB.prepare("UPDATE confirms SET answer = 0, sent = 1 WHERE id = ? AND owner = ? AND answer IS NULL").bind(String(b.id || ""), owner).run();
   return json({ ok: true });
 }
 
@@ -327,39 +438,46 @@ export default {
       if (p === "/manifest.json") return json(MANIFEST);
       if (!p.startsWith("/api/")) return new Response("Not found", { status: 404 });
       if (p === "/api/device/claim" && req.method === "POST") return claim(req, env);
-      const owner = await ownerHash(env);
-      if (!owner) return json({ error: "站点尚未认领" }, 401);
       if (p === "/api/pair" && req.method === "POST") return pair(req, env);
       if (p.startsWith("/api/device/")) {
-        if (!(await isDevice(req, env))) return json({ error: "认领密钥无效" }, 401);
-        if (p === "/api/device/poll") return poll(env);
-        if (p === "/api/device/ping") return json({ ok: true, version: VERSION, features: ["claim", "pairing"] });
-        if (p === "/api/device/rekey" && req.method === "POST") return rekey(req, env);
-        if (p === "/api/device/pair/start" && req.method === "POST") return startPair(env);
+        const me = await deviceOwner(req, env);
+        if (!me) {
+          const anyone = await env.DB.prepare("SELECT id FROM owners LIMIT 1").first();
+          return json({ error: anyone ? "密钥不对：这台手机还不是站点成员" : "站点尚未认领" }, 401);
+        }
+        const o = me.id;
+        if (p === "/api/device/poll") return poll(o, env);
+        if (p === "/api/device/ping") return json({ ok: true, version: VERSION, features: ["claim", "pairing", "members"], admin: me.admin === 1 });
+        if (p === "/api/device/rekey" && req.method === "POST") return rekey(req, me, env);
+        if (p === "/api/device/pair/start" && req.method === "POST") return startPair(me, env);
+        if (p === "/api/device/invite" && req.method === "POST") return invite(me, env);
+        if (p === "/api/device/members" && req.method === "GET") return members(me, env);
+        if (p === "/api/device/members/remove" && req.method === "POST") return removeMember(req, me, env);
         if (p === "/api/device/devices" && req.method === "GET") {
-          const devices = (await env.DB.prepare("SELECT id, name, created, last_seen FROM devices ORDER BY created DESC").all()).results;
+          const devices = (await env.DB.prepare("SELECT id, name, created, last_seen FROM devices WHERE owner = ? ORDER BY created DESC").bind(o).all()).results;
           return json(devices);
         }
         if (p === "/api/device/devices/revoke" && req.method === "POST") {
           const body = await req.json().catch(() => ({}));
-          await env.DB.prepare("DELETE FROM devices WHERE id = ?").bind(String(body.id || "")).run();
+          await env.DB.prepare("DELETE FROM devices WHERE id = ? AND owner = ?").bind(String(body.id || ""), o).run();
           return json({ ok: true });
         }
-        if (p === "/api/device/reply" && req.method === "POST") return reply(req, env);
-        if (p === "/api/device/ask" && req.method === "POST") return ask(req, env);
-        if (p === "/api/device/cancel" && req.method === "POST") return cancelAsk(req, env);
-        if (p === "/api/device/upload" && req.method === "POST") return upload(req, env, url, "k");
-        if (p === "/api/device/file") return file(url, env);
+        if (p === "/api/device/reply" && req.method === "POST") return reply(req, o, env);
+        if (p === "/api/device/ask" && req.method === "POST") return ask(req, o, env);
+        if (p === "/api/device/cancel" && req.method === "POST") return cancelAsk(req, o, env);
+        if (p === "/api/device/upload" && req.method === "POST") return upload(req, env, url, o, "k");
+        if (p === "/api/device/file") return file(url, o, env);
         return json({ error: "没有这个接口" }, 404);
       }
-      if (!(await isWeb(req, env))) return json({ error: "这台设备尚未配对，请先配对" }, 401);
-      if (p === "/api/state") return state(url, env);
-      if (p === "/api/send" && req.method === "POST") return send(req, env);
-      if (p === "/api/upload" && req.method === "POST") return upload(req, env, url, "u");
-      if (p === "/api/file") return file(url, env);
-      if (p === "/api/confirm" && req.method === "POST") return answer(req, env);
-      if (p === "/api/stop" && req.method === "POST") return stop(req, env);
-      if (p === "/api/delete" && req.method === "POST") return removeConv(req, env);
+      const o = await webOwner(req, env);
+      if (!o) return json({ error: "这台设备尚未配对，请先配对" }, 401);
+      if (p === "/api/state") return state(url, o, env);
+      if (p === "/api/send" && req.method === "POST") return send(req, o, env);
+      if (p === "/api/upload" && req.method === "POST") return upload(req, env, url, o, "u");
+      if (p === "/api/file") return file(url, o, env);
+      if (p === "/api/confirm" && req.method === "POST") return answer(req, o, env);
+      if (p === "/api/stop" && req.method === "POST") return stop(req, o, env);
+      if (p === "/api/delete" && req.method === "POST") return removeConv(req, o, env);
       return json({ error: "没有这个接口" }, 404);
     } catch (e) {
       return json({ error: String(e && e.message || e) }, 500);

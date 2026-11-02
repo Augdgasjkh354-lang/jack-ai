@@ -26,8 +26,18 @@ class RemoteClientTest {
         val kavi = RemoteClient(base, key, http)
         assertTrue(kavi.claim() != ClaimResult.TAKEN)
         assertEquals(ClaimResult.ALREADY_MINE, kavi.claim())
-        assertEquals(ClaimResult.TAKEN, RemoteClient(base, "wrong", http).claim())
-        assertTrue(kavi.ping() >= 2)
+        assertTrue(kavi.info().admin)
+        assertTrue(kavi.ping() >= 3)
+
+        // 朋友的手机：没邀请码、错的邀请码进不来；站长给的码能进，用过就作废；朋友不是站长
+        val friend = RemoteClient(base, key + "-friend", http)
+        assertEquals(ClaimResult.NEED_INVITE, friend.claim())
+        assertEquals(ClaimResult.BAD_INVITE, friend.claim("AAAA-BBBB"))
+        val inv = kavi.invite()
+        assertEquals(ClaimResult.CLAIMED, friend.claim(inv.code.lowercase(), "小明"))
+        assertEquals(ClaimResult.BAD_INVITE, RemoteClient(base, key + "-other", http).claim(inv.code))
+        assertEquals(false, friend.info().admin)
+        val buddy = kavi.members().single { it.name == "小明" }
         try { RemoteClient(base, "wrong", http).ping(); error("错的密钥不该连上") } catch (e: IOException) { assertTrue(e.message!!.contains("密钥")) }
 
         // 网页那边：扫码配对、传文件、发消息
@@ -61,6 +71,12 @@ class RemoteClientTest {
         kavi.reply(m.id, "答完了", listOf("查资料"), listOf(rf), "done")
         val after = web("/api/state?conv=${m.conv}")
         assertTrue(after, after.contains("答完了") && after.contains(rf.key) && after.contains("查资料"))
+
+        // 朋友看不到站长的消息，也回不了；站长移出朋友后，朋友的密钥作废
+        assertTrue(friend.poll().messages.isEmpty())
+        try { friend.reply(m.id, "偷答", emptyList(), emptyList(), "done"); error("别人的消息不该能回") } catch (e: IOException) { assertTrue(e.message!!.contains("404")) }
+        kavi.removeMember(buddy.id)
+        try { friend.ping(); error("移出后不该连上") } catch (e: IOException) { assertTrue(e.message!!.contains("密钥")) }
 
         // 踢掉以后网页就用不了
         kavi.revoke(device.id)

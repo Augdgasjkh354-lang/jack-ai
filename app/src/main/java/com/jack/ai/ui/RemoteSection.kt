@@ -38,7 +38,10 @@ import com.jack.ai.data.ClaimResult
 import com.jack.ai.data.QrImage
 import com.jack.ai.data.RemoteClient
 import com.jack.ai.data.RemoteDevice
+import com.jack.ai.data.RemoteInvite
+import com.jack.ai.data.RemoteMember
 import com.jack.ai.data.RemotePairing
+import com.jack.ai.data.SiteInfo
 import com.jack.ai.data.Settings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -53,15 +56,15 @@ https://github.com/Augdgasjkh354-lang/jack-ai/tree/main/remote-site
 需要的配置：
 1. 一个 D1 数据库，绑定名必须是 DB（表会在第一次请求时自动建，不用建表）
 2. 一个 R2 存储桶，绑定名必须是 FILES
-3. 不要设置 KAVI_KEY 之类的密钥：我手机上的 App 第一次连上时会自动认领这个站点
-4. 访问权限：互联网上的任何人都能访问（网站自己靠认领和设备配对把关）
+3. 不要设置 KAVI_KEY 之类的密钥：我手机上的 App 第一次连上时会自动认领这个站点（朋友的手机凭我给的邀请码加入）
+4. 访问权限：互联网上的任何人都能访问（网站自己靠认领、邀请码和设备配对把关）
 
 部署好以后告诉我网站地址。"""
 
 /**
- * 设置页的「远程连接」：在 iPhone、电脑上通过自己的 ChatGPT 站点用手机上的 Kavi。
- * 填站点地址、点「连接站点」（自动生成密钥并认领站点，之后站点只认这台手机），
- * 再「配对新设备」：别的设备扫二维码或输 6 位码就能用；配过的设备能随时踢掉。
+ * 设置页的「远程连接」：在 iPhone、电脑上通过 ChatGPT 站点用手机上的 Kavi。
+ * 填站点地址、点「连接站点」：自动生成密钥并认领站点，第一台是站长；朋友的手机填站长给的邀请码加入，各用各的、互相看不到。
+ * 再「配对新设备」：别的设备扫二维码或输 6 位码就能用；配过的设备能随时踢掉。站长还能邀请朋友、移出成员。
  */
 @Composable
 fun RemoteSection(vm: ChatViewModel, settings: Settings) {
@@ -77,6 +80,11 @@ fun RemoteSection(vm: ChatViewModel, settings: Settings) {
     var pairing by remember { mutableStateOf<RemotePairing?>(null) }
     var devices by remember { mutableStateOf<List<RemoteDevice>?>(null) }
     var kick by remember { mutableStateOf<RemoteDevice?>(null) }
+    var inviteIn by remember { mutableStateOf("") }
+    var info by remember { mutableStateOf<SiteInfo?>(null) }
+    var invited by remember { mutableStateOf<RemoteInvite?>(null) }
+    var members by remember { mutableStateOf<List<RemoteMember>?>(null) }
+    var removing by remember { mutableStateOf<RemoteMember?>(null) }
     fun copy(label: String, text: String) {
         (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText(label, text))
         Toast.makeText(ctx, "已复制$label", Toast.LENGTH_SHORT).show()
@@ -97,7 +105,12 @@ fun RemoteSection(vm: ChatViewModel, settings: Settings) {
         }
     }
     fun loadDevices() = site("读设备列表") { devices = client().devices(); null }
+    fun loadMembers() = site("读成员列表") { members = client().members(); null }
     val ready = settings.remoteUrl.isNotBlank() && settings.remoteKey.isNotBlank()
+    // 连着站点时看一下自己是不是站长（站长才有「邀请朋友」「站点成员」）
+    LaunchedEffect(settings.remoteUrl, settings.remoteKey) {
+        info = if (ready) withContext(Dispatchers.IO) { runCatching { client().info() }.getOrNull() } else null
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -113,16 +126,27 @@ fun RemoteSection(vm: ChatViewModel, settings: Settings) {
             onValueChange = { url = it.trim(); vm.updateSettings { s -> s.copy(remoteUrl = url) } },
             label = { Text("站点地址") }, placeholder = { Text("https://….chatgpt.site") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
         )
+        OutlinedTextField(
+            value = inviteIn, onValueChange = { inviteIn = it.trim() },
+            label = { Text("邀请码（加入朋友的站点才要填）") }, placeholder = { Text("ABCD-EFGH") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+        )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             OutlinedButton(enabled = url.isNotBlank() && !busy, onClick = {
                 // 没有密钥就先生成一把存好，再拿它去认领
                 val key = settings.remoteKey.ifBlank { RemoteClient.newKey().also { k -> vm.updateSettings { it.copy(remoteKey = k) } } }
+                val name = settings.userName.trim().ifBlank { android.os.Build.MODEL.orEmpty() }
                 site("连接站点") {
-                    when (RemoteClient(url, key, sharedHttp).claim()) {
-                        ClaimResult.TAKEN -> "这个站点已经被别的手机（或别的密钥）认领了。换过手机、清过数据的话，重新部署一个站点再连"
+                    val c = RemoteClient(url, key, sharedHttp)
+                    when (c.claim(inviteIn, name)) {
+                        ClaimResult.NEED_INVITE -> "这个站点已经有站长了：要加入，请站长在他的 Kavi 里点「邀请朋友」，把邀请码填在上面再连"
+                        ClaimResult.BAD_INVITE -> "邀请码不对、用过了或过期了，请站长再发一个"
+                        ClaimResult.TAKEN -> "这个站点只认一台手机，已经被别的手机认领了"
                         else -> {
-                            withContext(Dispatchers.Main) { update { it.copy(remoteUrl = url, remoteKey = key, remoteOn = true) } }
-                            "连上了：站点只认这台手机。下一步点「配对新设备」"
+                            val me = runCatching { c.info() }.getOrNull()
+                            info = me
+                            withContext(Dispatchers.Main) { inviteIn = ""; update { it.copy(remoteUrl = url, remoteKey = key, remoteOn = true) } }
+                            (if (me?.admin == false) "加入了：你的对话和设备跟站长的分开，互相看不到。" else "连上了：你是这个站点的站长。") +
+                                "下一步点「配对新设备」"
                         }
                     }
                 }
@@ -146,6 +170,23 @@ fun RemoteSection(vm: ChatViewModel, settings: Settings) {
                     }
                 }
             }
+            if (info?.admin == true) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(enabled = !busy, onClick = { site("生成邀请码") { invited = client().invite(); null } }) { Text("邀请朋友") }
+                    TextButton(enabled = !busy, onClick = { loadMembers() }) { Text(if (members == null) "站点成员" else "刷新成员") }
+                }
+                members?.let { list ->
+                    list.forEach { m ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(m.name + when { m.me -> "（我）"; m.admin -> "（站长）"; else -> "" }, style = MaterialTheme.typography.bodyMedium)
+                                Text("最近在线：" + whenText(m.lastSeen), style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                            }
+                            if (!m.me) TextButton(enabled = !busy, onClick = { removing = m }) { Text("移出") }
+                        }
+                    }
+                }
+            }
             Text("密钥：" + if (showKey) settings.remoteKey else "••••••••" + settings.remoteKey.takeLast(4), style = MaterialTheme.typography.bodyMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = { showKey = !showKey }) { Text(if (showKey) "藏起来" else "显示") }
@@ -163,7 +204,8 @@ fun RemoteSection(vm: ChatViewModel, settings: Settings) {
         OutlinedButton(onClick = { copy("部署说明", DEPLOY_PROMPT) }, modifier = Modifier.fillMaxWidth()) { Text("复制给 ChatGPT 的部署说明") }
         Text(
             "怎么用：① 点上面复制部署说明，发给 ChatGPT（Plus 以上，用「站点」功能），不用填任何密钥；" +
-                "② 把站点地址填到上面，点「连接站点」：Kavi 自动生成密钥、认领站点，之后站点只认这台手机（部署好就马上连，免得被别人抢先）；" +
+                "② 把站点地址填到上面，点「连接站点」：Kavi 自动生成密钥、认领站点，你就是站长（部署好就马上连，免得被别人抢先）；" +
+                "朋友要用：你点「邀请朋友」把邀请码发给他，他在自己的 Kavi 里填站点地址和邀请码再连，各用各的、互相看不到（消息会经过你的站点）；" +
                 "③ 点「配对新设备」，在 iPhone 或电脑上扫二维码，或打开站点输 6 位码，然后「添加到主屏幕」。\n" +
                 "开着时手机常驻一条通知、保持联网，比平时耗电；国外站点会自动走 Kavi 专用代理。别的设备上要确认的事就在那边网页上问。密钥不进备份。",
             style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
@@ -171,6 +213,37 @@ fun RemoteSection(vm: ChatViewModel, settings: Settings) {
     }
 
     pairing?.let { p -> PairDialog(p, client().pairUrl(p.token), onCopy = { copy("配对链接", it) }) { pairing = null; if (devices != null) loadDevices() } }
+
+    invited?.let { inv ->
+        val text = "用我的 Kavi 远程站点：\n站点：${settings.remoteUrl}\n邀请码：${inv.code}（7 天内有效，只能用一次）\n" +
+            "在 Kavi 的 设置 → 远程连接 里填上站点地址和邀请码，点「连接站点」。"
+        AlertDialog(
+            onDismissRequest = { invited = null },
+            title = { Text("邀请朋友") },
+            text = {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                    Text(inv.code, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                    Text("把邀请码和站点地址发给朋友，7 天内有效、只能用一次。他的对话和设备和你的分开，但消息会经过你的站点。",
+                        style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                }
+            },
+            confirmButton = { TextButton(onClick = { copy("邀请", text); invited = null }) { Text("复制邀请") } },
+            dismissButton = { TextButton(onClick = { invited = null }) { Text("关闭") } },
+        )
+    }
+
+    removing?.let { m ->
+        AlertDialog(
+            onDismissRequest = { removing = null },
+            title = { Text("把「${m.name}」移出站点？") },
+            text = { Text("他的手机马上连不上，他在站点上的对话、文件和配过的设备一起删掉。要再用得重新邀请。") },
+            confirmButton = { TextButton(onClick = {
+                removing = null
+                site("移出成员") { client().removeMember(m.id); members = client().members(); "已移出「${m.name}」" }
+            }) { Text("移出") } },
+            dismissButton = { TextButton(onClick = { removing = null }) { Text("取消") } },
+        )
+    }
 
     kick?.let { d ->
         AlertDialog(

@@ -33,8 +33,20 @@ data class RemoteDevice(val id: String, val name: String, val created: Long, val
 /** 发起一次配对：二维码里放 token，用户也可以输 6 位码；expires 是秒。 */
 data class RemotePairing(val code: String, val token: String, val expires: Long)
 
-/** 认领站点的结果：新认领的、本来就是这把密钥的、被别的密钥占了的。 */
-enum class ClaimResult { CLAIMED, ALREADY_MINE, TAKEN }
+/**
+ * 认领站点的结果：新认领的（第一台是站长）、本来就是成员的、
+ * 站点已经有站长了要邀请码、邀请码不对（用过、过期）、只认一台手机的老站点被别的密钥占了。
+ */
+enum class ClaimResult { CLAIMED, ALREADY_MINE, NEED_INVITE, BAD_INVITE, TAKEN }
+
+/** 站点情况：代码第几版、这台手机是不是站长。 */
+data class SiteInfo(val version: Int, val admin: Boolean)
+
+/** 站长发的邀请码：一次性，expires 是秒。 */
+data class RemoteInvite(val code: String, val expires: Long)
+
+/** 站点成员（共用这个站点的手机）。me 是自己这台。 */
+data class RemoteMember(val id: String, val name: String, val admin: Boolean, val me: Boolean, val created: Long, val lastSeen: Long)
 
 /** 来取一次的结果：新消息、用户回了的确认（id → 同不同意）、要停的回答（用户消息的 id）。 */
 data class RemotePoll(val messages: List<RemoteMessage>, val answers: Map<String, Boolean>, val stops: List<Long>)
@@ -59,7 +71,7 @@ class RemoteClient(base: String, private val key: String, http: OkHttpClient) {
             .apply { if (body != null) post(body) }.build()
         client.newCall(req).execute().use { r ->
             val text = r.body?.string().orEmpty()
-            if (r.code == 401) throw IOException(if ("尚未认领" in text) "站点还没被认领：点「连接站点」" else "站点不认这把密钥：可能站点重新部署过，或被别的手机认领了")
+            if (r.code == 401) throw IOException(if ("尚未认领" in text) "站点还没被认领：点「连接站点」" else "站点不认这把密钥：可能站点重新部署过、被站长移出了，或者还没加入")
             if (!r.isSuccessful) throw IOException("站点返回 ${r.code}：" + text.take(200))
             return text
         }
@@ -68,15 +80,18 @@ class RemoteClient(base: String, private val key: String, http: OkHttpClient) {
     private fun post(path: String, o: JsonObject) = call(path, o.toString().toRequestBody(jsonType))
 
     /**
-     * 认领站点：新部署的站点没有主人，第一把来认领的密钥就是主人，以后只认它。
-     * 409 是被别的密钥认领了（或者是老站点，用 Secrets 里的 KAVI_KEY 管：那把和这把一样也算是自己的）。
+     * 认领站点：新部署的站点第一台来认领的手机是站长；之后的手机要带站长给的邀请码（invite）才能加入。
+     * name 是成员列表里显示的名字。409 是只认一台手机的老站点被别的密钥占了（用 KAVI_KEY 管的老站点，那把和这把一样也算是自己的）。
      */
-    fun claim(): ClaimResult {
+    fun claim(invite: String = "", name: String = ""): ClaimResult {
+        val body = buildJsonObject { if (invite.isNotBlank()) put("invite", invite.trim()); if (name.isNotBlank()) put("name", name) }
         val req = Request.Builder().url(url("/api/device/claim")).header("Authorization", "Bearer $key")
-            .post(ByteArray(0).toRequestBody(null)).build()
+            .post(body.toString().toRequestBody(jsonType)).build()
         client.newCall(req).execute().use { r ->
             val text = r.body?.string().orEmpty()
             if (r.code == 409) return if (runCatching { ping() }.isSuccess) ClaimResult.ALREADY_MINE else ClaimResult.TAKEN
+            if (r.code == 403) return if ("need_invite" in text) ClaimResult.NEED_INVITE else ClaimResult.BAD_INVITE
+            if (r.code == 429) throw IOException("试错太多次，十分钟后再试")
             if (r.code == 404) throw IOException("站点代码太旧，不支持自动认领：按下面的说明重新部署一下")
             if (!r.isSuccessful) throw IOException("站点返回 ${r.code}：" + text.take(200))
             val claimed = runCatching { json.parseToJsonElement(text).jsonObject.str("claimed") }.getOrNull() == "true"
@@ -101,6 +116,26 @@ class RemoteClient(base: String, private val key: String, http: OkHttpClient) {
     }
 
     fun revoke(id: String) { post("/api/device/devices/revoke", buildJsonObject { put("id", id) }) }
+
+    /** 站点版本、自己是不是站长（老站点没有 admin，只有一台手机，算站长）。 */
+    fun info(): SiteInfo {
+        val o = json.parseToJsonElement(call("/api/device/ping")).jsonObject
+        return SiteInfo(o.str("version").toIntOrNull() ?: 0, o["admin"]?.let { (it as? JsonPrimitive)?.content == "true" } ?: true)
+    }
+
+    /** 站长发一个邀请码（7 天有效、只能用一次）。 */
+    fun invite(): RemoteInvite {
+        val o = json.parseToJsonElement(post("/api/device/invite", buildJsonObject {})).jsonObject
+        return RemoteInvite(o.str("code"), o.str("expires").toLongOrNull() ?: 0)
+    }
+
+    fun members(): List<RemoteMember> = (json.parseToJsonElement(call("/api/device/members")) as? JsonArray).orEmpty().map { it.jsonObject }.map { m ->
+        RemoteMember(m.str("id"), m.str("name"), m.str("admin") == "true", m.str("me") == "true",
+            m.str("created").toLongOrNull() ?: 0, m.str("last_seen").toLongOrNull() ?: 0)
+    }
+
+    /** 站长把一个成员移出：他的对话、文件、配过的设备一起删。 */
+    fun removeMember(id: String) { post("/api/device/members/remove", buildJsonObject { put("id", id) }) }
 
     /** 测试连接：密钥对不对、站点代码是第几版（不取消息）。 */
     fun ping(): Int = json.parseToJsonElement(call("/api/device/ping")).jsonObject.str("version").toIntOrNull() ?: 0
