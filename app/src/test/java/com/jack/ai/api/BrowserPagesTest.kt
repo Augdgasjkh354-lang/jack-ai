@@ -122,4 +122,11 @@ class BrowserPagesTest {
         assertEquals(0, BrowserPages.tabsToSave(all, 1, 10).current)
         assertEquals(0, BrowserPages.tabsToSave(listOf(t("", false)), 0, 10).tabs.size)
     }
+
+    @Test
+    fun desktopScriptOnlyActsUnderDesktopUserAgentAndUsesDesktopWidth() {
+        assertTrue(BrowserPages.DESKTOP_JS.contains("/Windows NT/.test(navigator.userAgent)"))
+        assertTrue(BrowserPages.DESKTOP_JS.contains("width=${BrowserPages.DESKTOP_WIDTH}"))
+        assertTrue(BrowserPages.desktopUserAgent("Mozilla/5.0 (Linux; Android 14) Chrome/131.0.1.2 Mobile Safari/537.36").contains("Windows NT"))
+    }
 }

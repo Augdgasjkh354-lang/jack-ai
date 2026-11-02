@@ -498,6 +498,9 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
                 userAgentString = BrowserPages.cleanUserAgent(userAgentString)
                 mobileUa = userAgentString
             }
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.USER_AGENT_METADATA) && mobileMeta == null) {
+                mobileMeta = runCatching { androidx.webkit.WebSettingsCompat.getUserAgentMetadata(settings) }.getOrNull()
+            }
             if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
                 androidx.webkit.WebSettingsCompat.setAlgorithmicDarkeningAllowed(settings, darkAllowed)
             }
@@ -527,6 +530,8 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
             // 网页生成文件后马上收回（revokeObjectURL）的话就存不下来了：晚两分钟再收；顺便记下链接上写的文件名
             if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
                 runCatching { androidx.webkit.WebViewCompat.addDocumentStartJavaScript(this, KEEP_BLOB_JS, setOf("*")) }
+                // 电脑版：网页一开始就当自己在电脑上（只在电脑版标识下起作用）
+                runCatching { androidx.webkit.WebViewCompat.addDocumentStartJavaScript(this, BrowserPages.DESKTOP_JS, setOf("*")) }
                 // 数着后台请求：动作做完等它们回来再读页面，失败的告诉模型（只在主页面装）
                 t.netScript = runCatching { androidx.webkit.WebViewCompat.addDocumentStartJavaScript(this, BrowserNetWatch.JS, setOf("*")) }.getOrNull()
                 // 不让网页靠 WebRTC 查到真实 IP（每个嵌入框也装）
@@ -658,7 +663,22 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         val ua = uaFor(url)
         if (mobileUa.isEmpty() || w.settings.userAgentString == ua) return false
         w.settings.userAgentString = ua
+        // 新式设备标识（请求里的 Sec-CH-UA-*、网页里的 userAgentData）跟着换，不然大网站照样认出是手机
+        val meta = if (ua == mobileUa) mobileMeta else mobileMeta?.let { desktopMeta(it) }
+        if (meta != null) runCatching { androidx.webkit.WebSettingsCompat.setUserAgentMetadata(w.settings, meta) }
         return true
+    }
+
+    /** 手机版原本的新式设备标识（第一个网页窗口建好时记下）；网页组件不支持改它时是 null。 */
+    private var mobileMeta: androidx.webkit.UserAgentMetadata? = null
+
+    /** 电脑版的新式设备标识：Windows 上的 Chrome，不是手机；版本号照手机上的。 */
+    private fun desktopMeta(m: androidx.webkit.UserAgentMetadata): androidx.webkit.UserAgentMetadata {
+        val brands = m.brandVersionList.map { b ->
+            if (b.brand.contains("WebView", true)) androidx.webkit.UserAgentMetadata.BrandVersion.Builder(b).setBrand("Google Chrome").build() else b
+        }
+        return androidx.webkit.UserAgentMetadata.Builder(m).setBrandVersionList(brands).setPlatform("Windows").setPlatformVersion("10.0.0")
+            .setArchitecture("x86").setBitness(64).setModel("").setMobile(false).setWow64(false).build()
     }
 
     /** 当前网站切换电脑版 / 手机版（按网站记住），然后重新打开。默认全用电脑版时，记的是哪些网站例外用手机版。 */
@@ -686,7 +706,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         if (!isDesktopAt(url)) return
         w.evaluateJavascript(
             "(function(){var m=document.querySelector('meta[name=viewport]');if(!m){m=document.createElement('meta');m.name='viewport';" +
-                "(document.head||document.documentElement).appendChild(m);}m.content='width=1200';})();", null,
+                "(document.head||document.documentElement).appendChild(m);}m.content='width=${BrowserPages.DESKTOP_WIDTH}';})();", null,
         )
     }
 
