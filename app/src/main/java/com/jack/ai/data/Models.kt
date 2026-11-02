@@ -81,6 +81,9 @@ data class SearchRecord(
 
 @Serializable
 data class Conversation(
+    /** 思路来自 deepseek-ai/deepseek-harness packages/goal/goal/，MIT。清除目标也保留修改时间，避免旧界面保存时覆盖新状态。 */
+    val goal: Goal? = null,
+    val goalChangedAt: Long = 0,
     val id: String = newId(),
     val title: String = "新对话",
     /** Kavi 因为极端辱骂结束了这个对话：不为空就是结束了（写着原因），不能再发消息，新开对话照常。 */

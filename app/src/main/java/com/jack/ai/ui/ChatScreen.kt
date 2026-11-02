@@ -228,6 +228,7 @@ fun ChatScreen(
             containerColor = bg,
             snackbarHost = { androidx.compose.material3.SnackbarHost(snackbar) },
             topBar = {
+                Column {
                 // 顶栏透明：背景色从上往下渐变到全透明，消息滚上去时自然淡出
                 CenterAlignedTopAppBar(
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
@@ -269,6 +270,9 @@ fun ChatScreen(
                         if (conv != null && conv.messages.isNotEmpty()) ExportMenu(vm, onMemory = { memoryOf = conv })
                     },
                 )
+                // 思路来自 deepseek-ai/deepseek-harness packages/goal/goal/，MIT。
+                conv?.let { GoalBar(vm, it) }
+                }
             },
             bottomBar = {
                 // Kavi 结束了这个对话：输入框换成一句说明和「新对话」

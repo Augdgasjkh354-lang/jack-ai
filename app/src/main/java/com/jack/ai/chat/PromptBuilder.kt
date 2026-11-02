@@ -185,6 +185,7 @@ object PromptBuilder {
                 add(SkillTools.LIST_WORKBENCH); add(SkillTools.DELETE_WORKBENCH)
             } else add(SkillTools.DELETE_FILE)
             if (skills.isNotEmpty()) add(SkillTools.USE_SKILL)
+            SkillTools.GOAL_TOOLS.forEach { add(it) } // 思路来自 deepseek-ai/deepseek-harness packages/goal/tool-goal/，MIT。
             add(SkillTools.RUN_CODE) // 思路来自 deepseek-ai/deepseek-harness packages/ptc-runtime/，MIT。
             add(SkillTools.UPDATE_PLAN); add(SkillTools.DELEGATE_TASKS)
             if (web) { add(SkillTools.WEB_SEARCH); add(SkillTools.READ_WEBPAGE); add(SkillTools.DOWNLOAD_FILE) }

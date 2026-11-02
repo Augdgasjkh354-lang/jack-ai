@@ -83,7 +83,23 @@ class Store(context: Context) {
 
     /** Chat 和 Work 合并了：旧的 Work 对话读出来就当普通对话。 */
     fun loadConversations() = load("conversations.json", Conversation.serializer()).map { if (it.work) it.copy(work = false) else it }
-    fun saveConversations(list: List<Conversation>) = save("conversations.json", Conversation.serializer(), list)
+    /** 思路来自 deepseek-ai/deepseek-harness packages/goal/goal/，MIT。后台更新的目标不能被前台旧快照盖掉。 */
+    fun saveConversations(list: List<Conversation>) = synchronized(LOCK) {
+        val disk = loadConversations().associateBy { it.id }
+        save("conversations.json", Conversation.serializer(), list.map { c ->
+            val newer = disk[c.id]?.takeIf { it.goalChangedAt > c.goalChangedAt }
+            if (newer == null) c else c.copy(goal = newer.goal, goalChangedAt = newer.goalChangedAt)
+        })
+    }
+
+    /** 思路来自 deepseek-ai/deepseek-harness packages/goal/goal/，MIT。读改写在同一存储锁内，进展与续做计数一起落盘。 */
+    fun changeGoal(id: String, fallback: Conversation?, transform: (Goal?) -> Goal?): Conversation? = synchronized(LOCK) {
+        val list = loadConversations()
+        val conv = list.firstOrNull { it.id == id } ?: fallback ?: return@synchronized null
+        val next = conv.copy(goal = transform(conv.goal), goalChangedAt = maxOf(System.currentTimeMillis(), conv.goalChangedAt + 1))
+        saveConversations(if (list.any { it.id == id }) list.map { if (it.id == id) next else it } else list + next)
+        next
+    }
     /** 远程连接的对话（从站点来的）：单独存一份，带着工具调用过程，下一轮接着用；App 里看到的是收件箱合进来的副本。 */
     fun loadRemoteConvs() = load("remote_convs.json", Conversation.serializer())
     fun saveRemoteConvs(list: List<Conversation>) = save("remote_convs.json", Conversation.serializer(), list)

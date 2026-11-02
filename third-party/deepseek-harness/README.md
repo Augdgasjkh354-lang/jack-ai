@@ -10,4 +10,4 @@
 
 - `packages/ptc-runtime/` 和 `.agents/notes/implemented/feature/2026-06-15-ptc.zh.md`：`data/CodeRunner.kt`、`data/JsRunner.kt`、`tools/CodeTools.kt`、`tools/ToolSession.kt`、`data/Skills.kt`、`chat/PromptBuilder.kt`。借鉴 Code Mode，将重复只读调用放进一段程序，保留普通工具的检查与统计。
 - `packages/guard/timeout-policy/`、`packages/compaction/compaction-image-offload/`：`tools/ToolTimeout.kt`、`tools/ToolSession.kt`、`chat/ImageOffload.kt`、`chat/Agent.kt`：工具分类超时、确认等待不计时，以及请求图片超额降级。
-- `packages/goal/`（goal、tool-goal、goal-round-driver）、`docs/subsystems/goal.zh.md`：对话持久目标、后台续做与目标状态条（第三项提交补齐实现路径）。
+- `packages/goal/`（goal、tool-goal、goal-round-driver）、`docs/subsystems/goal.zh.md`：`data/Goal.kt`、`data/Goals.kt`、`data/GoalWorker.kt`、`data/Models.kt`、`data/Store.kt`、`tools/GoalTools.kt`、`tools/BackgroundWork.kt`、`tools/ParallelTools.kt`、`tools/ContextNote.kt`、`tools/ToolSession.kt`、`tools/BrowserTools.kt`、`data/Skills.kt`、`chat/PromptBuilder.kt`、`ui/GoalBar.kt`、`ui/ChatScreen.kt`、`ChatViewModel.kt`、`WorkService.kt`、`KaviApp.kt`：对话持久目标、沿用 TaskCheckpoint 的后台续做、预算与轮数限制、人工接管停止，以及目标状态条。

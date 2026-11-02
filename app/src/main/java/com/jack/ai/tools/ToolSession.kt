@@ -110,6 +110,8 @@ class ToolSession(
     var maxRounds = WORK_MAX_ROUNDS
     /** 用户在不在（后台任务里是 false）：不在的时候 Kavi 不能改自己。 */
     var interactive = true
+    /** 思路来自 deepseek-ai/deepseek-harness packages/goal/goal-round-driver/，MIT。自动续做绝不绕过用户确认。 */
+    var goalRun = false
     /** 当前模型能不能看图（浏览器截图要用）。 */
     var canSee = false
     /** 这次回答里给 PPT、Word 拍过几次照（[lookAtPages]）：最多两次，免得改了又看、看了又改停不下来。 */
@@ -128,13 +130,14 @@ class ToolSession(
      * strict 的操作（读过外部内容后发信给新地址）完全授权下也要问。
      */
     suspend fun approve(title: String, body: String, action: String, strict: Boolean = false): Boolean =
-        ((!strict && withContext(Dispatchers.IO) { host.store.loadSettings().fullAuth }) ||
+        ((!goalRun && !strict && withContext(Dispatchers.IO) { host.store.loadSettings().fullAuth }) ||
             // 这一轮读到过疑似注入的内容：弹窗最上面先说一声
             ask(title, injection?.let { "⚠️ 这一轮读到了疑似提示词注入的内容（$it），确认这是你想让 Kavi 做的。\n\n" }.orEmpty() + body, action))
             .also { if (!it) rejected.incrementAndGet() }
 
     /** 正在替用户操作别的 App 时，Kavi 的弹窗用户看不到：改在屏幕下方的悬浮卡片里问。 */
     private suspend fun ask(title: String, body: String, action: String): Boolean {
+        if (goalRun) return ui.confirm(title, body, action)
         val svc = com.jack.ai.a11y.KaviAccessibility.instance
         if (!remote && phoneSeen != null && svc != null && com.jack.ai.a11y.KaviAccessibility.othersInFront(app)) return ToolTimeout.waiting { svc.confirm(title, body, action) }
         return ui.confirm(title, body, action)
@@ -147,7 +150,7 @@ class ToolSession(
     @Volatile internal var phoneSeen: com.jack.ai.a11y.Screen? = null
     @Volatile internal var phoneScale = 1f
     @Volatile internal var phoneStops = -1
-    internal var phoneControl: com.jack.ai.a11y.PhoneControl? = null
+    @Volatile internal var phoneControl: com.jack.ai.a11y.PhoneControl? = null
 
     internal suspend fun claimPhone(service: com.jack.ai.a11y.KaviAccessibility): com.jack.ai.a11y.PhoneControl {
         phoneControl?.let { it.ready(); return it }
@@ -261,8 +264,16 @@ class ToolSession(
     /** 按工具名执行，返回给模型看的结果，顺便记进工具统计。 */
     suspend fun execute(name: String, argsText: String): String = perform(name, argsText).text
 
+    /** 思路来自 deepseek-ai/deepseek-harness packages/goal/goal-round-driver/，MIT。批处理和分身也要遵守目标状态与月度预算。 */
+    internal fun goalAllowed(): Boolean {
+        if (!goalRun) return true
+        val g = com.jack.ai.data.Goals.current(app, conv.id)
+        return g != null && g.id == conv.goal?.id && g.status == "active" && !com.jack.ai.data.Goals.pauseForBudget(app, conv.id)
+    }
+
     /** 同 execute，另外带上这次成没成（由代码判定，不看结果文字怎么写）。 */
     suspend fun perform(name: String, argsText: String): ToolOutcome {
+        if (!goalAllowed()) return ToolOutcome("目标已停止，不要再调用工具，请用户查看目标进展。", ToolStatus.REJECTED)
         loop.check(name, argsText)?.let { msg ->
             withContext(Dispatchers.IO) { runCatching { host.store.addToolStat(name, failed = true) } }
             return ToolOutcome(msg, ToolStatus.FAILED)
@@ -358,6 +369,7 @@ class ToolSession(
             name == "create_diagram" && SkillIds.CALC in skillIds -> makeDiagram(args)
             name == "update_plan" -> updatePlan(args)
             name == "delegate_tasks" -> delegateTasks(args)
+            name in setOf("get_goal", "create_goal", "update_goal") -> goalTool(name, args)
             name == "run_code" -> runCode(args)
             name == "read_file" -> readFile(args)
             name == "write_file" -> writeFile(args)

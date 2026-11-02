@@ -13,6 +13,8 @@ class KaviApp : Application() {
         if (android.os.Build.VERSION.SDK_INT >= 31 && com.jack.ai.data.Store(this).loadSettings().phoneBackground) {
             com.wangzan101.mika.cap.phone.PhoneServices.of(this).shellManager.start()
         }
+        // 思路来自 deepseek-ai/deepseek-harness packages/goal/goal-round-driver/，MIT。
+        com.jack.ai.data.Goals.recover(this)
         Thread {
             runCatching { CrashLog.upload(this, com.jack.ai.data.Store(this).loadSettings().githubToken) }
         }.apply { isDaemon = true; name = "crash-upload" }.start()

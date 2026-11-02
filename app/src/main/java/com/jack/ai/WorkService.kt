@@ -109,15 +109,20 @@ class WorkService : Service() {
             post(ctx)
         }
 
+        /** 思路来自 deepseek-ai/deepseek-harness packages/goal/goal-round-driver/，MIT。续做复用任务进度通知。 */
+        fun foregroundInfo(ctx: Context): androidx.work.ForegroundInfo =
+            if (Build.VERSION.SDK_INT >= 29) androidx.work.ForegroundInfo(ID, summary(ctx), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            else androidx.work.ForegroundInfo(ID, summary(ctx))
+
         /** 干完了：别的还在进行就只更新通知，全都完了才关掉前台服务；App 不在眼前时发一条完成通知。 */
-        fun finish(ctx: Context, convId: String, title: String, result: String, work: Boolean) {
+        fun finish(ctx: Context, convId: String, title: String, result: String, work: Boolean, notifyResult: Boolean = true) {
             runs.remove(convId)
             if (runs.isEmpty()) {
                 ctx.stopService(Intent(ctx, WorkService::class.java))
                 // 前台服务没开成时，进度是普通的常驻通知，停服务撤不掉它，要自己撤（不然一直挂着「正在回答」划不掉）
                 runCatching { NotificationManagerCompat.from(ctx).cancel(ID) }
             } else post(ctx)
-            if (!MainActivity.visible) Routines.notify(ctx, "work-$convId", (if (work) "完成了：" else "回答好了：") + title, result, openChat = convId)
+            if (notifyResult && !MainActivity.visible) Routines.notify(ctx, "work-$convId", (if (work) "完成了：" else "回答好了：") + title, result, openChat = convId)
         }
     }
 }

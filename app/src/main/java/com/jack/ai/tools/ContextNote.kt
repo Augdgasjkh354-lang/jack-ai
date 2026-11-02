@@ -17,6 +17,10 @@ object ContextNote {
     private const val MAX_ITEMS = 30
 
     fun build(ctx: Context, store: Store, conv: Conversation, skillIds: Set<String>): String = buildString {
+        // 思路来自 deepseek-ai/deepseek-harness packages/goal/goal/，MIT。动态目标放本轮消息，固定提示词缓存不变。
+        store.loadConversations().firstOrNull { it.id == conv.id }?.goal?.let { g ->
+            append("【Persistent goal】").append(com.jack.ai.data.Goals.prompt(g) + "\n状态：${g.status}；最新进展：${g.progress.lastOrNull().orEmpty()}").append("\n")
+        }
         append(files(Workspace.dir(ctx, Workspace.key(conv))))
         // 能上网时：以前碰到过问题的网站，开工就知道该换来源（放在最后一条消息上，不影响缓存）
         if (conv.work || com.jack.ai.data.SkillIds.WEB in skillIds) append(com.jack.ai.data.Persona.fill(com.jack.ai.data.SiteNotes.note(com.jack.ai.data.SiteNotes.load(ctx)), store.loadSettings()))

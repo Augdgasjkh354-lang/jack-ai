@@ -61,6 +61,8 @@ internal suspend fun ToolSession.delegateTasks(args: JsonObject): String {
                         kotlinx.coroutines.flow.flow {
                             while (true) {
                                 try {
+                                    // 思路来自 deepseek-ai/deepseek-harness packages/goal/goal-round-driver/，MIT。
+                                    if (!goalAllowed()) throw com.jack.ai.data.GoalStopped()
                                     client.stream(ep, msgs, ThinkLevel.OFF, 1.0f, t).collect { emit(it) }
                                     break
                                 } catch (e: com.jack.ai.api.ApiException) {
