@@ -59,7 +59,7 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
         val screen = Screen(pkg, label(pkg), ScreenText.elements(root))
         PhoneGuard.payPage(screen.texts())?.let { phoneSeen = null; return null to "到了付款或输密码的页面（看到「$it」），Kavi 不碰。停下，告诉用户这一步要自己来。" }
         phoneSeen = screen
-        val note = StringBuilder(ScreenText.format(screen))
+        val note = StringBuilder(flowHint(pkg)).append(ScreenText.format(screen))
         // 读不到几个字的（自己画的界面、游戏）：能看图就自动截一张
         if (screen.elements.size < 4 && canSee) svc.screenshot(screen.elements)?.let { (img, k) ->
             images += img; phoneScale = k
@@ -115,7 +115,7 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
                 // 冷启动慢：等它到前台
                 repeat(20) { if (svc.foreground() != pkg) delay(250) }
                 svc.settle(4000)
-                flowHint(pkg) + read().second
+                read().second
             }
             "read" -> read().second
             "screenshot" -> {
@@ -222,14 +222,17 @@ private fun ToolSession.locked(): Boolean {
     return km.isKeyguardLocked || !pm.isInteractive
 }
 
-/** 打开一个存过流程的 App 时提醒一句（这一轮每个 App 只提醒一次）。 */
+/** 首次读到这个 App 时，合并内置使用知识、用户备忘和已存流程（每轮每个 App 只给一次）。 */
 private suspend fun ToolSession.flowHint(pkg: String): String {
     val site = com.jack.ai.data.BrowserFlows.APP_PREFIX + pkg
-    if (!flowHinted.add(site)) return ""
-    val flows = withContext(Dispatchers.IO) { host.store.loadFlows() }.filter { it.site == site }
-    if (flows.isEmpty()) return ""
-    return "【这个 App 存了流程】" + flows.joinToString("；") { f -> "「${f.name}」" + f.whenToUse.takeIf { it.isNotBlank() }?.let { "（$it）" }.orEmpty() } +
-        "。和用户要做的事对得上，就先用 action=flow 填 name 读出步骤照着做；对不上就照常做。\n\n"
+    if (site in flowHinted) return ""
+    val hint = withContext(Dispatchers.IO) {
+        val flows = host.store.loadFlows().filter { it.site == site }
+        val notes = com.jack.ai.data.BrowserFlows.notesFor(host.store.loadSiteNotes(), site) +
+            com.jack.ai.data.BrowserFlows.builtinNotesFor(site)
+        com.jack.ai.data.BrowserFlows.hint(flows, notes, app = true)
+    }
+    return if (hint.isNotEmpty() && flowHinted.add(site)) "$hint\n" else ""
 }
 
 /** 读一个手机流程的步骤（记一次使用），或者存 / 更新一个（存的是文字步骤，照着做时发送、付款照样要用户确认）。 */
