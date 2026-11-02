@@ -58,13 +58,14 @@ object SkillIds {
     const val RECEIPTS = "builtin-receipts"
     const val CODE = "builtin-code"
     const val JOB = "builtin-job"
+    const val DESIGN = "builtin-design"
 
     /**
      * 这些技能的工具不在开场就给，等模型用 use_skill 读了做法才加进来（本对话之后一直带着）：
      * 平时用得少、工具说明又长，每次都摆在面前既占上下文，也让模型更容易选错工具。
      * 计算与图表只有画图（create_chart / create_diagram）算在这里，算数一直能用。
      */
-    val ON_DEMAND = setOf(WORD, PDF, PPT, EXCEL, CALENDAR, MAIL, TRAIN, APP, GITHUB, BROWSER, NOTION, LEARN, CALC, FLOWS, CODE)
+    val ON_DEMAND = setOf(WORD, PDF, PPT, EXCEL, CALENDAR, MAIL, TRAIN, APP, GITHUB, BROWSER, NOTION, LEARN, CALC, FLOWS, CODE, DESIGN)
 }
 
 private fun schema(s: String): JsonObject = Json.parseToJsonElement(s).jsonObject
@@ -218,6 +219,28 @@ val BUILTIN_SKILLS = listOf(
 6. 计算要准：贷款等额本息、复利这类公式写对，用户给的例子心算核对一遍。
 7. 用户要改，用 edit_file 改它的底稿（就是这份 HTML），只改要改的那一段，不要整份重做。
 8. 生成后用一两句话说明怎么用，不要把代码贴进聊天。""",
+    ),
+    Skill(
+        id = SkillIds.DESIGN, builtin = true, name = "设计",
+        description = "做单张设计图：小红书配图、朋友圈方图、海报、活动宣传、邀请函、贺卡、名片、公众号封面、长图。用户说“做张海报/封面/邀请函/配图”时使用。",
+        instructions = """做设计图的做法（像 Canva：套模板改字换色，或者从头排版）：
+1. 弄清用途和内容：发哪（小红书、朋友圈、打印……）、要放哪些字（标题、时间、地点、联系方式……）、想要什么风格、有没有照片（用户发来的图在对话文件夹里）。够用就直接做；邀请函缺时间地点这类关键信息才问。
+2. 先 design action=templates（可以按 category 筛）看模板，按用途和风格挑最贴的一个；实在没有合适的，再用 html 从头设计。
+3. 套模板（action=make, template=模板 id）：
+   - slots 填文字：照每个位置的字数上限写，宁短勿长。标题要抓眼，6～14 字最好；不需要的位置填空字符串，它就不显示。
+   - lists 填列表（要点、步骤、日程），项数在模板写的范围里。
+   - 照片填进图片位，值写对话文件夹里的文件名。
+   - 想换颜色用 colors，六个变量是 bg、fg、primary、secondary、accent、muted。字和底色的对比要够；一张图里的彩色（主色、辅色、点缀）不超过三种。
+4. 从头设计（action=make, html=…, size=xhs/square/poster/a4/invite/card/cover/long 或「宽x高」）：
+   - 页面里放一个 <div class="canvas">，所有东西都在它里面。CSS 写在 <style> 里，不能用 JS，不能引外部网址。
+   - 配色写成上面六个变量；字体用 "Noto Sans CJK SC",sans-serif，要宋体用 "Noto Serif CJK SC",serif；字重只用 400 和 700。
+   - 每段文字加 data-slot="名字" 和 data-max="字数"，这样出图时能帮你查有没有装不下。
+   - 图标写 <i data-icon="calendar"></i>（用线框图标名：calendar、map-pin、phone、mail、heart、star、gift、clock……），用 CSS 定大小和颜色。照片写成 <div data-slot="photo" data-kind="image">，在 slots 里填文件名。
+   - 排版：一个最大的视觉焦点；标题字号是正文的 2.5～4 倍；对齐方式统一；四边至少留 64px（名片、封面 40px）；留白比堆东西更高级；装饰用几何形状、色块、细线，少而准。
+5. 出图后看工具给的检查结果；能看图的话再看一眼缩略图。有装不下的、对不齐的、太挤的、颜色发闷的，先改好再交给用户。
+6. 用户要改：用 edit_file 改底稿 .html 里那一处，再用 design action=render path=底稿名 重新出图，不要从头再做；只有换模板才重新 make。
+7. 要打印的（名片、海报、邀请函）加 format=pdf，同时出一份 PDF。
+8. 交付时用一两句话说用了什么风格，哪些地方能换（颜色、照片、文字）；不要把代码贴进聊天。""",
     ),
     Skill(
         id = SkillIds.TRAIN, builtin = true, name = "火车票",
@@ -642,6 +665,7 @@ object SkillTools {
 
     val MANAGE_EMAILS = schema("""{"type":"function","function":{"name":"manage_emails","description":"处理邮件：read/unread 标成已读或未读；trash 删除（移到「已删除」，能找回）；delete_forever 彻底删除；move 移到 target_folder；empty_trash 清空「已删除」（不用填 uids）。删除和移动前一般会弹窗让用户确认。","parameters":{"type":"object","properties":{"action":{"type":"string","enum":["read","unread","trash","delete_forever","move","empty_trash"]},"uids":{"type":"array","items":{"type":"integer"},"description":"list_emails 给出的编号，可以多个，一次最多 200"},"folder":{"type":"string","description":"邮件所在的文件夹；不填就按列表里这几封信所在的文件夹（拿不准会报错让你写明）"},"target_folder":{"type":"string","description":"只有 move 用：移到哪个文件夹"},"account":{"type":"string","description":"用哪个邮箱（邮箱地址），不填用默认邮箱"}},"required":["action"]}}}""")
 
+    val DESIGN = schema("""{"type":"function","function":{"name":"design","description":"做单张设计图（小红书配图、方图、海报、邀请函、贺卡、名片、公众号封面、长图），出 PNG，要打印可再出 PDF。templates 看模板；make 套模板或用 html 从头设计；render 改完底稿 .html 后重新出图。","parameters":{"type":"object","properties":{"action":{"type":"string","enum":["templates","make","render"]},"category":{"type":"string","enum":["xhs","square","poster","invite","card","cover","long"],"description":"templates 时按分类筛：xhs 小红书、square 方图、poster 海报、invite 邀请函贺卡、card 名片、cover 公众号封面、long 长图"},"template":{"type":"string","description":"make：模板 id；不填就用 html 从头设计"},"html":{"type":"string","description":"make 不用模板时：完整 HTML，内容都在 <div class=\"canvas\"> 里，规则见「设计」技能"},"size":{"type":"string","description":"不用模板时的尺寸：xhs、square、poster、a4、invite、card、cover、long，或「宽x高」像素"},"slots":{"type":"object","description":"位置名 → 内容。文字里用 \\n 换行，空字符串表示去掉这个元素；图片位填对话文件夹里的图片文件名"},"lists":{"type":"object","description":"列表名 → 数组，每项是 {位置名: 文字}；每项只有一段字时可以直接写字符串"},"colors":{"type":"object","description":"换配色：bg、fg、primary、secondary、accent、muted → #RRGGBB"},"filename":{"type":"string","description":"文件名（不带扩展名）"},"format":{"type":"string","enum":["png","pdf"],"description":"pdf：除了 PNG 再出一份 PDF（打印用）"},"path":{"type":"string","description":"render：底稿 .html 的文件名"}},"required":["action"]}}}""")
     val CREATE_APP = schema("""{"type":"function","function":{"name":"create_app","description":"做一个小工具：一个完整的 HTML 网页，直接显示在聊天里，用户能点击、输入、计算，也能全屏打开、下次接着用。","parameters":{"type":"object","properties":{"title":{"type":"string","description":"小工具的名字，比如 贷款计算器"},"html":{"type":"string","description":"完整的 HTML，CSS 和 JS 都写在里面"}},"required":["title","html"]}}}""")
     val QUERY_TRAINS = schema("""{"type":"function","function":{"name":"query_trains","description":"查 12306 某天两地之间的高铁、动车、火车车次和余票。只查不买。","parameters":{"type":"object","properties":{"from":{"type":"string","description":"出发站或城市，比如 北京、上海虹桥"},"to":{"type":"string","description":"到达站或城市"},"date":{"type":"string","description":"出发日期 yyyy-MM-dd"},"types":{"type":"string","description":"只看哪些车型，比如 GD（高铁和动车）；不填就全部"},"depart_after":{"type":"string","description":"最早出发时间 HH:mm"},"depart_before":{"type":"string","description":"最晚出发时间 HH:mm"}},"required":["from","to","date"]}}}""")
     val GITHUB = schema("""{"type":"function","function":{"name":"github","description":"GitHub。读：search 搜项目或代码，mine 用户自己的项目，repo 概况，tree 目录，read 读文件，grep 在本地副本里全文搜，releases 版本，download 下载项目到本地，asset 下载附件。改代码：write / edit / rm 改本地副本，diff 看改动，sync 拉取 GitHub 上别人的新提交并合并，commit 提交并推送（推之前自动同步）。PR：prs、pr、pr_create、merge。issue：issues、issue、issue_create、comment。自动打包：runs、run（看失败日志）、rerun。","parameters":{"type":"object","properties":{"action":{"type":"string","enum":["search","mine","repo","tree","read","grep","releases","download","asset","write","edit","rm","diff","sync","commit","prs","pr","pr_create","merge","issues","issue","issue_create","comment","runs","run","rerun"]},"repo":{"type":"string","description":"作者/项目名，或项目网址"},"query":{"type":"string","description":"search、grep 用：关键词（grep 可以是正则）"},"type":{"type":"string","enum":["repos","code"],"description":"search 用：搜项目（默认）还是搜代码"},"sort":{"type":"string","enum":["best","stars","updated"]},"path":{"type":"string","description":"文件或目录路径（相对项目根目录）"},"ref":{"type":"string","description":"分支、标签或提交，不填是默认分支"},"start":{"type":"integer"},"end":{"type":"integer"},"regex":{"type":"boolean"},"tag":{"type":"string"},"name":{"type":"string","description":"asset 用：附件名"},"content":{"type":"string","description":"write 用：文件的完整新内容"},"old":{"type":"string","description":"edit 用：要替换的原文（和文件里完全一致，要唯一）"},"new":{"type":"string","description":"edit 用：换成什么"},"all":{"type":"boolean","description":"edit 用：全部替换"},"message":{"type":"string","description":"commit 用：提交说明"},"branch":{"type":"string","description":"commit 用：推到哪个分支，不填就是下载时的分支；填一个不存在的名字会新建分支"},"number":{"type":"integer","description":"PR 或 issue 编号"},"title":{"type":"string"},"body":{"type":"string","description":"PR、issue、评论的正文"},"head":{"type":"string","description":"pr_create 用：从哪个分支合过来"},"base":{"type":"string","description":"pr_create 用：合到哪个分支，不填是默认分支"},"method":{"type":"string","enum":["squash","merge","rebase"],"description":"merge 用，默认 squash"},"state":{"type":"string","enum":["open","closed","all"]},"run_id":{"type":"integer","description":"run、rerun 用：运行编号（runs 里有）"}},"required":["action"]}}}""")

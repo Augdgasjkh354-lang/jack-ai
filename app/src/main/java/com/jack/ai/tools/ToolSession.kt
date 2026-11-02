@@ -334,6 +334,7 @@ class ToolSession(
             name.startsWith(com.jack.ai.data.Mcp.PREFIX) -> callConnector(name, args)
             name == "query_trains" && SkillIds.TRAIN in skillIds -> queryTrains(args)
             name == "create_app" && SkillIds.APP in skillIds -> makeApp(args)
+            name == "design" && SkillIds.DESIGN in skillIds -> design(args)
             name == "github" && SkillIds.GITHUB in skillIds -> github(args)
             name == "browser" && SkillIds.BROWSER in skillIds -> browse(args)
             name == "download_file" && web -> downloadFile(args)
