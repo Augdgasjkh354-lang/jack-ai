@@ -122,6 +122,7 @@ class BrowserActivity : ComponentActivity() {
     /** 选网页字号。 */
     private var textPick by mutableStateOf(false)
     /** 历史记录页开着。 */
+    private var searchPick by mutableStateOf(false)
     private var showHistory by mutableStateOf(false)
     /** 选电脑版放大多少。 */
     private var zoomPick by mutableStateOf(false)
@@ -283,7 +284,7 @@ class BrowserActivity : ComponentActivity() {
     }
 
     private fun open(input: String) {
-        val url = BrowserNet.normalize(input, proxiedNow())
+        val url = BrowserNet.normalize(input, proxiedNow(), JackBrowser.searchEngine)
         if (url.isEmpty()) return
         editing = url
         when (BrowserNet.classify(url)) {
@@ -432,6 +433,7 @@ class BrowserActivity : ComponentActivity() {
                         DropdownMenuItem(text = { Text("分享") }, enabled = has, onClick = { menu = false; share(b.address, b.title) })
                         DropdownMenuItem(text = { Text("存成 PDF") }, enabled = has, onClick = { menu = false; savePdf() })
                         DropdownMenuItem(text = { Text("页内查找") }, enabled = has, onClick = { menu = false; finding = "" })
+                        DropdownMenuItem(text = { Text("搜索引擎") }, onClick = { menu = false; searchPick = true })
                         DropdownMenuItem(text = { Text("历史记录") }, onClick = { menu = false; showHistory = true })
                         DropdownMenuItem(text = { Text("网页字号：${b.textZoom}%") }, onClick = { menu = false; textPick = true })
                         DropdownMenuItem(text = { Text(if (b.marks.any { it.url == b.address }) "移出书签" else "加入书签") }, enabled = has, onClick = {
@@ -605,6 +607,13 @@ class BrowserActivity : ComponentActivity() {
         }
         b.pressed?.let { p -> PressMenu(p) }
         b.permAsk?.let { a -> PermDialog(a) }
+        if (searchPick && b.userViewing) AlertDialog(
+            onDismissRequest = { searchPick = false }, title = { Text("搜索引擎") },
+            text = { Column { listOf("auto" to "自动", "google" to "Google", "bing" to "必应", "baidu" to "百度", "duckduckgo" to "DuckDuckGo").forEach { (key, label) ->
+                Text((if (b.searchEngine == key) "✓ " else "    ") + label,
+                    Modifier.fillMaxWidth().clickable { b.changeSearchEngine(key); searchPick = false }.padding(vertical = 12.dp))
+            } } }, confirmButton = { TextButton(onClick = { searchPick = false }) { Text("关闭") } },
+        )
         if (textPick) ZoomDialog("网页字号", "网页里的字太大或太小时调一下，所有网页都用这个字号。排版不变，只改字。",
             BrowserPages.TEXT_ZOOMS, b.textZoom, { textPick = false }) { b.changeTextZoom(it) }
         if (zoomPick) AlertDialog(

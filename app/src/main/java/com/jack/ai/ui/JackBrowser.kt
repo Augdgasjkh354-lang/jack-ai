@@ -174,6 +174,12 @@ object JackBrowser {
     /** 网页想打开别的 App，等用户点头（只在用户自己看着浏览器时问）。 */
     var external by mutableStateOf<String?>(null)
     var notice by mutableStateOf<String?>(null)
+    var searchEngine by mutableStateOf(BrowserNet.AUTO)
+        private set
+    fun changeSearchEngine(engine: String) {
+        searchEngine = engine
+        prefs().edit().putString("searchEngine", engine).apply()
+    }
     var route by mutableStateOf(BrowserNet.AUTO)
         private set
     /** 网页要下载、还没决定下不下的文件。 */
@@ -736,6 +742,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
     private fun loadLists() {
         fun read(k: String) = prefs().getString(k, null)?.let { runCatching { listJson.decodeFromString(visitList, it) }.getOrNull() }.orEmpty()
         visits = read("visits"); marks = read("marks")
+        searchEngine = prefs().getString("searchEngine", BrowserNet.AUTO) ?: BrowserNet.AUTO
         desktopSites = prefs().getStringSet("desktop", emptySet()).orEmpty().toSet()
         desktopAll = prefs().getBoolean("desktopall", true)
         desktopZoom = prefs().getInt("deskzoom", 100)

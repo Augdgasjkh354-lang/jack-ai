@@ -49,14 +49,20 @@ object BrowserNet {
     }
 
     /** 地址栏的输入 → 要打开的网址。像网址就补上 https://，不像就去搜。 */
-    fun normalize(input: String, proxied: Boolean): String {
+    fun normalize(input: String, proxied: Boolean, engine: String = AUTO): String {
         val t = input.trim()
         if (t.isEmpty()) return ""
         if (Regex("^https?://", RegexOption.IGNORE_CASE).containsMatchIn(t)) return t
         val looksLikeHost = !t.contains(' ') && Regex("""^[\w-]+(\.[\w-]+)+(:\d+)?(/.*)?$""").matches(t)
         if (looksLikeHost) return "https://$t"
         val q = java.net.URLEncoder.encode(t, "UTF-8")
-        return if (proxied) "https://www.google.com/search?q=$q" else "https://cn.bing.com/search?q=$q"
+        val chosen = if (engine == AUTO) { if (proxied) "google" else "bing" } else engine
+        return when (chosen) {
+            "google" -> "https://www.google.com/search?q=$q"
+            "baidu" -> "https://www.baidu.com/s?wd=$q"
+            "duckduckgo" -> "https://duckduckgo.com/?q=$q"
+            else -> "https://cn.bing.com/search?q=$q"
+        }
     }
 
     /** 浏览器里一个网址该怎么处理。 */

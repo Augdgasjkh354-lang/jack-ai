@@ -9,6 +9,17 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BrowserNetTest {
+    @org.junit.Test fun chosenSearchEngines() {
+        val query = "中文 a"
+        val q = java.net.URLEncoder.encode(query, "UTF-8")
+        listOf("google" to "https://www.google.com/search?q=", "bing" to "https://cn.bing.com/search?q=",
+            "baidu" to "https://www.baidu.com/s?wd=", "duckduckgo" to "https://duckduckgo.com/?q=").forEach { (engine, prefix) ->
+            org.junit.Assert.assertEquals(prefix + q, BrowserNet.normalize(query, false, engine))
+        }
+        org.junit.Assert.assertEquals(BrowserNet.normalize(query, true, "google"), BrowserNet.normalize(query, true))
+        org.junit.Assert.assertEquals(BrowserNet.normalize(query, false, "bing"), BrowserNet.normalize(query, false))
+    }
+
     private val node = ProxyNode("香港", "shadowsocks", "{}")
     private val on = Net.Config(enabled = true, nodes = listOf(node))
     private val off = Net.Config()
