@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-quote-ink","name":"留白金句","category":"xhs","size":[1080,1440],"style":"极简沉静","description":"深色底与细金线构成安静的金句海报，适合短句、读书感悟和情绪表达","slots":[{"name":"tag","label":"主题标签","max":12},{"name":"title","label":"金句","max":32},{"name":"body","label":"补充文字","max":32},{"name":"name","label":"署名","max":10},{"name":"role","label":"身份说明","max":14},{"name":"footer","label":"落款","max":18}],"lists":[],"images":[],"colors":{"bg":"#1E2227","fg":"#F0EEE8","primary":"#C2A36B","secondary":"#353B42","accent":"#E0C388","muted":"#B6B9B8"}}'>
+<title>留白金句</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--font-sans:"Noto Sans CJK SC","Source Han Sans SC","PingFang SC",sans-serif;--font-serif:"Noto Serif CJK SC","Source Han Serif SC","Songti SC",serif;--bg:#1E2227;--fg:#F0EEE8;--primary:#C2A36B;--secondary:#353B42;--accent:#E0C388;--muted:#B6B9B8;position:relative;display:flex;flex-direction:column;width:1080px;height:1440px;overflow:hidden;padding:88px;background:var(--bg);color:var(--fg);font-family:var(--font-sans);font-weight:400}
+.canvas:before{content:"";position:absolute;inset:26px;border:1px solid color-mix(in srgb,var(--primary) 56%,transparent);pointer-events:none}
+.canvas:after{content:"";position:absolute;right:86px;bottom:160px;width:180px;height:180px;border:1px solid color-mix(in srgb,var(--secondary) 82%,transparent);border-radius:50%}
+.canvas>*{position:relative;z-index:1}
+.top{display:flex;align-items:center;justify-content:space-between;height:42px}
+.tag{color:var(--primary);font-size:19px;font-weight:700;letter-spacing:.22em}
+.index{color:var(--muted);font-size:17px;letter-spacing:.2em}
+.quote-mark{margin-top:104px;color:var(--primary);font-family:var(--font-serif);font-size:118px;line-height:.9}
+.quote{max-width:880px;margin:16px 0 0;font-family:var(--font-serif);font-size:74px;line-height:1.34;font-weight:700;letter-spacing:.025em}
+.bodycopy{max-width:800px;margin:29px 0 0;color:var(--muted);font-size:26px;line-height:1.6}
+.signature{display:flex;align-items:center;gap:22px;margin-top:44px}
+.seal{display:flex;align-items:center;justify-content:center;width:70px;height:70px;border:1px solid var(--primary);border-radius:50%;color:var(--primary);font-family:var(--font-serif);font-size:25px;font-weight:700}
+.person{display:flex;flex-direction:column;gap:6px}
+.name{color:var(--fg);font-size:25px;font-weight:700}
+.role{color:var(--muted);font-size:18px}
+.bottom{display:flex;align-items:center;justify-content:space-between;margin-top:auto;padding-top:20px;border-top:1px solid color-mix(in srgb,var(--primary) 35%,transparent);color:var(--muted);font-size:18px;letter-spacing:.08em}
+.bottom-mark{width:58px;height:2px;background:var(--accent)}
+span[data-slot]{display:inline-block}
+</style>
+</head>
+<body style="margin:0"><div class="canvas">
+<header class="top"><span class="tag" data-slot="tag" data-max="12">给自己一点时间</span><span class="index">A QUIET NOTE · 04</span></header>
+<div class="quote-mark" aria-hidden="true">“</div>
+<h1 class="quote" data-slot="title" data-max="32">慢一点没有关系，重要的是别忘了自己为什么出发</h1>
+<p class="bodycopy" data-slot="body" data-max="32">走自己的节奏，也是一种笃定。愿每一步都通向更自在的生活。</p>
+<div class="signature"><span class="seal">日</span><div class="person"><span class="name" data-slot="name" data-max="10">林间来信</span><span class="role" data-slot="role" data-max="14">写给认真生活的人</span></div></div>
+<footer class="bottom"><span data-slot="footer" data-max="18">把这句话留给今天</span><span class="bottom-mark"></span></footer>
+</div></body>
+</html>

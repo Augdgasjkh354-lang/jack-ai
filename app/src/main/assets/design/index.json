@@ -1,0 +1,352 @@
+[
+  {
+    "id": "xhs-checklist-coral",
+    "name": "轻松打卡清单",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "活泼可爱",
+    "description": "珊瑚红与奶油色的打卡清单卡片，适合习惯养成、出游准备和生活小目标",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "主题标签",
+        "max": 12
+      },
+      {
+        "name": "title",
+        "label": "标题",
+        "max": 14
+      },
+      {
+        "name": "subtitle",
+        "label": "副标题",
+        "max": 20
+      },
+      {
+        "name": "footer",
+        "label": "落款",
+        "max": 16
+      }
+    ],
+    "lists": [
+      {
+        "name": "steps",
+        "label": "清单",
+        "min": 3,
+        "max": 5,
+        "slots": [
+          {
+            "name": "text",
+            "label": "清单内容",
+            "max": 24
+          }
+        ]
+      }
+    ],
+    "images": [],
+    "colors": {
+      "bg": "#FFF4E8",
+      "fg": "#342626",
+      "primary": "#B63C32",
+      "secondary": "#F8D4BC",
+      "accent": "#E79C36",
+      "muted": "#6E5650"
+    }
+  },
+  {
+    "id": "xhs-editorial-moment",
+    "name": "午后编辑部",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "杂志编辑感",
+    "description": "像生活杂志内页一样用大幅留白和柔和配图讲述一个日常瞬间",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "栏目",
+        "max": 10
+      },
+      {
+        "name": "date",
+        "label": "日期",
+        "max": 16
+      },
+      {
+        "name": "title",
+        "label": "标题",
+        "max": 18
+      },
+      {
+        "name": "subtitle",
+        "label": "副标题",
+        "max": 24
+      },
+      {
+        "name": "body",
+        "label": "正文",
+        "max": 42
+      },
+      {
+        "name": "footer",
+        "label": "落款",
+        "max": 18
+      }
+    ],
+    "lists": [],
+    "images": [
+      {
+        "name": "photo",
+        "label": "配图",
+        "optional": true
+      }
+    ],
+    "colors": {
+      "bg": "#F3EFE7",
+      "fg": "#31261F",
+      "primary": "#8B3F38",
+      "secondary": "#D9C6A9",
+      "accent": "#B17B36",
+      "muted": "#68584A"
+    }
+  },
+  {
+    "id": "xhs-knowledge-fresh",
+    "name": "清新知识卡",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "清新自然",
+    "description": "清爽留白配薄荷绿要点卡，适合知识整理、经验分享与收藏清单",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "栏目标签",
+        "max": 12
+      },
+      {
+        "name": "title",
+        "label": "标题",
+        "max": 16
+      },
+      {
+        "name": "subtitle",
+        "label": "副标题",
+        "max": 24
+      },
+      {
+        "name": "footer",
+        "label": "落款",
+        "max": 16
+      }
+    ],
+    "lists": [
+      {
+        "name": "points",
+        "label": "要点",
+        "min": 3,
+        "max": 5,
+        "slots": [
+          {
+            "name": "text",
+            "label": "要点",
+            "max": 28
+          }
+        ]
+      }
+    ],
+    "images": [],
+    "colors": {
+      "bg": "#F5F8F0",
+      "fg": "#23372D",
+      "primary": "#3D725A",
+      "secondary": "#DCEBDD",
+      "accent": "#D29B3E",
+      "muted": "#596B60"
+    }
+  },
+  {
+    "id": "xhs-quote-ink",
+    "name": "留白金句",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "极简沉静",
+    "description": "深色底与细金线构成安静的金句海报，适合短句、读书感悟和情绪表达",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "主题标签",
+        "max": 12
+      },
+      {
+        "name": "title",
+        "label": "金句",
+        "max": 32
+      },
+      {
+        "name": "body",
+        "label": "补充文字",
+        "max": 32
+      },
+      {
+        "name": "name",
+        "label": "署名",
+        "max": 10
+      },
+      {
+        "name": "role",
+        "label": "身份说明",
+        "max": 14
+      },
+      {
+        "name": "footer",
+        "label": "落款",
+        "max": 18
+      }
+    ],
+    "lists": [],
+    "images": [],
+    "colors": {
+      "bg": "#1E2227",
+      "fg": "#F0EEE8",
+      "primary": "#C2A36B",
+      "secondary": "#353B42",
+      "accent": "#E0C388",
+      "muted": "#B6B9B8"
+    }
+  },
+  {
+    "id": "xhs-retro-paper",
+    "name": "旧纸上的小事",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "复古手账",
+    "description": "纸张肌理、深绿和朱砂色点缀，适合旅行记录、生活观察与温柔清单",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "主题标签",
+        "max": 12
+      },
+      {
+        "name": "date",
+        "label": "日期",
+        "max": 14
+      },
+      {
+        "name": "title",
+        "label": "标题",
+        "max": 14
+      },
+      {
+        "name": "subtitle",
+        "label": "副标题",
+        "max": 22
+      },
+      {
+        "name": "footer",
+        "label": "落款",
+        "max": 18
+      }
+    ],
+    "lists": [
+      {
+        "name": "notes",
+        "label": "手账条目",
+        "min": 3,
+        "max": 5,
+        "slots": [
+          {
+            "name": "text",
+            "label": "记录内容",
+            "max": 24
+          }
+        ]
+      }
+    ],
+    "images": [],
+    "colors": {
+      "bg": "#F5E7C9",
+      "fg": "#302718",
+      "primary": "#425A37",
+      "secondary": "#E2D0AA",
+      "accent": "#B55335",
+      "muted": "#61563F"
+    }
+  },
+  {
+    "id": "xhs-tech-grid",
+    "name": "未来效率图鉴",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "科技信息图",
+    "description": "深海蓝底色搭配网格和数据卡片，适合效率方法、工具盘点与数字知识合集",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "主题标签",
+        "max": 12
+      },
+      {
+        "name": "title",
+        "label": "标题",
+        "max": 16
+      },
+      {
+        "name": "subtitle",
+        "label": "副标题",
+        "max": 22
+      },
+      {
+        "name": "footer",
+        "label": "落款",
+        "max": 18
+      }
+    ],
+    "lists": [
+      {
+        "name": "metrics",
+        "label": "方法卡片",
+        "min": 3,
+        "max": 5,
+        "slots": [
+          {
+            "name": "label",
+            "label": "关键词",
+            "max": 8
+          },
+          {
+            "name": "text",
+            "label": "说明",
+            "max": 22
+          }
+        ]
+      }
+    ],
+    "images": [],
+    "colors": {
+      "bg": "#071E33",
+      "fg": "#EAF6FF",
+      "primary": "#37C8C5",
+      "secondary": "#173B55",
+      "accent": "#F0BA5E",
+      "muted": "#A9C4D4"
+    }
+  }
+]

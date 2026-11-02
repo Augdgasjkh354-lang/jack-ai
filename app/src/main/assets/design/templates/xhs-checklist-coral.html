@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-checklist-coral","name":"轻松打卡清单","category":"xhs","size":[1080,1440],"style":"活泼可爱","description":"珊瑚红与奶油色的打卡清单卡片，适合习惯养成、出游准备和生活小目标","slots":[{"name":"tag","label":"主题标签","max":12},{"name":"title","label":"标题","max":14},{"name":"subtitle","label":"副标题","max":20},{"name":"footer","label":"落款","max":16}],"lists":[{"name":"steps","label":"清单","min":3,"max":5,"slots":[{"name":"text","label":"清单内容","max":24}]}],"images":[],"colors":{"bg":"#FFF4E8","fg":"#342626","primary":"#B63C32","secondary":"#F8D4BC","accent":"#E79C36","muted":"#6E5650"}}'>
+<title>轻松打卡清单</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--font-sans:"Noto Sans CJK SC","Source Han Sans SC","PingFang SC",sans-serif;--font-serif:"Noto Serif CJK SC","Source Han Serif SC","Songti SC",serif;--bg:#FFF4E8;--fg:#342626;--primary:#B63C32;--secondary:#F8D4BC;--accent:#E79C36;--muted:#6E5650;position:relative;display:flex;flex-direction:column;width:1080px;height:1440px;overflow:hidden;padding:72px;background:var(--bg);color:var(--fg);font-family:var(--font-sans);font-weight:400}
+.canvas:before{content:"";position:absolute;top:42px;right:50px;width:230px;height:230px;border:2px dashed color-mix(in srgb,var(--accent) 48%,transparent);border-radius:50%}
+.canvas:after{content:"";position:absolute;left:0;bottom:100px;width:26px;height:180px;border-radius:0 16px 16px 0;background:var(--primary)}
+.canvas>*{position:relative;z-index:1}
+.top{display:flex;align-items:center;justify-content:space-between;height:48px}
+.tag{display:inline-flex;align-items:center;padding:11px 18px;border:1px solid color-mix(in srgb,var(--primary) 42%,var(--bg));border-radius:20px;color:var(--primary);font-size:22px;font-weight:700}
+.season{color:var(--muted);font-size:18px;font-weight:700;letter-spacing:.15em}
+.hero{margin-top:40px}
+.title{max-width:900px;margin:0;font-size:82px;line-height:1.14;font-weight:700;letter-spacing:.02em}
+.subtitle{margin:15px 0 0;color:var(--muted);font-size:29px;line-height:1.4}
+.list-title{display:flex;align-items:center;gap:14px;margin:30px 0 15px;color:var(--primary);font-size:22px;font-weight:700;letter-spacing:.08em}
+.list-title:before,.list-title:after{content:"";height:1px;background:color-mix(in srgb,var(--primary) 34%,var(--bg))}
+.list-title:before{width:38px}.list-title:after{flex:1}
+.steps{display:flex;flex:1;flex-direction:column;gap:15px;min-height:0;counter-reset:step}
+.step{display:grid;flex:1;grid-template-columns:80px 1fr 34px;align-items:center;gap:18px;min-height:118px;padding:18px 24px;border-radius:26px;background:color-mix(in srgb,var(--secondary) 72%,var(--bg));counter-increment:step}
+.step:before{content:counter(step);display:flex;align-items:center;justify-content:center;width:64px;height:64px;border-radius:22px 22px 22px 8px;background:var(--primary);color:var(--bg);font-size:28px;font-weight:700;transform:rotate(-3deg)}
+.step:after{content:"";width:24px;height:24px;border:2px solid color-mix(in srgb,var(--primary) 55%,var(--bg));border-radius:50%}
+.step-text{display:block;font-size:29px;line-height:1.38;font-weight:400}
+.bottom{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:20px;color:var(--muted);font-size:20px}
+.star{width:14px;height:14px;background:var(--accent);transform:rotate(45deg)}
+span[data-slot]{display:inline-block}
+</style>
+</head>
+<body style="margin:0"><div class="canvas">
+<header class="top"><span class="tag" data-slot="tag" data-max="12">一周好习惯</span><span class="season">WEEKLY CHECK</span></header>
+<section class="hero"><h1 class="title" data-slot="title" data-max="14">把自己照顾好</h1><p class="subtitle" data-slot="subtitle" data-max="20">不必一次改变很多，今天先做好这几件小事</p></section>
+<div class="list-title">本周轻轻打卡</div>
+<section class="steps" data-list="steps" data-min="3" data-max="5">
+<article class="step" data-item><span class="step-text" data-slot="text" data-max="24">起床后先喝一杯温水</span></article>
+<article class="step" data-item><span class="step-text" data-slot="text" data-max="24">午休时离开屏幕十分钟</span></article>
+<article class="step" data-item><span class="step-text" data-slot="text" data-max="24">睡前写下今天的一件好事</span></article>
+</section>
+<footer class="bottom"><i class="star"></i><span data-slot="footer" data-max="16">完成一件，也值得夸夸自己</span></footer>
+</div></body>
+</html>

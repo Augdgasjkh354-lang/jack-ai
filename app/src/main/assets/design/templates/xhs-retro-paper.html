@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-retro-paper","name":"旧纸上的小事","category":"xhs","size":[1080,1440],"style":"复古手账","description":"纸张肌理、深绿和朱砂色点缀，适合旅行记录、生活观察与温柔清单","slots":[{"name":"tag","label":"主题标签","max":12},{"name":"date","label":"日期","max":14},{"name":"title","label":"标题","max":14},{"name":"subtitle","label":"副标题","max":22},{"name":"footer","label":"落款","max":18}],"lists":[{"name":"notes","label":"手账条目","min":3,"max":5,"slots":[{"name":"text","label":"记录内容","max":24}]}],"images":[],"colors":{"bg":"#F5E7C9","fg":"#302718","primary":"#425A37","secondary":"#E2D0AA","accent":"#B55335","muted":"#61563F"}}'>
+<title>旧纸上的小事</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--font-sans:"Noto Sans CJK SC","Source Han Sans SC","PingFang SC",sans-serif;--font-serif:"Noto Serif CJK SC","Source Han Serif SC","Songti SC",serif;--bg:#F5E7C9;--fg:#302718;--primary:#425A37;--secondary:#E2D0AA;--accent:#B55335;--muted:#61563F;position:relative;display:flex;flex-direction:column;width:1080px;height:1440px;overflow:hidden;padding:70px 74px;background:var(--bg);color:var(--fg);font-family:var(--font-sans);font-weight:400}
+.canvas:before{content:"";position:absolute;inset:16px;border:1px solid color-mix(in srgb,var(--primary) 35%,transparent);pointer-events:none}
+.canvas:after{content:"";position:absolute;right:76px;top:165px;width:142px;height:142px;border:2px solid color-mix(in srgb,var(--accent) 66%,transparent);border-radius:50%;box-shadow:inset 0 0 0 9px color-mix(in srgb,var(--bg) 92%,transparent),inset 0 0 0 10px color-mix(in srgb,var(--accent) 46%,transparent)}
+.canvas>*{position:relative;z-index:1}
+.top{display:flex;align-items:center;justify-content:space-between;height:48px}
+.tag{display:inline-flex;align-items:center;padding:9px 16px;border:1px solid color-mix(in srgb,var(--primary) 52%,var(--bg));border-radius:3px;color:var(--primary);font-size:20px;font-weight:700;letter-spacing:.09em}
+.date{color:var(--muted);font-family:var(--font-serif);font-size:19px}
+.hero{margin-top:38px}
+.overline{margin-bottom:10px;color:var(--accent);font-size:19px;font-weight:700;letter-spacing:.2em}
+.title{max-width:840px;margin:0;font-family:var(--font-serif);font-size:78px;line-height:1.2;font-weight:700;letter-spacing:.025em}
+.subtitle{max-width:790px;margin:16px 0 0;color:var(--muted);font-size:28px;line-height:1.45}
+.notes{display:flex;flex:1;flex-direction:column;gap:14px;min-height:0;margin-top:28px;counter-reset:note}
+.note{display:grid;flex:1;grid-template-columns:63px 1fr;align-items:center;gap:18px;min-height:108px;padding:16px 20px;border-top:1px solid color-mix(in srgb,var(--primary) 42%,var(--bg));border-bottom:1px solid color-mix(in srgb,var(--primary) 25%,var(--bg));background:color-mix(in srgb,var(--secondary) 60%,var(--bg));counter-increment:note}
+.note:before{content:"0" counter(note);color:var(--accent);font-family:var(--font-serif);font-size:25px;font-weight:700}
+.note-text{display:block;color:var(--fg);font-size:28px;line-height:1.4}
+.bottom{display:flex;align-items:center;justify-content:space-between;margin-top:18px;padding-top:16px;border-top:2px solid color-mix(in srgb,var(--primary) 48%,var(--bg));color:var(--muted);font-family:var(--font-serif);font-size:20px}
+.bottom-stamp{color:var(--accent);font-size:17px;font-weight:700;letter-spacing:.14em}
+span[data-slot]{display:inline-block}
+</style>
+</head>
+<body style="margin:0"><div class="canvas">
+<header class="top"><span class="tag" data-slot="tag" data-max="12">沿途拾记</span><span class="date" data-slot="date" data-max="14">春日手账 · 06</span></header>
+<section class="hero"><div class="overline">NOTES FROM THE DAY</div><h1 class="title" data-slot="title" data-max="14">记下微小的快乐</h1><p class="subtitle" data-slot="subtitle" data-max="22">那些不起眼的瞬间，也在悄悄照亮生活</p></section>
+<section class="notes" data-list="notes" data-min="3" data-max="5">
+<article class="note" data-item><span class="note-text" data-slot="text" data-max="24">路边新开的花，刚好遇见的人</span></article>
+<article class="note" data-item><span class="note-text" data-slot="text" data-max="24">读到一句喜欢的话，窗外落了一场雨</span></article>
+<article class="note" data-item><span class="note-text" data-slot="text" data-max="24">把饭慢慢吃完，给自己泡一杯茶</span></article>
+</section>
+<footer class="bottom"><span data-slot="footer" data-max="18">日子是由小事拼起来的</span><span class="bottom-stamp">KEEP THIS MOMENT</span></footer>
+</div></body>
+</html>
