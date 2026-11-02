@@ -9,6 +9,7 @@
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -80,6 +81,12 @@
             </intent-filter>
         </activity>
         <!-- 万能收件箱：分享菜单里的「存进 Kavi 收件箱」，进来后自动归档，不用再按发送 -->
+        <service android:name=".BrowserPlaybackService" android:exported="false" android:foregroundServiceType="mediaPlayback">
+            <intent-filter><action android:name="android.intent.action.MEDIA_BUTTON" /></intent-filter>
+        </service>
+        <receiver android:name="androidx.media.session.MediaButtonReceiver" android:exported="false">
+            <intent-filter><action android:name="android.intent.action.MEDIA_BUTTON" /></intent-filter>
+        </receiver>
         <!-- Kavi 浏览器：自己翻网页，可以走 Kavi 专用代理 -->
         <activity
             android:name=".ui.BrowserActivity"

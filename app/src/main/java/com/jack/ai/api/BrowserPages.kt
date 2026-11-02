@@ -125,6 +125,19 @@ Object.defineProperty(P,'visibilityState',{get:function(){return keep?'visible':
 function on(e){if(dh.get.call(document)){if(!keep&&playing())keep=true;if(keep)e.stopImmediatePropagation();}else if(keep){keep=false;e.stopImmediatePropagation();}}
 window.addEventListener('visibilitychange',on,true);window.addEventListener('webkitvisibilitychange',on,true);})();"""
 
+    const val MEDIA_PREFIX = "KAVI_MEDIA:"
+    /** 每个框架单独报声音状态，动态加入的播放器也能收到事件。 */
+    const val MEDIA_JS = """(function(){if(window.__kaviMedia)return;window.__kaviMedia=1;
+var id=Math.random().toString(36).slice(2);
+function report(){var on=false;[].forEach.call(document.querySelectorAll('video,audio'),function(m){if(!m.paused&&!m.ended&&!m.muted&&m.volume>0){on=true;m.__kaviResume=true;}});
+console.log('KAVI_MEDIA:'+JSON.stringify({id:id,on:on}));}
+['play','pause','ended','volumechange','emptied'].forEach(function(e){document.addEventListener(e,report,true);});
+function cmd(op){document.querySelectorAll('video,audio').forEach(function(m){if(op==='play'){if(m.__kaviResume){var p=m.play();if(p)p.catch(function(){});}}
+else {if(!m.paused&&!m.ended)m.__kaviResume=true;if(op==='stop')m.__kaviResume=false;m.pause();}});
+for(var i=0;i<frames.length;i++)frames[i].postMessage({kaviMedia:op},'*');report();}
+window.__kaviMediaCommand=cmd;window.addEventListener('message',function(e){if(e.source===parent&&e.data&&e.data.kaviMedia)cmd(e.data.kaviMedia);});
+setInterval(report,1000);})();"""
+
     /** 暂停网页里所有在放的声音和视频（关掉浏览器、关掉画中画时）。 */
     const val PAUSE_ALL_JS = "(function(){try{document.querySelectorAll('video,audio').forEach(function(m){m.pause();});}catch(e){}})();"
 

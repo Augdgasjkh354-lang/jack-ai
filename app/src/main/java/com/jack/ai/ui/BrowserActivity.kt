@@ -228,6 +228,7 @@ class BrowserActivity : ComponentActivity() {
     override fun onPause() {
         super.onPause()
         JackBrowser.userViewing = false
+        JackBrowser.backgroundPlayback()
         // 刚登录完 App 就被系统杀掉也不丢登录：离开浏览器时把 Cookie 写到磁盘
         JackBrowser.flushCookies()
         // 标签页也记下来，下次打开 App 还在

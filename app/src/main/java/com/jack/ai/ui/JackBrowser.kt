@@ -73,6 +73,9 @@ object JackBrowser {
     /** incognito：隐身标签页，Cookie、登录状态、网页存储和别的标签页分开，关掉最后一个隐身页就全清掉，也不记最近访问。 */
     /** account：分身（1 到 [ACCOUNTS]），和主账号、别的分身的登录状态分开，同一个网站能登不同的账号；0 是平常的。 */
     class Tab(val id: Int, val incognito: Boolean = false, val account: Int = 0) {
+        var mediaFromUser = false
+        val mediaFrames = mutableMapOf<String, Pair<Boolean, Long>>()
+        val audible get() = mediaFrames.values.any { it.first && System.currentTimeMillis() - it.second < 5000 }
         var web: WebView? = null
         var address by mutableStateOf("")
         var title by mutableStateOf("")
@@ -449,7 +452,18 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
     }
 
     /** 暂停所有标签页里在放的声音和视频。 */
-    fun pauseAll() { tabs.forEach { it.web?.evaluateJavascript(BrowserPages.PAUSE_ALL_JS, null) } }
+    fun pauseAll() {
+        tabs.forEach { mediaControl(it.id, "stop"); it.mediaFrames.clear() }
+        if (::app.isInitialized) com.jack.ai.BrowserPlaybackService.stop(app)
+    }
+    fun mediaControl(id: Int, action: String) {
+        if (action == "stop") tabs.find { it.id == id }?.mediaFromUser = false
+        val fallback = if (action == "play") "" else BrowserPages.PAUSE_ALL_JS
+        tabs.find { it.id == id }?.web?.evaluateJavascript("if(window.__kaviMediaCommand){window.__kaviMediaCommand('$action');}else{$fallback}", null)
+    }
+    fun backgroundPlayback() {
+        if (::app.isInitialized) tabs.lastOrNull { it.audible && it.mediaFromUser }?.let { com.jack.ai.BrowserPlaybackService.start(app, it) }
+    }
 
     /** 电脑版放大多少（百分比，见 BrowserPages.desktopWidth）。 */
     var desktopZoom by mutableIntStateOf(100)
@@ -602,7 +616,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
             if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
                 runCatching { androidx.webkit.WebViewCompat.addDocumentStartJavaScript(this, KEEP_BLOB_JS, setOf("*")) }
                 // 切出浏览器时正在放的声音接着放
-                runCatching { androidx.webkit.WebViewCompat.addDocumentStartJavaScript(this, BrowserPages.KEEP_PLAYING_JS, setOf("*")) }
+                runCatching { androidx.webkit.WebViewCompat.addDocumentStartJavaScript(this, BrowserPages.KEEP_PLAYING_JS + BrowserPages.MEDIA_JS, setOf("*")) }
                 // 电脑版：网页一开始就当自己在电脑上（只在电脑版标识下起作用）
                 t.deskScript = runCatching { androidx.webkit.WebViewCompat.addDocumentStartJavaScript(this, BrowserPages.desktopJs(desktopWidth()), setOf("*")) }.getOrNull()
                 // 数着后台请求：动作做完等它们回来再读页面，失败的告诉模型（只在主页面装）
@@ -1237,6 +1251,8 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
             if (t.pageDone?.isCompleted != false) t.pageDone = CompletableDeferred()
             t.translated = false
             t.media.clear()
+            t.mediaFrames.clear()
+            t.mediaFromUser = false
             t.address = url
             t.site = BrowserPages.site(url)
             t.blockedNow.set(0); t.blocked = 0
@@ -1249,12 +1265,14 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
             // 不支持开头注入的旧网页组件：页面露出来时补装钩子
             if (t.diagOn && t.diagScript == null) view.evaluateJavascript(BrowserDiag.HOOK_JS, null)
             if (t.netScript == null) view.evaluateJavascript(BrowserNetWatch.JS, null)
+            view.evaluateJavascript(BrowserPages.KEEP_PLAYING_JS + BrowserPages.MEDIA_JS, null)
             widenIfDesktop(view, url)
             if (blocksAds(t.site)) view.evaluateJavascript(BrowserAds.INJECT_JS, null)
             applyBlocks(view, t.site)
         }
 
         override fun onPageFinished(view: WebView, url: String) {
+            view.evaluateJavascript(BrowserPages.KEEP_PLAYING_JS + BrowserPages.MEDIA_JS, null)
             widenIfDesktop(view, url)
             if (blocksAds(t.site)) view.evaluateJavascript(BrowserAds.INJECT_JS, null)
             t.pageDone?.complete(Unit)
@@ -1285,6 +1303,16 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         override fun onConsoleMessage(m: android.webkit.ConsoleMessage): Boolean {
             val text = m.message().orEmpty()
             when {
+                text.startsWith(BrowserPages.MEDIA_PREFIX) -> {
+                    runCatching { json.parseToJsonElement(text.removePrefix(BrowserPages.MEDIA_PREFIX)).jsonObject }.getOrNull()?.let { o ->
+                        val id = (o["id"] as? JsonPrimitive)?.content ?: return@let
+                        val wasPlaying = t.audible
+                        t.mediaFrames.entries.removeAll { System.currentTimeMillis() - it.value.second > 5000 }
+                        t.mediaFrames[id] = ((o["on"] as? JsonPrimitive)?.content == "true") to System.currentTimeMillis()
+                        if (t.audible && userViewing && t === tab) t.mediaFromUser = true
+                        if (!wasPlaying && t.audible && t.mediaFromUser && !userViewing) com.jack.ai.BrowserPlaybackService.start(app, t)
+                    }
+                }
                 text.startsWith(BrowserDiag.PREFIX) -> t.diag.add(text.removePrefix(BrowserDiag.PREFIX))
                 text.startsWith(BrowserBlocks.PREFIX) -> if (picking && t === tab) BrowserBlocks.parsePick(text)?.let { picked = it }
                 text.startsWith(BrowserTeach.PREFIX) -> if (teaching) BrowserTeach.stepOf(text)?.let { teachSteps = BrowserTeach.append(teachSteps, it) }
