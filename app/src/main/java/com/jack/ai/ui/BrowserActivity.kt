@@ -122,6 +122,12 @@ class BrowserActivity : ComponentActivity() {
     /** 选网页字号。 */
     private var textPick by mutableStateOf(false)
     /** 历史记录页开着。 */
+    private var shotJob: kotlinx.coroutines.Job? = null
+    private var shooting by mutableStateOf(false)
+    private var longShot by mutableStateOf<com.jack.ai.data.Downloads.Saved?>(null)
+    private val shotPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) takeLongShot() else JackBrowser.notice = "没有相册存储权限，无法保存长截图"
+    }
     private var showDownloads by mutableStateOf(false)
     private var showLater by mutableStateOf(false)
     private var searchPick by mutableStateOf(false)
@@ -441,6 +447,7 @@ class BrowserActivity : ComponentActivity() {
                             onClick = { menu = false; b.toggleDesktopAll() })
                         DropdownMenuItem(text = { Text("电脑版放大：${b.desktopZoom}%") }, onClick = { menu = false; zoomPick = true })
                         DropdownMenuItem(text = { Text("分享") }, enabled = has, onClick = { menu = false; share(b.address, b.title) })
+                        DropdownMenuItem(text = { Text("长截图") }, enabled = has && !shooting, onClick = { menu = false; takeLongShot() })
                         DropdownMenuItem(text = { Text("存成 PDF") }, enabled = has, onClick = { menu = false; savePdf() })
                         DropdownMenuItem(text = { Text("页内查找") }, enabled = has, onClick = { menu = false; finding = "" })
                         DropdownMenuItem(text = { Text("搜索引擎") }, onClick = { menu = false; searchPick = true })
@@ -623,6 +630,23 @@ class BrowserActivity : ComponentActivity() {
         }
         b.pressed?.let { p -> PressMenu(p) }
         b.permAsk?.let { a -> PermDialog(a) }
+        if (shooting && b.userViewing) AlertDialog(
+            onDismissRequest = { shotJob?.cancel() }, title = { Text("正在截图…") },
+            text = { Text("正在逐屏加载并拼接，最多二十屏。") },
+            confirmButton = { TextButton(onClick = { shotJob?.cancel() }) { Text("取消") } },
+        )
+        longShot?.takeIf { b.userViewing }?.let { saved -> AlertDialog(
+            onDismissRequest = { longShot = null }, title = { Text("长截图已存到相册") }, text = { Text(saved.where) },
+            confirmButton = { TextButton(onClick = {
+                runCatching { startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(saved.uri, saved.mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)) }
+                    .onFailure { b.notice = "手机上没有能打开图片的 App" }
+            }) { Text("打开") } },
+            dismissButton = { Row {
+                TextButton(onClick = { runCatching { startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType(saved.mime).putExtra(Intent.EXTRA_STREAM, saved.uri)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION), "分享长截图")) } }) { Text("分享") }
+                TextButton(onClick = { longShot = null }) { Text("关闭") }
+            } },
+        ) }
         if (searchPick && b.userViewing) AlertDialog(
             onDismissRequest = { searchPick = false }, title = { Text("搜索引擎") },
             text = { Column { listOf("auto" to "自动", "google" to "Google", "bing" to "必应", "baidu" to "百度", "duckduckgo" to "DuckDuckGo").forEach { (key, label) ->
@@ -1040,6 +1064,28 @@ class BrowserActivity : ComponentActivity() {
     }
 
     /** 存成 PDF：用系统的打印，选「另存为 PDF」，存在哪由用户定。 */
+    private fun takeLongShot() {
+        if (!JackBrowser.userViewing || shooting) return
+        if (Build.VERSION.SDK_INT < 29 && !has(Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+            shotPermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE); return
+        }
+        val w = JackBrowser.tab.web ?: return
+        shooting = true
+        shotJob = lifecycleScope.launch {
+            try {
+                val (saved, cut) = BrowserLongShot.capture(this@BrowserActivity, w)
+                longShot = saved
+                JackBrowser.notice = if (cut) "页面太长，只截了前面一部分" else "长截图已存到相册 Pictures/Kavi"
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: OutOfMemoryError) {
+                JackBrowser.notice = "页面图片太大，手机内存不够，没能完成截图"
+            } catch (e: Exception) {
+                JackBrowser.notice = "截图没完成：${e.message ?: "图片太大"}"
+            } finally { shooting = false; shotJob = null }
+        }
+    }
+
     private fun savePdf() {
         val b = JackBrowser
         val name = b.title.ifBlank { BrowserPages.host(b.address) }.ifBlank { "网页" }
