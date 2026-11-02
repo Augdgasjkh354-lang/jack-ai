@@ -152,6 +152,14 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             dreams = store.loadDreams(),
         )
         Dreamer.schedule(app, _state.value.settings.dreamEnabled)
+        // 上次录音中途被系统杀掉：救回录到的，放进输入框等用户发（不自动发，免得隔了几天突然开始整理花钱）
+        viewModelScope.launch {
+            val saved = withContext(Dispatchers.IO) { runCatching { com.jack.ai.RecordService.recover(app) }.getOrDefault(emptyList()) }
+            if (saved.isEmpty()) return@launch
+            _state.update { st -> st.copy(pending = st.pending + saved.map { Attachment(kind = "file", name = it.file.name, path = it.file.absolutePath) }) }
+            val mins = saved.sumOf { it.seconds } / 60
+            core.toast("上次录音被系统打断了，救回了 ${if (mins > 0) "$mins 分钟" else "录到的部分"}，已放进输入框，发出去就整理成纪要")
+        }
         com.jack.ai.data.Reader.schedule(app, _state.value.settings.readingEnabled)
         // 桌面图标和设置对不上（比如从备份恢复了别的选择）：照设置改过来
         runCatching { com.jack.ai.ui.AppIcon.ensure(app, _state.value.settings.appIcon) }

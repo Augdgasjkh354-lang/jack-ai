@@ -76,6 +76,61 @@ object MediaMux {
     }
 
     /**
+     * 把几段同样参数录的音频首尾接成一个 m4a（录音分段存的那几段）：不重新编码，后一段的时间接着前一段往后排。
+     * 返回总时长（微秒）。
+     */
+    fun concatAudio(inputs: List<File>, out: File): Long {
+        if (inputs.isEmpty()) throw IllegalArgumentException("没有可拼的录音")
+        out.delete()
+        var muxer: MediaMuxer? = null
+        try {
+            var dst = -1
+            var offset = 0L
+            var buf = ByteBuffer.allocate(1024 * 1024)
+            val info = MediaCodec.BufferInfo()
+            for (f in inputs) {
+                val ex = MediaExtractor()
+                try {
+                    ex.setDataSource(f.absolutePath)
+                    val track = (0 until ex.trackCount).firstOrNull { ex.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true }
+                        ?: throw IllegalStateException("「${f.name}」里没有声音")
+                    val fmt = ex.getTrackFormat(track)
+                    if (fmt.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) fmt.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE).let { if (it > buf.capacity()) buf = ByteBuffer.allocate(it) }
+                    if (muxer == null) {
+                        muxer = MediaMuxer(out.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+                        dst = muxer.addTrack(fmt)
+                        muxer.start()
+                    }
+                    ex.selectTrack(track)
+                    // AAC 一帧 1024 个采样：每段最后一帧的时长按这个算，下一段从它后面接上
+                    val frameUs = 1024L * 1_000_000 / (if (fmt.containsKey(MediaFormat.KEY_SAMPLE_RATE)) fmt.getInteger(MediaFormat.KEY_SAMPLE_RATE) else 16_000)
+                    var last = -1L
+                    while (true) {
+                        buf.clear()
+                        val size = ex.readSampleData(buf, 0)
+                        if (size < 0) break
+                        last = ex.sampleTime
+                        info.set(0, size, offset + last, if (ex.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC != 0) MediaCodec.BUFFER_FLAG_KEY_FRAME else 0)
+                        muxer!!.writeSampleData(dst, buf, info)
+                        if (!ex.advance()) break
+                    }
+                    if (last >= 0) offset += last + frameUs
+                } finally {
+                    runCatching { ex.release() }
+                }
+            }
+            muxer!!.stop()
+            if (out.length() == 0L) throw IllegalStateException("拼出来是空的")
+            return offset
+        } catch (e: Exception) {
+            out.delete()
+            throw e
+        } finally {
+            runCatching { muxer?.release() }
+        }
+    }
+
+    /**
      * 解码第一条音轨，换成 16 kHz 单声道，按 chunkSec 秒一段写成 WAV，放进 dir。返回 (各段文件, 总秒数)。
      * progress(已解到第几微秒, 总微秒或 -1)。
      */
