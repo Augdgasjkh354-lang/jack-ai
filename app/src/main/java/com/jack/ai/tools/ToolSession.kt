@@ -232,11 +232,12 @@ class ToolSession(
     /**
      * 浏览器同一时间只给一个回答用（几个对话同时答、浏览器里的 Kavi、后台任务都算）：
      * 谁先用谁占着，回答结束（releaseBrowser）才放；别的要用就排队等，最多等 BROWSER_WAIT_MS。
+     * 占着的那个闲了 [BrowserLock.idleMs] 没碰浏览器，排队的就接手（不然用过一次就占到整个回答结束）。
+     * 拿到后调用方要在 finally 里 BrowserLock.exit。
      */
     internal suspend fun claimBrowser(): Boolean {
-        if (BrowserLock.holds(this)) return true
-        if (BrowserLock.tryLock(this)) return true
-        val label = "等浏览器空出来（另一个回答正在用）"
+        if (BrowserLock.enter(this)) return true
+        val label = "等浏览器空出来（" + (BrowserLock.holderTitle()?.let { "「${it.take(20)}」" } ?: "另一个回答") + "正在用）"
         ui.started(label)
         ui.progress(label)
         val got = BrowserLock.lock(this, BROWSER_WAIT_MS)
@@ -606,16 +607,61 @@ internal suspend fun ToolSession.updatePlan(args: JsonObject): String {
 /** 浏览器的占用：谁占着（一个 ToolSession），没人占时排队的按先后拿到。 */
 internal object BrowserLock {
     private val mutex = kotlinx.coroutines.sync.Mutex()
+    /** 占着的那个回答、它正在跑的浏览器动作数、最后一次碰浏览器的时间。 */
+    private var holder: Any? = null
+    private var busy = 0
+    private var lastUsed = 0L
+    /** 被别人接手过的（下次再用时提醒它页面可能变了）。 */
+    private val lost = java.util.Collections.newSetFromMap(java.util.WeakHashMap<Any, Boolean>())
+
+    /** 占着的回答这么久没碰浏览器（在想、在写、在做别的），排队的就接手：不再整个回答占到底。 */
+    @Volatile var idleMs = 20_000L
 
     fun holds(owner: Any) = mutex.holdsLock(owner)
 
-    fun tryLock(owner: Any) = mutex.tryLock(owner)
+    /** 占住（已经占着也行）并记一次「正在用」；被别人占着就返回 false。用完调 [exit]。 */
+    @Synchronized
+    fun enter(owner: Any): Boolean {
+        if (!mutex.holdsLock(owner) && !mutex.tryLock(owner)) return false
+        holder = owner; busy++; lastUsed = System.currentTimeMillis()
+        return true
+    }
 
-    /** 等到拿到为止，最多等 timeoutMs；拿到返回 true。 */
+    @Synchronized
+    fun exit(owner: Any) {
+        if (holder !== owner) return
+        if (busy > 0) busy--
+        lastUsed = System.currentTimeMillis()
+    }
+
+    /** 占着的那个闲了够久：放掉它的占用，记下它被接手过。 */
+    @Synchronized
+    private fun takeOverIdle() {
+        val h = holder ?: return
+        if (busy > 0 || System.currentTimeMillis() - lastUsed < idleMs || !mutex.holdsLock(h)) return
+        mutex.unlock(h)
+        holder = null
+        lost += h
+    }
+
+    @Synchronized
+    fun takeLost(owner: Any) = lost.remove(owner)
+
+    /** 正占着浏览器的对话名（排队时告诉用户在等谁）。 */
+    @Synchronized
+    fun holderTitle(): String? = (holder as? ToolSession)?.conv?.title?.takeIf { it.isNotBlank() }
+
+    /** 等到占住为止（同 [enter]），最多等 timeoutMs；对方闲够 [idleMs] 就接手。 */
     suspend fun lock(owner: Any, timeoutMs: Long): Boolean =
-        kotlinx.coroutines.withTimeoutOrNull(timeoutMs) { mutex.lock(owner); true } ?: false
+        kotlinx.coroutines.withTimeoutOrNull(timeoutMs) {
+            while (!enter(owner)) { takeOverIdle(); kotlinx.coroutines.delay(500) }
+            true
+        } ?: false
 
+    @Synchronized
     fun unlock(owner: Any) {
-        if (mutex.holdsLock(owner)) mutex.unlock(owner)
+        if (!mutex.holdsLock(owner)) return
+        mutex.unlock(owner)
+        if (holder === owner) { holder = null; busy = 0 }
     }
 }

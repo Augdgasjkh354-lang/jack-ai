@@ -48,9 +48,9 @@ class ParallelRepliesTest {
     fun browserIsUsedByOneReplyAtATime() = runBlocking {
         val first = Any()
         val second = Any()
-        assertTrue(BrowserLock.tryLock(first))
+        assertTrue(BrowserLock.enter(first))
         assertTrue(BrowserLock.holds(first))
-        assertFalse(BrowserLock.tryLock(second))
+        assertFalse(BrowserLock.enter(second))
         // 等不到就超时，不会一直卡着
         assertFalse(BrowserLock.lock(second, 50))
         val waiting = async(Dispatchers.Default) { BrowserLock.lock(second, 5_000) }
@@ -62,7 +62,7 @@ class ParallelRepliesTest {
         BrowserLock.unlock(first)
         assertTrue(BrowserLock.holds(second))
         BrowserLock.unlock(second)
-        assertTrue(BrowserLock.tryLock(first))
+        assertTrue(BrowserLock.enter(first))
         BrowserLock.unlock(first)
     }
 
