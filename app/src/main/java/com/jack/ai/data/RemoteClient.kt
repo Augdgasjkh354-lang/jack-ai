@@ -27,6 +27,15 @@ data class RemoteFile(val key: String, val name: String, val size: Long = 0, val
 /** 用户在别的设备上发来的一条消息。 */
 data class RemoteMessage(val id: Long, val conv: String, val text: String, val files: List<RemoteFile>)
 
+/** 配过对的一台设备（iPhone、电脑上的浏览器）。时间是毫秒。 */
+data class RemoteDevice(val id: String, val name: String, val created: Long, val lastSeen: Long)
+
+/** 发起一次配对：二维码里放 token，用户也可以输 6 位码；expires 是秒。 */
+data class RemotePairing(val code: String, val token: String, val expires: Long)
+
+/** 认领站点的结果：新认领的、本来就是这把密钥的、被别的密钥占了的。 */
+enum class ClaimResult { CLAIMED, ALREADY_MINE, TAKEN }
+
 /** 来取一次的结果：新消息、用户回了的确认（id → 同不同意）、要停的回答（用户消息的 id）。 */
 data class RemotePoll(val messages: List<RemoteMessage>, val answers: Map<String, Boolean>, val stops: List<Long>)
 
@@ -50,13 +59,48 @@ class RemoteClient(base: String, private val key: String, http: OkHttpClient) {
             .apply { if (body != null) post(body) }.build()
         client.newCall(req).execute().use { r ->
             val text = r.body?.string().orEmpty()
-            if (r.code == 401) throw IOException("站点说密钥不对：Kavi 里的密钥要和站点 Secrets 里的 KAVI_KEY 一样")
+            if (r.code == 401) throw IOException(if ("尚未认领" in text) "站点还没被认领：点「连接站点」" else "站点不认这把密钥：可能站点重新部署过，或被别的手机认领了")
             if (!r.isSuccessful) throw IOException("站点返回 ${r.code}：" + text.take(200))
             return text
         }
     }
 
     private fun post(path: String, o: JsonObject) = call(path, o.toString().toRequestBody(jsonType))
+
+    /**
+     * 认领站点：新部署的站点没有主人，第一把来认领的密钥就是主人，以后只认它。
+     * 409 是被别的密钥认领了（或者是老站点，用 Secrets 里的 KAVI_KEY 管：那把和这把一样也算是自己的）。
+     */
+    fun claim(): ClaimResult {
+        val req = Request.Builder().url(url("/api/device/claim")).header("Authorization", "Bearer $key")
+            .post(ByteArray(0).toRequestBody(null)).build()
+        client.newCall(req).execute().use { r ->
+            val text = r.body?.string().orEmpty()
+            if (r.code == 409) return if (runCatching { ping() }.isSuccess) ClaimResult.ALREADY_MINE else ClaimResult.TAKEN
+            if (r.code == 404) throw IOException("站点代码太旧，不支持自动认领：按下面的说明重新部署一下")
+            if (!r.isSuccessful) throw IOException("站点返回 ${r.code}：" + text.take(200))
+            val claimed = runCatching { json.parseToJsonElement(text).jsonObject.str("claimed") }.getOrNull() == "true"
+            return if (claimed) ClaimResult.CLAIMED else ClaimResult.ALREADY_MINE
+        }
+    }
+
+    /** 换密钥：用旧密钥证明身份，换成新的；站点上配过对的设备全部作废。 */
+    fun rekey(newKey: String) { post("/api/device/rekey", buildJsonObject { put("new_key", newKey) }) }
+
+    /** 发起配对：5 分钟有效、只能用一次，新的出来旧的作废。 */
+    fun startPairing(): RemotePairing {
+        val o = json.parseToJsonElement(post("/api/device/pair/start", buildJsonObject {})).jsonObject
+        return RemotePairing(o.str("code"), o.str("token"), o.str("expires").toLongOrNull() ?: 0)
+    }
+
+    /** 扫码配对的网址：token 放在 # 后面，不进站点的访问日志。 */
+    fun pairUrl(token: String) = "$base/pair#t=$token"
+
+    fun devices(): List<RemoteDevice> = (json.parseToJsonElement(call("/api/device/devices")) as? JsonArray).orEmpty().map { it.jsonObject }.map { d ->
+        RemoteDevice(d.str("id"), d.str("name"), d.str("created").toLongOrNull() ?: 0, d.str("last_seen").toLongOrNull() ?: 0)
+    }
+
+    fun revoke(id: String) { post("/api/device/devices/revoke", buildJsonObject { put("id", id) }) }
 
     /** 测试连接：密钥对不对、站点代码是第几版（不取消息）。 */
     fun ping(): Int = json.parseToJsonElement(call("/api/device/ping")).jsonObject.str("version").toIntOrNull() ?: 0

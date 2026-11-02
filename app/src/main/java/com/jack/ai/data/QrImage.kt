@@ -10,7 +10,7 @@ import com.google.zxing.MultiFormatReader
 import com.google.zxing.RGBLuminanceSource
 import com.google.zxing.common.HybridBinarizer
 
-/** 从图片里读二维码（不用谷歌服务）。读不出返回 null。 */
+/** 从图片里读二维码、把文字画成二维码（不用谷歌服务）。读不出返回 null。 */
 object QrImage {
     /** 相册里的截图。 */
     fun decode(ctx: Context, uri: Uri): String? = runCatching {
@@ -33,5 +33,13 @@ object QrImage {
         bmp.getPixels(px, 0, bmp.width, 0, 0, bmp.width, bmp.height)
         val hints = mapOf(DecodeHintType.TRY_HARDER to true, DecodeHintType.POSSIBLE_FORMATS to listOf(BarcodeFormat.QR_CODE))
         return MultiFormatReader().decode(BinaryBitmap(HybridBinarizer(RGBLuminanceSource(bmp.width, bmp.height, px))), hints).text
+    }
+
+    /** 把文字画成二维码（黑块白底，四周留白），给别的设备扫。 */
+    fun encode(text: String, size: Int = 720): android.graphics.Bitmap {
+        val m = com.google.zxing.qrcode.QRCodeWriter().encode(text, BarcodeFormat.QR_CODE, size, size,
+            mapOf(com.google.zxing.EncodeHintType.MARGIN to 2))
+        val px = IntArray(m.width * m.height) { i -> if (m[i % m.width, i / m.width]) android.graphics.Color.BLACK else android.graphics.Color.WHITE }
+        return android.graphics.Bitmap.createBitmap(px, m.width, m.height, android.graphics.Bitmap.Config.ARGB_8888)
     }
 }

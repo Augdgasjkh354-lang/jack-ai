@@ -1,4 +1,4 @@
-# 只给本地调试用（npx wrangler dev）。部署到 ChatGPT 站点时由站点自己配：D1 绑定名 DB、R2 绑定名 FILES、密钥 KAVI_KEY。
+# 只给本地调试用（npx wrangler dev）；自动认领不需要设置 KAVI_KEY。旧部署兼容性测试时可临时设置它。
 name = "kavi-remote"
 main = "src/worker.js"
 compatibility_date = "2026-10-01"
