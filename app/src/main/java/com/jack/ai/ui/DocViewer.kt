@@ -268,6 +268,8 @@ private fun FaithfulPage(file: File, modifier: Modifier, onFail: () -> Unit) {
  * 点链接交给系统浏览器。截图（[PageShots]）也用它。
  */
 internal fun docViewClient(file: File) = object : WebViewClient() {
+    // 网页进程没了（崩溃或内存紧被收回，和 Kavi 浏览器共用一个进程）：丢掉这个网页窗口，不接住的话整个 App 会被系统关掉
+    override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean = view.dropAfterRendererGone()
     override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
         val url = request.url
         if (url.scheme == "data" || url.scheme == "blob") return null
@@ -316,6 +318,8 @@ private fun OfficePage(file: File, modifier: Modifier) {
                     settings.displayZoomControls = false
                     setBackgroundColor(android.graphics.Color.TRANSPARENT)
                     webViewClient = object : WebViewClient() {
+                        // 网页进程没了（崩溃或内存紧被收回，和 Kavi 浏览器共用一个进程）：丢掉这个网页窗口，不接住的话整个 App 会被系统关掉
+                        override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean = view.dropAfterRendererGone()
                         override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
                             if (request.url.scheme == "data") null
                             else WebResourceResponse("text/plain", "utf-8", 403, "Blocked", emptyMap(), ByteArrayInputStream(ByteArray(0)))

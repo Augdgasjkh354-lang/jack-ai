@@ -542,6 +542,9 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
     @SuppressLint("SetJavaScriptEnabled")
     fun webView(ctx: Context): WebView {
         web?.let { return it }
+        // 已经初始化过（只是这一页没有网页窗口，比如 Kavi 用着的那页被关了）：只补开一页。
+        // 再走一遍初始化会换掉 wrapper（别的标签页的弹窗、下拉框就没了 Context）、清掉开着的隐身页
+        if (::wrapper.isInitialized) return newTab().web!!
         app = ctx.applicationContext
         route = app.getSharedPreferences("browser", Context.MODE_PRIVATE).getString("route", BrowserNet.AUTO) ?: BrowserNet.AUTO
         // 用可换底的 Context：放进浏览器页时换成那个页面（下拉框、弹窗要它），离开后换回 App
@@ -566,9 +569,18 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
     fun newTab(switch: Boolean = true, incognito: Boolean = false, account: Int = 0): Tab {
         val ok = incognitoSupported()
         val t = Tab(nextTabId++, incognito && ok, if (ok && !incognito) account.coerceIn(0, ACCOUNTS) else 0)
+        t.web = buildWeb(t)
+        tabs += t
+        if (switch) switchTo(tabs.lastIndex)
+        return t
+    }
+
+    /** 给标签页建网页窗口（新开时，或网页进程崩了重建时）。 */
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun buildWeb(t: Tab): WebView {
         val profile = if (t.incognito) INCOGNITO else if (t.account > 0) accountProfile(t.account) else null
         // 换资料夹要在网页窗口做任何别的事之前
-        t.web = JackWebView(wrapper).also { w -> profile?.let { androidx.webkit.WebViewCompat.setProfile(w, it) } }.apply {
+        return JackWebView(wrapper).also { w -> profile?.let { androidx.webkit.WebViewCompat.setProfile(w, it) } }.apply {
             settings.apply {
                 javaScriptEnabled = true
                 domStorageEnabled = true
@@ -631,9 +643,29 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
                 if (rtcBlocked()) t.rtcScript = runCatching { androidx.webkit.WebViewCompat.addDocumentStartJavaScript(this, RTC_JS, setOf("*")) }.getOrNull()
             }
         }
-        tabs += t
-        if (switch) switchTo(tabs.lastIndex)
-        return t
+    }
+
+    /**
+     * 网页进程没了（崩溃，或手机内存紧被系统收回）：所有标签页共用一个网页进程，每页都会收到。
+     * 不接住的话系统会把整个 App 关掉。这一页换个新网页窗口：用户眼前的和 Kavi 正用着的马上重新打开，别的切过去时再开。
+     */
+    private fun recover(t: Tab, dead: WebView) {
+        val url = t.address
+        (dead.parent as? ViewGroup)?.removeView(dead)
+        runCatching { dead.destroy() }
+        if (t !in tabs) { t.web = null; return }
+        t.netScript = null; t.diagScript = null; t.teachScript = null; t.rtcScript = null; t.deskScript = null
+        t.diagOn = false
+        t.web = buildWeb(t)
+        t.pageDone?.complete(Unit)
+        t.loading = 100
+        t.media.clear(); t.mediaFrames.clear()
+        if (BrowserPages.isWeb(url)) {
+            val visible = t === tabs.getOrNull(current) || com.jack.ai.tools.BrowserLock.isAgentTab(t)
+            if (visible) { t.web?.let { w -> applyUa(w, url); w.loadUrl(url) } } else t.restore = url
+            t.error = "网页崩溃了（多半是手机内存紧），已经重新打开"; t.pageFailed = false
+        }
+        hostGen++
     }
 
     // ---------- 网页要用相机、麦克风、位置 ----------
@@ -1302,7 +1334,9 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
 
         override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean {
             t.diag.add("网页进程没了（" + (if (detail.didCrash()) "崩溃" else "被系统收回内存") + "）")
-            return super.onRenderProcessGone(view, detail)
+            // 这个网页窗口已经不能用了：换新的接着用，返回 true 告诉系统已经处理（不然整个 App 被关掉）
+            if (t.web === view) recover(t, view) else runCatching { (view.parent as? ViewGroup)?.removeView(view); view.destroy() }
+            return true
         }
 
         override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
@@ -1974,4 +2008,11 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
         bmp.recycle()
         "data:image/jpeg;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
     }
+}
+
+/** 网页进程没了以后这个网页窗口就不能用了：从界面上拿下来、销毁，告诉系统已经处理（返回 true）。 */
+internal fun WebView.dropAfterRendererGone(): Boolean {
+    runCatching { (parent as? ViewGroup)?.removeView(this) }
+    runCatching { destroy() }
+    return true
 }

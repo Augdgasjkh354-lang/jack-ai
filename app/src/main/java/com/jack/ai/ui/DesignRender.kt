@@ -76,6 +76,8 @@ object DesignRender {
             view.isHorizontalScrollBarEnabled = false
             val root = dir.canonicalFile
             view.webViewClient = object : WebViewClient() {
+                // 网页进程没了（崩溃或内存紧被收回，和 Kavi 浏览器共用一个进程）：丢掉这个网页窗口，不接住的话整个 App 会被系统关掉
+                override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean = view.dropAfterRendererGone()
                 override fun shouldInterceptRequest(v: WebView, request: WebResourceRequest): WebResourceResponse {
                     val url = request.url
                     val path = url.path.orEmpty()
