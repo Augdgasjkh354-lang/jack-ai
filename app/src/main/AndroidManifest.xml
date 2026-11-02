@@ -85,6 +85,8 @@
             android:name=".ui.BrowserActivity"
             android:exported="false"
             android:launchMode="singleTask"
+            android:supportsPictureInPicture="true"
+            android:resizeableActivity="true"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:windowSoftInputMode="adjustResize" />
         <!-- 能当默认浏览器：别的 App 里点的网页链接从这里转进 Kavi 浏览器 -->

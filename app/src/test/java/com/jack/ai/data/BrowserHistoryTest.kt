@@ -37,4 +37,21 @@ class BrowserHistoryTest {
         assertEquals(listOf("象印保温杯" to 4), PriceLog.items(log))
         assertTrue(PriceLog.series(log, "电饭煲").isEmpty())
     }
+
+    @Test
+    fun historyPageGroupsByDayAndFiltersAndRemoves() {
+        val zone = java.time.ZoneId.of("Asia/Shanghai")
+        val now = java.time.ZonedDateTime.of(2026, 11, 2, 15, 0, 0, 0, zone).toInstant().toEpochMilli()
+        val h = 3_600_000L
+        val list = listOf(
+            HistoryEntry("https://a.com", "保温杯", now - h),
+            HistoryEntry("https://b.com", "新闻", now - 20 * h),
+            HistoryEntry("https://c.com", "旧的", now - 400L * 24 * h),
+            HistoryEntry("https://d.com", "三月", java.time.ZonedDateTime.of(2026, 3, 5, 9, 0, 0, 0, zone).toInstant().toEpochMilli()),
+        )
+        val g = BrowserHistory.byDay(list, "", now, zone)
+        org.junit.Assert.assertEquals(listOf("今天", "昨天", "3月5日", "2025年9月28日"), g.map { it.first })
+        org.junit.Assert.assertEquals(listOf("https://a.com"), BrowserHistory.byDay(list, "保温 a.com", now, zone).flatMap { it.second }.map { it.url })
+        org.junit.Assert.assertEquals(3, BrowserHistory.remove(list, "https://b.com").size)
+    }
 }

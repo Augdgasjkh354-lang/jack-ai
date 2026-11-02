@@ -106,6 +106,8 @@ object JackBrowser {
         var teachScript: androidx.webkit.ScriptHandler? = null
         /** 防 IP 泄漏的脚本（关着 WebRTC 时装上）。 */
         var rtcScript: androidx.webkit.ScriptHandler? = null
+        /** 标签页列表里的缩略图（离开这一页、打开列表时拍）。 */
+        var thumb by mutableStateOf<android.graphics.Bitmap?>(null)
         /** 电脑版脚本（按放大比例装的，换比例时重装）。 */
         var deskScript: androidx.webkit.ScriptHandler? = null
         /** 这一页里播放器拉过的视频、音频地址（拦截请求时记下，最新的在后面），存视频时从这里挑。 */
@@ -402,6 +404,47 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
     /** 所有网站默认用电脑版（默认开：很多报名、办事网站手机上打不开或缺功能）；开着时 [mobileSites] 里的网站例外用手机版。 */
     var desktopAll by mutableStateOf(true)
         private set
+    /** 网页字号（百分比，所有网页通用）。 */
+    var textZoom by mutableIntStateOf(100)
+        private set
+
+    fun changeTextZoom(z: Int) {
+        textZoom = z
+        prefs().edit().putInt("textzoom", z).apply()
+        tabs.forEach { it.web?.settings?.textZoom = z }
+    }
+
+    /** 往下翻网页时收起顶栏和底栏，往回翻一点就出来（JackWebView 按滚动方向改它）。 */
+    var barsHidden by mutableStateOf(false)
+
+    /** 从屏幕边缘滑：哪边（-1 左 = 后退，1 右 = 前进）和拉了多少（到 1 松手就跳）。 */
+    var edgeSwipe by mutableStateOf<Pair<Int, Float>?>(null)
+
+    /** 边缘滑到底松手：后退或前进。 */
+    fun edgeGo(side: Int) {
+        val w = web ?: return
+        clearError()
+        if (side < 0 && w.canGoBack()) w.goBack() else if (side > 0 && w.canGoForward()) w.goForward()
+    }
+
+    /** 拍当前标签页的缩略图（标签页列表用）：按三分之一大小画，没显示出来的不拍。 */
+    fun snap(t: Tab = tab) {
+        val w = t.web ?: return
+        if (w.width <= 0 || w.height <= 0 || !w.isAttachedToWindow || t.address.isEmpty()) return
+        val s = 0.33f
+        runCatching {
+            val bmp = android.graphics.Bitmap.createBitmap((w.width * s).toInt().coerceAtLeast(1), (w.height * s).toInt().coerceAtLeast(1), android.graphics.Bitmap.Config.RGB_565)
+            val c = android.graphics.Canvas(bmp)
+            c.scale(s, s)
+            c.translate(-w.scrollX.toFloat(), -w.scrollY.toFloat())
+            w.draw(c)
+            t.thumb = bmp
+        }
+    }
+
+    /** 暂停所有标签页里在放的声音和视频。 */
+    fun pauseAll() { tabs.forEach { it.web?.evaluateJavascript(BrowserPages.PAUSE_ALL_JS, null) } }
+
     /** 电脑版放大多少（百分比，见 BrowserPages.desktopWidth）。 */
     var desktopZoom by mutableIntStateOf(100)
         private set
@@ -515,6 +558,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
                 builtInZoomControls = true
                 displayZoomControls = false
                 useWideViewPort = true
+                textZoom = this@JackBrowser.textZoom
                 loadWithOverviewMode = true
                 userAgentString = BrowserPages.cleanUserAgent(userAgentString)
                 mobileUa = userAgentString
@@ -551,6 +595,8 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
             // 网页生成文件后马上收回（revokeObjectURL）的话就存不下来了：晚两分钟再收；顺便记下链接上写的文件名
             if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
                 runCatching { androidx.webkit.WebViewCompat.addDocumentStartJavaScript(this, KEEP_BLOB_JS, setOf("*")) }
+                // 切出浏览器时正在放的声音接着放
+                runCatching { androidx.webkit.WebViewCompat.addDocumentStartJavaScript(this, BrowserPages.KEEP_PLAYING_JS, setOf("*")) }
                 // 电脑版：网页一开始就当自己在电脑上（只在电脑版标识下起作用）
                 t.deskScript = runCatching { androidx.webkit.WebViewCompat.addDocumentStartJavaScript(this, BrowserPages.desktopJs(desktopWidth()), setOf("*")) }.getOrNull()
                 // 数着后台请求：动作做完等它们回来再读页面，失败的告诉模型（只在主页面装）
@@ -633,6 +679,29 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         scope.launch(historyIo) { if (historyList == null) historyList = com.jack.ai.data.Store(app).loadHistory() }
     }
 
+    /** 历史记录页要的完整浏览记录。 */
+    suspend fun historyEntries(): List<com.jack.ai.data.HistoryEntry> = withContext(historyIo) {
+        historyList ?: com.jack.ai.data.Store(app).loadHistory().also { historyList = it }
+    }
+
+    /** 删掉一条浏览记录（起始页的最近访问里也去掉）。 */
+    fun deleteHistory(url: String) {
+        visits = visits.filterNot { it.url == url }; saveLists()
+        scope.launch(historyIo) {
+            val store = com.jack.ai.data.Store(app)
+            historyList = com.jack.ai.data.BrowserHistory.remove(historyList ?: store.loadHistory(), url)
+            historySave?.cancel()
+            store.saveHistory(historyList.orEmpty())
+        }
+    }
+
+    /** 清空浏览记录和最近访问（登录状态、缓存不动）。 */
+    fun clearHistory() {
+        visits = emptyList(); saveLists()
+        historySave?.cancel()
+        scope.launch(historyIo) { historyList = emptyList(); com.jack.ai.data.Store(app).saveHistory(emptyList()) }
+    }
+
     /** 地址栏输入时的联想：书签、最近访问、浏览记录里对得上的。 */
     fun suggest(query: String): List<BrowserPages.Visit> =
         BrowserPages.suggest(query, marks, visits + historyList.orEmpty().map { BrowserPages.Visit(it.url, it.title, it.at) })
@@ -643,6 +712,8 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
     /** 切到第 i 个标签页：网页窗口换了，让浏览器页重新来要。 */
     fun switchTo(i: Int) {
         if (i !in tabs.indices) return
+        if (i != current) snap()
+        barsHidden = false
         current = i
         hostGen++
     }
@@ -668,6 +739,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         desktopSites = prefs().getStringSet("desktop", emptySet()).orEmpty().toSet()
         desktopAll = prefs().getBoolean("desktopall", true)
         desktopZoom = prefs().getInt("deskzoom", 100)
+        textZoom = prefs().getInt("textzoom", 100)
         mobileSites = prefs().getStringSet("mobile", emptySet()).orEmpty().toSet()
         proxySites = prefs().getStringSet("proxysites", emptySet()).orEmpty().toSet()
         webrtcAllowed = prefs().getBoolean("webrtc", false)
@@ -1153,6 +1225,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         }
 
         override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+            if (t === tab) barsHidden = false
             t.diag.add("开始打开 ${url.take(160)}")
             if (t.pageDone?.isCompleted != false) t.pageDone = CompletableDeferred()
             t.translated = false

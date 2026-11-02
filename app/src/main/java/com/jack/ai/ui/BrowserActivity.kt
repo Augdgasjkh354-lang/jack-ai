@@ -82,6 +82,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
@@ -112,6 +119,10 @@ class BrowserActivity : ComponentActivity() {
     private var blockList by mutableStateOf(false)
     /** 自动填密码的说明。 */
     private var autofillInfo by mutableStateOf(false)
+    /** 选网页字号。 */
+    private var textPick by mutableStateOf(false)
+    /** 历史记录页开着。 */
+    private var showHistory by mutableStateOf(false)
     /** 选电脑版放大多少。 */
     private var zoomPick by mutableStateOf(false)
     /** 选开哪个分身。 */
@@ -227,7 +238,37 @@ class BrowserActivity : ComponentActivity() {
         if (JackBrowser.address.isNotEmpty()) outState.putString(EXTRA_URL, JackBrowser.address)
     }
 
+    /** 全屏看视频时按 Home 或切走：缩成画中画小窗接着放。 */
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (JackBrowser.fullscreen != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            runCatching { enterPictureInPictureMode(pipParams()) }
+        }
+    }
+
+    private fun pipParams(): android.app.PictureInPictureParams =
+        android.app.PictureInPictureParams.Builder().setAspectRatio(android.util.Rational(16, 9)).apply {
+            // 新系统：全屏视频时切走自动进小窗（手势动画更顺）
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) setAutoEnterEnabled(JackBrowser.fullscreen != null)
+        }.build()
+
+    /** 画中画开着。 */
+    private var inPip by mutableStateOf(false)
+
+    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: android.content.res.Configuration) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        inPip = isInPictureInPictureMode
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // 画中画小窗被划掉：视频停下，退出全屏
+        if (inPip) { inPip = false; JackBrowser.pauseAll(); exitFullscreen() }
+    }
+
     override fun onDestroy() {
+        // 用户自己关掉浏览器：网页里在放的声音也停（只是切到后台时接着放）
+        if (isFinishing) JackBrowser.pauseAll()
         JackBrowser.userViewing = false
         if (JackBrowser.chooser == ::chooseFiles) JackBrowser.chooser = null
         if (JackBrowser.systemPerms == ::systemPerms) JackBrowser.systemPerms = null
@@ -314,6 +355,7 @@ class BrowserActivity : ComponentActivity() {
         val full = b.fullscreen
         LaunchedEffect(full != null) {
             val c = WindowCompat.getInsetsController(window, window.decorView)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) runCatching { setPictureInPictureParams(pipParams()) }
             if (full != null) {
                 c.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
                 c.hide(WindowInsetsCompat.Type.systemBars())
@@ -324,6 +366,7 @@ class BrowserActivity : ComponentActivity() {
                 b.fullscreen != null -> exitFullscreen()
                 finding != null -> closeFind()
                 showTabs -> showTabs = false
+                showHistory -> showHistory = false
                 else -> {
                     val w = b.webView(this)
                     when {
@@ -335,8 +378,11 @@ class BrowserActivity : ComponentActivity() {
                 }
             }
         }
+        // 往下翻网页时收起顶栏底栏；在打字、开着菜单、起始页、出错时一直显示
+        val bars = !b.barsHidden || typing || menu || finding != null || b.address.isEmpty() || b.pageFailed || BrowserChat.open
         Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().safeDrawingPadding()) {
+            AnimatedVisibility(bars) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { finish() }) { Icon(Icons.Default.Close, "关闭浏览器") }
                 OutlinedTextField(
@@ -386,6 +432,8 @@ class BrowserActivity : ComponentActivity() {
                         DropdownMenuItem(text = { Text("分享") }, enabled = has, onClick = { menu = false; share(b.address, b.title) })
                         DropdownMenuItem(text = { Text("存成 PDF") }, enabled = has, onClick = { menu = false; savePdf() })
                         DropdownMenuItem(text = { Text("页内查找") }, enabled = has, onClick = { menu = false; finding = "" })
+                        DropdownMenuItem(text = { Text("历史记录") }, onClick = { menu = false; showHistory = true })
+                        DropdownMenuItem(text = { Text("网页字号：${b.textZoom}%") }, onClick = { menu = false; textPick = true })
                         DropdownMenuItem(text = { Text(if (b.marks.any { it.url == b.address }) "移出书签" else "加入书签") }, enabled = has, onClick = {
                             menu = false
                             val adding = b.marks.none { it.url == b.address }
@@ -443,6 +491,7 @@ class BrowserActivity : ComponentActivity() {
                     }
                 }
             }
+            }
             // 地址栏打字时：书签、最近访问、浏览记录里对得上的
             if (typing && editing.isNotBlank() && editing != b.address) {
                 b.suggest(editing).forEach { v ->
@@ -454,7 +503,7 @@ class BrowserActivity : ComponentActivity() {
                     }
                 }
             }
-            if (b.tab.badge.isNotEmpty() || (b.title.isNotBlank() && b.address.isNotEmpty())) {
+            if (bars && (b.tab.badge.isNotEmpty() || (b.title.isNotBlank() && b.address.isNotEmpty()))) {
                 Text(b.tab.badge + b.title, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
                     style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
@@ -489,6 +538,20 @@ class BrowserActivity : ComponentActivity() {
                 }
                 if (b.address.isEmpty() && b.loading >= 100 && !b.pageFailed) StartPage()
                 b.error?.takeIf { b.pageFailed }?.let { ErrorPage(it) }
+                // 从边缘滑：拉够了圆圈变实，松手就后退 / 前进
+                b.edgeSwipe?.let { (side, p) ->
+                    val can = if (side < 0) b.canBack else b.canForward
+                    Box(
+                        Modifier.align(if (side < 0) Alignment.CenterStart else Alignment.CenterEnd)
+                            .padding(horizontal = (4 + 20 * p).dp).size(44.dp).clip(androidx.compose.foundation.shape.CircleShape)
+                            .background(if (p >= 1f && can) colors.primary else colors.surfaceVariant.copy(alpha = 0.6f + 0.4f * p)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(if (side < 0) Icons.AutoMirrored.Filled.ArrowBack else Icons.AutoMirrored.Filled.ArrowForward,
+                            if (side < 0) "后退" else "前进",
+                            tint = if (p >= 1f && can) colors.onPrimary else colors.onSurfaceVariant.copy(alpha = if (can) 1f else 0.4f))
+                    }
+                }
             }
             b.downloading?.let { msg ->
                 Text(msg, Modifier.fillMaxWidth().background(colors.secondaryContainer).padding(horizontal = 12.dp, vertical = 6.dp),
@@ -497,12 +560,13 @@ class BrowserActivity : ComponentActivity() {
             if (b.picking) PickBar()
             if (b.teaching) TeachBar()
             if (BrowserChat.open) ChatPanel()
+            AnimatedVisibility(bars) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(enabled = b.canBack, onClick = { b.clearError(); b.webView(this@BrowserActivity).goBack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "后退") }
                 IconButton(enabled = b.canForward, onClick = { b.clearError(); b.webView(this@BrowserActivity).goForward() }) { Icon(Icons.AutoMirrored.Filled.ArrowForward, "前进") }
                 IconButton(onClick = { reload() }) { Icon(Icons.Default.Refresh, "刷新") }
                 IconButton(enabled = b.address.isNotEmpty(), onClick = { finding = null; b.home(); editing = "" }) { Icon(Icons.Default.Home, "起始页") }
-                IconButton(onClick = { showTabs = true }) {
+                IconButton(onClick = { b.snap(); showTabs = true }) {
                     Text(
                         b.tabs.size.coerceAtLeast(1).toString(),
                         Modifier.border(1.5.dp, colors.onSurface, androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
@@ -528,8 +592,10 @@ class BrowserActivity : ComponentActivity() {
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            }
         }
         if (showTabs) Box(Modifier.fillMaxSize().safeDrawingPadding()) { TabsPanel() }
+        if (showHistory) Box(Modifier.fillMaxSize().safeDrawingPadding()) { HistoryPanel() }
         // 视频全屏：盖满整个屏幕
         full?.let { (view, _) ->
             Box(Modifier.fillMaxSize().background(Color.Black)) {
@@ -539,6 +605,8 @@ class BrowserActivity : ComponentActivity() {
         }
         b.pressed?.let { p -> PressMenu(p) }
         b.permAsk?.let { a -> PermDialog(a) }
+        if (textPick) ZoomDialog("网页字号", "网页里的字太大或太小时调一下，所有网页都用这个字号。排版不变，只改字。",
+            BrowserPages.TEXT_ZOOMS, b.textZoom, { textPick = false }) { b.changeTextZoom(it) }
         if (zoomPick) AlertDialog(
             onDismissRequest = { zoomPick = false },
             title = { Text("电脑版放大") },
@@ -1032,28 +1100,110 @@ class BrowserActivity : ComponentActivity() {
                     TextButton(enabled = b.tabs.size < JackBrowser.MAX_TABS, onClick = { showTabs = false; openInNewTab(null) }) { Text("新标签页") }
                 }
                 HorizontalDivider()
-                LazyColumn(Modifier.fillMaxSize()) {
+                // 两列卡片：上面是这一页的缩略图（没拍过的写网站名），下面是标题和关闭
+                LazyVerticalGrid(GridCells.Fixed(2), Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(b.tabs.size, key = { b.tabs[it].id }) { i ->
                         val t = b.tabs[i]
                         val on = i == b.current
-                        Row(
-                            Modifier.fillMaxWidth().background(if (on) colors.primaryContainer else Color.Transparent)
-                                .clickable { switchTab(i) }.padding(start = 16.dp, top = 6.dp, bottom = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                        Column(
+                            Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+                                .border(if (on) 2.dp else 1.dp, if (on) colors.primary else colors.outlineVariant, androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+                                .clickable { switchTab(i) },
                         ) {
-                            Column(Modifier.weight(1f)) {
-                                Text(t.badge + t.title.ifBlank { if (t.address.isEmpty()) "起始页" else BrowserPages.host(t.address) },
-                                    style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                    color = if (on) colors.onPrimaryContainer else colors.onSurface)
-                                if (t.address.isNotEmpty()) Text(BrowserPages.host(t.address), style = MaterialTheme.typography.labelSmall,
-                                    color = colors.onSurfaceVariant, maxLines = 1)
+                            Row(Modifier.fillMaxWidth().background(if (on) colors.primaryContainer else colors.surfaceVariant).padding(start = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically) {
+                                Text(t.badge + t.title.ifBlank { if (t.address.isEmpty()) "起始页" else BrowserPages.host(t.address) }, Modifier.weight(1f),
+                                    style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                    color = if (on) colors.onPrimaryContainer else colors.onSurfaceVariant)
+                                IconButton(onClick = { b.closeTab(i); if (b.tabs.isEmpty()) showTabs = false }, Modifier.size(36.dp)) {
+                                    Icon(Icons.Default.Close, "关闭这个标签页", Modifier.size(18.dp))
+                                }
                             }
-                            IconButton(onClick = { b.closeTab(i); if (b.tabs.isEmpty()) showTabs = false }) { Icon(Icons.Default.Close, "关闭这个标签页") }
+                            Box(Modifier.fillMaxWidth().aspectRatio(0.8f).background(colors.surface), contentAlignment = Alignment.Center) {
+                                val thumb = t.thumb
+                                if (thumb != null) androidx.compose.foundation.Image(thumb.asImageBitmap(), null, Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop, alignment = Alignment.TopCenter)
+                                else Text(if (t.address.isEmpty()) "起始页" else BrowserPages.host(t.address), Modifier.padding(8.dp),
+                                    style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, maxLines = 2)
+                            }
                         }
                     }
                 }
             }
         }
+    }
+
+    /** 选一个百分比的小弹窗（网页字号）。 */
+    @Composable
+    private fun ZoomDialog(title: String, note: String, options: List<Int>, now: Int, close: () -> Unit, pick: (Int) -> Unit) {
+        AlertDialog(
+            onDismissRequest = close,
+            title = { Text(title) },
+            text = {
+                Column {
+                    Text(note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    options.forEach { z ->
+                        Text((if (z == now) "✓ " else "    ") + "$z%" + if (z == 100) "（原样）" else "",
+                            Modifier.fillMaxWidth().clickable { close(); pick(z) }.padding(vertical = 10.dp),
+                            style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = close) { Text("关闭") } },
+        )
+    }
+
+    /** 完整的历史记录：按天分组、能搜、能删单条、能清空。 */
+    @Composable
+    private fun HistoryPanel() {
+        val b = JackBrowser
+        val colors = MaterialTheme.colorScheme
+        var all by remember { mutableStateOf<List<com.jack.ai.data.HistoryEntry>?>(null) }
+        var query by remember { mutableStateOf("") }
+        var confirmClear by remember { mutableStateOf(false) }
+        LaunchedEffect(Unit) { all = b.historyEntries() }
+        val now = remember { System.currentTimeMillis() }
+        val groups = remember(all, query) { com.jack.ai.data.BrowserHistory.byDay(all.orEmpty(), query, now) }
+        val time = remember { java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()) }
+        Surface(Modifier.fillMaxSize(), color = colors.background) {
+            Column(Modifier.fillMaxSize()) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { showHistory = false }) { Icon(Icons.Default.Close, "收起") }
+                    Text("历史记录", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                    TextButton(enabled = !all.isNullOrEmpty(), onClick = { confirmClear = true }) { Text("清空", color = colors.error) }
+                }
+                OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    placeholder = { Text("搜标题或网址") }, singleLine = true, textStyle = MaterialTheme.typography.bodyMedium)
+                when {
+                    all == null -> Text("正在读…", Modifier.padding(24.dp), color = colors.onSurfaceVariant)
+                    groups.isEmpty() -> Text(if (query.isBlank()) "还没有浏览记录。" else "没找到。", Modifier.padding(24.dp), color = colors.onSurfaceVariant)
+                    else -> LazyColumn(Modifier.fillMaxSize()) {
+                        groups.forEach { (day, list) ->
+                            item(key = "d$day") { Box(Modifier.padding(horizontal = 16.dp)) { Section(day) } }
+                            items(list, key = { "h" + it.url }) { e ->
+                                Row(Modifier.fillMaxWidth().clickable { showHistory = false; open(e.url) }.padding(start = 16.dp, top = 4.dp, bottom = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(e.title.ifBlank { BrowserPages.host(e.url) }, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text(time.format(java.util.Date(e.at)) + "  " + BrowserPages.host(e.url), style = MaterialTheme.typography.labelSmall,
+                                            color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
+                                    IconButton(onClick = { b.deleteHistory(e.url); all = all?.filterNot { it.url == e.url } }) { Icon(Icons.Default.Close, "删掉这条") }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (confirmClear) AlertDialog(
+            onDismissRequest = { confirmClear = false },
+            title = { Text("清空历史记录？") },
+            text = { Text("浏览记录和起始页的最近访问都删掉，Kavi 也翻不到了。登录状态、书签不动。") },
+            confirmButton = { TextButton(onClick = { confirmClear = false; b.clearHistory(); all = emptyList() }) { Text("清空", color = colors.error) } },
+            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("取消") } },
+        )
     }
 
     /** 网页没打开：盖一层干净的说明，不露出网页组件自带的英文出错页。 */
@@ -1183,7 +1333,12 @@ class BrowserActivity : ComponentActivity() {
                 items(b.marks, key = { "m" + it.url }) { PageRow(it) }
             }
             if (b.visits.isNotEmpty()) {
-                item { Section("最近访问") }
+                item {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.weight(1f)) { Section("最近访问") }
+                        TextButton(onClick = { showHistory = true }) { Text("全部历史") }
+                    }
+                }
                 items(b.visits.take(15), key = { "v" + it.url }) { PageRow(it) }
             }
         }

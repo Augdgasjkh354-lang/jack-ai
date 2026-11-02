@@ -42,6 +42,30 @@ object BrowserHistory {
         }.sortedWith(compareByDescending<Pair<HistoryEntry, Int>> { it.second }.thenByDescending { it.first.at }).map { it.first }.take(limit)
     }
 
+    /** 删掉一个网址的记录（历史记录页里点删除）。 */
+    fun remove(list: List<HistoryEntry>, url: String): List<HistoryEntry> = list.filterNot { it.url == url }
+
+    /** 历史记录页的日期分组名：今天、昨天、今年的写「3月5日」，更早的带年份。 */
+    fun dayLabel(at: Long, now: Long, zone: java.time.ZoneId = java.time.ZoneId.systemDefault()): String {
+        val d = java.time.Instant.ofEpochMilli(at).atZone(zone).toLocalDate()
+        val today = java.time.Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
+        return when {
+            d == today -> "今天"
+            d == today.minusDays(1) -> "昨天"
+            d.year == today.year -> "${d.monthValue}月${d.dayOfMonth}日"
+            else -> "${d.year}年${d.monthValue}月${d.dayOfMonth}日"
+        }
+    }
+
+    /** 按天分组（新的在前），给历史记录页用；query 不空时只留标题或网址里有每个词的。 */
+    fun byDay(list: List<HistoryEntry>, query: String, now: Long, zone: java.time.ZoneId = java.time.ZoneId.systemDefault()): List<Pair<String, List<HistoryEntry>>> {
+        val words = query.lowercase().split(Regex("\\s+")).filter { it.isNotBlank() }
+        return list.filter { e -> words.all { it in e.title.lowercase() || it in e.url.lowercase() } }
+            .sortedByDescending { it.at }
+            .groupBy { dayLabel(it.at, now, zone) }
+            .toList()
+    }
+
     /** 给模型看的清单。 */
     fun describe(found: List<HistoryEntry>, now: Long): String = found.mapIndexed { i, e ->
         val ago = (now - e.at).let { d ->
