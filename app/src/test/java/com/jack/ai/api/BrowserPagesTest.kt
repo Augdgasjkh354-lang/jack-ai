@@ -7,6 +7,17 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BrowserPagesTest {
+    @Test fun readingListAddReadRemoveAndLimit() {
+        val first = BrowserPages.addLater(emptyList(), "https://a.com", " A ", 1)
+        assertEquals(first, BrowserPages.addLater(first, "https://a.com", "B", 2))
+        assertTrue(BrowserPages.readLater(first, "https://a.com").single().read)
+        assertTrue(BrowserPages.removeLater(first, "https://a.com").isEmpty())
+        assertTrue(BrowserPages.addLater(emptyList(), "file:///a", "", 0).isEmpty())
+        val many = (1..205).fold(emptyList<BrowserPages.Later>()) { l, n -> BrowserPages.addLater(l, "https://s$n.com", "", n.toLong()) }
+        assertEquals(200, many.size)
+        assertEquals("https://s205.com", many.first().url)
+    }
+
     @Test
     fun recentKeepsNewestFirstWithoutDuplicates() {
         var list = BrowserPages.visit(emptyList(), "https://a.com", "A", 1)

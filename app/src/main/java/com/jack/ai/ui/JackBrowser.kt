@@ -212,6 +212,7 @@ object JackBrowser {
     data class Pressed(val link: String?, val image: String?)
     /** 最近访问（只记用户自己看的）和书签，存在 browser 偏好里。 */
     var visits by mutableStateOf(listOf<BrowserPages.Visit>())
+    var later by mutableStateOf(listOf<BrowserPages.Later>())
     var marks by mutableStateOf(listOf<BrowserPages.Visit>())
     /** 网页跟着 App 变深色（浅色主题时不变）。 */
     private var darkAllowed = true
@@ -751,11 +752,42 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
 
     private fun prefs() = app.getSharedPreferences("browser", Context.MODE_PRIVATE)
     private val listJson = Json { ignoreUnknownKeys = true }
+    private val laterList = kotlinx.serialization.builtins.ListSerializer(BrowserPages.Later.serializer())
+    private fun laterFile(url: String): java.io.File {
+        val hash = java.security.MessageDigest.getInstance("SHA-1").digest(url.toByteArray()).joinToString("") { "%02x".format(it) }
+        return java.io.File(app.filesDir, "readlater/$hash.md")
+    }
+    private fun saveLater() { prefs().edit().putString("readlater", listJson.encodeToString(laterList, later)).apply() }
+    fun removeLater(url: String) {
+        later = BrowserPages.removeLater(later, url); saveLater()
+        scope.launch(Dispatchers.IO) { laterFile(url).delete() }
+    }
+    fun markLaterRead(url: String) { later = BrowserPages.readLater(later, url); saveLater() }
+    fun addLater(url: String, name: String = "") {
+        if (tab.incognito || !userViewing) return
+        val before = later
+        later = BrowserPages.addLater(later, url, name, System.currentTimeMillis()); saveLater()
+        val kept = later.map { it.url }.toSet()
+        scope.launch(Dispatchers.IO) { before.filterNot { it.url in kept }.forEach { laterFile(it.url).delete() } }
+        val t = tabs.firstOrNull { !it.incognito && it.address == url } ?: return
+        scope.launch(pin(t)) {
+            val body = readable(app)?.second ?: return@launch
+            withContext(Dispatchers.IO) {
+                if (later.any { it.url == url }) laterFile(url).apply { parentFile?.mkdirs(); writeText(body) }
+            }
+        }
+    }
+    suspend fun offlineLater(url: String): Pair<String, String>? = withContext(Dispatchers.IO) {
+        val entry = later.find { it.url == url } ?: return@withContext null
+        runCatching { entry.title to laterFile(url).readText() }.getOrNull()
+    }
+
     private val visitList = kotlinx.serialization.builtins.ListSerializer(BrowserPages.Visit.serializer())
 
     private fun loadLists() {
         fun read(k: String) = prefs().getString(k, null)?.let { runCatching { listJson.decodeFromString(visitList, it) }.getOrNull() }.orEmpty()
         visits = read("visits"); marks = read("marks")
+        later = prefs().getString("readlater", null)?.let { runCatching { listJson.decodeFromString(laterList, it) }.getOrNull() }.orEmpty()
         searchEngine = prefs().getString("searchEngine", BrowserNet.AUTO) ?: BrowserNet.AUTO
         desktopSites = prefs().getStringSet("desktop", emptySet()).orEmpty().toSet()
         desktopAll = prefs().getBoolean("desktopall", true)

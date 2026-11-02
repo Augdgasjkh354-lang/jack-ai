@@ -122,6 +122,7 @@ class BrowserActivity : ComponentActivity() {
     /** 选网页字号。 */
     private var textPick by mutableStateOf(false)
     /** 历史记录页开着。 */
+    private var showLater by mutableStateOf(false)
     private var searchPick by mutableStateOf(false)
     private var showHistory by mutableStateOf(false)
     /** 选电脑版放大多少。 */
@@ -418,6 +419,11 @@ class BrowserActivity : ComponentActivity() {
                             menu = false
                             if (b.blocksHere().isNotEmpty()) blockList = true else b.startPick()
                         })
+                        DropdownMenuItem(text = { Text(if (b.later.any { it.url == b.address }) "移出阅读列表" else "加入阅读列表") }, enabled = has && !b.tab.incognito, onClick = {
+                            menu = false
+                            if (b.later.any { it.url == b.address }) b.removeLater(b.address) else b.addLater(b.address, b.title)
+                        })
+                        DropdownMenuItem(text = { Text("阅读列表") }, onClick = { menu = false; showLater = true })
                         DropdownMenuItem(text = { Text("阅读模式") }, enabled = has, onClick = {
                             menu = false
                             lifecycleScope.launch { b.readable(this@BrowserActivity)?.let { reader = it } ?: run { b.notice = "这一页找不出正文（可能不是文章页，或者还没加载完）" } }
@@ -598,6 +604,10 @@ class BrowserActivity : ComponentActivity() {
             }
         }
         if (showTabs) Box(Modifier.fillMaxSize().safeDrawingPadding()) { TabsPanel() }
+        if (showLater && b.userViewing) Box(Modifier.fillMaxSize().safeDrawingPadding()) { LaterPanel() }
+        LaunchedEffect(b.pageFailed, b.address) {
+            if (b.pageFailed && b.userViewing && !b.tab.incognito) b.offlineLater(b.address)?.let { reader = it; b.notice = "网络打不开，显示已保存的正文" }
+        }
         if (showHistory) Box(Modifier.fillMaxSize().safeDrawingPadding()) { HistoryPanel() }
         // 视频全屏：盖满整个屏幕
         full?.let { (view, _) ->
@@ -1164,6 +1174,39 @@ class BrowserActivity : ComponentActivity() {
         )
     }
 
+    private fun openLater(e: BrowserPages.Later) {
+        showLater = false
+        JackBrowser.markLaterRead(e.url)
+        open(e.url)
+    }
+
+    @Composable
+    private fun LaterPanel() {
+        val b = JackBrowser
+        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { showLater = false }) { Icon(Icons.Default.Close, "收起") }
+                    Text("阅读列表", style = MaterialTheme.typography.titleMedium)
+                }
+                LazyColumn {
+                    listOf(false to "未读", true to "已读").forEach { (read, label) ->
+                        item { Box(Modifier.padding(horizontal = 16.dp)) { Section(label) } }
+                        items(b.later.filter { it.read == read }, key = { it.url }) { e ->
+                            Row(Modifier.fillMaxWidth().clickable { openLater(e) }.padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(e.title.ifBlank { BrowserPages.host(e.url) }, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(BrowserPages.host(e.url), style = MaterialTheme.typography.labelSmall)
+                                }
+                                IconButton(onClick = { b.removeLater(e.url) }) { Icon(Icons.Default.Close, "删掉这条") }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     /** 完整的历史记录：按天分组、能搜、能删单条、能清空。 */
     @Composable
     private fun HistoryPanel() {
@@ -1248,6 +1291,8 @@ class BrowserActivity : ComponentActivity() {
                     @Composable
                     fun item(label: String, action: () -> Unit) = Text(label, Modifier.fillMaxWidth().clickable { close(); action() }.padding(vertical = 12.dp))
                     p.link?.let { link ->
+                        Text("稍后读", Modifier.fillMaxWidth().clickable(enabled = !b.tab.incognito) { close(); b.addLater(link) }.padding(vertical = 12.dp),
+                            color = if (b.tab.incognito) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f) else MaterialTheme.colorScheme.onSurface)
                         item("打开") { open(link) }
                         item("在新标签页打开") { openInNewTab(link) }
                         item("复制链接") { copy(link); b.notice = "已复制链接" }
@@ -1336,6 +1381,16 @@ class BrowserActivity : ComponentActivity() {
                             OutlinedButton(onClick = { open(url) }) { Text(name) }
                         }
                     }
+                }
+            }
+            item { Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(1f)) { Section("阅读列表") }
+                TextButton(onClick = { showLater = true }) { Text("全部") }
+            } }
+            items(b.later.filterNot { it.read }.take(10), key = { "l" + it.url }) { e ->
+                Column(Modifier.fillMaxWidth().clickable { openLater(e) }.padding(vertical = 8.dp)) {
+                    Text(e.title.ifBlank { BrowserPages.host(e.url) }, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(BrowserPages.host(e.url), style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
                 }
             }
             if (b.marks.isNotEmpty()) {

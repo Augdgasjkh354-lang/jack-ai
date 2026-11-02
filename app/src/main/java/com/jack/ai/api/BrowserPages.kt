@@ -8,6 +8,16 @@ object BrowserPages {
     @Serializable
     data class Visit(val url: String, val title: String = "", val at: Long = 0)
 
+    @Serializable
+    data class Later(val url: String, val title: String = "", val at: Long = 0, val read: Boolean = false)
+
+    fun addLater(list: List<Later>, url: String, title: String, now: Long): List<Later> =
+        if (!isWeb(url) || list.any { it.url == url }) list
+        else (listOf(Later(url, title.trim(), now)) + list).take(200)
+
+    fun removeLater(list: List<Later>, url: String) = list.filterNot { it.url == url }
+    fun readLater(list: List<Later>, url: String) = list.map { if (it.url == url) it.copy(read = true) else it }
+
     const val RECENT_MAX = 30
 
     /** 记一次访问：同一个网址只留最新的一条，排最前；只记 http/https。 */
