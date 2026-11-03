@@ -71,4 +71,76 @@ class XlsxBookTest {
         assertTrue(p.getValue("[Content_Types].xml").contains("/xl/drawings/drawing1.xml"))
         assertTrue(p.getValue("xl/styles.xml").contains("FF0F766E"))
     }
+
+    @Test
+    fun warnsAboutTooManyColumnsAndBadHeaders() {
+        val header = (1..13).map { "列$it" }.toMutableList().apply {
+            this[2] = ""
+            this[4] = "金额"
+            this[8] = "金额"
+        }
+        val bos = ByteArrayOutputStream()
+        val warnings = OfficeWriter.writeXlsx(
+            listOf(OfficeWriter.Sheet("宽表", listOf(header, List(13) { "1" }))),
+            bos,
+        )
+
+        assertTrue(warnings.any { it.contains("13 列") && it.contains("拆成两张表") })
+        assertTrue(warnings.any { it.contains("C1") && it.contains("表头") && it.contains("空") })
+        assertTrue(warnings.any { it.contains("E1") && it.contains("I1") && it.contains("重复") })
+    }
+
+    @Test
+    fun warnsWhenNumericColumnContainsText() {
+        val bos = ByteArrayOutputStream()
+        val warnings = OfficeWriter.writeXlsx(
+            listOf(
+                OfficeWriter.Sheet(
+                    "混合类型",
+                    listOf(
+                        listOf("项目", "金额"),
+                        listOf("A", "10"),
+                        listOf("B", "20元"),
+                        listOf("C", "30"),
+                    ),
+                ),
+            ),
+            bos,
+        )
+
+        assertTrue(warnings.any { it.contains("第 B 列") && it.contains("B3") && it.contains("被存成文字") })
+    }
+
+    @Test
+    fun warnsWhenCellTextIsTooLong() {
+        val bos = ByteArrayOutputStream()
+        val warnings = OfficeWriter.writeXlsx(
+            listOf(OfficeWriter.Sheet("长文本", listOf(listOf("说明"), listOf("这是一段很长的说明".repeat(12))))),
+            bos,
+        )
+
+        assertTrue(warnings.any { it.contains("A2") && it.contains("文字太长") && it.contains("备注列") })
+    }
+
+    @Test
+    fun warnsWhenManualTotalDoesNotMatchDetails() {
+        val bos = ByteArrayOutputStream()
+        val warnings = OfficeWriter.writeXlsx(
+            listOf(
+                OfficeWriter.Sheet(
+                    "合计检查",
+                    listOf(
+                        listOf("项目", "金额"),
+                        listOf("A", "10"),
+                        listOf("B", "20"),
+                        listOf("合计", "25"),
+                    ),
+                ),
+            ),
+            bos,
+        )
+
+        assertTrue(warnings.any { it.contains("B4") && it.contains("25") && it.contains("30") && it.contains("重新计算合计") })
+    }
+
 }
