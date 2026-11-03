@@ -37,7 +37,7 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
     } else null
     val openPolicy = openPkg?.let(AppUsageNotes::policyForPackage)
     if (openPolicy?.mainScreenOnly == true && settings.phoneBackground && !interactive) {
-        return "「${accessibility.appLabel(openPkg)}」为保护登录状态只允许在主屏操作，后台定时任务不打开它。请用户在聊天里前台发起这次操作。"
+        return "「${accessibility.appLabel(openPkg!!)}」为保护登录状态只允许在主屏操作，后台定时任务不打开它。请用户在聊天里前台发起这次操作。"
     }
     // 列 App 不建虚拟屏；标成主屏专用的 App 不进入 Mika 虚拟屏。
     val svc = try {
