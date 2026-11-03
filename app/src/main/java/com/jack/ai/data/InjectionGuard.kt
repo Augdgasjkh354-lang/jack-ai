@@ -119,12 +119,12 @@ object InjectionGuard {
     private fun file(ctx: Context) = File(ctx.filesDir, "injection_log.json")
 
     fun log(ctx: Context): List<Record> = synchronized(lock) {
-        runCatching { json.decodeFromString(ListSerializer(Record.serializer()), file(ctx).readText()) }.getOrDefault(emptyList())
+        runCatching { json.decodeFromString(ListSerializer(Record.serializer()), SafeFile.readText(file(ctx))) }.getOrDefault(emptyList())
     }
 
     fun record(ctx: Context, tool: String, source: String, scan: Scan) = synchronized(lock) {
         val f = scan.findings.firstOrNull()
         val r = Record(System.currentTimeMillis(), tool, source.take(200), f?.kind ?: "藏着看不见的字", f?.line ?: "${scan.hidden} 个看不见的字符")
-        runCatching { file(ctx).writeText(json.encodeToString(ListSerializer(Record.serializer()), (log(ctx) + r).takeLast(100))) }
+        runCatching { SafeFile.writeText(file(ctx), json.encodeToString(ListSerializer(Record.serializer()), (log(ctx) + r).takeLast(100))) }
     }
 }
