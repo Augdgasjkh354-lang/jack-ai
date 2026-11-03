@@ -112,19 +112,23 @@ internal object BrowserCdp {
         } catch (e: Exception) {
             sessions.remove(tab.id)?.close()
             targets.remove(tab.id)
-            val status = if (sender.eventAttempted) Outcome.UNCERTAIN else Outcome.FALLBACK
+            val status = failureOutcome(sender.eventAttempted)
             tab.diag.add("CDP $action 失败：${e.javaClass.simpleName}，" +
                 if (status == Outcome.FALLBACK) "退回旧输入" else "不重复输入")
             status
         }
     }
 
+    internal fun failureOutcome(eventAttempted: Boolean) = if (eventAttempted) Outcome.UNCERTAIN else Outcome.FALLBACK
+
     private class Sender(private val s: CdpSession) {
         var eventAttempted = false
             private set
 
         suspend fun send(method: String, params: kotlinx.serialization.json.JsonObject) {
-            eventAttempted = true
+            // 单纯移动鼠标失败时，没有发生点击或编辑，可以退回脚本。
+            if (method != "Input.dispatchMouseEvent" ||
+                params["type"]?.jsonPrimitive?.contentOrNull != "mouseMoved") eventAttempted = true
             s.send(method, params, timeoutMs = 2_000)
         }
 
@@ -177,8 +181,10 @@ internal object BrowserCdp {
         if (op == "key" && BrowserCdpKeys.named(arg) == null) return Outcome.FALLBACK
         return perform(tab, op) {
             mouse("mouseMoved", x, y)
-            mouse("mousePressed", x, y, "left", 1)
-            mouse("mouseReleased", x, y, "left", 0)
+            if (op != "hover") {
+                mouse("mousePressed", x, y, "left", 1)
+                mouse("mouseReleased", x, y, "left", 0)
+            }
             when (op) {
                 "click" -> Unit
                 "hover" -> Unit

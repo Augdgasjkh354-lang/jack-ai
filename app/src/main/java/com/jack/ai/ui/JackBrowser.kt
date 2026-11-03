@@ -1710,12 +1710,36 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
         return runCatching { json.parseToJsonElement(raw).jsonObject }.getOrNull()
     }
 
-    /** 对某个编号的元素做一个动作（click / type / delete / select / key），做完等页面稳定。返回出错原因。 */
+    /** 对某个编号的元素做动作；CDP 不可用时沿用脚本输入。 */
     suspend fun act(ctx: Context, n: Int, op: String, arg: String = "", clear: Boolean = false): String? {
         agentAt = System.currentTimeMillis()
         withContext(Dispatchers.Main) { error = null; pageDone = CompletableDeferred() }
-        val raw = unwrap(eval(ctx, BrowserScripts.act(ctx, n, op, arg, clear)))
-        val err = runCatching { (json.parseToJsonElement(raw).jsonObject["err"] as? JsonPrimitive)?.content }.getOrNull()
+        var outcome = BrowserCdp.Outcome.FALLBACK
+        if (op in setOf("click", "hover", "type", "delete", "key")) {
+            // 日期等特殊原生控件仍按原方式设置，普通文本框才用 CDP 输入。
+            val info = if (op == "type" || op == "delete") inspect(ctx, n) else null
+            val fieldType = (info?.get("type") as? JsonPrimitive)?.content.orEmpty()
+            val isText = (info?.get("text") as? JsonPrimitive)?.content == "true"
+            val supported = op !in setOf("type", "delete") || (isText &&
+                (op != "type" || fieldType !in setOf("date", "datetime-local", "time", "month", "week", "range", "color")))
+            if (supported) {
+                val at = runCatching {
+                    json.parseToJsonElement(unwrap(eval(ctx, BrowserScripts.center(ctx, n)))).jsonObject
+                }.getOrNull()
+                if ((at?.get("found") as? JsonPrimitive)?.content == "true") {
+                    fun coord(k: String) = (at[k] as? JsonPrimitive)?.content?.toDoubleOrNull() ?: 0.0
+                    delay(300)
+                    outcome = BrowserCdp.act(pinned() ?: tab, coord("x"), coord("y"), op, arg, clear)
+                }
+            }
+        }
+        if (outcome == BrowserCdp.Outcome.UNCERTAIN) {
+            return "CDP 输入中途断开，网页可能已经收到这次操作。先读页面确认，不要直接重复提交。"
+        }
+        val err = if (outcome == BrowserCdp.Outcome.DONE) null else {
+            val raw = unwrap(eval(ctx, BrowserScripts.act(ctx, n, op, arg, clear)))
+            runCatching { (json.parseToJsonElement(raw).jsonObject["err"] as? JsonPrimitive)?.content }.getOrNull()
+        }
         settle()
         return err ?: withContext(Dispatchers.Main) { error }
     }
@@ -1739,12 +1763,23 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
         val inside = withContext(Dispatchers.Main) { listOf(ax, bx).all { it in 0f..w.width.toFloat() } && listOf(ay, by).all { it in 0f..w.height.toFloat() } }
         if (!inside) return "坐标在网页窗口外面（截图大约 ${(w.width * scale).toInt()}×${(w.height * scale).toInt()}）"
         withContext(Dispatchers.Main) { pageDone = CompletableDeferred(); clearError() }
-        if (withContext(Dispatchers.Main) { w.isAttachedToWindow }) {
-            withContext(Dispatchers.Main) { gesture(w, ax, ay, bx, by, durationMs) }
-        } else {
-            // 不在屏幕上：触摸事件不一定送得到，改用脚本点那个位置（只能点，不能划）
-            val k = withContext(Dispatchers.Main) { w.width.toFloat() } / unwrap(eval(ctx, "innerWidth")).toFloat().coerceAtLeast(1f)
-            eval(ctx, "(function(){var e=document.elementFromPoint(${ax / k},${ay / k});if(e){e.click();}})();1")
+        val cssWidth = unwrap(eval(ctx, "innerWidth")).toFloatOrNull()?.takeIf { it > 0 } ?: w.width.toFloat()
+        val outcome = BrowserCdp.at(pinned() ?: tab,
+            BrowserCdpCoords.fromScreenshot(x1, w.width, cssWidth),
+            BrowserCdpCoords.fromScreenshot(y1, w.width, cssWidth),
+            BrowserCdpCoords.fromScreenshot(x2, w.width, cssWidth),
+            BrowserCdpCoords.fromScreenshot(y2, w.width, cssWidth), durationMs)
+        if (outcome == BrowserCdp.Outcome.UNCERTAIN) {
+            return "CDP 输入中途断开，网页可能已经收到这次操作。先读页面确认，不要直接重复。"
+        }
+        if (outcome == BrowserCdp.Outcome.FALLBACK) {
+            if (withContext(Dispatchers.Main) { w.isAttachedToWindow }) {
+                withContext(Dispatchers.Main) { gesture(w, ax, ay, bx, by, durationMs) }
+            } else {
+                // 不在屏幕上：触摸事件不一定送得到，退回脚本（只能点，不能划）
+                val k = w.width.toFloat() / cssWidth
+                eval(ctx, "(function(){var e=document.elementFromPoint(${ax / k},${ay / k});if(e){e.click();}})();1")
+            }
         }
         settle()
         return withContext(Dispatchers.Main) { error }

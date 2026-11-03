@@ -3,6 +3,7 @@ package com.jack.ai.tools
 import com.jack.ai.api.BrowserNet
 import com.jack.ai.data.SearchRecord
 import com.jack.ai.ui.JackBrowser
+import com.jack.ai.ui.BrowserCdp
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
@@ -29,10 +30,15 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
     val lost = BrowserLock.takeLost(this)
     // 分到的是后台标签页：这次的操作都钉在它上面（读页面、点、开网址都在这一页，不碰用户眼前的）
     val pin = BrowserLock.pinOf(this)
+    val inputAction = action in setOf("click", "tap", "swipe", "hover", "type", "key", "delete", "fill", "steps", "parallel", "upload")
     return try {
+        if (inputAction) withContext(kotlinx.coroutines.Dispatchers.Main) { BrowserCdp.begin() }
         val r = if (pin != null) withContext(pin) { browseNow(args, action) } else browseNow(args, action)
         if (lost) "（你停下没用浏览器的时候，它被别的任务接手用过，页面可能变了：以这次读到的为准，要用的网页没了就重新打开。）\n$r" else r
-    } finally { BrowserLock.exit(this) }
+    } finally {
+        if (inputAction) withContext(kotlinx.coroutines.NonCancellable + kotlinx.coroutines.Dispatchers.Main) { BrowserCdp.end() }
+        BrowserLock.exit(this)
+    }
 }
 
 private suspend fun ToolSession.browseNow(args: JsonObject, action: String): String {
