@@ -105,6 +105,13 @@ object PptChart {
         fun txF(si: Int) = refs?.let { "${sheetRef(it.sheet)}!$d${col(it.valCols[si])}$d${it.header}" } ?: "Sheet1!$d${col(si + 1)}${d}1"
         fun valF(si: Int) = refs?.let { "${sheetRef(it.sheet)}!$d${col(it.valCols[si])}$d${it.first}:$d${col(it.valCols[si])}$d${it.last}" } ?: "Sheet1!$d${col(si + 1)}${d}2:$d${col(si + 1)}$d${n + 1}"
         val pie = c.type == "pie" || c.type == "doughnut"
+        // 数值轴的格式写明：数据是百分比显示 45%，上千的数加千分位；只写「跟随数据」时 LibreOffice 等会显示成 0.45
+        val axFmt = when {
+            refs?.formats?.isNotEmpty() == true && refs.formats.all { "%" in it } -> "0%"
+            c.series.flatMap { it.values }.maxOfOrNull { kotlin.math.abs(it) }?.let { it >= 1000 } == true -> "#,##0"
+            else -> null
+        }
+        val valFmt = axFmt?.let { """<c:numFmt formatCode="${esc(it)}" sourceLinked="0"/>""" } ?: """<c:numFmt formatCode="General" sourceLinked="1"/>"""
         val xy = c.type == "scatter" || c.type == "bubble"
         val label = t.text
         val cat = """<c:cat><c:strRef><c:f>${esc(catF)}</c:f><c:strCache><c:ptCount val="$n"/>""" +
@@ -170,10 +177,10 @@ object PptChart {
         val catPos = if (c.type == "bar") "l" else "b"
         val valPos = if (c.type == "bar") "b" else "l"
         val xAx = """<c:valAx><c:axId val="11"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:numFmt formatCode="General" sourceLinked="1"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:spPr><a:ln w="9525">${solid(grid)}</a:ln></c:spPr>${tp(1200, t.muted, t = t)}<c:crossAx val="22"/><c:crosses val="autoZero"/></c:valAx>"""
-        val yAx = """<c:valAx><c:axId val="22"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines><c:spPr><a:ln w="6350">${solid(grid)}</a:ln></c:spPr></c:majorGridlines><c:numFmt formatCode="General" sourceLinked="1"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:spPr><a:ln><a:noFill/></a:ln></c:spPr>${tp(1200, t.muted, t = t)}<c:crossAx val="11"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>"""
+        val yAx = """<c:valAx><c:axId val="22"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines><c:spPr><a:ln w="6350">${solid(grid)}</a:ln></c:spPr></c:majorGridlines>$valFmt<c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:spPr><a:ln><a:noFill/></a:ln></c:spPr>${tp(1200, t.muted, t = t)}<c:crossAx val="11"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>"""
         val axisXml = if (pie) "" else if (xy) xAx + yAx else
             """<c:catAx><c:axId val="11"/><c:scaling><c:orientation val="${if (c.type == "bar") "maxMin" else "minMax"}"/></c:scaling><c:delete val="0"/><c:axPos val="$catPos"/><c:numFmt formatCode="General" sourceLinked="1"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:spPr><a:ln w="9525">${solid(grid)}</a:ln></c:spPr>${tp(1300, label, t = t)}<c:crossAx val="22"/><c:crosses val="autoZero"/><c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:noMultiLvlLbl val="0"/></c:catAx>""" +
-                """<c:valAx><c:axId val="22"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="$valPos"/><c:majorGridlines><c:spPr><a:ln w="6350">${solid(grid)}</a:ln></c:spPr></c:majorGridlines><c:numFmt formatCode="General" sourceLinked="1"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:spPr><a:ln><a:noFill/></a:ln></c:spPr>${tp(1200, t.muted, t = t)}<c:crossAx val="11"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>"""
+                """<c:valAx><c:axId val="22"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="$valPos"/><c:majorGridlines><c:spPr><a:ln w="6350">${solid(grid)}</a:ln></c:spPr></c:majorGridlines>$valFmt<c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:spPr><a:ln><a:noFill/></a:ln></c:spPr>${tp(1200, t.muted, t = t)}<c:crossAx val="11"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>"""
         // 饼图扇区上已经写了「名字：百分比」，不用图例（以前放右边，重复还把饼挤到一边）；环形图环上只写百分比，名字靠图例，放下面
         val legend = if (c.type == "doughnut" || (!pie && c.series.size > 1)) """<c:legend><c:legendPos val="${if (c.type == "doughnut") "b" else "t"}"/><c:overlay val="0"/>${tp(1300, label, t = t)}</c:legend>""" else ""
         return """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">""" +

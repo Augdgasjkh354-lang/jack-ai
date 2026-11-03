@@ -209,6 +209,8 @@ object XlsxBook {
             val withTotal = sheet.totalRow && data.isNotEmpty() && numericCol.drop(1).any { it }
 
             val sb = StringBuilder("""$XML<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="$REL">""")
+            // 打印、导出 PDF 时缩到一页宽（不然多出来的一两列单独跑到下一页，图也被切开）
+            sb.append("""<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>""")
             if (rows.isNotEmpty()) sb.append("""<sheetViews><sheetView workbookViewId="0"${if (si == 0) " tabSelected=\"1\"" else ""}><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>""")
             sb.append("""<sheetFormatPr defaultRowHeight="18"/>""")
             if (cols > 0) {
@@ -279,6 +281,8 @@ object XlsxBook {
                 sb.append("""<conditionalFormatting sqref="$range">$rule</conditionalFormatting>""")
             }
             sb.append("""<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>""")
+            val landscape = cols > 6 || sheet.charts.isNotEmpty()
+            sb.append("""<pageSetup paperSize="9" orientation="${if (landscape) "landscape" else "portrait"}" fitToWidth="1" fitToHeight="0"/>""")
 
             // 图表：放在表格右边，一张接一张往下排
             val anchors = StringBuilder()
@@ -346,7 +350,12 @@ object XlsxBook {
             val font = when { header == "true" -> 1; total == "true" -> 2; else -> 0 }
             val fill = when { header == "true" -> 2; total == "true" -> 4; band == "true" -> 3; else -> 0 }
             val border = if (total == "true") 2 else 1
-            val align = if (header == "true") """<alignment horizontal="center" vertical="center" wrapText="1"/>""" else """<alignment vertical="center"/>"""
+            // 日期居中：靠右时会和右边一列左对齐的字挤在一起（读成「2026-01-31007」）
+            val align = when {
+                header == "true" -> """<alignment horizontal="center" vertical="center" wrapText="1"/>"""
+                format == "date" -> """<alignment horizontal="center" vertical="center"/>"""
+                else -> """<alignment vertical="center"/>"""
+            }
             styles.append("""<xf numFmtId="$fmt" fontId="$font" fillId="$fill" borderId="$border" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1">$align</xf>""")
         }
         styles.append("""</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>""")

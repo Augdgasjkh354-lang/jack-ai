@@ -214,9 +214,11 @@ budget = 800
     }
 
     @Test
-    fun tocTurnsOnByItselfForLongDocsAndDecimalNumbering() {
-        val doc = write(WordDoc.Options(headingNumbers = "decimal")).getValue("word/document.xml")
-        assertTrue(doc.contains("TOC \\o"))  // 四个章节，自动加目录；没要封面就不加封面，标题在目录页顶上
+    fun shortDocsSkipTheAutoTocAndDecimalNumbering() {
+        // 四个章节但只有几百字：不自动加目录，一页的东西配一页目录全是壳子
+        assertFalse(write(WordDoc.Options()).getValue("word/document.xml").contains("TOC \\o"))
+        val doc = write(WordDoc.Options(headingNumbers = "decimal", toc = true)).getValue("word/document.xml")
+        assertTrue(doc.contains("TOC \\o"))  // 明确要目录照加；没要封面就不加封面，标题在目录页顶上
         assertFalse(doc.contains("CoverTitle"))
         assertTrue(doc.indexOf("<w:pStyle w:val=\"Title\"/>") < doc.indexOf("TOC \\o"))
         assertTrue(doc.contains(">1 市场回顾<"))

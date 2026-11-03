@@ -213,7 +213,9 @@ object WordDoc {
         }
         flushBlankLines()
 
-        val withToc = o.toc ?: (headingCount >= 4)
+        // 自动目录要文档够长才加：一两页的东西配一页目录，翻开全是壳子
+        val bodyChars = lines.withIndex().sumOf { (i, l) -> if (fence[i]) 0 else l.trim().length }
+        val withToc = o.toc ?: (headingCount >= 4 && bodyChars >= 3000)
         val cover = o.cover
         // 没有封面但有目录：标题放在目录那页顶上，正文里就不再写一遍
         val titleOnToc = cover == null && withToc && docTitle.isNotEmpty()
