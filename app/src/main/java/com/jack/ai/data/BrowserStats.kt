@@ -38,13 +38,13 @@ object BrowserStats {
 
     /** 读一份按对象记的结果（浏览器按网站、手机按 App，格式一样）。 */
     internal fun loadFrom(f: File): List<Event> = runCatching {
-        json.decodeFromString(ListSerializer(Event.serializer()), f.readText())
+        json.decodeFromString(ListSerializer(Event.serializer()), SafeFile.readText(f))
     }.getOrDefault(emptyList())
 
     /** 记一笔，只留最近 3000 笔。 */
     internal fun appendTo(f: File, e: Event) = synchronized(lock) {
         val list = (loadFrom(f) + e).takeLast(MAX)
-        runCatching { f.writeText(json.encodeToString(ListSerializer(Event.serializer()), list)) }
+        runCatching { SafeFile.writeText(f, json.encodeToString(ListSerializer(Event.serializer()), list)) }
         Unit
     }
 

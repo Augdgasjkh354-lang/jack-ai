@@ -65,11 +65,11 @@ object Reader {
     private fun file(ctx: Context) = File(ctx.filesDir, "reading_log.json")
 
     fun log(ctx: Context): List<ReadEntry> = synchronized(lock) {
-        runCatching { json.decodeFromString(ListSerializer(ReadEntry.serializer()), file(ctx).readText()) }.getOrDefault(emptyList())
+        runCatching { json.decodeFromString(ListSerializer(ReadEntry.serializer()), SafeFile.readText(file(ctx))) }.getOrDefault(emptyList())
     }
 
     private fun add(ctx: Context, e: ReadEntry) = synchronized(lock) {
-        runCatching { file(ctx).writeText(json.encodeToString(ListSerializer(ReadEntry.serializer()), (listOf(e) + log(ctx)))) }
+        runCatching { SafeFile.writeText(file(ctx), json.encodeToString(ListSerializer(ReadEntry.serializer()), (listOf(e) + log(ctx)))) }
     }
 
     /** 今天（自然日）已经花了多少。 */

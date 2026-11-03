@@ -66,12 +66,12 @@ object Timeline {
 
     /** 每个对话摘要到了哪条消息（时间）。 */
     private fun summarizedUpTo(ctx: Context): Map<String, Long> = synchronized(lock) {
-        runCatching { json.decodeFromString(MapSerializer(String.serializer(), Long.serializer()), stateFile(ctx).readText()) }.getOrDefault(emptyMap())
+        runCatching { json.decodeFromString(MapSerializer(String.serializer(), Long.serializer()), SafeFile.readText(stateFile(ctx))) }.getOrDefault(emptyMap())
     }
 
     private fun markSummarized(ctx: Context, convId: String, at: Long) = synchronized(lock) {
         val m = summarizedUpTo(ctx) + (convId to at)
-        runCatching { stateFile(ctx).writeText(json.encodeToString(MapSerializer(String.serializer(), Long.serializer()), m)) }
+        runCatching { SafeFile.writeText(stateFile(ctx), json.encodeToString(MapSerializer(String.serializer(), Long.serializer()), m)) }
     }
 
     /** 这个对话进不进经历流：隐私项目、关了全局记忆的、自由时间和收件箱自己的不进。 */

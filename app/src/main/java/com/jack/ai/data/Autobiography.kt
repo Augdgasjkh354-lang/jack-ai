@@ -52,11 +52,11 @@ object SelfStory {
     private fun checkFile(ctx: Context) = File(ctx.filesDir, "checkups.json")
 
     fun bio(ctx: Context): Autobiography = synchronized(lock) {
-        runCatching { json.decodeFromString(Autobiography.serializer(), bioFile(ctx).readText()) }.getOrDefault(Autobiography())
+        runCatching { json.decodeFromString(Autobiography.serializer(), SafeFile.readText(bioFile(ctx))) }.getOrDefault(Autobiography())
     }
 
     fun checkups(ctx: Context): List<CheckUp> = synchronized(lock) {
-        runCatching { json.decodeFromString(ListSerializer(CheckUp.serializer()), checkFile(ctx).readText()) }.getOrDefault(emptyList())
+        runCatching { json.decodeFromString(ListSerializer(CheckUp.serializer()), SafeFile.readText(checkFile(ctx))) }.getOrDefault(emptyList())
     }
 
     /** 做梦后调：到时候了就更新自传、做体检。出错不影响做梦。 */
@@ -118,7 +118,7 @@ Output only one JSON object: {"text": "…", "shared": "…"}"""
         }.getOrNull()?.let { text = it }
         text = text.take(BIO_MAX)
         synchronized(lock) {
-            runCatching { bioFile(ctx).writeText(json.encodeToString(Autobiography.serializer(), Autobiography(text, o.str("shared"), now))) }
+            runCatching { SafeFile.writeText(bioFile(ctx), json.encodeToString(Autobiography.serializer(), Autobiography(text, o.str("shared"), now))) }
         }
         Timeline.add(ctx, Episode(at = now, place = "dream", text = "updated my autobiography"))
     }
@@ -153,7 +153,7 @@ Output only one JSON object: {"answers": ["…", "…"], "changes": "what change
         if (answers.isEmpty()) return
         val c = CheckUp(now, answers, o.str("changes").take(800), o.str("drift") == "true", o.str("note").take(400))
         synchronized(lock) {
-            runCatching { checkFile(ctx).writeText(json.encodeToString(ListSerializer(CheckUp.serializer()), (checkups(ctx) + c).takeLast(26))) }
+            runCatching { SafeFile.writeText(checkFile(ctx), json.encodeToString(ListSerializer(CheckUp.serializer()), (checkups(ctx) + c).takeLast(26))) }
         }
         Timeline.add(ctx, Episode(at = now, place = "dream", text = "self check-up" + if (c.drift) ": noticed drift — ${c.note.take(150)}" else ": still myself"))
     }

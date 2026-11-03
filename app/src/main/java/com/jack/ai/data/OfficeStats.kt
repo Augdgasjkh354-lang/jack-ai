@@ -29,12 +29,12 @@ object OfficeStats {
     private fun file(ctx: Context) = File(ctx.filesDir, "office_stats.json")
 
     fun load(ctx: Context): List<Event> = runCatching {
-        json.decodeFromString(ListSerializer(Event.serializer()), file(ctx).readText())
+        json.decodeFromString(ListSerializer(Event.serializer()), SafeFile.readText(file(ctx)))
     }.getOrDefault(emptyList())
 
     fun record(ctx: Context, e: Event) = synchronized(lock) {
         val list = (load(ctx) + e).takeLast(MAX)
-        runCatching { file(ctx).writeText(json.encodeToString(ListSerializer(Event.serializer()), list)) }
+        runCatching { SafeFile.writeText(file(ctx), json.encodeToString(ListSerializer(Event.serializer()), list)) }
         Unit
     }
 

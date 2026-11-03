@@ -41,13 +41,13 @@ object Threads {
     private fun file(ctx: Context) = File(ctx.filesDir, "threads.json")
 
     fun load(ctx: Context): List<OpenThread> = synchronized(lock) {
-        runCatching { json.decodeFromString(ListSerializer(OpenThread.serializer()), file(ctx).readText()) }.getOrDefault(emptyList())
+        runCatching { json.decodeFromString(ListSerializer(OpenThread.serializer()), SafeFile.readText(file(ctx))) }.getOrDefault(emptyList())
     }
 
     fun save(ctx: Context, list: List<OpenThread>) = synchronized(lock) {
         // 了结和淡出的只留最近的一些（经历流里有记录）
         val keep = list.filter { it.status == "open" } + list.filter { it.status != "open" }.sortedByDescending { it.closedAt }.take(100)
-        runCatching { file(ctx).writeText(json.encodeToString(ListSerializer(OpenThread.serializer()), keep)) }
+        runCatching { SafeFile.writeText(file(ctx), json.encodeToString(ListSerializer(OpenThread.serializer()), keep)) }
     }
 
     fun open(list: List<OpenThread>) = list.filter { it.status == "open" }

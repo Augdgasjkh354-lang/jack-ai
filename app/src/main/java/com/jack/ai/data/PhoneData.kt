@@ -61,7 +61,7 @@ object PhoneData {
     }
 
     fun notices(ctx: Context): List<Notice> = synchronized(lock) {
-        runCatching { json.decodeFromString(ListSerializer(Notice.serializer()), file(ctx).readText()) }.getOrDefault(emptyList())
+        runCatching { json.decodeFromString(ListSerializer(Notice.serializer()), SafeFile.readText(file(ctx))) }.getOrDefault(emptyList())
     }
 
     /** 记一条：同一个 App 一样的内容一分钟内不重复记，只留三天、最多 400 条。 */
@@ -69,7 +69,7 @@ object PhoneData {
         val list = notices(ctx)
         if (list.any { it.pkg == n.pkg && it.title == n.title && it.text == n.text && n.at - it.at < 60_000 }) return@synchronized
         val kept = (list + n).filter { n.at - it.at < KEEP_MS }.takeLast(MAX)
-        runCatching { file(ctx).writeText(json.encodeToString(ListSerializer(Notice.serializer()), kept)) }
+        runCatching { SafeFile.writeText(file(ctx), json.encodeToString(ListSerializer(Notice.serializer()), kept)) }
     }
 
     /** 查通知：最近几小时、哪个 App（名字或包名）、包含什么字。 */

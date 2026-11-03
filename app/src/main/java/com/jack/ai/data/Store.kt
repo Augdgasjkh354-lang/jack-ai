@@ -124,10 +124,10 @@ class Store(context: Context) {
 
     fun loadLibrary() = load("library.json", LibraryDoc.serializer())
     fun saveLibrary(list: List<LibraryDoc>) = save("library.json", LibraryDoc.serializer(), list)
-    fun libraryText(id: String): String = runCatching { File(File(dir, "library"), "$id.txt").readText() }.getOrDefault("")
+    fun libraryText(id: String): String = runCatching { SafeFile.readText(File(File(dir, "library"), "$id.txt")) }.getOrDefault("")
     fun saveLibraryText(id: String, text: String) {
         File(dir, "library").mkdirs()
-        File(File(dir, "library"), "$id.txt").writeText(text)
+        SafeFile.writeText(File(File(dir, "library"), "$id.txt"), text)
     }
     fun deleteLibraryText(id: String) { File(File(dir, "library"), "$id.txt").delete() }
 

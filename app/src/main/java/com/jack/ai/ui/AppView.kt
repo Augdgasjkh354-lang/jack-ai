@@ -49,6 +49,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.jack.ai.data.GeneratedFile
+import com.jack.ai.data.SafeFile
 import com.jack.ai.data.Verify
 import java.io.ByteArrayInputStream
 import java.io.File
@@ -71,11 +72,11 @@ private class AppBridge(private val app: File, private val onHeight: (Int) -> Un
     @JavascriptInterface
     fun save(json: String) {
         if (json.length > 1_000_000) return
-        runCatching { dataFile(app).apply { parentFile?.mkdirs() }.writeText(json) }
+        runCatching { SafeFile.writeText(dataFile(app), json) }
     }
 
     @JavascriptInterface
-    fun load(): String = runCatching { dataFile(app).takeIf { it.exists() }?.readText() }.getOrNull().orEmpty()
+    fun load(): String = runCatching { SafeFile.readText(dataFile(app)) }.getOrNull().orEmpty()
 
     @JavascriptInterface
     fun height(px: Int) { main.post { onHeight(px) } }

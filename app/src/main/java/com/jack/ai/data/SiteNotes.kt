@@ -34,7 +34,7 @@ object SiteNotes {
     private fun file(ctx: Context) = File(ctx.filesDir, "site_notes.json")
 
     fun load(ctx: Context): List<SiteRecord> = runCatching {
-        json.decodeFromString(ListSerializer(SiteRecord.serializer()), file(ctx).readText())
+        json.decodeFromString(ListSerializer(SiteRecord.serializer()), SafeFile.readText(file(ctx)))
     }.getOrDefault(emptyList())
 
     /** 链接的网站名（去掉 www）；不是链接返回 null。 */
@@ -56,7 +56,7 @@ object SiteNotes {
             }.copy(at = now)
             list.removeAll { it.host == host }
             list.add(0, new)
-            runCatching { file(ctx).writeText(json.encodeToString(ListSerializer(SiteRecord.serializer()), list.take(MAX_SITES))) }
+            runCatching { SafeFile.writeText(file(ctx), json.encodeToString(ListSerializer(SiteRecord.serializer()), list.take(MAX_SITES))) }
         }
     }
 
