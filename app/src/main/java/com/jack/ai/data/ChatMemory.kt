@@ -27,7 +27,7 @@ object ChatMemory {
     /** 做事经验（以前叫工作记忆，文件名不改）：所有对话共用，记踩过的坑、交付习惯、常用路径。 */
     fun workFile(ctx: Context): File = File(Workspace.dir(ctx, WORK_DIR), WORK_FILE)
 
-    fun read(file: File): String = runCatching { if (file.exists()) file.readText() else "" }.getOrDefault("")
+    fun read(file: File): String = runCatching { SafeFile.readText(file) }.getOrDefault("")
 
     /** 文件里的每一条（「- 」开头的行）。用户手写的其他格式的行也算一条。 */
     fun items(text: String): List<String> = text.lines()
@@ -77,6 +77,6 @@ object ChatMemory {
             return
         }
         file.parentFile?.mkdirs()
-        file.writeText(render(titleOf(file), items))
+        SafeFile.writeText(file, render(titleOf(file), items))
     }
 }
