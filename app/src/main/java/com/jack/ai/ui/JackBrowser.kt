@@ -1724,7 +1724,9 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
             val isText = (info?.get("text") as? JsonPrimitive)?.content == "true"
             val supported = op !in setOf("type", "delete") || (isText &&
                 (op != "type" || fieldType !in setOf("date", "datetime-local", "time", "month", "week", "range", "color")))
-            if (supported) {
+            // 没挂在界面上的网页（后台标签页）收不收得到 CDP 输入还没在真机上验证过，先走原来的脚本
+            val attached = withContext(Dispatchers.Main) { (pinned() ?: tab).web?.isAttachedToWindow == true }
+            if (supported && attached) {
                 val at = runCatching {
                     json.parseToJsonElement(unwrap(eval(ctx, BrowserScripts.center(ctx, n)))).jsonObject
                 }.getOrNull()
@@ -1768,7 +1770,8 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
         if (!inside) return "坐标在网页窗口外面（截图大约 ${(w.width * scale).toInt()}×${(w.height * scale).toInt()}）"
         withContext(Dispatchers.Main) { pageDone = CompletableDeferred(); clearError() }
         val cssWidth = unwrap(eval(ctx, "innerWidth")).toFloatOrNull()?.takeIf { it > 0 } ?: w.width.toFloat()
-        val outcome = BrowserCdp.at(pinned() ?: tab,
+        val outcome = if (!withContext(Dispatchers.Main) { w.isAttachedToWindow }) BrowserCdp.Outcome.FALLBACK
+        else BrowserCdp.at(pinned() ?: tab,
             BrowserCdpCoords.fromScreenshot(x1, w.width, cssWidth),
             BrowserCdpCoords.fromScreenshot(y1, w.width, cssWidth),
             BrowserCdpCoords.fromScreenshot(x2, w.width, cssWidth),
