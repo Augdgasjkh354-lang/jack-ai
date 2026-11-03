@@ -38,7 +38,7 @@ import java.util.Locale
 
 /** 工具要改 App 里的数据时找它（由 ChatViewModel 提供）。 */
 /** 一次回答最多调用几轮工具。 */
-const val WORK_MAX_ROUNDS = 200
+const val WORK_MAX_ROUNDS = 500
 
 interface ToolHost {
     val app: Application
@@ -106,7 +106,7 @@ class ToolSession(
     val wsDir: File = Workspace.dir(host.app, Workspace.key(conv))
     val wsCache = File(wsDir, ".cache")
 
-    /** 最多调用工具 200 次（Chat 和 Work 合并了，每个对话都可能接长任务）。 */
+    /** 最多调用工具 500 次（Chat 和 Work 合并了，每个对话都可能接长任务；Jack 要能交大任务）。 */
     var maxRounds = WORK_MAX_ROUNDS
     /** 用户在不在（后台任务里是 false）：不在的时候 Kavi 不能改自己。 */
     var interactive = true

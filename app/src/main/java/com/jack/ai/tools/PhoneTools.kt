@@ -124,16 +124,18 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
 
     fun needScreen(): Screen? = phoneSeen?.takeIf { it.pkg == svc.foreground() }
 
-    /** 对标成 careful 的 App 强制放慢动作，并限制一轮里连续操作的次数。 */
-    suspend fun beforeAction(s: Screen): String? {
+    /** 对标成 careful 的 App 强制放慢动作，并限制一轮里连续操作的次数（翻页、划只放慢，不计数）。 */
+    suspend fun beforeAction(s: Screen, counts: Boolean = true): String? {
         val policy = AppUsageNotes.policyForPackage(s.pkg)
         if (policy.actionIntervalMs <= 0) return null
-        val count = (phoneActionCounts[s.pkg] ?: 0) + 1
-        if (count > policy.actionLimit) {
-            phoneSeen = null
-            return "为了保护「${s.app}」账号，这一轮已经连续操作 ${policy.actionLimit} 次，先停在这里。不要继续刷或反复打开页面，稍后由用户重新发起。"
+        if (counts) {
+            val count = (phoneActionCounts[s.pkg] ?: 0) + 1
+            if (count > policy.actionLimit) {
+                phoneSeen = null
+                return "为了保护「${s.app}」账号，这一轮已经连续操作 ${policy.actionLimit} 次，先停在这里。不要继续刷或反复打开页面，稍后由用户重新发起。"
+            }
+            phoneActionCounts[s.pkg] = count
         }
-        phoneActionCounts[s.pkg] = count
         val last = phoneLastActionAt[s.pkg] ?: 0L
         val wait = (policy.actionIntervalMs - (System.currentTimeMillis() - last)).coerceAtLeast(0L)
         if (wait > 0) delay(wait)
@@ -224,7 +226,7 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
             }
             "scroll", "swipe" -> {
                 val s = needScreen()
-                if (s != null) beforeAction(s)?.let { return@runTool it to SearchRecord(toolLabel) }
+                if (s != null) beforeAction(s, counts = false)?.let { return@runTool it to SearchRecord(toolLabel) }
                 if (action == "swipe") {
                     val (x1, y1, x2, y2) = listOf("x", "y", "x2", "y2").map { args[it].text().toFloatOrNull() }
                     if (x1 == null || y1 == null || x2 == null || y2 == null) return@runTool "swipe 要填 x、y、x2、y2（截图上的像素）。翻列表用 scroll 更简单。" to SearchRecord(toolLabel)

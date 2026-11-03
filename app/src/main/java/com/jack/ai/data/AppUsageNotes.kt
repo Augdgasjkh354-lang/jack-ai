@@ -10,7 +10,7 @@ object AppUsageNotes {
         val signedOutMarkers: List<String> = emptyList(),
     ) {
         val actionIntervalMs: Long get() = if (pace == "careful") 1_500L else 0L
-        val actionLimit: Int get() = if (pace == "careful") 12 else Int.MAX_VALUE
+        val actionLimit: Int get() = if (pace == "careful") 500 else Int.MAX_VALUE
         fun signedOutMarker(texts: List<String>): String? =
             signedOutMarkers.firstOrNull { marker -> texts.any { marker in it } }
     }
