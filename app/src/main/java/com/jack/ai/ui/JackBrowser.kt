@@ -41,6 +41,8 @@ import com.jack.ai.api.BrowserTranslate
 import com.jack.ai.api.MediaGrab
 import com.jack.ai.data.Downloads
 import com.jack.ai.data.backgroundEndpoint
+import com.wangzan101.mika.core.cap.web.ElementFusion
+import com.wangzan101.mika.core.cap.web.ElementProbe
 import kotlinx.serialization.json.put
 import com.jack.ai.api.Net
 import com.jack.ai.data.ProxyCore
@@ -656,6 +658,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
     private fun recover(t: Tab, dead: WebView) {
         val url = t.address
         (dead.parent as? ViewGroup)?.removeView(dead)
+        BrowserCdp.release(t)
         runCatching { dead.destroy() }
         if (t !in tabs) { t.web = null; return }
         t.netScript = null; t.diagScript = null; t.teachScript = null; t.rtcScript = null; t.deskScript = null
@@ -788,6 +791,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         if (tabs.size == 1) { home(); return }
         val t = tabs.removeAt(i)
         (t.web?.parent as? ViewGroup)?.removeView(t.web)
+        BrowserCdp.release(t)
         t.web?.destroy()
         if (t.incognito && tabs.none { it.incognito }) runCatching { clearIncognito() }
         val stay = if (i < current) current - 1 else current.coerceAtMost(tabs.lastIndex)
@@ -1344,6 +1348,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         }
 
         override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+            BrowserCdp.forget(t)
             if (t === tab) barsHidden = false
             t.diag.add("开始打开 ${url.take(160)}")
             if (t.pageDone?.isCompleted != false) t.pageDone = CompletableDeferred()
@@ -1391,6 +1396,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         }
 
         override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
+            if (url != t.address) BrowserCdp.forget(t)
             if (url != "about:blank") t.address = url
             t.canBack = view.canGoBack(); t.canForward = view.canGoForward()
         }
@@ -1701,13 +1707,31 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
             )
         }
         val dialog = lastDialog.also { lastDialog = null }
-        return Page(o.s("url"), o.s("title"), items, o.f("above").toInt(), o.f("below").toInt(), o.f("scroll").toInt(),
+        val page = Page(o.s("url"), o.s("title"), items, o.f("above").toInt(), o.f("below").toInt(), o.f("scroll").toInt(),
             o.f("height").toInt(), o.f("vh").toInt(), o.s("text"), o.f("vx"), o.f("vy"), o.f("vw"),
             withContext(Dispatchers.Main) { error }, dialog, pendingHere(), o.f("frames").toInt())
+        val t = pinned() ?: tab
+        // 后台、没有 CDP 或页面已经跳转时维持脚本清单，避免影响现有读页。
+        if (o.s("docKey").isBlank() || !withContext(Dispatchers.Main) { t.web?.isAttachedToWindow == true }) return page
+        fun box(it: JsonObject): ElementFusion.Box {
+            fun n(k: String) = (it[k] as? JsonPrimitive)?.content?.toDoubleOrNull() ?: 0.0
+            return ElementFusion.Box(n("x"), n("y"), n("x") + n("w"), n("y") + n("h"))
+        }
+        val hidden = (o["hidden"] as? kotlinx.serialization.json.JsonArray).orEmpty()
+            .mapNotNull { it as? JsonObject }.map(::box)
+        val listeners = (o["probes"] as? kotlinx.serialization.json.JsonArray).orEmpty()
+            .mapNotNull { it as? JsonObject }.map {
+                ElementProbe.Listener((it["label"] as? JsonPrimitive)?.content.orEmpty(), box(it))
+            }
+        return BrowserCdp.enrich(t, page, o.s("docKey"), hidden, listeners) { count ->
+            unwrap(eval(ctx, BrowserScripts.reserve(ctx, o.s("docKey"), count))).toIntOrNull()
+        }
     }
 
     /** 某个编号的元素是什么（决定要不要先问用户）。找不到返回 null。 */
     suspend fun inspect(ctx: Context, n: Int): JsonObject? {
+        val t = pinned() ?: tab
+        if (BrowserCdp.hasRef(t, n)) return BrowserCdp.inspect(t, n)
         val raw = unwrap(eval(ctx, BrowserScripts.inspect(ctx, n)))
         return runCatching { json.parseToJsonElement(raw).jsonObject }.getOrNull()
     }
@@ -1716,6 +1740,27 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
     suspend fun act(ctx: Context, n: Int, op: String, arg: String = "", clear: Boolean = false): String? {
         agentAt = System.currentTimeMillis()
         withContext(Dispatchers.Main) { error = null; pageDone = CompletableDeferred() }
+        val t = pinned() ?: tab
+        if (BrowserCdp.hasRef(t, n)) {
+            if (op !in setOf("click", "hover", "type", "delete", "key")) {
+                return "这个编号来自嵌入页面或封闭组件，暂不支持 $op；请先点开再用编号操作。"
+            }
+            if (!withContext(Dispatchers.Main) { t.web?.isAttachedToWindow == true }) {
+                return "这个嵌入元素目前在后台，不能安全地发真实输入。请先打开它所在标签页。"
+            }
+            val point = BrowserCdp.locate(t, n) ?: return "编号 $n 已经移走或被挡住，请重新 read。"
+            if (op == "key" && !BrowserCdp.focus(t, n)) return "这个元素现在无法获得输入焦点，请重新 read。"
+            val sent = BrowserCdp.act(t, point.first, point.second, op, arg, clear)
+            t.lastCdpInput = sent == BrowserCdp.Outcome.DONE
+            if (sent == BrowserCdp.Outcome.UNCERTAIN) {
+                return "CDP 输入中途断开，页面可能已经收到操作。先读页面确认，不要直接重复。"
+            }
+            if (sent == BrowserCdp.Outcome.FALLBACK) {
+                return "CDP 已断开，这个元素没有脚本入口，请重新 read 再试。"
+            }
+            settle()
+            return withContext(Dispatchers.Main) { error }
+        }
         var outcome = BrowserCdp.Outcome.FALLBACK
         if (op in setOf("click", "hover", "type", "delete", "key")) {
             // 日期等特殊原生控件仍按原方式设置，普通文本框才用 CDP 输入。
@@ -1754,7 +1799,9 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
     suspend fun markText(ctx: Context, text: String): JsonObject? {
         agentAt = System.currentTimeMillis()
         val raw = unwrap(eval(ctx, BrowserScripts.markText(ctx, text)))
-        return runCatching { json.parseToJsonElement(raw).jsonObject }.getOrNull()?.takeIf { (it["found"] as? JsonPrimitive)?.content == "true" }
+        return runCatching { json.parseToJsonElement(raw).jsonObject }.getOrNull()
+            ?.takeIf { (it["found"] as? JsonPrimitive)?.content == "true" }
+            ?: BrowserCdp.markText(pinned() ?: tab, text)
     }
 
     /**
@@ -1824,6 +1871,14 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
 
     /** 编号 n 的元素中心换成截图上的像素（先滚到屏幕中间）。找不到返回 null。 */
     suspend fun centerOf(ctx: Context, n: Int): Pair<Float, Float>? {
+        val t = pinned() ?: tab
+        if (BrowserCdp.hasRef(t, n)) {
+            val center = BrowserCdp.locate(t, n) ?: return null
+            val w = withContext(Dispatchers.Main) { t.web ?: webView(ctx) }
+            val cssW = unwrap(eval(ctx, "innerWidth")).toFloatOrNull()?.coerceAtLeast(1f) ?: w.width.toFloat()
+            val k = w.width / cssW * minOf(1f, 720f / w.width.coerceAtLeast(1))
+            return (center.first * k).toFloat() to (center.second * k).toFloat()
+        }
         val o = runCatching { json.parseToJsonElement(unwrap(eval(ctx, BrowserScripts.center(ctx, n)))).jsonObject }.getOrNull() ?: return null
         if ((o["found"] as? JsonPrimitive)?.content != "true") return null
         fun f(k: String) = (o[k] as? JsonPrimitive)?.content?.toFloatOrNull() ?: 0f

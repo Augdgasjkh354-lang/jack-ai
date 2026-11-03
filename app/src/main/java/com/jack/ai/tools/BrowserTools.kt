@@ -130,6 +130,10 @@ private suspend fun ToolSession.browseNow(args: JsonObject, action: String): Str
                 }
                 val kind = info["kind"].text()
                 val what = "$kind「${info["label"].text()}」"
+                if (info["frame"].flag() == true &&
+                    !approve("让 Kavi 操作跨站嵌入框？", "网页：${JackBrowser.address}\n嵌入框里的控件：$what\n\n这里可能是登录、支付或验证页面。", "操作")) {
+                    return@runTool "用户没有同意，这一步没做。" to SearchRecord("$label：已取消")
+                }
                 if (action == "type" && info["password"].flag() == true) {
                     return@runTool "这是密码框，Kavi 不替用户填密码。请用户点开浏览器自己输入（点回答里的网页画面，或侧边栏 → 浏览器），填好后告诉你再继续。" to SearchRecord(label)
                 }

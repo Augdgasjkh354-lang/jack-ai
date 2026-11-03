@@ -84,3 +84,5 @@ core/src/main/kotlin/com/wangzan101/mika/core/cap/web/cdp/WebSocket.kt
 core/src/main/kotlin/com/wangzan101/mika/core/cap/web/cdp/CdpCommands.kt
 app/src/main/java/com/wangzan101/mika/cap/web/cdp/TargetMatch.kt
 app/src/main/java/com/wangzan101/mika/cap/web/cdp/DevtoolsTransport.kt
+core/src/main/kotlin/com/wangzan101/mika/core/cap/web/ElementFusion.kt
+core/src/main/kotlin/com/wangzan101/mika/core/cap/web/ElementProbe.kt

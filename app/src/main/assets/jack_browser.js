@@ -7,6 +7,7 @@
     '[role=tab],[role=menuitem],[role=option],[role=switch],[role=textbox],[role=combobox],[role=searchbox],' +
     '[contenteditable=""],[contenteditable=true],[onclick],[tabindex]:not([tabindex="-1"])';
   var MAX = 120;
+  var docKey = Math.random().toString(36).slice(2);
 
   function clean(t) { return (t || '').replace(/\s+/g, ' ').trim(); }
 
@@ -14,9 +15,10 @@
 
   /** 主页面和能读到的嵌入页面（同一个网站的 iframe，最多两层），带着它们在屏幕上的偏移。读不到的（别的网站的）记个数。 */
   var hiddenFrames = 0;
+  var hiddenNodes = [], hiddenRects = [];
   function docs() {
     var out = [{ doc: document, ox: 0, oy: 0, frame: false }];
-    hiddenFrames = 0;
+    hiddenFrames = 0; hiddenNodes = []; hiddenRects = [];
     (function walk(d, ox, oy, depth) {
       if (depth >= 2) return;
       var fs = d.querySelectorAll('iframe,frame');
@@ -24,7 +26,12 @@
         var f = fs[i], cd = null, r = f.getBoundingClientRect();
         if (r.width < 20 || r.height < 20) continue;
         try { cd = f.contentDocument; } catch (e) { cd = null; }
-        if (!cd || !cd.body) { hiddenFrames++; continue; }
+        if (!cd || !cd.body) {
+          hiddenFrames++;
+          hiddenNodes.push(f);
+          hiddenRects.push({ x: ox + r.left, y: oy + r.top, w: r.width, h: r.height });
+          continue;
+        }
         var o = { doc: cd, ox: ox + r.left, oy: oy + r.top, frame: true };
         out.push(o);
         walk(cd, o.ox, o.oy, depth + 1);
@@ -150,6 +157,29 @@
     return item;
   }
 
+  /** 查直接挂了鼠标/触摸监听器的纯文字，候选节点交给 CDP 检验；不在这里猜它可点。 */
+  function listenerCandidates(ds) {
+    var out = [], rects = [];
+    ds.forEach(function (d) {
+      var els = d.doc.querySelectorAll('span,div,p,li,label,strong,em,img,svg,section');
+      for (var i = 0; i < els.length && out.length < 40; i++) {
+        var el = els[i];
+        if (el.hasAttribute('data-jack') || el.closest('[data-jack]') ||
+            el.querySelector('[data-jack]')) continue;
+        var text = clean(el.innerText || el.getAttribute('aria-label') || el.getAttribute('alt') || '');
+        if (!text || text.length > 80) continue;
+        var r = visibleRect(el);
+        if (!r || r.width < 8 || r.height < 8 || r.top < 0 || r.bottom > innerHeight) continue;
+        // 重叠的文字外壳只试最贴近文字的那个。
+        if (el.children.length && clean(el.children[0].innerText) === text) continue;
+        out.push(el);
+        rects.push({ label: text.slice(0, 80), x: r.left + d.ox, y: r.top + d.oy, w: r.width, h: r.height });
+      }
+    });
+    window.__jackListeners = out;
+    return rects;
+  }
+
   /**
    * 编号在同一个页面里不变：上次编过号的元素还用原来的号，新出现的接着往后编（跳到新页面才从 1 重来）。
    * 这样页面没跳转时只要告诉模型哪些是新的，旧的编号照样能用。
@@ -157,7 +187,7 @@
   function snapshot() {
     var ds = docs();
     ds.forEach(function (d) { d.doc.querySelectorAll('[data-jack="0"]').forEach(function (e) { e.removeAttribute('data-jack'); }); });
-    var vh = innerHeight, items = [], above = 0, below = 0, n = 0;
+    var vh = innerHeight, items = [], refs = [], above = 0, below = 0, n = 0;
     if (!window.__jackNext) window.__jackNext = 1;
     ds.forEach(function (d) {
       var all = Array.prototype.slice.call(d.doc.querySelectorAll(SELECTOR));
@@ -180,18 +210,31 @@
           var id = parseInt(el.getAttribute('data-jack'), 10);
           if (!(id > 0)) { id = window.__jackNext++; el.setAttribute('data-jack', id); }
           items.push(describe(el, id, r, d.frame));
+          refs.push(el);
         }
         // 第二遍：标准元素之外、鼠标是手指形状的
         all = pass === 0 ? pointerItems(d.doc, vh) : [];
       }
     });
+    window.__jackRefs = refs;
+    window.__jackFrames = hiddenNodes;
+    var probes = listenerCandidates(ds);
     var vv = window.visualViewport;
     return JSON.stringify({
+      docKey: docKey, hidden: hiddenRects, probes: probes,
       url: location.href, title: document.title, items: items, above: above, below: below,
       scroll: Math.round(scrollY), height: document.documentElement.scrollHeight, vh: vh,
       vx: vv ? vv.offsetLeft : 0, vy: vv ? vv.offsetTop : 0, vw: vv ? vv.width : innerWidth,
       text: nearbyText(4000), frames: hiddenFrames,
     });
+  }
+
+  /** 给无障碍树独有的节点预留编号，不与脚本发现的新元素撞号。 */
+  function reserve(count) {
+    if (!window.__jackNext) window.__jackNext = 1;
+    var start = window.__jackNext;
+    window.__jackNext += Math.max(0, Math.min(120, count | 0));
+    return start;
   }
 
   function find(n) {
@@ -724,6 +767,6 @@
     return '1';
   }
 
-  window.__jack = { snapshot: snapshot, inspect: inspect, act: act, markText: markText, center: center, focus: focus,
+  window.__jack = { key: docKey, snapshot: snapshot, inspect: inspect, act: act, markText: markText, center: center, focus: focus, reserve: reserve,
     signature: signature, fingerprint: fingerprint, hasText: hasText, extract: extract, at: at, dismiss: dismiss, readable: readable, subtitles: subtitles };
 })();

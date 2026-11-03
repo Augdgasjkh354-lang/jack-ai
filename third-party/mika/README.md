@@ -29,3 +29,6 @@ Jack AI 适配（2026-11-02）：
 - 固定来源提交：`0091d2d67b541a417df913a23fefbb8e3a04e4a7`（Mika，Apache-2.0）。
 - 仅移植 DevTools 本地套接字、HTTP/WebSocket、CDP 命令会话和标签匹配的直接依赖；保留上游命名空间。
 - Jack AI modification：浏览器侧在 `com.jack.ai.ui.BrowserCdp` 使用精简适配层，保持 Kavi 原有浏览器界面和工具签名；CDP 不可用时使用原脚本输入。
+
+- 第 2 步（元素融合）：基于同一提交的 `ElementFusion.kt`、`ElementProbe.kt`，为 Kavi 的稳定编号、网页脚本节点表及 CSS 像素坐标做 Jack AI modification。只读 CDP 无障碍树与 DOM 信息，不移植 Mika 的整套 WebHost、UiTree 或 Agent。
+- 页面读屏以原脚本结果为基线，按 backendNodeId 对齐无障碍名称与角色；可见的跨源框架、封闭 shadow root 元素和直接挂点击监听器的文字补入清单。CDP 不可用时继续原脚本读页。
