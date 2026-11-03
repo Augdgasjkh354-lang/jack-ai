@@ -113,8 +113,14 @@ val BUILTIN_SKILLS = listOf(
         id = SkillIds.PPT, builtin = true, name = "PPT 演示文稿",
         description = "生成 .pptx 演示文稿：汇报、课件、方案展示、读书分享等。",
         instructions = """生成 PPT 的做法：
-1. 先列大纲：封面 → 目录（6 页以上时）→ 每章一个章节页 + 几页内容 → 总结 → 结尾页。一般 8 到 15 页，用户指定页数时照做。
-2. 用 create_ppt 工具，每页一个对象。版式按内容挑，同一种版式别连着用三页以上，一份里至少用到四五种：
+0. 先想清楚给谁看、要他做什么，按场合搭结构（用户没说就从内容判断，拿不准问一句）：
+   - 给领导汇报：先说结论和要什么支持，再给依据（数据、进展、问题），最后下一步。别从背景讲起。
+   - 给客户提案：对方的痛点 → 我们的方案 → 对方能得到什么（尽量量化）→ 案例或证据 → 下一步怎么合作。
+   - 课件、分享：由浅入深，一页一个知识点，多举例子，结尾回顾要点。
+   - 复盘、总结：目标 vs 结果 → 做对了什么 → 问题和原因 → 改进措施。
+1. 列大纲时只放这个场合需要的页，别套固定骨架。一般 8 到 15 页，用户指定页数时照做。目录页 10 页以上才放；章节页三章以上、每章不止一页时才放，8 页的 PPT 不用章节页。封面和结尾页照常。
+   写完大纲先自查：只读每页标题，连起来是不是一个完整、能说服人的故事。读不通就重排。
+2. 用 create_ppt 工具，每页一个对象。版式跟着内容走：有并列的点用 cards，有先后用 timeline 或 process，有真实数据用 chart 或 stats，有对比用 two_column，普通论述就用 content。不用为了变化硬换版式，内容是什么就用什么；只是同一种版式连着四页以上时，看看是不是有页其实能换个讲法。各版式：
    - title 封面：title 主标题，bullets 第一条副标题（汇报人、日期），可再加一两条小字。
    - section 章节页：title 写章节名，bullets 第一条可写一句导语；编号自动排。
    - agenda 目录：bullets 写各章，「章名：一句说明」，最多 8 条。
@@ -128,7 +134,12 @@ val BUILTIN_SKILLS = listOf(
    - quote 金句：title 写引言本身，bullets 第一条写出处。
    - image 大图：整页铺满一张图，title 压在图上，必须写 image_query。适合开篇、转场、情绪页，一份最多两三页。
    - end 结尾：title 写「谢谢」或一句收尾的话，bullets 写联系方式。
-3. 字要少：标题短而有力，最好是结论式的（「销售额同比增长 32%」优于「销售情况」）。一页只讲一件事，讲不完就拆成两页。生成后如果有【排版提醒】，按提醒改。
+3. 标题写结论：内容页的标题是一句话说清这页的观点（「销售额同比增长 32%，主要靠新渠道」，不是「销售情况」）；封面、章节、目录、结尾除外。一页只讲一件事，讲不完就拆成两页。生成后如果有【排版提醒】，按提醒改。
+   去掉 AI 腔，写得像一个懂行的人做的：
+   - 具体胜过抽象：写真实的数字、名字、例子、时间（「华东区三个月新增 120 家门店」），不写「提升效率、降低成本、增强协同」这种放哪份 PPT 都成立的话。
+   - 不用「赋能、抓手、闭环、打通、深耕、助力、全方位、多维度」这类套话，不用感叹号和 emoji。
+   - 不硬凑三条：有两点就写两点，有五点就写五点。条目长短、句式不用刻意对齐，别每条都写成对仗的「XX：XX」。
+   - 没有真实数据就不做 stats、chart 页，不编数字、不写「提升 30%」这种估计当事实。用户的资料里没有、这次也没查到的，宁可用 content 讲清楚定性的判断。
 4. 图标（icons）用英文名，常用的：target rocket lightbulb users user chart-column chart-line chart-pie trending-up dollar-sign wallet briefcase building-2 calendar clock globe map-pin mail phone message-circle shield-check lock settings wrench cpu database cloud code smartphone laptop zap leaf sun heart star award trophy flag book-open graduation-cap pencil file-text clipboard-list circle-check search eye camera image gift shopping-cart truck package plane car house hospital stethoscope pill activity brain puzzle layers workflow network link recycle droplet flame trees coffee utensils smile handshake thumbs-up megaphone bell scale landmark factory palette sparkles compass microscope flask-conical atom sprout piggy-bank receipt percent calculator hourglass milestone route goal crown gem bot headphones mic presentation gauge funnel heart-pulse dumbbell earth languages。写别的也行，认不出会尽量换成相近的，实在没有就不放。
 5. 用户说「用我的模板」「照上次那个风格」时，template 写模板名（名字见消息前的【My templates】）。用户说「把这个风格存下来」「以后都这样做」时，用 my_templates 存（from_file 写这份文件；「以后都这样」就设 default）。用户发来一份 PPT 说「照着这个风格做」「用我们公司的模板」时，用 style_from 写那个文件名，会照它的配色和字体来，theme 就不用写；生成后告诉用户取到了什么颜色和字体。没有这种要求时，theme 选最贴合主题的一个：商务 blue，环保健康 green，活泼创意 orange，文艺 purple，科技 dark，庆典、节日、党政 red，医疗、清新 teal，极简高级 ink，生活、文艺、温暖 warm。
 6. 转场 transition 整份统一一种就好，默认 fade；正式场合用 fade 或 push，活泼的可以 zoom 或 cover，想要高级流畅的感觉用 morph（平滑：前后两页的标题、装饰、编号会自动滑过去，同版式连着的几页效果最好；PowerPoint 2019 以后和新版 WPS 支持，老版本自动变成淡入）；个别页要强调时单独写这一页的 transition。animation 默认 fade（条目点一下出现一个），用户要一页全出来就写 none。这些在 WPS、PowerPoint 放映时才看得到，App 里预览只显示最后的样子。
