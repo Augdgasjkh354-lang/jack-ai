@@ -74,7 +74,9 @@ data class Screen(val pkg: String, val app: String, val elements: List<Element>,
         if (q.isEmpty()) return null
         return elements.filter { it.role != "列表" }.mapNotNull { e ->
             val label = normalizedText(e.label)
-            if (label.isNotEmpty() && (q in label || label in q)) e to kotlin.math.abs(label.length - q.length) else null
+            // 反过来（按钮上的字被模型的话包含）只认够长的：不然「我的收藏」不在屏幕上时会点到底栏的「我」
+            val inQuery = label.length >= 2 && label.length * 2 >= q.length && label in q
+            if (label.isNotEmpty() && (q in label || inQuery)) e to kotlin.math.abs(label.length - q.length) else null
         }.minWithOrNull(compareBy<Pair<Element, Int>>(
             { if (it.first.clickable || it.first.editable) 0 else 1 },
             { it.second },

@@ -187,7 +187,11 @@ object WordDoc {
             if (!headingLine.matches(s)) continue
             var next = lineIndex + 1
             while (next < lines.size && lines[next].trim().isEmpty()) next++
-            if (next >= lines.size || (!fence[next] && headingLine.matches(lines[next].trim()))) {
+            // 下面直接是更小一级的标题（## 一、 接 ### （一））是正常的层级，不算空；同级或更大一级才算
+            val level = s.takeWhile { it == '#' }.length
+            val nextLine = if (next < lines.size) lines[next].trim() else ""
+            val sameOrUpper = !fence.getOrElse(next) { false } && headingLine.matches(nextLine) && nextLine.takeWhile { it == '#' }.length <= level
+            if (next >= lines.size || sameOrUpper) {
                 val title = s.substringAfter(' ').trim()
                 warnings += "标题「$title」（第 ${lineIndex + 1} 行）下面没有正文；建议补一段说明，或删除/合并这个空标题。"
             }

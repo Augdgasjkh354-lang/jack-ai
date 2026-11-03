@@ -191,11 +191,14 @@ budget = 800
             # 报告
             ## 空章节
 
-            ### 下一节
+            ## 一、有小节的章
+            ### （一）小节
             这里有正文。
         """.trimIndent()
         val warnings = warnings(text)
         assertTrue(warnings.toString(), warnings.any { it.contains("标题「空章节」") && it.contains("下面没有正文") && it.contains("删除/合并") })
+        // 大标题下面直接接小标题是正常层级
+        assertTrue(warnings.toString(), warnings.none { it.contains("有小节的章") })
     }
 
     @Test

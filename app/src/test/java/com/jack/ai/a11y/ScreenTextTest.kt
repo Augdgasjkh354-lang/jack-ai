@@ -2,6 +2,7 @@ package com.jack.ai.a11y
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -118,5 +119,12 @@ class ScreenTextTest {
             e(2, "搜索结果页", clickable = true),
         )
         assertEquals(2, s.byText("搜索结果")!!.n)
+    }
+
+    @Test
+    fun byTextDoesNotFallBackToShortLabelInsideQuery() {
+        val s = screen(e(1, "我", clickable = true), e(2, "消息", clickable = true))
+        assertNull(s.byText("我的收藏"))
+        assertNull(s.byText("消息免打扰设置"))
     }
 }
