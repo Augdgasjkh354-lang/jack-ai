@@ -99,13 +99,30 @@ class LongRunAuditTest {
     }
 
     @Test
-    @Ignore("audit: 复现")
     fun loopGuardShouldTreatEquivalentJsonAsTheSameCall() {
         val guard = LoopGuard()
 
         assertNull(guard.check("web_search", """{"query":"x"}"""))
         assertNull(guard.check("web_search", """{"query" : "x"}"""))
         assertNotNull(guard.check("web_search", """{"query"  : "x"}"""))
+    }
+
+    @Test
+    fun loopGuardShouldTreatNestedEquivalentJsonAsTheSameCall() {
+        val guard = LoopGuard()
+
+        assertNull(guard.check("web_search", """{"query":"x","filters":{"b":2,"a":1}}"""))
+        assertNull(guard.check("web_search", """{"filters":{"a":1,"b":2},"query":"x"}"""))
+        assertNotNull(guard.check("web_search", """{"filters":{"b":2,"a":1},"query":"x"}"""))
+    }
+
+    @Test
+    fun loopGuardShouldFallBackForInvalidJson() {
+        val guard = LoopGuard()
+
+        assertNull(guard.check("web_search", """{"query":"""))
+        assertNull(guard.check("web_search", """  {"query":  """))
+        assertNotNull(guard.check("web_search", """{"query":"""))
     }
 
     @Test
