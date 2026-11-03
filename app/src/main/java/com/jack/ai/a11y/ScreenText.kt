@@ -47,6 +47,18 @@ data class Element(
     internal fun areaOf() = area
 }
 
+private fun normalizedText(s: String): String = buildString {
+    for (c in java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFKC)) {
+        val type = Character.getType(c)
+        if (c.isWhitespace() || type == Character.CONNECTOR_PUNCTUATION.toInt() ||
+            type == Character.DASH_PUNCTUATION.toInt() || type == Character.START_PUNCTUATION.toInt() ||
+            type == Character.END_PUNCTUATION.toInt() || type == Character.INITIAL_QUOTE_PUNCTUATION.toInt() ||
+            type == Character.FINAL_QUOTE_PUNCTUATION.toInt() || type == Character.OTHER_PUNCTUATION.toInt()
+        ) continue
+        append(c)
+    }
+}
+
 /** 读到的一屏：哪个 App、清单、读的时间。 */
 data class Screen(val pkg: String, val app: String, val elements: List<Element>, val at: Long = System.currentTimeMillis()) {
     /** 屏幕上所有的字（查付款页面用）。 */
@@ -56,13 +68,17 @@ data class Screen(val pkg: String, val app: String, val elements: List<Element>,
     /** 这一点上最小的那个控件（按坐标点时看它是什么）。 */
     fun at(x: Int, y: Int): Element? = elements.filter { it.contains(x, y) && it.role != "列表" }.minByOrNull { it.areaOf() }
     fun byNumber(n: Int): Element? = elements.firstOrNull { it.n == n }
-    /** 按文字找：先找完全一样的，再找包含的；能点的优先。 */
+    /** 按文字找：忽略空白、全半角和标点，标签和模型文字互相包含都算；能点/能输入、字数接近的优先。 */
     fun byText(t: String): Element? {
-        val q = t.trim()
+        val q = normalizedText(t)
         if (q.isEmpty()) return null
-        val all = elements.filter { it.role != "列表" }
-        return all.filter { it.label == q }.minByOrNull { if (it.clickable || it.editable) 0 else 1 }
-            ?: all.filter { q in it.label }.minWithOrNull(compareBy<Element>({ if (it.clickable || it.editable) 0 else 1 }, { it.label.length }))
+        return elements.filter { it.role != "列表" }.mapNotNull { e ->
+            val label = normalizedText(e.label)
+            if (label.isNotEmpty() && (q in label || label in q)) e to kotlin.math.abs(label.length - q.length) else null
+        }.minWithOrNull(compareBy<Pair<Element, Int>>(
+            { if (it.first.clickable || it.first.editable) 0 else 1 },
+            { it.second },
+        ))?.first
     }
 }
 

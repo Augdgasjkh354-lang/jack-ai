@@ -8,6 +8,22 @@ import org.junit.Test
 class ScreenTextTest {
     private fun b(l: Int, t: Int, r: Int, bt: Int) = intArrayOf(l, t, r, bt)
 
+    private fun e(n: Int, label: String, clickable: Boolean = false, editable: Boolean = false) = Element(
+        n = n,
+        role = if (editable) "输入框" else if (clickable) "按钮" else "文字",
+        label = label,
+        bounds = b(0, 0, 100, 100),
+        path = listOf(n),
+        clickable = clickable,
+        editable = editable,
+        scrollable = false,
+        password = false,
+        checked = null,
+        enabled = true,
+    )
+
+    private fun screen(vararg elements: Element) = Screen("p", "测试", elements.toList())
+
     /** 一个聊天界面：标题、一行聊天（能点，字在里面）、输入框、密码框、发送按钮、一个看不见的控件。 */
     private val root = UiNode(
         cls = "FrameLayout", bounds = b(0, 0, 1080, 2400),
@@ -65,5 +81,42 @@ class ScreenTextTest {
         assertEquals(listOf(4), s.byText("发送")!!.path)
         assertEquals("发送", s.at(900, 2250)!!.label)
         assertEquals(s.byNumber(2)!!.label, s.at(50, 200)!!.label)
+    }
+
+    @Test
+    fun byTextIgnoresSpacesWidthAndPunctuation() {
+        val s = screen(
+            e(1, "发送", clickable = true),
+            e(2, "确定", clickable = true),
+            e(3, "ＡＢＣ", clickable = true),
+        )
+        assertEquals("发送", s.byText("发 送")!!.label)
+        assertEquals("发送", s.byText("发送 ")!!.label)
+        assertEquals("确定", s.byText("确定。")!!.label)
+        assertEquals("ＡＢＣ", s.byText("ABC")!!.label)
+    }
+
+    @Test
+    fun byTextMatchesLongModelWordingAndQuotes() {
+        val s = screen(e(1, "搜索", clickable = true))
+        assertEquals("搜索", s.byText("「搜索」按钮")!!.label)
+    }
+
+    @Test
+    fun byTextPrefersActionableCandidate() {
+        val s = screen(
+            e(1, "搜索按钮"),
+            e(2, "搜索", editable = true),
+        )
+        assertEquals(2, s.byText("「搜索」按钮")!!.n)
+    }
+
+    @Test
+    fun byTextPrefersClosestLengthAmongActionableCandidates() {
+        val s = screen(
+            e(1, "搜索", clickable = true),
+            e(2, "搜索结果页", clickable = true),
+        )
+        assertEquals(2, s.byText("搜索结果")!!.n)
     }
 }
