@@ -37,7 +37,7 @@ internal object BrowserCdp {
     private val locks = mutableMapOf<Int, Mutex>()
     @Volatile private var users = 0
     private var debuggingOn = false
-    private val handler = Handler(Looper.getMainLooper())
+    private val handler by lazy { Handler(Looper.getMainLooper()) }
     private val backgroundClose = Runnable { disable() }
 
     /** 工具开始时打开；最后一个工具结束立即关掉 USB 可见的调试接口。主线程调用。 */
