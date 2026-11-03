@@ -5,6 +5,7 @@ import com.jack.ai.a11y.KaviAccessibility
 import com.jack.ai.a11y.PhoneGuard
 import com.jack.ai.a11y.Screen
 import com.jack.ai.a11y.ScreenText
+import com.jack.ai.data.AppUsageNotes
 import com.jack.ai.data.SearchRecord
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -26,9 +27,22 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
         else "无障碍服务没开，Kavi 碰不到别的 App。请用户到 设置 → 操作其他 App 点「去打开」（安卓 13 以上要先在应用信息里「允许受限制的设置」）。"
     // 存流程、读流程不用碰屏幕
     if (action == "flow" || action == "save_flow") return phoneFlow(action, args)
-    // 列 App 不建虚拟屏，其余操作在这一轮固定到同一个操作端口。
+    val openWant = if (action == "open") args["app"].text().trim() else ""
+    val openPkg = if (action == "open") {
+        if (openWant.isBlank()) return "open 要填 app（App 名字或包名）。"
+        allowed.firstOrNull { it == openWant }
+            ?: allowed.firstOrNull { accessibility.appLabel(it) == openWant }
+            ?: allowed.firstOrNull { openWant in accessibility.appLabel(it) || accessibility.appLabel(it) in openWant }
+            ?: return "「$openWant」不在用户勾的 App 里（勾了：${allowed.joinToString("、") { accessibility.appLabel(it) }}）。要用的话请用户在 设置 → 操作其他 App 里勾上。"
+    } else null
+    val openPolicy = openPkg?.let(AppUsageNotes::policyForPackage)
+    if (openPolicy?.mainScreenOnly == true && settings.phoneBackground && !interactive) {
+        return "「${accessibility.appLabel(openPkg)}」为保护登录状态只允许在主屏操作，后台定时任务不打开它。请用户在聊天里前台发起这次操作。"
+    }
+    // 列 App 不建虚拟屏；标成主屏专用的 App 不进入 Mika 虚拟屏。
     val svc = try {
-        (if (action == "apps") com.jack.ai.a11y.PhoneControl(accessibility, null) else claimPhone(accessibility)).also { it.ready() }
+        (if (action == "apps") com.jack.ai.a11y.PhoneControl(accessibility, null)
+        else claimPhone(accessibility, forceMain = openPolicy?.mainScreenOnly == true)).also { it.ready() }
     } catch (e: kotlinx.coroutines.CancellationException) { throw e }
     catch (e: Exception) { return "手机操作未开始：${ToolSession.errorText(e)}" }
     // 手机锁着（多半是定时任务在后台跑）：推送请用户解锁，等两分钟
@@ -58,6 +72,10 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
         refuse(pkg)?.let { phoneSeen = null; return null to it }
         val screen = Screen(pkg, label(pkg), ScreenText.elements(root))
         PhoneGuard.payPage(screen.texts())?.let { phoneSeen = null; return null to "到了付款或输密码的页面（看到「$it」），Kavi 不碰。停下，告诉用户这一步要自己来。" }
+        AppUsageNotes.policyForPackage(pkg).signedOutMarker(screen.texts())?.let {
+            phoneSeen = null
+            return null to "检测到「$it」，账号已经回到登录页。为保护账号，这一轮停止操作；请用户在主屏手动登录后再继续。"
+        }
         phoneSeen = screen
         val note = StringBuilder(flowHint(pkg)).append(ScreenText.format(screen))
         // 读不到几个字的（自己画的界面、游戏）：能看图就自动截一张
@@ -101,6 +119,23 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
 
     fun needScreen(): Screen? = phoneSeen?.takeIf { it.pkg == svc.foreground() }
 
+    /** 对标成 careful 的 App 强制放慢动作，并限制一轮里连续操作的次数。 */
+    suspend fun beforeAction(s: Screen): String? {
+        val policy = AppUsageNotes.policyForPackage(s.pkg)
+        if (policy.actionIntervalMs <= 0) return null
+        val count = (phoneActionCounts[s.pkg] ?: 0) + 1
+        if (count > policy.actionLimit) {
+            phoneSeen = null
+            return "为了保护「${s.app}」账号，这一轮已经连续操作 ${policy.actionLimit} 次，先停在这里。不要继续刷或反复打开页面，稍后由用户重新发起。"
+        }
+        phoneActionCounts[s.pkg] = count
+        val last = phoneLastActionAt[s.pkg] ?: 0L
+        val wait = (policy.actionIntervalMs - (System.currentTimeMillis() - last)).coerceAtLeast(0L)
+        if (wait > 0) delay(wait)
+        phoneLastActionAt[s.pkg] = System.currentTimeMillis()
+        return null
+    }
+
     val bar = when (action) {
         "open" -> "打开 " + args["app"].text()
         "tap", "long_press" -> (if (action == "tap") "点 " else "长按 ") + (args["text"].text().ifBlank { args["n"].text().let { n -> if (n.isNotBlank()) "第 $n 项" else "屏幕" } })
@@ -121,17 +156,14 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
                 "用户勾了这些 App 给你操作：\n" + allowed.joinToString("\n") { p -> "- ${label(p)}（$p）" + if (app.packageManager.getLaunchIntentForPackage(p) == null) "：没装或打不开" else "" }
             }
             "open" -> {
-                val want = args["app"].text().trim()
-                if (want.isBlank()) return@runTool "open 要填 app（App 名字或包名）。" to SearchRecord(toolLabel)
-                val pkg = allowed.firstOrNull { it == want } ?: allowed.firstOrNull { label(it) == want } ?: allowed.firstOrNull { want in label(it) || label(it) in want }
-                    ?: return@runTool ("「$want」不在用户勾的 App 里（勾了：${allowed.joinToString("、") { label(it) }}）。要用的话请用户在 设置 → 操作其他 App 里勾上。") to SearchRecord(toolLabel)
+                val pkg = openPkg ?: return@runTool "open 要填 app（App 名字或包名）。" to SearchRecord(toolLabel)
                 PhoneGuard.blocked(pkg, label(pkg), app.packageName)?.let { return@runTool "「${label(pkg)}」$it。" to SearchRecord(toolLabel) }
                 if (!svc.open(pkg)) return@runTool fail(label(pkg), "failed", "打不开「${label(pkg)}」（可能没装）。")
                 // 冷启动慢：等它到前台
                 repeat(20) { if (svc.foreground() != pkg) delay(250) }
                 svc.settle(4000)
                 stat(label(pkg), if (svc.foreground() == pkg) "ok" else "no_change")
-                read().second
+                (if (openPolicy?.mainScreenOnly == true) "为保护登录状态，这个 App 只在主屏操作。\n\n" else "") + read().second
             }
             "read" -> read().second
             "screenshot" -> {
@@ -144,6 +176,7 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
             }
             "tap", "long_press" -> {
                 val s = needScreen() ?: return@runTool fail(fgName(), "stale", "先用 read 看一下现在的屏幕（界面变了或还没读过）。")
+                beforeAction(s)?.let { return@runTool it to SearchRecord(toolLabel) }
                 val long = action == "long_press"
                 val verb = if (long) "长按" else "点"
                 val x = args["x"].text().toFloatOrNull(); val y = args["y"].text().toFloatOrNull()
@@ -163,6 +196,7 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
             }
             "type" -> {
                 val s = needScreen() ?: return@runTool fail(fgName(), "stale", "先用 read 看一下现在的屏幕。")
+                beforeAction(s)?.let { return@runTool it to SearchRecord(toolLabel) }
                 val content = args["content"].text().ifEmpty { args["value"].text() }
                 val e = (args["n"].text().toIntOrNull()?.let { s.byNumber(it) } ?: s.elements.firstOrNull { it.editable })
                     ?: return@runTool fail(s.app, "miss", "这一屏没有输入框。先点开要输入的地方。")
@@ -173,6 +207,7 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
             }
             "enter" -> {
                 val s = needScreen() ?: return@runTool fail(fgName(), "stale", "先用 read 看一下现在的屏幕。")
+                beforeAction(s)?.let { return@runTool it to SearchRecord(toolLabel) }
                 val typed = s.elements.firstOrNull { it.editable && !it.password && it.value.isNotBlank() }?.value.orEmpty()
                 // 回车常常就是「发送」「搜索」：搜索不问，别的按发送算
                 val search = s.elements.any { it.editable && "搜索" in (it.label + it.value) }
@@ -184,6 +219,7 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
             }
             "scroll", "swipe" -> {
                 val s = needScreen()
+                if (s != null) beforeAction(s)?.let { return@runTool it to SearchRecord(toolLabel) }
                 if (action == "swipe") {
                     val (x1, y1, x2, y2) = listOf("x", "y", "x2", "y2").map { args[it].text().toFloatOrNull() }
                     if (x1 == null || y1 == null || x2 == null || y2 == null) return@runTool "swipe 要填 x、y、x2、y2（截图上的像素）。翻列表用 scroll 更简单。" to SearchRecord(toolLabel)
@@ -203,6 +239,8 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
                 val pkg = svc.foreground() ?: ""
                 refuse(pkg)?.let { return@runTool it to SearchRecord(toolLabel) }
                 val before = phoneSeen?.takeIf { it.pkg == pkg }
+                val paceStop = before?.let { beforeAction(it) }
+                if (paceStop != null) return@runTool paceStop to SearchRecord(toolLabel)
                 svc.back()
                 after("已返回。", before)
             }
