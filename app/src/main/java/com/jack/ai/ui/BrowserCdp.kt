@@ -79,13 +79,19 @@ internal object BrowserCdp {
             sessions.remove(tab.id)?.close()
             val view = withContext(Dispatchers.Main) { tab.web } ?: return@withLock null
             val marker = UUID.randomUUID().toString()
-            val marked = withTimeoutOrNull(1_500) {
-                withContext(Dispatchers.Main) {
-                    suspendCancellableCoroutine<Boolean> { c ->
-                        view.evaluateJavascript(TargetMatch.markScript(marker)) { if (c.isActive) c.resume(true) }
+            val marked = try {
+                withTimeoutOrNull(1_500) {
+                    withContext(Dispatchers.Main) {
+                        suspendCancellableCoroutine<Boolean> { c ->
+                            view.evaluateJavascript(TargetMatch.markScript(marker)) { if (c.isActive) c.resume(true) }
+                        }
                     }
-                }
-            } ?: false
+                } ?: false
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                false
+            }
             if (!marked) return@withLock null
             try {
                 val url = withContext(Dispatchers.Main) { view.url }
@@ -166,7 +172,7 @@ internal object BrowserCdp {
             send("Input.dispatchTouchEvent", buildJsonObject {
                 put("type", type)
                 put("touchPoints", buildJsonArray {
-                    if (!end) add(buildJsonObject { put("x", x); put("y", y) })
+                    if (!end) add(buildJsonObject { put("x", x); put("y", y); put("id", 1) })
                 })
             })
 

@@ -102,6 +102,8 @@ object JackBrowser {
         var openedBy: Int? = null
         /** 网页诊断：出错的平时就记；diagOn 时网页里加了钩子，点击、弹框、请求也记。 */
         val diag = BrowserDiag.Log()
+        /** 上一次按编号操作是否已由 CDP 送出；避免再模拟触摸造成重复点击。 */
+        @Volatile var lastCdpInput = false
         var diagOn by mutableStateOf(false)
         /** 数后台请求的钩子（见 BrowserNetWatch）；旧网页组件装不上开头注入时是 null，页面露出来再补。 */
         var netScript: androidx.webkit.ScriptHandler? = null
@@ -1734,6 +1736,7 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
                 }
             }
         }
+        (pinned() ?: tab).lastCdpInput = outcome == BrowserCdp.Outcome.DONE
         if (outcome == BrowserCdp.Outcome.UNCERTAIN) {
             return "CDP 输入中途断开，网页可能已经收到这次操作。先读页面确认，不要直接重复提交。"
         }

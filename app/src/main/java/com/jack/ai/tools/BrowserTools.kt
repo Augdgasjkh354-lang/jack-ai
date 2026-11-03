@@ -171,7 +171,7 @@ private suspend fun ToolSession.browseNow(args: JsonObject, action: String): Str
                 }
                 if (n == null) note.append("点了$what。\n")
                 var stuck = false
-                if (retry && err == null && JackBrowser.tab.id == fromTab && JackBrowser.pageSignature(ctx) == before) {
+                if (retry && err == null && !JackBrowser.tab.lastCdpInput && JackBrowser.tab.id == fromTab && JackBrowser.pageSignature(ctx) == before) {
                     val r = retapNote(id, before, mark)
                     stuck = "都没变化" in r || "页面没变化" in r
                     note.append(r)
