@@ -134,6 +134,20 @@ object PptDeck {
         return max(1, ceil(w / (width * 0.92)).toInt())
     }
 
+    /** 折行后最后一行只剩一两个字（「60」「18%」单独占一行）：难看，算孤字。 */
+    internal fun orphan(text: String, size: Int, width: Long): Boolean {
+        val em = size / 100.0 * 12700
+        var w = 0.0
+        for (ch in text) w += if (ch.code >= 0x2E80) em else if (ch == ' ') em * 0.3 else em * 0.56
+        val line = width * 0.92
+        val n = ceil(w / line).toInt()
+        return n > 1 && w - (n - 1) * line < em * 2.5
+    }
+
+    /** 有孤字就把字号往下调，一档 1 号，最多调小 4 号；调不掉就用原来的。 */
+    internal fun avoidOrphans(texts: List<String>, size: Int, width: Long): Int =
+        (size downTo maxOf(size - 400, 1000) step 100).firstOrNull { sz -> texts.none { orphan(it, sz, width) } } ?: size
+
     /** 在 [min, max] 里找放得下的最大字号（每段之间算 spacing 倍行高的空）。 */
     internal fun fit(texts: List<String>, width: Long, height: Long, maxSize: Int, minSize: Int, spacing: Double = 0.4): Int {
         var size = maxSize
@@ -255,9 +269,16 @@ object PptDeck {
         fun iconAt(i: Int) = icons.getOrNull(i)
         val onPrimary = "FFFFFF"
 
-        // 浅色页右上角一个淡淡的大圆，深色页也有，只是更暗：让页面不那么空
+        // 一个淡淡的大圆让页面不那么空（深色页更暗）。位置按页轮换：右上、左下、右下，
+        // 每页都一模一样就像一套模板复制出来的；名字不变，平滑转场时它会跟着挪过去
         fun decor() {
-            out.append(shape(next(), W - 2300000, -1500000, 3600000, 3600000, "ellipse", t.soft, if (t.dark) 70 else 100, name = "!!Decor"))
+            val a = if (t.dark) 70 else 100
+            val (x, y, d) = when (number % 3) {
+                0 -> Triple(W - 2300000, -1500000L, 3600000L)
+                1 -> Triple(-1700000L, H - 2000000, 3400000L)
+                else -> Triple(W - 1500000, H - 1900000, 2600000L)
+            }
+            out.append(shape(next(), x, y, d, d, "ellipse", t.soft, a, name = "!!Decor"))
         }
         fun header(title: String, iconName: String? = null) {
             var x = MX
@@ -304,6 +325,7 @@ object PptDeck {
             }
             "section" -> {
                 bg = if (t.dark) t.bg else t.soft
+                out.append(shape(next(), W - 4200000, H - 3300000, 5600000, 5600000, "ellipse", t.primary, if (t.dark) 18 else 7, name = "!!Decor"))
                 out.append(shape(next(), 0, 0, 220000, H, "rect", t.primary, name = "!!Side bar"))
                 val no = "%02d".format(section)
                 out.append(text(next(), MX + 300000, 1500000, 3400000, 3000000, listOf(para(listOf(Run(no, 13000, t.accent, true)))), "ctr", "!!Number"))
@@ -353,22 +375,25 @@ object PptDeck {
                         val cw = (W - 2 * MX - (cols - 1) * gap) / cols
                         val room = (H - top - 650000 - (rowsN - 1) * gap) / rowsN
                         val parts = list.map(::split)
-                        val bodyW = cw - 400000
+                        val bodyW = cw - 300000 - 2 * 91440  // 卡片文本框里真正能写字的宽度
                         val top0 = if (rowsN == 1) 1700000L else 1250000L
                         val bodies = parts.map { it.second }.filter { it.isNotEmpty() }.ifEmpty { listOf("") }
-                        val bodySize = fitEach(bodies, bodyW, (room - top0).coerceAtLeast(300000), if (rowsN == 1) 2000 else 1600, 1100)
+                        val bodySize = avoidOrphans(bodies, fitEach(bodies, bodyW, (room - top0).coerceAtLeast(300000), if (rowsN == 1) 2200 else 1600, 1100), bodyW)
                         small(bodySize, 1100, "卡片说明")
                         // 卡片高度跟着字走：字少就矮一点，不留一大截空白
                         val need = top0 + bodies.maxOf { lines(it, bodySize, bodyW) } * (bodySize / 100.0 * 12700 * 1.35).toLong() + 300000
-                        val ch = need.coerceIn(minOf(2800000L, room), room)
+                        // 一排时至少占七成高：字少的卡片缩成中间一条窄带，上下各空一大截，页面显得单薄
+                        val ch = need.coerceIn(minOf(if (rowsN == 1) room * 7 / 10 else 2800000L, room), room)
                         val yTop = top + (room * rowsN + (rowsN - 1) * gap - (ch * rowsN + (rowsN - 1) * gap)) / 2
+                        // 卡片比字高出来的部分上下平分，内容在卡片里竖着居中（各卡片对齐用最高的那张算）
+                        val pad = if (rowsN == 1) ((ch - (need - 300000)) / 2).coerceAtLeast(260000) else 260000L
                         parts.forEachIndexed { i, (head, rest) ->
                             val x = MX + (i % cols) * (cw + gap); val y = yTop + (i / cols) * (ch + gap)
                             val ids = mutableListOf<Int>()
                             val card = next(); ids += card
                             out.append(shape(card, x, y, cw, ch, "roundRect", t.card, line = if (t.dark) null else t.soft, adj = "6000", shadow = !t.dark, name = "Card ${i + 1}"))
                             val iconSize = if (rowsN == 1) 760000L else 560000L
-                            var ty = y + 260000
+                            var ty = y + pad
                             iconAt(i)?.let { ic ->
                                 val b = next(); ids += b
                                 out.append(shape(b, x + 200000, ty, iconSize, iconSize, "ellipse", if (t.dark) t.soft else t.soft, name = "Icon bg ${i + 1}"))
@@ -382,7 +407,7 @@ object PptDeck {
                                 ty += 520000 + 160000
                             }
                             val hid = next(); ids += hid
-                            val headSize = fit(listOf(head), bodyW, 520000, 2200, 1400)
+                            val headSize = fit(listOf(head), bodyW, 520000, if (rowsN == 1) 2600 else 2200, 1400)
                             out.append(text(hid, x + 150000, ty, cw - 300000, 520000, listOf(para(listOf(Run(head, headSize, t.title, true)))), "t", "Card title ${i + 1}"))
                             if (rest.isNotEmpty()) {
                                 val bid = next(); ids += bid
@@ -418,12 +443,22 @@ object PptDeck {
                     "process" -> {
                         val list = clip(items, 5, "步骤")
                         val n = list.size.coerceAtLeast(1)
-                        val top = 2300000L
                         val aw = (W - 2 * MX) / n
-                        val ah = 1000000L
+                        val ah = 1100000L
                         val parts = list.map(::split)
-                        val bodySize = fitEach(parts.map { it.second }, aw - 200000, 2400000, 1900, 1100)
+                        val textW = aw - 360000 - 2 * 91440  // 说明卡里真正能写字的宽度（去掉文本框内边距）
+                        // 说明都很短时，宁可小一点也让每条在一行内，不然常常拆出一两个字单独占一行
+                        val oneLine = (2000 downTo 1500 step 100).firstOrNull { sz -> parts.all { lines(it.second, sz, textW) == 1 } }
+                        val bodySize = oneLine ?: avoidOrphans(parts.map { it.second }, fitEach(parts.map { it.second }, textW, 2400000, 2000, 1100), textW)
                         small(bodySize, 1100, "步骤说明")
+                        // 说明放进箭头下面的卡片里，卡片至少占剩下高度的四成；箭头加卡片整块竖着居中，不再下面空一半
+                        val areaTop = 1600000L; val room = H - areaTop - 650000
+                        val gapY = 260000L
+                        val hasText = parts.any { it.second.isNotEmpty() }
+                        val lineH = (bodySize / 100.0 * 12700 * 1.4).toLong()
+                        val textNeed = parts.maxOf { (_, r) -> if (r.isEmpty()) 0 else lines(r, bodySize, textW) } * lineH + 500000
+                        val dh = if (hasText) textNeed.coerceIn(minOf(1800000L, room - ah - gapY), room - ah - gapY) else 0L
+                        val top = areaTop + (room - ah - (if (hasText) gapY + dh else 0L)) / 2
                         parts.forEachIndexed { i, (head, rest) ->
                             val x = MX + i * aw
                             val ids = mutableListOf<Int>()
@@ -432,9 +467,13 @@ object PptDeck {
                             val hs = fit(listOf(head), aw - 600000, ah - 100000, 2200, 1200)
                             out.append(shape(a, x, top, aw + 120000, ah, if (i == 0) "homePlate" else "chevron", color, adj = "30000",
                                 body = body(listOf(para(listOf(Run(head, hs, onPrimary, true)), "ctr")), "ctr", 280000), name = "Step ${i + 1}"))
-                            if (rest.isNotEmpty()) {
-                                val b = next(); ids += b
-                                out.append(text(b, x + 60000, top + ah + 250000, aw - 120000, 2500000, listOf(para(listOf(Run(rest, bodySize, t.text)), "ctr")), "t", "Step text ${i + 1}"))
+                            if (hasText) {
+                                val c = next(); ids += c
+                                out.append(shape(c, x + 80000, top + ah + gapY, aw - 160000, dh, "roundRect", t.card, line = if (t.dark) null else t.soft, adj = "8000", shadow = !t.dark, name = "Step card ${i + 1}"))
+                                if (rest.isNotEmpty()) {
+                                    val b = next(); ids += b
+                                    out.append(text(b, x + 180000, top + ah + gapY + 200000, aw - 360000, dh - 400000, listOf(para(listOf(Run(rest, bodySize, t.text)), "ctr")), "ctr", "Step text ${i + 1}"))
+                                }
                             }
                             steps += Step(ids.map { it to -1 })
                         }
@@ -578,7 +617,8 @@ object PptDeck {
                 val textW = if (withImage) (W * 0.5).toLong() else W - 2 * MX
                 val areaH = H - 1550000 - 700000
                 val texts = list.map { it.trim() }
-                val size = fit(texts, textW - 500000, areaH, if (withImage) 2200 else 2400, 1400, spacing = 0.6)
+                // 三四条的短要点用大一号的字，不然半页空着
+                val size = fit(texts, textW - 500000, areaH, if (withImage) 2400 else if (list.size <= 4) 2800 else 2400, 1400, spacing = 0.6)
                 small(size, 1400, "要点")
                 val tid = next()
                 out.append(text(tid, MX, 1550000, textW, areaH, list.mapIndexed { j, v ->
@@ -587,7 +627,7 @@ object PptDeck {
                     val runs = if (rest.isNotEmpty() && head.length <= 12) listOf(Run("$head：", if (level == 1) size - 300 else size, t.title, true), Run(rest, if (level == 1) size - 300 else size, t.text))
                         else listOf(Run(v.trim().removePrefix("- ").removePrefix("• "), if (level == 1) size - 300 else size, t.text))
                     para(runs, bullet = if (level == 0) "•" else "–", bulletColor = t.accent, level = level, before = if (j == 0) 0 else if (level == 0) 1000 else 300)
-                }, "t", "Body"))
+                }, if (withImage) "ctr" else "t", "Body"))
                 byPara += tid
                 list.indices.forEach { steps += Step(listOf(tid to it)) }
                 if (withImage) {

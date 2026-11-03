@@ -306,4 +306,16 @@ class PptDeckTest {
         assertEquals("标题" to "说明", PptDeck.split("标题：说明"))
         assertEquals("没有冒号" to "", PptDeck.split("没有冒号"))
     }
+
+    @Test
+    fun shortTailsAreNotLeftAloneOnTheLastLine() {
+        // 「18%」被单独挤到第二行：字号往下调到它能留在第一行
+        val w = 2_400_000L
+        val text = "单用户获客成本下降 18%"
+        val size = (2600 downTo 1500 step 100).first { sz ->
+            PptDeck.orphan(text, sz, w) && (sz - 400..sz - 100 step 100).any { !PptDeck.orphan(text, it, w) }
+        }
+        val fixed = PptDeck.avoidOrphans(listOf(text), size, w)
+        assertTrue(fixed < size && !PptDeck.orphan(text, fixed, w))
+    }
 }
