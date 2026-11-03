@@ -204,7 +204,7 @@ internal object BrowserCdp {
         if (op == "key" && BrowserCdpKeys.named(arg) == null) return Outcome.FALLBACK
         return perform(tab, op) {
             mouse("mouseMoved", x, y)
-            if (op != "hover") {
+            if (op in setOf("click", "type", "delete")) {
                 mouse("mousePressed", x, y, "left", 1)
                 mouse("mouseReleased", x, y, "left", 0)
             }

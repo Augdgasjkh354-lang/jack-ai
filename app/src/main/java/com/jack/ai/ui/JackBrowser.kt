@@ -1729,7 +1729,8 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
                 if ((at?.get("found") as? JsonPrimitive)?.content == "true") {
                     fun coord(k: String) = (at[k] as? JsonPrimitive)?.content?.toDoubleOrNull() ?: 0.0
                     delay(300)
-                    outcome = BrowserCdp.act(pinned() ?: tab, coord("x"), coord("y"), op, arg, clear)
+                    val focused = op != "key" || unwrap(eval(ctx, BrowserScripts.focus(ctx, n))) == "true"
+                    if (focused) outcome = BrowserCdp.act(pinned() ?: tab, coord("x"), coord("y"), op, arg, clear)
                 }
             }
         }

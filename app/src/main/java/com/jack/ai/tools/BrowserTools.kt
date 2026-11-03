@@ -30,13 +30,12 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
     val lost = BrowserLock.takeLost(this)
     // 分到的是后台标签页：这次的操作都钉在它上面（读页面、点、开网址都在这一页，不碰用户眼前的）
     val pin = BrowserLock.pinOf(this)
-    val inputAction = action in setOf("click", "tap", "swipe", "hover", "type", "key", "delete", "fill", "steps", "parallel", "upload")
     return try {
-        if (inputAction) withContext(kotlinx.coroutines.Dispatchers.Main) { BrowserCdp.begin() }
+        withContext(kotlinx.coroutines.Dispatchers.Main) { BrowserCdp.begin() }
         val r = if (pin != null) withContext(pin) { browseNow(args, action) } else browseNow(args, action)
         if (lost) "（你停下没用浏览器的时候，它被别的任务接手用过，页面可能变了：以这次读到的为准，要用的网页没了就重新打开。）\n$r" else r
     } finally {
-        if (inputAction) withContext(kotlinx.coroutines.NonCancellable + kotlinx.coroutines.Dispatchers.Main) { BrowserCdp.end() }
+        withContext(kotlinx.coroutines.NonCancellable + kotlinx.coroutines.Dispatchers.Main) { BrowserCdp.end() }
         BrowserLock.exit(this)
     }
 }

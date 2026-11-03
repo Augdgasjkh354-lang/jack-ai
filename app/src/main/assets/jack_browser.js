@@ -275,6 +275,14 @@
     return mark(target);
   }
 
+  /** 只让目标拿到键盘焦点；不能为按键而额外点击提交按钮。 */
+  function focus(n) {
+    var el = find(n);
+    if (!el) return false;
+    if (el.focus) el.focus();
+    return true;
+  }
+
   /** 元素中心在网页可视区里的位置（CSS px），真手指点它用。先滚到屏幕中间。 */
   function center(n) {
     var el = find(n);
@@ -716,6 +724,6 @@
     return '1';
   }
 
-  window.__jack = { snapshot: snapshot, inspect: inspect, act: act, markText: markText, center: center,
+  window.__jack = { snapshot: snapshot, inspect: inspect, act: act, markText: markText, center: center, focus: focus,
     signature: signature, fingerprint: fingerprint, hasText: hasText, extract: extract, at: at, dismiss: dismiss, readable: readable, subtitles: subtitles };
 })();

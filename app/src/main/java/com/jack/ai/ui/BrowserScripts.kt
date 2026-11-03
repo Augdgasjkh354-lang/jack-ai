@@ -19,6 +19,7 @@ object BrowserScripts {
     fun markText(ctx: Context, text: String) = "${lib(ctx)}\nwindow.__jack.markText(${q(text)})"
     fun at(ctx: Context, x: Float, y: Float) = "${lib(ctx)}\nwindow.__jack.at($x, $y)"
     fun center(ctx: Context, n: Int) = "${lib(ctx)}\nwindow.__jack.center($n)"
+    fun focus(ctx: Context, n: Int) = "${lib(ctx)}\nwindow.__jack.focus($n)"
     fun dismiss(ctx: Context) = "${lib(ctx)}\nwindow.__jack.dismiss()"
     fun signature(ctx: Context) = "${lib(ctx)}\nwindow.__jack.signature()"
     fun fingerprint(ctx: Context) = "${lib(ctx)}\nwindow.__jack.fingerprint()"
