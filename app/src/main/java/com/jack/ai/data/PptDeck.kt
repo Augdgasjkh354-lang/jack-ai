@@ -424,18 +424,26 @@ object PptDeck {
                         val ch = 3600000L; val top = 1550000L + (H - 1550000L - 600000 - ch) / 2
                         val parts = list.map(::split)
                         val numSize = fitEach(parts.map { it.first }, cw - 200000, 1400000, if (n <= 2) 8000 else 6400, 3200)
+                        // 图标、数字、说明整块在卡片里竖着居中（原来贴着上面排，卡片底下空一截）
+                        val labelSizes = parts.map { (_, l) -> if (l.isEmpty()) 0 else fit(listOf(l), cw - 300000, 1100000, 2000, 1200) }
+                        val contentTop = if (parts.indices.any { iconAt(it) != null }) 300000L else 800000L
+                        val contentBottom = parts.indices.maxOf { i ->
+                            val (_, l) = parts[i]
+                            if (l.isEmpty()) 2200000L else 2300000L + lines(l, labelSizes[i], cw - 300000) * (labelSizes[i] / 100.0 * 12700 * 1.3).toLong()
+                        }
+                        val off = ((ch - (contentBottom - contentTop)) / 2 - contentTop).coerceAtLeast(0)
                         parts.forEachIndexed { i, (num, label) ->
                             val x = MX + i * (cw + gap)
                             val ids = mutableListOf<Int>()
                             val card = next(); ids += card
                             out.append(shape(card, x, top, cw, ch, "roundRect", t.card, line = if (t.dark) null else t.soft, adj = "5000", shadow = !t.dark, name = "Stat ${i + 1}"))
-                            iconAt(i)?.let { ic -> val ii = next(); ids += ii; out.append(icon(ii, ic, x + cw / 2 - 230000, top + 300000, 460000, t.accent)) }
+                            iconAt(i)?.let { ic -> val ii = next(); ids += ii; out.append(icon(ii, ic, x + cw / 2 - 230000, top + off + 300000, 460000, t.accent)) }
                             val nid = next(); ids += nid
-                            out.append(text(nid, x + 100000, top + 800000, cw - 200000, 1400000, listOf(para(listOf(Run(num, numSize, t.primary.takeIf { !t.dark } ?: t.accent, true)), "ctr")), "ctr", "Number ${i + 1}"))
+                            out.append(text(nid, x + 100000, top + off + 800000, cw - 200000, 1400000, listOf(para(listOf(Run(num, numSize, t.primary.takeIf { !t.dark } ?: t.accent, true)), "ctr")), "ctr", "Number ${i + 1}"))
                             if (label.isNotEmpty()) {
                                 val lid = next(); ids += lid
-                                val ls = fit(listOf(label), cw - 300000, 1100000, 2000, 1200)
-                                out.append(text(lid, x + 150000, top + 2300000, cw - 300000, 1100000, listOf(para(listOf(Run(label, ls, t.text)), "ctr")), "t", "Label ${i + 1}"))
+                                val ls = labelSizes[i]
+                                out.append(text(lid, x + 150000, top + off + 2300000, cw - 300000, 1100000, listOf(para(listOf(Run(label, ls, t.text)), "ctr")), "t", "Label ${i + 1}"))
                             }
                             steps += Step(ids.map { it to -1 })
                         }
@@ -485,7 +493,7 @@ object PptDeck {
                         out.append(shape(next(), MX, lineY - 22000, W - 2 * MX, 44000, "rect", t.soft.takeIf { !t.dark } ?: t.muted, name = "Line"))
                         val seg = (W - 2 * MX) / n
                         val parts = list.map(::split)
-                        val bodySize = fitEach(parts.map { it.second }, seg - 120000, 1300000, 1800, 1000)
+                        val bodySize = avoidOrphans(parts.map { it.second }, fitEach(parts.map { it.second }, seg - 120000 - 2 * 91440, 1300000, 2000, 1000), seg - 120000 - 2 * 91440)
                         small(bodySize, 1000, "时间线说明")
                         parts.forEachIndexed { i, (time, rest) ->
                             val cx = MX + seg * i + seg / 2
@@ -495,7 +503,7 @@ object PptDeck {
                             val up = i % 2 == 0
                             val tid = next(); ids += tid
                             out.append(text(tid, cx - seg / 2 + 40000, if (up) lineY - 900000 else lineY + 230000, seg - 80000, 700000,
-                                listOf(para(listOf(Run(time, fit(listOf(time), seg - 120000, 600000, 2600, 1300), t.primary.takeIf { !t.dark } ?: t.accent, true)), "ctr")), if (up) "b" else "t", "Time ${i + 1}"))
+                                listOf(para(listOf(Run(time, fit(listOf(time), seg - 120000, 600000, 2800, 1300), t.primary.takeIf { !t.dark } ?: t.accent, true)), "ctr")), if (up) "b" else "t", "Time ${i + 1}"))
                             if (rest.isNotEmpty()) {
                                 val bid = next(); ids += bid
                                 out.append(text(bid, cx - seg / 2 + 40000, if (up) lineY - 2300000 else lineY + 950000, seg - 80000, 1400000,
@@ -520,7 +528,7 @@ object PptDeck {
                 if (groups.size > 2) warn += "第 $number 页（two_column）只放两栏，多出的没放"
                 val gap = 420000L; val top = 1600000L
                 val cw = (W - 2 * MX - gap) / 2; val room = H - top - 650000
-                val listSize = cols.minOf { (_, l) -> fit(l.ifEmpty { listOf("") }, cw - 500000, room - 900000, 2200, 1200, spacing = 0.6) }
+                val listSize = cols.minOf { (_, l) -> fit(l.ifEmpty { listOf("") }, cw - 500000, room - 900000, 2400, 1200, spacing = 0.6) }
                 small(listSize, 1200, "两栏内容")
                 val lineH = (listSize / 100.0 * 12700 * 1.4).toLong()
                 val need = 1100000 + cols.maxOf { (_, l) -> l.sumOf { lines(it, listSize, cw - 500000) } * lineH + l.size * 114300 }
@@ -571,7 +579,7 @@ object PptDeck {
                     small(size, 1300, "图表旁的要点")
                     // 卡片高度跟着字走，和图竖着居中
                     val lineH = (size / 100.0 * 12700 * 1.4).toLong()
-                    val ch = (500000 + list.sumOf { lines(it, size, w - 500000) } * lineH + (list.size - 1) * lineH * 7 / 10).coerceIn(minOf(1800000L, chartH), chartH)
+                    val ch = (500000 + list.sumOf { lines(it, size, w - 500000) } * lineH + (list.size - 1) * lineH * 7 / 10).coerceIn(minOf(1000000L, chartH), chartH)
                     val cy = top + (chartH - ch) / 2
                     out.append(shape(card, x, cy, w, ch, "roundRect", t.card, line = if (t.dark) null else t.soft, adj = "6000", shadow = !t.dark, name = "Takeaways"))
                     val tid = next()

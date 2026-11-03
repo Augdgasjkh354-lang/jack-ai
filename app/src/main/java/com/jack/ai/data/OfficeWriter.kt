@@ -127,7 +127,7 @@ object OfficeWriter {
             // 图表：图表部件 + 内嵌的数据表，双击能改数
             val chartRel = r.chart?.let { c ->
                 charts += n
-                files += "ppt/charts/chart$n.xml" to PptChart.xml(c, t)
+                files += "ppt/charts/chart$n.xml" to PptChart.xml(c, t, large = true)
                 media += "ppt/embeddings/Microsoft_Excel_Worksheet$n.xlsx" to PptChart.workbook(c)
                 files += "ppt/charts/_rels/chart$n.xml.rels" to """$XML<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="$rel/package" Target="../embeddings/Microsoft_Excel_Worksheet$n.xlsx"/></Relationships>"""
                 """<Relationship Id="rId3" Type="$rel/chart" Target="../charts/chart$n.xml"/>"""
