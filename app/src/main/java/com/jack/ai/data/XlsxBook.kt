@@ -83,6 +83,79 @@ object XlsxBook {
 
     // ---------- 整本 ----------
 
+    /** 给模型看的常见表格问题提醒；只提示，不改用户的数据。 */
+    private fun sheetWarnings(
+        sheetName: String,
+        rows: List<List<String>>,
+        cells: List<List<Cell>>,
+        numericCol: List<Boolean>,
+        colFormat: List<String>,
+        cols: Int,
+    ): List<String> {
+        val warnings = mutableListOf<String>()
+        val header = rows.firstOrNull().orEmpty()
+
+        if (cols > 12) warnings += "「$sheetName」有 $cols 列，手机和 A4 上会很挤；建议拆成两张表，或只保留最重要的列"
+
+        for (c in 0 until cols) {
+            if (header.getOrElse(c) { "" }.isBlank()) warnings += "「$sheetName」：表头 ${colName(c)}1 是空的；建议补上明确列名"
+        }
+        (0 until cols).groupBy { header.getOrElse(it) { "" }.trim().lowercase() }
+            .filterKeys { it.isNotEmpty() }
+            .values.filter { it.size > 1 }.forEach { same ->
+                val name = header.getOrElse(same.first()) { "" }.trim()
+                warnings += "「$sheetName」：表头「$name」在 ${same.joinToString("、") { "${colName(it)}1" }} 重复；建议改成含义不同的列名"
+            }
+
+        val longCells = mutableListOf<Triple<Int, Int, String>>()
+        header.forEachIndexed { c, text -> if (text.isNotBlank() && displayWidth(text.trim()) > 80) longCells += Triple(1, c, text.trim()) }
+        cells.forEachIndexed { r, row ->
+            row.forEachIndexed { c, cell ->
+                val text = cell.text?.trim().orEmpty()
+                if (text.isNotEmpty() && displayWidth(text) > 80) longCells += Triple(r + 2, c, text)
+            }
+        }
+        longCells.take(3).forEach { (r, c, text) ->
+            val preview = text.replace("\n", " ").take(24)
+            warnings += "「$sheetName」：${colName(c)}$r 文字太长（开头「$preview」）；建议缩短内容、拆成多列，或把长说明移到备注列"
+        }
+        if (longCells.size > 3) warnings += "「$sheetName」另外还有 ${longCells.size - 3} 个文字过长的单元格；建议一起缩短或移到备注列"
+
+        for (c in 0 until cols) {
+            if (!numericCol.getOrElse(c) { false }) continue
+            val numericCount = cells.count { it[c].number != null }
+            if (numericCount == 0) continue
+            val textCells = cells.mapIndexedNotNull { r, row ->
+                row[c].text?.trim()?.takeIf { it.isNotEmpty() }?.let { Triple(r + 2, c, it) }
+            }
+            if (textCells.isEmpty()) continue
+            val title = header.getOrElse(c) { "" }.trim().ifEmpty { colName(c) }
+            val places = textCells.take(3).joinToString("、") { (r, _, text) -> "${colName(c)}$r「${text.take(16)}」" }
+            warnings += "「$sheetName」：第 ${colName(c)} 列「$title」里数字和文字混在一起，$places 被存成文字；建议数字统一写成纯数字，缺失值留空，说明文字放到备注列"
+        }
+
+        fun isTotal(row: List<Cell>): Boolean = row.firstOrNull()?.text?.trim()?.trimEnd('：', ':') in setOf("合计", "总计")
+        cells.forEachIndexed { r, row ->
+            if (!isTotal(row)) return@forEachIndexed
+            for (c in 1 until cols) {
+                val total = row[c].number ?: continue
+                if (row[c].format in setOf("pct", "pct1", "date") || colFormat.getOrElse(c) { "general" } in setOf("pct", "pct1", "date")) continue
+                val detail = cells.take(r).filterNot(::isTotal).map { it[c] }
+                if (detail.any { it.formula != null }) continue
+                val numbers = detail.mapNotNull { it.number }
+                if (numbers.isEmpty()) continue
+                val expected = numbers.sum()
+                val tolerance = maxOf(1e-9, kotlin.math.abs(expected) * 1e-9)
+                if (kotlin.math.abs(total - expected) > tolerance) {
+                    val totalRow = r + 2
+                    val title = header.getOrElse(c) { "" }.trim().ifEmpty { colName(c) }
+                    warnings += "「$sheetName」：合计行 ${colName(c)}$totalRow（「$title」）是 ${num(total)}，但明细 ${colName(c)}2:${colName(c)}${totalRow - 1} 相加是 ${num(expected)}；建议重新计算合计或修正明细"
+                }
+            }
+        }
+        return warnings
+    }
+
     fun write(sheets: List<OfficeWriter.Sheet>, out: OutputStream, themeName: String = "blue"): List<String> {
         val t = PptDeck.theme(themeName).let { if (it.dark) PptDeck.theme("blue").copy(primary = it.accent) else it }
         val warnings = mutableListOf<String>()
@@ -125,6 +198,7 @@ object XlsxBook {
                 val filled = cells.count { it[c].text?.isEmpty() != true }
                 filled > 0 && cells.count { it[c].number != null || it[c].formula != null } * 2 >= filled
             }
+            warnings += sheetWarnings(names[si], rows, cells, numericCol, colFormat, cols)
             fun colIndex(ref: String): Int? {
                 val r = ref.trim()
                 header.indexOfFirst { it.trim() == r }.takeIf { it >= 0 }?.let { return it }
