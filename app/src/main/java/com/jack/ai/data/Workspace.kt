@@ -77,11 +77,11 @@ object Workspace {
     fun saveSource(file: File, tool: String, args: JsonObject) {
         val f = sourceFile(file)
         f.parentFile?.mkdirs()
-        f.writeText(buildJsonObject { put("tool", tool); put("args", args) }.toString())
+        SafeFile.writeText(f, buildJsonObject { put("tool", tool); put("args", args) }.toString())
     }
 
     fun source(file: File): Pair<String, JsonObject>? = runCatching {
-        val o = Json.parseToJsonElement(sourceFile(file).readText()).jsonObject
+        val o = Json.parseToJsonElement(SafeFile.readText(sourceFile(file))).jsonObject
         (o["tool"] as JsonPrimitive).content to o["args"]!!.jsonObject
     }.getOrNull()
 
