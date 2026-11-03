@@ -55,11 +55,11 @@ object StyleTemplates {
     private fun file(ctx: Context) = File(ctx.filesDir, "style_templates.json")
 
     fun load(ctx: Context): List<Template> = synchronized(lock) {
-        runCatching { json.decodeFromString(ListSerializer(Template.serializer()), file(ctx).readText()) }.getOrDefault(emptyList())
+        runCatching { json.decodeFromString(ListSerializer(Template.serializer()), SafeFile.readText(file(ctx))) }.getOrDefault(emptyList())
     }
 
     fun save(ctx: Context, list: List<Template>) = synchronized(lock) {
-        file(ctx).writeText(json.encodeToString(ListSerializer(Template.serializer()), list))
+        SafeFile.writeText(file(ctx), json.encodeToString(ListSerializer(Template.serializer()), list))
     }
 
     /** 加一个（同名同类的换掉）；设成默认的话同类别的取消默认。 */
