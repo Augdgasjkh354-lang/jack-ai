@@ -32,6 +32,18 @@ class AppUsageNotesTest {
         assertTrue(BrowserFlows.builtinNotesFor("https://zhipin.com").isEmpty())
     }
 
+
+    @Test fun bossPolicyUsesMainScreenCarefulPacingAndStopsAtLogin() {
+        val policy = AppUsageNotes.policyForPackage("com.hpbr.bosszhipin")
+        assertTrue(policy.mainScreenOnly)
+        assertEquals("careful", policy.pace)
+        assertEquals(1_500L, policy.actionIntervalMs)
+        assertEquals(12, policy.actionLimit)
+        assertEquals("微信登录", policy.signedOutMarker(listOf("欢迎使用 BOSS直聘", "微信登录", "一键登录")))
+        assertNull(policy.signedOutMarker(listOf("推荐", "职位", "消息")))
+        assertFalse(AppUsageNotes.policyForPackage("com.tencent.mm").mainScreenOnly)
+    }
+
     @Test fun appNotesUseTheSharedStoreAndCombineWithFlowsAndBuiltinKnowledge() {
         val site = "app:com.tencent.mm"
         val saved = BrowserFlows.addNote(emptyList(), site, "这个账号的联系人用了备注名", now = 1)

@@ -52,7 +52,7 @@ class PhoneControl(val service: KaviAccessibility, val background: BackgroundPho
         service.mark(shot, marks)
     }
 
-    suspend fun close() { background?.close() }
+    suspend fun close(): String? = background?.close()
 
     companion object {
         internal val lock = kotlinx.coroutines.sync.Mutex()

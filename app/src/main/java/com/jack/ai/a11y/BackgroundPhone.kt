@@ -11,6 +11,7 @@ import androidx.core.app.NotificationCompat
 import com.jack.ai.ui.BackgroundPhoneActivity
 import com.wangzan101.mika.cap.phone.PhoneServices
 import com.wangzan101.mika.cap.phone.display.AgentDisplay
+import com.wangzan101.mika.cap.phone.shell.AppsAfterTask
 import com.wangzan101.mika.shell.IMikaShell
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -86,15 +87,22 @@ class BackgroundPhone private constructor(
         moved
     } }
 
-    suspend fun close() = operations.withLock {
-        if (closed) return@withLock
+    suspend fun close(): String? = operations.withLock {
+        if (closed) return@withLock null
         closed = true
         // 用户接管中的任务已经在主屏，不随虚拟屏关闭；其余沿用 Mika 的任务收尾规则。
-        runCatching { shell.finishDisplay(displayId, emptyArray(), emptyArray()) }
+        val result = runCatching { shell.finishDisplay(displayId, emptyArray(), emptyArray()) }.getOrNull()
         display.release()
         runCatching { shell.restoreClip() }
         currentState.compareAndSet(this, null)
         (app.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTICE)
+        result?.let {
+            val kept = it.getStringArray(AppsAfterTask.KEY_KEPT).orEmpty().size
+            val closedCount = it.getStringArray(AppsAfterTask.KEY_CLOSED).orEmpty().size
+            val note = it.getString(AppsAfterTask.KEY_NOTE).orEmpty()
+            "后台手机收尾：保留 ${kept} 个任务，关闭 ${closedCount} 个任务" +
+                if (note.isBlank()) "" else "（$note）"
+        }
     }
 
     private fun notifyRunning() {

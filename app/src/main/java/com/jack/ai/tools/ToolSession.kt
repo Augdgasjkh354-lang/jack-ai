@@ -156,9 +156,23 @@ class ToolSession(
     @Volatile internal var phoneScale = 1f
     @Volatile internal var phoneStops = -1
     @Volatile internal var phoneControl: com.jack.ai.a11y.PhoneControl? = null
+    internal val phoneActionCounts = java.util.concurrent.ConcurrentHashMap<String, Int>()
+    internal val phoneLastActionAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    @Volatile internal var phoneCloseSummary: String? = null
 
-    internal suspend fun claimPhone(service: com.jack.ai.a11y.KaviAccessibility): com.jack.ai.a11y.PhoneControl {
-        phoneControl?.let { it.ready(); return it }
+    internal suspend fun claimPhone(service: com.jack.ai.a11y.KaviAccessibility, forceMain: Boolean = false): com.jack.ai.a11y.PhoneControl {
+        phoneControl?.let { current ->
+            if (forceMain && current.background != null) {
+                current.close()?.let { note ->
+                    phoneCloseSummary = listOfNotNull(phoneCloseSummary, note).joinToString("；")
+                }
+                phoneSeen = null
+                phoneScale = 1f
+                return com.jack.ai.a11y.PhoneControl(service, null).also { phoneControl = it }
+            }
+            current.ready()
+            return current
+        }
         val lock = com.jack.ai.a11y.PhoneControl.lock
         try {
             if (!lock.tryLock(this)) {
@@ -167,7 +181,7 @@ class ToolSession(
                     throw java.io.IOException("另一个任务仍在操作手机，请稍后继续。")
                 }
             }
-            val background = if (settings.phoneBackground) com.jack.ai.a11y.BackgroundPhone.create(app, conv.title) else null
+            val background = if (settings.phoneBackground && !forceMain) com.jack.ai.a11y.BackgroundPhone.create(app, conv.title) else null
             return com.jack.ai.a11y.PhoneControl(service, background).also { phoneControl = it }
         } catch (t: Throwable) {
             if (lock.holdsLock(this)) lock.unlock(this)
@@ -260,14 +274,17 @@ class ToolSession(
     }
 
     /** 回答结束时调：占着浏览器就放出来。 */
-    suspend fun releaseBrowser() {
+    suspend fun releaseBrowser(): String? {
         BrowserLock.unlock(this)?.let { BrowserLock.closeQuietly(it) }
         // 所有调用方都在 finally 收尾，取消任务时也要释放虚拟屏和手机操作锁。
-        withContext(kotlinx.coroutines.NonCancellable + Dispatchers.IO) {
-            val control = phoneControl ?: return@withContext
+        val current = withContext(kotlinx.coroutines.NonCancellable + Dispatchers.IO) {
+            val control = phoneControl ?: return@withContext null
             phoneControl = null
             try { control.close() } finally { com.jack.ai.a11y.PhoneControl.lock.unlock(this@ToolSession) }
         }
+        val summary = listOfNotNull(phoneCloseSummary, current).joinToString("；").ifBlank { null }
+        phoneCloseSummary = null
+        return summary
     }
 
     /** 这次回答里读过外部内容（邮件、网页）没有；读过之后发信给新地址，完全授权下也要确认。 */

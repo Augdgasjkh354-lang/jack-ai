@@ -6,6 +6,8 @@ aliases: ["BOSS直聘", "Boss直聘", "boss直聘", "BOSS", "直聘", "bosszhipi
 sites: ["zhipin.com"]
 open: BOSS直聘
 pace: careful
+background: main_screen_only
+signed_out: ["微信登录", "一键登录", "其他方式登录", "手机号登录"]
 description: 招聘求职 App
 ---
 ## 是什么
