@@ -1,6 +1,7 @@
 package com.jack.ai.data
 
 import android.app.Application
+import android.util.AtomicFile
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertTrue
 import org.junit.Ignore
@@ -53,7 +54,6 @@ class PersistenceAuditTest {
         assertTrue("B 的更新应该保留", "对话 B 学到的工具经验" in items)
     }
 
-    @Ignore("audit: 复现")
     @Test
     fun halfWrittenStyleTemplatesSilentlyLoadAsEmpty() {
         val file = File(app.filesDir, "style_templates.json")
@@ -61,8 +61,8 @@ class PersistenceAuditTest {
         StyleTemplates.save(app, listOf(template))
         val full = file.readText()
 
-        // 模拟 writeText 截断旧文件后，App 在新内容只写到一半时被杀。
-        file.writeText(full.take(full.length / 2))
+        // 模拟 AtomicFile 新版本只写到一半，App 就被杀：没有 finishWrite / failWrite。
+        AtomicFile(file).startWrite().use { it.write(full.take(full.length / 2).toByteArray()) }
 
         val loaded = StyleTemplates.load(app)
         assertTrue("半写文件不应让用户已有模板静默变成空列表", loaded.any { it.name == "公司汇报" })
