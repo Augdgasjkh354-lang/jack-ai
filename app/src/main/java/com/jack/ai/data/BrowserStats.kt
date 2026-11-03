@@ -29,35 +29,43 @@ object BrowserStats {
     private val lock = Any()
     private fun file(ctx: Context) = File(ctx.filesDir, "browser_stats.json")
 
-    fun load(ctx: Context): List<Event> = runCatching {
-        json.decodeFromString(ListSerializer(Event.serializer()), file(ctx).readText())
-    }.getOrDefault(emptyList())
+    fun load(ctx: Context): List<Event> = loadFrom(file(ctx))
 
     fun record(ctx: Context, site: String, action: String, outcome: String, now: Long = System.currentTimeMillis()) {
         if (site.isBlank()) return
-        synchronized(lock) {
-            val list = (load(ctx) + Event(now, site, action, outcome)).takeLast(MAX)
-            runCatching { file(ctx).writeText(json.encodeToString(ListSerializer(Event.serializer()), list)) }
-        }
+        appendTo(file(ctx), Event(now, site, action, outcome))
+    }
+
+    /** 读一份按对象记的结果（浏览器按网站、手机按 App，格式一样）。 */
+    internal fun loadFrom(f: File): List<Event> = runCatching {
+        json.decodeFromString(ListSerializer(Event.serializer()), f.readText())
+    }.getOrDefault(emptyList())
+
+    /** 记一笔，只留最近 3000 笔。 */
+    internal fun appendTo(f: File, e: Event) = synchronized(lock) {
+        val list = (loadFrom(f) + e).takeLast(MAX)
+        runCatching { f.writeText(json.encodeToString(ListSerializer(Event.serializer()), list)) }
+        Unit
     }
 
     /** 最近 30 天：总的和各网站的成功率（网站按次数多的在前）。 */
-    fun rates(events: List<Event>, now: Long = System.currentTimeMillis()): Pair<Rate, List<Rate>> {
+    fun rates(events: List<Event>, now: Long = System.currentTimeMillis(), success: Set<String> = SUCCESS): Pair<Rate, List<Rate>> {
         val recent = events.filter { now - it.at < WINDOW_MS }
-        fun rate(site: String, ev: List<Event>) = Rate(site, ev.size, ev.count { it.outcome in SUCCESS },
-            ev.filter { it.outcome !in SUCCESS }.groupingBy { it.outcome }.eachCount().maxByOrNull { it.value }?.key)
+        fun rate(site: String, ev: List<Event>) = Rate(site, ev.size, ev.count { it.outcome in success },
+            ev.filter { it.outcome !in success }.groupingBy { it.outcome }.eachCount().maxByOrNull { it.value }?.key)
         val all = rate("全部", recent)
         val bySite = recent.groupBy { it.site }.map { (s, ev) -> rate(s, ev) }.sortedByDescending { it.total }
         return all to bySite
     }
 
     /** 给自查和统计页看的几行。没有记录返回空。 */
-    fun summary(events: List<Event>, sites: Int = 8): String {
-        val (all, bySite) = rates(events)
+    fun summary(events: List<Event>, sites: Int = 8, labels: Map<String, String> = LABELS, success: Set<String> = SUCCESS,
+                now: Long = System.currentTimeMillis()): String {
+        val (all, bySite) = rates(events, now, success)
         if (all.total == 0) return ""
         return "近 30 天 ${all.total} 步，成功 ${all.percent}%\n" +
             bySite.take(sites).joinToString("\n") { r ->
-                "- ${r.site}：${r.total} 步，成功 ${r.percent}%" + (r.worst?.let { "，最多的问题是${LABELS[it] ?: it}" } ?: "")
+                "- ${r.site}：${r.total} 步，成功 ${r.percent}%" + (r.worst?.let { "，最多的问题是${labels[it] ?: it}" } ?: "")
             }
     }
 }

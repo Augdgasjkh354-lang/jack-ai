@@ -83,6 +83,8 @@ internal suspend fun ToolSession.selfCheck(args: JsonObject): String = runTool("
                     } + "\n")
             }
             com.jack.ai.data.BrowserStats.summary(com.jack.ai.data.BrowserStats.load(ctx)).takeIf { it.isNotEmpty() }?.let { append("【浏览器实测】$it\n") }
+            com.jack.ai.data.PhoneStats.summary(com.jack.ai.data.PhoneStats.load(ctx)).takeIf { it.isNotEmpty() }?.let { append("【操作其他 App 实测】$it\n") }
+            com.jack.ai.data.OfficeStats.summary(com.jack.ai.data.OfficeStats.load(ctx)).takeIf { it.isNotEmpty() }?.let { append("【Office 一次做对率】$it\n") }
 
             val errors = host.store.loadToolErrors().takeLast(args["errors"].text().toIntOrNull()?.coerceIn(1, 30) ?: 8)
             if (errors.isEmpty()) append("【最近没做成的工具调用】没有\n")

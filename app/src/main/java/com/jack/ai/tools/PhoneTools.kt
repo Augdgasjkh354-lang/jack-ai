@@ -82,10 +82,20 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
         PhoneGuard.Risk.OK -> null
     }
 
-    /** 做完一步：等界面停下来，再读一遍。 */
-    suspend fun after(done: String): String {
+    /** 记一笔实测结果（隐私项目里不记）。 */
+    suspend fun stat(appName: String, outcome: String) {
+        if (project?.isolated == true || appName.isBlank()) return
+        withContext(Dispatchers.IO) { runCatching { com.jack.ai.data.PhoneStats.record(app, appName, action, outcome) } }
+    }
+
+    /** 现在前台的 App 名（只算用户勾过的）。 */
+    fun fgName(): String = svc.foreground()?.takeIf { it in allowed }?.let { label(it) }.orEmpty()
+
+    /** 做完一步：等界面停下来，再读一遍；和做之前那一屏比，一点没变就记成「做了但屏幕没变」。 */
+    suspend fun after(done: String, before: Screen?): String {
         svc.settle()
-        val (_, text) = read()
+        val (now, text) = read()
+        before?.let { stat(it.app, if (now != null && now.signature() == it.signature()) "no_change" else "ok") }
         return "$done\n\n$text"
     }
 
@@ -99,6 +109,11 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
         else -> action
     }
     val toolLabel = "操作手机：$bar"
+    /** 没做成：记一笔，把话交给模型。 */
+    suspend fun fail(appName: String, outcome: String, msg: String): Pair<String, SearchRecord> {
+        stat(appName, outcome)
+        return msg to SearchRecord(toolLabel)
+    }
     return runTool(toolLabel) {
         if (action != "apps") svc.showBar(bar)
         val text: String = when (action) {
@@ -111,10 +126,11 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
                 val pkg = allowed.firstOrNull { it == want } ?: allowed.firstOrNull { label(it) == want } ?: allowed.firstOrNull { want in label(it) || label(it) in want }
                     ?: return@runTool ("「$want」不在用户勾的 App 里（勾了：${allowed.joinToString("、") { label(it) }}）。要用的话请用户在 设置 → 操作其他 App 里勾上。") to SearchRecord(toolLabel)
                 PhoneGuard.blocked(pkg, label(pkg), app.packageName)?.let { return@runTool "「${label(pkg)}」$it。" to SearchRecord(toolLabel) }
-                if (!svc.open(pkg)) return@runTool "打不开「${label(pkg)}」（可能没装）。" to SearchRecord(toolLabel)
+                if (!svc.open(pkg)) return@runTool fail(label(pkg), "failed", "打不开「${label(pkg)}」（可能没装）。")
                 // 冷启动慢：等它到前台
                 repeat(20) { if (svc.foreground() != pkg) delay(250) }
                 svc.settle(4000)
+                stat(label(pkg), if (svc.foreground() == pkg) "ok" else "no_change")
                 read().second
             }
             "read" -> read().second
@@ -127,67 +143,68 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
                 "截图在下一条消息里，红框上的数字就是下面清单的编号；按图上的位置点用 tap 的 x、y（截图上的像素）。\n$t"
             }
             "tap", "long_press" -> {
-                val s = needScreen() ?: return@runTool "先用 read 看一下现在的屏幕（界面变了或还没读过）。" to SearchRecord(toolLabel)
+                val s = needScreen() ?: return@runTool fail(fgName(), "stale", "先用 read 看一下现在的屏幕（界面变了或还没读过）。")
                 val long = action == "long_press"
                 val verb = if (long) "长按" else "点"
                 val x = args["x"].text().toFloatOrNull(); val y = args["y"].text().toFloatOrNull()
                 val e = target(s)
-                if (e == null && (x == null || y == null)) return@runTool "要填 n（清单编号）、text（按钮上的字）或 x、y（截图上的坐标）。清单里没有对得上的。" to SearchRecord(toolLabel)
+                if (e == null && (x == null || y == null)) return@runTool fail(s.app, "miss", "要填 n（清单编号）、text（按钮上的字）或 x、y（截图上的坐标）。清单里没有对得上的。")
                 if (e != null) {
                     check(s, e.label, verb)?.let { return@runTool it to SearchRecord(toolLabel) }
                     if (!e.enabled) return@runTool "「${e.label}」现在点不了（灰的）。" to SearchRecord(toolLabel)
-                    if (!svc.click(e, long)) return@runTool "没点成「${e.label}」。可以 read 重看一下，或者截图按坐标点。" to SearchRecord(toolLabel)
-                    after("已${verb}「${e.label.ifBlank { "第 ${e.n} 项" }}」。")
+                    if (!svc.click(e, long)) return@runTool fail(s.app, "failed", "没点成「${e.label}」。可以 read 重看一下，或者截图按坐标点。")
+                    after("已${verb}「${e.label.ifBlank { "第 ${e.n} 项" }}」。", s)
                 } else {
                     val px = (x!! * phoneScale).toInt(); val py = (y!! * phoneScale).toInt()
                     s.at(px, py)?.let { under -> check(s, under.label, verb)?.let { return@runTool it to SearchRecord(toolLabel) } }
-                    if (!svc.tap(px, py, long)) return@runTool "没点成。" to SearchRecord(toolLabel)
-                    after("已${verb}屏幕上 ($px, $py)。")
+                    if (!svc.tap(px, py, long)) return@runTool fail(s.app, "failed", "没点成。")
+                    after("已${verb}屏幕上 ($px, $py)。", s)
                 }
             }
             "type" -> {
-                val s = needScreen() ?: return@runTool "先用 read 看一下现在的屏幕。" to SearchRecord(toolLabel)
+                val s = needScreen() ?: return@runTool fail(fgName(), "stale", "先用 read 看一下现在的屏幕。")
                 val content = args["content"].text().ifEmpty { args["value"].text() }
                 val e = (args["n"].text().toIntOrNull()?.let { s.byNumber(it) } ?: s.elements.firstOrNull { it.editable })
-                    ?: return@runTool "这一屏没有输入框。先点开要输入的地方。" to SearchRecord(toolLabel)
+                    ?: return@runTool fail(s.app, "miss", "这一屏没有输入框。先点开要输入的地方。")
                 if (e.password) return@runTool "这是密码框，Kavi 不填。请用户自己输入。" to SearchRecord(toolLabel)
-                if (!e.editable) return@runTool "第 ${e.n} 项不是输入框。" to SearchRecord(toolLabel)
-                if (!svc.type(e, content)) return@runTool "没填进去。可以先 tap 点一下输入框再试。" to SearchRecord(toolLabel)
-                after("已在输入框里填好（还没发出去；要发就点「发送」或用 enter）。")
+                if (!e.editable) return@runTool fail(s.app, "miss", "第 ${e.n} 项不是输入框。")
+                if (!svc.type(e, content)) return@runTool fail(s.app, "failed", "没填进去。可以先 tap 点一下输入框再试。")
+                after("已在输入框里填好（还没发出去；要发就点「发送」或用 enter）。", s)
             }
             "enter" -> {
-                val s = needScreen() ?: return@runTool "先用 read 看一下现在的屏幕。" to SearchRecord(toolLabel)
+                val s = needScreen() ?: return@runTool fail(fgName(), "stale", "先用 read 看一下现在的屏幕。")
                 val typed = s.elements.firstOrNull { it.editable && !it.password && it.value.isNotBlank() }?.value.orEmpty()
                 // 回车常常就是「发送」「搜索」：搜索不问，别的按发送算
                 val search = s.elements.any { it.editable && "搜索" in (it.label + it.value) }
                 if (!search && !approve("让 Kavi 在「${s.app}」按回车（可能直接发出去）？", if (typed.isNotEmpty()) "输入框里：${typed.take(200)}" else "输入框是空的。", "按")) {
                     return@runTool "用户没同意按回车，没有按。" to SearchRecord(toolLabel)
                 }
-                if (!svc.imeEnter()) return@runTool "按不了回车（要安卓 11 以上，或者输入框不支持）。找一下页面上的「发送」「搜索」按钮。" to SearchRecord(toolLabel)
-                after("已按回车。")
+                if (!svc.imeEnter()) return@runTool fail(s.app, "failed", "按不了回车（要安卓 11 以上，或者输入框不支持）。找一下页面上的「发送」「搜索」按钮。")
+                after("已按回车。", s)
             }
             "scroll", "swipe" -> {
                 val s = needScreen()
                 if (action == "swipe") {
                     val (x1, y1, x2, y2) = listOf("x", "y", "x2", "y2").map { args[it].text().toFloatOrNull() }
                     if (x1 == null || y1 == null || x2 == null || y2 == null) return@runTool "swipe 要填 x、y、x2、y2（截图上的像素）。翻列表用 scroll 更简单。" to SearchRecord(toolLabel)
-                    if (s == null) return@runTool "先用 read 看一下现在的屏幕。" to SearchRecord(toolLabel)
+                    if (s == null) return@runTool fail(fgName(), "stale", "先用 read 看一下现在的屏幕。")
                     val k = phoneScale
                     svc.swipe((x1 * k).toInt(), (y1 * k).toInt(), (x2 * k).toInt(), (y2 * k).toInt())
-                    after("已划过。")
+                    after("已划过。", s)
                 } else {
-                    if (s == null) return@runTool "先用 read 看一下现在的屏幕。" to SearchRecord(toolLabel)
+                    if (s == null) return@runTool fail(fgName(), "stale", "先用 read 看一下现在的屏幕。")
                     val dir = args["direction"].text().ifBlank { "down" }
                     val list = args["n"].text().toIntOrNull()?.let { s.byNumber(it) } ?: s.elements.filter { it.scrollable }.maxByOrNull { (it.bounds[2] - it.bounds[0]).toLong() * (it.bounds[3] - it.bounds[1]) }
                     svc.scroll(list, dir)
-                    after("已往${mapOf("down" to "下", "up" to "上", "left" to "左", "right" to "右")[dir] ?: dir}翻。")
+                    after(before = s, done = "已往${mapOf("down" to "下", "up" to "上", "left" to "左", "right" to "右")[dir] ?: dir}翻。")
                 }
             }
             "back" -> {
                 val pkg = svc.foreground() ?: ""
                 refuse(pkg)?.let { return@runTool it to SearchRecord(toolLabel) }
+                val before = phoneSeen?.takeIf { it.pkg == pkg }
                 svc.back()
-                after("已返回。")
+                after("已返回。", before)
             }
             "home" -> {
                 if (svc.background != null) "后台屏幕没有手机桌面。要换 App 请用 open；不要操作主屏。"

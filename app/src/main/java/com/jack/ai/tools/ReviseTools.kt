@@ -109,6 +109,7 @@ internal suspend fun ToolSession.reviseFile(args: JsonObject): String {
         val (newArgs, done) = revise(tool, old, args)
         val warnings = renderFile(tool, newArgs, file, wsCache)
         withContext(Dispatchers.IO) { Workspace.saveSource(file, tool, newArgs) }
+        officeStat(tool, file, warnings, created = false)
         ui.attach(file)
         val pages = (newArgs["slides"] as? JsonArray)?.size?.let { "，现在一共 $it 页" }.orEmpty()
         "已修改「${file.name}」：" + done.joinToString("；") + pages + "。" + verifyGenerated(tool, newArgs, file) + layoutNote(warnings) +

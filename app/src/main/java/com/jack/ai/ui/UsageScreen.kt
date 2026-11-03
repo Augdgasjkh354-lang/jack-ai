@@ -115,17 +115,23 @@ fun UsageScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                 }
             }
 
-            // ---- 浏览器实测 ----
+            // ---- 实测：浏览器、操作其他 App、Office 一次做对率 ----
             val appCtx = androidx.compose.ui.platform.LocalContext.current.applicationContext
-            val browserStats by androidx.compose.runtime.produceState("") {
+            val measured by androidx.compose.runtime.produceState(emptyList<Pair<String, String>>()) {
                 value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    com.jack.ai.data.BrowserStats.summary(com.jack.ai.data.BrowserStats.load(appCtx))
+                    listOf(
+                        "浏览器实测成功率" to com.jack.ai.data.BrowserStats.summary(com.jack.ai.data.BrowserStats.load(appCtx)),
+                        "操作其他 App 实测成功率" to com.jack.ai.data.PhoneStats.summary(com.jack.ai.data.PhoneStats.load(appCtx)),
+                        "Word、PPT、Excel 一次做对率" to com.jack.ai.data.OfficeStats.summary(com.jack.ai.data.OfficeStats.load(appCtx)),
+                    ).filter { it.second.isNotEmpty() }
                 }
             }
-            if (browserStats.isNotEmpty()) Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("浏览器实测成功率", style = MaterialTheme.typography.titleSmall)
-                    Text(browserStats, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+            measured.forEach { (title, body) ->
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(title, style = MaterialTheme.typography.titleSmall)
+                        Text(body, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                    }
                 }
             }
 

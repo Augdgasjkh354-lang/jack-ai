@@ -28,6 +28,7 @@ internal suspend fun ToolSession.create(tool: String, asked: JsonObject, base: S
             file.delete(); throw e
         }
         withContext(Dispatchers.IO) { Workspace.saveSource(file, tool, args) }
+        officeStat(tool, file, warnings, created = true)
         ui.attach(file)
         val shown = when (ext) {
             "png" -> "图已生成并显示在聊天里"
@@ -170,6 +171,7 @@ internal suspend fun ToolSession.editFile(args: JsonObject): String {
             val newArgs = Workspace.argsFromText(tool, a, edited)
             val warnings = renderFile(tool, newArgs, file, wsCache)
             withContext(Dispatchers.IO) { Workspace.saveSource(file, tool, newArgs) }
+            officeStat(tool, file, warnings, created = false)
             check = verifyGenerated(tool, newArgs, file) + layoutNote(warnings)
             count
         } else withContext(Dispatchers.IO) {
@@ -191,6 +193,20 @@ internal suspend fun ToolSession.editFile(args: JsonObject): String {
             else Verify.note(listOfNotNull(withContext(Dispatchers.IO) { Verify.fileOpens(file) }), "文件能正常打开")
         "已修改「${file.name}」，替换了 $n 处，其他内容没动。$verified" to SearchRecord("修改 ${file.name}")
     }
+}
+
+/**
+ * 记一笔 Office 一次做对率（隐私项目里不记）：生成记 create；这次回答里生成的又改了算 rework（Kavi 自己返工），
+ * 以前生成的再改算 change（用户又让改）。warnings 只数真问题，不数「照着哪个 PPT 取了颜色」这种说明。
+ */
+internal suspend fun ToolSession.officeStat(tool: String, file: File, warnings: List<String>, created: Boolean) {
+    val kind = OfficeStats.KINDS[tool] ?: return
+    if (project?.isolated == true) return
+    val key = file.absolutePath
+    val job = if (created) java.util.UUID.randomUUID().toString().take(12).also { officeJobs[key] = it } else officeJobs[key].orEmpty()
+    val step = when { created -> "create"; job.isNotEmpty() -> "rework"; else -> "change" }
+    val e = OfficeStats.Event(System.currentTimeMillis(), job, kind, step, warnings.count { !it.startsWith(INFO) })
+    withContext(Dispatchers.IO) { runCatching { OfficeStats.record(app, e) } }
 }
 
 /** 生成的文件核实：能不能打开；Excel 再查公式引用。 */

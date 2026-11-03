@@ -116,6 +116,8 @@ class ToolSession(
     var canSee = false
     /** 这次回答里给 PPT、Word 拍过几次照（[lookAtPages]）：最多两次，免得改了又看、看了又改停不下来。 */
     var pageLooks = 0
+    /** 这次回答里生成的 Word/PPT/Excel（文件路径 → 统计编号）：同一次回答里再改算 Kavi 自己返工。 */
+    internal val officeJobs = java.util.concurrent.ConcurrentHashMap<String, String>()
     /** 这次回答用的模型（显示名），自查时报给 Kavi。 */
     var modelName = ""
     /** 工具产生的图片（data URL），下一轮请求时作为一条用户消息补上，补完清空。 */
