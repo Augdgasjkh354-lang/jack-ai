@@ -129,16 +129,29 @@ class DeepSeekClient(
                             throw ApiException(describeError(resp.code, body), resp.code, if (quota) "AllocationQuota.FreeTierOnly" else "")
                         }
                         val source = resp.body?.source() ?: throw ApiException("服务器没有返回内容")
+                        var finished = false
+                        var validData = false
+                        val raw = StringBuilder()
+                        fun streamError(err: JsonObject) = ApiException(
+                            "服务返回错误：" + err["message"].str().ifBlank { err.toString() },
+                            serviceCode = err["code"].str(),
+                        )
                         while (true) {
                             val line = source.readUtf8Line() ?: break
+                            if (raw.length < 65_536) {
+                                if (raw.isNotEmpty()) raw.append('\n')
+                                raw.append(line.take(65_536 - raw.length))
+                            }
                             if (!line.startsWith("data:")) continue
                             val data = line.removePrefix("data:").trim()
-                            if (data == "[DONE]") break
-                            val obj = runCatching { json.parseToJsonElement(data).jsonObject }.getOrNull() ?: continue
-                            // 有的服务出错时仍回 200，把错误放在流里；不报出来就只会显示“没有收到回复”
-                            (obj["error"] as? JsonObject)?.let { err ->
-                                throw ApiException("服务返回错误：" + err["message"].str().ifBlank { err.toString() }, serviceCode = err["code"].str())
+                            if (data == "[DONE]") {
+                                finished = true
+                                break
                             }
+                            val obj = runCatching { json.parseToJsonElement(data).jsonObject }.getOrNull() ?: continue
+                            validData = true
+                            // 有的服务出错时仍回 200，把错误放在流里；不报出来就只会显示“没有收到回复”
+                            (obj["error"] as? JsonObject)?.let { err -> throw streamError(err) }
                             (obj["usage"] as? JsonObject)?.let { u ->
                                 val p = (u["prompt_tokens"] as? JsonPrimitive)?.intOrNull ?: 0
                                 val c = (u["completion_tokens"] as? JsonPrimitive)?.intOrNull ?: 0
@@ -146,7 +159,9 @@ class DeepSeekClient(
                             }
                             // 有的服务在最后的用量块里写 "choices": null
                             val choice = (obj["choices"] as? JsonArray)?.firstOrNull() as? JsonObject ?: continue
+                            (choice["error"] as? JsonObject)?.let { err -> throw streamError(err) }
                             choice["finish_reason"].str().takeIf { it.isNotEmpty() }?.let { reason ->
+                                finished = true
                                 if (trySendBlocking(StreamEvent.Finish(reason)).isFailure) return
                             }
                             val delta = choice["delta"] as? JsonObject ?: continue
@@ -164,6 +179,14 @@ class DeepSeekClient(
                                 )).isFailure) return
                             }
                         }
+                        if (!validData && !finished) {
+                            val body = raw.toString()
+                            val obj = runCatching { json.parseToJsonElement(body).jsonObject }.getOrNull()
+                            (obj?.get("error") as? JsonObject)?.let { err -> throw streamError(err) }
+                            val preview = body.take(200).ifBlank { "<空响应>" }
+                            throw ApiException("服务返回了无法识别的内容：" + preview)
+                        }
+                        if (!finished) throw IOException("回答中途断开")
                     }
                     close()
                 } catch (e: Exception) {
