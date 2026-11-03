@@ -36,13 +36,18 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
             ?: return "「$openWant」不在用户勾的 App 里（勾了：${allowed.joinToString("、") { accessibility.appLabel(it) }}）。要用的话请用户在 设置 → 操作其他 App 里勾上。"
     } else null
     val openPolicy = openPkg?.let(AppUsageNotes::policyForPackage)
-    if (openPolicy?.mainScreenOnly == true && settings.phoneBackground && !interactive) {
-        return "「${accessibility.appLabel(openPkg!!)}」为保护登录状态只允许在主屏操作，后台定时任务不打开它。请用户在聊天里前台发起这次操作。"
+    // 有时模型第一步就是 read：这时也要从主屏正在显示的 App 判断，不能先建虚拟屏再发现是敏感 App。
+    val mainPkg = if (action != "open" && action != "apps" && phoneControl == null) accessibility.foreground() else null
+    val mainPolicy = mainPkg?.let(AppUsageNotes::policyForPackage)
+    val forceMain = openPolicy?.mainScreenOnly == true || mainPolicy?.mainScreenOnly == true
+    val protectedPkg = openPkg?.takeIf { openPolicy?.mainScreenOnly == true } ?: mainPkg?.takeIf { mainPolicy?.mainScreenOnly == true }
+    if (forceMain && settings.phoneBackground && !interactive) {
+        return "「${accessibility.appLabel(protectedPkg!!)}」为保护登录状态只允许在主屏操作，后台定时任务不打开它。请用户在聊天里前台发起这次操作。"
     }
     // 列 App 不建虚拟屏；标成主屏专用的 App 不进入 Mika 虚拟屏。
     val svc = try {
         (if (action == "apps") com.jack.ai.a11y.PhoneControl(accessibility, null)
-        else claimPhone(accessibility, forceMain = openPolicy?.mainScreenOnly == true)).also { it.ready() }
+        else claimPhone(accessibility, forceMain = forceMain)).also { it.ready() }
     } catch (e: kotlinx.coroutines.CancellationException) { throw e }
     catch (e: Exception) { return "手机操作未开始：${ToolSession.errorText(e)}" }
     // 手机锁着（多半是定时任务在后台跑）：推送请用户解锁，等两分钟
