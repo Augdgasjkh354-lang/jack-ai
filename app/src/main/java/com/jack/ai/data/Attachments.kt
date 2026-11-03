@@ -170,8 +170,10 @@ object Attachments {
         if (sample.count { it == 0.toByte() } > 0) {
             throw IllegalArgumentException("这个文件不是文字格式，暂时读不了")
         }
-        return bytes.toString(Charsets.UTF_8)
+        return decodeText(bytes)
     }
+
+    internal fun decodeText(bytes: ByteArray): String = TextPreview.decode(bytes)
 
     fun imageDataUrl(path: String): String? = runCatching {
         "data:image/jpeg;base64," + Base64.encodeToString(File(path).readBytes(), Base64.NO_WRAP)
