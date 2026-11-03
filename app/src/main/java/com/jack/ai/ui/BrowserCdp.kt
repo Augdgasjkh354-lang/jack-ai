@@ -1,5 +1,7 @@
 package com.jack.ai.ui
 
+import android.os.Handler
+import android.os.Looper
 import android.os.Process
 import android.webkit.WebView
 import com.wangzan101.mika.cap.web.cdp.DirectTransport
@@ -33,23 +35,44 @@ internal object BrowserCdp {
     private val sessions = mutableMapOf<Int, CdpSession>()
     private val targets = mutableMapOf<Int, String>()
     private val locks = mutableMapOf<Int, Mutex>()
-    private var users = 0
+    @Volatile private var users = 0
+    private var debuggingOn = false
+    private val handler = Handler(Looper.getMainLooper())
+    private val backgroundClose = Runnable { disable() }
 
-    /** 工具开始时打开；最后一个工具结束立刻关掉 USB 可见的调试接口。主线程调用。 */
+    /** 工具开始时打开；最后一个工具结束立即关掉 USB 可见的调试接口。主线程调用。 */
     fun begin() {
-        if (users++ == 0) WebView.setWebContentsDebuggingEnabled(true)
+        handler.removeCallbacks(backgroundClose)
+        users++
+        if (!debuggingOn) {
+            WebView.setWebContentsDebuggingEnabled(true)
+            debuggingOn = true
+        }
     }
 
     fun end() {
-        if (users <= 0 || --users != 0) return
+        if (users <= 0) return
+        if (--users == 0) disable()
+    }
+
+    /** App 在后台超过半分钟时，不继续暴露登录中的网页。主线程调用。 */
+    fun background() {
+        if (debuggingOn) handler.postDelayed(backgroundClose, 30_000L)
+    }
+
+    fun foreground() { handler.removeCallbacks(backgroundClose) }
+
+    private fun disable() {
+        if (!debuggingOn) return
         sessions.values.forEach { it.close() }
         sessions.clear()
         targets.clear()
         WebView.setWebContentsDebuggingEnabled(false)
+        debuggingOn = false
     }
 
     private suspend fun session(tab: JackBrowser.Tab): CdpSession? {
-        if (users == 0 || tab.web == null) return null
+        if (users == 0 || !debuggingOn || tab.web == null) return null
         val lock = withContext(Dispatchers.Main) { locks.getOrPut(tab.id) { Mutex() } }
         return lock.withLock {
             sessions[tab.id]?.takeUnless { it.closed.value }?.let { return@withLock it }
@@ -90,7 +113,7 @@ internal object BrowserCdp {
             } catch (_: Exception) {
                 null
             } finally {
-                withContext(Dispatchers.Main) { view.evaluateJavascript(TargetMatch.CLEAR_SCRIPT, null) }
+                withContext(Dispatchers.Main) { runCatching { view.evaluateJavascript(TargetMatch.CLEAR_SCRIPT, null) } }
             }
         }
     }

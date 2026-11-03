@@ -1757,7 +1757,7 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
      */
     suspend fun touch(ctx: Context, x1: Float, y1: Float, x2: Float = x1, y2: Float = y1, durationMs: Long = 60): String? {
         agentAt = System.currentTimeMillis()
-        val w = withContext(Dispatchers.Main) { webView(ctx).also { ensureLaidOut(it) } }
+        val w = withContext(Dispatchers.Main) { (pinned()?.web ?: webView(ctx)).also { ensureLaidOut(it) } }
         val scale = withContext(Dispatchers.Main) { minOf(1f, 720f / w.width.coerceAtLeast(1)) }
         val (ax, ay, bx, by) = listOf(x1 / scale, y1 / scale, x2 / scale, y2 / scale)
         val inside = withContext(Dispatchers.Main) { listOf(ax, bx).all { it in 0f..w.width.toFloat() } && listOf(ay, by).all { it in 0f..w.height.toFloat() } }
