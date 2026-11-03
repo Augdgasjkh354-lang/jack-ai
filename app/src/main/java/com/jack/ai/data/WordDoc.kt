@@ -156,12 +156,12 @@ object WordDoc {
         val headingCount = lines.withIndex().count { (i, l) -> val s = l.trim(); !fence[i] && (s.startsWith("## ") || (s.startsWith("# ") && i != titleIdx)) }
 
         // 给模型看的排版提醒：只指出常见可读性问题，不改变生成结果。
-        val headingLine = Regex("""^#{1,4}\\s+.+""")
+        val headingLine = Regex("""^#{1,4}\s+.+""")
         for (lineIndex in lines.indices) {
             if (fence[lineIndex]) continue
             val s = lines[lineIndex].trim()
             if (s.startsWith("|") && lineIndex + 1 < lines.size &&
-                lines[lineIndex + 1].trim().matches(Regex("""\\|?\\s*:?-{2,}.*"""))) {
+                lines[lineIndex + 1].trim().matches(Regex("""\|?\s*:?-{2,}.*"""))) {
                 val cols = splitRow(s).size
                 if (cols > 6) warnings += "第 ${lineIndex + 1} 行的表格有 ${cols} 列，A4 页面和手机预览容易挤不下；建议拆成两个表，或把次要列移到列表/附录。"
             }
@@ -174,9 +174,9 @@ object WordDoc {
             val isBody = s.isNotEmpty() &&
                 !s.startsWith("#") && !s.startsWith("|") && !s.startsWith(">") &&
                 !s.startsWith("```") && !IMAGE_LINE.matches(s) &&
-                !s.matches(Regex("""[-*+]\\s+.*""")) &&
-                !s.matches(Regex("""\\d+[.)、]\\s*.*""")) &&
-                !s.matches(Regex("""-{3,}|\\*{3,}"""))
+                !s.matches(Regex("""[-*+]\s+.*""")) &&
+                !s.matches(Regex("""\d+[.)、]\s*.*""")) &&
+                !s.matches(Regex("""-{3,}|\*{3,}"""))
             if (isBody && s.length > 400) {
                 warnings += "第 ${lineIndex + 1} 行正文有 ${s.length} 个字符，单段过长；建议拆成 2～4 段，必要时加小标题或项目符号。"
             }
