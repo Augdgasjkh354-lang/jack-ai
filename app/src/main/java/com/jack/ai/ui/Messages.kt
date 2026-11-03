@@ -758,7 +758,11 @@ private fun SearchBox(searches: List<SearchRecord>, busy: Boolean = false) {
             AnimatedVisibility(expanded) {
                 Column(Modifier.padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     var n = 0
-                    searches.forEach { rec ->
+                    // 几百步的长任务一次全画出来会卡：只列最近 100 步（来源编号照旧从头数）
+                    val hidden = (searches.size - 100).coerceAtLeast(0)
+                    searches.take(hidden).forEach { if (!isOther(it.query)) n += it.sources.size }
+                    if (hidden > 0) Text("前面还有 $hidden 步没列出来", style = MaterialTheme.typography.bodySmall, color = colors.outline)
+                    searches.drop(hidden).forEach { rec ->
                         Text(
                             (when {
                                 rec.query.startsWith("读取") -> "📄 "
@@ -914,20 +918,32 @@ private fun toolLook(label: String): Pair<ImageVector, Color> = when {
     else -> AppIcons.Globe to Color(0xFF3B82F6)
 }
 
-/** Work 的执行记录：一行一步，时间、图标、做了什么；平时露最近 5 步，点开看全部。 */
+/**
+ * Work 的执行记录：一行一步，时间、图标、做了什么；平时露最近 5 步。
+ * 长任务（几百步）顶上多一行总览；展开时一次只多画 50 步（一下子画几百行会卡），出错多时能只看出错的。
+ */
 @Composable
 private fun ToolTimeline(searches: List<SearchRecord>, busy: Boolean) {
-    var all by rememberSaveable { mutableStateOf(false) }
+    // 0 是收起（最近 5 步），否则展开最近 limit 步
+    var limit by rememberSaveable { mutableStateOf(0) }
+    var errorsOnly by rememberSaveable { mutableStateOf(false) }
+    val all = limit > 0
     val colors = MaterialTheme.colorScheme
     val uriHandler = LocalUriHandler.current
     val time = remember { java.text.SimpleDateFormat("HH:mm", java.util.Locale.US) }
-    val shown = if (all) searches else searches.takeLast(5)
+    val errors = searches.count { it.error != null }
+    val pool = if (errorsOnly) searches.filter { it.error != null } else searches
+    val shown = if (all) pool.takeLast(limit) else pool.takeLast(5)
+    // 总览一分钟刷新一次就够（用时按分算）
+    val digest = remember(searches.size, errors, searches.lastOrNull()?.pending, System.currentTimeMillis() / 60_000) { ToolDigest.line(searches) }
     WorkCard {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 6.dp)) {
             Text("执行记录", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             if (busy && searches.none { it.pending }) Text("接着想…", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
             else Text("${searches.size} 步", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
         }
+        if (digest.isNotEmpty()) Text(digest, style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant,
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp))
         Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             shown.forEach { rec ->
                 val (icon, tint) = toolLook(rec.query)
@@ -952,11 +968,19 @@ private fun ToolTimeline(searches: List<SearchRecord>, busy: Boolean) {
                         modifier = Modifier.fillMaxWidth().padding(start = 78.dp).clickable { runCatching { uriHandler.openUri(src.url) } })
                 }
             }
-            if (searches.size > 5 || searches.any { it.sources.isNotEmpty() }) Text(
-                if (all) "收起" else if (searches.size > 5) "展开全部 ${searches.size} 步" else "看参考的网页",
-                style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant,
-                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { all = !all }.padding(vertical = 2.dp),
-            )
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                @Composable
+                fun link(text: String, onClick: () -> Unit) = Text(text, style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant,
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick).padding(vertical = 2.dp))
+                val earlier = pool.size - shown.size
+                when {
+                    !all && (pool.size > 5 || searches.any { it.sources.isNotEmpty() }) ->
+                        link(if (pool.size > 5) "展开" + if (pool.size > 50) "最近 50 步" else "全部 ${pool.size} 步" else "看参考的网页") { limit = 50 }
+                    all && earlier > 0 -> link("再往前 50 步（还有 $earlier 步）") { limit += 50 }
+                }
+                if (all) link("收起") { limit = 0 }
+                if (errors >= 2 || errorsOnly) link(if (errorsOnly) "看全部步骤" else "只看出错的 $errors 步") { errorsOnly = !errorsOnly }
+            }
         }
     }
 }

@@ -237,6 +237,8 @@ class ShotsTest {
     fun settings() {
         Assume.assumeTrue(System.getenv("SHOTS_DIR") != null)
         val vm = vm(emptyList())
+        // 填了 Key 才是首页（分组列表）；没填会直接打开 Key 那页
+        vm.updateSettings { it.copy(apiKey = "sk-test", userName = "Jack") }
         rule.mainClock.autoAdvance = false
         rule.setContent {
             val state by vm.state.collectAsState()

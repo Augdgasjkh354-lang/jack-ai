@@ -8,6 +8,13 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Search
+import com.jack.ai.data.hasAnyKey
+import com.jack.ai.data.phoneDataOn
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -101,17 +108,22 @@ fun SettingsScreen(
         confirmRestore = uri
     }
 
+    // null 是首页（分组列表）；还没填任何 Key 时直接打开 Key 那页
+    var page by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(if (settings.hasAnyKey()) null else SettingsPage.KEY) }
+    androidx.activity.compose.BackHandler(enabled = page != null) { page = null }
+    val homeScroll = rememberScrollState()
+    val pageScroll = remember(page) { androidx.compose.foundation.ScrollState(0) }
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     Scaffold(
         // 浅灰的底，上面一张张白卡片
         containerColor = if (dark) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.surfaceContainerLow,
         topBar = {
             TopAppBar(
-                title = { Text("设置", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
+                title = { Text(page?.title ?: "设置", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
                 colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
                     containerColor = if (dark) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.surfaceContainerLow),
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = { if (page != null) page = null else onBack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
                 },
@@ -123,12 +135,13 @@ fun SettingsScreen(
                 .padding(padding)
                 .fillMaxSize()
                 .imePadding()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(if (page == null) homeScroll else pageScroll)
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            if (page == null) SettingsHome(vm, settings, onPick = { page = it }, onOpenSkills = onOpenSkills, onOpenUsage = onOpenUsage)
             // ---- 个性化 ----
-            Section("个性化", icon = Icons.Default.Person) {
+            if (page == SettingsPage.PROFILE) Section {
                 SettingField("怎么称呼你", settings.userName, "例如：Jack") { v ->
                     vm.updateSettings { it.copy(userName = v) }
                 }
@@ -141,7 +154,7 @@ fun SettingsScreen(
             }
 
             // ---- API Key ----
-            Section("DeepSeek API Key", icon = AppIcons.Lock) {
+            if (page == SettingsPage.KEY) Section {
                 OutlinedTextField(
                     value = keyInput,
                     onValueChange = {
@@ -169,45 +182,41 @@ fun SettingsScreen(
                 balance?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
             }
 
-            Section("其他模型服务", icon = AppIcons.Code) {
+            if (page == SettingsPage.PROVIDERS) Section {
                 ProvidersSection(vm, settings.providers)
                 FreePoolCard(settings)
             }
 
-            Section("本地模型", icon = AppIcons.Chip, hint = "装在手机上的向量模型：按意思找记忆、查事实库，判断问题难不难。不联网、不花钱；默认在硅基流动没配或连不上时用。") {
+            if (page == SettingsPage.LOCAL) Section(hint = "装在手机上的向量模型：按意思找记忆、查事实库，判断问题难不难。不联网、不花钱；默认在硅基流动没配或连不上时用。") {
                 LocalModelsSection(vm, settings)
             }
 
-            Section("远程连接", icon = AppIcons.Share, hint = "在 iPhone、电脑上通过你自己的 ChatGPT 站点用这台手机上的 Kavi：记忆、文件、邮件、浏览器都在手机上。") {
+            if (page == SettingsPage.REMOTE) Section(hint = "在 iPhone、电脑上通过你自己的 ChatGPT 站点用这台手机上的 Kavi：记忆、文件、邮件、浏览器都在手机上。") {
                 RemoteSection(vm, settings)
             }
 
-            Section("连接", icon = AppIcons.Share, hint = "点开一项设置；连好之后只显示一行状态。") {
+            if (page == SettingsPage.CONNECT) Section(hint = "点开一项设置；连好之后只显示一行状态。") {
                 ConnectionsSection(vm, settings)
             }
 
-            Section("技能", icon = Icons.Default.Build) {
-                OutlinedButton(onClick = onOpenSkills) { Text("管理技能") }
-            }
-
-            Section("操作其他 App", icon = AppIcons.Phone, hint = "让 Kavi 替你在别的 App 里点、输入、翻页（比如在微信里找聊天记录、在淘宝里搜东西）。只能操作你勾过的 App。") {
+            if (page == SettingsPage.PHONE) Section(hint = "让 Kavi 替你在别的 App 里点、输入、翻页（比如在微信里找聊天记录、在淘宝里搜东西）。只能操作你勾过的 App。") {
                 PhoneControlSection(vm, settings)
             }
 
-            Section("问这一屏", icon = AppIcons.Phone, hint = "随时叫出 Kavi，带上当前屏幕问：「这是什么」「帮我回这条」「这个值不值」。") {
+            if (page == SettingsPage.ASK) Section(hint = "随时叫出 Kavi，带上当前屏幕问：「这是什么」「帮我回这条」「这个值不值」。") {
                 AskScreenSection(vm, settings)
             }
 
-            Section("手机数据", icon = AppIcons.Phone, hint = "每样单独开，默认都关着。") {
+            if (page == SettingsPage.PHONEDATA) Section(hint = "每样单独开，默认都关着。") {
                 PhoneDataSection(vm, settings)
             }
 
-            Section("手机文件夹", icon = AppIcons.Folder, hint = "授权给 Kavi 的文件夹：它能在里面找文件、拷进对话处理、把做好的文件存回去，搬和删之前先问你。别的地方它碰不到。") {
+            if (page == SettingsPage.FOLDERS) Section(hint = "授权给 Kavi 的文件夹：它能在里面找文件、拷进对话处理、把做好的文件存回去，搬和删之前先问你。别的地方它碰不到。") {
                 PhoneFoldersSection(vm, settings)
             }
 
             // ---- 模型 ----
-            Section("模型和思考", icon = AppIcons.Brain) {
+            if (page == SettingsPage.MODEL) Section {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     settings.modelChoices().forEach { c ->
                         FilterChip(
@@ -245,9 +254,8 @@ fun SettingsScreen(
                 }
             }
 
-            // ---- 统计 ----
             // ---- 长对话 ----
-            Section("长对话自动压缩", icon = AppIcons.Compress, hint = "对话用到这么多上下文时，较早的部分自动压缩成提要。越高记得越全、每次越贵；模型本身的上限比它低时，以模型为准。") {
+            if (page == SettingsPage.COMPRESS) Section(hint = "对话用到这么多上下文时，较早的部分自动压缩成提要。越高记得越全、每次越贵；模型本身的上限比它低时，以模型为准。") {
                 // 松手才生效：在设置页里上下翻时误碰一下不会改掉
                 var draft by remember(settings.compressTokens) { mutableStateOf(settings.compressTokens / 1000f) }
                 Text("${draft.toInt()}k", style = MaterialTheme.typography.titleMedium)
@@ -260,23 +268,8 @@ fun SettingsScreen(
                 )
             }
 
-            Section("统计", icon = Icons.Default.Info) {
-                val monthSpent by produceState<Double?>(null) {
-                    val month = java.text.SimpleDateFormat("yyyy-MM", Locale.US).format(java.util.Date())
-                    value = vm.loadUsage().filter { it.date.startsWith(month) }.sumOf { it.costYuan() ?: 0.0 }
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("本月已花 " + (monthSpent?.let { yuan(it) } ?: "…") +
-                            if (settings.monthlyBudget > 0) " / 预算 ${yuan(settings.monthlyBudget)}" else "")
-                    }
-                    OutlinedButton(onClick = onOpenUsage) { Text("查看") }
-                }
-            }
-
-
             // ---- 外观 ----
-            Section("外观", icon = AppIcons.Image) {
+            if (page == SettingsPage.LOOK) Section {
                 ThemeTiles(settings.themeMode) { m -> vm.updateSettings { it.copy(themeMode = m) } }
                 Text("桌面图标", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -343,7 +336,7 @@ fun SettingsScreen(
             }
 
             // ---- 隐私和数据 ----
-            Section("隐私和数据", icon = AppIcons.Lock) {
+            if (page == SettingsPage.PRIVACY) Section {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("应用锁")
@@ -377,11 +370,11 @@ fun SettingsScreen(
             }
 
             // ---- 高级 ----
-            Section("版本更新", icon = AppIcons.Download) {
+            if (page == SettingsPage.UPDATE) Section {
                 UpdateSection(vm, settings)
             }
 
-            Section("高级", icon = Icons.Default.Settings) {
+            if (page == SettingsPage.ADVANCED) Section {
                 var url by remember { mutableStateOf(settings.baseUrl) }
                 OutlinedTextField(
                     value = url,
@@ -451,9 +444,9 @@ private fun SettingField(
     )
 }
 
-/** 一组设置：一张白卡片，左上角图标加粗体标题，下面是这一组的内容；说明写在卡片下面。 */
+/** 子页里的一组设置：一张白卡片装内容，说明写在卡片下面（标题在顶栏上）。 */
 @Composable
-private fun Section(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector? = null, hint: String? = null, content: @Composable () -> Unit) {
+private fun Section(hint: String? = null, content: @Composable () -> Unit) {
     val colors = MaterialTheme.colorScheme
     val dark = colors.background.luminance() < 0.5f
     Column(Modifier.fillMaxWidth()) {
@@ -464,13 +457,6 @@ private fun Section(title: String, icon: androidx.compose.ui.graphics.vector.Ima
             modifier = Modifier.fillMaxWidth(),
         ) {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 2.dp)) {
-                    if (icon != null) {
-                        Icon(icon, null, Modifier.size(20.dp), tint = colors.onSurface)
-                        Spacer(Modifier.size(10.dp))
-                    }
-                    Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-                }
                 content()
             }
         }
@@ -564,5 +550,107 @@ private fun FullAuthRow(vm: ChatViewModel, settings: Settings) {
             },
             dismissButton = { TextButton(onClick = { asking = false }) { Text("取消") } },
         )
+    }
+}
+
+/** 设置里的一页：首页上的一行，点进去是原来那一块设置。 */
+private enum class SettingsPage(val title: String) {
+    PROFILE("个性化"), KEY("DeepSeek API Key"), PROVIDERS("其他模型服务"), MODEL("模型和思考"), LOCAL("本地模型"),
+    COMPRESS("长对话自动压缩"), CONNECT("连接"), REMOTE("远程连接"), PHONE("操作其他 App"), ASK("问这一屏"),
+    PHONEDATA("手机数据"), FOLDERS("手机文件夹"), LOOK("外观"), PRIVACY("隐私和数据"), UPDATE("版本更新"), ADVANCED("高级"),
+}
+
+/** 首页上的一行：图标、名字、右边灰字的当前状态（warn 时标红），点了进子页或跳到别的页面。 */
+private class SettingsEntry(
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val title: String,
+    val value: String? = null,
+    val warn: Boolean = false,
+    val onClick: () -> Unit,
+)
+
+/** 设置首页：像 ChatGPT 那样分几组，每组一张圆角卡片，一行一个入口。 */
+@Composable
+private fun SettingsHome(
+    vm: ChatViewModel,
+    settings: Settings,
+    onPick: (SettingsPage) -> Unit,
+    onOpenSkills: () -> Unit,
+    onOpenUsage: () -> Unit,
+) {
+    val monthSpent by produceState<Double?>(null) {
+        val month = java.text.SimpleDateFormat("yyyy-MM", Locale.US).format(java.util.Date())
+        value = vm.loadUsage().filter { it.date.startsWith(month) }.sumOf { it.costYuan() ?: 0.0 }
+    }
+    fun go(p: SettingsPage, icon: androidx.compose.ui.graphics.vector.ImageVector, value: String? = null, warn: Boolean = false) =
+        SettingsEntry(icon, p.title, value, warn) { onPick(p) }
+    val noKey = !settings.hasAnyKey()
+    val model = settings.modelChoices().firstOrNull { it.key == settings.model }?.label
+    SettingsGroup("关于你", listOf(
+        go(SettingsPage.PROFILE, Icons.Default.Person, settings.userName.ifBlank { "未设置" }),
+    ))
+    SettingsGroup("模型", listOf(
+        go(SettingsPage.KEY, AppIcons.Lock, if (settings.apiKey.isNotBlank()) "已填" else "未填", warn = noKey),
+        go(SettingsPage.PROVIDERS, AppIcons.Code, if (settings.providers.isEmpty()) "未添加" else "${settings.providers.size} 个"),
+        go(SettingsPage.MODEL, AppIcons.Brain, listOfNotNull(model, settings.thinking.label).joinToString(" · ")),
+        go(SettingsPage.LOCAL, AppIcons.Chip),
+        go(SettingsPage.COMPRESS, AppIcons.Compress, "${settings.compressTokens / 1000}k"),
+    ))
+    SettingsGroup("Kavi 能用的", listOf(
+        go(SettingsPage.CONNECT, AppIcons.Globe),
+        SettingsEntry(Icons.Default.Build, "技能", onClick = onOpenSkills),
+        go(SettingsPage.REMOTE, AppIcons.Share),
+    ))
+    SettingsGroup("手机", listOf(
+        go(SettingsPage.PHONE, AppIcons.Phone, if (settings.phoneApps.isEmpty()) "未开启" else "${settings.phoneApps.size} 个 App"),
+        go(SettingsPage.ASK, Icons.Default.Search),
+        go(SettingsPage.PHONEDATA, Icons.AutoMirrored.Filled.List, if (settings.phoneDataOn) "已开" else "全关"),
+        go(SettingsPage.FOLDERS, AppIcons.Folder, if (settings.phoneFolders.isEmpty()) "未授权" else "${settings.phoneFolders.size} 个"),
+    ))
+    SettingsGroup("应用", listOf(
+        go(SettingsPage.LOOK, AppIcons.Moon, settings.themeMode.label),
+        SettingsEntry(Icons.Default.Info, "统计", monthSpent?.let { "本月 " + yuan(it) }, onClick = onOpenUsage),
+        go(SettingsPage.PRIVACY, Icons.Default.Lock, when {
+            settings.fullAuth -> "完全授权开着"
+            settings.appLock -> "应用锁开着"
+            else -> null
+        }, warn = settings.fullAuth),
+        go(SettingsPage.UPDATE, AppIcons.Download),
+        go(SettingsPage.ADVANCED, Icons.Default.Settings),
+    ))
+}
+
+/** 一组入口：灰色小标题，下面一张圆角卡片，行和行之间一道从文字起头的细线。 */
+@Composable
+private fun SettingsGroup(title: String, entries: List<SettingsEntry>) {
+    val colors = MaterialTheme.colorScheme
+    val dark = colors.background.luminance() < 0.5f
+    Column(Modifier.fillMaxWidth()) {
+        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+            color = colors.onSurfaceVariant, modifier = Modifier.padding(start = 6.dp, bottom = 8.dp))
+        androidx.compose.material3.Surface(
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
+            color = if (dark) colors.surfaceContainer else colors.surfaceContainerLowest,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column {
+                entries.forEachIndexed { i, e ->
+                    if (i > 0) androidx.compose.material3.HorizontalDivider(Modifier.padding(start = 54.dp), color = colors.outlineVariant.copy(alpha = 0.6f))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().clickable(onClick = e.onClick).padding(horizontal = 16.dp, vertical = 15.dp),
+                    ) {
+                        Icon(e.icon, null, Modifier.size(22.dp), tint = colors.onSurface)
+                        Spacer(Modifier.size(16.dp))
+                        Text(e.title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        e.value?.takeIf { it.isNotBlank() }?.let {
+                            Text(it, style = MaterialTheme.typography.bodyMedium, color = if (e.warn) colors.error else colors.onSurfaceVariant,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 12.dp).widthIn(max = 170.dp))
+                        }
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, Modifier.padding(start = 4.dp).size(20.dp), tint = colors.onSurfaceVariant)
+                    }
+                }
+            }
+        }
     }
 }
