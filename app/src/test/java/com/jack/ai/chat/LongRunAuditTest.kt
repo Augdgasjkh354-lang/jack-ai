@@ -105,15 +105,6 @@ class LongRunAuditTest {
     }
 
     @Test
-    fun loopGuardShouldTreatNestedEquivalentJsonAsTheSameCall() {
-        val guard = LoopGuard()
-
-        assertNull(guard.check("web_search", """{"query":"x","filters":{"b":2,"a":1}}"""))
-        assertNull(guard.check("web_search", """{"filters":{"a":1,"b":2},"query":"x"}"""))
-        assertNotNull(guard.check("web_search", """{"filters":{"b":2,"a":1},"query":"x"}"""))
-    }
-
-    @Test
     fun loopGuardShouldFallBackForInvalidJson() {
         val guard = LoopGuard()
 

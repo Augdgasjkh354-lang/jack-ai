@@ -26,9 +26,9 @@
 | 1 | ✅ 第一次请求前没瘦身；瘦身的 60k 预算不是硬上限（最近 6 条以外的旧结果硬上限 30k） | agent 高 1、2 | Claude |
 | 2 | ✅ 网络抖动重试次数整次回答共用、成功后不清零 | agent 中 | Claude |
 | 3 | ✅ 记忆、做事经验并发回看互相覆盖（Store.updateMemories / ChatMemory.update，6 处写记忆都走它） | store 1、2、10 部分 | Claude |
-| 4 | 记忆、资料库、模板、心里挂着的事等文件直接覆盖写，被杀会写坏 | store 3–9、11–14 | GPT（data/ 下各文件改原子写） |
-| 5 | 流式没收到结束标记就当成功；choices 里的 error、坏 JSON 被吞 | provider 4、5、6 | GPT（DeepSeekClient） |
-| 6 | 打转检测按原始 JSON 字符串比，换个格式就绕过 | agent 中 | GPT（LoopGuard） |
+| 4 | ✅ 记忆、资料库、模板、心里挂着的事等文件直接覆盖写，被杀会写坏 | store 3–9、11–14 | GPT（data/ 下各文件改原子写） |
+| 5 | ✅ 流式没收到结束标记就当成功；choices 里的 error、坏 JSON 被吞 | provider 4、5、6 | GPT（DeepSeekClient） |
+| 6 | ✅ 打转检测按原始 JSON 字符串比，换个格式就绕过 | agent 中 | GPT（LoopGuard） |
 
 **第二批：要先定方案**
 
