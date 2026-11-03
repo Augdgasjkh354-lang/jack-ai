@@ -60,6 +60,11 @@ budget = 800
         return parts(bos.toByteArray())
     }
 
+    private fun warnings(text: String): List<String> {
+        val bos = ByteArrayOutputStream()
+        return WordDoc.write(text, bos)
+    }
+
     @Test
     fun fullReportHasCoverTocNumberingHeaderFooterAndTables() {
         val o = WordDoc.Options(theme = "teal", cover = WordDoc.Cover("2026 年度产品规划", "产品部 · 内部讨论稿", "Jack", "产品部", "2026 年 10 月"),
@@ -158,6 +163,51 @@ budget = 800
         assertTrue(doc.contains("<w:pStyle w:val=\"Title\"/>"))
         assertEquals(1, Regex("<w:sectPr>").findAll(doc).count())
         assertFalse(p.getValue("word/settings.xml").contains("updateFields"))
+    }
+
+
+    @Test
+    fun warnsWhenTableHasTooManyColumns() {
+        val text = """
+            # 表格报告
+            | A | B | C | D | E | F | G |
+            |---|---|---|---|---|---|---|
+            | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+        """.trimIndent()
+        val warnings = warnings(text)
+        assertTrue(warnings.toString(), warnings.any { it.contains("第 2 行") && it.contains("7 列") && it.contains("拆成两个表") })
+    }
+
+    @Test
+    fun warnsWhenBodyParagraphIsVeryLong() {
+        val longText = "这是一段需要拆分的正文内容。".repeat(45)
+        val warnings = warnings("# 长文报告\n$longText")
+        assertTrue(warnings.toString(), warnings.any { it.contains("第 2 行正文") && it.contains("单段过长") && it.contains("拆成 2～4 段") })
+    }
+
+    @Test
+    fun warnsWhenHeadingHasNoBody() {
+        val text = """
+            # 报告
+            ## 空章节
+
+            ### 下一节
+            这里有正文。
+        """.trimIndent()
+        val warnings = warnings(text)
+        assertTrue(warnings.toString(), warnings.any { it.contains("标题「空章节」") && it.contains("下面没有正文") && it.contains("删除/合并") })
+    }
+
+    @Test
+    fun warnsWhenThereAreSeveralBlankParagraphs() {
+        val warnings = warnings("# 报告\n第一段\n\n\n\n第二段")
+        assertTrue(warnings.toString(), warnings.any { it.contains("第 3～5 行") && it.contains("连续有 3 个空段") && it.contains("只保留一个空行") })
+    }
+
+    @Test
+    fun warnsWhenImageCaptionIsMissing() {
+        val warnings = warnings("# 图片报告\n![](photo.png)")
+        assertTrue(warnings.toString(), warnings.any { it.contains("第 2 行") && it.contains("图片「photo.png」没有说明文字") && it.contains("补一句简短图注") })
     }
 
     @Test

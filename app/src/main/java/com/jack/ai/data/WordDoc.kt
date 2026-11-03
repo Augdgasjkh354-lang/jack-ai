@@ -154,6 +154,61 @@ object WordDoc {
         val titleIdx = lines.withIndex().indexOfFirst { (i, l) -> l.trim().startsWith("# ") && !fence[i] }
         val docTitle = (if (titleIdx >= 0) lines[titleIdx].trim().removePrefix("# ").trim() else "").ifEmpty { o.cover?.title.orEmpty() }
         val headingCount = lines.withIndex().count { (i, l) -> val s = l.trim(); !fence[i] && (s.startsWith("## ") || (s.startsWith("# ") && i != titleIdx)) }
+
+        // 给模型看的排版提醒：只指出常见可读性问题，不改变生成结果。
+        val headingLine = Regex("""^#{1,4}\s+.+""")
+        for (lineIndex in lines.indices) {
+            if (fence[lineIndex]) continue
+            val s = lines[lineIndex].trim()
+            if (s.startsWith("|") && lineIndex + 1 < lines.size &&
+                lines[lineIndex + 1].trim().matches(Regex("""\|?\s*:?-{2,}.*"""))) {
+                val cols = splitRow(s).size
+                if (cols > 6) warnings += "第 ${lineIndex + 1} 行的表格有 ${cols} 列，A4 页面和手机预览容易挤不下；建议拆成两个表，或把次要列移到列表/附录。"
+            }
+            if (IMAGE_LINE.matches(s)) {
+                val m = IMAGE_LINE.find(s)!!
+                if (m.groupValues[1].isBlank()) {
+                    warnings += "第 ${lineIndex + 1} 行的图片「${m.groupValues[2].trim()}」没有说明文字；建议在 ![说明](...) 的方括号里补一句简短图注。"
+                }
+            }
+            val isBody = s.isNotEmpty() &&
+                !s.startsWith("#") && !s.startsWith("|") && !s.startsWith(">") &&
+                !s.startsWith("```") && !IMAGE_LINE.matches(s) &&
+                !s.matches(Regex("""[-*+]\s+.*""")) &&
+                !s.matches(Regex("""\d+[.)、]\s*.*""")) &&
+                !s.matches(Regex("""-{3,}|\*{3,}"""))
+            if (isBody && s.length > 400) {
+                warnings += "第 ${lineIndex + 1} 行正文有 ${s.length} 个字符，单段过长；建议拆成 2～4 段，必要时加小标题或项目符号。"
+            }
+        }
+        for (lineIndex in lines.indices) {
+            if (fence[lineIndex] || lineIndex == titleIdx) continue
+            val s = lines[lineIndex].trim()
+            if (!headingLine.matches(s)) continue
+            var next = lineIndex + 1
+            while (next < lines.size && lines[next].trim().isEmpty()) next++
+            if (next >= lines.size || (!fence[next] && headingLine.matches(lines[next].trim()))) {
+                val title = s.substringAfter(' ').trim()
+                warnings += "标题「$title」（第 ${lineIndex + 1} 行）下面没有正文；建议补一段说明，或删除/合并这个空标题。"
+            }
+        }
+        var blankStart = -1
+        var blankCount = 0
+        fun flushBlankLines() {
+            if (blankCount >= 3) {
+                warnings += "第 ${blankStart + 1}～${blankStart + blankCount} 行连续有 ${blankCount} 个空段；建议只保留一个空行，避免版面出现大片空白。"
+            }
+            blankStart = -1
+            blankCount = 0
+        }
+        for (lineIndex in lines.indices) {
+            if (!fence[lineIndex] && lines[lineIndex].trim().isEmpty()) {
+                if (blankCount == 0) blankStart = lineIndex
+                blankCount++
+            } else flushBlankLines()
+        }
+        flushBlankLines()
+
         val withToc = o.toc ?: (headingCount >= 4)
         val cover = o.cover
         // 没有封面但有目录：标题放在目录那页顶上，正文里就不再写一遍
