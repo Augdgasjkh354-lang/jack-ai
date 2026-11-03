@@ -34,6 +34,6 @@ class KaviApp : Application() {
 
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
-        if (level == TRIM_MEMORY_UI_HIDDEN) BrowserCdp.background()
+        if (level == android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) BrowserCdp.background()
     }
 }

@@ -261,7 +261,7 @@ internal object BrowserCdpKeys {
 internal object BrowserCdpCoords {
     fun fromScreenshot(pixel: Float, viewWidth: Int, cssWidth: Float): Double {
         val imageScale = minOf(1f, 720f / viewWidth.coerceAtLeast(1))
-        return pixel / imageScale * cssWidth / viewWidth.coerceAtLeast(1)
+        return (pixel / imageScale * cssWidth / viewWidth.coerceAtLeast(1)).toDouble()
     }
 
     fun center(x: Float, y: Float, w: Float, h: Float): Pair<Double, Double> =
