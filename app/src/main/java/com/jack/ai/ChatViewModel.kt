@@ -972,20 +972,22 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 val ops = com.jack.ai.data.MemoryReview.parse(raw)
                 // 在现在的记忆上改（这期间 Kavi 或用户可能刚存过）
                 // 全局记忆直接在带 id 的条目上改：改过的条目保留 id、历史和用量，不再经字符串拼回去
-                val done: List<String>
+                // 在锁里拿最新的改：几个对话同时回看、Kavi 同时在存，谁也不盖掉谁
+                var done: List<String> = emptyList()
                 if (work) {
-                    val (next, d) = com.jack.ai.data.MemoryReview.apply(current(), ops, budget)
-                    done = d
-                    if (done.isNotEmpty()) com.jack.ai.data.ChatMemory.write(workFile, next)
-                } else {
-                    val live = store.loadMemories()
-                    val (next, d) = com.jack.ai.data.MemoryReview.applyItems(live, ops, budget, "聊天时回看：${conv.title}")
-                    done = d
-                    if (done.isNotEmpty()) {
-                        com.jack.ai.data.MemoryOps.snapshot(app, live)
-                        store.saveMemories(next)
-                        _state.update { it.copy(memories = next) }
+                    com.jack.ai.data.ChatMemory.update(workFile) { live ->
+                        val (next, d) = com.jack.ai.data.MemoryReview.apply(live, ops, budget)
+                        done = d
+                        next.takeIf { d.isNotEmpty() }
                     }
+                } else {
+                    var saved: List<com.jack.ai.data.MemoryItem>? = null
+                    store.updateMemories { live ->
+                        val (next, d) = com.jack.ai.data.MemoryReview.applyItems(live, ops, budget, "聊天时回看：${conv.title}")
+                        done = d
+                        if (d.isEmpty()) null else { com.jack.ai.data.MemoryOps.snapshot(app, live); saved = next; next }
+                    }
+                    saved?.let { next -> _state.update { it.copy(memories = next) } }
                 }
                 if (done.isNotEmpty()) {
                     val lastAnswer = conv.messages.lastOrNull { it.role == "assistant" }?.id

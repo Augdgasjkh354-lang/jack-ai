@@ -41,14 +41,23 @@ object ChatMemory {
 
     fun titleOf(file: File) = when (file.name) { PROJECT_FILE -> "项目记忆"; WORK_FILE -> "做事经验"; else -> "本对话记忆" }
 
+    private val updating = Any()
+
+    /**
+     * 在文件里最新的条目上改并写回，读、改、写在同一把锁里（做事经验是所有对话共用的，几个对话同时回看不会互相盖掉）。
+     * transform 返回 null 表示不改。返回写下的条目，没改返回 null。
+     */
+    fun update(file: File, transform: (List<String>) -> List<String>?): List<String>? = synchronized(updating) {
+        val next = transform(items(read(file))) ?: return null
+        write(file, next)
+        next
+    }
+
     /** 加一条；已经有一模一样的就不重复加。返回 false 表示没加。 */
     fun add(file: File, item: String): Boolean {
         val text = item.trim().removePrefix("- ").trim()
         if (text.isEmpty()) return false
-        val list = items(read(file))
-        if (list.any { it == text }) return false
-        write(file, list + text)
-        return true
+        return update(file) { list -> if (list.any { it == text }) null else list + text } != null
     }
 
     /**

@@ -46,4 +46,19 @@ class ContextSlimTest {
         ContextSlim.slim(m2) { null }
         assertTrue(content(m2[0]).contains("Call the tool again"))
     }
+
+    @Test
+    fun oldResultsHaveAHardCapAndKeepTheSavedFileName() {
+        // 已经压过一轮（带着全文文件名）的旧结果攒多了，再加几条大的：还得压回预算以内
+        val trimmed = ContextSlim.shrink("y".repeat(5_000), "网页-1.txt")
+        val m = MutableList(80) { tool(trimmed) }
+        repeat(ContextSlim.KEEP_RECENT) { m += tool("z".repeat(3_000) + it) }
+        val recent = m.takeLast(ContextSlim.KEEP_RECENT).map { content(it) }
+        ContextSlim.slim(m) { null }
+        assertTrue(m.sumOf { content(it).length } <= ContextSlim.BUDGET)
+        assertTrue(m.dropLast(ContextSlim.KEEP_RECENT).sumOf { content(it).length } <= ContextSlim.OLD_BUDGET)
+        assertTrue(content(m[0]).startsWith(ContextSlim.STUB))
+        assertTrue("压狠了也要留着全文在哪个文件", "网页-1.txt" in content(m[0]))
+        assertEquals("最近几条模型正要用，原样留着", recent, m.takeLast(ContextSlim.KEEP_RECENT).map { content(it) })
+    }
 }

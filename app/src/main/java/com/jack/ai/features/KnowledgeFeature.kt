@@ -106,8 +106,7 @@ class KnowledgeFeature(core: AppCore) : Feature(core) {
 
     internal fun editMemories(transform: (List<MemoryItem>) -> List<MemoryItem>) {
         scope.launch(ioSerial) {
-            val list = transform(store.loadMemories())
-            store.saveMemories(list)
+            val list = store.updateMemories(transform)
             state.update { it.copy(memories = list) }
         }
     }
@@ -185,15 +184,15 @@ class KnowledgeFeature(core: AppCore) : Feature(core) {
 
     fun workMemory(): List<String> = ChatMemory.items(workMemoryText())
 
-    fun setWorkMemory(items: List<String>) = ChatMemory.write(ChatMemory.workFile(app), items)
+    fun setWorkMemory(items: List<String>) = ChatMemory.update(ChatMemory.workFile(app)) { items }
 
     fun chatMemory(conv: Conversation): List<String> = ChatMemory.items(ChatMemory.read(ChatMemory.chatFile(app, conv)))
 
-    fun setChatMemory(conv: Conversation, items: List<String>) = ChatMemory.write(ChatMemory.chatFile(app, conv), items)
+    fun setChatMemory(conv: Conversation, items: List<String>) = ChatMemory.update(ChatMemory.chatFile(app, conv)) { items }
 
     fun projectMemory(projectId: String): List<String> = ChatMemory.items(ChatMemory.read(ChatMemory.projectFile(app, projectId)))
 
-    fun setProjectMemory(projectId: String, items: List<String>) = ChatMemory.write(ChatMemory.projectFile(app, projectId), items)
+    fun setProjectMemory(projectId: String, items: List<String>) = ChatMemory.update(ChatMemory.projectFile(app, projectId)) { items }
 
     /** 把一条本对话记忆挪到全局记忆。 */
     fun moveToGlobal(conv: Conversation, item: String) {

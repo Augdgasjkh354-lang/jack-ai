@@ -31,7 +31,6 @@ class LongRunAuditTest {
     )
 
     @Test
-    @Ignore("audit: 复现")
     fun slimShouldRunBeforeTheFirstRequest() = runBlocking {
         var slimmed = false
         var sawSlimmed = false
@@ -52,7 +51,6 @@ class LongRunAuditTest {
     }
 
     @Test
-    @Ignore("audit: 复现")
     fun contextSlimShouldEnforceItsBudgetForManySmallResults() {
         val messages = MutableList(100) { toolResult("x".repeat(1_000)) }
 
@@ -66,7 +64,6 @@ class LongRunAuditTest {
     }
 
     @Test
-    @Ignore("audit: 复现")
     fun transientRetryBudgetShouldResetAfterSuccessfulRounds() = runBlocking {
         val oldDelays = Agent.RETRY_DELAYS
         Agent.RETRY_DELAYS = longArrayOf(0, 0)

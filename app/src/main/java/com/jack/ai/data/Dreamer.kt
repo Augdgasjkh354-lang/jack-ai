@@ -231,10 +231,12 @@ Output only one JSON object, in this format:
             return null
         }
         // 在现在的记忆上执行（做梦要好一会，期间用户删掉、改过的照现在的算），改之前存一版
-        val current = store.loadMemories()
-        MemoryOps.snapshot(ctx, current)
-        val result = MemoryOps.apply(current, ops, deepNow = MemoryOps.deep(ctx))
-        store.saveMemories(result.live)
+        lateinit var result: MemoryOps.Result
+        store.updateMemories { current ->
+            MemoryOps.snapshot(ctx, current)
+            result = MemoryOps.apply(current, ops, deepNow = MemoryOps.deep(ctx))
+            result.live
+        }
         if (result.demoted + result.promoted + result.invalidated > 0) MemoryOps.saveDeep(ctx, result.deep)
         MemoryOps.addToArchive(ctx, result.archived)
         val ownResult = OwnMemory.applyOps(ctx, ops.filter { it.own })

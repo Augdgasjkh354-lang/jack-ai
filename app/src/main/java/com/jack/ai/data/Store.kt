@@ -108,6 +108,17 @@ class Store(context: Context) {
 
     fun loadMemories() = load("memories.json", MemoryItem.serializer())
     fun saveMemories(list: List<MemoryItem>) = save("memories.json", MemoryItem.serializer(), list)
+    /**
+     * 在最新的记忆上改并存下，读、改、写在同一把锁里：几个对话同时回看、做梦、Kavi 存记忆、用户手改，
+     * 谁也不会拿旧快照把别人刚存的盖掉。transform 返回 null 表示不改。返回存下的（或没改时现在的）列表。
+     * transform 里不要做联网这类慢事，算好要改什么再进来。
+     */
+    fun updateMemories(transform: (List<MemoryItem>) -> List<MemoryItem>?): List<MemoryItem> = synchronized(LOCK) {
+        val live = loadMemories()
+        val next = transform(live) ?: return live
+        saveMemories(next)
+        next
+    }
     fun loadDreams() = load("dreams.json", DreamEntry.serializer())
     fun saveDreams(list: List<DreamEntry>) = save("dreams.json", DreamEntry.serializer(), list)
 

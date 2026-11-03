@@ -109,40 +109,47 @@ internal suspend fun ToolSession.remember(args: JsonObject): String {
     return runTool(label) {
         if (text.isEmpty() && old.isEmpty()) throw IllegalArgumentException("内容是空的")
         when (scope) {
-            "global" -> {
-                val list = host.store.loadMemories()
+            // 读、改、写都在锁里（Store.updateMemories / ChatMemory.update）：别的对话同时在存记忆、回看，不会被这里的旧快照盖掉
+            "global" -> withContext(Dispatchers.IO) {
                 if (toDeep && old.isNotEmpty()) {
                     // 放到深处：常记里拿掉，深处留着，聊到相关的会浮上来
-                    val keep = ChatMemory.replace(list.map { it.text }, old, "")
-                    val moved = list.filter { it.text !in keep }
-                    withContext(Dispatchers.IO) { com.jack.ai.data.MemoryOps.saveDeep(app, com.jack.ai.data.MemoryOps.deep(app) + moved) }
-                    val rest = list.filter { it.text in keep }
-                    host.store.saveMemories(rest)
+                    val rest = host.store.updateMemories { list ->
+                        val keep = ChatMemory.replace(list.map { it.text }, old, "")
+                        com.jack.ai.data.MemoryOps.saveDeep(app, com.jack.ai.data.MemoryOps.deep(app) + list.filter { it.text !in keep })
+                        list.filter { it.text in keep }
+                    }
                     host.setMemories(rest)
-                    return@runTool "已放到深处（常记现在约 ${com.jack.ai.data.MemoryOps.hotTokens(rest)} / ${com.jack.ai.data.MemoryOps.HOT_BUDGET}）。" to SearchRecord(label)
+                    return@withContext "已放到深处（常记现在约 ${com.jack.ai.data.MemoryOps.hotTokens(rest)} / ${com.jack.ai.data.MemoryOps.HOT_BUDGET}）。"
                 }
-                if (old.isEmpty() && list.any { it.text == text }) return@runTool "已经有一模一样的这条，没有重复存。" to SearchRecord(label)
-                val updated = if (old.isEmpty()) list + MemoryItem(text = text) else {
-                    // 按文字改，没动的条目保留原来的编号和时间
-                    val texts = ChatMemory.replace(list.map { it.text }, old, text)
-                    val byText = list.associateBy { it.text }
-                    texts.map { byText[it] ?: MemoryItem(text = it) }
+                var dup = false
+                val updated = host.store.updateMemories { list ->
+                    if (old.isEmpty() && list.any { it.text == text }) { dup = true; return@updateMemories null }
+                    val next = if (old.isEmpty()) list + MemoryItem(text = text) else {
+                        // 按文字改，没动的条目保留原来的编号和时间
+                        val texts = ChatMemory.replace(list.map { it.text }, old, text)
+                        val byText = list.associateBy { it.text }
+                        texts.map { byText[it] ?: MemoryItem(text = it) }
+                    }
+                    com.jack.ai.data.MemoryOps.fullNote(list.map { it.text }, next.map { it.text }, com.jack.ai.data.MemoryOps.HOT_BUDGET, where, canDeep = true)
+                        ?.let { throw IllegalArgumentException(it) }
+                    next
                 }
-                com.jack.ai.data.MemoryOps.fullNote(list.map { it.text }, updated.map { it.text }, com.jack.ai.data.MemoryOps.HOT_BUDGET, where, canDeep = true)
-                    ?.let { throw IllegalArgumentException(it) }
-                host.store.saveMemories(updated)
+                if (dup) return@withContext "已经有一模一样的这条，没有重复存。"
                 host.setMemories(updated)
-            }
+                null
+            }?.let { return@runTool it to SearchRecord(label) }
             else -> withContext(Dispatchers.IO) {
                 val file = when (scope) {
                     "project" -> ChatMemory.projectFile(app, project!!.id)
                     "work" -> ChatMemory.workFile(app)
                     else -> ChatMemory.chatFile(app, conv)
                 }
-                val before = ChatMemory.items(ChatMemory.read(file))
-                val after = if (old.isEmpty()) (if (text in before) before else before + text) else ChatMemory.replace(before, old, text)
-                com.jack.ai.data.MemoryOps.fullNote(before, after, com.jack.ai.data.MemoryOps.FILE_BUDGET, where)?.let { throw IllegalArgumentException(it) }
-                if (old.isEmpty()) ChatMemory.add(file, text) else ChatMemory.write(file, after)
+                ChatMemory.update(file) { before ->
+                    val after = if (old.isEmpty()) (if (text in before) before else before + text) else ChatMemory.replace(before, old, text)
+                    com.jack.ai.data.MemoryOps.fullNote(before, after, com.jack.ai.data.MemoryOps.FILE_BUDGET, where)?.let { throw IllegalArgumentException(it) }
+                    after.takeIf { it != before }
+                }
+                null
             }
         }
         val done = when {

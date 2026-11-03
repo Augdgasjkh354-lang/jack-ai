@@ -90,6 +90,8 @@ class Agent(
         var hiccups = 0
         var imageRetried = false
         while (true) {
+            // 每次请求前都瘦身，包括第一次：上一条回答跑了几百步，追问时旧工具结果会整个带进来
+            slim?.invoke(messages)
             beforeRequest(messages, currentTools)
             val calls = sortedMapOf<Int, Call>()
             val roundReasoning = StringBuilder()
@@ -115,6 +117,8 @@ class Agent(
                         }
                     }
                 }
+                // 这一轮顺利收完：抖动重试的次数清零（按连续失败算，几百步的任务早先抖过两次，后面照样能重试）
+                hiccups = 0
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 // 服务一时忙不过来、网断了一下：这一轮还什么都没收到，就等几秒重发（最多两次），长任务不至于半路断掉
@@ -237,7 +241,6 @@ class Agent(
                 messages += m
                 trail += m.toString()
             }
-            slim?.invoke(messages)
             onRound()
             retool?.let { currentTools = it() }
             if (round >= maxRounds() || toolCalls >= maxToolCalls()) currentTools = null
