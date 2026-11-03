@@ -7,7 +7,7 @@
 - `store-persistence.md`：本地存储、并发写
 - `provider-streaming-billing.md`：网络、服务商参数、计费
 
-复现测试都带 `@Ignore("audit: 复现")`。修好一条就去掉对应的 `@Ignore`，让它变成常规测试。
+没修的问题不留跑不起来的复现测试（报告里已写清怎么复现），修的时候再按需要写 1～3 个测试。
 
 ## 严重程度校正
 

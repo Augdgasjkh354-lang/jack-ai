@@ -1,6 +1,5 @@
 package com.jack.ai.chat
 
-import com.jack.ai.api.ApiException
 import com.jack.ai.api.StreamEvent
 import com.jack.ai.tools.LoopGuard
 import kotlinx.coroutines.flow.Flow
@@ -11,11 +10,9 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Ignore
 import org.junit.Test
 import java.io.IOException
 
@@ -111,11 +108,5 @@ class LongRunAuditTest {
         assertNull(guard.check("web_search", """{"query":"""))
         assertNull(guard.check("web_search", """  {"query":  """))
         assertNotNull(guard.check("web_search", """{"query":"""))
-    }
-
-    @Test
-    @Ignore("audit: 复现")
-    fun generic413ShouldNotBeAssumedToBeAnImageBudgetError() {
-        assertFalse(ImageOffload.rejected(ApiException("request entity too large", 413)))
     }
 }

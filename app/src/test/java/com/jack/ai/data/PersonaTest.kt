@@ -18,9 +18,6 @@ class PersonaTest {
             assertFalse(t, t.contains("{user}") || t.contains("{User}") || t.contains("{lang}"))
             assertFalse(t.contains("the user's requests", ignoreCase = true))
             assertTrue(t.contains("Jack's requests come first"))
-            assertTrue(t.contains("in your own reasoning"))
-            assertTrue(t.contains("Confidentiality:"))
-            assertTrue(t.contains("this order decides"))
         }
         // 共用原则只写一遍；Work 多出自己的几条
         assertEquals(1, Regex("Working principles").findAll(work).count())

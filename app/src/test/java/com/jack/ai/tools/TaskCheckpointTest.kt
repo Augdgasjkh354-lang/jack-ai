@@ -9,7 +9,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Ignore
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -66,26 +65,4 @@ class TaskCheckpointTest {
         }
         assertEquals(listOf("操作浏览器"), TaskCheckpoint.skillsUsed(listOf(msg("user", "u"), use, result("x"))))
     }
-
-    @Ignore("audit: 复现")
-    @Test
-    fun staleCheckpointDropsSuccessfulSideEffectHistory() {
-        val f = TaskCheckpoint.file(tmp.root, "side-effect")
-        val msgs = listOf(msg("system", "s"), msg("user", "发邮件"), call("send"), result("send"))
-        TaskCheckpoint.save(f, "same-task", msgs, 0.12, now = 1_000)
-
-        assertNull(TaskCheckpoint.load(f, "same-task", now = 1_000 + TaskCheckpoint.MAX_AGE_MS + 1))
-    }
-
-    @Ignore("audit: 复现")
-    @Test
-    fun interruptedToolWithoutRecordedResultIsMarkedNotDone() {
-        val msgs = listOf(msg("system", "s"), msg("user", "依次执行"), call("first", "second"), result("first"))
-        val fixed = TaskCheckpoint.repair(msgs)
-        val last = fixed.last()
-
-        assertEquals("second", (last["tool_call_id"] as JsonPrimitive).content)
-        assertTrue((last["content"] as JsonPrimitive).content.contains("这一步没做"))
-    }
-
 }
