@@ -188,11 +188,11 @@ object MemoryOps {
     private fun deepFile(ctx: Context) = File(ctx.filesDir, "deep_memories.json")
 
     fun deep(ctx: Context): List<MemoryItem> = synchronized(lock) {
-        runCatching { json.decodeFromString(ListSerializer(MemoryItem.serializer()), deepFile(ctx).readText()) }.getOrDefault(emptyList())
+        runCatching { json.decodeFromString(ListSerializer(MemoryItem.serializer()), SafeFile.readText(deepFile(ctx))) }.getOrDefault(emptyList())
     }
 
     fun saveDeep(ctx: Context, list: List<MemoryItem>): Unit = synchronized(lock) {
-        runCatching { deepFile(ctx).writeText(json.encodeToString(ListSerializer(MemoryItem.serializer()), list.takeLast(2000))) }
+        runCatching { SafeFile.writeText(deepFile(ctx), json.encodeToString(ListSerializer(MemoryItem.serializer()), list.takeLast(2000))) }
     }
 
     // ---------- 存档和版本 ----------
@@ -203,13 +203,13 @@ object MemoryOps {
     private fun versionDir(ctx: Context) = File(ctx.filesDir, "memories_versions").apply { mkdirs() }
 
     fun archive(ctx: Context): List<ArchivedMemory> = synchronized(lock) {
-        runCatching { json.decodeFromString(ListSerializer(ArchivedMemory.serializer()), archiveFile(ctx).readText()) }.getOrDefault(emptyList())
+        runCatching { json.decodeFromString(ListSerializer(ArchivedMemory.serializer()), SafeFile.readText(archiveFile(ctx))) }.getOrDefault(emptyList())
     }
 
     fun addToArchive(ctx: Context, items: List<ArchivedMemory>) {
         if (items.isEmpty()) return
         synchronized(lock) {
-            runCatching { archiveFile(ctx).writeText(json.encodeToString(ListSerializer(ArchivedMemory.serializer()), (archive(ctx) + items).takeLast(1000))) }
+            runCatching { SafeFile.writeText(archiveFile(ctx), json.encodeToString(ListSerializer(ArchivedMemory.serializer()), (archive(ctx) + items).takeLast(1000))) }
         }
     }
 
@@ -217,7 +217,7 @@ object MemoryOps {
     fun snapshot(ctx: Context, live: List<MemoryItem>, now: Long = System.currentTimeMillis()): Unit = synchronized(lock) {
         val dir = versionDir(ctx)
         val f = File(dir, FreeTime.day(now) + ".json")
-        if (!f.exists()) runCatching { f.writeText(json.encodeToString(ListSerializer(MemoryItem.serializer()), live)) }
+        if (!f.exists()) runCatching { SafeFile.writeText(f, json.encodeToString(ListSerializer(MemoryItem.serializer()), live)) }
         dir.listFiles()?.sortedByDescending { it.name }?.drop(30)?.forEach { it.delete() }
     }
 
@@ -225,5 +225,5 @@ object MemoryOps {
     fun versions(ctx: Context): List<String> = versionDir(ctx).listFiles()?.map { it.name.removeSuffix(".json") }?.sortedDescending().orEmpty()
 
     fun version(ctx: Context, day: String): List<MemoryItem>? =
-        runCatching { json.decodeFromString(ListSerializer(MemoryItem.serializer()), File(versionDir(ctx), "$day.json").readText()) }.getOrNull()
+        runCatching { json.decodeFromString(ListSerializer(MemoryItem.serializer()), SafeFile.readText(File(versionDir(ctx), "$day.json"))) }.getOrNull()
 }
