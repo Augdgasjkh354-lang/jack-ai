@@ -317,7 +317,7 @@ suspend fun runBackgroundWork(
     } finally {
         goalMonitor?.cancel()
         // 占着浏览器的话放出来，聊天里等着用的回答接着用
-        session.releaseBrowser()
+        session.releaseBrowser()?.let { log(com.jack.ai.data.RunStep("phone-close", true, it)) }
     }
     if (!free && (goalId == null || com.jack.ai.data.Goals.current(ctx, conv.id)?.status == "complete")) TaskCheckpoint.clear(checkpoint)
     val text = agent.lastRound.trim().ifBlank { agent.content.toString().trim() }
