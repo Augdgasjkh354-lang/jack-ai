@@ -1936,16 +1936,27 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
     /** 读整页：what = text / links / table。返回网页给的 JSON。 */
     suspend fun extract(ctx: Context, what: String, start: Int = 0, limit: Int = 12_000): JsonObject? {
         agentAt = System.currentTimeMillis()
-        if (what == "table") {
-            val t = pinned() ?: tab
-            // 并行比价会在同一次工具调用里抽取；先取回本标签已完成的接口正文。
-            BrowserCdp.flushNetwork(t.id)
-            BrowserNetwork.table(t.id, t.address)?.let {
-                t.diag.add("CDP 接口列表优先用于 extract")
-                return it
-            }
-        }
-        return runCatching { json.parseToJsonElement(unwrap(eval(ctx, BrowserScripts.extract(ctx, what, start, limit)))).jsonObject }.getOrNull()
+        val fromPage = runCatching { json.parseToJsonElement(unwrap(eval(ctx, BrowserScripts.extract(ctx, what, start, limit)))).jsonObject }.getOrNull()
+        if (what != "table") return fromPage
+        val t = pinned() ?: tab
+        // 并行比价会在同一次工具调用里抽取；先取回本标签已完成的接口正文。
+        BrowserCdp.flushNetwork(t.id)
+        val fromNet = BrowserNetwork.table(t.id, t.address) ?: return fromPage
+        // 接口数据只有名称/价格/店铺/链接四列，也可能是推荐流这类无关列表：网页上读得到像样的表就还用网页的，
+        // 网页读不到或明显少一大截（虚拟列表、画在画布上）才换接口数据
+        val pageRows = tableRows(fromPage)
+        if (pageRows > 0 && tableRows(fromNet) < pageRows * 2) return fromPage
+        t.diag.add("CDP 接口列表用于 extract（网页脚本读到 $pageRows 行）")
+        return fromNet
+    }
+
+    /** extract(table) 结果里最多的一张表或第一组列表有几行。 */
+    private fun tableRows(o: JsonObject?): Int {
+        o ?: return 0
+        val tables = (o["tables"] as? kotlinx.serialization.json.JsonArray).orEmpty()
+            .maxOfOrNull { ((it as? JsonObject)?.get("rows") as? kotlinx.serialization.json.JsonArray)?.size ?: 0 } ?: 0
+        val list = ((o["lists"] as? kotlinx.serialization.json.JsonArray)?.firstOrNull() as? kotlinx.serialization.json.JsonArray)?.size ?: 0
+        return if (tables > 0) tables else list
     }
 
     /** Kavi 要上传的文件：网页弹出选文件时直接交给它（不弹选择器）。uploadTaken 表示网页已经拿走了。 */
