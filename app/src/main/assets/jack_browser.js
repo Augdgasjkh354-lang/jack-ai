@@ -162,14 +162,16 @@
     var out = [], rects = [];
     ds.forEach(function (d) {
       var els = d.doc.querySelectorAll('span,div,p,li,label,strong,em,img,svg,section');
-      for (var i = 0; i < els.length && out.length < 40; i++) {
+      // 大网页上 div/span 成千上万：先做不触发排版的便宜检查，最多看 3000 个，免得每次读页都变慢
+      for (var i = 0; i < els.length && i < 3000 && out.length < 40; i++) {
         var el = els[i];
+        if (el.childElementCount > 3 || (el.textContent || '').length > 200) continue;
         if (el.hasAttribute('data-jack') || el.closest('[data-jack]') ||
             el.querySelector('[data-jack]')) continue;
-        var text = clean(el.innerText || el.getAttribute('aria-label') || el.getAttribute('alt') || '');
-        if (!text || text.length > 80) continue;
         var r = visibleRect(el);
         if (!r || r.width < 8 || r.height < 8 || r.top < 0 || r.bottom > innerHeight) continue;
+        var text = clean(el.innerText || el.getAttribute('aria-label') || el.getAttribute('alt') || '');
+        if (!text || text.length > 80) continue;
         // 重叠的文字外壳只试最贴近文字的那个。
         if (el.children.length && clean(el.children[0].innerText) === text) continue;
         out.push(el);
