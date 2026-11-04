@@ -1217,7 +1217,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
     }
 
     /** 打开网址；等到加载完（最多 timeoutMs）。返回出错原因，成功返回 null。 */
-    suspend fun load(ctx: Context, url: String, timeoutMs: Long = 25_000): String? {
+    suspend fun load(ctx: Context, url: String, timeoutMs: Long = 25_000, agent: Boolean = true): String? {
         // 并行抓取时在指定的标签页里开，平时在当前页
         val t = withContext(Dispatchers.Main) { pinned() ?: webView(ctx).let { tab } }
         // 恢复的标签页等真开始加载了才算恢复完：半路被打断（页面关掉、代理没起来）下次切过来还会再开，不会一直空白
@@ -1228,8 +1228,11 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
             BrowserNet.Kind.BLOCKED -> return "不能打开这个地址（本机、局域网和文件地址都不开）：$url"
         }
         prepare(ctx)?.let { reason -> withContext(Dispatchers.Main) { t.error = reason; t.pageFailed = true }; return reason }
-        if (BrowserPacing.blocked(t, url) != null) return "网站已提示访问受限，先交给用户处理，暂停同站打开新页面。"
-        BrowserPacing.before(t, url)
+        // 节奏和停手只管 Kavi 自己的操作；用户在地址栏打开网页（包括去处理验证）不拦也不等
+        if (agent) {
+            if (BrowserPacing.blocked(t, url) != null) return "网站已提示访问受限，先交给用户处理，暂停同站打开新页面。"
+            BrowserPacing.before(t, url)
+        }
         BrowserCdp.observeNetwork(t)
         val done = withContext(Dispatchers.Main) {
             CompletableDeferred<Unit>().also { t.pageDone = it; t.restore = null; t.web!!.let { w -> applyUa(w, url); w.loadUrl(url) } }

@@ -342,7 +342,9 @@ private suspend fun ToolSession.browseNow(args: JsonObject, action: String): Str
         if (action != "wait_user") {
             var barrier = BrowserPacing.blocked(JackBrowser.tab)
             if ((barrier == null && looksLikeChallenge(page)) ||
-                (barrier?.kind == WebBarrier.Kind.CAPTCHA && barrier.detail != "验证码框架")) {
+                (barrier?.kind == WebBarrier.Kind.CAPTCHA && barrier.detail != "验证码框架") ||
+                // Cloudflare 这类「请稍候」检查页常带 403/503，多数等几秒自己就过了，先等再交给用户
+                barrier?.detail in setOf("HTTP 403", "HTTP 503")) {
                 // 短暂的 Cloudflare 加载检查仍可自行结束；没结束再交给用户。
                 val cleared = waitUntil(15_000, 1_500) {
                     BrowserPacing.blocked(JackBrowser.tab) == null && !looksLikeChallenge(it)

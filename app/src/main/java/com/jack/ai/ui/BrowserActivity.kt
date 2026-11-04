@@ -299,7 +299,7 @@ class BrowserActivity : ComponentActivity() {
         editing = url
         when (BrowserNet.classify(url)) {
             BrowserNet.Kind.EXTERNAL -> JackBrowser.external = url
-            else -> lifecycleScope.launch { JackBrowser.load(this@BrowserActivity, url) }
+            else -> lifecycleScope.launch { JackBrowser.load(this@BrowserActivity, url, agent = false) }
         }
     }
 

@@ -22,6 +22,10 @@ object WebBarrier {
         "automatedrequests", "accesstemporarilyrestricted", "toomanyrequests",
         "requestwasblocked", "requesthasbeenblocked", "ratelimit", "riskcontrol",
     )
+    private val apiRiskWords = listOf(
+        "频繁", "访问受限", "账号存在风险", "风控", "toomanyrequests", "ratelimit", "riskcontrol",
+        "unusualtraffic", "suspiciousactivity", "accesstemporarilyrestricted",
+    )
     private val challengeWords = listOf(
         "请稍候", "确认您是真人", "验证您是否是真人", "请完成人机验证", "请完成安全验证",
         "checkingyourbrowser", "justamoment", "verifyyouarehuman",
@@ -65,7 +69,8 @@ object WebBarrier {
             if (key.lowercase() !in apiMessageKeys) continue
             val msg = (value as? JsonPrimitive)?.takeIf { it.isString }?.content ?: continue
             val compact = msg.lowercase().filterNot(Char::isWhitespace)
-            if (compact.length <= 200 && (riskWords + listOf("abnormal", "账号存在风险")).any { it in compact }) {
+            // 接口失败常回「请求异常」这类泛泛的话，只认明确的限流、风控说法
+            if (compact.length <= 200 && apiRiskWords.any { it in compact }) {
                 return msg.take(200)
             }
         }

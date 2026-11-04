@@ -142,12 +142,11 @@ internal object BrowserNetwork {
         val data = tabs[id] ?: return null
         val site = PagePacing.site(pageUrl) ?: return null
         return synchronized(data) {
-            data.ledger.list().asReversed().firstNotNullOfOrNull { r ->
-                if (PagePacing.site(r.url) != site) null
-                else if (r.status == 429) "请求过于频繁"
-                else if (r.state == CapturedResponse.State.DONE) WebBarrier.apiRisk(r.body)
-                else null
-            }
+            // 只看同网站最近完成的一个请求：用户在页面上过了验证、新请求正常了，就不再算受限
+            val last = data.ledger.list().lastOrNull {
+                PagePacing.site(it.url) == site && it.state == CapturedResponse.State.DONE
+            } ?: return@synchronized null
+            if (last.status == 429) "请求过于频繁" else WebBarrier.apiRisk(last.body)
         }
     }
 
