@@ -74,6 +74,7 @@ internal object BrowserCdp {
 
     private fun disable() {
         if (!debuggingOn) return
+        BrowserNetwork.detachAll()
         sessions.values.forEach { it.close() }
         sessions.clear()
         targets.clear()
@@ -133,6 +134,21 @@ internal object BrowserCdp {
             }
         }
     }
+
+    /** 页面动作前订阅 Network；断线时仅放弃截接口，不影响浏览器输入。 */
+    suspend fun observeNetwork(tab: JackBrowser.Tab) {
+        val connected = try {
+            session(tab)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        }
+        if (connected != null) BrowserNetwork.start(tab, connected)
+    }
+
+    /** 工具收尾前取响应正文，关 CDP 后只保留内存中的有限缓存。 */
+    suspend fun flushNetwork(tabId: Int? = null) = BrowserNetwork.flush(tabId)
 
     /** 事件发出后断线，页面可能已执行：停止重复发送；只有尚未发出输入时才退回旧脚本。 */
     private suspend fun perform(tab: JackBrowser.Tab, action: String, block: suspend Sender.() -> Unit): Outcome {

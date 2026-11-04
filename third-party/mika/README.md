@@ -32,3 +32,7 @@ Jack AI 适配（2026-11-02）：
 
 - 第 2 步（元素融合）：基于同一提交的 `ElementFusion.kt`、`ElementProbe.kt`，为 Kavi 的稳定编号、网页脚本节点表及 CSS 像素坐标做 Jack AI modification。只读 CDP 无障碍树与 DOM 信息，不移植 Mika 的整套 WebHost、UiTree 或 Agent。
 - 页面读屏以原脚本结果为基线，按 backendNodeId 对齐无障碍名称与角色；可见的跨源框架、封闭 shadow root 元素和直接挂点击监听器的文字补入清单。CDP 不可用时继续原脚本读页。
+
+- 第 3 步（Network 域截接口）：增加 `NetworkLedger.kt`，同样固定参考 Mika `0091d2d`；保留上游命名空间及 Apache-2.0 版权说明。
+- Jack AI modification：用 `BrowserNetwork` 为 Kavi 原有标签页订阅 XHR/fetch、限定正文大小并在任务结束前缓存 JSON/文本；`BrowserNetworkRows` 只把同网站、非敏感路径的结构化商品列表转换为 `extract(table)` 的原格式，失败退回原网页脚本。
+- 未移植 Mika 的 `NetworkTracker.kt`（直接依赖上游 WebTab），由 Kavi 的精简会话适配代替；保留 `BrowserNetWatch` 原有等待和请求失败诊断。

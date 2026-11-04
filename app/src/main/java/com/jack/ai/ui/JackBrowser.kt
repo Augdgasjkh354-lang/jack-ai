@@ -659,6 +659,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         val url = t.address
         (dead.parent as? ViewGroup)?.removeView(dead)
         BrowserCdp.release(t)
+        BrowserNetwork.release(t.id)
         runCatching { dead.destroy() }
         if (t !in tabs) { t.web = null; return }
         t.netScript = null; t.diagScript = null; t.teachScript = null; t.rtcScript = null; t.deskScript = null
@@ -792,6 +793,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         val t = tabs.removeAt(i)
         (t.web?.parent as? ViewGroup)?.removeView(t.web)
         BrowserCdp.release(t)
+        BrowserNetwork.release(t.id)
         t.web?.destroy()
         if (t.incognito && tabs.none { it.incognito }) runCatching { clearIncognito() }
         val stay = if (i < current) current - 1 else current.coerceAtMost(tabs.lastIndex)
@@ -1222,6 +1224,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
             BrowserNet.Kind.BLOCKED -> return "不能打开这个地址（本机、局域网和文件地址都不开）：$url"
         }
         prepare(ctx)?.let { reason -> withContext(Dispatchers.Main) { t.error = reason; t.pageFailed = true }; return reason }
+        BrowserCdp.observeNetwork(t)
         val done = withContext(Dispatchers.Main) {
             CompletableDeferred<Unit>().also { t.pageDone = it; t.restore = null; t.web!!.let { w -> applyUa(w, url); w.loadUrl(url) } }
         }
@@ -1349,6 +1352,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
 
         override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
             BrowserCdp.forget(t)
+            BrowserNetwork.navigated(t.id)
             if (t === tab) barsHidden = false
             t.diag.add("开始打开 ${url.take(160)}")
             if (t.pageDone?.isCompleted != false) t.pageDone = CompletableDeferred()
@@ -1396,7 +1400,10 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         }
 
         override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
-            if (url != t.address) BrowserCdp.forget(t)
+            if (url != t.address) {
+                BrowserCdp.forget(t)
+                BrowserNetwork.navigated(t.id)
+            }
             if (url != "about:blank") t.address = url
             t.canBack = view.canGoBack(); t.canForward = view.canGoForward()
         }
@@ -1741,6 +1748,7 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
         agentAt = System.currentTimeMillis()
         withContext(Dispatchers.Main) { error = null; pageDone = CompletableDeferred() }
         val t = pinned() ?: tab
+        BrowserCdp.observeNetwork(t)
         if (BrowserCdp.hasRef(t, n)) {
             if (op !in setOf("click", "hover", "type", "delete", "key")) {
                 return "这个编号来自嵌入页面或封闭组件，暂不支持 $op；请先点开再用编号操作。"
@@ -1811,6 +1819,7 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
     suspend fun touch(ctx: Context, x1: Float, y1: Float, x2: Float = x1, y2: Float = y1, durationMs: Long = 60): String? {
         agentAt = System.currentTimeMillis()
         val w = withContext(Dispatchers.Main) { (pinned()?.web ?: webView(ctx)).also { ensureLaidOut(it) } }
+        BrowserCdp.observeNetwork(pinned() ?: tab)
         val scale = withContext(Dispatchers.Main) { minOf(1f, 720f / w.width.coerceAtLeast(1)) }
         val (ax, ay, bx, by) = listOf(x1 / scale, y1 / scale, x2 / scale, y2 / scale)
         val inside = withContext(Dispatchers.Main) { listOf(ax, bx).all { it in 0f..w.width.toFloat() } && listOf(ay, by).all { it in 0f..w.height.toFloat() } }
@@ -1927,6 +1936,15 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
     /** 读整页：what = text / links / table。返回网页给的 JSON。 */
     suspend fun extract(ctx: Context, what: String, start: Int = 0, limit: Int = 12_000): JsonObject? {
         agentAt = System.currentTimeMillis()
+        if (what == "table") {
+            val t = pinned() ?: tab
+            // 并行比价会在同一次工具调用里抽取；先取回本标签已完成的接口正文。
+            BrowserCdp.flushNetwork(t.id)
+            BrowserNetwork.table(t.id, t.address)?.let {
+                t.diag.add("CDP 接口列表优先用于 extract")
+                return it
+            }
+        }
         return runCatching { json.parseToJsonElement(unwrap(eval(ctx, BrowserScripts.extract(ctx, what, start, limit)))).jsonObject }.getOrNull()
     }
 
@@ -1988,6 +2006,7 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
     /** 滚到页面最底下（往下划才加载更多的页面用），等新内容出来。 */
     suspend fun scrollToBottom(ctx: Context) {
         agentAt = System.currentTimeMillis()
+        BrowserCdp.observeNetwork(pinned() ?: tab)
         eval(ctx, "window.scrollTo(0, Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0)); 1")
         delay(600)
         waitStable(ctx, 5_000)
@@ -1996,12 +2015,14 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
     /** 翻页：dir = 1 往下，-1 往上。 */
     suspend fun scroll(ctx: Context, dir: Int) {
         agentAt = System.currentTimeMillis()
+        BrowserCdp.observeNetwork(pinned() ?: tab)
         eval(ctx, "window.scrollBy(0, ${dir} * window.innerHeight * 0.8); 1")
         delay(400)
     }
 
     suspend fun back(ctx: Context): Boolean {
         agentAt = System.currentTimeMillis()
+        BrowserCdp.observeNetwork(pinned() ?: tab)
         val ok = withContext(Dispatchers.Main) {
             val w = webView(ctx)
             if (w.canGoBack()) { pageDone = CompletableDeferred(); clearError(); w.goBack(); true } else false

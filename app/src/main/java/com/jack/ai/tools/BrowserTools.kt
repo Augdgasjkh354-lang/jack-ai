@@ -35,8 +35,12 @@ internal suspend fun ToolSession.browse(args: JsonObject): String {
         val r = if (pin != null) withContext(pin) { browseNow(args, action) } else browseNow(args, action)
         if (lost) "（你停下没用浏览器的时候，它被别的任务接手用过，页面可能变了：以这次读到的为准，要用的网页没了就重新打开。）\n$r" else r
     } finally {
-        withContext(kotlinx.coroutines.NonCancellable + kotlinx.coroutines.Dispatchers.Main) { BrowserCdp.end() }
-        BrowserLock.exit(this)
+        try {
+            withContext(kotlinx.coroutines.NonCancellable) { BrowserCdp.flushNetwork() }
+        } finally {
+            withContext(kotlinx.coroutines.NonCancellable + kotlinx.coroutines.Dispatchers.Main) { BrowserCdp.end() }
+            BrowserLock.exit(this)
+        }
     }
 }
 
