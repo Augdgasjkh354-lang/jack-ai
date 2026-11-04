@@ -106,6 +106,8 @@ object JackBrowser {
         val diag = BrowserDiag.Log()
         /** 上一次按编号操作是否已由 CDP 送出；避免再模拟触摸造成重复点击。 */
         @Volatile var lastCdpInput = false
+        /** 主文档返回的 HTTP 状态；子资源 403 不拿来当整站限流。 */
+        @Volatile var mainHttpStatus: Int? = null
         var diagOn by mutableStateOf(false)
         /** 数后台请求的钩子（见 BrowserNetWatch）；旧网页组件装不上开头注入时是 null，页面露出来再补。 */
         var netScript: androidx.webkit.ScriptHandler? = null
@@ -660,6 +662,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         (dead.parent as? ViewGroup)?.removeView(dead)
         BrowserCdp.release(t)
         BrowserNetwork.release(t.id)
+        BrowserPacing.release(t.id)
         runCatching { dead.destroy() }
         if (t !in tabs) { t.web = null; return }
         t.netScript = null; t.diagScript = null; t.teachScript = null; t.rtcScript = null; t.deskScript = null
@@ -794,6 +797,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         (t.web?.parent as? ViewGroup)?.removeView(t.web)
         BrowserCdp.release(t)
         BrowserNetwork.release(t.id)
+        BrowserPacing.release(t.id)
         t.web?.destroy()
         if (t.incognito && tabs.none { it.incognito }) runCatching { clearIncognito() }
         val stay = if (i < current) current - 1 else current.coerceAtMost(tabs.lastIndex)
@@ -1224,11 +1228,14 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
             BrowserNet.Kind.BLOCKED -> return "不能打开这个地址（本机、局域网和文件地址都不开）：$url"
         }
         prepare(ctx)?.let { reason -> withContext(Dispatchers.Main) { t.error = reason; t.pageFailed = true }; return reason }
+        if (BrowserPacing.blocked(t, url) != null) return "网站已提示访问受限，先交给用户处理，暂停同站打开新页面。"
+        BrowserPacing.before(t, url)
         BrowserCdp.observeNetwork(t)
         val done = withContext(Dispatchers.Main) {
             CompletableDeferred<Unit>().also { t.pageDone = it; t.restore = null; t.web!!.let { w -> applyUa(w, url); w.loadUrl(url) } }
         }
         withTimeoutOrNull(timeoutMs) { done.await() }
+        BrowserPacing.seen(t, withContext(Dispatchers.Main) { t.address })
         return withContext(Dispatchers.Main) { t.error }
     }
 
@@ -1340,6 +1347,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         }
 
         override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, r: WebResourceResponse) {
+            if (request.isForMainFrame) t.mainHttpStatus = r.statusCode
             t.diag.add((if (request.isForMainFrame) "网页 " else "请求 ") + "${r.statusCode} ${request.method} ${request.url.toString().take(160)}")
         }
 
@@ -1353,6 +1361,9 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
             BrowserCdp.forget(t)
             BrowserNetwork.navigated(t.id)
+            t.mainHttpStatus = null
+            if (url.startsWith("http://") || url.startsWith("https://")) BrowserPacing.navigated(t, url)
+            else BrowserPacing.release(t.id)
             if (t === tab) barsHidden = false
             t.diag.add("开始打开 ${url.take(160)}")
             if (t.pageDone?.isCompleted != false) t.pageDone = CompletableDeferred()
@@ -1403,6 +1414,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
             if (url != t.address) {
                 BrowserCdp.forget(t)
                 BrowserNetwork.navigated(t.id)
+                BrowserPacing.navigated(t, url)
             }
             if (url != "about:blank") t.address = url
             t.canBack = view.canGoBack(); t.canForward = view.canGoForward()
@@ -1699,9 +1711,14 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
     /** 读当前页面：可操作元素编上号，加上当前屏附近的文字。 */
     suspend fun read(ctx: Context): Page {
         agentAt = System.currentTimeMillis()
+        val t = pinned() ?: tab
         val raw = unwrap(eval(ctx, BrowserScripts.snapshot(ctx)))
         val o = runCatching { json.parseToJsonElement(raw).jsonObject }.getOrNull()
-            ?: return Page(address, title, emptyList(), 0, 0, 0, 0, 0, "", 0f, 0f, 0f, error ?: "读不到页面内容（页面可能还没加载出来）", null)
+            ?: return Page(address, title, emptyList(), 0, 0, 0, 0, 0, "", 0f, 0f, 0f,
+                error ?: "读不到页面内容（页面可能还没加载出来）", null).also {
+                BrowserPacing.report(t, it.url, it.title, it.text, t.mainHttpStatus, emptyList(),
+                    BrowserNetwork.risk(t.id, it.url))
+            }
         fun JsonObject.s(k: String) = (this[k] as? JsonPrimitive)?.content.orEmpty()
         fun JsonObject.f(k: String) = s(k).toFloatOrNull() ?: 0f
         val items = (o["items"] as? kotlinx.serialization.json.JsonArray).orEmpty().map { e ->
@@ -1717,7 +1734,10 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
         val page = Page(o.s("url"), o.s("title"), items, o.f("above").toInt(), o.f("below").toInt(), o.f("scroll").toInt(),
             o.f("height").toInt(), o.f("vh").toInt(), o.s("text"), o.f("vx"), o.f("vy"), o.f("vw"),
             withContext(Dispatchers.Main) { error }, dialog, pendingHere(), o.f("frames").toInt())
-        val t = pinned() ?: tab
+        val frames = (o["frameUrls"] as? kotlinx.serialization.json.JsonArray).orEmpty()
+            .mapNotNull { (it as? JsonPrimitive)?.content }
+        BrowserPacing.report(t, page.url, page.title, page.text, t.mainHttpStatus, frames,
+            BrowserNetwork.risk(t.id, page.url))
         // 后台、没有 CDP 或页面已经跳转时维持脚本清单，避免影响现有读页。
         if (o.s("docKey").isBlank() || !withContext(Dispatchers.Main) { t.web?.isAttachedToWindow == true }) return page
         fun box(it: JsonObject): ElementFusion.Box {
@@ -1748,6 +1768,8 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
         agentAt = System.currentTimeMillis()
         withContext(Dispatchers.Main) { error = null; pageDone = CompletableDeferred() }
         val t = pinned() ?: tab
+        if (BrowserPacing.blocked(t) != null) return "网站已触发风控或验证，停止操作。请让用户接管后重新读页。"
+        if (op == "click" || op == "select" || (op == "key" && arg == "enter")) BrowserPacing.before(t)
         BrowserCdp.observeNetwork(t)
         if (BrowserCdp.hasRef(t, n)) {
             if (op !in setOf("click", "hover", "type", "delete", "key")) {
@@ -1819,12 +1841,17 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
     suspend fun touch(ctx: Context, x1: Float, y1: Float, x2: Float = x1, y2: Float = y1, durationMs: Long = 60): String? {
         agentAt = System.currentTimeMillis()
         val w = withContext(Dispatchers.Main) { (pinned()?.web ?: webView(ctx)).also { ensureLaidOut(it) } }
-        BrowserCdp.observeNetwork(pinned() ?: tab)
+        val t = pinned() ?: tab
+        if (BrowserPacing.blocked(t) != null) return "网站已触发风控或验证，停止触摸。请用户接管。"
+        BrowserPacing.before(t)
+        BrowserCdp.observeNetwork(t)
         val scale = withContext(Dispatchers.Main) { minOf(1f, 720f / w.width.coerceAtLeast(1)) }
         val (ax, ay, bx, by) = listOf(x1 / scale, y1 / scale, x2 / scale, y2 / scale)
         val inside = withContext(Dispatchers.Main) { listOf(ax, bx).all { it in 0f..w.width.toFloat() } && listOf(ay, by).all { it in 0f..w.height.toFloat() } }
         if (!inside) return "坐标在网页窗口外面（截图大约 ${(w.width * scale).toInt()}×${(w.height * scale).toInt()}）"
         withContext(Dispatchers.Main) { pageDone = CompletableDeferred(); clearError() }
+        val isSwipe = x1 != x2 || y1 != y2
+        val mark = if (isSwipe) BrowserNetwork.mark(t.id) else null
         val cssWidth = unwrap(eval(ctx, "innerWidth")).toFloatOrNull()?.takeIf { it > 0 } ?: w.width.toFloat()
         val outcome = if (!withContext(Dispatchers.Main) { w.isAttachedToWindow }) BrowserCdp.Outcome.FALLBACK
         else BrowserCdp.at(pinned() ?: tab,
@@ -1845,6 +1872,7 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
             }
         }
         settle()
+        if (isSwipe && BrowserNetwork.loadedMore(t.id, mark)) BrowserPacing.loadedMore(t)
         return withContext(Dispatchers.Main) { error }
     }
 
@@ -2017,23 +2045,37 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
     /** 滚到页面最底下（往下划才加载更多的页面用），等新内容出来。 */
     suspend fun scrollToBottom(ctx: Context) {
         agentAt = System.currentTimeMillis()
-        BrowserCdp.observeNetwork(pinned() ?: tab)
+        val t = pinned() ?: tab
+        if (BrowserPacing.blocked(t) != null) return
+        BrowserPacing.before(t)
+        BrowserCdp.observeNetwork(t)
+        val mark = BrowserNetwork.mark(t.id)
         eval(ctx, "window.scrollTo(0, Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0)); 1")
         delay(600)
         waitStable(ctx, 5_000)
+        if (BrowserNetwork.loadedMore(t.id, mark)) BrowserPacing.loadedMore(t)
     }
 
     /** 翻页：dir = 1 往下，-1 往上。 */
     suspend fun scroll(ctx: Context, dir: Int) {
         agentAt = System.currentTimeMillis()
-        BrowserCdp.observeNetwork(pinned() ?: tab)
+        val t = pinned() ?: tab
+        if (BrowserPacing.blocked(t) != null) return
+        if (dir > 0) BrowserPacing.before(t)
+        BrowserCdp.observeNetwork(t)
+        val mark = if (dir > 0) BrowserNetwork.mark(t.id) else null
         eval(ctx, "window.scrollBy(0, ${dir} * window.innerHeight * 0.8); 1")
         delay(400)
+        if (dir > 0) runCatching { waitNetQuiet(ctx, 2_000) }
+        if (dir > 0 && BrowserNetwork.loadedMore(t.id, mark)) BrowserPacing.loadedMore(t)
     }
 
     suspend fun back(ctx: Context): Boolean {
         agentAt = System.currentTimeMillis()
-        BrowserCdp.observeNetwork(pinned() ?: tab)
+        val t = pinned() ?: tab
+        if (BrowserPacing.blocked(t) != null) return false
+        BrowserPacing.before(t)
+        BrowserCdp.observeNetwork(t)
         val ok = withContext(Dispatchers.Main) {
             val w = webView(ctx)
             if (w.canGoBack()) { pageDone = CompletableDeferred(); clearError(); w.goBack(); true } else false

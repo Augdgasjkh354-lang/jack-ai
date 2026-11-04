@@ -224,6 +224,11 @@
     var vv = window.visualViewport;
     return JSON.stringify({
       docKey: docKey, hidden: hiddenRects, probes: probes,
+      frameUrls: hiddenNodes.filter(function(f) {
+        var r = f.getBoundingClientRect(), st = styleOf(f);
+        return r.right > 0 && r.bottom > 0 && r.left < innerWidth && r.top < innerHeight &&
+          st.display !== 'none' && st.visibility !== 'hidden' && parseFloat(st.opacity) !== 0;
+      }).map(function(f) { return f.src || ''; }).filter(Boolean).slice(0, 20),
       url: location.href, title: document.title, items: items, above: above, below: below,
       scroll: Math.round(scrollY), height: document.documentElement.scrollHeight, vh: vh,
       vx: vv ? vv.offsetLeft : 0, vy: vv ? vv.offsetTop : 0, vw: vv ? vv.width : innerWidth,

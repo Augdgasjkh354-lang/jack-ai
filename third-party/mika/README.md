@@ -36,3 +36,6 @@ Jack AI 适配（2026-11-02）：
 - 第 3 步（Network 域截接口）：增加 `NetworkLedger.kt`，同样固定参考 Mika `0091d2d`；保留上游命名空间及 Apache-2.0 版权说明。
 - Jack AI modification：用 `BrowserNetwork` 为 Kavi 原有标签页订阅 XHR/fetch、限定正文大小并在任务结束前缓存 JSON/文本；`BrowserNetworkRows` 只把同网站、非敏感路径的结构化商品列表转换为 `extract(table)` 的原格式，失败退回原网页脚本。
 - 未移植 Mika 的 `NetworkTracker.kt`（直接依赖上游 WebTab），由 Kavi 的精简会话适配代替；保留 `BrowserNetWatch` 原有等待和请求失败诊断。
+
+- 第 4 步（节奏与风控）：基于 Mika `0091d2d` 的 `PagePacing.kt`、`WebBarrier.kt` 裁剪移植到 `app/src/main/mika/`，保留原命名空间、版权和 Apache-2.0 许可；不移植依赖上游 WebPort/ScreenFacts 的 `PageDwell.kt`。
+- Jack AI modification：`BrowserPacing` 在 Kavi 的标签页按同站新页及滚动加载批次计时，首页和换站免等待、逐页增加停留、上限 12 秒；主文档 403/429/503、接口风控文字、短拦截页及可见验证码 iframe 会停止自动操作，交由现有 `wait_user` 流程，保留原浏览器 UI 和工具参数。

@@ -4,6 +4,8 @@ import com.jack.ai.api.BrowserNet
 import com.jack.ai.data.SearchRecord
 import com.jack.ai.ui.JackBrowser
 import com.jack.ai.ui.BrowserCdp
+import com.jack.ai.ui.BrowserPacing
+import com.wangzan101.mika.core.cap.web.WebBarrier
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
@@ -109,6 +111,13 @@ private suspend fun ToolSession.browseNow(args: JsonObject, action: String): Str
         else -> return "action 要填 open、read、click、type、delete、select、key、scroll、back、look、tap、swipe、wait、extract、upload、tabs、new_tab、switch_tab、close_tab、download、download_all、download_media、fill、hover、flow、save_flow、wait_user、steps、parallel 或 note_site"
     }
     if (action == "flow" || action == "save_flow") return runTool(label) { flowAction(action, args) to SearchRecord(label) }
+    // 限流状态下禁止模型在同站继续点击、翻页或抓数据；读页和交给用户接管仍可用。
+    if (action !in setOf("read", "look", "wait", "wait_user", "tabs", "switch_tab", "close_tab",
+            "new_tab", "flow", "save_flow") &&
+        BrowserPacing.blocked(JackBrowser.tab,
+            if (action == "open") normalizeUrl(args["url"].text()) else null) != null) {
+        return "⚠ 网站已触发访问限制或人机验证，Kavi 已停手，不再自动操作。用 action=wait_user 交给用户处理，完成后重新 read。"
+    }
     return runTool(label) {
         val note = StringBuilder()
         val fromTab = JackBrowser.tab.id
@@ -330,14 +339,33 @@ private suspend fun ToolSession.browseNow(args: JsonObject, action: String): Str
         JackBrowser.tab.takeIf { it.id != fromTab && it.openedBy == fromTab }?.let { note.append("网页打开了新窗口（登录窗口之类），已经切过去了；关掉后会回到原来那页。\n") }
         var page = JackBrowser.read(ctx)
         // 人机验证（Cloudflare「请稍候」之类）：多数等几秒自己就过了；过不去要用户点一下
-        if (action != "wait_user" && looksLikeChallenge(page)) {
-            val cleared = waitUntil(15_000, 1_500) { !looksLikeChallenge(it) }
-            if (cleared != null) { page = cleared; note.append("网站做了一下人机验证，等了几秒自己过了。\n") }
-            else {
-                // 思路来自 deepseek-ai/deepseek-harness packages/goal/goal-round-driver/，MIT。需要人工验证时目标停止。
-                if (goalRun) ui.confirm("网站需要人机验证", "请打开 Kavi 浏览器完成验证后继续目标。", "继续")
-                note.append(if (interactive) "⚠ 网站要人机验证（「确认您是真人」之类），等了 15 秒没过。不要自己去点或滑：用 action=wait_user，text 写「点一下网页上的验证」，用户做完会自动接着来。\n"
-                else "⚠ 网站要人机验证，后台过不去。任务到这里停下，结果里写明「网站要人机验证，请在 Kavi 浏览器里打开 ${com.jack.ai.api.BrowserPages.site(page.url)} 过一次」。\n")
+        if (action != "wait_user") {
+            var barrier = BrowserPacing.blocked(JackBrowser.tab)
+            if ((barrier == null && looksLikeChallenge(page)) ||
+                (barrier?.kind == WebBarrier.Kind.CAPTCHA && barrier.detail != "验证码框架")) {
+                // 短暂的 Cloudflare 加载检查仍可自行结束；没结束再交给用户。
+                val cleared = waitUntil(15_000, 1_500) {
+                    BrowserPacing.blocked(JackBrowser.tab) == null && !looksLikeChallenge(it)
+                }
+                if (cleared != null) {
+                    page = cleared
+                    note.append("页面验证自动结束，可以继续。\n")
+                    barrier = null
+                } else if (barrier == null) {
+                    barrier = WebBarrier.Block(WebBarrier.Kind.CAPTCHA, "需要人机验证")
+                }
+            }
+            if (barrier != null) {
+                val site = com.jack.ai.api.BrowserPages.site(page.url)
+                val what = if (barrier.kind == WebBarrier.Kind.CAPTCHA) "完成 $site 的人机验证" else "处理 $site 的访问限制（${barrier.detail}）"
+                note.append("⚠ $site 已限制访问，Kavi 已停手，禁止继续自动重试、点击或翻页。\n")
+                if (interactive) note.append(waitUser(what))
+                else {
+                    if (goalRun) ui.confirm("网站需要你接管", what, "继续")
+                    com.jack.ai.data.Routines.notify(app, "browser-block-$site", "Kavi 需要你处理 $site", what + "。打开 Kavi 浏览器完成验证。")
+                    note.append("已通知用户，请在 Kavi 浏览器里处理后重新 read。当前任务停下。\n")
+                }
+                return@runTool note.toString() + show(JackBrowser.read(ctx), full = true) to SearchRecord(label)
             }
         }
         // 跳到了登录页：可能还没登录或登录过期了，停下来请用户登录（后台任务就推送通知）
@@ -487,7 +515,7 @@ private suspend fun ToolSession.runSteps(args: JsonObject): String {
             (st["text"].text().takeIf { it.isNotBlank() }?.let { "「${it.take(20)}」" } ?: "")
         lines += "${i + 1}. $what" + if (head.isNotEmpty()) "：" + head.lines().joinToString("；").take(200) else ""
         val failed = succeeded.get() == okBefore || rejected.get() != rejBefore ||
-            Regex("出错|找不到|没找到|没有同意|不能|登录页").containsMatchIn(head)
+            Regex("出错|找不到|没找到|没有同意|不能|登录页|访问限制|已停手|人机验证").containsMatchIn(head)
         if (failed) { stop = "第 ${i + 1} 步没做成，后面的没做"; break }
     }
     browserSeen.clear(); browserSeen.putAll(seenBefore)
@@ -613,13 +641,15 @@ private suspend fun ToolSession.waitUser(what: String): String {
     if (!interactive) return "后台任务里用户不在，等不了。任务到这里停下，结果里写明要用户自己做的事：$what。\n"
     val ctx = app
     val start = JackBrowser.read(ctx)
-    val blocked = looksLikeLogin(start) || looksLikeChallenge(start)
+    val blocked = looksLikeLogin(start) || looksLikeChallenge(start) ||
+        BrowserPacing.blocked(JackBrowser.tab) != null
     // 在后台标签页里做的：先把用户眼前的换成这一页，用户一打开浏览器就是要处理的地方
     withContext(kotlinx.coroutines.Dispatchers.Main) { JackBrowser.showToUser(); JackBrowser.waitingUser = what }
     try {
         if (!appVisible(ctx)) com.jack.ai.data.Routines.notify(ctx, "wait-user", "Kavi 在等你", "$what。打开 Kavi，在网页上做完它会自己接着来。")
         val done = waitUntil(WAIT_USER_MS, 2_000) { p ->
-            if (blocked) !looksLikeLogin(p) && !looksLikeChallenge(p) else p.url != start.url
+            if (blocked) !looksLikeLogin(p) && !looksLikeChallenge(p) &&
+                BrowserPacing.blocked(JackBrowser.tab) == null else p.url != start.url
         } ?: return "等了 5 分钟，用户还没做完「$what」。先停下，问问用户要不要接着等。\n"
         // 刚跳过来的页面可能还在加载
         JackBrowser.waitFor(ctx, "", 5_000)
@@ -663,6 +693,16 @@ private suspend fun ToolSession.checkRisk(action: String, info: JsonObject, key:
 private suspend fun ToolSession.extractPage(args: JsonObject): String {
     val ctx = app
     val what = args["what"].text().ifBlank { "text" }
+    val currentPage = JackBrowser.read(ctx)
+    if (BrowserPacing.blocked(JackBrowser.tab) != null || looksLikeChallenge(currentPage)) {
+        val site = com.jack.ai.api.BrowserPages.site(currentPage.url)
+        val help = if (interactive) waitUser("完成 $site 的访问验证") else {
+            com.jack.ai.data.Routines.notify(ctx, "browser-block-$site",
+                "Kavi 需要你处理 $site", "网站已限制访问，请打开 Kavi 浏览器处理。")
+            "已通知用户。"
+        }
+        return "⚠ $site 已触发网站限流或人机验证，Kavi 已停止自动抓取。$help 完成后再重新 extract。"
+    }
     val saveAs = args["save_as"].text().trim().replace(Regex("""[\\/:*?"<>|]"""), "_")
     if (what == "article" || what == "subtitles") {
         val (body, info) = if (what == "article") {
@@ -715,6 +755,19 @@ private suspend fun ToolSession.extractPage(args: JsonObject): String {
     var stop = ""
     JackBrowser.dismissPopups(ctx)
     for (page in 1..pages) {
+        // 连续抓取期间也要重新判断；风险出现后不再翻下一页或继续下拉。
+        val checked = if (page == 1) currentPage else JackBrowser.read(ctx)
+        if (BrowserPacing.blocked(JackBrowser.tab) != null || looksLikeChallenge(checked)) {
+            val site = com.jack.ai.api.BrowserPages.site(checked.url)
+            stop = "第 $page 页遇到网站限流或人机验证，已停止继续翻页。"
+            if (interactive) stop += waitUser("完成 $site 的访问验证")
+            else {
+                com.jack.ai.data.Routines.notify(ctx, "browser-block-$site",
+                    "Kavi 需要你处理 $site", "网站限制访问，请打开 Kavi 浏览器完成验证。")
+                stop += "已通知用户，等待用户处理后再继续。"
+            }
+            break
+        }
         val (h, r) = rowsOf(JackBrowser.extract(ctx, "table") ?: break) ?: (emptyList<String>() to emptyList())
         if (r.isEmpty()) { if (page == 1) return "这一页没找到表格或成组的列表（商品、搜索结果之类）。可以用 what=text 读全文。"; break }
         if (headers.isEmpty()) headers = h
@@ -736,6 +789,7 @@ private suspend fun ToolSession.extractPage(args: JsonObject): String {
         if (stop.isNotEmpty()) break
         JackBrowser.waitFor(ctx, "", 8_000)
     }
+    if (readPages == 0 && stop.isNotEmpty()) return stop
     // 按用户要的列整理（名称、价格、店铺……），不然列表是一整段挤在「内容」一格里
     val columns = (args["columns"] as? kotlinx.serialization.json.JsonArray).orEmpty().map { it.text().trim() }.filter { it.isNotEmpty() }.take(12)
     var tidy = ""
@@ -809,6 +863,7 @@ private suspend fun ToolSession.parallel(args: JsonObject): String {
     if (JackBrowser.tabs.size + urls.size > JackBrowser.MAX_TABS) return "标签页太多了，先用 close_tab 关掉几个再来"
     val columns = (args["columns"] as? kotlinx.serialization.json.JsonArray).orEmpty().map { it.text().trim() }.filter { it.isNotEmpty() }.take(12)
     val made = withContext(kotlinx.coroutines.Dispatchers.Main) { urls.map { JackBrowser.newTab(switch = false) } }
+    val blockedTabs = java.util.concurrent.ConcurrentHashMap.newKeySet<Int>()
     val results = try {
         kotlinx.coroutines.coroutineScope {
             urls.zip(made).map { (u, t) ->
@@ -816,13 +871,21 @@ private suspend fun ToolSession.parallel(args: JsonObject): String {
                     val url = normalizeUrl(u)
                     val err = JackBrowser.load(ctx, url)
                     JackBrowser.waitFor(ctx, "", 8_000)
-                    JackBrowser.dismissPopups(ctx)
-                    Triple(url, err, rowsOf(JackBrowser.extract(ctx, "table")))
+                    val checked = JackBrowser.read(ctx)
+                    if (BrowserPacing.blocked(t) != null || looksLikeChallenge(checked)) {
+                        blockedTabs.add(t.id)
+                        Triple(url, "访问受限或人机验证，已停止抓取并保留标签页", null)
+                    } else {
+                        JackBrowser.dismissPopups(ctx)
+                        Triple(url, err, rowsOf(JackBrowser.extract(ctx, "table")))
+                    }
                 }
             }.awaitAll()
         }
     } finally {
-        withContext(kotlinx.coroutines.NonCancellable + kotlinx.coroutines.Dispatchers.Main) { made.forEach { JackBrowser.closeTab(it) } }
+        withContext(kotlinx.coroutines.NonCancellable + kotlinx.coroutines.Dispatchers.Main) {
+            made.filterNot { it.id in blockedTabs }.forEach { JackBrowser.closeTab(it) }
+        }
     }
     val report = StringBuilder()
     val allRows = mutableListOf<List<String>>()
@@ -838,11 +901,22 @@ private suspend fun ToolSession.parallel(args: JsonObject): String {
         r.forEach { row -> allRows += listOf(site) + idx.map { i -> if (i >= 0) row.getOrElse(i) { "" } else "" } }
         report.append("- $site：${r.size} 行\n")
     }
-    if (allRows.isEmpty()) return "几个网页都没抓到表：\n${report}可以换成一个一个 open 看看是什么情况。"
+    val takeover = made.firstOrNull { it.id in blockedTabs }?.let { t ->
+        val site = com.jack.ai.api.BrowserPages.site(t.address)
+        val help = if (interactive) {
+            withContext(JackBrowser.pin(t)) { waitUser("完成 $site 的访问验证") }
+        } else {
+            com.jack.ai.data.Routines.notify(ctx, "browser-block-$site",
+                "Kavi 需要你处理 $site", "网站限制访问，请在 Kavi 浏览器里完成验证。")
+            "网站 $site 已限制访问，Kavi 已停止抓取，已通知用户；保留了标签页等待人工接管。"
+        }
+        "\n⚠ 已停止对 $site 的操作，并保留标签页供用户处理。$help\n"
+    }.orEmpty()
+    if (allRows.isEmpty()) return "几个网页都没抓到表：\n${report}$takeover 可以换成一个一个 open 看看是什么情况。"
     val saveAs = args["save_as"].text().trim().replace(Regex("""[\\/:*?"<>|]"""), "_")
     val saved = if (saveAs.isNotEmpty()) saveCsv(saveAs, headers, allRows) else null
     val show = allRows.take(80)
-    return FENCE + selfCheck(headers, allRows, 1, 1) + "同时抓了 ${urls.size} 个网页：\n${report}共 ${allRows.size} 行" +
+    return FENCE + selfCheck(headers, allRows, 1, 1) + "同时抓了 ${urls.size} 个网页：\n${report}$takeover 共 ${allRows.size} 行" +
         (saved?.let { "，已全部存成「$it」" } ?: "") + "：\n| " + headers.joinToString(" | ") + " |\n" +
         show.joinToString("\n") { "| " + it.joinToString(" | ") { c -> c.replace("|", "/").take(120) } + " |" } +
         (if (allRows.size > show.size) "\n……（只列了前 ${show.size} 行" + (if (saved == null) "，要全部就加 save_as" else "") + "）" else "")

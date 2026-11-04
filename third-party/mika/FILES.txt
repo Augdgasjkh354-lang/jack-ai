@@ -87,3 +87,5 @@ app/src/main/java/com/wangzan101/mika/cap/web/cdp/DevtoolsTransport.kt
 core/src/main/kotlin/com/wangzan101/mika/core/cap/web/ElementFusion.kt
 core/src/main/kotlin/com/wangzan101/mika/core/cap/web/ElementProbe.kt
 core/src/main/kotlin/com/wangzan101/mika/core/cap/web/NetworkLedger.kt
+core/src/main/kotlin/com/wangzan101/mika/core/cap/web/PagePacing.kt
+core/src/main/kotlin/com/wangzan101/mika/core/cap/web/WebBarrier.kt

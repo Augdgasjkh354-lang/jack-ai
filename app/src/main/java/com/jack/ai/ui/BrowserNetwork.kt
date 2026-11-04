@@ -2,6 +2,8 @@ package com.jack.ai.ui
 
 import com.wangzan101.mika.core.cap.web.CapturedResponse
 import com.wangzan101.mika.core.cap.web.NetworkLedger
+import com.wangzan101.mika.core.cap.web.PagePacing
+import com.wangzan101.mika.core.cap.web.WebBarrier
 import com.wangzan101.mika.core.cap.web.cdp.CdpSession
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -133,6 +135,37 @@ internal object BrowserNetwork {
         val data = tabs[id] ?: return null
         val responses: List<CapturedResponse> = synchronized(data) { data.ledger.list() }
         return BrowserNetworkRows.table(responses, pageUrl)
+    }
+
+    /** 限流只看同网站的接口：429 或者响应顶层明确写了风控；不把第三方广告 403 算成被封。 */
+    fun risk(id: Int, pageUrl: String): String? {
+        val data = tabs[id] ?: return null
+        val site = PagePacing.site(pageUrl) ?: return null
+        return synchronized(data) {
+            data.ledger.list().asReversed().firstNotNullOfOrNull { r ->
+                if (PagePacing.site(r.url) != site) null
+                else if (r.status == 429) "请求过于频繁"
+                else if (r.state == CapturedResponse.State.DONE) WebBarrier.apiRisk(r.body)
+                else null
+            }
+        }
+    }
+
+    /** 滚动之前的请求编号；滚动后有新的、大于 2KB 的列表响应才算又加载了一页。 */
+    fun mark(id: Int): Set<String>? = tabs[id]?.let { data ->
+        synchronized(data) { data.ledger.list().mapTo(HashSet()) { it.id } }
+    }
+
+    fun loadedMore(id: Int, before: Set<String>?): Boolean {
+        before ?: return false
+        val data = tabs[id] ?: return false
+        return synchronized(data) {
+            data.ledger.list().any { r ->
+                r.id !in before && r.state == CapturedResponse.State.DONE &&
+                    (r.status ?: 0) in 200..299 && (r.size ?: 0) >= 2_048 &&
+                    NetworkLedger.isText(r.mime)
+            }
+        }
     }
 
     /** 会话与 USB 调试权限一同关闭，数据仍仅在内存里保留。 */
