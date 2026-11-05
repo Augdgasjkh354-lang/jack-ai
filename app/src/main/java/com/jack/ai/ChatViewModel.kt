@@ -144,7 +144,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val snapshots = com.jack.ai.chat.MemorySnapshots()
 
     init {
-        com.jack.ai.data.KaviSelf.ensure(getApplication())
         _state.value = UiState(
             conversations = store.loadConversations().sortedByDescending { it.updatedAt },
             projects = store.loadProjects().sortedByDescending { it.updatedAt },
@@ -169,7 +168,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             val mins = saved.sumOf { it.seconds } / 60
             core.toast("上次录音被系统打断了，救回了 ${if (mins > 0) "$mins 分钟" else "录到的部分"}，已放进输入框，发出去就整理成纪要")
         }
-        com.jack.ai.data.Reader.schedule(app, _state.value.settings.readingEnabled)
+        com.jack.ai.data.Retired.cleanup(app)
         // 桌面图标和设置对不上（比如从备份恢复了别的选择）：照设置改过来
         runCatching { com.jack.ai.ui.AppIcon.ensure(app, _state.value.settings.appIcon) }
         com.jack.ai.data.Proactive.schedule(app, _state.value.settings.proactive)
@@ -601,9 +600,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             com.jack.ai.chat.MemorySnapshots.Snap(
                 memories = if (settings.memoryEnabled) store.loadMemories() else emptyList(),
                 chatMemory = chat, projectMemory = proj,
-                journal = Dreamer.recentJournals(_state.value.dreams),
-                story = com.jack.ai.data.SelfStory.bio(getApplication()).text,
-                lately = com.jack.ai.data.FreeTime.latelyNote(getApplication()),
                 workMemory = if (conv.workMemoryAllowed(project)) knowledge.workMemoryText() else "",
                 summaryUntilId = conv.summaryUntilId, usedAt = 0,
             )
@@ -617,7 +613,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         var promptInput = PromptBuilder.Input(settings, conv, project, memories, skills, vision = images, sendReasoning = thinkingOn,
             appVersion = reply.appVersion,
             extraUser = extraUser, chatMemory = snap.chatMemory, projectMemory = snap.projectMemory,
-            journal = snap.journal, story = snap.story, lately = snap.lately, workMemory = snap.workMemory)
+            workMemory = snap.workMemory)
         fun buildHistory(withTools: Boolean, flat: Boolean = false): MutableList<JsonObject> =
             PromptBuilder.history(promptInput, if (withTools) toolSet else null, flat)
 
@@ -641,7 +637,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     // 深处的记忆：和这句话相关的浮上来（不常用的不再每轮都带着）
                     (if (conv.globalAllowed(project)) runCatching { com.jack.ai.data.DeepRecall.note(getApplication(), settings, lastUser?.content.orEmpty()) }.getOrDefault("") else "") +
                     // 很长的对话里重新锚定一下「我是谁」：越聊越长时开头的设定会被冲淡
-                    (if (conv.messages.size >= ANCHOR_AFTER) com.jack.ai.data.Persona.fill("【Still you】" + com.jack.ai.data.KaviSelf.text(editable = false) +
+                    (if (conv.messages.size >= ANCHOR_AFTER) com.jack.ai.data.Persona.fill("【Still you】" + com.jack.ai.data.KaviSelf.text() +
                         "\nThis conversation has run long: keep your own voice and the principles you started with.\n", settings) else "")
             })
             // 历史里的附加说明必须和第一次发出时一致，才能保住后续请求的前缀缓存。
@@ -1155,8 +1151,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val memories = if (st.settings.memoryEnabled) st.memories else emptyList()
         val (chatMemory, projectMemory) = knowledge.memoryTexts(c)
         return PromptBuilder.contextBreakdown(st.settings, c, st.project(c.projectId), memories, st.settings.activeSkills(),
-            chatMemory, projectMemory, Dreamer.recentJournals(st.dreams), com.jack.ai.data.FreeTime.latelyNote(getApplication()),
-            com.jack.ai.data.SelfStory.bio(getApplication()).text, if (c.workMemoryAllowed(st.project(c.projectId))) knowledge.workMemoryText() else "")
+            chatMemory, projectMemory, if (c.workMemoryAllowed(st.project(c.projectId))) knowledge.workMemoryText() else "")
     }
 
     private fun updateConv(id: String, transform: (Conversation) -> Conversation) = core.updateConv(id, transform)
@@ -1165,20 +1160,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 这个对话的持久目标：读内存里的（后台改了会经 Goals.changes 同步过来），不在主线程上整份读盘。 */
     private fun goalOf(convId: String) = _state.value.conversations.firstOrNull { it.id == convId }?.goal
-    /** 让 Kavi 现在就去过一次自由时间（不管开没开，预算照算）。 */
-    fun readNow() {
-        com.jack.ai.data.Reader.runNow(getApplication())
-        _state.update { it.copy(toast = "Kavi 去过自由时间了，做完记在「记忆与梦」页") }
-    }
-
-    /** 回 Kavi 的心愿：approved 给预算 / declined 先不了 / bought 买了。 */
-    fun answerWish(id: String, status: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val app = getApplication<android.app.Application>()
-            com.jack.ai.data.FreeTime.save(app, com.jack.ai.data.FreeTime.answer(com.jack.ai.data.FreeTime.load(app), id, status))
-        }
-    }
-
     /** 从事实库里删掉一条（连同向量）。 */
     fun deleteFact(id: String) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -1252,7 +1233,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun demoteMemory(id: String) { snapshots.clear(); knowledge.demoteMemory(id) }
     fun markDreamsSeen() = knowledge.markDreamsSeen()
     fun dreamNow() = knowledge.dreamNow()
-    fun editJournal(id: String, text: String) { snapshots.clear(); knowledge.editJournal(id, text) }
     fun deleteDream(id: String) { snapshots.clear(); knowledge.deleteDream(id) }
 
     // 对话记忆和项目记忆（存在文件夹里的 Markdown 文件）

@@ -149,11 +149,11 @@ private fun MemoryPage(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
         ) {
             item {
                 Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)) {
-                    Text("记忆与梦", style = MaterialTheme.typography.headlineLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                    Text("记忆", style = MaterialTheme.typography.headlineLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
                     Text(" ✦", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(bottom = 6.dp))
                 }
-                Text("Kavi 每天凌晨回看聊天，写给自己的日记。", style = MaterialTheme.typography.bodyMedium,
+                Text("Kavi 每天凌晨回看聊天，整理关于你的记忆：新的记下，过时的作废，重复的合并，不常用的放到深处。", style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp, bottom = 8.dp))
             }
             item {
@@ -164,14 +164,14 @@ private fun MemoryPage(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                             Switch(settings.memoryEnabled, { on -> vm.updateSettings { it.copy(memoryEnabled = on) } })
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("做梦（每天 5:30）", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                            Text("夜间整理（每天 5:30）", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
                             Switch(settings.dreamEnabled, { on -> vm.updateSettings { it.copy(dreamEnabled = on) } })
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            OutlinedButton(onClick = vm::dreamNow, enabled = !state.dreaming) { Text("现在就做梦") }
+                            OutlinedButton(onClick = vm::dreamNow, enabled = !state.dreaming) { Text("现在就整理") }
                             if (state.dreaming) {
                                 CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                                Text("正在做梦…", style = MaterialTheme.typography.bodySmall)
+                                Text("正在整理…", style = MaterialTheme.typography.bodySmall)
                             }
                         }
                     }
@@ -179,8 +179,7 @@ private fun MemoryPage(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
             }
 
             item { NudgeCard(vm, settings) }
-            item { KaviSelfCard() }
-            item { ReadingCard(vm, settings) }
+            item { FactsCard(vm) }
             item {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 12.dp)) {
                     Text("关于你", style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
@@ -225,14 +224,14 @@ private fun MemoryPage(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
             item { DeepMemories(vm, state.memories) }
 
             item {
-                Text("日记", style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                Text("整理记录", style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
                     modifier = Modifier.padding(top = 16.dp))
                 if (state.dreams.isEmpty()) {
-                    Text("还没有写过。", color = MaterialTheme.colorScheme.outline)
+                    Text("还没有整理过。", color = MaterialTheme.colorScheme.outline)
                 }
             }
             items(state.dreams, key = { it.id }) { d ->
-                DreamCard(d, initiallyOpen = d == state.dreams.first(), onEdit = { vm.editJournal(d.id, it) }, onDelete = { vm.deleteDream(d.id) })
+                DreamCard(d, onDelete = { vm.deleteDream(d.id) })
             }
         }
     }
@@ -276,180 +275,50 @@ private val dreamDate = SimpleDateFormat("M月d日 EEEE", Locale.CHINA)
 private val dreamDay = SimpleDateFormat("M月d日", Locale.CHINA)
 
 @Composable
-fun DreamCard(d: DreamEntry, initiallyOpen: Boolean, onEdit: (String) -> Unit, onDelete: () -> Unit) {
-    var open by remember { mutableStateOf(initiallyOpen) }
-    var editing by remember { mutableStateOf(false) }
+fun DreamCard(d: DreamEntry, onDelete: () -> Unit) {
     var deleting by remember { mutableStateOf(false) }
-    val body = d.journal.ifBlank { d.dream }
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        modifier = Modifier.fillMaxWidth().clickable { open = !open },
+        modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.padding(start = 18.dp, end = 8.dp, top = 8.dp, bottom = 14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(AppIcons.Moon, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.size(6.dp))
-                Text(
-                    if (d.merged > 0) "${dreamDay.format(Date(d.from))} – ${dreamDay.format(Date(d.createdAt))} · ${d.merged} 篇合成"
-                    else dreamDate.format(Date(d.createdAt)),
-                    style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f),
-                )
-                if (open) {
-                    if (d.journal.isNotBlank()) TextButton(onClick = { editing = true }) { Text("编辑") }
-                    TextButton(onClick = { deleting = true }) { Text("删除") }
-                }
+                Text(dreamDate.format(Date(d.createdAt)), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                TextButton(onClick = { deleting = true }) { Text("删除") }
             }
-            Text(
-                body,
-                style = if (d.journal.isNotBlank()) MaterialTheme.typography.bodyMedium.copy(lineHeight = 25.sp)
-                    else MaterialTheme.typography.bodyMedium.copy(fontStyle = FontStyle.Italic),
-                maxLines = if (open) Int.MAX_VALUE else 3,
-                overflow = TextOverflow.Ellipsis,
-            )
-            AnimatedVisibility(open) {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (d.summary.isNotBlank()) {
-                        Text("聊过的事", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                        Text(d.summary, style = MaterialTheme.typography.bodySmall)
-                    }
-                    if (d.changes.isNotBlank()) {
-                        Text("记忆的变化", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                        Text(d.changes, style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-            }
+            Text(d.changes.ifBlank { "这次没有改动。" }, style = MaterialTheme.typography.bodyMedium)
         }
     }
-    if (editing) {
-        var text by remember(d.id) { mutableStateOf(d.journal) }
-        AlertDialog(
-            onDismissRequest = { editing = false },
-            title = { Text("编辑日记") },
-            text = { OutlinedTextField(text, { text = it }, Modifier.fillMaxWidth().heightIn(min = 200.dp, max = 420.dp)) },
-            confirmButton = { TextButton(onClick = { onEdit(text); editing = false }, enabled = text.isNotBlank()) { Text("保存") } },
-            dismissButton = { TextButton(onClick = { editing = false }) { Text("取消") } },
-        )
-    }
     if (deleting) {
-        ConfirmDeleteDialog("删除这篇日记？", "删掉后之后的聊天不会再参考它。", onDismiss = { deleting = false }) {
+        ConfirmDeleteDialog("删除这条记录？", "只删记录，记忆本身不变。", onDismiss = { deleting = false }) {
             onDelete(); deleting = false
         }
     }
 }
 
-/**
- * 阅读和知识：Kavi 每天自己上网读一会（开关、每日预算、现在就去读），读过什么、存了几条；
- * 事实库里有什么（状态、出处），不对的可以删。
- */
+/** 事实库：Kavi 做任务时查实、存下来的事（状态、出处），不对的可以删。 */
 @Composable
-internal fun ReadingCard(vm: ChatViewModel, settings: com.jack.ai.data.Settings) {
+internal fun FactsCard(vm: ChatViewModel) {
     val ctx = androidx.compose.ui.platform.LocalContext.current.applicationContext
     val colors = MaterialTheme.colorScheme
     var refresh by remember { androidx.compose.runtime.mutableIntStateOf(0) }
-    var editBudget by remember { mutableStateOf(false) }
     var showFacts by remember { mutableStateOf(false) }
-    val data by androidx.compose.runtime.produceState(emptyList<com.jack.ai.data.ReadEntry>() to emptyList<com.jack.ai.data.Fact>(), refresh) {
+    val facts by androidx.compose.runtime.produceState(emptyList<com.jack.ai.data.Fact>(), refresh) {
         value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            com.jack.ai.data.Reader.log(ctx) to com.jack.ai.data.Facts.load(ctx).filter { it.status != "retired" }.sortedByDescending { it.updatedAt }
+            com.jack.ai.data.Facts.load(ctx).filter { it.status != "retired" }.sortedByDescending { it.updatedAt }
         }
     }
-    val free by androidx.compose.runtime.produceState(com.jack.ai.data.FreeState(), refresh) {
-        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.jack.ai.data.FreeTime.load(ctx) }
-    }
-    val works by androidx.compose.runtime.produceState(emptyList<java.io.File>(), refresh) {
-        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.jack.ai.data.Reader.workbench(ctx) }
-    }
-    var showWorks by remember { mutableStateOf(false) }
-    val open = rememberFileOpener()
-    val uri = androidx.compose.ui.platform.LocalUriHandler.current
-    val (log, facts) = data
-    val fmt = remember { java.text.SimpleDateFormat("M月d日 HH:mm", java.util.Locale.CHINA) }
     Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = NIGHT_CARD, contentColor = colors.onSurface)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("自由时间（每天凌晨）", style = MaterialTheme.typography.titleSmall)
-                    Text("这点预算和时间是 Kavi 自己的：读书、做东西、写东西、想事情、随便逛逛，发呆也行，想不想总结都随它。上网只读，不碰你的邮件和文件，不发任何东西。",
-                        style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
-                }
-                Switch(settings.readingEnabled, { on -> vm.updateSettings { it.copy(readingEnabled = on) } })
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("积蓄 ¥%.2f · 每天存进 ¥%.2f".format(free.savings, settings.readingBudget) + (if (settings.readingExtra > 0) " · 花光后收尾 ¥%.2f（每天一次）".format(settings.readingExtra) else "") +
-                    "\n今天已花 ¥%.2f".format(com.jack.ai.data.Reader.spentToday(log)),
-                    Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
-                TextButton(onClick = { editBudget = true }) { Text("改预算") }
-            }
-            if (free.nextAt > System.currentTimeMillis()) Text("Kavi 自己约了下一次：" + fmt.format(java.util.Date(free.nextAt)),
-                style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
-            // 心愿：想要一笔预算、想买个东西，等你回
-            free.wishes.filter { it.status == "pending" }.forEach { w ->
-                androidx.compose.material3.Surface(color = colors.onSurface.copy(alpha = 0.07f), shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant), modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(if (w.kind == "buy") "✦ Kavi 想买东西" else "✦ Kavi 有个心愿", style = MaterialTheme.typography.labelLarge)
-                        Text(w.text, style = MaterialTheme.typography.bodyMedium)
-                        Text(if (w.kind == "buy") "价格约 ${com.jack.ai.data.FreeTime.money(w.amount)}" + (if (w.offer > 0) "，它愿意从积蓄出 ${com.jack.ai.data.FreeTime.money(w.offer)}" else "")
-                            else "需要 ${com.jack.ai.data.FreeTime.money(w.amount)}", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            if (w.kind == "buy") {
-                                if (w.url.isNotBlank()) TextButton(onClick = { runCatching { uri.openUri(w.url) } }) { Text("看看") }
-                                TextButton(onClick = { vm.answerWish(w.id, "bought"); refresh++ }) { Text("买了") }
-                                TextButton(onClick = { vm.answerWish(w.id, "declined"); refresh++ }) { Text("不买") }
-                            } else {
-                                TextButton(onClick = { vm.answerWish(w.id, "approved"); refresh++ }) { Text("给它 ${com.jack.ai.data.FreeTime.money(w.amount)}") }
-                                TextButton(onClick = { vm.answerWish(w.id, "declined"); refresh++ }) { Text("先不了") }
-                            }
-                        }
-                    }
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { vm.readNow() }) { Text("现在就去") }
-                TextButton(onClick = { refresh++ }) { Text("刷新") }
-            }
-            log.take(5).forEach { e ->
-                Column(Modifier.padding(top = 6.dp)) {
-                    val failed = e.skipped.isNotEmpty() && e.title.isEmpty() && e.topics.isEmpty()
-                    Text(fmt.format(java.util.Date(e.at)) + (if (failed) " · 没做成" else " · " + (com.jack.ai.data.Reader.KINDS[e.kind] ?: "别的") +
-                        (if (e.saved > 0) " · 存了 ${e.saved} 条事实" else "") + " · ¥%.2f".format(e.spent)),
-                        style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
-                    val head = e.title.ifBlank { e.topics.joinToString(" · ") }.ifBlank { if (e.report.isBlank() && e.files.isEmpty() && !failed) "安安静静待了一会" else "" }
-                    if (head.isNotBlank()) Text(head, style = MaterialTheme.typography.bodyMedium)
-                    if (e.summaryError.isNotBlank()) Text("衔接摘要：${e.summaryError}", style = MaterialTheme.typography.bodySmall, color = colors.error)
-                    if (e.memoryError.isNotBlank()) Text(e.memoryError, style = MaterialTheme.typography.bodySmall, color = colors.error)
-                    val body = e.report.ifBlank { e.skipped }
-                    if (body.isNotBlank()) Text(body, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
-                    // 做出来的东西：点开看
-                    e.files.filter { java.io.File(it.path).exists() }.forEach { f ->
-                        TextButton(onClick = { open(f) }, contentPadding = PaddingValues(horizontal = 0.dp)) {
-                            Text("📎 " + f.name, style = MaterialTheme.typography.labelLarge)
-                        }
-                    }
-                }
-            }
-            androidx.compose.material3.HorizontalDivider(Modifier.padding(vertical = 6.dp), color = colors.outlineVariant)
-            // 工作台沿用自由时间的文件夹
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Kavi 的工作台 · ${works.size} 个文件", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
-                if (works.isNotEmpty()) TextButton(onClick = { showWorks = !showWorks }) { Text(if (showWorks) "收起" else "看看") }
-            }
-            if (works.isEmpty()) Text("这里是 Kavi 的文件夹，想留下什么、修改什么，都由它自己决定。",
-                style = MaterialTheme.typography.bodySmall, color = colors.outline)
-            if (showWorks) works.forEach { f ->
-                TextButton(onClick = { open(com.jack.ai.data.GeneratedFile(f.name, f.absolutePath, com.jack.ai.tools.ToolSession.mimeOf(f.name), f.length())) },
-                    contentPadding = PaddingValues(horizontal = 0.dp)) {
-                    Text("📎 " + f.name + "  ·  " + fmt.format(java.util.Date(f.lastModified())), style = MaterialTheme.typography.labelLarge)
-                }
-            }
-            androidx.compose.material3.HorizontalDivider(Modifier.padding(vertical = 6.dp), color = colors.outlineVariant)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("事实库 ${facts.size} 条" + (if (facts.isNotEmpty()) "（已核对 ${facts.count { it.status == "verified" }}）" else ""),
                     Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
                 if (facts.isNotEmpty()) TextButton(onClick = { showFacts = !showFacts }) { Text(if (showFacts) "收起" else "看看") }
             }
-            if (facts.isEmpty()) Text("还是空的。Kavi 做任务、自由时间里查实的事会存进来，每条都带出处。",
+            if (facts.isEmpty()) Text("还是空的。Kavi 做任务时查实的事会存进来，每条都带出处。",
                 style = MaterialTheme.typography.bodySmall, color = colors.outline)
             if (showFacts) facts.take(50).forEach { f ->
                 Row(verticalAlignment = Alignment.Top, modifier = Modifier.padding(top = 4.dp)) {
@@ -468,32 +337,6 @@ internal fun ReadingCard(vm: ChatViewModel, settings: com.jack.ai.data.Settings)
                 }
             }
         }
-    }
-    if (editBudget) {
-        var text by remember { mutableStateOf("%.2f".format(settings.readingBudget)) }
-        var extraText by remember { mutableStateOf("%.2f".format(settings.readingExtra)) }
-        val decimal = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal)
-        AlertDialog(
-            onDismissRequest = { editBudget = false },
-            title = { Text("自由时间的预算") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(text, { text = it }, singleLine = true, label = { Text("每天存进积蓄") }, suffix = { Text("元") }, keyboardOptions = decimal)
-                    OutlinedTextField(extraText, { extraText = it }, singleLine = true, label = { Text("额外预算（积蓄花光后收尾用，每天一次）") }, suffix = { Text("元") }, keyboardOptions = decimal)
-                    Text("每天的钱按日历存进 Kavi 的积蓄，没花完的一直留着，自由时间里它想怎么花都行。积蓄花光时，系统会告诉它「积蓄用完了，可以收尾，也可以明天再做」，再给它额外预算收尾（每天一次，不从积蓄扣），不必花完。填 0 就是直接停。",
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    val b = text.toDoubleOrNull()?.coerceIn(0.0, 20.0)
-                    val e = extraText.toDoubleOrNull()?.coerceIn(0.0, 5.0)
-                    vm.updateSettings { it.copy(readingBudget = b ?: it.readingBudget, readingExtra = e ?: it.readingExtra) }
-                    editBudget = false
-                }) { Text("保存") }
-            },
-            dismissButton = { TextButton(onClick = { editBudget = false }) { Text("取消") } },
-        )
     }
 }
 
@@ -522,7 +365,7 @@ internal fun DeepMemories(vm: ChatViewModel, hot: List<com.jack.ai.data.MemoryIt
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp)) {
                     Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
                         Text(m.text, style = MaterialTheme.typography.bodySmall)
-                        if (m.lastUsedAt > 0) Text("上次浮上来 " + com.jack.ai.data.FreeTime.day(m.lastUsedAt), style = MaterialTheme.typography.labelSmall,
+                        if (m.lastUsedAt > 0) Text("上次浮上来 " + com.jack.ai.data.Timeline.day(m.lastUsedAt), style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.outline)
                     }
                     TextButton(onClick = { vm.promoteMemory(m.id) }) { Text("放回常记") }

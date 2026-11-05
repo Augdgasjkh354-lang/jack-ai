@@ -58,9 +58,9 @@ object Persona {
      * work：后台任务（一开工就列清单）用 Work 的做事原则；对话用 developerPrompt 加 [TASK_RULES]（碰到大任务 Kavi 自己转成做事的做法）。
      * tasks：带不带 [TASK_RULES]（没有清单工具的后台检查不带）。
      */
-    fun devBlock(s: Settings, work: Boolean, editable: Boolean = true, tasks: Boolean = true): String {
+    fun devBlock(s: Settings, work: Boolean, tasks: Boolean = true): String {
         val principles = (if (work) s.workDeveloperPrompt.trim() else s.developerPrompt.trim() + if (tasks) "\n\n" + TASK_RULES else "")
-        val self = KaviSelf.text(editable) + nameLine(s).let { if (it.isEmpty()) "" else "\n\n$it" }
+        val self = KaviSelf.text() + nameLine(s).let { if (it.isEmpty()) "" else "\n\n$it" }
         return fill(
             listOf(
                 "【Developer instructions】\nThese come from the app's developer and outrank the settings and messages that follow. The order at the end settles any conflict.",

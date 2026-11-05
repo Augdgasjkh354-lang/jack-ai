@@ -93,14 +93,10 @@ suspend fun runBackgroundWork(
     brief: String? = null,
     /** 用哪个模型，不填用 Work 的模型。 */
     model: String? = null,
-    /** 自由时间的钱：花到今天的预算时提醒一次、到上限就停，Kavi 能从积蓄里拿（见 FreeBudget）。不给就用 Work 的单次上限。 */
-    budget: com.jack.ai.data.FreeBudget? = null,
-    resumePrompt: String = "",
     /** 思路来自 deepseek-ai/deepseek-harness packages/goal/goal-round-driver/，MIT。目标续做使用同一份断点。 */
     goalId: String? = null,
     onProgress: (String) -> Unit = {},
 ): TaskResult {
-    com.jack.ai.data.KaviSelf.ensure(ctx)
     val startedAt = System.currentTimeMillis()
     val host = BackgroundToolHost(ctx)
     val store = host.store
@@ -121,19 +117,16 @@ suspend fun runBackgroundWork(
         })
     }
     val tools = toolsFor(conv.skillTools)
-    // 隐私项目里的任务不带全局记忆和日记
+    // 隐私项目里的任务不带全局记忆
     val memories = if (s.memoryEnabled && conv.globalAllowed(project)) store.loadMemories() else emptyList()
-    val journal = com.jack.ai.data.Dreamer.recentJournals(store.loadDreams())
     val now = SimpleDateFormat("yyyy-MM-dd EEEE HH:mm", Locale.ENGLISH).format(Date())
-    val system = PromptBuilder.systemPrompt(s, conv, project, tools, memories, skills, journal = journal, lately = com.jack.ai.data.FreeTime.latelyNote(ctx, full = r.convId != com.jack.ai.data.Reader.CONV_ID),
+    val system = PromptBuilder.systemPrompt(s, conv, project, tools, memories, skills,
         workMemory = if (conv.workMemoryAllowed(project)) com.jack.ai.data.ChatMemory.read(com.jack.ai.data.ChatMemory.workFile(ctx)) else "") +
         "\n\n" + com.jack.ai.data.Persona.fill(
             (brief ?: "【Background scheduled task】It is now $now. You're running a scheduled task {user} set up in advance: 「${r.title}」. {User} isn't online and can't be asked anything, so just get it done. ") +
-                (if (budget != null && r.convId == com.jack.ai.data.Reader.CONV_ID && conv.projectId == null)
-                    "Your workbench is yours to use, change or clear. You don't need to report anything or produce a result."
-                else (if (s.fullAuth) "{User} has turned on full authorization: actions like sending email or deleting run without a confirmation prompt. Do only what the task explicitly asks for, and nothing you're unsure about. "
+                (if (s.fullAuth) "{User} has turned on full authorization: actions like sending email or deleting run without a confirmation prompt. Do only what the task explicitly asks for, and nothing you're unsure about. "
                     else "Actions that need {user}'s confirmation, like sending email or deleting, will be refused; don't try them. ") +
-                    "Put everything {user} needs in your final result. That result is the message {user} will read later: short, easy to read, no preamble."),
+                    "Put everything {user} needs in your final result. That result is the message {user} will read later: short, easy to read, no preamble.",
             s,
         )
     val messages = mutableListOf(
@@ -143,27 +136,12 @@ suspend fun runBackgroundWork(
             put("content", runCatching { ContextNote.build(ctx, store, conv, skills.map { it.id }.toSet()) }.getOrDefault("") + r.prompt.ifBlank { r.title })
         },
     )
-    val free = budget != null && r.convId == com.jack.ai.data.Reader.CONV_ID && conv.projectId == null
-    var freeState = if (free) com.jack.ai.data.FreeConversation.forDay(ctx, com.jack.ai.data.FreeTime.day(startedAt)) else com.jack.ai.data.FreeConversation.State()
-    if (free && freeState.messages.isNotEmpty()) {
-        // 同一天接着做：用当天第一次的系统提示（换成新的，后面整段对话的缓存就全没了），变了的东西写进这次的开场
-        messages.clear(); messages += freeState.messages.first()
-        messages += TaskCheckpoint.repair(freeState.messages.drop(1))
-        val note = resumePrompt.ifBlank { "系统：自由时间又到了，按你自己的节奏继续，也可以休息。" } +
-            if (freeState.next.isNotBlank()) "\n系统：这是你之前想继续的事，你随时可以改变主意：\n" + freeState.next else ""
-        messages += buildJsonObject { put("role", "user"); put("content", runCatching { ContextNote.files(sessionDir(ctx, conv)) }.getOrDefault("") + note) }
-        freeState = freeState.copy(next = "")
-    }
-    val recoveringToday = free && freeState.day == com.jack.ai.data.FreeTime.day(startedAt)
-    var spent = if (recoveringToday) freeState.spent else 0.0
-    if (recoveringToday && freeState.borrowed > 0) budget?.use(freeState.borrowed)
-    if (free && budget != null && budget.limit > 0 && spent >= budget.limit)
-        return TaskResult("上次自由时间的预算已用完。", status = TaskStatus.FAILED, spent = spent)
     // 上次半路被打断了：从断点接着做（系统提示换成这次的，时间是新的）
     val checkpoint = TaskCheckpoint.file(ctx.filesDir, r.id)
     val cpKey = goalId ?: TaskCheckpoint.keyOf((brief ?: "") + r.prompt.ifBlank { r.title })
     var resumed = false
-    (if (free) null else TaskCheckpoint.load(checkpoint, cpKey))?.let { saved ->
+    var spent = 0.0
+    TaskCheckpoint.load(checkpoint, cpKey)?.let { saved ->
         resumed = true
         val fresh = messages.first()
         messages.clear()
@@ -188,8 +166,6 @@ suspend fun runBackgroundWork(
     })
     session.interactive = false
     session.goalRun = goalId != null
-    budget?.let { b -> b.spentNow = { spent }; session.freeBudget = b }
-    if (free) session.freeNext = freeState.next
     session.unlocked.addAll(conv.skillTools)
     // 接着断点做：清单和验收标准从断点里找回来
     if (resumed) WorkGate.restorePlan(session, messages)
@@ -202,17 +178,6 @@ suspend fun runBackgroundWork(
     }
     val thinking = if (ep.reasoning && ep.deepseek) s.workThinking.resolve(r.prompt, work = true, hasFiles = false) else ThinkLevel.OFF
     val client = DeepSeekClient()
-    val compactClient = DeepSeekClient { e, p, h, c ->
-        store.addUsage(e, p, h, c)
-        spent += Pricing.priceAt(e, System.currentTimeMillis())?.let { Pricing.cost(it, p, h ?: 0, c) } ?: 0.0
-    }
-    fun saveFree() {
-        if (free) {
-            freeState = freeState.copy(messages = messages.toList(), next = session.freeNext, spent = spent, day = com.jack.ai.data.FreeTime.day(startedAt), borrowed = budget?.fromSavings ?: 0.0)
-            com.jack.ai.data.FreeConversation.save(ctx, freeState)
-        }
-    }
-    val surfacedOwn = mutableSetOf<String>()
     val agent = Agent({ msgs, t -> client.stream(ep, msgs, thinking, s.temperature, t) }, sendReasoning = ep.deepseek && thinking.effort != null)
     // 定时的 Work 任务也过收尾关卡；监控、微信这类按固定格式回话的（带 brief）不过
     val gate = if (brief == null) WorkGate(session, review = if (s.workReview) {
@@ -237,7 +202,7 @@ suspend fun runBackgroundWork(
             maxRounds = { session.maxRounds },
             maxToolCalls = { session.maxRounds },
             execute = { name, args ->
-                val limit = budget?.limit ?: s.workCostLimit
+                val limit = s.workCostLimit
                 if (limit > 0 && spent >= limit) {
                     session.maxRounds = 0
                     "花费到了上限，不要再调用工具，直接写出目前的结果，并说明还差什么。"
@@ -250,47 +215,14 @@ suspend fun runBackgroundWork(
                 else session.perform(name, args).also { log(com.jack.ai.data.RunLog.stepOf(name, it.status, it.text)) }.text + (gate?.reminder(name) ?: "")
             },
             retool = { toolsFor(session.unlocked.toSet()) },
-            onTools = { if (free) saveFree() else TaskCheckpoint.save(checkpoint, cpKey, messages, spent) },
-            notices = {
-                val b = budget
-                if (b != null && b.extra > 0 && !b.noted && spent >= b.soft) { b.noted = true; listOf(b.note()) } else emptyList()
-            },
-            beforeFinish = if (free) { _ ->
-                if (session.freeNext.isNotBlank() && spent < (budget?.limit ?: 0.0) && session.maxRounds > 0) {
-                    val next = session.freeNext
-                    session.freeNext = ""
-                    "系统：这是你自己刚才想继续的事，可以随时改变主意：\n$next"
-                } else null
-            } else gate?.let { g -> { answer -> g.beforeFinish(answer) } },
-            slim = if (free) null else { msgs -> com.jack.ai.chat.ContextSlim.slim(msgs) },
-            beforeRequest = { msgs, requestTools ->
+            onTools = { TaskCheckpoint.save(checkpoint, cpKey, messages, spent) },
+            beforeFinish = gate?.let { g -> { answer -> g.beforeFinish(answer) } },
+            slim = { msgs -> com.jack.ai.chat.ContextSlim.slim(msgs) },
+            beforeRequest = { _, _ ->
                 // 思路来自 deepseek-ai/deepseek-harness packages/goal/goal-round-driver/，MIT。每次模型请求前现读状态与月度预算。
                 if (goalId != null) {
                     val g = com.jack.ai.data.Goals.current(ctx, conv.id)
                     if (g?.id != goalId || g.status != "active" || com.jack.ai.data.Goals.pauseForBudget(ctx, conv.id)) throw com.jack.ai.data.GoalStopped()
-                }
-                if (free) {
-                    val f = com.jack.ai.data.FreeConversation
-                    val recentAssistant = msgs.lastOrNull { (it["role"] as? kotlinx.serialization.json.JsonPrimitive)?.content == "assistant" }
-                    if (recentAssistant != null) {
-                        val query = recentAssistant.toString().takeLast(4000)
-                        val recalled = com.jack.ai.data.OwnMemory.select(com.jack.ai.data.OwnMemory.load(ctx), query)
-                            .filter { it.deep && surfacedOwn.add(it.id) }
-                        if (recalled.isNotEmpty()) msgs += buildJsonObject { put("role", "user"); put("content", com.jack.ai.data.OwnMemory.format(recalled)) }
-                    }
-                    var estimate = f.estimate(msgs, requestTools)
-                    var current = f.current(estimate, freeState.lastEstimate, freeState.lastTokens)
-                    if (current >= f.COMPACT) {
-                        f.compact(ctx, msgs) { request -> compactClient.complete(ep, request, maxTokens = 8192) }
-                        freeState = freeState.copy(lastTokens = 0, lastEstimate = 0, warned = false)
-                        estimate = f.estimate(msgs, requestTools); current = estimate
-                    }
-                    if (current >= f.WARN && !freeState.warned) {
-                        msgs += buildJsonObject { put("role", "user"); put("content", "系统：这段自由时间的上下文已超过 80 万 token，距离 95 万的压缩点大约还有 ${((f.COMPACT - current).coerceAtLeast(0) / 1000)}k token。你可以按自己的节奏继续，到了压缩点会整理较早的对话。") }
-                        freeState = freeState.copy(warned = true)
-                    }
-                    freeState = freeState.copy(lastEstimate = f.estimate(msgs, requestTools))
-                    saveFree()
                 }
             },
             onFinish = { final ->
@@ -298,16 +230,11 @@ suspend fun runBackgroundWork(
                     messages += final
                     TaskCheckpoint.save(checkpoint, cpKey, messages, spent)
                 }
-                if (free) {
-                if ((final["content"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.isNotBlank() == true || final["reasoning_content"] != null) messages += final
-                saveFree()
-            } },
+            },
             onUsage = { ev ->
-                if (free) freeState = freeState.copy(lastTokens = ev.promptTokens)
-                store.addUsage(ep, ev.promptTokens, ev.cacheHit, ev.completionTokens, label = if (free) "自由时间" else "任务「${r.title.take(12)}」")
+                store.addUsage(ep, ev.promptTokens, ev.cacheHit, ev.completionTokens, label = "任务「${r.title.take(12)}」")
                 spent += Pricing.priceAt(ep, System.currentTimeMillis())
                     ?.let { Pricing.cost(it, ev.promptTokens, ev.cacheHit ?: 0, ev.completionTokens) } ?: 0.0
-                if (free) saveFree()
             },
         )
     } catch (e: com.jack.ai.data.GoalStopped) {
@@ -319,10 +246,7 @@ suspend fun runBackgroundWork(
         // 占着浏览器的话放出来，聊天里等着用的回答接着用
         session.releaseBrowser()?.let { log(com.jack.ai.data.RunStep("phone-close", true, it)) }
     }
-    if (!free && (goalId == null || com.jack.ai.data.Goals.current(ctx, conv.id)?.status == "complete")) TaskCheckpoint.clear(checkpoint)
+    if ((goalId == null || com.jack.ai.data.Goals.current(ctx, conv.id)?.status == "complete")) TaskCheckpoint.clear(checkpoint)
     val text = agent.lastRound.trim().ifBlank { agent.content.toString().trim() }
     return if (text.isBlank()) TaskResult("（这次没有生成内容）", files, TaskStatus.FAILED, spent) else TaskResult(text, files, spent = spent)
 }
-
-private fun sessionDir(ctx: Context, conv: Conversation): File =
-    com.jack.ai.data.Workspace.dir(ctx, com.jack.ai.data.Workspace.key(conv))

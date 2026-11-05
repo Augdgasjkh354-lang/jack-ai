@@ -258,24 +258,13 @@ class PromptBuilderTest {
     }
 
     @Test
-    fun journalGoesWithGlobalMemoryOnly() {
-        val conv = Conversation()
-        val sys = PromptBuilder.systemPrompt(settings, conv, null, null, memories, settings.activeSkills(), journal = "他说话玩笑裹着认真")
-        assertTrue(sys.contains("【Your journal】"))
-        assertTrue(sys.contains("玩笑裹着认真"))
-        val off = PromptBuilder.systemPrompt(settings, conv.copy(useGlobalMemory = false), null, null, memories, settings.activeSkills(), journal = "他说话玩笑裹着认真")
-        assertFalse(off.contains("玩笑裹着认真"))
-    }
-
-    @Test
     fun chatAndWorkAreOne() {
         // Chat 和 Work 合并了：每个对话都带全局记忆、近况和做事经验，都有清单和分身工具
         val chat = Conversation()
         val c = PromptBuilder.systemPrompt(settings, chat, null, tools(chat), memories, settings.activeSkills(),
-            lately = "最近在读诗", story = "我的自传", workMemory = "- 报告用 Word 交")
+            workMemory = "- 报告用 Word 交")
         assertTrue(c.contains("喜欢简短的回答"))
-        assertTrue(c.contains("最近在读诗"))
-        assertTrue(c.contains("我的自传"))
+        assertFalse(c.contains("【How you've been lately】"))
         assertTrue(c.contains("【Lessons from past tasks】"))
         assertTrue(c.contains("报告用 Word 交"))
         assertTrue(c.contains("- work (lessons from past tasks"))
@@ -434,13 +423,13 @@ class PromptBuilderTest {
 
     @Test
     fun sharedPartsComeBeforeConversationParts() {
-        val journal = "他说话玩笑裹着认真"
-        val plain = PromptBuilder.systemPrompt(settings, Conversation(), null, tools(Conversation()), memories, settings.activeSkills(), journal = journal)
+        val journal = "- 报告用 Word 交"
+        val plain = PromptBuilder.systemPrompt(settings, Conversation(), null, tools(Conversation()), memories, settings.activeSkills(), workMemory = journal)
         val project = Project(name = "小说", instructions = "写悬疑")
         val special = Conversation(systemPrompt = "你是一只猫", projectId = project.id)
         val other = PromptBuilder.systemPrompt(settings, special, project, tools(special), memories, settings.activeSkills(),
-            chatMemory = "- 主角叫阿明", journal = journal)
-        // 有人设、在项目里的对话，开头到日记为止都和普通对话一字不差
+            chatMemory = "- 主角叫阿明", workMemory = journal)
+        // 有人设、在项目里的对话，开头到做事经验为止都和普通对话一字不差
         val shared = plain.substring(0, plain.indexOf(journal) + journal.length)
         assertTrue(other.startsWith(shared))
         assertTrue(other.indexOf("【Persona for this conversation】") > other.indexOf(journal))
@@ -483,26 +472,9 @@ class PromptBuilderTest {
     }
 
     @Test
-    fun latelyIsKavisOwnAndOnlyWhenWritten() {
-        val conv = Conversation(messages = listOf(user("你最近在干嘛")))
-        val with = PromptBuilder.systemPrompt(settings, conv, null, tools(conv), memories, settings.activeSkills(), lately = "最近在学写短诗。")
-        assertTrue(with.contains("【How you've been lately】\n最近在学写短诗。"))
-        assertTrue(with.contains("don't steer conversations toward yourself"))
-        assertFalse(PromptBuilder.systemPrompt(settings, conv, null, tools(conv), memories, settings.activeSkills()).contains("【How you've been lately】"))
-        // 自由时间里才有 budget 工具
-        assertFalse("free_time" in toolNames(Conversation()))
-        assertTrue("free_time" in toolNames(Conversation(id = com.jack.ai.data.Reader.CONV_ID, work = true)))
-        // 结束对话：和人聊的对话里才有
-        assertTrue("end_conversation" in toolNames(Conversation()))
-        assertFalse("end_conversation" in toolNames(Conversation(id = com.jack.ai.data.Reader.CONV_ID, work = true)))
+    fun noFreeTimeToolsAndEndConversationInChats() {
+        val names = toolNames(Conversation())
+        listOf("free_time", "my_savings", "own_history", "update_self").forEach { assertFalse(it in names) }
+        assertTrue("end_conversation" in names)
     }
-    @Test
-    fun workbenchToolsAreAvailableInFreeTime() {
-        val free = Conversation(id = com.jack.ai.data.Reader.CONV_ID, work = true)
-        assertTrue("list_files" in toolNames(free))
-        assertTrue("delete_file" in toolNames(free))
-        assertTrue("list_files" in com.jack.ai.data.Reader.TOOLS)
-        assertFalse("list_files" in toolNames(Conversation()))
-    }
-
 }

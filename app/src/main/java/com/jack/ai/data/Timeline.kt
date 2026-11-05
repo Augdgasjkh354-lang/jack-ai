@@ -76,11 +76,13 @@ object Timeline {
 
     /** 这个对话进不进经历流：隐私项目、关了全局记忆的、自由时间和收件箱自己的不进。 */
     fun counts(c: Conversation, projects: List<Project>): Boolean =
-        c.id != Reader.CONV_ID && c.id != INBOX_ID && c.globalAllowed(projects.firstOrNull { it.id == c.projectId })
+        c.id != Retired.FREE_TIME_CONV && c.id != INBOX_ID && c.globalAllowed(projects.firstOrNull { it.id == c.projectId })
 
     // ---------- 给模型看的 ----------
 
     /** 「20 minutes ago」「yesterday」这样的相对时间。 */
+    fun day(at: Long): String = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date(at))
+
     fun ago(at: Long, now: Long): String {
         val m = (now - at) / 60_000
         return when {
@@ -94,8 +96,6 @@ object Timeline {
 
     private fun placeName(e: Episode) = when (e.place) {
         "chat" -> "chat 「${e.title}」"
-        "free" -> "your free time"
-        "dream" -> "your nightly look-back"
         "proactive" -> "you reached out to {user}"
         else -> e.place
     }
@@ -105,7 +105,7 @@ object Timeline {
      * 还没写摘要的别的对话（最后几句顶上）、上次和用户说话是什么时候、这期间自己做了什么。
      */
     fun note(
-        episodes: List<Episode>,
+        all: List<Episode>,
         convs: List<Conversation>,
         projects: List<Project>,
         current: Conversation,
@@ -113,6 +113,8 @@ object Timeline {
         now: Long = System.currentTimeMillis(),
     ): String {
         if (!counts(current, projects)) return ""
+        // 以前自由时间、做梦记的那些是 Kavi 自己的事，不再带进聊天
+        val episodes = all.filter { it.place != "free" && it.place != "dream" }
         // 别的对话里，摘要之后又聊了的：先用最后几句话顶上
         val pending = convs.filter { it.id != current.id && counts(it, projects) }.mapNotNull { c ->
             val since = summarized[c.id] ?: 0L
@@ -132,7 +134,7 @@ object Timeline {
             .maxByOrNull { it.second }
         val out = StringBuilder()
         if (recent.isNotEmpty()) {
-            out.append("【Recently】(your own memory across conversations and your own time, oldest first)\n")
+            out.append("【Recently】(your own memory across conversations, oldest first)\n")
             recent.forEach { e ->
                 out.append("- ").append(ago(e.at, now)).append(", ").append(placeName(e)).append(": ").append(Recap.clip(e.text, 160))
                 if (e.mood.isNotBlank()) out.append(" ({user} seemed ").append(Recap.clip(e.mood, 30)).append(")")
@@ -143,9 +145,6 @@ object Timeline {
             val gapDays = (currentUserAt - lastTalk.second) / 86_400_000L
             out.append("【Time】Before this message, {user} last talked with you ").append(ago(lastTalk.second, currentUserAt))
                 .append(" in 「").append(lastTalk.first.title).append("」.")
-            val mine = episodes.filter { it.at > lastTalk.second && it.place in setOf("free", "dream") }
-            if (mine.isNotEmpty()) out.append(" Since then, on your side: ").append(mine.groupingBy { it.place }.eachCount().entries.joinToString(", ") { (p, n) ->
-                (if (p == "free") "free time" else "nightly look-back") + if (n > 1) " ×$n" else "" }).append(".")
             out.append(if (gapDays >= GAP_DAYS) " It's been a while: you may acknowledge it briefly and naturally (no guilt-tripping)." else " Don't comment on the time gap.")
             out.append("\n")
         }
@@ -158,10 +157,6 @@ object Timeline {
         if (n.isEmpty() && !counts(conv, projects)) return ""
         return Persona.fill(n + Threads.note(Threads.load(ctx)), settings)
     }
-
-    /** 自由时间里看的那段：最近的经历（和用户聊了什么、自己做了什么），不带挂心事（自由时间的提示里另有）。 */
-    fun freeNote(ctx: Context, settings: Settings, convs: List<Conversation>, projects: List<Project>): String =
-        Persona.fill(note(load(ctx, NOTE_WINDOW), convs, projects, Conversation(id = "-"), summarizedUpTo(ctx)), settings)
 
     // ---------- 聊天的摘要 ----------
 
@@ -218,7 +213,6 @@ Write in {lang}. Output only one JSON object:
         if (s.memoryEnabled) {
             val text = fresh.joinToString("\n") { it.content }
             store.updateMemories { MemoryOps.markUsed(it, text, ignore = MemoryOps.ignoreFor(s)) }
-            OwnMemory.markUsed(ctx, text, MemoryOps.ignoreFor(s))
         }
         markSummarized(ctx, convId, fresh.last().createdAt)
     }

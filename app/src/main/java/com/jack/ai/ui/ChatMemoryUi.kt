@@ -83,14 +83,14 @@ fun ConversationMemoryDialog(vm: ChatViewModel, conv: Conversation, onDismiss: (
         title = { Text("记忆") },
         text = {
             Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (isolated) Text("这个对话在隐私项目里，和全局记忆、做梦都隔开了。", style = MaterialTheme.typography.bodySmall,
+                if (isolated) Text("这个对话在隐私项目里，和全局记忆、夜间整理都隔开了。", style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("使用全局记忆", Modifier.weight(1f))
                     Switch(useGlobal && !isolated, { useGlobal = it; vm.setMemoryFlags(conv.id, it, inDream) }, enabled = !isolated)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("参与做梦", Modifier.weight(1f))
+                    Text("参与夜间整理", Modifier.weight(1f))
                     Switch(inDream && !isolated, { inDream = it; vm.setMemoryFlags(conv.id, useGlobal, it) }, enabled = !isolated)
                 }
                 if (workOn) {

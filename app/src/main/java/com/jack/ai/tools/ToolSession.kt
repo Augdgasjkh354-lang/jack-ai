@@ -213,10 +213,6 @@ class ToolSession(
     internal var planAsked = false
     /** 让模型停下时给它看的话（maxRounds 设成 0 之后，再调工具就回这句）。 */
     @Volatile var stopNote: String? = null
-    /** 自由时间的钱（只有自由时间里有）：budget 工具看余额、从积蓄里拿。 */
-    @Volatile var freeBudget: com.jack.ai.data.FreeBudget? = null
-    /** Kavi 自己提出的下一步，空着就自然结束。 */
-    var freeNext: String = ""
     /** 这次回答里已经在网页上提交过的（网站|按钮），同一个再点就是重复提交，要拦。 */
     val submitted: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
     /** 这次回答开始的时间：之后改过的文件算这次的产出。 */
@@ -417,10 +413,7 @@ class ToolSession(
             name == "my_templates" && (SkillIds.WORD in skillIds || SkillIds.PPT in skillIds || SkillIds.EXCEL in skillIds) -> myTemplates(args)
             name == "delete_file" -> deleteFiles(args)
             name == "search_my_data" -> searchMyData(args)
-            name == "my_savings" -> mySavings()
             name == "facts" -> if (args["action"].text() == "save") saveFact(args) else recallFacts(args)
-            name == "own_history" && ((conv.id == com.jack.ai.data.Reader.CONV_ID && freeBudget != null) || (settings.memoryEnabled && conv.globalAllowed(project))) -> ownHistory(args)
-            name == "free_time" && freeBudget != null -> freeTimeTool(args)
             name == "end_conversation" && interactive -> endConversation(args)
             name == "schedule" && SkillIds.ROUTINE in skillIds -> schedule(args)
             name == "cancel_schedule" && SkillIds.ROUTINE in skillIds -> cancelSchedule(args)
@@ -428,7 +421,6 @@ class ToolSession(
             name == "add_calendar_event" && SkillIds.CALENDAR in skillIds -> addEvent(args)
             name == "list_calendar_events" && SkillIds.CALENDAR in skillIds -> listEvents(args)
             name == "save_memory" -> remember(args)
-            name == "update_self" -> updateSelf(args)
             name == "save_skill" -> saveSkill(args)
             name == "save_note" -> saveNote(args)
             name == "add_rows" && SkillIds.TABLES in skillIds -> addRows(args)

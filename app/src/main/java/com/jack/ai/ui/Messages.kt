@@ -339,10 +339,10 @@ fun AssistantMessage(
                         color = colors.onPrimaryContainer.copy(alpha = 0.85f), modifier = Modifier.padding(top = 4.dp))
                     // 后台回看记下的：不对就去记忆页改；Kavi 改自己设定的：能恢复上一版
                     Text(when {
-                        n.startsWith(com.jack.ai.data.MemoryReview.NOTICE_PREFIX) -> "不对的话在「记忆与梦」里改或删"
+                        n.startsWith(com.jack.ai.data.MemoryReview.NOTICE_PREFIX) -> "不对的话在「记忆」里改或删"
                         n.startsWith(com.jack.ai.data.KaviSkills.NOTICE_PREFIX) -> "在「技能」里能看、改、删"
                         n.startsWith(com.jack.ai.data.InjectionGuard.NOTICE_PREFIX) -> "拦下的记录在「统计」页最下面"
-                        else -> "可以在「记忆与梦」里恢复上一版"
+                        else -> "可以在「记忆」里恢复上一版"
                     }, style = MaterialTheme.typography.labelSmall,
                         color = colors.onPrimaryContainer.copy(alpha = 0.6f), modifier = Modifier.padding(top = 4.dp))
                 }

@@ -414,9 +414,6 @@ class Store(context: Context) {
             thinkSummary = prefs.getBoolean("thinkSummary", true),
             summaryCollapsed = prefs.getBoolean("summaryCollapsed", false),
             workConfirmPlan = prefs.getString("workConfirmPlan", "big") ?: "big",
-            readingEnabled = prefs.getBoolean("readingEnabled", true),
-            readingBudget = prefs.getFloat("readingBudget", 0.5f).toDouble(),
-            readingExtra = prefs.getFloat("readingExtra", 0.1f).toDouble(),
             // 压缩门槛：200k 到 1M（换了个键，以前误拖到 50k 存下的旧值不再读）
             compressTokens = prefs.getInt("compressTokens2", COMPRESS_MIN).coerceIn(COMPRESS_MIN, COMPRESS_MAX),
             memoryEnabled = prefs.getBoolean("memoryEnabled", true),
@@ -512,9 +509,6 @@ class Store(context: Context) {
             .putBoolean("thinkSummary", s.thinkSummary)
             .putBoolean("summaryCollapsed", s.summaryCollapsed)
             .putString("workConfirmPlan", s.workConfirmPlan)
-            .putBoolean("readingEnabled", s.readingEnabled)
-            .putFloat("readingBudget", s.readingBudget.toFloat())
-            .putFloat("readingExtra", s.readingExtra.toFloat())
             .putInt("compressTokens2", s.compressTokens.coerceIn(COMPRESS_MIN, COMPRESS_MAX))
             .putBoolean("memoryEnabled", s.memoryEnabled)
             .putBoolean("dreamEnabled", s.dreamEnabled)

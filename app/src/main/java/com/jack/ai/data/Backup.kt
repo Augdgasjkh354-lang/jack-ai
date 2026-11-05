@@ -119,8 +119,6 @@ object Backup {
                 } catch (e: Exception) { tmp.delete(); throw e }
             }
             File(staging, "prefs.json").takeIf { it.exists() }?.let { Store(ctx).importPrefs(it.readText()) }
-            KaviSelf.invalidate()
-            FreeTime.invalidate()
             return count
         } finally {
             staging.deleteRecursively()

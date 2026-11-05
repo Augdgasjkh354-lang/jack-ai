@@ -141,11 +141,7 @@ class KnowledgeFeature(core: AppCore) : Feature(core) {
         }
     }
 
-    fun editJournal(id: String, text: String) = changeDreams { list -> list.map { if (it.id == id) it.copy(journal = text.trim()) else it } }
-    fun deleteDream(id: String) = changeDreams { list ->
-        list.firstOrNull { it.id == id }?.let { com.jack.ai.data.DreamArchive.delete(app, it) }
-        list.filterNot { it.id == id }
-    }
+    fun deleteDream(id: String) = changeDreams { list -> list.filterNot { it.id == id } }
 
     private fun changeDreams(transform: (List<com.jack.ai.data.DreamEntry>) -> List<com.jack.ai.data.DreamEntry>) {
         scope.launch(ioSerial) {
@@ -161,11 +157,11 @@ class KnowledgeFeature(core: AppCore) : Feature(core) {
         scope.launch {
             try {
                 val entry = Dreamer.dream(app, force = true)
-                if (entry == null) state.update { it.copy(toast = "上次做梦之后还没有新的聊天") }
+                if (entry == null) state.update { it.copy(toast = "上次整理之后还没有新的聊天") }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                state.update { it.copy(toast = "做梦失败：${e.message ?: "网络问题"}") }
+                state.update { it.copy(toast = "整理失败：${e.message ?: "网络问题"}") }
             } finally {
                 state.update { it.copy(dreaming = false) }
                 reloadMemory()

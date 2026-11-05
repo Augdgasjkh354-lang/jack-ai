@@ -263,11 +263,6 @@ data class Settings(
     val summaryCollapsed: Boolean = false,
     /** Work 开工前要不要先给用户确认清单：always 每次、big 大任务（步骤多或模型觉得要问）、never 从不。 */
     val workConfirmPlan: String = "big",
-    /** 阅读时间：Kavi 每天自己上网读一会，把查实的事实存进事实库。readingBudget 是每天最多花多少元。 */
-    val readingEnabled: Boolean = true,
-    val readingBudget: Double = 0.5,
-    /** 自由时间的额外预算：今日预算用完时系统告诉 Kavi，再给这么多让它收尾（不必花完）。 */
-    val readingExtra: Double = 0.1,
     val compressTokens: Int = COMPRESS_MIN,
     val memoryEnabled: Boolean = true,
     val dreamEnabled: Boolean = true,

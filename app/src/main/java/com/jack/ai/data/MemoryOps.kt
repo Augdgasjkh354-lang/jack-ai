@@ -192,7 +192,7 @@ object MemoryOps {
 
     /** 给模型看的记忆：带短编号、出处、多久没用了、用过几次。 */
     fun listing(live: List<MemoryItem>, now: Long = System.currentTimeMillis()): String = if (live.isEmpty()) "(none)\n" else live.joinToString("") { m ->
-        val used = if (m.lastUsedAt > 0) "last used ${Timeline.ago(m.lastUsedAt, now)}, ${m.uses}×" else "not used since " + FreeTime.day(m.createdAt)
+        val used = if (m.lastUsedAt > 0) "last used ${Timeline.ago(m.lastUsedAt, now)}, ${m.uses}×" else "not used since " + Timeline.day(m.createdAt)
         "- [m:${m.id.take(6)}] ${m.text}（" + listOfNotNull(m.source.takeIf { it.isNotBlank() }, used).joinToString("; ") + "）\n"
     }
 
@@ -229,7 +229,7 @@ object MemoryOps {
     /** 改之前存一版（按天，同一天多次只留最后一次之前的那版），最多留 30 天。 */
     fun snapshot(ctx: Context, live: List<MemoryItem>, now: Long = System.currentTimeMillis()): Unit = synchronized(lock) {
         val dir = versionDir(ctx)
-        val f = File(dir, FreeTime.day(now) + ".json")
+        val f = File(dir, Timeline.day(now) + ".json")
         if (!f.exists()) runCatching { SafeFile.writeText(f, json.encodeToString(ListSerializer(MemoryItem.serializer()), live)) }
         dir.listFiles()?.sortedByDescending { it.name }?.drop(30)?.forEach { it.delete() }
     }

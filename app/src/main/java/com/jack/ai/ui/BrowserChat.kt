@@ -137,9 +137,8 @@ object BrowserChat {
         history += buildJsonObject { put("role", "user"); put("content", page + q) }
 
         // 浏览器里的小窗口也是 Kavi：「你是谁」、名字、保密照旧，做事只讲浏览器
-        com.jack.ai.data.KaviSelf.ensure(ctx)
         val system = com.jack.ai.data.Persona.fill(
-            com.jack.ai.data.KaviSelf.text(editable = false) + com.jack.ai.data.Persona.nameLine(s).let { if (it.isEmpty()) "" else "\n\n$it" } + "\n\n" +
+            com.jack.ai.data.KaviSelf.text() + com.jack.ai.data.Persona.nameLine(s).let { if (it.isEmpty()) "" else "\n\n$it" } + "\n\n" +
                 com.jack.ai.data.CONFIDENTIAL_PROMPT + "\n\n" +
                 "{User} is browsing in the Kavi browser and talking to you through a small panel at the bottom, so keep answers short and reply in the language {user} writes in. " +
                 "If the question is about this page, answer from the page text you were given; if that's not enough, read more with browser extract or read. " +

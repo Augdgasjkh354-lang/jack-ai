@@ -97,7 +97,6 @@ object RemoteChat {
             "Files you create are sent to that device. Anything that needs confirmation is asked on that device." +
             (if (s.remotePhone) "" else " Operating other apps on the phone is turned off for remote use.") + "\n"
         val input = PromptBuilder.Input(s, conv, project, memories, skills, vision = ep.vision, sendReasoning = thinkingOn,
-            journal = com.jack.ai.data.Dreamer.recentJournals(store.loadDreams()), lately = com.jack.ai.data.FreeTime.latelyNote(ctx),
             contextNote = com.jack.ai.data.Persona.fill(note, s), appVersion = com.jack.ai.data.appVersion(ctx))
         val history = PromptBuilder.history(input, toolSet)
 

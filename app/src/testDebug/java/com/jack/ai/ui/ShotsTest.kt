@@ -156,19 +156,6 @@ class ShotsTest {
         Assume.assumeTrue(System.getenv("SHOTS_DIR") != null)
         val app = RuntimeEnvironment.getApplication() as Application
         val now = System.currentTimeMillis()
-        java.io.File(app.filesDir, "reading_log.json").writeText(kotlinx.serialization.json.Json.encodeToString(
-            kotlinx.serialization.builtins.ListSerializer(com.jack.ai.data.ReadEntry.serializer()),
-            listOf(
-                com.jack.ai.data.ReadEntry(at = now - 3_600_000L, kind = "build", title = "运费计算小工具", spent = 0.18,
-                    report = "你最近常比三家物流的价格，我做了个小网页：填重量和目的地，直接算出三家的运费和时效，以后不用一家家查了。",
-                    files = listOf(com.jack.ai.data.GeneratedFile("运费计算.html", app.filesDir.path + "/x/运费计算.html", "text/html", 8000))),
-                com.jack.ai.data.ReadEntry(at = now - 86_400_000L, kind = "read", title = "", topics = listOf("跨境电商物流时效", "端侧大模型"), saved = 6, spent = 0.21,
-                    report = "读了三家物流公司的官方时效说明，美国线普遍 7 到 12 天；另外看了手机端运行大模型的进展。"),
-            )))
-        java.io.File(app.filesDir, "x").mkdirs(); java.io.File(app.filesDir, "x/运费计算.html").writeText("<html></html>")
-        com.jack.ai.data.FreeTime.save(app, com.jack.ai.data.FreeState(savings = 1.2, lately = "最近在慢慢写一个关于灯塔守夜人的短篇，也想把那个运费小工具做得更好看。",
-            nextAt = now + 20 * 3_600_000L,
-            wishes = listOf(com.jack.ai.data.Wish(kind = "buy", text = "《宇宙的琴弦》电子版：想读读弦理论到底在说什么，没什么用，就是好奇", amount = 18.0, offer = 1.2, url = "https://example.com/book"))))
         com.jack.ai.data.Facts.save(app, listOf(
             com.jack.ai.data.Fact(text = "珠穆朗玛峰海拔 8848.86 米（2020 年中尼联合测量）", topic = "地理", status = "verified",
                 sources = listOf(com.jack.ai.data.FactSource("https://www.gov.cn/x"), com.jack.ai.data.FactSource("https://en.wikipedia.org/wiki/Mount_Everest"))),
@@ -181,7 +168,7 @@ class ShotsTest {
             JackTheme(ThemeMode.DARK) {
                 androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color(0xFF0B1030)).padding(androidx.compose.ui.unit.Dp(16f))) {
                     androidx.compose.foundation.layout.Column {
-                        ReadingCard(vm, state.settings)
+                        FactsCard(vm)
                     }
                 }
             }

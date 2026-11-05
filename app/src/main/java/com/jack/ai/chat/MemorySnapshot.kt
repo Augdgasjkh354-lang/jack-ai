@@ -15,9 +15,6 @@ class MemorySnapshots {
         val memories: List<MemoryItem>,
         val chatMemory: String,
         val projectMemory: String,
-        val journal: String,
-        val story: String,
-        val lately: String,
         val workMemory: String,
         /** 拍的时候对话压缩到哪条。 */
         val summaryUntilId: String?,

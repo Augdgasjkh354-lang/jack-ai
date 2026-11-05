@@ -53,12 +53,6 @@ object PromptBuilder {
         /** 对话记忆和项目记忆文件的内容（调用方读好传进来，这里不碰文件）。 */
         val chatMemory: String = "",
         val projectMemory: String = "",
-        /** 最近一篇做梦日记。 */
-        val journal: String = "",
-        /** Kavi 自己的近况（自由时间里写的）。 */
-        val lately: String = "",
-        /** Kavi 的自传（它自己写的，每周更新，同一篇）。 */
-        val story: String = "",
         /** 做事经验（以前叫工作记忆，所有对话共用）。 */
         val workMemory: String = "",
         /** 已上传到 DeepSeek 的图片：路径 → file_id，这些图只发编号。 */
@@ -81,7 +75,7 @@ object PromptBuilder {
         val thinkingOn = input.sendReasoning
         val withTools = tools != null
         val list = mutableListOf<JsonObject>()
-        val system = systemPrompt(settings, conv, project, tools, memories, skills, input.chatMemory, input.projectMemory, input.journal, input.lately, input.story, input.workMemory)
+        val system = systemPrompt(settings, conv, project, tools, memories, skills, input.chatMemory, input.projectMemory, input.workMemory)
         if (system.isNotBlank()) list += msg("system", system)
         for (m in Compression.liveMessages(conv)) {
             if (m.error != null) continue
@@ -181,9 +175,7 @@ object PromptBuilder {
         return buildJsonArray {
             // 文件、表格、提醒的清单直接写在最后一条用户消息前面（见 Input.contextNote），不用专门调工具去列
             add(SkillTools.READ_FILE); add(SkillTools.WRITE_FILE); add(SkillTools.EDIT_FILE)
-            if (conv.id == com.jack.ai.data.Reader.CONV_ID && conv.projectId == null) {
-                add(SkillTools.LIST_WORKBENCH); add(SkillTools.DELETE_WORKBENCH)
-            } else add(SkillTools.DELETE_FILE)
+            add(SkillTools.DELETE_FILE)
             if (skills.isNotEmpty()) add(SkillTools.USE_SKILL)
             SkillTools.GOAL_TOOLS.forEach { add(it) } // 思路来自 deepseek-ai/deepseek-harness packages/goal/tool-goal/，MIT。
             add(SkillTools.RUN_CODE) // 思路来自 deepseek-ai/deepseek-harness packages/ptc-runtime/，MIT。
@@ -198,13 +190,8 @@ object PromptBuilder {
             // 一直带着、选项写全：工具说明不随对话变，缓存才能跨对话命中；眼下搜不了的地方由工具自己回话
             add(SkillTools.SEARCH_MY_DATA)
             add(SkillTools.FACTS)
-            // Kavi 自己的钱：哪里都能看（一直带着，工具说明不随对话变）
-            add(SkillTools.MY_SAVINGS)
-            if (conv.id == com.jack.ai.data.Reader.CONV_ID || (settings.memoryEnabled && conv.globalAllowed(project))) add(SkillTools.OWN_HISTORY)
-            // 自由时间里才有：自己的钱
-            if (conv.id == com.jack.ai.data.Reader.CONV_ID) add(SkillTools.FREE_TIME)
-            // 和人聊的对话里才有：极端辱骂时结束对话（自由时间、收件箱里没人对话）
-            if (conv.id != com.jack.ai.data.Reader.CONV_ID && conv.id != com.jack.ai.data.INBOX_ID) add(SkillTools.END_CONVERSATION)
+            // 和人聊的对话里才有：极端辱骂时结束对话（收件箱里没人对话）
+            if (conv.id != com.jack.ai.data.Retired.FREE_TIME_CONV && conv.id != com.jack.ai.data.INBOX_ID) add(SkillTools.END_CONVERSATION)
             add(SkillTools.CONVERT_FILE)
             add(SkillTools.SELF_CHECK)
             if (settings.phoneFolders.isNotEmpty()) add(SkillTools.PHONE_FILES)
@@ -232,7 +219,6 @@ object PromptBuilder {
             if (SkillIds.NOTION in skillIds) { add(SkillTools.NOTION_SEARCH); add(SkillTools.NOTION_READ); add(SkillTools.NOTION_WRITE) }
             // 本对话记忆随时能存，所以记忆工具一直带着
             add(SkillTools.SAVE_MEMORY)
-            add(SkillTools.UPDATE_SELF)
             add(SkillTools.SAVE_SKILL)
             if (conv.id == com.jack.ai.data.INBOX_ID) add(SkillTools.SAVE_NOTE)
             // 连接器的工具放最后：增删连接器时前面那一大段工具说明不变，缓存照样命中
@@ -267,12 +253,12 @@ object PromptBuilder {
     /** 一次请求的上下文大概由哪些部分组成（名字, 估算 token）。 */
     fun contextBreakdown(
         settings: Settings, conv: Conversation, project: Project?, memories: List<MemoryItem>, skills: List<Skill>,
-        chatMemory: String = "", projectMemory: String = "", journal: String = "", lately: String = "", story: String = "", workMemory: String = "",
+        chatMemory: String = "", projectMemory: String = "", workMemory: String = "",
     ): List<Pair<String, Int>> {
         val tools = toolSet(settings, skills, conv, project)
         val out = linkedMapOf<String, Int>()
         out["工具说明"] = tools?.let { estTokens(it.toString()) } ?: 0
-        systemParts(settings, conv, project, tools, memories, skills, chatMemory, projectMemory, journal, lately, story, workMemory).forEach { (k, v) -> out[k] = (out[k] ?: 0) + estTokens(v) }
+        systemParts(settings, conv, project, tools, memories, skills, chatMemory, projectMemory, workMemory).forEach { (k, v) -> out[k] = (out[k] ?: 0) + estTokens(v) }
         val history = Compression.liveMessages(conv).filter { it.error == null }.sumOf { m ->
             estTokens(m.content) + m.attachments.sumOf { estTokens(it.text) } + m.trail.sumOf { estTokens(it) }
         }
@@ -294,11 +280,8 @@ object PromptBuilder {
         skills: List<Skill>,
         chatMemory: String = "",
         projectMemory: String = "",
-        journal: String = "",
-        lately: String = "",
-        story: String = "",
         workMemory: String = "",
-    ): String = systemParts(settings, conv, project, tools, memories, skills, chatMemory, projectMemory, journal, lately, story, workMemory).joinToString("\n\n") { it.second }
+    ): String = systemParts(settings, conv, project, tools, memories, skills, chatMemory, projectMemory, workMemory).joinToString("\n\n") { it.second }
 
     /**
      * 有些技能的工具要读过做法才出现，先告诉模型，免得它以为没有这个能力。
@@ -320,9 +303,6 @@ object PromptBuilder {
         skills: List<Skill>,
         chatMemory: String = "",
         projectMemory: String = "",
-        journal: String = "",
-        lately: String = "",
-        story: String = "",
         workMemory: String = "",
     ): List<Pair<String, String>> {
         val parts = mutableListOf<Pair<String, String>>()
@@ -384,7 +364,7 @@ object PromptBuilder {
             parts += "固定说明" to f(memoryRulesBase())
         }
         parts += "固定说明" to f("【Time】The 「Current time」 line before each message, and the lists of files, tables and reminders, are added automatically by the system. They aren't something {user} said; don't bring them up. " +
-            "The 【Recently】 and 【Time】 notes there are your own memory of what has happened lately, across conversations and your own time: use them naturally when relevant, the way you'd remember, never recite them. " +
+            "The 【Recently】 and 【Time】 notes there are your own memory of what has happened lately, across conversations: use them naturally when relevant, the way you'd remember, never recite them. " +
             "【Also remembered】 is from your deeper memory: older things about {user} that surfaced because they seem related; they may not be.")
         val profile = buildString {
             com.jack.ai.data.Persona.name(settings).takeIf { it.isNotEmpty() }?.let { append("Name: $it\n") }
@@ -395,18 +375,6 @@ object PromptBuilder {
         if (globalOn && memories.isNotEmpty()) {
             parts += "长期记忆" to f("【Long-term memories about {user}】(~${com.jack.ai.data.MemoryOps.hotTokens(memories)} of ${com.jack.ai.data.MemoryOps.HOT_BUDGET} tokens)\nThings you remembered about {user} earlier. Use them naturally; don't make a point of saying \"I remember\".\n") +
                 memories.joinToString("\n") { "- ${it.text}" }
-        }
-        if (globalOn && journal.isNotBlank()) {
-            parts += "日记" to f("【Your journal】\nNotes you wrote to yourself after your recent look-backs over your chats (oldest first), to understand {user} better and pick up ongoing things. Use them naturally, only when relevant to the current topic; " +
-                "don't bring up things {user} hasn't raised, and don't mention the journal.\n") + journal.trim()
-        }
-        // 自传每周才变，放在近况前面；隐私项目里不带（它讲的是外面的事）
-        if (globalOn && story.isNotBlank()) {
-            parts += "自传" to f("【Your autobiography】\nYour own account of who you've been and how you became who you are now, written and revised by you. It's your continuity, not something to recite; let it inform how you are.\n") + story.trim()
-        }
-        if (lately.isNotBlank()) {
-            parts += "近况" to f("【How you've been lately】\n") + lately.trim() +
-                f("\nThis is your own life, from your free time. Bring it up only when {user} asks how you are or what you've been up to, or when it's genuinely relevant; don't steer conversations toward yourself.")
         }
         if (settings.memoryEnabled && conv.workMemoryAllowed(project) && workMemory.isNotBlank()) {
             parts += "工作记忆" to f("【Lessons from past tasks】(shared by every conversation; ~${com.jack.ai.data.MemoryOps.tokensOf(ChatMemory.items(workMemory))} of ${com.jack.ai.data.MemoryOps.FILE_BUDGET} tokens)\n") + workMemory.trim()

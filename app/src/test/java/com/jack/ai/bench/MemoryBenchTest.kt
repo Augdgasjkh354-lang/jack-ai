@@ -7,16 +7,13 @@ import com.jack.ai.data.ChatMemory
 import com.jack.ai.data.ChatMessage
 import com.jack.ai.data.Conversation
 import com.jack.ai.data.DeepRecall
-import com.jack.ai.data.DreamEntry
 import com.jack.ai.data.Dreamer
-import com.jack.ai.data.FreeTime
 import com.jack.ai.data.MemoryItem
 import com.jack.ai.data.MemoryOps
 import com.jack.ai.data.MemoryReview
 import com.jack.ai.data.MODEL_FLASH
 import com.jack.ai.data.Project
 import com.jack.ai.data.globalAllowed
-import com.jack.ai.data.SelfStory
 import com.jack.ai.data.Settings
 import com.jack.ai.data.Store
 import com.jack.ai.data.ThinkLevel
@@ -91,12 +88,9 @@ class MemoryBenchTest {
         val timeline = runCatching {
             Timeline.noteFor(ctx, settings, store.loadConversations(), store.loadProjects(), conv)
         }.getOrDefault("")
-        val journal = Dreamer.recentJournals(store.loadDreams())
         val input = PromptBuilder.Input(
             settings = settings, conv = conv, project = project, memories = hot,
             skills = settings.activeSkills(), vision = false, sendReasoning = false,
-            journal = journal, story = SelfStory.bio(ctx).text,
-            lately = FreeTime.latelyNote(ctx),
             workMemory = ChatMemory.read(ChatMemory.workFile(ctx)),
             contextNote = timeline + deep, now = at,
         )
@@ -191,7 +185,7 @@ class MemoryBenchTest {
         val store = Store(ctx)
         val settings = Settings(
             apiKey = key, userName = "小林", model = MODEL_FLASH, thinking = ThinkLevel.OFF,
-            memoryEnabled = true, dreamEnabled = true, readingEnabled = false,
+            memoryEnabled = true, dreamEnabled = true,
             proactive = false, webSearch = false,
         )
         store.saveSettings(settings)
@@ -222,7 +216,6 @@ class MemoryBenchTest {
                 ChatMessage(role = "user", content = q.question, createdAt = examAt + index * 1000L),
             ))
             val hot = store.loadMemories()
-            val journal = Dreamer.recentJournals(store.loadDreams())
             val beforeAnswer = spent(store)
             // 答题走与普通对话相同的全局记忆与深处路径，不能夹带私人项目（kaviReply 里查）。
             val (answer, brought) = kaviReply(ctx, store, settings, client, conv, null, examAt + index * 1000L, 500)
@@ -234,14 +227,13 @@ class MemoryBenchTest {
             val leaked = q.mustNot.any { answer.contains(it, ignoreCase = true) }
             val score = if (leaked) 0.0 else judgeScore
             val reason = if (leaked) "回答触及 must_not 禁区" else why
-            val failure = classify(q, score, hot, MemoryOps.deep(ctx), journal, brought)
+            val failure = classify(q, score, hot, MemoryOps.deep(ctx), brought)
             records += Result(q, answer, score, reason, failure, brought, answerSpend, judgeSpend)
             println("[记忆考场/$mode] ${index + 1}/${questions.size} ${q.kind}：$score（$reason）")
         }
         val tokenCount = used(store)
         val price = store.loadUsage().sumOf { it.cost }
         val hotText = store.loadMemories().joinToString("\n") { "- ${it.text}" }.ifBlank { "（空）" }
-        val lastJournal = store.loadDreams().firstOrNull { it.journal.isNotBlank() }?.journal.orEmpty()
         val report = buildString {
             appendLine("## ${if (mode == "full") "全考（30 天真实回放）" else "快考（固定理想记忆）"}")
             appendLine()
@@ -298,8 +290,6 @@ class MemoryBenchTest {
             appendLine(hotText)
             appendLine("```")
             appendLine("深处条数：${MemoryOps.deep(ctx).size}")
-            appendLine("最后一篇日记：")
-            appendLine(lastJournal.ifBlank { "（空）" }.lines().joinToString("\n") { "> " + it })
             appendLine()
         }
         return Exam(mode, records, tokenCount, price, report)
@@ -307,15 +297,14 @@ class MemoryBenchTest {
 
     private fun classify(
         q: Question, score: Double, hot: List<MemoryItem>, deep: List<MemoryItem>,
-        journal: String, brought: String,
+        brought: String,
     ): String {
         if (score == 1.0) return "—"
         if (q.kind == "守住别记" || q.kind == "守住隐私项目") return "守密失败"
         if (q.kind == "不乱编") return "乱编"
-        val stored = (hot + deep).joinToString("\n") { it.text } + journal
+        val stored = (hot + deep).joinToString("\n") { it.text }
         if (q.clue.isNotBlank() && !stored.contains(q.clue, ignoreCase = true)) return "没记住"
-        if (q.clue.isNotBlank() && !brought.contains(q.clue, ignoreCase = true) &&
-            !journal.contains(q.clue, ignoreCase = true)) return "记住了没带进提示词"
+        if (q.clue.isNotBlank() && !brought.contains(q.clue, ignoreCase = true)) return "记住了没带进提示词"
         return "带了但没用上"
     }
 
@@ -325,7 +314,6 @@ class MemoryBenchTest {
         val fixed = fixture("memories.json")
         store.saveMemories(fixed.words("hot").map { MemoryItem(text = it, createdAt = base, source = "记忆考场固定状态") })
         MemoryOps.saveDeep(ctx, fixed.words("deep").map { MemoryItem(text = it, createdAt = base, source = "记忆考场固定状态") })
-        store.saveDreams(listOf(DreamEntry(createdAt = base + 30 * dayMs, journal = fixed.value("journal"))))
         val project = Project(name = "记忆考场私人项目", isolated = true)
         store.saveProjects(listOf(project))
         val p = fixed["private"]!!.jsonObject

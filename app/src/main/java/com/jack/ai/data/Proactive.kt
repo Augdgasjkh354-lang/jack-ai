@@ -122,13 +122,12 @@ object Proactive {
 
     // ---------- 回看 ----------
 
-    /** 交给 Kavi 判断的材料：最近的对话、日记里还在进行的事、到期该回访的客户、今明两天的日程、最近的后台任务、它以前找过用户的记录。 */
+    /** 交给 Kavi 判断的材料：最近的对话、到期该回访的客户、今明两天的日程、最近的后台任务、它以前找过用户的记录。 */
     fun material(ctx: Context, store: Store, now: Long): String = buildString {
         val f = SimpleDateFormat("MM-dd HH:mm", Locale.ENGLISH)
         val projects = store.loadProjects()
         val recap = Recap.build(Conversation(id = "-"), store.loadConversations().filter { it.id != CONV_ID }, projects, now)
         append("【Recent conversations】\n").append(recap.ifBlank { "(no chats in the last few days)" }).append("\n\n")
-        store.loadDreams().firstOrNull { it.journal.isNotBlank() }?.let { append("【Your latest journal entry】\n").append(it.journal.take(3000)).append("\n\n") }
         // 表里写着「下次联系」的：今天和以前的都算到期
         val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(now))
         val due = runCatching {
@@ -163,7 +162,7 @@ Default to saying nothing. Speak only when all three hold:
 1. It's time-sensitive: if you don't say it now, it'll be too late or cost something real (a client due for a follow-up today, something about to expire, an early plan tomorrow that needs preparing).
 2. {User} can act on it: after reading, they know what to do next.
 3. They probably don't know yet: reminders already set will ring by themselves, and background tasks that already notified them or things they just chatted about don't need repeating.
-No small talk, check-ins, "long time no see", retelling the journal, or general advice. If unsure, say nothing.
+No small talk, check-ins, "long time no see", or general advice. If unsure, say nothing.
 If you do speak: one thing, one or two sentences (at most about 80 Chinese characters or 50 English words), like a message from a friend. State the matter and the suggested next step directly; no greetings, no emoji. Write it in {lang}, or in the language {user} uses in the recent conversations.
 Output only one JSON object: {"send": true or false, "kind": "a two-or-three-word category (client follow-up, to-do due, schedule prep...)", "text": "the message to send (empty if not sending)", "why": "one sentence on why you're sending or not"}"""
 
@@ -177,12 +176,11 @@ Output only one JSON object: {"send": true or false, "kind": "a two-or-three-wor
         val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
         val log = store.loadNudges()
         gate(log, now, hour)?.let { if (!force) return record(store, Nudge(now, sent = false, blocked = it)) }
-        KaviSelf.ensure(ctx)
         val time = SimpleDateFormat("yyyy-MM-dd EEEE HH:mm", Locale.ENGLISH).format(Date(now))
         val raw = DeepSeekClient(store::addUsage).complete(
             ep,
             listOf(
-                buildJsonObject { put("role", "system"); put("content", Persona.fill(KaviSelf.text(editable = false) + Persona.nameLine(s).let { if (it.isEmpty()) "" else "\n\n$it" } + "\n\n" + CONFIDENTIAL_PROMPT + "\n\n" + RULES, s)) },
+                buildJsonObject { put("role", "system"); put("content", Persona.fill(KaviSelf.text() + Persona.nameLine(s).let { if (it.isEmpty()) "" else "\n\n$it" } + "\n\n" + CONFIDENTIAL_PROMPT + "\n\n" + RULES, s)) },
                 buildJsonObject { put("role", "user"); put("content", "It is now $time (the ${if (slot == "evening") "evening" else "morning"} look-back).\n\n" + material(ctx, store, now)) },
             ),
             maxTokens = 1024,

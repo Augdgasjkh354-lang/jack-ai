@@ -37,7 +37,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** 「记忆与梦」页上的「Kavi 主动找你」：开关、现在回看一次、它说过和忍住没说的。 */
+/** 「记忆」页上的「Kavi 主动找你」：开关、现在回看一次、它说过和忍住没说的。 */
 @Composable
 fun NudgeCard(vm: ChatViewModel, settings: Settings) {
     val ctx = LocalContext.current

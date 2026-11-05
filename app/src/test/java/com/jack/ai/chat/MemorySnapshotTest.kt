@@ -6,7 +6,7 @@ import org.junit.Test
 
 class MemorySnapshotTest {
     private var taken = 0
-    private fun fresh(text: String) = { taken++; MemorySnapshots.Snap(listOf(MemoryItem(text = text)), "", "", "", "", "", "", null, 0) }
+    private fun fresh(text: String) = { taken++; MemorySnapshots.Snap(listOf(MemoryItem(text = text)), "", "", "", null, 0) }
 
     @Test fun staysFrozenWithinAConversation() {
         val s = MemorySnapshots()

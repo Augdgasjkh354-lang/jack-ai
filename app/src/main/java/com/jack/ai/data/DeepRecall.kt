@@ -68,9 +68,9 @@ object DeepRecall {
         }
     }
 
-    /** 深处记忆（用户的和自己的）的 (键, 文字)。 */
+    /** 深处记忆的 (键, 文字)。 */
     private fun deepDocs(ctx: Context): List<Pair<String, String>> =
-        MemoryOps.deep(ctx).map { key(it.id, it.text) to it.text } + OwnMemory.load(ctx).filter { it.deep }.map { key(it.id, it.text) to it.text }
+        MemoryOps.deep(ctx).map { key(it.id, it.text) to it.text }
 
     /** 用本地模型时，后台把还没算过的深处记忆都先算好（几条一批，中途让出给要紧的请求）。 */
     fun prefill(ctx: Context, settings: Settings) {
@@ -94,15 +94,10 @@ object DeepRecall {
         if (!settings.memoryEnabled || query.isBlank()) return ""
         val ignore = MemoryOps.ignoreFor(settings)
         val deep = MemoryOps.deep(ctx)
-        val own = OwnMemory.load(ctx)
-        val ownDeep = own.filter { it.deep }
-        val (sims, minSim) = similarities(ctx, settings, query, deep.map { key(it.id, it.text) to it.text } + ownDeep.map { key(it.id, it.text) to it.text })
+        val (sims, minSim) = similarities(ctx, settings, query, deep.map { key(it.id, it.text) to it.text })
         fun sim(id: String, text: String) = sims[key(id, text)] ?: 0f
 
         val userHits = (MemoryOps.recall(deep, query, ignore = ignore) + deep.filter { sim(it.id, it.text) >= minSim })
-            .distinctBy { it.id }.sortedByDescending { sim(it.id, it.text) }.take(6)
-        // 自己的：问到最近在干嘛时带上最近几件（常记的也算），再加上意思相近的深处经历
-        val ownHits = (OwnMemory.select(own, query, includeHot = false) + ownDeep.filter { sim(it.id, it.text) >= minSim })
             .distinctBy { it.id }.sortedByDescending { sim(it.id, it.text) }.take(6)
 
         val out = StringBuilder()
@@ -111,10 +106,6 @@ object DeepRecall {
             MemoryOps.saveDeep(ctx, MemoryOps.deep(ctx).map { if (it.id in ids) it.copy(lastUsedAt = now, uses = it.uses + 1) else it })
             out.append(Persona.fill("【Also remembered】(from deeper memory, because it seems related; use only if it helps)\n", settings))
                 .append(userHits.joinToString("\n") { "- [m:${it.id.take(6)}] ${it.text}" }).append("\n")
-        }
-        if (ownHits.isNotEmpty()) {
-            OwnMemory.markDeepUsed(ctx, ownHits.filter { it.deep }.map { it.id }.toSet(), now)
-            out.append(OwnMemory.format(ownHits))
         }
         return out.toString()
     }

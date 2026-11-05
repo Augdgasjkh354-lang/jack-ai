@@ -23,10 +23,11 @@ class TimelineTest {
         )
         val note = Timeline.note(eps, listOf(old, current), emptyList(), current, mapOf("a" to now - 4 * day + 1000), now)
         assertTrue(note, note.contains("【Recently】"))
-        assertTrue(note.indexOf("报价") < note.indexOf("灯塔"))  // 旧的在前
+        // 以前自由时间、做梦记的是 Kavi 自己的事，不再带进聊天
+        assertFalse(note.contains("灯塔") || note.contains("free time") || note.contains("looked back"))
         assertTrue(note.contains("({user} seemed 有点急)"))
         assertTrue(note.contains("last talked with you 4 days ago in 「报价」"))
-        assertTrue(note.contains("free time") && note.contains("It's been a while"))
+        assertTrue(note.contains("It's been a while"))
     }
 
     @Test

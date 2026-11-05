@@ -153,7 +153,7 @@ fun HistoryDrawer(
                     val due = state.cards.count { it.due <= now }
                     val main = listOf(
                         Tool(Icons.Default.Notifications, "提醒和任务", badge = state.routines.count { it.enabled }.takeIf { it > 0 }?.toString(), tint = 0xFFEF5A5A, onClick = onOpenRoutines),
-                        Tool(AppIcons.Moon, "记忆与梦", dot = state.dreams.any { !it.seen }, tint = 0xFF8B5CF6, onClick = onOpenMemory),
+                        Tool(AppIcons.Moon, "记忆", dot = state.dreams.any { !it.seen }, tint = 0xFF8B5CF6, onClick = onOpenMemory),
                         Tool(AppIcons.Folder, "资料库", tint = 0xFF3B82F6, onClick = onOpenLibrary),
                         Tool(AppIcons.Globe, "浏览器", tint = 0xFF22A06B, onClick = { ctx.startActivity(android.content.Intent(ctx, BrowserActivity::class.java)) }),
                     )

@@ -36,22 +36,4 @@ class DreamerTest {
         assertTrue(one.contains("1字"))
         assertEquals(101L, cut)
     }
-
-    @Test
-    fun mergesTenOldJournalsButKeepsTheNewest() {
-        val nine = (1..10).map { DreamEntry(createdAt = it * 1000L, journal = "第 $it 天") }
-        // 最新一篇不算，只有 9 篇：不合
-        assertNull(Dreamer.mergeBatch(nine))
-        val list = (nine + DreamEntry(createdAt = 11_000L, journal = "第 11 天")).sortedByDescending { it.createdAt }
-        val batch = Dreamer.mergeBatch(list)!!
-        assertEquals((1..10).map { "第 $it 天" }, batch.map { it.journal })
-        val after = Dreamer.replaceWithMerged(list, batch, "十天合成", "记了几条")
-        assertEquals(2, after.size)
-        // 下次聊天带的仍是最新一篇
-        assertEquals("第 11 天", after.first { it.journal.isNotBlank() }.journal)
-        val m = after[1]
-        assertEquals(10, m.merged); assertEquals(1000L, m.from); assertEquals(10_000L, m.createdAt)
-        // 合成过的不再算进下一批
-        assertNull(Dreamer.mergeBatch(after))
-    }
 }

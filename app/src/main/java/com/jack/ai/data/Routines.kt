@@ -309,8 +309,7 @@ object Routines {
         val memories = if (s.memoryEnabled && !isolated) store.loadMemories() else emptyList()
         val system = buildString {
             // 后台任务也是 Kavi：同一份开发者指令（「你是谁」+ 做事原则 + 说话方式 + 保密）
-            KaviSelf.ensure(ctx)
-            append(Persona.devBlock(s, work = false, editable = false, tasks = false)).append("\n\n")
+            append(Persona.devBlock(s, work = false, tasks = false)).append("\n\n")
             val body = buildString {
                 append("It is now $today.\n")
                 if (s.aboutMe.isNotBlank()) append("About {user}: ${s.aboutMe.trim()}\n")

@@ -126,7 +126,7 @@ object MemoryReview {
         settings: Settings, client: DeepSeekClient,
     ): ReviewResult? {
         if (!due(conv) || !settings.memoryEnabled || !conv.inDream || conv.ownLife ||
-            conv.id == INBOX_ID || conv.id == Reader.CONV_ID) return null
+            conv.id == INBOX_ID || conv.id == Retired.FREE_TIME_CONV) return null
         val unseen = unseen(conv)
         val work = unseen.any { it.plan.isNotEmpty() } && conv.workMemoryAllowed(project)
         val chat = !work && conv.globalAllowed(project)

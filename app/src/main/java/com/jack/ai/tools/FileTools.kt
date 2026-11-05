@@ -88,18 +88,11 @@ internal suspend fun ToolSession.listFiles() = runTool("查看文件夹") {
     (if (list.isEmpty()) "对话文件夹是空的。" else list.joinToString("\n")) to SearchRecord("查看文件夹")
 }
 
-/** Kavi 自己工作台（自由时间的文件夹）上的文件：聊天里提到自己做过的东西时能直接读。隐私项目里不看外面的。 */
-private fun ToolSession.ownWorkbenchFile(name: String): File? {
-    if (project?.isolated == true || conv.id == Reader.CONV_ID) return null
-    return Workspace.find(Workspace.dir(app, Workspace.key(Conversation(id = Reader.CONV_ID))), name)
-}
-
 internal suspend fun ToolSession.readFile(args: JsonObject): String {
     val name = args["name"].text()
     return runTool("查看 $name") {
         // 长任务里压掉的工具结果全文（.spill/…），文件夹列表里看不到，但能读
-        val file = Spill.file(wsDir, name) ?: runCatching { wsFile(name) }.getOrElse { e -> ownWorkbenchFile(name) ?: throw TextEdit.EditException(e.message.orEmpty() +
-            if (name.startsWith("free_") || name.endsWith(".json")) "（自由时间、梦的原文用 own_history 看，不用 read_file）" else "") }
+        val file = Spill.file(wsDir, name) ?: wsFile(name)
         val extracted = args["extracted"].text() == "true"
         val text = withContext(Dispatchers.IO) { Workspace.readText(file, extracted) }
         val lines = text.lines()
@@ -125,8 +118,7 @@ internal suspend fun ToolSession.deleteFiles(args: JsonObject): String {
     return runTool("删除文件：${names.joinToString("、")}") {
         val files = names.map { wsFile(it, exact = true) }.distinct()
         val list = files.joinToString("\n") { "· ${it.name}（${ToolSession.sizeText(it.length())}）" }
-        val ownWorkbench = freeBudget != null && conv.id == Reader.CONV_ID && conv.projectId == null
-        if (!ownWorkbench && !approve("删除 ${files.size} 个文件？", "删了找不回来。\n\n$list", "删除")) {
+        if (!approve("删除 ${files.size} 个文件？", "删了找不回来。\n\n$list", "删除")) {
             return@runTool "用户取消了，文件没有删。" to SearchRecord("删除文件：已取消")
         }
         withContext(Dispatchers.IO) { files.forEach { Workspace.delete(it) } }
