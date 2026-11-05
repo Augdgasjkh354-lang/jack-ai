@@ -39,3 +39,11 @@ Jack AI 适配（2026-11-02）：
 
 - 第 4 步（节奏与风控）：基于 Mika `0091d2d` 的 `PagePacing.kt`、`WebBarrier.kt` 裁剪移植到 `app/src/main/mika/`，保留原命名空间、版权和 Apache-2.0 许可；不移植依赖上游 WebPort/ScreenFacts 的 `PageDwell.kt`。
 - Jack AI modification：`BrowserPacing` 在 Kavi 的标签页按同站新页及滚动加载批次计时，首页和换站免等待、逐页增加停留、上限 12 秒；主文档 403/429/503、接口风控文字、短拦截页及可见验证码 iframe 会停止自动操作，交由现有 `wait_user` 流程，保留原浏览器 UI 和工具参数。
+
+## App 操作移植（2026-11-05）
+
+- 固定来源提交：`0091d2d67b541a417df913a23fefbb8e3a04e4a7`（Mika，Apache-2.0）。
+- 第 1 步移植 `GesturePacing.kt`、`TypingPacing.kt`、`OperatingPace.kt`、`ActionEffect.kt` 及直接依赖 `Pace.kt`，保留上游命名空间，源码放在 `app/src/main/mika/`。
+- Jack AI modification：删去对 Mika 的 TextField、AppPacing、ScreenSnapshot、Agent 的依赖，改用 Kavi 的无障碍控件树作为薄适配输入；手机手势优先真实触摸，失败或坐标不可用才尝试节点动作。后台虚拟屏幕同样调用无障碍的目标显示编号。
+- 「像人」模式采用轻微落点偏移、落指前短停顿、续接的弧线滑动和按词递增输入；「快」模式保留固定手势、整段输入。动作之间按 App 节奏停顿和限流识别留到第 3 步。
+- 判断效果只使用本次动作前后的控件树；界面有变化、无变化、读不准分别告知模型。无变化不自动重复触摸，防止发送、提交等按钮重复执行。
