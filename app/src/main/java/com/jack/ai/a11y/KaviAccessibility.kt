@@ -32,6 +32,9 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import com.jack.ai.data.Settings
 import com.jack.ai.data.Store
+import com.wangzan101.mika.core.cap.phone.GesturePacing
+import com.wangzan101.mika.core.cap.phone.OperatingPace
+import com.wangzan101.mika.core.cap.phone.TypingPacing
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -65,7 +68,7 @@ class KaviAccessibility : AccessibilityService() {
 
         /** 设置变了：只收勾过的 App 的事件。 */
         fun apply(s: Settings) {
-            instance?.let { svc -> Handler(Looper.getMainLooper()).post { svc.filter(s.phoneApps); if (s.floatBall) svc.showBall() else svc.hideBall() } }
+            instance?.let { svc -> Handler(Looper.getMainLooper()).post { svc.humanGestures = s.phonePace == OperatingPace.HUMAN; svc.filter(s.phoneApps); if (s.floatBall) svc.showBall() else svc.hideBall() } }
         }
 
         /** 现在前台是别的 App（不是 Kavi 自己）：要确认的事得用悬浮卡片问。 */
@@ -80,10 +83,13 @@ class KaviAccessibility : AccessibilityService() {
     private var panel: View? = null
     private val hideBar = Runnable { removeBar() }
     private val asking = Mutex()
+    @Volatile private var humanGestures = true
+    private fun gesturePacing() = if (humanGestures) GesturePacing.human() else GesturePacing.Instant
 
     override fun onServiceConnected() {
         instance = this
         val s = runCatching { Store(this).loadSettings() }.getOrNull()
+        humanGestures = s?.phonePace != OperatingPace.FAST
         filter(s?.phoneApps.orEmpty())
         if (s?.floatBall == true) showBall()
     }
@@ -246,17 +252,27 @@ class KaviAccessibility : AccessibilityService() {
 
     // ---------- 做 ----------
 
-    /** 点一个控件：它自己或往上最近的能点的控件执行点击；不行就在它中间按一下。 */
+    /** 优先真实触摸；坐标失效或触摸派发失败时才退到无障碍节点动作。 */
     suspend fun click(e: Element, long: Boolean = false, displayId: Int = Display.DEFAULT_DISPLAY): Boolean {
+        val node = find(e.path, displayId)
+        val (w, h) = screenSize(displayId)
+        val b = e.bounds
+        val l = b[0].coerceAtLeast(0); val t = b[1].coerceAtLeast(0)
+        val r = b[2].coerceAtMost(w); val bottom = b[3].coerceAtMost(h)
+        if (l < r && t < bottom && (node == null || node.isVisibleToUser && sameSpot(node, e))) {
+            val (x, y) = gesturePacing().within(l, t, r, bottom)
+            // 已派发的触摸不能再补一次 ACTION_CLICK：发送/提交类按钮可能执行两次。
+            if (tapAt(x, y, long, displayId)) return true
+        }
         val action = if (long) AccessibilityNodeInfo.ACTION_LONG_CLICK else AccessibilityNodeInfo.ACTION_CLICK
-        var n = find(e.path, displayId)
+        var n = node
         if (n != null && sameSpot(n, e)) {
             while (n != null) {
                 if ((if (long) n.isLongClickable else n.isClickable) && n.performAction(action)) return true
                 n = n.parent
             }
         }
-        return tap(e.centerX, e.centerY, long, displayId)
+        return false
     }
 
     private fun sameSpot(n: AccessibilityNodeInfo, e: Element): Boolean {
@@ -264,18 +280,54 @@ class KaviAccessibility : AccessibilityService() {
         return r.contains(e.centerX, e.centerY)
     }
 
-    /** 在屏幕上按一下（long：长按）。 */
-    suspend fun tap(x: Int, y: Int, long: Boolean = false, displayId: Int = Display.DEFAULT_DISPLAY): Boolean =
-        gesture(Path().apply { moveTo(x.toFloat(), y.toFloat()) }, if (long) 700 else 60, displayId)
+    /** 在屏幕上按一下（long：长按），按坐标时偏移最多 3 像素。 */
+    suspend fun tap(x: Int, y: Int, long: Boolean = false, displayId: Int = Display.DEFAULT_DISPLAY): Boolean {
+        val (w, h) = screenSize(displayId)
+        if (x !in 0 until w || y !in 0 until h) return false
+        val (px, py) = gesturePacing().near(x, y)
+        return tapAt(px.coerceIn(0, w - 1), py.coerceIn(0, h - 1), long, displayId)
+    }
 
-    suspend fun swipe(x1: Int, y1: Int, x2: Int, y2: Int, ms: Long = 350, displayId: Int = Display.DEFAULT_DISPLAY): Boolean =
-        gesture(Path().apply { moveTo(x1.toFloat(), y1.toFloat()); lineTo(x2.toFloat(), y2.toFloat()) }, ms, displayId)
+    private suspend fun tapAt(x: Int, y: Int, long: Boolean, displayId: Int): Boolean {
+        val pace = gesturePacing()
+        if (pace.paced) delay(pace.approach())
+        val duration = if (long) maxOf(700L, pace.duration(700)) else if (pace.paced) pace.press() else 60L
+        return gesture(GestureDescription.StrokeDescription(Path().apply { moveTo(x.toFloat(), y.toFloat()) }, 0, duration), displayId)
+    }
 
-    private suspend fun gesture(path: Path, ms: Long, displayId: Int): Boolean = suspendCancellableCoroutine { c ->
-        val builder = GestureDescription.Builder().addStroke(GestureDescription.StrokeDescription(path, 0, ms))
+    suspend fun swipe(x1: Int, y1: Int, x2: Int, y2: Int, ms: Long = 350, displayId: Int = Display.DEFAULT_DISPLAY): Boolean {
+        val pace = gesturePacing()
+        if (pace.paced) delay(pace.approach())
+        val stroke = pace.stroke(listOf(x1.toDouble() to y1.toDouble(), x2.toDouble() to y2.toDouble()),
+            ms, bow = pace.paced, bounds = screenSize(displayId))
+        if (!pace.paced) {
+            val p = Path().apply { moveTo(x1.toFloat(), y1.toFloat()); lineTo(x2.toFloat(), y2.toFloat()) }
+            return gesture(GestureDescription.StrokeDescription(p, 0, ms), displayId)
+        }
+        // 分段续接同一根手指：实际时长按 Mika 的先快后慢采样走，末段才抬手。
+        val points = stroke.points
+        val chunks = minOf(6, points.lastIndex)
+        var previous: GestureDescription.StrokeDescription? = null
+        for (i in 0 until chunks) {
+            val from = i * points.lastIndex / chunks
+            val to = (i + 1) * points.lastIndex / chunks
+            val p = Path().apply {
+                moveTo(points[from].x.toFloat(), points[from].y.toFloat())
+                for (j in from + 1..to) lineTo(points[j].x.toFloat(), points[j].y.toFloat())
+            }
+            val duration = (points[to].t - points[from].t).coerceAtLeast(1)
+            val desc = previous?.continueStroke(p, 0, duration, i != chunks - 1)
+                ?: GestureDescription.StrokeDescription(p, 0, duration, i != chunks - 1)
+            if (!gesture(desc, displayId)) return false
+            previous = desc
+        }
+        return true
+    }
+
+    private suspend fun gesture(stroke: GestureDescription.StrokeDescription, displayId: Int): Boolean = suspendCancellableCoroutine { c ->
+        val builder = GestureDescription.Builder().addStroke(stroke)
         if (Build.VERSION.SDK_INT >= 30) builder.setDisplayId(displayId)
-        val g = builder.build()
-        val ok = dispatchGesture(g, object : GestureResultCallback() {
+        val ok = dispatchGesture(builder.build(), object : GestureResultCallback() {
             override fun onCompleted(d: GestureDescription?) { if (c.isActive) c.resume(true) }
             override fun onCancelled(d: GestureDescription?) { if (c.isActive) c.resume(false) }
         }, main)
@@ -283,11 +335,28 @@ class KaviAccessibility : AccessibilityService() {
     }
 
     /** 在输入框里填字（替换原来的）：先直接设，不行就点一下再粘贴。 */
-    suspend fun type(e: Element, text: String, displayId: Int = Display.DEFAULT_DISPLAY, clipboard: ((String) -> Boolean)? = null): Boolean {
-        val n = find(e.path, displayId)?.takeIf { it.isEditable } ?: run { click(e, displayId = displayId); delay(300); rootOn(displayId)?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) } ?: return false
+    suspend fun type(e: Element, text: String, displayId: Int = Display.DEFAULT_DISPLAY,
+                     clipboard: ((String) -> Boolean)? = null, pace: TypingPacing = TypingPacing.Instant): Boolean {
+        val n = find(e.path, displayId)?.takeIf { it.isEditable }
+            ?: run { click(e, displayId = displayId); delay(300); rootOn(displayId)?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) }
+            ?: return false
+        if (n.isPassword) return false
         n.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
-        val args = Bundle().apply { putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text) }
-        if (n.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) return true
+        fun set(value: String): Boolean {
+            val args = Bundle().apply { putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, value) }
+            return n.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+        }
+        val steps = pace.plan(text)
+        if (steps.size > 1) {
+            for ((index, step) in steps.dropLast(1).withIndex()) {
+                delay(step.delayMs)
+                val prefix = text.substring(0, step.end)
+                if (!set(prefix)) break // 输入框不接受分段写入时，退回原来的一次写入
+                if (index == 0 && n.text?.toString() != prefix) break
+            }
+            delay(steps.last().delayMs)
+        }
+        if (set(text)) return true
         if (clipboard != null) {
             if (!clipboard(text)) return false
         } else (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Kavi", text))
