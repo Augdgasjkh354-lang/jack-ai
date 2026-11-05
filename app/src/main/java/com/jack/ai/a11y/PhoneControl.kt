@@ -3,6 +3,7 @@ package com.jack.ai.a11y
 import android.graphics.Bitmap
 import android.view.KeyEvent
 import com.wangzan101.mika.cap.phone.shell.ShellService
+import com.wangzan101.mika.core.cap.phone.TypingPacing
 import java.io.IOException
 
 /** 同一轮任务固定使用主屏或后台屏幕；后台出错时不退回主屏。 */
@@ -27,8 +28,8 @@ class PhoneControl(val service: KaviAccessibility, val background: BackgroundPho
     suspend fun tap(x: Int, y: Int, long: Boolean = false) = control(true) { service.tap(x, y, long, id) }
     suspend fun swipe(x1: Int, y1: Int, x2: Int, y2: Int) = control(true) { service.swipe(x1, y1, x2, y2, displayId = id) }
     suspend fun scroll(e: Element?, direction: String) = control(true) { service.scroll(e, direction, id) }
-    suspend fun type(e: Element, text: String) = control(true) {
-        service.type(e, text, id, background?.let { b -> { value -> b.shell.setClipText(value) == 0 } })
+    suspend fun type(e: Element, text: String, pace: TypingPacing = TypingPacing.Instant) = control(true) {
+        service.type(e, text, id, background?.let { b -> { value -> b.shell.setClipText(value) == 0 } }, pace)
     }
     suspend fun imeEnter() = control(true) { service.imeEnter(id) }
     suspend fun back() = control { background?.shell?.injectKey(id, KeyEvent.KEYCODE_BACK) ?: service.back() }
