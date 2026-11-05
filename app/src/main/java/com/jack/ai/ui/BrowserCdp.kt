@@ -151,15 +151,21 @@ internal object BrowserCdp {
     suspend fun flushNetwork(tabId: Int? = null) = BrowserNetwork.flush(tabId)
 
     /** 事件发出后断线，页面可能已执行：停止重复发送；只有尚未发出输入时才退回旧脚本。 */
-    private suspend fun perform(tab: JackBrowser.Tab, action: String, block: suspend Sender.() -> Unit): Outcome {
+    private suspend fun perform(tab: JackBrowser.Tab, action: String, block: suspend CdpInputScript.() -> Unit): Outcome {
         val s = session(tab)
         if (s == null) {
             tab.diag.add("CDP 连不上，$action 退回旧输入")
             return Outcome.FALLBACK
         }
-        val sender = Sender(s)
+        var eventAttempted = false
+        val input = CdpInputScript { method, params ->
+            // 单纯移动鼠标失败时，没有发生点击或编辑，可以退回脚本。
+            if (method != "Input.dispatchMouseEvent" ||
+                params["type"]?.jsonPrimitive?.contentOrNull != "mouseMoved") eventAttempted = true
+            s.send(method, params, timeoutMs = 2_000)
+        }
         return try {
-            sender.block()
+            input.block()
             tab.diag.add("CDP 输入成功：$action")
             Outcome.DONE
         } catch (e: CancellationException) {
@@ -167,7 +173,7 @@ internal object BrowserCdp {
         } catch (e: Exception) {
             sessions.remove(tab.id)?.close()
             targets.remove(tab.id)
-            val status = failureOutcome(sender.eventAttempted)
+            val status = failureOutcome(eventAttempted)
             tab.diag.add("CDP $action 失败：${e.javaClass.simpleName}，" +
                 if (status == Outcome.FALLBACK) "退回旧输入" else "不重复输入")
             status
@@ -273,120 +279,17 @@ internal object BrowserCdp {
 
     internal fun failureOutcome(eventAttempted: Boolean) = if (eventAttempted) Outcome.UNCERTAIN else Outcome.FALLBACK
 
-    private class Sender(private val s: CdpSession) {
-        var eventAttempted = false
-            private set
-
-        suspend fun send(method: String, params: kotlinx.serialization.json.JsonObject) {
-            // 单纯移动鼠标失败时，没有发生点击或编辑，可以退回脚本。
-            if (method != "Input.dispatchMouseEvent" ||
-                params["type"]?.jsonPrimitive?.contentOrNull != "mouseMoved") eventAttempted = true
-            s.send(method, params, timeoutMs = 2_000)
-        }
-
-        suspend fun mouse(type: String, x: Double, y: Double, button: String = "none", buttons: Int = 0) =
-            send("Input.dispatchMouseEvent", buildJsonObject {
-                put("type", type); put("x", x); put("y", y)
-                put("button", button); put("buttons", buttons)
-                put("clickCount", if (button == "left") 1 else 0); put("pointerType", "mouse")
-            })
-
-        suspend fun touch(type: String, x: Double, y: Double, end: Boolean = false) =
-            send("Input.dispatchTouchEvent", buildJsonObject {
-                put("type", type)
-                put("touchPoints", buildJsonArray {
-                    if (!end) add(buildJsonObject { put("x", x); put("y", y); put("id", 1) })
-                })
-            })
-
-        suspend fun key(spec: BrowserCdpKey, modifiers: Int = 0) {
-            val params = { type: String -> buildJsonObject {
-                put("type", type); put("key", spec.key); put("code", spec.code)
-                put("windowsVirtualKeyCode", spec.codePoint)
-                put("nativeVirtualKeyCode", spec.codePoint)
-                if (modifiers != 0) put("modifiers", modifiers)
-                if (spec.text != null && type == "keyDown") { put("text", spec.text); put("unmodifiedText", spec.text) }
-            } }
-            send("Input.dispatchKeyEvent", params(if (spec.text == null) "rawKeyDown" else "keyDown"))
-            send("Input.dispatchKeyEvent", params("keyUp"))
-        }
-
-        suspend fun selectAll() {
-            val ctrl = BrowserCdpKey("Control", "ControlLeft", 17)
-            val a = BrowserCdpKey("a", "KeyA", 65)
-            send("Input.dispatchKeyEvent", buildJsonObject {
-                put("type", "rawKeyDown"); put("key", ctrl.key); put("code", ctrl.code)
-                put("windowsVirtualKeyCode", ctrl.codePoint); put("modifiers", 2)
-            })
-            try { key(a, modifiers = 2) } finally {
-                runCatching {
-                    send("Input.dispatchKeyEvent", buildJsonObject {
-                        put("type", "keyUp"); put("key", ctrl.key); put("code", ctrl.code)
-                        put("windowsVirtualKeyCode", ctrl.codePoint)
-                    })
-                }
-            }
-        }
-    }
-
     suspend fun act(tab: JackBrowser.Tab, x: Double, y: Double, op: String, arg: String, clear: Boolean): Outcome {
         if (op == "key" && BrowserCdpKeys.named(arg) == null) return Outcome.FALLBACK
-        return perform(tab, op) {
-            mouse("mouseMoved", x, y)
-            if (op in setOf("click", "type", "delete")) {
-                mouse("mousePressed", x, y, "left", 1)
-                mouse("mouseReleased", x, y, "left", 0)
-            }
-            when (op) {
-                "click" -> Unit
-                "hover" -> Unit
-                "type" -> {
-                    key(BrowserCdpKeys.named("end")!!)
-                    if (clear) { selectAll(); key(BrowserCdpKeys.named("backspace")!!) }
-                    send("Input.insertText", buildJsonObject { put("text", arg) })
-                }
-                "delete" -> {
-                    key(BrowserCdpKeys.named("end")!!)
-                    val n = arg.toIntOrNull() ?: 0
-                    if (n <= 0) { selectAll(); key(BrowserCdpKeys.named("backspace")!!) }
-                    else repeat(n.coerceAtMost(1_000)) { key(BrowserCdpKeys.named("backspace")!!) }
-                }
-                "key" -> key(BrowserCdpKeys.named(arg)!!)
-            }
-        }
+        return perform(tab, op) { act(x, y, op, arg, clear) }
     }
 
     suspend fun at(tab: JackBrowser.Tab, x: Double, y: Double, x2: Double, y2: Double, durationMs: Long): Outcome =
         perform(tab, if (x == x2 && y == y2) "tap" else "swipe") {
-            touch("touchStart", x, y)
-            if (x != x2 || y != y2) {
-                val steps = 10
-                repeat(steps) { i ->
-                    delay((durationMs / steps).coerceAtLeast(1))
-                    val f = (i + 1).toDouble() / steps
-                    touch("touchMove", x + (x2 - x) * f, y + (y2 - y) * f)
-                }
-            }
-            touch("touchEnd", x2, y2, end = true)
+            at(x, y, x2, y2, durationMs)
         }
 }
 
-internal data class BrowserCdpKey(val key: String, val code: String, val codePoint: Int, val text: String? = null)
-
-internal object BrowserCdpKeys {
-    fun named(name: String): BrowserCdpKey? = when (name.lowercase()) {
-        "enter" -> BrowserCdpKey("Enter", "Enter", 13, "\r")
-        "backspace" -> BrowserCdpKey("Backspace", "Backspace", 8)
-        "tab" -> BrowserCdpKey("Tab", "Tab", 9)
-        "escape" -> BrowserCdpKey("Escape", "Escape", 27)
-        "down" -> BrowserCdpKey("ArrowDown", "ArrowDown", 40)
-        "up" -> BrowserCdpKey("ArrowUp", "ArrowUp", 38)
-        "end" -> BrowserCdpKey("End", "End", 35)
-        else -> null
-    }
-}
-
-/** 截图像素到 CDP 的 CSS 像素，先撤销 720px 截图缩放，再按 WebView 宽度换算。 */
 internal object BrowserCdpCoords {
     fun fromScreenshot(pixel: Float, viewWidth: Int, cssWidth: Float): Double {
         val imageScale = minOf(1f, 720f / viewWidth.coerceAtLeast(1))
