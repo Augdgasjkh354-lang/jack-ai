@@ -498,8 +498,9 @@ private val BATCHABLE = setOf("open", "click", "type", "delete", "select", "key"
  * 出错、被拒、找不到就停下，最后只发一次页面（相对这串动作开始前模型看到的那一页）。
  */
 private suspend fun ToolSession.runSteps(args: JsonObject): String {
-    val steps = (args["steps"] as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { it as? JsonObject }
-    if (steps.isEmpty()) return "steps 要填动作数组，比如 [{\"action\":\"type\",\"n\":3,\"text\":\"保温杯\"},{\"action\":\"click\",\"text\":\"搜索\"}]"
+    // 动作数组在 actions 里（steps 这个名字给 save_flow 的文字步骤用了）；老写法放在 steps 里的也认
+    val steps = ((args["actions"] ?: args["steps"]) as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { it as? JsonObject }
+    if (steps.isEmpty()) return "actions 要填动作数组，比如 [{\"action\":\"type\",\"n\":3,\"text\":\"保温杯\"},{\"action\":\"click\",\"text\":\"搜索\"}]"
     if (steps.size > 12) return "一次最多 12 步，分几次做"
     steps.firstOrNull { it["action"].text() !in BATCHABLE }?.let {
         return "steps 里只能用 " + BATCHABLE.joinToString("、") + "；「${it["action"].text()}」要单独调用"

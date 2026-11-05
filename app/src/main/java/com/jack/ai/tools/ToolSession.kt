@@ -161,6 +161,8 @@ class ToolSession(
     /** 同一轮手机任务共享停留状态，模型思考时间计入停留。 */
     internal val phoneDwell = com.wangzan101.mika.core.cap.phone.AppDwell(com.wangzan101.mika.core.cap.phone.AppPacing.human())
     @Volatile internal var phoneLimitStop: String? = null
+    /** 上一次 phone 调用做成了没有（steps 一串动作靠它决定要不要接着做）。 */
+    @Volatile internal var phoneStepOk = false
     @Volatile internal var phoneCloseSummary: String? = null
 
     internal suspend fun claimPhone(service: com.jack.ai.a11y.KaviAccessibility, forceMain: Boolean = false): com.jack.ai.a11y.PhoneControl {

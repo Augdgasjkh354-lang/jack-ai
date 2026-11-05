@@ -25,6 +25,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import com.jack.ai.a11y.PhoneCollect
 
 /**
  * 操作其他 App（phone 工具，无障碍）：apps 列出能操作的 App、open 打开、read 读屏幕、tap / long_press 点、type 填字、
@@ -34,6 +37,7 @@ import kotlinx.serialization.json.JsonObject
  */
 internal suspend fun ToolSession.phone(args: JsonObject): String {
     val action = args["action"].text().trim()
+    phoneStepOk = false
     phoneLimitStop?.let {
         if (action !in setOf("apps", "read", "screenshot", "flow", "save_flow"))
             return "$it 请停止这一轮自动操作，由用户确认后重新发起。"
@@ -45,6 +49,7 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
         else "无障碍服务没开，Kavi 碰不到别的 App。请用户到 设置 → 操作其他 App 点「去打开」（安卓 13 以上要先在应用信息里「允许受限制的设置」）。"
     // 存流程、读流程不用碰屏幕
     if (action == "flow" || action == "save_flow") return phoneFlow(action, args)
+    if (action == "steps") return phoneSteps(args)
     val openWant = if (action == "open") args["app"].text().trim() else ""
     val openPkg = if (action == "open") {
         if (openWant.isBlank()) return "open 要填 app（App 名字或包名）。"
@@ -240,6 +245,7 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
             phoneSeen = null
             return "$done\n$phoneLimitStop 这一轮停手，不再继续重试；请用户稍后重新发起。\n\n$screenText"
         }
+        phoneStepOk = now != null && effect != EffectKind.NO_EFFECT
         val result = when (effect) {
             EffectKind.CHANGED -> "操作效果：界面明显变了。"
             EffectKind.NO_EFFECT -> when (action) {
@@ -293,6 +299,7 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
         "tap", "long_press" -> (if (action == "tap") "点 " else "长按 ") + (args["text"].text().ifBlank { args["n"].text().let { n -> if (n.isNotBlank()) "第 $n 项" else "屏幕" } })
         "type" -> "输入文字"
         "read", "screenshot", "wait", "apps" -> "看屏幕"
+        "collect" -> "逐屏读列表"
         else -> action
     }
     val toolLabel = "操作手机：$bar"
@@ -318,7 +325,9 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
                 if (settings.phonePace == OperatingPace.HUMAN)
                     phoneDwell.after(pkg, System.currentTimeMillis(), newScreen = true,
                         careful = openPolicy?.pace == "careful", counts = true)
-                (if (openPolicy?.mainScreenOnly == true) "为保护登录状态，这个 App 只在主屏操作。\n\n" else "") + read().second
+                val (opened, shown) = read()
+                phoneStepOk = opened?.pkg == pkg
+                (if (openPolicy?.mainScreenOnly == true) "为保护登录状态，这个 App 只在主屏操作。\n\n" else "") + shown
             }
             "read" -> read().second
             "screenshot" -> {
@@ -418,24 +427,123 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
             }
             "wait" -> {
                 val want = args["text"].text().trim()
-                val secs = args["seconds"].text().toFloatOrNull()?.coerceIn(0.5f, 15f) ?: if (want.isNotEmpty()) 10f else 2f
+                val gone = args["gone"].text().trim()
+                val secs = args["seconds"].text().toFloatOrNull()?.coerceIn(0.5f, 15f) ?: if (want.isNotEmpty() || gone.isNotEmpty()) 10f else 2f
                 val end = System.currentTimeMillis() + (secs * 1000).toLong()
-                if (want.isEmpty()) { delay((secs * 1000).toLong()); read().second }
-                else {
+                if (want.isEmpty() && gone.isEmpty()) {
+                    delay((secs * 1000).toLong())
+                    val (s, t) = read()
+                    phoneStepOk = s != null
+                    t
+                } else {
+                    fun met(s: Screen) = (want.isEmpty() || s.texts().any { want in it }) && (gone.isEmpty() || s.texts().none { gone in it })
                     var last = ""
                     while (true) {
                         val (s, t) = read()
                         last = t
-                        if (s == null || s.texts().any { want in it } || System.currentTimeMillis() > end) break
+                        if (s != null && met(s)) { phoneStepOk = true; break }
+                        if (s == null || System.currentTimeMillis() > end) break
                         delay(700)
                     }
-                    (if (phoneSeen?.texts()?.any { want in it } == true) "等到了「$want」。\n\n" else "等了 ${secs.toInt()} 秒还没出现「$want」。\n\n") + last
+                    val what = listOfNotNull(want.ifEmpty { null }?.let { "出现「$it」" }, gone.ifEmpty { null }?.let { "「$it」消失" }).joinToString("、")
+                    (if (phoneStepOk) "等到了$what。\n\n" else "等了 ${"%.1f".format(secs).removeSuffix(".0")} 秒还没等到$what。\n\n") + last
                 }
             }
-            else -> return@runTool "action 要填 apps、open、read、tap、long_press、type、enter、scroll、swipe、back、home、wait 或 screenshot。" to SearchRecord(toolLabel)
+            "collect" -> {
+                val first = needScreen() ?: read().let { (s, t) -> s ?: return@runTool t to SearchRecord(toolLabel) }
+                val dir = args["direction"].text().ifBlank { "down" }.takeIf { it == "down" || it == "up" }
+                    ?: return@runTool "collect 的 direction 只能是 down（往下读）或 up（往上读更早的，比如聊天记录）。" to SearchRecord(toolLabel)
+                val pages = args["pages"].text().toIntOrNull()?.coerceIn(1, 30) ?: 10
+                val maxItems = args["max_items"].text().toIntOrNull()?.coerceIn(1, 1000) ?: 300
+                // 只收列表里面的字：顶栏、底栏、输入框每屏都一样，混进来会让前后两屏对不上
+                fun listIn(s: Screen) = args["n"].text().toIntOrNull()?.let { s.byNumber(it) }?.takeIf { it.scrollable }
+                    ?: s.elements.filter { it.scrollable }.maxByOrNull { (it.bounds[2] - it.bounds[0]).toLong() * (it.bounds[3] - it.bounds[1]) }
+                fun linesOf(s: Screen): List<String> {
+                    val box = listIn(s)?.bounds
+                    return s.elements.filter { e ->
+                        e.role != "列表" && !e.editable && !e.password && e.label.isNotBlank() &&
+                            (box == null || (e.centerY in box[1] until box[3] && e.centerX in box[0] until box[2]))
+                    }.map { it.label.replace('\n', ' ').trim() }
+                }
+                var screen: Screen = first
+                var merged = PhoneCollect.Lines(linesOf(first))
+                var pagesRead = 1
+                var why = "翻到 $pages 屏的上限"
+                while (pagesRead < pages && merged.lines.size < maxItems) {
+                    if (KaviAccessibility.stops.get() != phoneStops) { why = "用户按了停止"; break }
+                    val paced = beforeAction(screen, counts = false)
+                    if (paced != null) { why = paced; break }
+                    if (!svc.scroll(listIn(screen), dir)) { why = "翻不动了"; break }
+                    svc.settle()
+                    val (next, text) = read()
+                    if (next == null) { why = text.lines().first(); break }
+                    pagesRead++
+                    if (next.signature() == screen.signature()) { why = if (dir == "down") "到底了" else "到顶了"; break }
+                    merged = PhoneCollect.merge(merged, linesOf(next), prepend = dir == "up")
+                    screen = next
+                }
+                phoneSeen = null
+                phoneStepOk = true
+                val all = merged.lines.take(maxItems)
+                if (merged.lines.size >= maxItems) why = "收满 $maxItems 行"
+                val body = buildString {
+                    for (l in all) { if (length + l.length > 15000) { append("……（后面还有，太长没列出）\n"); break }; append(l).append('\n') }
+                }
+                "逐屏读了「${screen.app}」$pagesRead 屏，拼好 ${all.size} 行（停下：$why）" +
+                    (if (merged.gaps > 0) "；有 ${merged.gaps} 处前后两屏没对上，可能漏了几行，标成「……」" else "") +
+                    (if (dir == "up") "；按从早到晚排好" else "") + "：\n" + body +
+                    "\n现在停在最后读的那一屏。要接着点、输入，先 read 看一下当前屏幕。"
+            }
+            else -> return@runTool "action 要填 apps、open、read、tap、long_press、type、enter、scroll、swipe、back、home、wait、screenshot、steps、collect、flow 或 save_flow。" to SearchRecord(toolLabel)
         }
         text to SearchRecord(toolLabel)
     }
+}
+
+private val PHONE_BATCHABLE = setOf("open", "tap", "long_press", "type", "enter", "scroll", "swipe", "back", "wait")
+
+/**
+ * 一次做一串手机动作：每步照单独调用走（该问用户的照样问、节奏照样等），做完可以等某几个字出现或消失再做下一步，
+ * 不用为「还在加载」再问一次模型。哪一步没做成、被拒、没等到就停下，最后只交一次当前屏幕。
+ * 思路来自 Mika 的 do_steps（BatchRunner），Apache-2.0。
+ */
+private suspend fun ToolSession.phoneSteps(args: JsonObject): String {
+    val steps = (args["actions"] as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { it as? JsonObject }
+    if (steps.isEmpty()) return "actions 要填动作数组，比如 [{\"action\":\"open\",\"app\":\"微信\",\"expect\":\"通讯录\"},{\"action\":\"tap\",\"text\":\"搜索\"}]"
+    if (steps.size > 12) return "一次最多 12 步，分几次做。"
+    steps.firstOrNull { it["action"].text() !in PHONE_BATCHABLE }?.let {
+        return "steps 里只能用 " + PHONE_BATCHABLE.joinToString("、") + "；「${it["action"].text()}」要单独调用。"
+    }
+    val lines = mutableListOf<String>()
+    var stop = ""
+    var last = ""
+    for ((i, st) in steps.withIndex()) {
+        val out = phone(st)
+        last = out
+        val what = st["action"].text() + (st["app"].text().takeIf { it.isNotBlank() }?.let { " $it" } ?: "") +
+            (st["n"].text().takeIf { it.isNotBlank() }?.let { " $it" } ?: "") +
+            (st["text"].text().takeIf { it.isNotBlank() }?.let { "「${it.take(20)}」" } ?: "")
+        val head = out.substringBefore("【手机屏幕】").trim().lines().filter { it.isNotBlank() }.joinToString("；").take(200)
+        lines += "${i + 1}. $what" + if (head.isNotEmpty()) "：$head" else ""
+        if (!phoneStepOk) { stop = "第 ${i + 1} 步没做成，后面的没做"; break }
+        val want = st["expect"].text().trim()
+        val gone = st["expect_gone"].text().trim()
+        if (want.isNotEmpty() || gone.isNotEmpty()) {
+            val waitArgs = buildJsonObject {
+                put("action", "wait")
+                if (want.isNotEmpty()) put("text", want)
+                if (gone.isNotEmpty()) put("gone", gone)
+                put("seconds", st["timeout"].text().toFloatOrNull()?.coerceIn(1f, 15f) ?: 8f)
+            }
+            val waited = phone(waitArgs)
+            last = waited
+            lines += "   " + waited.substringBefore("\n").trim()
+            if (!phoneStepOk) { stop = "第 ${i + 1} 步之后没等到，后面的没做"; break }
+        }
+    }
+    val screen = last.indexOf("【手机屏幕】").takeIf { it >= 0 }?.let { last.substring(it) } ?: phone(buildJsonObject { put("action", "read") })
+    return "连着做了 ${lines.count { !it.startsWith("   ") }}/${steps.size} 步" + (if (stop.isNotEmpty()) "（$stop）" else "") + "：\n" +
+        lines.joinToString("\n") + "\n\n" + screen
 }
 
 /** 手机锁着屏或屏幕灭着。 */
