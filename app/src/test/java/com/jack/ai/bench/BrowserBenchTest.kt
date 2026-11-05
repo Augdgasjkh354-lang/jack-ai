@@ -210,7 +210,7 @@ class BrowserBenchTest {
             val extra = merged.second.extras.firstOrNull { it.backendId == item.backendId }
                 ?: return Check(false, "新增节点缺少 backendNodeId")
             val viewport = viewport(s)
-            val placed = ElementProbe(tab.session).locate(extra.backendId, extra.ownerId, viewport)
+            val placed = ElementProbe(tab.session).locate(extra.backendId, extra.ownerId, viewport, extra.frameId, extra.hits)
                 ?: return Check(false, "ElementProbe.locate 无法定位")
             if (placed.hit !in extra.hits && placed.hit != extra.ownerId)
                 return Check(false, "定位点被其他节点挡住")
