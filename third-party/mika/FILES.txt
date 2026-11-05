@@ -94,3 +94,5 @@ core/src/main/kotlin/com/wangzan101/mika/core/uistate/ActionEffect.kt
 core/src/main/kotlin/com/wangzan101/mika/core/cap/phone/GesturePacing.kt
 core/src/main/kotlin/com/wangzan101/mika/core/cap/phone/TypingPacing.kt
 core/src/main/kotlin/com/wangzan101/mika/core/cap/phone/OperatingPace.kt
+core/src/main/kotlin/com/wangzan101/mika/core/uistate/TreeQuality.kt
+core/src/main/kotlin/com/wangzan101/mika/core/uistate/RefStabilizer.kt

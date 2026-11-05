@@ -6,6 +6,9 @@ import com.wangzan101.mika.cap.phone.shell.ShellService
 import com.wangzan101.mika.core.cap.phone.TypingPacing
 import java.io.IOException
 
+/** 主屏、后台屏幕共用的截图判断结果。 */
+data class PhoneCapture(val image: Pair<String, Float>? = null, val black: Boolean = false)
+
 /** 同一轮任务固定使用主屏或后台屏幕；后台出错时不退回主屏。 */
 class PhoneControl(val service: KaviAccessibility, val background: BackgroundPhone?) {
     private val id get() = background?.displayId ?: android.view.Display.DEFAULT_DISPLAY
@@ -47,10 +50,16 @@ class PhoneControl(val service: KaviAccessibility, val background: BackgroundPho
         }
     }
 
-    suspend fun screenshot(marks: List<Element>): Pair<String, Float>? = control {
-        val b = background ?: return@control service.screenshot(marks)
-        val shot: Bitmap = b.display.latestFrameBitmap() ?: return@control null
-        service.mark(shot, marks)
+    suspend fun screenshot(marks: List<Element>): Pair<String, Float>? = checkedScreenshot(marks)?.image
+
+    /** 主屏用无障碍截图，后台只从虚拟屏幕取画面，绝不落回主屏。 */
+    suspend fun checkedScreenshot(marks: List<Element>): PhoneCapture? = control {
+        val shot: Bitmap = (if (background == null) service.rawShot() else background.display.latestFrameBitmap())
+            ?: return@control null
+        if (service.blackFrame(shot)) {
+            shot.recycle()
+            PhoneCapture(black = true)
+        } else PhoneCapture(image = service.mark(shot, marks))
     }
 
     suspend fun close(): String? = background?.close()

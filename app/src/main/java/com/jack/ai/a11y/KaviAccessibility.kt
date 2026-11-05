@@ -443,6 +443,23 @@ class KaviAccessibility : AccessibilityService() {
         }
     }
 
+    /** 防截屏窗口常给全黑画面：只采样少量像素，不保存原图。 */
+    internal fun blackFrame(shot: Bitmap): Boolean {
+        val sample = if (shot.config == Bitmap.Config.HARDWARE) shot.copy(Bitmap.Config.ARGB_8888, false) else shot
+        if (sample == null) return false
+        val result = runCatching {
+            var dark = 0
+            val nx = 24; val ny = 24
+            for (row in 0 until ny) for (col in 0 until nx) {
+                val color = sample.getPixel(col * (sample.width - 1) / (nx - 1), row * (sample.height - 1) / (ny - 1))
+                if (Color.red(color) <= 12 && Color.green(color) <= 12 && Color.blue(color) <= 12) dark++
+            }
+            dark >= nx * ny * 99 / 100
+        }.getOrDefault(false)
+        if (sample !== shot) sample.recycle()
+        return result
+    }
+
     internal fun mark(shot: Bitmap, marks: List<Element>): Pair<String, Float> {
         val scale = minOf(1f, 720f / shot.width)
         val out = Bitmap.createBitmap((shot.width * scale).toInt(), (shot.height * scale).toInt(), Bitmap.Config.ARGB_8888)

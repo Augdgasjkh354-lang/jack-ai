@@ -47,3 +47,11 @@ Jack AI 适配（2026-11-02）：
 - Jack AI modification：删去对 Mika 的 TextField、AppPacing、ScreenSnapshot、Agent 的依赖，改用 Kavi 的无障碍控件树作为薄适配输入；手机手势优先真实触摸；坐标不可用、控件不在可见区域时才尝试节点动作。触摸派发一旦开始，取消也不补点，避免重复提交。后台虚拟屏幕同样调用无障碍的目标显示编号。
 - 「像人」模式采用轻微落点偏移、落指前短停顿、续接的弧线滑动和按词递增输入；「快」模式保留固定手势、整段输入。动作之间按 App 节奏停顿和限流识别留到第 3 步。
 - 判断效果只使用本次动作前后的控件树；界面有变化、无变化、读不准分别告知模型。无变化不自动重复触摸，防止发送、提交等按钮重复执行。
+## App 操作移植：第 2 步（2026-11-05）
+
+- 固定参考 Mika 提交 `0091d2d67b541a417df913a23fefbb8e3a04e4a7`，Apache-2.0；移植 `TreeQuality.kt`、`RefStabilizer.kt` 至 `app/src/main/mika/` 并保留 `com.wangzan101.mika` 命名空间。
+- Jack AI modification：用 `PhoneScreenAnalysis` 把 Kavi 的 `UiNode` 和 `Element` 转成精简树质量、稳定编号输入；不移植 Mika 的 Agent、ScreenSnapshot、UiTree。
+- `read` 在树完整时只返回原来的文字清单；遇到缺块、自绘区域或几乎读不到内容时自动附标号截图，编号在同一 App 的连续读屏中尽量稳定，新控件顺延编号。主屏和后台虚拟屏幕都只截自己的画面。
+- 对接近全黑的截图提示用户接管，不继续操作；截图失败时保留纯文字并说明。原有 PhoneGuard 的禁用 App、付款页面和密码保护不变。
+- `ScreenMap.kt` 和 `VisibleText.kt` 依赖 OCR；本步没有接入手机 App 的 OCR，故未移植。
+

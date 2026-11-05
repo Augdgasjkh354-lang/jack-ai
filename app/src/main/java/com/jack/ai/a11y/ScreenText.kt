@@ -60,7 +60,8 @@ private fun normalizedText(s: String): String = buildString {
 }
 
 /** 读到的一屏：哪个 App、清单、读的时间。 */
-data class Screen(val pkg: String, val app: String, val elements: List<Element>, val at: Long = System.currentTimeMillis()) {
+data class Screen(val pkg: String, val app: String, val elements: List<Element>, val at: Long = System.currentTimeMillis(),
+                  val nextRef: Int = 1) {
     /** 屏幕上所有的字（查付款页面用）。 */
     fun texts(): List<String> = elements.map { it.label }
     /** 这一屏长什么样（字、输入框里的字、位置）：前后一样就是「做了但屏幕没变」。 */

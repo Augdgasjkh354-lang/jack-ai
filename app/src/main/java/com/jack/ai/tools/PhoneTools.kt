@@ -2,6 +2,8 @@ package com.jack.ai.tools
 
 import com.jack.ai.a11y.Element
 import com.jack.ai.a11y.KaviAccessibility
+import com.jack.ai.a11y.PhoneScreenAnalysis
+import com.wangzan101.mika.core.uistate.TreeQuality
 import com.jack.ai.a11y.PhoneGuard
 import com.jack.ai.a11y.Screen
 import com.jack.ai.a11y.ScreenText
@@ -79,18 +81,40 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
     suspend fun read(): Pair<Screen?, String> {
         val (pkg, root) = svc.snapshot() ?: return null to "读不到屏幕（可能在锁屏或系统界面上）。"
         refuse(pkg)?.let { phoneSeen = null; return null to it }
-        val screen = Screen(pkg, label(pkg), ScreenText.elements(root))
-        PhoneGuard.payPage(screen.texts())?.let { phoneSeen = null; return null to "到了付款或输密码的页面（看到「$it」），Kavi 不碰。停下，告诉用户这一步要自己来。" }
-        AppUsageNotes.policyForPackage(pkg).signedOutMarker(screen.texts())?.let {
+        val raw = Screen(pkg, label(pkg), ScreenText.elements(root))
+        PhoneGuard.payPage(raw.texts())?.let { phoneSeen = null; return null to "到了付款或输密码的页面（看到「$it」），Kavi 不碰。停下，告诉用户这一步要自己来。" }
+        AppUsageNotes.policyForPackage(pkg).signedOutMarker(raw.texts())?.let {
             phoneSeen = null
             return null to "检测到「$it」，账号已经回到登录页。为保护账号，这一轮停止操作；请用户在主屏手动登录后再继续。"
         }
+        val size = svc.screenSize()
+        val screen = PhoneScreenAnalysis.stabilize(phoneSeen, raw, size)
+        val quality = PhoneScreenAnalysis.quality(root, size)
         phoneSeen = screen
         val note = StringBuilder(flowHint(pkg)).append(ScreenText.format(screen))
-        // 读不到几个字的（自己画的界面、游戏）：能看图就自动截一张
-        if (screen.elements.size < 4 && canSee) svc.screenshot(screen.elements)?.let { (img, k) ->
-            images += img; phoneScale = k
-            note.append("这一屏读到的字很少，自动截了图（在下一条消息里），红框上的数字是清单编号；要点图里别的地方用 tap 的 x、y（截图上的像素）。\n")
+        // 树正常时沿用原来的纯文字读屏；缺块或读不到才附标号截图。
+        if (quality.poor && action != "screenshot") {
+            if (!canSee) note.append("这一屏树读不全，当前模型看不了截图，请用户来查看这一屏。\n")
+            else {
+                // 截图前再查一次目标 App，避免用户切屏时拍到未授权或付款 App。
+                if (svc.foreground() != pkg) {
+                    phoneSeen = null
+                    return null to "截图前 App 已切换，先重新 read 确认当前屏幕，不读取其他 App。"
+                }
+                val capture = svc.checkedScreenshot(screen.elements)
+                when {
+                    PhoneScreenAnalysis.withFrame(quality, capture?.black == true).quality == TreeQuality.Protected -> {
+                        phoneSeen = null
+                        return null to "这一屏防截屏，画面全黑。Kavi 无法安全辨认，请用户自己完成这一步；处理完再重新 read。"
+                    }
+                    capture?.image != null -> {
+                        val (img, k) = capture.image
+                        images += img; phoneScale = k
+                        note.append("这一屏树读不全，已附截图（在下一条消息里）；红框数字与清单编号一致，可以按截图坐标 tap。\n")
+                    }
+                    else -> note.append("这一屏树读不全，截图暂时拿不到，请用户查看这一屏后再继续。\n")
+                }
+            }
         }
         return screen to note.toString()
     }
@@ -197,7 +221,16 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
                 if (!canSee) return@runTool "当前模型看不了图，用 read 读屏幕上的字和按钮。" to SearchRecord(toolLabel)
                 val (s, t) = read()
                 if (s == null) return@runTool t to SearchRecord(toolLabel)
-                val (img, k) = svc.screenshot(s.elements) ?: return@runTool "截不了图（要安卓 11 以上；或者截得太频繁，等一秒再试）。下面是读到的清单：\n$t" to SearchRecord(toolLabel)
+                if (svc.foreground() != s.pkg) {
+                    phoneSeen = null
+                    return@runTool "截图前 App 已切换，请重新 read，先确认当前 App 能不能操作。" to SearchRecord(toolLabel)
+                }
+                val capture = svc.checkedScreenshot(s.elements)
+                if (capture?.black == true) {
+                    phoneSeen = null
+                    return@runTool "这一屏防截屏，画面全黑。请用户自己完成这一步，Kavi 不继续操作。" to SearchRecord(toolLabel)
+                }
+                val (img, k) = capture?.image ?: return@runTool "截不了图（要安卓 11 以上；或者截得太频繁、系统禁止截图）。下面是读到的清单：\n$t" to SearchRecord(toolLabel)
                 images += img; phoneScale = k
                 "截图在下一条消息里，红框上的数字就是下面清单的编号；按图上的位置点用 tap 的 x、y（截图上的像素）。\n$t"
             }
