@@ -1740,7 +1740,8 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
         val frames = (o["frameUrls"] as? kotlinx.serialization.json.JsonArray).orEmpty()
             .mapNotNull { (it as? JsonPrimitive)?.content }
         BrowserPacing.report(t, page.url, page.title, page.text, t.mainHttpStatus, frames,
-            BrowserNetwork.risk(t.id, page.url), longPage = page.height > page.vh * 2)
+            BrowserNetwork.risk(t.id, page.url),
+            longPage = o.s("textLength").toIntOrNull()?.let { it > 800 } ?: (page.height > page.vh * 2))
         // 后台、没有 CDP 或页面已经跳转时维持脚本清单，避免影响现有读页。
         if (o.s("docKey").isBlank() || !withContext(Dispatchers.Main) { t.web?.isAttachedToWindow == true }) return page
         fun box(it: JsonObject): ElementFusion.Box {
