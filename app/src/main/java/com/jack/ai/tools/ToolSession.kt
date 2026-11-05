@@ -387,6 +387,7 @@ class ToolSession(
             args == null -> "参数不是有效的 JSON，可能内容太长被截断了，请精简后重试"
             name.startsWith(com.jack.ai.data.Mcp.PREFIX) -> callConnector(name, args)
             name == "query_trains" && SkillIds.TRAIN in skillIds -> queryTrains(args)
+            name == "check_ai_tone" && SkillIds.TONE in skillIds -> checkAiTone(args)
             name == "create_app" && SkillIds.APP in skillIds -> makeApp(args)
             name == "design" && SkillIds.DESIGN in skillIds -> design(args)
             name == "github" && SkillIds.GITHUB in skillIds -> github(args)

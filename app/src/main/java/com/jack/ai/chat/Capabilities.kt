@@ -28,7 +28,7 @@ object Capabilities {
         skill(SkillIds.TABLES)?.let { lines += "Bookkeeping, lists, clients and other tables: 「$it」" }
         skill(SkillIds.RECEIPTS)?.let { lines += "Record invoices, receipts, delivery slips and business cards from photos into tables: 「$it」" }
         if ("schedule" in tools) lines += "Reminders, scheduled tasks, watching a web page for changes: schedule"
-        listOf(SkillIds.MAIL, SkillIds.CALENDAR, SkillIds.GITHUB, SkillIds.NOTION, SkillIds.TRAIN, SkillIds.WORD, SkillIds.PPT, SkillIds.EXCEL, SkillIds.PDF, SkillIds.APP)
+        listOf(SkillIds.MAIL, SkillIds.CALENDAR, SkillIds.GITHUB, SkillIds.NOTION, SkillIds.TRAIN, SkillIds.WORD, SkillIds.PPT, SkillIds.EXCEL, SkillIds.PDF, SkillIds.APP, SkillIds.TONE)
             .mapNotNull { skill(it) }.takeIf { it.isNotEmpty() }?.let { lines += "Other skills: " + it.joinToString(", ") { n -> "「$n」" } }
         // App 里用户自己点的入口：用得上时告诉用户
         lines += "Entry points on {user}'s side: 「+ → 录音纪要」 in the input box (you'll receive the recording; transcribe it and write up notes); 「分享 → 用 Kavi 下载 / 用 Kavi 总结」 in other apps; 「下载」 in the side menu for downloaded files" +

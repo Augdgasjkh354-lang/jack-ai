@@ -224,6 +224,7 @@ object PromptBuilder {
                 add(SkillTools.LIST_EMAILS); add(SkillTools.READ_EMAIL); add(SkillTools.SEND_EMAIL); add(SkillTools.MANAGE_EMAILS)
             }
             if (SkillIds.TRAIN in skillIds) add(SkillTools.QUERY_TRAINS)
+            if (SkillIds.TONE in skillIds) add(SkillTools.CHECK_AI_TONE)
             if (SkillIds.APP in skillIds) add(SkillTools.CREATE_APP)
             if (SkillIds.DESIGN in skillIds) add(SkillTools.DESIGN)
             if (SkillIds.GITHUB in skillIds) add(SkillTools.GITHUB)
