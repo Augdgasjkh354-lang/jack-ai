@@ -1,0 +1,53 @@
+name: 记忆考场
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "快考 / 全考 / 两种对比"
+        required: true
+        type: choice
+        default: quick
+        options:
+          - quick
+          - full
+          - both
+
+permissions:
+  contents: read
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      MEMORY_BENCH_MODE: ${{ inputs.mode }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Run memory bench
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:testDebugUnitTest --tests "com.jack.ai.bench.MemoryBenchTest"
+      - name: Show report
+        if: always()
+        run: |
+          if [ -f app/build/reports/memory-bench.md ]; then
+            cat app/build/reports/memory-bench.md
+            cat app/build/reports/memory-bench.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "未生成报告：检查 DEEPSEEK_API_KEY 是否已配置，或查看测试日志。" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: memory-bench-${{ inputs.mode }}
+          path: app/build/reports/memory-bench.md
+          if-no-files-found: warn

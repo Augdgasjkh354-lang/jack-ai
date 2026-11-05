@@ -1,0 +1,983 @@
+{
+  "user": "小林",
+  "days": [
+    {
+      "day": 1,
+      "conversations": [
+        {
+          "title": "第1天·日常",
+          "private": false,
+          "turns": [
+            {
+              "user": "我叫小林，在上海做产品设计。妹妹林小雨目前在杭州读研究生。",
+              "assistant": "收到，我们继续聊。"
+            },
+            {
+              "user": "写一条简短的会议邀请。",
+              "assistant": "明白，这个话题我们继续。"
+            },
+            {
+              "user": "写段不超过三句的读书推荐。",
+              "assistant": "可以，我给你一个简短的回应。"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "day": 2,
+      "conversations": [
+        {
+          "title": "第2天·日常",
+          "private": false,
+          "turns": [
+            {
+              "user": "我家猫叫土豆，喜欢窝在纸箱里。",
+              "assistant": "收到，我们继续聊。"
+            },
+            {
+              "user": "帮我想三个植物的昵称。",
+              "assistant": "可以，我给你一个简短的回应。"
+            },
+            {
+              "user": "说一个古典音乐的小知识。",
+              "assistant": "好，按你说的来。"
+            }
+          ]
+        },
+        {
+          "title": "第2天·闲聊",
+          "private": false,
+          "turns": [
+            {
+              "user": "写一条简短的会议邀请。",
+              "assistant": "我写一版简短的。"
+            },
+            {
+              "user": "解释一下为什么天空会变红。",
+              "assistant": "可以。"
+            },
+            {
+              "user": "今天阴天吗？我随口问问。",
+              "assistant": "好的。"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "day": 3,
+      "conversations": [
+        {
+          "title": "第3天·日常",
+          "private": false,
+          "turns": [
+            {
+              "user": "我喝咖啡最爱美式，早上通常来一杯。",
+              "assistant": "收到，我们继续聊。"
+            },
+            {
+              "user": "解释一下为什么天空会变红。",
+              "assistant": "好，按你说的来。"
+            },
+            {
+              "user": "帮我想一句咖啡店招牌文案。",
+              "assistant": "明白，这个话题我们继续。"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "day": 4,
+      "conversations": [
+        {
+          "title": "第4天·日常",
+          "private": false,
+          "turns": [
+            {
+              "user": "公司同事老周开会老迟到，我得提前给他发提醒。",
+              "assistant": "收到，我们继续聊。"
+            },
+            {
+              "user": "写段不超过三句的读书推荐。",
+              "assistant": "明白，这个话题我们继续。"
+            },
+            {
+              "user": "今天阴天吗？我随口问问。",
+              "assistant": "可以，我给你一个简短的回应。"
+            }
+          ]
+        },
+        {
+          "title": "第4天·闲聊",
+          "private": false,
+          "turns": [
+            {
+              "user": "解释一下为什么天空会变红。",
+              "assistant": "我写一版简短的。"
+            },
+            {
+              "user": "说一个古典音乐的小知识。",
+              "assistant": "可以。"
+            },
+            {
+              "user": "写一条简短的会议邀请。",
+              "assistant": "好的。"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "day": 5,
+      "conversations": [
+        {
+          "title": "第5天·日常",
+          "private": false,
+          "turns": [
+            {
+              "user": "最近开始学吉他，正在练最简单的和弦。",
+              "assistant": "收到，我们继续聊。"
+            },
+            {
+              "user": "说一个古典音乐的小知识。",
+              "assistant": "可以，我给你一个简短的回应。"
+            },
+            {
+              "user": "给我讲个不冷的笑话。",
+              "assistant": "好，按你说的来。"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "day": 6,
+      "conversations": [
+        {
+          "title": "第6天·日常",
+          "private": false,
+          "turns": [
+            {
+              "user": "我下班后喜欢逛书店，尤其爱看科幻。",
+              "assistant": "收到，我们继续聊。"
+            },
+            {
+              "user": "帮我想一句咖啡店招牌文案。",
+              "assistant": "好，按你说的来。"
+            },
+            {
+              "user": "写一条简短的会议邀请。",
+              "assistant": "明白，这个话题我们继续。"
+            }
+          ]
+        },
+        {
+          "title": "第6天·闲聊",
+          "private": false,
+          "turns": [
+            {
+              "user": "说一个古典音乐的小知识。",
+              "assistant": "我写一版简短的。"
+            },
+            {
+              "user": "今天阴天吗？我随口问问。",
+              "assistant": "可以。"
+            },
+            {
+              "user": "解释一下为什么天空会变红。",
+              "assistant": "好的。"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "day": 7,
+      "conversations": [
+        {
+          "title": "第7天·日常",
+          "private": false,
+          "turns": [
+            {
+              "user": "顺便说一句，我对芒果过敏，吃了会起疹子。",
+              "assistant": "收到，我们继续聊。"
+            },
+            {
+              "user": "今天阴天吗？我随口问问。",
+              "assistant": "明白，这个话题我们继续。"
+            },
+            {
+              "user": "帮我想三个植物的昵称。",
+              "assistant": "可以，我给你一个简短的回应。"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "day": 8,
+      "conversations": [
+        {
+          "title": "第8天·日常",
+          "private": false,
+          "turns": [
+            {
+              "user": "妹妹林小雨说她在杭州的课题有点忙。",
+              "assistant": "收到，我们继续聊。"
+            },
+            {
+              "user": "给我讲个不冷的笑话。",
+              "assistant": "可以，我给你一个简短的回应。"
+            },
+            {
+              "user": "解释一下为什么天空会变红。",
+              "assistant": "好，按你说的来。"
+            }
+          ]
+        },
+        {
+          "title": "第8天·闲聊",
+          "private": false,
+          "turns": [
+            {
+              "user": "今天阴天吗？我随口问问。",
+              "assistant": "我写一版简短的。"
+            },
+            {
+              "user": "写一条简短的会议邀请。",
+              "assistant": "可以。"
+            },
+            {
+              "user": "说一个古典音乐的小知识。",
+              "assistant": "好的。"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "day": 9,
+      "conversations": [
+        {
+          "title": "第9天·日常",
+          "private": false,
+          "turns": [
+            {
+              "user": "下周三约了体检，到时候我得早点出门。",
+              "assistant": "收到，我们继续聊。"
+            },
+            {
+              "user": "写一条简短的会议邀请。",
+              "assistant": "好，按你说的来。"
+            },
+            {
+              "user": "写段不超过三句的读书推荐。",
+              "assistant": "明白，这个话题我们继续。"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "day": 10,
+      "conversations": [
+        {
+          "title": "第10天·日常",
+          "private": false,
+          "turns": [
+            {
+              "user": "我现在住在上海，平常骑地铁通勤。",
+              "assistant": "收到，我们继续聊。"
+            },
+            {
+              "user": "帮我想三个植物的昵称。",
+              "assistant": "明白，这个话题我们继续。"
+            },
+            {
+              "user": "说一个古典音乐的小知识。",
+              "assistant": "可以，我给你一个简短的回应。"
+            }
+          ]
+        },
+        {
+          "title": "第10天·闲聊",
+          "private": false,
+          "turns": [
+            {
+              "user": "写一条简短的会议邀请。",
+              "assistant": "我写一版简短的。"
+            },
+            {
+              "user": "解释一下为什么天空会变红。",
+              "assistant": "可以。"
+            },
+            {
+              "user": "今天阴天吗？我随口问问。",
+              "assistant": "好的。"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "day": 11,
+      "conversations": [
+        {
+          "title": "第11天·日常",
+          "private": false,
+          "turns": [
+            {
+              "user": "土豆这两天又把猫抓板弄坏了。",
+              "assistant": "收到，我们继续聊。"
+            },
+            {
+              "user": "解释一下为什么天空会变红。",
+              "assistant": "可以，我给你一个简短的回应。"
+            },
+            {
+              "user": "帮我想一句咖啡店招牌文案。",
+              "assistant": "好，按你说的来。"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "day": 12,
+      "conversations": [
+        {
+          "title": "第12天·日常",
+          "private": false,
+          "turns": [
+            {
+              "user": "这事别记：我在偷偷找新工作。",
+              "assistant": "收到，我们继续聊。"
+            },
+            {
+              "user": "写段不超过三句的读书推荐。",
+              "assistant": "好，按你说的来。"
+            },
+            {
+              "user": "今天阴天吗？我随口问问。",
+              "assistant": "明白，这个话题我们继续。"
+            }
+          ]
+        },
+        {
+          "title": "第12天·闲聊",
+          "private": false,
+          "turns": [
+            {
+              "user": "解释一下为什么天空会变红。",
+              "assistant": "我写一版简短的。"
+            },
+            {
+              "user": "说一个古典音乐的小知识。",
+              "assistant": "可以。"
+            },
+            {
+              "user": "写一条简短的会议邀请。",
+              "assistant": "好的。"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "day": 13,
+      "conversations": [
+        {
+          "title": "第13天·日常",
+          "private": false,
+          "turns": [
+            {
+              "user": "周末喜欢和朋友去公园走走，不爱太吵的场所。",
+              "assistant": "收到，我们继续聊。"
+            },
+            {
+              "user": "说一个古典音乐的小知识。",
+              "assistant": "明白，这个话题我们继续。"
+            },
+            {
+              "user": "给我讲个不冷的笑话。",
+              "assistant": "可以，我给你一个简短的回应。"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "day": 14,
+      "conversations": [
+        {
+          "title": "第14天·日常",
+          "private": false,
+          "turns": [
+            {
+              "user": "我最喜欢的颜色是墨绿色。",
+              "assistant": "收到，我们继续聊。"
+            },
+            {
+              "user": "帮我想一句咖啡店招牌文案。",
+              "assistant": "可以，我给你一个简短的回应。"
+            },
+            {
+              "user": "写一条简短的会议邀请。",
+              "assistant": "好，按你说的来。"
+            }
+          ]
+        },
+        {
+          "title": "第14天·闲聊",
+          "private": false,
+          "turns": [
+            {
+              "user": "说一个古典音乐的小知识。",
+              "assistant": "我写一版简短的。"
+            },
+            {
+              "user": "今天阴天吗？我随口问问。",
+              "assistant": "可以。"
+            },
+            {
+              "user": "解释一下为什么天空会变红。",
+              "assistant": "好的。"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "day": 15,
+      "conversations": [
+        {
+          "title": "第15天·日常",
+          "private": false,
+          "turns": [
+            {
+              "user": "想给土豆买一个结实点的猫抓板。",
+              "assistant": "收到，我们继续聊。"
+            },
+            {
+              "user": "今天阴天吗？我随口问问。",
+              "assistant": "好，按你说的来。"
+            },
+            {
+              "user": "帮我想三个植物的昵称。",
+              "assistant": "明白，这个话题我们继续。"
+            }
+          ]
+        },
+        {
+          "title": "第15天·私人谈话",
+          "private": true,
+          "turns": [
+            {
+              "user": "这个私人项目里我最近在看心理咨询，暂时不想跟别处的聊天混在一起。",
+              "assistant": "好，我们只在这个私密项目里讨论。"
+            },
+            {
+              "user": "咨询时会记录一些心情变化。",
+              "assistant": "我们把讨论留在这里。"
+            },
+            {
+              "user": "这些内容不要带去普通对话。",
+              "assistant": "好的，按私人项目的隔离规则处理。"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "day": 16,
+      "conversations": [
+        {
+          "title": "第16天·日常",
+          "private": false,
+          "turns": [
+            {
+              "user": "老周今天开会又晚了十分钟。",
+              "assistant": "收到，我们继续聊。"
+            },
+            {
+              "user": "给我讲个不冷的笑话。",
+              "assistant": "明白，这个话题我们继续。"
+            },
+            {
+              "user": "解释一下为什么天空会变红。",
+              "assistant": "可以，我给你一个简短的回应。"
+            }
+          ]
+        },
+        {
+          "title": "第16天·闲聊",
+          "private": false,
+          "turns": [
+            {
+              "user": "今天阴天吗？我随口问问。",
+              "assistant": "我写一版简短的。"
+            },
+            {
+              "user": "写一条简短的会议邀请。",
+              "assistant": "可以。"
+            },
+            {
+              "user": "说一个古典音乐的小知识。",
+              "assistant": "好的。"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "day": 17,
+      "conversations": [
+        {
+          "title": "第17天·日常",
+          "private": false,
+          "turns": [
+            {
+              "user": "最近天气转凉，我开始晨跑，每周日早晨出去跑。",
+              "assistant": "收到，我们继续聊。"
+            },
+            {
+              "user": "写一条简短的会议邀请。",
+              "assistant": "可以，我给你一个简短的回应。"
+            },
+            {
+              "user": "写段不超过三句的读书推荐。",
+              "assistant": "好，按你说的来。"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "day": 18,
+      "conversations": [
+        {
+          "title": "第18天·日常",
+          "private": false,
+          "turns": [
+            {
+              "user": "最近胃不好，不再喝美式了，改喝温拿铁。",
+              "assistant": "收到，我们继续聊。"
+            },
+            {
+              "user": "帮我想三个植物的昵称。",
+              "assistant": "好，按你说的来。"
+            },
+            {
+              "user": "说一个古典音乐的小知识。",
+              "assistant": "明白，这个话题我们继续。"
+            }
+          ]
+        },
+        {
+          "title": "第18天·闲聊",
+          "private": false,
+          "turns": [
+            {
+              "user": "写一条简短的会议邀请。",
+              "assistant": "我写一版简短的。"
+            },
+            {
+              "user": "解释一下为什么天空会变红。",
+              "assistant": "可以。"
+            },
+            {
+              "user": "今天阴天吗？我随口问问。",
+              "assistant": "好的。"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "day": 19,
+      "conversations": [
+        {
+          "title": "第19天·日常",
+          "private": false,
+          "turns": [
+            {
+              "user": "我喜欢清淡的晚饭，尤其爱喝蔬菜汤。",
+              "assistant": "收到，我们继续聊。"
+            },
+            {
+              "user": "解释一下为什么天空会变红。",
+              "assistant": "明白，这个话题我们继续。"
+            },
+            {
+              "user": "帮我想一句咖啡店招牌文案。",
+              "assistant": "可以，我给你一个简短的回应。"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "day": 20,
+      "conversations": [
+        {
+          "title": "第20天·日常",
+          "private": false,
+          "turns": [
+            {
+              "user": "妹妹最近忙着写毕业论文，仍然在杭州。",
+              "assistant": "收到，我们继续聊。"
+            },
+            {
+              "user": "写段不超过三句的读书推荐。",
+              "assistant": "可以，我给你一个简短的回应。"
+            },
+            {
+              "user": "今天阴天吗？我随口问问。",
+              "assistant": "好，按你说的来。"
+            }
+          ]
+        },
+        {
+          "title": "第20天·闲聊",
+          "private": false,
+          "turns": [
+            {
+              "user": "解释一下为什么天空会变红。",
+              "assistant": "我写一版简短的。"
+            },
+            {
+              "user": "说一个古典音乐的小知识。",
+              "assistant": "可以。"
+            },
+            {
+              "user": "写一条简短的会议邀请。",
+              "assistant": "好的。"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "day": 21,
+      "conversations": [
+        {
+          "title": "第21天·日常",
+          "private": false,
+          "turns": [
+            {
+              "user": "现在周末也会偶尔带土豆去宠物友好的地方。",
+              "assistant": "收到，我们继续聊。"
+            },
+            {
+              "user": "说一个古典音乐的小知识。",
+              "assistant": "好，按你说的来。"
+            },
+            {
+              "user": "给我讲个不冷的笑话。",
+              "assistant": "明白，这个话题我们继续。"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "day": 22,
+      "conversations": [
+        {
+          "title": "第22天·日常",
+          "private": false,
+          "turns": [
+            {
+              "user": "吉他练不下去了，决定放弃，改学尤克里里。",
+              "assistant": "收到，我们继续聊。"
+            },
+            {
+              "user": "帮我想一句咖啡店招牌文案。",
+              "assistant": "明白，这个话题我们继续。"
+            },
+            {
+              "user": "写一条简短的会议邀请。",
+              "assistant": "可以，我给你一个简短的回应。"
+            }
+          ]
+        },
+        {
+          "title": "第22天·闲聊",
+          "private": false,
+          "turns": [
+            {
+              "user": "说一个古典音乐的小知识。",
+              "assistant": "我写一版简短的。"
+            },
+            {
+              "user": "今天阴天吗？我随口问问。",
+              "assistant": "可以。"
+            },
+            {
+              "user": "解释一下为什么天空会变红。",
+              "assistant": "好的。"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "day": 23,
+      "conversations": [
+        {
+          "title": "第23天·日常",
+          "private": false,
+          "turns": [
+            {
+              "user": "我发现尤克里里四根弦更容易上手。",
+              "assistant": "收到，我们继续聊。"
+            },
+            {
+              "user": "今天阴天吗？我随口问问。",
+              "assistant": "可以，我给你一个简短的回应。"
+            },
+            {
+              "user": "帮我想三个植物的昵称。",
+              "assistant": "好，按你说的来。"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "day": 24,
+      "conversations": [
+        {
+          "title": "第24天·日常",
+          "private": false,
+          "turns": [
+            {
+              "user": "之前安排的体检已经结束，报告也看过了。",
+              "assistant": "收到，我们继续聊。"
+            },
+            {
+              "user": "给我讲个不冷的笑话。",
+              "assistant": "好，按你说的来。"
+            },
+            {
+              "user": "解释一下为什么天空会变红。",
+              "assistant": "明白，这个话题我们继续。"
+            }
+          ]
+        },
+        {
+          "title": "第24天·闲聊",
+          "private": false,
+          "turns": [
+            {
+              "user": "今天阴天吗？我随口问问。",
+              "assistant": "我写一版简短的。"
+            },
+            {
+              "user": "写一条简短的会议邀请。",
+              "assistant": "可以。"
+            },
+            {
+              "user": "说一个古典音乐的小知识。",
+              "assistant": "好的。"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "day": 25,
+      "conversations": [
+        {
+          "title": "第25天·日常",
+          "private": false,
+          "turns": [
+            {
+              "user": "我最常听轻音乐，写设计稿时不放太吵的歌。",
+              "assistant": "收到，我们继续聊。"
+            },
+            {
+              "user": "写一条简短的会议邀请。",
+              "assistant": "明白，这个话题我们继续。"
+            },
+            {
+              "user": "写段不超过三句的读书推荐。",
+              "assistant": "可以，我给你一个简短的回应。"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "day": 26,
+      "conversations": [
+        {
+          "title": "第26天·日常",
+          "private": false,
+          "turns": [
+            {
+              "user": "周末可能约朋友去植物园看看。",
+              "assistant": "收到，我们继续聊。"
+            },
+            {
+              "user": "帮我想三个植物的昵称。",
+              "assistant": "可以，我给你一个简短的回应。"
+            },
+            {
+              "user": "说一个古典音乐的小知识。",
+              "assistant": "好，按你说的来。"
+            }
+          ]
+        },
+        {
+          "title": "第26天·闲聊",
+          "private": false,
+          "turns": [
+            {
+              "user": "写一条简短的会议邀请。",
+              "assistant": "我写一版简短的。"
+            },
+            {
+              "user": "解释一下为什么天空会变红。",
+              "assistant": "可以。"
+            },
+            {
+              "user": "今天阴天吗？我随口问问。",
+              "assistant": "好的。"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "day": 27,
+      "conversations": [
+        {
+          "title": "第27天·日常",
+          "private": false,
+          "turns": [
+            {
+              "user": "工作里我偏爱先做原型再评审。",
+              "assistant": "收到，我们继续聊。"
+            },
+            {
+              "user": "解释一下为什么天空会变红。",
+              "assistant": "好，按你说的来。"
+            },
+            {
+              "user": "帮我想一句咖啡店招牌文案。",
+              "assistant": "明白，这个话题我们继续。"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "day": 28,
+      "conversations": [
+        {
+          "title": "第28天·日常",
+          "private": false,
+          "turns": [
+            {
+              "user": "老周还是经常迟到，不过这周有进步。",
+              "assistant": "收到，我们继续聊。"
+            },
+            {
+              "user": "写段不超过三句的读书推荐。",
+              "assistant": "明白，这个话题我们继续。"
+            },
+            {
+              "user": "今天阴天吗？我随口问问。",
+              "assistant": "可以，我给你一个简短的回应。"
+            }
+          ]
+        },
+        {
+          "title": "第28天·闲聊",
+          "private": false,
+          "turns": [
+            {
+              "user": "解释一下为什么天空会变红。",
+              "assistant": "我写一版简短的。"
+            },
+            {
+              "user": "说一个古典音乐的小知识。",
+              "assistant": "可以。"
+            },
+            {
+              "user": "写一条简短的会议邀请。",
+              "assistant": "好的。"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "day": 29,
+      "conversations": [
+        {
+          "title": "第29天·日常",
+          "private": false,
+          "turns": [
+            {
+              "user": "我打算给土豆换更大的猫窝。",
+              "assistant": "收到，我们继续聊。"
+            },
+            {
+              "user": "说一个古典音乐的小知识。",
+              "assistant": "可以，我给你一个简短的回应。"
+            },
+            {
+              "user": "给我讲个不冷的笑话。",
+              "assistant": "好，按你说的来。"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "day": 30,
+      "conversations": [
+        {
+          "title": "第30天·日常",
+          "private": false,
+          "turns": [
+            {
+              "user": "现在喝温拿铁，晚上练尤克里里，周末多陪土豆。",
+              "assistant": "收到，我们继续聊。"
+            },
+            {
+              "user": "帮我想一句咖啡店招牌文案。",
+              "assistant": "好，按你说的来。"
+            },
+            {
+              "user": "写一条简短的会议邀请。",
+              "assistant": "明白，这个话题我们继续。"
+            }
+          ]
+        },
+        {
+          "title": "第30天·闲聊",
+          "private": false,
+          "turns": [
+            {
+              "user": "说一个古典音乐的小知识。",
+              "assistant": "我写一版简短的。"
+            },
+            {
+              "user": "今天阴天吗？我随口问问。",
+              "assistant": "可以。"
+            },
+            {
+              "user": "解释一下为什么天空会变红。",
+              "assistant": "好的。"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
