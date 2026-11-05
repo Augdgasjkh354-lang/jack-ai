@@ -219,9 +219,9 @@ class BrowserBenchTest {
             JsonPrimitive(arg) + "," + clear + ")")
     }
 
-    private fun sender(tab: BenchTab) = CdpInputScript { method, params ->
+    private fun sender(tab: BenchTab) = CdpInputScript(send = { method, params ->
         tab.session.send(method, params, timeoutMs = 2_000)
-    }
+    })
 
     private fun box(o: JsonObject): ElementFusion.Box {
         val x = o.getValue("x").jsonPrimitive.double
