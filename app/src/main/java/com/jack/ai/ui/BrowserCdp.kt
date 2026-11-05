@@ -194,7 +194,9 @@ internal object BrowserCdp {
             (page.vx + page.vw).toDouble(), (page.vy + page.vh).toDouble())
         val probe = ElementProbe(s).read(source, hidden, listeners, viewport)
             ?: return page.also { pages.remove(tab.id); tab.diag.add("CDP 元素融合失败，保留脚本清单") }
-        val fused = ElementFusion.fuse(source, probe.pageIds, probe.ax, probe.extras, viewport)
+        val visible = source.withIndex().filter { it.value.n !in probe.coveredPageNumbers }
+        val fused = ElementFusion.fuse(visible.map { it.value },
+            visible.map { probe.pageIds[it.index] }, probe.ax, probe.extras, viewport)
         val prev = pages[tab.id]?.takeIf { it.key == key }?.refs.orEmpty()
         val oldByBackend = prev.entries.associate { it.value.backendId to it.key }
         val added = fused.elements.filter { it.oldN == null }
