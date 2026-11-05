@@ -89,3 +89,8 @@ core/src/main/kotlin/com/wangzan101/mika/core/cap/web/ElementProbe.kt
 core/src/main/kotlin/com/wangzan101/mika/core/cap/web/NetworkLedger.kt
 core/src/main/kotlin/com/wangzan101/mika/core/cap/web/PagePacing.kt
 core/src/main/kotlin/com/wangzan101/mika/core/cap/web/WebBarrier.kt
+core/src/main/kotlin/com/wangzan101/mika/core/uistate/Pace.kt
+core/src/main/kotlin/com/wangzan101/mika/core/uistate/ActionEffect.kt
+core/src/main/kotlin/com/wangzan101/mika/core/cap/phone/GesturePacing.kt
+core/src/main/kotlin/com/wangzan101/mika/core/cap/phone/TypingPacing.kt
+core/src/main/kotlin/com/wangzan101/mika/core/cap/phone/OperatingPace.kt
