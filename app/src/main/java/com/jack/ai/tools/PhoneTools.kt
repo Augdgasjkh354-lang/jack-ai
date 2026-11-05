@@ -72,8 +72,11 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
     if (locked()) {
         if (interactive) return "手机锁着屏，Kavi 没法操作。请用户解锁后再说一声。"
         com.jack.ai.data.Routines.notify(app, "phone-unlock", "Kavi 要用一下手机", "后台任务要操作手机上的 App，解锁后它会接着做（两分钟内）。")
-        val end = System.currentTimeMillis() + 120_000
-        while (locked() && System.currentTimeMillis() < end) delay(2000)
+        // 等解锁不算工具执行时间：不然加上之后的操作容易超过工具时限被整段取消
+        ToolTimeout.waiting {
+            val end = System.currentTimeMillis() + 120_000
+            while (locked() && System.currentTimeMillis() < end) delay(2000)
+        }
         if (locked()) return "手机一直锁着屏，没法操作，已推送通知提醒用户。任务到这里停下，结果里写明「需要解锁手机才能做」。"
     }
     // 用户按了停止：这一轮不再操作
@@ -101,7 +104,7 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
             if (!background.handOver()) return false
             com.jack.ai.data.Routines.notify(app, "phone-human", "Kavi 已暂停后台操作", "$hint 回到后台屏幕页点「继续后台」。")
             ui.progress("等用户接管「${label(pkg)}」并继续后台")
-            return withTimeoutOrNull(180_000L) { background.ready(); true } == true
+            return ToolTimeout.waiting { withTimeoutOrNull(180_000L) { background.ready(); true } == true }
         }
         return ToolTimeout.waiting {
             if (remote) ui.confirm("请你来做：${label(pkg)}", hint, "已经处理好")
@@ -481,7 +484,8 @@ private suspend fun ToolSession.phoneFlow(action: String, args: JsonObject): Str
     val steps = args["steps"].text().trim().take(6000)
     if (steps.isEmpty()) return "steps 要填编号的文字步骤。"
     val site = prefix + pkg
-    val old = flows.firstOrNull { it.name == name }
+    // 只在手机流程里找同名的：同名的浏览器流程不能被改成手机流程
+    val old = mine.firstOrNull { it.name == name }
     val saved = (old ?: com.jack.ai.data.BrowserFlow(name = name, site = site, steps = steps)).copy(name = name, site = site, whenToUse = args["when"].text().trim().take(200), steps = steps)
     withContext(Dispatchers.IO) {
         val now = store.loadFlows()
