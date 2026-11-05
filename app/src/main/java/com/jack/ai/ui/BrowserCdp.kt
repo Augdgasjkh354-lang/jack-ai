@@ -41,7 +41,7 @@ internal object BrowserCdp {
     private val locks = mutableMapOf<Int, Mutex>()
     private data class AxRef(
         val backendId: Int, val ownerId: Int?, val kind: String, val label: String,
-        val tag: String, val type: String, val hits: Set<Int>,
+        val tag: String, val type: String, val hits: Set<Int>, val frameId: String,
     )
     private data class KnownPage(val key: String, val viewport: ElementFusion.Box, val refs: Map<Int, AxRef>)
     private val pages = ConcurrentHashMap<Int, KnownPage>()
@@ -215,7 +215,7 @@ internal object BrowserCdp {
                 val id = f.backendId ?: return@mapNotNull null
                 val n = assigned[id] ?: return@mapNotNull null
                 val e = extraById[id] ?: return@mapNotNull null
-                refs[n] = AxRef(id, e.ownerId, f.kind, f.label, e.tag, e.type, e.hits)
+                refs[n] = AxRef(id, e.ownerId, f.kind, f.label, e.tag, e.type, e.hits, e.frameId)
                 JackBrowser.Item(n, f.kind, f.label, null, null, emptyList(), null,
                     f.box.l.toFloat(), f.box.t.toFloat(), f.box.width.toFloat(), f.box.height.toFloat())
             }
@@ -256,7 +256,7 @@ internal object BrowserCdp {
         val page = pages[tab.id] ?: return null
         val ref = page.refs[n] ?: return null
         val s = session(tab) ?: return null
-        val place = ElementProbe(s).locate(ref.backendId, ref.ownerId, page.viewport) ?: return null
+        val place = ElementProbe(s).locate(ref.backendId, ref.ownerId, page.viewport, ref.frameId, ref.hits) ?: return null
         if (place.hit !in ref.hits && place.hit != ref.ownerId) return null
         return place.x to place.y
     }
