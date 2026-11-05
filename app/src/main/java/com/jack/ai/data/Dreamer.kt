@@ -159,13 +159,13 @@ Output only one JSON object, in this format:
     /**
      * 真正做梦的逻辑。没有新聊天、没填 Key 时返回 null。
      */
-    suspend fun dream(ctx: Context, force: Boolean = false): DreamEntry? {
+    suspend fun dream(ctx: Context, force: Boolean = false, now: Long = System.currentTimeMillis()): DreamEntry? {
         val store = Store(ctx)
         val settings = store.loadSettings()
         val ep = settings.backgroundEndpoint() ?: return null
         if (!force && !settings.dreamEnabled) return null
         // 从开始整理的这一刻算：做梦要好几分钟，期间新聊的下次再整理，不会被跳过
-        val startedAt = System.currentTimeMillis()
+        val startedAt = now
         val since = store.lastDreamAt.takeIf { it > 0 } ?: (startedAt - TimeUnit.DAYS.toMillis(1))
         val projects = store.loadProjects()
         // 关了「参与做梦」的对话、隐私项目里的对话不整理
@@ -241,7 +241,7 @@ Output only one JSON object, in this format:
         MemoryOps.addToArchive(ctx, result.archived)
         val ownResult = OwnMemory.applyOps(ctx, ops.filter { it.own })
         setHeld(ctx, "")
-        val entry = DreamEntry(journal = str("journal"), changes = str("changes"))
+        val entry = DreamEntry(journal = str("journal"), changes = str("changes"), createdAt = startedAt)
         val currentDreams = store.loadDreams()
         DreamArchive.preserve(ctx, listOf(entry) + currentDreams.drop(59))
         store.saveDreams(listOf(entry) + currentDreams.take(59))
