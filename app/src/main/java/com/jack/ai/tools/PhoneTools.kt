@@ -119,7 +119,10 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
         PhoneGuard.payPage(raw.texts())?.let { phoneSeen = null; return null to "到了付款或输密码的页面（看到「$it」），Kavi 不碰。停下，告诉用户这一步要自己来。" }
         val signedOut = AppUsageNotes.policyForPackage(pkg).signedOutMarker(raw.texts())
         val diagnosis = ScreenDiagnosis.classify(ScreenFacts(
-            currentApp = pkg, readableElements = raw.elements.size, texts = raw.texts(),
+            // 只看按钮、标题这类短字：聊天记录、短信里提到「验证码」「安全验证」不能让整轮任务停下
+            currentApp = pkg, readableElements = raw.elements.size,
+            texts = raw.elements.filter { !it.editable && it.label.length <= 20 }.map { it.label },
+            hasInput = raw.elements.any { it.editable },
             passwordField = root.anyNode { it.password }, signedOut = signedOut != null,
             changing = root.anyNode { it.cls.endsWith("ProgressBar") } ||
                 raw.texts().any { it.contains("加载中") || it.contains("正在加载") },

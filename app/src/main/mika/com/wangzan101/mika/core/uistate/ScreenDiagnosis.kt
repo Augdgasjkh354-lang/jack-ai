@@ -15,6 +15,8 @@ data class ScreenFacts(
     val changing: Boolean = false,
     val blackFrames: List<Boolean> = emptyList(),
     val hasWindow: Boolean = true,
+    /** 屏上有没有输入框：「获取验证码」这类字只有配着输入框才算登录页（Jack AI modification）。 */
+    val hasInput: Boolean = true,
 )
 
 data class ScreenCheck(
@@ -35,7 +37,7 @@ object ScreenDiagnosis {
             return ScreenCheck(ScreenState.LOADING)
         val reason = when {
             captcha.any { it in text } -> "captcha"
-            f.passwordField || f.signedOut || code.any { it in text } -> "login"
+            f.passwordField || f.signedOut || (f.hasInput && code.any { it in text }) -> "login"
             else -> null
         }
         if (f.hasWindow && f.blackFrames.size >= 2 && f.blackFrames.all { it })
