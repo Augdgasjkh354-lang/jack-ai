@@ -60,7 +60,20 @@ class MemoryBenchTest {
     private data class Result(
         val question: Question, val answer: String, val score: Double, val why: String,
         val failure: String, val brought: String,
+        val answerSpend: Spend = Spend(), val judgeSpend: Spend = Spend(),
     )
+    /** 一段时间里的用量：输入、缓存命中、输出 token 和花费（元，App 的 Pricing 当场算好的）。 */
+    private data class Spend(val prompt: Long = 0, val hit: Long = 0, val completion: Long = 0, val yuan: Double = 0.0) {
+        operator fun plus(o: Spend) = Spend(prompt + o.prompt, hit + o.hit, completion + o.completion, yuan + o.yuan)
+        operator fun minus(o: Spend) = Spend(prompt - o.prompt, hit - o.hit, completion - o.completion, yuan - o.yuan)
+        val tokens get() = prompt + completion
+        fun yuanText() = "¥" + "%.4f".format(Locale.US, yuan)
+    }
+    private fun spent(store: Store): Spend = store.loadUsage().fold(Spend()) { acc, d ->
+        acc + Spend(d.prompt, d.cacheHit, d.completion, d.cost)
+    }
+    /** 顺手记、做梦（只有全考有）各花了多少。 */
+    private class Stages { var review = Spend(); var dream = Spend() }
     private data class Exam(val mode: String, val results: List<Result>, val tokens: Long, val yuan: Double, val report: String)
 
     private fun JsonObject.value(key: String): String = (this[key] as? JsonPrimitive)?.content.orEmpty()
@@ -98,6 +111,8 @@ class MemoryBenchTest {
         for (mode in modes) exams += runMode(mode, key, questions, exams.sumOf { it.tokens })
         val report = buildString {
             appendLine("# 记忆考场报告（${when (selected) { "quick" -> "快考"; "full" -> "全考"; else -> "双模式对照" }}）")
+            appendLine()
+            appendLine("**总花费：¥${"%.4f".format(Locale.US, exams.sumOf { it.yuan })}**（${exams.sumOf { it.tokens }} token，含阅卷）")
             appendLine()
             appendLine("本地跑法：`DEEPSEEK_API_KEY=... ./gradlew :app:testDebugUnitTest --tests \"com.jack.ai.bench.MemoryBenchTest\"`")
             appendLine("切换模式：设置环境变量 `MEMORY_BENCH_MODE=quick|full|both`（默认 quick）。")
@@ -164,7 +179,8 @@ class MemoryBenchTest {
         val (store, settings) = reset(ctx, key)
         val client = DeepSeekClient(store::addUsage)
         val base = System.currentTimeMillis() - dayMs * 31
-        if (mode == "full") replay(ctx, store, settings, client, base, previous)
+        val stages = Stages()
+        if (mode == "full") replay(ctx, store, settings, client, base, previous, stages)
         else seed(ctx, store, base)
         val records = mutableListOf<Result>()
         val examAt = base + dayMs * 31
@@ -190,15 +206,18 @@ class MemoryBenchTest {
             val brought = hot.joinToString("\n") { "- ${it.text}" } + "\n" + deep
             // 答题提示词要走与普通对话相同的全局记忆与深处路径，不能夹带私人项目。
             check(!msgs.joinToString("\n").contains("心理咨询")) { "普通对话提示词泄露私人项目" }
+            val beforeAnswer = spent(store)
             val answer = client.complete(settings.endpoint(MODEL_FLASH)!!, msgs, maxTokens = 500)
+            val answerSpend = spent(store) - beforeAnswer
             guard(store, previous)
             val (judgeScore, why) = judge(store, settings, q, answer)
+            val judgeSpend = spent(store) - beforeAnswer - answerSpend
             guard(store, previous)
             val leaked = q.mustNot.any { answer.contains(it, ignoreCase = true) }
             val score = if (leaked) 0.0 else judgeScore
             val reason = if (leaked) "回答触及 must_not 禁区" else why
             val failure = classify(q, score, hot, MemoryOps.deep(ctx), journal, brought)
-            records += Result(q, answer, score, reason, failure, brought)
+            records += Result(q, answer, score, reason, failure, brought, answerSpend, judgeSpend)
             println("[记忆考场/$mode] ${index + 1}/${questions.size} ${q.kind}：$score（$reason）")
         }
         val tokenCount = used(store)
@@ -211,6 +230,21 @@ class MemoryBenchTest {
             appendLine("总分：${"%.1f".format(Locale.US, records.sumOf { it.score })}/${records.size}")
             appendLine("token：$tokenCount（输入+输出）；估算费用：¥${"%.4f".format(Locale.US, price)}")
             appendLine()
+            val answers = records.fold(Spend()) { a, r -> a + r.answerSpend }
+            val judges = records.fold(Spend()) { a, r -> a + r.judgeSpend }
+            appendLine("### 用量和花费")
+            appendLine("| 阶段 | 输入 | 缓存命中 | 输出 | 花费 |")
+            appendLine("|---|---:|---:|---:|---:|")
+            fun row(name: String, sp: Spend) = appendLine("| $name | ${sp.prompt} | ${sp.hit} | ${sp.completion} | ${sp.yuanText()} |")
+            if (mode == "full") { row("顺手记（30 天）", stages.review); row("做梦（30 天）", stages.dream) }
+            row("答题（${records.size} 题）", answers)
+            row("阅卷（考场自己的开销）", judges)
+            if (mode == "full") {
+                val daily = (stages.review + stages.dream).yuan / 30
+                appendLine()
+                appendLine("Kavi 自己每天的记忆开销（顺手记 + 做梦 ÷ 30 天）：约 ¥${"%.4f".format(Locale.US, daily)}")
+            }
+            appendLine()
             appendLine("### 分类别")
             appendLine("| 类别 | 得分 | 满分 |")
             appendLine("|---|---:|---:|")
@@ -219,10 +253,11 @@ class MemoryBenchTest {
             }
             appendLine()
             appendLine("### 逐题结果")
-            appendLine("| 题目 | 得分 | 理由 | 失败原因 |")
-            appendLine("|---|---:|---|---|")
+            appendLine("| 题目 | 得分 | 理由 | 失败原因 | 答题输入 / 命中 / 输出 | 答题花费 |")
+            appendLine("|---|---:|---|---|---:|---:|")
             records.forEach { r ->
-                appendLine("| ${cell(r.question.question)} | ${r.score} | ${cell(r.why)} | ${r.failure} |")
+                val a = r.answerSpend
+                appendLine("| ${cell(r.question.question)} | ${r.score} | ${cell(r.why)} | ${r.failure} | ${a.prompt} / ${a.hit} / ${a.completion} | ${a.yuanText()} |")
             }
             appendLine()
             appendLine("### 回答原文和实际带入的记忆")
@@ -287,7 +322,7 @@ class MemoryBenchTest {
 
     private suspend fun replay(
         ctx: Context, store: Store, settings: Settings, client: DeepSeekClient,
-        base: Long, previous: Long,
+        base: Long, previous: Long, stages: Stages,
     ) {
         val script = fixture("script.json")
         val days = script.items("days")
@@ -311,7 +346,9 @@ class MemoryBenchTest {
                             ChatMessage(role = "assistant", content = turn.value("assistant"), createdAt = at + 1),
                     )
                     store.saveConversations(store.loadConversations().filterNot { it.id == conv.id } + conv)
+                    val beforeReview = spent(store)
                     val reviewed = MemoryReview.review(ctx, store, conv, project, settings, client)
+                    stages.review += spent(store) - beforeReview
                     if (reviewed != null) {
                         conv = conv.copy(memReviewedAt = reviewed.reviewedAt)
                         store.saveConversations(store.loadConversations().filterNot { it.id == conv.id } + conv)
@@ -320,7 +357,9 @@ class MemoryBenchTest {
                 }
             }
             // 每天的对话使用历史时间戳；梦的起止时钟也落在那一天。
+            val beforeDream = spent(store)
             Dreamer.dream(ctx, force = true, now = base + (dayIndex + 1) * dayMs - 1)
+            stages.dream += spent(store) - beforeDream
             guard(store, previous)
             println("[记忆考场/全考] 第 ${dayIndex + 1}/30 天完成，累计 ${used(store)} token")
         }
