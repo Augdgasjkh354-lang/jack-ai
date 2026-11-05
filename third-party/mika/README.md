@@ -55,3 +55,11 @@ Jack AI 适配（2026-11-02）：
 - 对接近全黑的截图提示用户接管，不继续操作；截图失败时保留纯文字并说明。原有 PhoneGuard 的禁用 App、付款页面和密码保护不变。
 - `ScreenMap.kt` 和 `VisibleText.kt` 依赖 OCR；本步没有接入手机 App 的 OCR，故未移植。
 
+## App 操作移植：第 3 步（2026-11-05）
+
+- 固定参考 Mika 提交 `0091d2d67b541a417df913a23fefbb8e3a04e4a7`，Apache-2.0；裁剪移植 `AppPacing.kt`、`AppDwell.kt`、`LimitNotice.kt`、`ScreenDiagnosis.kt` 到 `app/src/main/mika/`，保留上游 `com.wangzan101.mika` 命名空间。
+- Jack AI modification：Kavi 沿用原有 `Screen`、`PhoneControl` 和 `PhoneGuard`；删除上游对 `ScreenPort`、`ScreenSnapshot`、`PlacePace`、`Hant` 和 Agent 的依赖，通过精简参数适配。未引入额外自动滑动，避免改变模型手里现有的控件编号。
+- 「像人」模式从上次改动完成时记下等待，模型读屏和思考时间一并抵扣；同屏约 0.5–1.2 秒、换屏约 0.9–2 秒，标为 careful 的 App 增加读字时间与连续浏览上限。批量同类操作额外随机间隔，旧 `actionIntervalMs` 作为下限。
+- 「快」模式维持原来的固定动作间隔和已有的安全计数；限额和登录、验证码拦截仍生效。只识别动作后新出现的短限额字样，不会按原样再试。
+- 验证码、登录等需用户处理的屏幕：主屏使用现有无障碍悬浮确认卡片，后台使用现有 `handOver()/resume()` 与通知接管，用户交回后重读屏幕；付款页面仍严格按 `PhoneGuard` 停止。重复确认失败后交给用户重新发起。
+- 防截屏全黑画面二次采样核对，避免把加载时的瞬时黑屏当成防截屏。没有移植 `DwellStop.kt` 中依赖 Mika 工具框架的结果格式，使用 Kavi 既有中文工具反馈。
