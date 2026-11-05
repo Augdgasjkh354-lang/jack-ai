@@ -53,10 +53,10 @@ internal class BenchServer : Closeable {
             val mime: String
             when (path) {
                 "api/items" -> {
-                    data = (1..12).joinToString(",", """{"items":[""", "]}") { i ->
-                        """{"name":"商品""" + i + """","price":"""" + i + """9.00","shop":"店铺""" + i +
-                            """","url":"https://example.com/item/""" + i + """","sales":""" + (100 + i) + "}"
-                    }
+                    data = "{\"items\":[" + (1..12).joinToString(",") { i ->
+                        "{\"name\":\"商品" + i + "\",\"price\":\"" + i + "9.00\",\"shop\":\"店铺" + i +
+                            "\",\"url\":\"https://example.com/item/" + i + "\",\"sales\":" + (100 + i) + "}"
+                    } + "]}"
                     mime = "application/json; charset=utf-8"
                 }
                 "api/recommend" -> {
@@ -121,10 +121,10 @@ internal class BenchChrome private constructor(
             timeoutMs = 3_000)["targetId"]!!.jsonPrimitive.content
         try {
             var targetUrl: String? = null
-            repeat(25) {
+            for (i in 0 until 25) {
                 targetUrl = CdpDiscovery.list(transport, port.toString(), timeoutMs = 2_000)
                     .firstOrNull { it.id == id }?.webSocketDebuggerUrl
-                if (targetUrl != null) return@repeat
+                if (targetUrl != null) break
                 delay(40)
             }
             val session = CdpSession.connect(transport, port.toString(),
