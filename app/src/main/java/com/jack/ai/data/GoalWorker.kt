@@ -74,9 +74,10 @@ class GoalWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, 
                 }
                 Goals.change(ctx, id) { g -> if (g?.id == goal.id && g.status == "active") g.update(note = result.text) else g }
                 val limit = store.loadSettings().workCostLimit
-                if (Goal.budgetReached(limit, result.spent) && Goals.current(ctx, id)?.status == "active") {
-                    Goals.change(ctx, id) { it?.update("paused", "本轮花费已达任务上限，请查看进展后继续。") }
-                    Routines.notify(ctx, Goals.workId(id), "目标已暂停", "本轮任务花费已达上限。", openChat = id)
+                val total = Goals.change(ctx, id) { g -> if (g?.id == goal.id) g.copy(spent = g.spent + result.spent) else g }?.spent ?: result.spent
+                if (Goal.budgetReached(limit, total) && Goals.current(ctx, id)?.status == "active") {
+                    Goals.change(ctx, id) { it?.update("paused", "自动续做累计花了 ¥%.2f，到了任务上限，请查看进展后继续。".format(total)) }
+                    Routines.notify(ctx, Goals.workId(id), "目标已暂停", "自动续做累计花费已达上限。", openChat = id)
                 }
             }
         } finally {

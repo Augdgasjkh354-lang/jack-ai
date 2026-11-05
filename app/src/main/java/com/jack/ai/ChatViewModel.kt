@@ -130,6 +130,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val jobs = java.util.concurrent.ConcurrentHashMap<String, Job>()
     /** 每个 Work 对话连着自动接着做了几次（答成功一次、用户发新消息就清零）。 */
     private val autoResumes = java.util.concurrent.ConcurrentHashMap<String, Int>()
+    /** 一件事（用户发一条消息起，含之后的自动接着做、手动接着做）累计花了多少、到多少再问：上限按整件事算，不按每段回答各算各的。 */
+    private val taskSpend = java.util.concurrent.ConcurrentHashMap<String, Pair<Double, Double>>()
 
     private val files = FilesFeature(core)
     private val projects = ProjectsFeature(core, files)
@@ -296,6 +298,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
         _state.update { it.copy(pending = emptyList()) }
         autoResumes.remove(id)
+        taskSpend.remove(id)
         startReply(id)
         return true
     }
@@ -504,7 +507,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(core.ioSerial) {
             com.jack.ai.data.Goals.change(getApplication(), convId) { g -> when (action) {
                 "clear" -> null
-                "resume" -> g?.copy(status = "active", autoRounds = 0)
+                "resume" -> g?.copy(status = "active", autoRounds = 0, spent = 0.0)
                 else -> g?.update("paused", "用户暂停了目标。")
             } }
             if (action != "resume") {
@@ -661,9 +664,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             /** 几个对话同时在答时，弹窗上写明是哪个对话在问。 */
             suspend fun ask(title: String, body: String, action: String) =
                 core.confirm(title, (if (_state.value.streamingIds.size > 1) "对话「$workTitle」：\n" else "") + body, action)
-            var spent = 0.0
             val limit = settings.workCostLimit
-            var nextLimit = limit
+            // 接着做（自动或手动）沿用这件事已经花的钱；新消息、重新回答、复核从 0 算
+            val carried = if (extraUser != null && extraUser != REVIEW_PROMPT) taskSpend[convId] else null
+            var spent = carried?.first ?: 0.0
+            var nextLimit = carried?.second ?: limit
             val session = ToolSession(toolHost, settings, conv, project, skills, object : ToolUi {
                 override fun started(label: String) {
                     patchMessage(convId, reply.id) { it.copy(searches = it.searches + SearchRecord(label, pending = true, at = System.currentTimeMillis())) }
@@ -908,8 +913,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 // Work 一时出错停下（网络断了、服务忙）：等一会儿自动接着做，连着最多 AUTO_RESUME_MAX 次；用户停下、花费到上限、复核的不接
                 if (failure == null) autoResumes.remove(convId)
+                if (extraUser != REVIEW_PROMPT) taskSpend[convId] = spent to nextLimit
                 val resumes = autoResumes[convId] ?: 0
-                if (work && goalOf(convId) == null && leftover.isEmpty() && extraUser != REVIEW_PROMPT && session.maxRounds != 0 &&
+                // 已经花到上限的不自动接着做：接了也是马上停下问，不如等用户看了再说
+                val underLimit = limit <= 0 || spent < nextLimit
+                if (work && goalOf(convId) == null && leftover.isEmpty() && extraUser != REVIEW_PROMPT && session.maxRounds != 0 && underLimit &&
                     failure?.let(::transient) == true && resumes < AUTO_RESUME_MAX) {
                     autoResumes[convId] = resumes + 1
                     val wait = AUTO_RESUME_DELAY_S * (resumes + 1)
