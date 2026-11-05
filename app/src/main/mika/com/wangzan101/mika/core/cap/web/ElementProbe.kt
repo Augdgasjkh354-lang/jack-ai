@@ -26,6 +26,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.put
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -43,6 +44,10 @@ class ElementProbe(private val session: CdpSession) {
     data class Placed(val box: Box, val x: Double, val y: Double, val hit: Int?)
     private data class Ref(val objectId: String?, val backendId: Int?, val frameId: String?)
     private class Skip(message: String) : Exception(message)
+    // 跨站 iframe 是独立 CDP target，必须把命令发往该 target 的子会话。
+    private val childFrames = HashSet<String>()
+    private val childSessions = ConcurrentHashMap<String, String>()
+    private val backendSessions = ConcurrentHashMap<Int, String>()
 
     suspend fun read(page: List<ElementFusion.PageNode>, frames: List<Box>,
                      listenerNodes: List<Listener>, viewport: Box): Snapshot? {
@@ -71,10 +76,17 @@ class ElementProbe(private val session: CdpSession) {
         val probeRefs = async { refs("window.__jackListeners || []", listenerNodes.size) }
         val frames = async { frameTree() }
         val pageIds = pageRefs.await().map { it.backendId }
-        val frameList = frames.await()
-        val directOwners = hiddenRefs.await().mapNotNull { ref ->
+        val rootFrames = frames.await()
+        val hiddenNodes = hiddenRefs.await()
+        val remoteOwners = remoteIframeOwners(hiddenNodes)
+        val rootId = rootFrames.firstOrNull()?.id
+        val frameList = rootFrames + remoteOwners.values.distinct()
+            .filterNot { frame -> rootFrames.any { it.id == frame } }
+            .map { Frame(it, rootId) }
+        childFrames += remoteOwners.values
+        val directOwners = hiddenNodes.mapNotNull { ref ->
             if (ref.backendId != null && ref.frameId != null) ref.backendId to ref.frameId else null
-        }.toMap()
+        }.toMap() + remoteOwners
         val ownerIds = frameList.drop(1).take(12).map { frame ->
             async { frame.id to frameOwner(frame.id) }
         }.awaitAll().filter { it.second != null }.associate { it.second!! to it.first } + directOwners
@@ -172,6 +184,35 @@ class ElementProbe(private val session: CdpSession) {
         }.awaitAll()
     }
 
+    /** 只挑本页可见 iframe 对应的 target，不扫其他标签页及扩展。 */
+    private suspend fun remoteIframeOwners(refs: List<Ref>): Map<Int, String> = runCatching {
+        val page = session.send("Runtime.evaluate", buildJsonObject {
+            put("expression", "(window.__jackFrames || []).map(function(f){return f.src || '';})")
+            put("returnByValue", true)
+        }, timeoutMs = CALL_MS)
+        val urls = ((page["result"] as? JsonObject)?.get("value") as? JsonArray).orEmpty()
+        val targets = (session.send("Target.getTargets", timeoutMs = CALL_MS)["targetInfos"] as? JsonArray)
+            .orEmpty().mapNotNull { it as? JsonObject }.filter { it.str("type") == "iframe" }
+        refs.mapIndexedNotNull { i, ref ->
+            val backend = ref.backendId ?: return@mapIndexedNotNull null
+            val url = (urls.getOrNull(i) as? JsonPrimitive)?.contentOrNull ?: return@mapIndexedNotNull null
+            if (url.isBlank()) return@mapIndexedNotNull null
+            val frame = targets.firstOrNull { it.str("targetId") == ref.frameId }
+                ?: targets.firstOrNull { it.str("url") == url }
+            frame?.str("targetId")?.let { backend to it }
+        }.toMap()
+    }.getOrDefault(emptyMap())
+
+    private suspend fun attachFrame(frame: String): String? {
+        childSessions[frame]?.let { return it }
+        return runCatching {
+            val response = session.send("Target.attachToTarget", buildJsonObject {
+                put("targetId", frame); put("flatten", true)
+            }, timeoutMs = CALL_MS)
+            response.str("sessionId")?.also { childSessions[frame] = it }
+        }.getOrNull()
+    }
+
     private suspend fun frameTree(): List<Frame> {
         val root = session.send("Page.getFrameTree", timeoutMs = CALL_MS)["frameTree"] as? JsonObject
             ?: throw Skip("框架树为空")
@@ -183,9 +224,13 @@ class ElementProbe(private val session: CdpSession) {
     }.getOrNull()
 
     private suspend fun axTree(frame: String): List<AxNode> = runCatching {
-        val nodes = session.send("Accessibility.getFullAXTree",
-            buildJsonObject { put("frameId", frame) }, timeoutMs = CALL_MS)["nodes"] as? JsonArray
-        parseAx(nodes.orEmpty().mapNotNull { it as? JsonObject }, frame)
+        val child = frame in childFrames
+        val sid = if (child) attachFrame(frame) ?: return@runCatching emptyList() else null
+        val params = buildJsonObject { if (!child) put("frameId", frame) }
+        val nodes = session.send("Accessibility.getFullAXTree", params, sid, CALL_MS)["nodes"] as? JsonArray
+        val parsed = parseAx(nodes.orEmpty().mapNotNull { it as? JsonObject }, frame)
+        if (sid != null) parsed.forEach { it.backendId?.let { backend -> backendSessions[backend] = sid } }
+        parsed
     }.getOrDefault(emptyList())
 
     private suspend fun listens(oid: String): Boolean = runCatching {
