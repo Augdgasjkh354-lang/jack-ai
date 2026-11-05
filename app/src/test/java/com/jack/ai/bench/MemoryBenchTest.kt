@@ -86,8 +86,8 @@ class MemoryBenchTest {
         val report = buildString {
             appendLine("# 记忆考场报告（${when (selected) { "quick" -> "快考"; "full" -> "全考"; else -> "双模式对照" }}）")
             appendLine()
-            appendLine("本地跑法：\`DEEPSEEK_API_KEY=... ./gradlew :app:testDebugUnitTest --tests \\"com.jack.ai.bench.MemoryBenchTest\\"\`")
-            appendLine("切换模式：设置环境变量 \`MEMORY_BENCH_MODE=quick|full|both\`（默认 quick）。")
+            appendLine("本地跑法：`DEEPSEEK_API_KEY=... ./gradlew :app:testDebugUnitTest --tests \"com.jack.ai.bench.MemoryBenchTest\"`")
+            appendLine("切换模式：设置环境变量 `MEMORY_BENCH_MODE=quick|full|both`（默认 quick）。")
             appendLine("使用真实 DeepSeek Flash、真实 Store / MemoryReview / Dreamer / DeepRecall / PromptBuilder；阅卷温度 0。")
             appendLine()
             exams.forEach { append(it.report).appendLine() }
@@ -219,16 +219,16 @@ class MemoryBenchTest {
                 appendLine(r.answer.lines().joinToString("\n") { "> " + it })
                 appendLine()
                 appendLine("提示词带入的常记 + 深处：")
-                appendLine("\`\`\`text")
+                appendLine("```text")
                 appendLine(r.brought)
-                appendLine("\`\`\`")
+                appendLine("```")
                 appendLine()
             }
             appendLine("### 30 天后的记忆快照")
             appendLine("常记全文：")
-            appendLine("\`\`\`text")
+            appendLine("```text")
             appendLine(hotText)
-            appendLine("\`\`\`")
+            appendLine("```")
             appendLine("深处条数：${MemoryOps.deep(ctx).size}")
             appendLine("最后一篇日记：")
             appendLine(lastJournal.ifBlank { "（空）" }.lines().joinToString("\n") { "> " + it })
@@ -285,10 +285,10 @@ class MemoryBenchTest {
         for ((dayIndex, day) in days.withIndex()) {
             check(day.value("day").toInt() == dayIndex + 1)
             for ((segmentIndex, segment) in day.items("conversations").withIndex()) {
-                val private = segment.value("private") == "true"
-                val project = privateProject.takeIf { private }
+                val isPrivate = segment.value("private") == "true"
+                val project = privateProject.takeIf { isPrivate }
                 var conv = Conversation(title = segment.value("title"), projectId = project?.id,
-                    useGlobalMemory = !private)
+                    useGlobalMemory = !isPrivate)
                 val turns = segment.items("turns")
                 for ((turnIndex, turn) in turns.withIndex()) {
                     val at = base + dayIndex * dayMs + (segmentIndex + 1) * 3_600_000L + turnIndex * 60_000L
@@ -352,7 +352,7 @@ class MemoryBenchTest {
             }
             val choice = (result["choices"] as JsonArray).first().jsonObject
             val message = choice["message"]!!.jsonObject.value("content")
-            val grade = json.parseToJsonElement(message.trim().removePrefix("\`\`\`json").removeSuffix("\`\`\`").trim()).jsonObject
+            val grade = json.parseToJsonElement(message.trim().removePrefix("```json").removeSuffix("```").trim()).jsonObject
             val score = (grade["score"] as? JsonPrimitive)?.doubleOrNull
                 ?: error("阅卷缺少 score")
             check(score == 0.0 || score == 0.5 || score == 1.0) { "阅卷分值错误：$score" }
