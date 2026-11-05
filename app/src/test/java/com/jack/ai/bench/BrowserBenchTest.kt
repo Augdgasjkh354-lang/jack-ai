@@ -120,8 +120,7 @@ class BrowserBenchTest {
                 val s = snapshot(tab)
                 val urls = (s["frameUrls"] as? JsonArray).orEmpty().map { it.jsonPrimitive.content }
                 val block = WebBarrier.classify(url, text(s, "title"), text(s, "text"),
-                    tab.mainStatus, urls, longPage = s.getValue("height").jsonPrimitive.int >
-                        s.getValue("vh").jsonPrimitive.int * 2)
+                    tab.mainStatus, urls, longPage = s.getValue("textLength").jsonPrimitive.int > 800)
                 val expected = when (page) {
                     "rate-limited.html" -> WebBarrier.Kind.LIMITED
                     "captcha-frame.html" -> WebBarrier.Kind.CAPTCHA
@@ -198,7 +197,11 @@ class BrowserBenchTest {
             val item = merged.first.firstOrNull { it.oldN == null && it.label.contains(label) }
                 ?: return Check(false, "融合后没有新增 " + label +
                     "；" + merged.second.stats + "；frames=" + merged.second.frames.size +
-                    "；相关AX=" + merged.second.ax.filter { it.name.contains("跨站") }.map { it.name })
+                    "；相关AX=" + merged.second.ax.filter { it.name.contains("跨站") }.map { it.name } +
+                    "；iframeReady=" + tab.string("String(window.__benchReady)") +
+                    "；targets=" + runCatching {
+                        tab.session.send("Target.getTargets", timeoutMs = 2_000)["targetInfos"].toString().take(350)
+                    }.getOrDefault("无法读取"))
             val extra = merged.second.extras.firstOrNull { it.backendId == item.backendId }
                 ?: return Check(false, "新增节点缺少 backendNodeId")
             val viewport = viewport(s)
