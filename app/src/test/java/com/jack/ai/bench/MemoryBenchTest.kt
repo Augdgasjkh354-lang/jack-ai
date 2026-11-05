@@ -35,6 +35,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
@@ -72,6 +73,18 @@ class MemoryBenchTest {
             "考场资源不存在：$name"
         }.bufferedReader(Charsets.UTF_8).use { it.readText() }
     private fun fixture(name: String): JsonObject = json.parseToJsonElement(resource(name)).jsonObject
+
+    /** 没有 Key 的分支检查也要验证剧本、题库与私密项目的基本结构。 */
+    @Test
+    fun fixturesHaveThirtyDaysAndQuestionCoverage() {
+        val days = fixture("script.json").items("days")
+        assertEquals(30, days.size)
+        assertEquals(46, days.sumOf { it.items("conversations").size })
+        assertEquals(1, days.flatMap { it.items("conversations") }
+            .count { it.value("private") == "true" })
+        assertTrue(fixtureQuestions().groupBy { it.kind }.size >= 9)
+        assertTrue(fixture("memories.json").words("deep").any { "芒果" in it })
+    }
 
     @Test(timeout = 5_400_000L)
     fun memoryBenchmark() = runBlocking {

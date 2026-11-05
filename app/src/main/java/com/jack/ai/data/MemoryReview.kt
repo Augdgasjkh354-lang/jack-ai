@@ -115,7 +115,7 @@ object MemoryReview {
 
 
     /** 顺手记执行结果；界面负责刷新状态和显示提示，考场负责保存回看位置。 */
-    data class ReviewResult(val done: List<String>, val reviewedAt: Long, val memories: List<MemoryItem>?)
+    data class ReviewResult(val done: List<String>, val reviewedAt: Long, val memories: List<MemoryItem>?, val work: Boolean)
 
     /**
      * App 与记忆考场共用同一条真实回看路径。
@@ -167,7 +167,7 @@ object MemoryReview {
                 }
             }
         }
-        return ReviewResult(done, unseen.maxOf { it.createdAt }, saved)
+        return ReviewResult(done, unseen.maxOf { it.createdAt }, saved, work)
     }
 
     /** 给用户看的那条说明（挂在回答下面）。 */

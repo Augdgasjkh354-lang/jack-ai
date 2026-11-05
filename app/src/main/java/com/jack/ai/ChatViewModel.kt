@@ -954,9 +954,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 if (result.done.isNotEmpty()) {
                     val lastAnswer = conv.messages.lastOrNull { it.role == "assistant" }?.id
                     if (lastAnswer != null) patchMessage(convId, lastAnswer) {
-                        it.copy(notices = it.notices + com.jack.ai.data.MemoryReview.notice(result.done,
-                            conv.messages.any { m -> m.createdAt > conv.memReviewedAt && m.plan.isNotEmpty() } &&
-                                conv.workMemoryAllowed(st.project(conv.projectId))))
+                        it.copy(notices = it.notices + com.jack.ai.data.MemoryReview.notice(result.done, result.work))
                     }
                 }
                 updateConvQuiet(convId) { it.copy(memReviewedAt = result.reviewedAt) }
