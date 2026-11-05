@@ -186,9 +186,20 @@ internal class BenchChrome private constructor(
             }
         }
 
-        /** 没装 Chrome 的本地环境由测试的 Assume 跳过。 */
+        /** 没装 Chrome 的本地环境由测试的 Assume 跳过。启动不起来时再试一次，还不行就把 Chrome 自己的输出带进报错。 */
         fun startOrNull(): BenchChrome? {
             val binary = browserPath() ?: return null
+            var lastOutput = emptyList<String>()
+            repeat(2) { attempt ->
+                launch(binary, if (attempt == 0) 30L else 45L)?.let { (chrome, out) ->
+                    if (chrome != null) return chrome
+                    lastOutput = out
+                }
+            }
+            error("Chrome 启动失败：没有得到 DevTools 端口（$binary）。Chrome 输出：\n" + lastOutput.takeLast(30).joinToString("\n"))
+        }
+
+        private fun launch(binary: String, waitSeconds: Long): Pair<BenchChrome?, List<String>>? {
             val profile = Files.createTempDirectory("jack-browser-bench").toFile()
             val process = ProcessBuilder(binary, "--headless=new", "--remote-debugging-port=0",
                 "--user-data-dir=" + profile.absolutePath, "--no-sandbox", "--disable-gpu",
@@ -197,9 +208,11 @@ internal class BenchChrome private constructor(
                 .redirectErrorStream(true).start()
             val port = AtomicInteger(0)
             val ready = CountDownLatch(1)
+            val output = java.util.Collections.synchronizedList(mutableListOf<String>())
             thread(name = "browser-bench-stderr", isDaemon = true) {
                 process.inputStream.bufferedReader().useLines { lines ->
                     lines.forEach { line ->
+                        if (output.size < 200) output += line
                         val found = Regex("DevTools listening on ws://[^:]+:(\\d+)/")
                             .find(line)?.groupValues?.get(1)?.toIntOrNull()
                         if (found != null) {
@@ -209,12 +222,13 @@ internal class BenchChrome private constructor(
                     }
                 }
             }
-            if (!ready.await(10, TimeUnit.SECONDS)) {
+            if (!ready.await(waitSeconds, TimeUnit.SECONDS)) {
+                val alive = process.isAlive
                 process.destroyForcibly()
                 profile.deleteRecursively()
-                error("Chrome 启动失败：没有得到 DevTools 端口")
+                return null to (output.toList() + "（等了 ${waitSeconds} 秒，进程" + (if (alive) "还在" else "已退出，退出码 ${runCatching { process.exitValue() }.getOrNull()}") + "）")
             }
-            return BenchChrome(process, profile, port.get())
+            return BenchChrome(process, profile, port.get()) to emptyList()
         }
     }
 }
