@@ -232,7 +232,7 @@
       url: location.href, title: document.title, items: items, above: above, below: below,
       scroll: Math.round(scrollY), height: document.documentElement.scrollHeight, vh: vh,
       vx: vv ? vv.offsetLeft : 0, vy: vv ? vv.offsetTop : 0, vw: vv ? vv.width : innerWidth,
-      text: nearbyText(4000), frames: hiddenFrames,
+      text: nearbyText(4000), textLength: document.body ? document.body.innerText.length : 0, frames: hiddenFrames,
     });
   }
 
