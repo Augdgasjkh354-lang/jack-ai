@@ -26,7 +26,9 @@ class GoalTest {
     }
     @Test fun conversationSurvivesSerializationWithGoal() {
         val c = Conversation(goal = Goal("整理邮件", listOf("读完十封邮件"), autoRounds = 3))
-        assertEquals(c, Json.decodeFromString(Conversation.serializer(), Json.encodeToString(Conversation.serializer(), c)))
+        // 时间戳默认值在编码时和默认值相同会被省掉，解码时按新的时间补，跨过一毫秒就对不上：全写进去再比
+        val all = Json { encodeDefaults = true }
+        assertEquals(c, all.decodeFromString(Conversation.serializer(), all.encodeToString(Conversation.serializer(), c)))
         assertNull(Json.decodeFromString(Conversation.serializer(), "{}").goal)
     }
     @Test fun staleConversationCannotRestoreClearedGoal() {
