@@ -22,6 +22,8 @@ class KaviApp : Application() {
         // 上次攒下的闪退报告：后台发到 GitHub Issues。只在主进程发（别的进程也会走到这里，免得重复发）；单元测试里不发
         val main = android.os.Build.VERSION.SDK_INT < 28 || getProcessName() == packageName
         if (!main || android.os.Build.FINGERPRINT == "robolectric") return
+        // 上次是在底层崩掉或卡死被系统杀的（网页组件常这样）：补记下来，主界面打开时弹框、稍后上报
+        runCatching { CrashLog.collectExits(this) }
         if (android.os.Build.VERSION.SDK_INT >= 31 && com.jack.ai.data.Store(this).loadSettings().phoneBackground) {
             com.wangzan101.mika.cap.phone.PhoneServices.of(this).shellManager.start()
         }
