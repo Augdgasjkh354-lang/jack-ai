@@ -209,10 +209,31 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
 
     /** 动作后读回：没看见变化就提醒模型先检查，绝不自动补点。 */
     suspend fun after(done: String, before: Screen?, typed: String? = null): String {
+        val finishedAt = System.currentTimeMillis()
         svc.settle()
         val (now, screenText) = read()
         val effect = ActionEffect.classify(before?.effectScreen(), now?.effectScreen(), typed)
         before?.let { stat(it.app, if (effect == EffectKind.NO_EFFECT) "no_change" else "ok") }
+        val newScreen = if (before == null || now == null) false else {
+            val left = before.elements.map { it.role to it.label }.toSet()
+            val right = now.elements.map { it.role to it.label }.toSet()
+            before.pkg != now.pkg || (left - right).size + (right - left).size >= 3
+        }
+        if (settings.phonePace == OperatingPace.HUMAN && before != null && now != null) {
+            val careful = AppUsageNotes.policyForPackage(before.pkg).pace == "careful"
+            phoneDwell.after(before.pkg, finishedAt, newScreen, careful,
+                counts = action !in setOf("swipe", "scroll"),
+                batchKind = if (action in setOf("tap", "long_press", "type")) action else null)
+        }
+        val notice = LimitNotice.find(
+            before?.elements?.filter { !it.editable && !it.password }?.map { it.label },
+            now?.elements?.filter { !it.editable && !it.password }?.map { it.label },
+        )
+        if (notice != null) {
+            phoneLimitStop = "检测到「${notice.take(120)}」，已达到次数上限或触发频繁操作限制。"
+            phoneSeen = null
+            return "$done\n$phoneLimitStop 这一轮停手，不再继续重试；请用户稍后重新发起。\n\n$screenText"
+        }
         val result = when (effect) {
             EffectKind.CHANGED -> "操作效果：界面明显变了。"
             EffectKind.NO_EFFECT -> when (action) {
@@ -228,11 +249,11 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
 
     fun needScreen(): Screen? = phoneSeen?.takeIf { it.pkg == svc.foreground() }
 
-    /** 对标成 careful 的 App 强制放慢动作，并限制一轮里连续操作的次数（翻页、划只放慢，不计数）。 */
+    /** 快模式保持旧固定间隔；像人模式按换屏、字数、批量操作补足停留。 */
     suspend fun beforeAction(s: Screen, counts: Boolean = true): String? {
+        phoneLimitStop?.let { return "$it 这一轮请停止自动操作。" }
         val policy = AppUsageNotes.policyForPackage(s.pkg)
-        if (policy.actionIntervalMs <= 0) return null
-        if (counts) {
+        if (counts && policy.actionIntervalMs > 0) {
             val count = (phoneActionCounts[s.pkg] ?: 0) + 1
             if (count > policy.actionLimit) {
                 phoneSeen = null
@@ -240,9 +261,23 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
             }
             phoneActionCounts[s.pkg] = count
         }
-        val last = phoneLastActionAt[s.pkg] ?: 0L
-        val wait = (policy.actionIntervalMs - (System.currentTimeMillis() - last)).coerceAtLeast(0L)
-        if (wait > 0) delay(wait)
+        val last = phoneLastActionAt[s.pkg]
+        if (settings.phonePace == OperatingPace.HUMAN) {
+            try {
+                phoneDwell.before(
+                    app = s.pkg, textChars = s.texts().sumOf { it.length },
+                    careful = policy.pace == "careful", policyFloorMs = policy.actionIntervalMs,
+                    lastActionAt = last, gate = counts,
+                )
+            } catch (e: PageLimitReached) {
+                phoneSeen = null
+                phoneLimitStop = "为了保护「${s.app}」账号，本轮已经打开 ${e.screens} 屏（上限 ${e.cap}）。"
+                return "$phoneLimitStop 请停下并告诉用户；由用户重新发起后再继续。"
+            }
+        } else if (policy.actionIntervalMs > 0) {
+            val wait = (policy.actionIntervalMs - (System.currentTimeMillis() - (last ?: 0L))).coerceAtLeast(0L)
+            if (wait > 0) delay(wait)
+        }
         phoneLastActionAt[s.pkg] = System.currentTimeMillis()
         return null
     }
@@ -274,6 +309,9 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
                 repeat(20) { if (svc.foreground() != pkg) delay(250) }
                 svc.settle(4000)
                 stat(label(pkg), if (svc.foreground() == pkg) "ok" else "no_change")
+                if (settings.phonePace == OperatingPace.HUMAN)
+                    phoneDwell.after(pkg, System.currentTimeMillis(), newScreen = true,
+                        careful = openPolicy?.pace == "careful", counts = true)
                 (if (openPolicy?.mainScreenOnly == true) "为保护登录状态，这个 App 只在主屏操作。\n\n" else "") + read().second
             }
             "read" -> read().second
