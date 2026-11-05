@@ -942,58 +942,24 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private fun maybeReviewMemory(convId: String) {
         val st = _state.value
         val conv = st.conversations.firstOrNull { it.id == convId } ?: return
-        val settings = st.settings
-        val project = st.project(conv.projectId)
-        if (conv.id == com.jack.ai.data.INBOX_ID || conv.id == com.jack.ai.data.Reader.CONV_ID) return
         if (!com.jack.ai.data.MemoryReview.due(conv)) return
-        val unseen = com.jack.ai.data.MemoryReview.unseen(conv)
-        // 这几轮里 Kavi 列过清单（在做任务）：回看记进做事经验；平常聊天记进全局记忆
-        val work = unseen.any { it.plan.isNotEmpty() } && conv.workMemoryAllowed(project)
-        val chat = !work && conv.globalAllowed(project)
-        if (!settings.memoryEnabled || !conv.inDream || conv.ownLife || !(work || chat)) return
         if (!reviewing.add(convId)) return
-        val ep = settings.backgroundEndpoint() ?: run { reviewing.remove(convId); return }
         val app = getApplication<Application>()
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val P = com.jack.ai.data.Persona
-                val workFile = com.jack.ai.data.ChatMemory.workFile(app)
-                fun current(): List<String> =
-                    if (work) com.jack.ai.data.ChatMemory.items(com.jack.ai.data.ChatMemory.read(workFile)) else store.loadMemories().map { it.text }
-                val budget = if (work) com.jack.ai.data.MemoryOps.FILE_BUDGET else com.jack.ai.data.MemoryOps.HOT_BUDGET
-                val before = current()
-                val input = "【Current ${if (work) "work memory" else "memories"}】(~${com.jack.ai.data.MemoryOps.tokensOf(before)} of $budget tokens)\n" +
-                    before.ifEmpty { listOf("(none)") }.joinToString("\n") { "- $it" } +
-                    "\n\n【The latest exchanges】\n" + com.jack.ai.data.MemoryReview.transcript(unseen, P.ref(settings) ?: "User")
-                val raw = client.complete(ep, listOf(
-                    buildJsonObject { put("role", "system"); put("content", P.fill(com.jack.ai.data.MemoryReview.instructions(work) + P.nameLine(settings).let { if (it.isEmpty()) "" else "\n\n$it" }, settings)) },
-                    buildJsonObject { put("role", "user"); put("content", input) },
-                ), maxTokens = 800, jsonMode = true)
-                val ops = com.jack.ai.data.MemoryReview.parse(raw)
-                // 在现在的记忆上改（这期间 Kavi 或用户可能刚存过）
-                // 全局记忆直接在带 id 的条目上改：改过的条目保留 id、历史和用量，不再经字符串拼回去
-                // 在锁里拿最新的改：几个对话同时回看、Kavi 同时在存，谁也不盖掉谁
-                var done: List<String> = emptyList()
-                if (work) {
-                    com.jack.ai.data.ChatMemory.update(workFile) { live ->
-                        val (next, d) = com.jack.ai.data.MemoryReview.apply(live, ops, budget)
-                        done = d
-                        next.takeIf { d.isNotEmpty() }
-                    }
-                } else {
-                    var saved: List<com.jack.ai.data.MemoryItem>? = null
-                    store.updateMemories { live ->
-                        val (next, d) = com.jack.ai.data.MemoryReview.applyItems(live, ops, budget, "聊天时回看：${conv.title}")
-                        done = d
-                        if (d.isEmpty()) null else { com.jack.ai.data.MemoryOps.snapshot(app, live); saved = next; next }
-                    }
-                    saved?.let { next -> _state.update { it.copy(memories = next) } }
-                }
-                if (done.isNotEmpty()) {
+                val result = com.jack.ai.data.MemoryReview.review(
+                    app, store, conv, st.project(conv.projectId), st.settings, client,
+                ) ?: return@launch
+                result.memories?.let { next -> _state.update { it.copy(memories = next) } }
+                if (result.done.isNotEmpty()) {
                     val lastAnswer = conv.messages.lastOrNull { it.role == "assistant" }?.id
-                    if (lastAnswer != null) patchMessage(convId, lastAnswer) { it.copy(notices = it.notices + com.jack.ai.data.MemoryReview.notice(done, work)) }
+                    if (lastAnswer != null) patchMessage(convId, lastAnswer) {
+                        it.copy(notices = it.notices + com.jack.ai.data.MemoryReview.notice(result.done,
+                            conv.messages.any { m -> m.createdAt > conv.memReviewedAt && m.plan.isNotEmpty() } &&
+                                conv.workMemoryAllowed(st.project(conv.projectId))))
+                    }
                 }
-                updateConvQuiet(convId) { it.copy(memReviewedAt = unseen.maxOf { m -> m.createdAt }) }
+                updateConvQuiet(convId) { it.copy(memReviewedAt = result.reviewedAt) }
                 persist()
             } catch (e: CancellationException) {
                 throw e
