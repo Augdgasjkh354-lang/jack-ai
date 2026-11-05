@@ -26,6 +26,7 @@ object Capabilities {
         if ("run_python" in tools) lines += "Arithmetic, processing tabular data, plotting: run_python"
         else if ("run_js" in tools) lines += "Exact calculation: run_js"
         skill(SkillIds.TABLES)?.let { lines += "Bookkeeping, lists, clients and other tables: 「$it」" }
+        skill(SkillIds.GITHUB)?.let { lines += "Install skills from a GitHub repo (SKILL.md format, shared with Claude Code, Codex…) and sync their updates: 「$it」" }
         skill(SkillIds.RECEIPTS)?.let { lines += "Record invoices, receipts, delivery slips and business cards from photos into tables: 「$it」" }
         if ("schedule" in tools) lines += "Reminders, scheduled tasks, watching a web page for changes: schedule"
         listOf(SkillIds.MAIL, SkillIds.CALENDAR, SkillIds.GITHUB, SkillIds.NOTION, SkillIds.TRAIN, SkillIds.WORD, SkillIds.PPT, SkillIds.EXCEL, SkillIds.PDF, SkillIds.APP, SkillIds.TONE, SkillIds.XHS)

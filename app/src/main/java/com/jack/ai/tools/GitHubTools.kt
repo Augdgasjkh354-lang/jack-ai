@@ -26,6 +26,7 @@ internal suspend fun ToolSession.github(args: JsonObject): String {
     val start = args["start"].text().toIntOrNull() ?: 0
     val end = args["end"].text().toIntOrNull() ?: 0
     if (action in WRITE_ACTIONS) return githubWrite(action, args)
+    if (action in SKILL_ACTIONS) return githubSkills(action, args)
     val needsRepo = action in setOf("repo", "tree", "read", "grep", "releases", "download", "asset")
     if (needsRepo && repo == null) return "$action 要填 repo（「作者/项目名」或项目网址）" + if (repoArg.isNotBlank()) "，「$repoArg」认不出来" else ""
     when (action) {

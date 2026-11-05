@@ -456,7 +456,7 @@ class ToolSession(
             name == "move_emails" && SkillIds.MAIL in skillIds -> moveEmails(args)
             name == "empty_mail_trash" && SkillIds.MAIL in skillIds -> emptyMailTrash(args)
             arg.isBlank() -> "参数缺失"
-            name == "use_skill" -> useSkill(arg)
+            name == "use_skill" -> useSkill(arg, args["file"].text().trim())
             name == "run_js" && SkillIds.CALC in skillIds -> runJs(arg)
             name == "run_python" && SkillIds.PYTHON in skillIds -> runPython(args)
             name == "check_page" && SkillIds.CODE in skillIds -> checkPage(args)
