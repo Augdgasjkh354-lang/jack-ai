@@ -1,3 +1,3 @@
 <!doctype html><meta charset="utf-8"><title>跨站框架</title>
 <p>框架里的按钮</p><iframe src="http://b.localhost:%PORT%/frame-button.html" style="margin:30px;width:450px;height:220px;border:1px solid gray" onload="window.__benchReady=true"></iframe>
-<script>window.__benchResult="";</script>
+<script>window.__benchResult="";window.addEventListener("message",e=>{if(e.data==="frame-clicked")window.__benchResult="clicked"});</script>
