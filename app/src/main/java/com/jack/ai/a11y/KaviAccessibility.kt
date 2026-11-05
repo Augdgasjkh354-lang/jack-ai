@@ -261,8 +261,8 @@ class KaviAccessibility : AccessibilityService() {
         val r = b[2].coerceAtMost(w); val bottom = b[3].coerceAtMost(h)
         if (l < r && t < bottom && (node == null || node.isVisibleToUser && sameSpot(node, e))) {
             val (x, y) = gesturePacing().within(l, t, r, bottom)
-            // 已派发的触摸不能再补一次 ACTION_CLICK：发送/提交类按钮可能执行两次。
-            if (tapAt(x, y, long, displayId)) return true
+            // 手势即便回调取消，也可能已经触发按钮；此时绝不再用 ACTION_CLICK 补点。
+            return tapAt(x, y, long, displayId)
         }
         val action = if (long) AccessibilityNodeInfo.ACTION_LONG_CLICK else AccessibilityNodeInfo.ACTION_CLICK
         var n = node
