@@ -50,10 +50,10 @@ internal object BrowserPacing {
     }
 
     fun report(tab: JackBrowser.Tab, url: String, title: String, text: String,
-               status: Int?, frames: List<String>, apiRisk: String?): WebBarrier.Block? {
+               status: Int?, frames: List<String>, apiRisk: String?, longPage: Boolean = false): WebBarrier.Block? {
         seen(tab, url)
         val s = tabs[tab.id] ?: return null
-        val result = WebBarrier.classify(url, title, text, status, frames, apiRisk)
+        val result = WebBarrier.classify(url, title, text, status, frames, apiRisk, longPage)
         synchronized(s) {
             if (s.barrier != result && result != null) {
                 tab.diag.add("网站需要人工接管：" + result.detail)
