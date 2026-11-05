@@ -30,6 +30,7 @@ import com.jack.ai.ChatViewModel
 import com.jack.ai.a11y.KaviAccessibility
 import com.jack.ai.a11y.PhoneGuard
 import com.jack.ai.data.Settings
+import com.wangzan101.mika.core.cap.phone.OperatingPace
 
 /**
  * 设置页的「操作其他 App」：无障碍开没开（去系统里打开，安卓 13 以上先允许受限制的设置），
@@ -55,6 +56,18 @@ fun PhoneControlSection(vm: ChatViewModel, settings: Settings) {
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         BackgroundPhoneSection(vm, settings)
+        Text("操作节奏", style = MaterialTheme.typography.titleSmall)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OperatingPace.entries.forEach { pace ->
+                androidx.compose.material3.FilterChip(
+                    selected = settings.phonePace == pace,
+                    onClick = { vm.updateSettings { it.copy(phonePace = pace) } },
+                    label = { Text(if (pace == OperatingPace.HUMAN) "像人（默认）" else "快") },
+                )
+            }
+        }
+        Text("像人：落点略偏、弧线滑动，输入按词上屏；快：固定手势，文字一次填入。动作之间的间隔仍按 App 的原有规则。",
+            style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("无障碍服务")
