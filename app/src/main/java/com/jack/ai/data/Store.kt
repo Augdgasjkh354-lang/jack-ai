@@ -467,6 +467,7 @@ class Store(context: Context) {
             localLlm = prefs.getBoolean("localLlm", false),
             floatBall = prefs.getBoolean("floatBall", false),
             phoneBackground = prefs.getBoolean("phoneBackground", false),
+            phonePace = com.wangzan101.mika.core.cap.phone.OperatingPace.parse(prefs.getString("phonePace", null)),
             noticeWatch = prefs.getBoolean("noticeWatch", false),
             noticeSkip = prefs.getString("noticeSkip", null)?.let { runCatching { json.decodeFromString(ListSerializer(String.serializer()), it) }.getOrNull() }.orEmpty(),
             contactsOn = prefs.getBoolean("contactsOn", false),
@@ -551,6 +552,7 @@ class Store(context: Context) {
             .putString("phoneApps", json.encodeToString(ListSerializer(String.serializer()), s.phoneApps))
             .putBoolean("floatBall", s.floatBall)
             .putBoolean("phoneBackground", s.phoneBackground)
+            .putString("phonePace", s.phonePace.name)
             .putBoolean("noticeWatch", s.noticeWatch)
             .putString("noticeSkip", json.encodeToString(ListSerializer(String.serializer()), s.noticeSkip))
             .putBoolean("contactsOn", s.contactsOn)
