@@ -7,6 +7,8 @@ import androidx.test.core.app.ApplicationProvider
 import com.jack.ai.data.Store
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Test
@@ -42,13 +44,18 @@ class BackgroundPhoneTest {
     @Test fun gesturesKeepTheirDisplayAndMainScreenRemainsDefault() = runBlocking {
         val service = Robolectric.buildService(KaviAccessibility::class.java).create().get()
         val shadow = shadowOf(service)
+        // 「像人」节奏下落指前会先停一下，等手势真的发出来再看
+        suspend fun dispatched(n: Int) = withTimeout(5_000) {
+            while (shadow.gesturesDispatched.size < n) delay(10)
+            shadow.gesturesDispatched.last()
+        }
         val background = async(start = CoroutineStart.UNDISPATCHED) { service.tap(100, 200, displayId = 7) }
-        val first = shadow.gesturesDispatched.last()
+        val first = dispatched(1)
         assertEquals(7, first.description().displayId)
         first.callback().onCompleted(first.description())
         assertTrue(background.await())
         val main = async(start = CoroutineStart.UNDISPATCHED) { service.tap(100, 200) }
-        val second = shadow.gesturesDispatched.last()
+        val second = dispatched(2)
         assertEquals(0, second.description().displayId)
         second.callback().onCompleted(second.description())
         assertTrue(main.await())
