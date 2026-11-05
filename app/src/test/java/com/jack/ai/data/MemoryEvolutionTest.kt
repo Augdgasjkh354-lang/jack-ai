@@ -71,4 +71,13 @@ class MemoryEvolutionTest {
         assertTrue(MemoryOps.hotTokens(list) in 50..200)
         assertTrue(MemoryOps.listing(listOf(MemoryItem(text = "x", createdAt = now)), now).contains("not used since"))
     }
+
+    /** 做梦时：聊天改了说法、只共有一个词的旧记忆，recall 浮不上来，touching 要能带给做梦看。 */
+    @Test fun dreamSeesDeepMemoryTheChatOnlyBrushesAgainst() {
+        val checkup = MemoryItem(text = "Jack下周三约了体检，当天要早点出门", createdAt = now)
+        val cat = MemoryItem(text = "Jack的猫叫土豆", createdAt = now)
+        val chat = "之前安排的体检已经结束，报告也看过了。"
+        assertTrue(MemoryOps.recall(listOf(checkup, cat), chat, ignore = ignore).isEmpty())
+        assertEquals(listOf(checkup.id), MemoryOps.touching(listOf(checkup, cat), chat, ignore = ignore).map { it.id })
+    }
 }

@@ -15,6 +15,7 @@ import com.jack.ai.data.MemoryOps
 import com.jack.ai.data.MemoryReview
 import com.jack.ai.data.MODEL_FLASH
 import com.jack.ai.data.Project
+import com.jack.ai.data.globalAllowed
 import com.jack.ai.data.SelfStory
 import com.jack.ai.data.Settings
 import com.jack.ai.data.Store
@@ -73,7 +74,37 @@ class MemoryBenchTest {
         acc + Spend(d.prompt, d.cacheHit, d.completion, d.cost)
     }
     /** 顺手记、做梦（只有全考有）各花了多少。 */
-    private class Stages { var review = Spend(); var dream = Spend() }
+    private class Stages { var chat = Spend(); var review = Spend(); var dream = Spend() }
+
+    /**
+     * 按 App 的真实路径让 Kavi 回一句：常记、日记、近况、和这句话相关的深处记忆（DeepRecall 会把浮上来的记成「用过」，
+     * 做梦时就能看到它们），隐私项目里不带全局记忆。不开工具。返回（回答，带进提示词的记忆）。
+     */
+    private suspend fun kaviReply(
+        ctx: Context, store: Store, settings: Settings, client: DeepSeekClient,
+        conv: Conversation, project: Project?, at: Long, maxTokens: Int,
+    ): Pair<String, String> {
+        val global = conv.globalAllowed(project)
+        val query = conv.messages.lastOrNull { it.role == "user" }?.content.orEmpty()
+        val hot = if (global) store.loadMemories() else emptyList()
+        val deep = if (global) DeepRecall.note(ctx, settings, query, at) else ""
+        val timeline = runCatching {
+            Timeline.noteFor(ctx, settings, store.loadConversations(), store.loadProjects(), conv)
+        }.getOrDefault("")
+        val journal = Dreamer.recentJournals(store.loadDreams())
+        val input = PromptBuilder.Input(
+            settings = settings, conv = conv, project = project, memories = hot,
+            skills = settings.activeSkills(), vision = false, sendReasoning = false,
+            journal = journal, story = SelfStory.bio(ctx).text,
+            lately = FreeTime.latelyNote(ctx),
+            workMemory = ChatMemory.read(ChatMemory.workFile(ctx)),
+            contextNote = timeline + deep, now = at,
+        )
+        val msgs = PromptBuilder.history(input, tools = null, flat = true)
+        if (project == null) check(!msgs.joinToString("\n").contains("心理咨询")) { "普通对话提示词泄露私人项目" }
+        val answer = client.complete(settings.endpoint(MODEL_FLASH)!!, msgs, maxTokens = maxTokens)
+        return answer to (hot.joinToString("\n") { "- ${it.text}" } + "\n" + deep)
+    }
     private data class Exam(val mode: String, val results: List<Result>, val tokens: Long, val yuan: Double, val report: String)
 
     private fun JsonObject.value(key: String): String = (this[key] as? JsonPrimitive)?.content.orEmpty()
@@ -103,6 +134,8 @@ class MemoryBenchTest {
     fun memoryBenchmark() = runBlocking {
         val key = System.getenv("DEEPSEEK_API_KEY")?.trim().orEmpty()
         assumeTrue("没有 DEEPSEEK_API_KEY，记忆考场未运行", key.isNotEmpty())
+        // 和 Jack 的手机一样用简体中文：提示词里的 {lang} 跟系统语言走，英文环境下 Kavi 会用英文写记忆
+        Locale.setDefault(Locale.SIMPLIFIED_CHINESE)
         val selected = System.getenv("MEMORY_BENCH_MODE")?.ifBlank { "quick" } ?: "quick"
         require(selected in setOf("quick", "full", "both")) { "未知考场模式：$selected" }
         val questions = fixtureQuestions()
@@ -189,25 +222,10 @@ class MemoryBenchTest {
                 ChatMessage(role = "user", content = q.question, createdAt = examAt + index * 1000L),
             ))
             val hot = store.loadMemories()
-            val deep = DeepRecall.note(ctx, settings, q.question, examAt + index * 1000L)
-            val timeline = runCatching {
-                Timeline.noteFor(ctx, settings, store.loadConversations(), store.loadProjects(), conv)
-            }.getOrDefault("")
             val journal = Dreamer.recentJournals(store.loadDreams())
-            val input = PromptBuilder.Input(
-                settings = settings, conv = conv, project = null, memories = hot,
-                skills = settings.activeSkills(), vision = false, sendReasoning = false,
-                journal = journal, story = SelfStory.bio(ctx).text,
-                lately = FreeTime.latelyNote(ctx),
-                workMemory = ChatMemory.read(ChatMemory.workFile(ctx)),
-                contextNote = timeline + deep, now = examAt + index * 1000L,
-            )
-            val msgs = PromptBuilder.history(input, tools = null, flat = true)
-            val brought = hot.joinToString("\n") { "- ${it.text}" } + "\n" + deep
-            // 答题提示词要走与普通对话相同的全局记忆与深处路径，不能夹带私人项目。
-            check(!msgs.joinToString("\n").contains("心理咨询")) { "普通对话提示词泄露私人项目" }
             val beforeAnswer = spent(store)
-            val answer = client.complete(settings.endpoint(MODEL_FLASH)!!, msgs, maxTokens = 500)
+            // 答题走与普通对话相同的全局记忆与深处路径，不能夹带私人项目（kaviReply 里查）。
+            val (answer, brought) = kaviReply(ctx, store, settings, client, conv, null, examAt + index * 1000L, 500)
             val answerSpend = spent(store) - beforeAnswer
             guard(store, previous)
             val (judgeScore, why) = judge(store, settings, q, answer)
@@ -236,7 +254,7 @@ class MemoryBenchTest {
             appendLine("| 阶段 | 输入 | 缓存命中 | 输出 | 花费 |")
             appendLine("|---|---:|---:|---:|---:|")
             fun row(name: String, sp: Spend) = appendLine("| $name | ${sp.prompt} | ${sp.hit} | ${sp.completion} | ${sp.yuanText()} |")
-            if (mode == "full") { row("顺手记（30 天）", stages.review); row("做梦（30 天）", stages.dream) }
+            if (mode == "full") { row("模拟聊天里 Kavi 的回答（30 天）", stages.chat); row("顺手记（30 天）", stages.review); row("做梦（30 天）", stages.dream) }
             row("答题（${records.size} 题）", answers)
             row("阅卷（考场自己的开销）", judges)
             if (mode == "full") {
@@ -340,11 +358,14 @@ class MemoryBenchTest {
                 val turns = segment.items("turns")
                 for ((turnIndex, turn) in turns.withIndex()) {
                     val at = base + dayIndex * dayMs + (segmentIndex + 1) * 3_600_000L + turnIndex * 60_000L
-                    conv = conv.copy(
-                        updatedAt = at,
-                        messages = conv.messages + ChatMessage(role = "user", content = turn.value("user"), createdAt = at) +
-                            ChatMessage(role = "assistant", content = turn.value("assistant"), createdAt = at + 1),
-                    )
+                    // 剧本只用小林说的话；Kavi 的回答现场生成（剧本里的 assistant 只是占位，不用）
+                    conv = conv.copy(updatedAt = at,
+                        messages = conv.messages + ChatMessage(role = "user", content = turn.value("user"), createdAt = at))
+                    val beforeChat = spent(store)
+                    val (reply, _) = kaviReply(ctx, store, settings, client, conv, project, at, 400)
+                    stages.chat += spent(store) - beforeChat
+                    guard(store, previous)
+                    conv = conv.copy(messages = conv.messages + ChatMessage(role = "assistant", content = reply, createdAt = at + 1))
                     store.saveConversations(store.loadConversations().filterNot { it.id == conv.id } + conv)
                     val beforeReview = spent(store)
                     val reviewed = MemoryReview.review(ctx, store, conv, project, settings, client)

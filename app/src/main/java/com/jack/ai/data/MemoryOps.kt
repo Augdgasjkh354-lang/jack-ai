@@ -166,6 +166,19 @@ object MemoryOps {
         return live.map { m -> if (related(m.text, tt, ignore)) m.copy(lastUsedAt = now, uses = m.uses + 1) else m }
     }
 
+    /**
+     * 做梦整理用：深处里和这段聊天沾边的（共有一个有分量的词就算），按共有词多少排。
+     * 比 [recall] 宽：做梦一天一次，多看几条不贵；聊天里改了说法（「体检做完了」对「下周三约了体检」）
+     * 只共有一个词，按 recall 的两个词门槛浮不上来，旧记忆就永远没机会被改掉。
+     */
+    fun touching(deep: List<MemoryItem>, text: String, top: Int = 30, ignore: Set<String> = emptySet()): List<MemoryItem> {
+        if (deep.isEmpty() || text.isBlank()) return emptyList()
+        val tt = keyTokens(text, ignore)
+        if (tt.isEmpty()) return emptyList()
+        return deep.map { m -> m to keyTokens(m.text, ignore).count { it in tt } }
+            .filter { it.second >= 1 }.sortedByDescending { it.second }.take(top).map { it.first }
+    }
+
     /** 从深处找和这句话最相关的几条。 */
     fun recall(deep: List<MemoryItem>, query: String, top: Int = 3, ignore: Set<String> = emptySet()): List<MemoryItem> {
         if (deep.isEmpty() || query.isBlank()) return emptyList()

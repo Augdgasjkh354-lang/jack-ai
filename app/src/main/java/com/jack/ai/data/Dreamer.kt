@@ -120,7 +120,7 @@ If there are no new chats, do not invent interactions or change memories about {
 
 You'll receive:
 1. All current memories, each with a short id like [m:ab12cd], where it came from and how often it has come up lately (may be empty), plus how much of your memory budget they take
-   Also any deeper memories that surfaced in chats since last time
+   Also deeper memories that surfaced in chats since last time or that these chats touch on
 2. Your previous journal entry (may be empty)
 3. All chats since the last look-back
 4. What you did in your own free time since then (may be empty): in your private journal, mention whatever matters to you, with no need to share it.
@@ -130,7 +130,7 @@ Write everything (journal, memory changes, changes) in {lang}, or in the languag
 I. Write "journal": a first-person journal written for yourself, about 300 to 800 Chinese characters (or 200 to 500 English words), in a few natural paragraphs, no headings or lists. Cover:
    1. Your understanding of {user}: how they talk, what they care about, how they see things, how they'd like you to be with them. Don't just restate facts; write what lies behind them (e.g. a serious question under a joking tone). Say how sure you are of each judgment ("quite sure", "fairly sure", "just a guess"); correct anything that contradicts your previous entry.
    2. Things still in progress: for each, where it stands, where it's stuck, and how to pick it up next time. Also note directions {user} clearly rejected or dropped, so you don't raise them again.
-   3. Review: what you got right, what you got wrong or were corrected on, concretely, and how you'll change.
+   3. Review: what you got right, what you got wrong or were corrected on, concretely, and how you'll change. If a lesson is already in your previous entry and nothing new happened, say so in one line instead of going over it again; review plainly, without self-reproach.
    4. Next time: what {user} will probably want to talk about and what you can think through in advance; and what not to do, e.g. don't bring things up unprompted, don't lecture, don't repeat reminders the system will send anyway.
    5. About yourself: what you learned about being with {user}, which views of your own formed or changed, what you were corrected on. Each point must trace back to something specific in the chats or your own free time; don't invent experiences.
       If you think a line in "who you are" should change, write "What I'd like to change: ...". It's only an idea and doesn't take effect by itself; you can raise it in a later chat and let {user} decide.
@@ -184,8 +184,11 @@ Output only one JSON object, in this format:
             append(MemoryOps.listing(memories))
             append("(memory budget: ~${MemoryOps.hotTokens(memories)} of ${MemoryOps.HOT_BUDGET} tokens used" + (if (MemoryOps.hotTokens(memories) > MemoryOps.HOT_BUDGET) " — over budget, make room" else "") + ")\n")
             val deepNow = MemoryOps.deep(ctx)
-            deepNow.filter { it.lastUsedAt > since }.sortedByDescending { it.uses }.take(20).takeIf { it.isNotEmpty() }?.let { l ->
-                append("\n【Deeper memories that surfaced since last time】(${deepNow.size} in deeper memory in all)\n").append(MemoryOps.listing(l))
+            // 浮上来过的，加上和这段聊天沾边的：没浮上来的旧记忆（换了说法、没配向量模型）也能被这次的聊天改掉或作废
+            val surfaced = deepNow.filter { it.lastUsedAt > since }.sortedByDescending { it.uses }.take(20)
+            val touched = MemoryOps.touching(deepNow, transcript, ignore = MemoryOps.ignoreFor(settings))
+            (surfaced + touched).distinctBy { it.id }.takeIf { it.isNotEmpty() }?.let { l ->
+                append("\n【Deeper memories that surfaced or that these chats touch on】(${deepNow.size} in deeper memory in all; update or invalidate any the chats show are outdated)\n").append(MemoryOps.listing(l))
             }
             Threads.listing(Threads.load(ctx)).takeIf { it.isNotBlank() }?.let { append("\n【On your mind】\n").append(Persona.fill(it, settings)).append("\n") }
             SelfStory.forDream(ctx).takeIf { it.isNotBlank() }?.let { append("\n").append(it) }
