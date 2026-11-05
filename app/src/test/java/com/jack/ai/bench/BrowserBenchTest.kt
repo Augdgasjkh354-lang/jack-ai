@@ -200,7 +200,12 @@ class BrowserBenchTest {
                     "；相关AX=" + merged.second.ax.filter { it.name.contains("跨站") }.map { it.name } +
                     "；iframeReady=" + tab.string("String(window.__benchReady)") +
                     "；targets=" + runCatching {
-                        tab.session.send("Target.getTargets", timeoutMs = 2_000)["targetInfos"].toString().take(350)
+                        val infos = tab.session.send("Target.getTargets", timeoutMs = 2_000)["targetInfos"] as? JsonArray
+                        infos.orEmpty().map { it.jsonObject }.filter {
+                            text(it, "url").contains("localhost") || text(it, "type") == "iframe"
+                        }.joinToString(",") {
+                            text(it, "type") + "@" + text(it, "url").take(70) + "[" + text(it, "targetId") + "]"
+                        }.take(700)
                     }.getOrDefault("无法读取"))
             val extra = merged.second.extras.firstOrNull { it.backendId == item.backendId }
                 ?: return Check(false, "新增节点缺少 backendNodeId")
