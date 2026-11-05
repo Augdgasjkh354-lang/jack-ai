@@ -96,3 +96,7 @@ core/src/main/kotlin/com/wangzan101/mika/core/cap/phone/TypingPacing.kt
 core/src/main/kotlin/com/wangzan101/mika/core/cap/phone/OperatingPace.kt
 core/src/main/kotlin/com/wangzan101/mika/core/uistate/TreeQuality.kt
 core/src/main/kotlin/com/wangzan101/mika/core/uistate/RefStabilizer.kt
+core/src/main/kotlin/com/wangzan101/mika/core/cap/phone/AppPacing.kt
+core/src/main/kotlin/com/wangzan101/mika/core/cap/phone/AppDwell.kt
+core/src/main/kotlin/com/wangzan101/mika/core/uistate/LimitNotice.kt
+core/src/main/kotlin/com/wangzan101/mika/core/uistate/ScreenDiagnosis.kt
