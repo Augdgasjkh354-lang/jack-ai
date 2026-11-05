@@ -1,6 +1,10 @@
 package com.jack.ai.data
 
+import android.content.Context
+import com.jack.ai.api.DeepSeekClient
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -107,6 +111,63 @@ object MemoryReview {
             done += when (op.op) { "add" -> "记下：${op.text}"; "update" -> "改成：${op.text}"; else -> "删掉：${op.old}" }
         }
         return list to done
+    }
+
+
+    /** 顺手记执行结果；界面负责刷新状态和显示提示，考场负责保存回看位置。 */
+    data class ReviewResult(val done: List<String>, val reviewedAt: Long, val memories: List<MemoryItem>?)
+
+    /**
+     * App 与记忆考场共用同一条真实回看路径。
+     * 返回 null 表示本轮不该回看或没有可用模型；请求失败由调用方处理。
+     */
+    suspend fun review(
+        ctx: Context, store: Store, conv: Conversation, project: Project?,
+        settings: Settings, client: DeepSeekClient,
+    ): ReviewResult? {
+        if (!due(conv) || !settings.memoryEnabled || !conv.inDream || conv.ownLife ||
+            conv.id == INBOX_ID || conv.id == Reader.CONV_ID) return null
+        val unseen = unseen(conv)
+        val work = unseen.any { it.plan.isNotEmpty() } && conv.workMemoryAllowed(project)
+        val chat = !work && conv.globalAllowed(project)
+        if (!work && !chat) return null
+        val ep = settings.backgroundEndpoint() ?: return null
+        val workFile = ChatMemory.workFile(ctx)
+        val budget = if (work) MemoryOps.FILE_BUDGET else MemoryOps.HOT_BUDGET
+        val before = if (work) ChatMemory.items(ChatMemory.read(workFile)) else store.loadMemories().map { it.text }
+        val input = "【Current ${if (work) "work memory" else "memories"}】(~${MemoryOps.tokensOf(before)} of $budget tokens)\n" +
+            before.ifEmpty { listOf("(none)") }.joinToString("\n") { "- $it" } +
+            "\n\n【The latest exchanges】\n" + transcript(unseen, Persona.ref(settings) ?: "User")
+        val raw = client.complete(ep, listOf(
+            buildJsonObject {
+                put("role", "system")
+                put("content", Persona.fill(instructions(work) + Persona.nameLine(settings).let {
+                    if (it.isEmpty()) "" else "\n\n$it"
+                }, settings))
+            },
+            buildJsonObject { put("role", "user"); put("content", input) },
+        ), maxTokens = 800, jsonMode = true)
+        val ops = parse(raw)
+        var done: List<String> = emptyList()
+        var saved: List<MemoryItem>? = null
+        if (work) {
+            ChatMemory.update(workFile) { live ->
+                val (next, changes) = apply(live, ops, budget)
+                done = changes
+                next.takeIf { changes.isNotEmpty() }
+            }
+        } else {
+            store.updateMemories { live ->
+                val (next, changes) = applyItems(live, ops, budget, "聊天时回看：${conv.title}")
+                done = changes
+                if (changes.isEmpty()) null else {
+                    MemoryOps.snapshot(ctx, live)
+                    saved = next
+                    next
+                }
+            }
+        }
+        return ReviewResult(done, unseen.maxOf { it.createdAt }, saved)
     }
 
     /** 给用户看的那条说明（挂在回答下面）。 */
