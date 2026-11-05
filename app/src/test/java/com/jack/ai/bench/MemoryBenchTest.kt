@@ -74,7 +74,7 @@ class MemoryBenchTest {
         acc + Spend(d.prompt, d.cacheHit, d.completion, d.cost)
     }
     /** 顺手记、做梦（只有全考有）各花了多少。 */
-    private class Stages { var chat = Spend(); var review = Spend(); var dream = Spend() }
+    private class Stages { var chat = Spend(); var review = Spend(); var dream = Spend(); val dreamFailures = mutableListOf<String>() }
 
     /**
      * 按 App 的真实路径让 Kavi 回一句：常记、日记、近况、和这句话相关的深处记忆（DeepRecall 会把浮上来的记成「用过」，
@@ -261,6 +261,8 @@ class MemoryBenchTest {
                 val daily = (stages.review + stages.dream).yuan / 30
                 appendLine()
                 appendLine("Kavi 自己每天的记忆开销（顺手记 + 做梦 ÷ 30 天）：约 ¥${"%.4f".format(Locale.US, daily)}")
+                appendLine()
+                appendLine("做梦失败：" + if (stages.dreamFailures.isEmpty()) "无" else "${stages.dreamFailures.size} 次（${stages.dreamFailures.joinToString("；")}）")
             }
             appendLine()
             appendLine("### 分类别")
@@ -379,7 +381,9 @@ class MemoryBenchTest {
             }
             // 每天的对话使用历史时间戳；梦的起止时钟也落在那一天。
             val beforeDream = spent(store)
-            Dreamer.dream(ctx, force = true, now = base + (dayIndex + 1) * dayMs - 1)
+            // 和 App 一样：这天做梦失败就跳过，下一次做梦会把没整理的接着整理（lastDreamAt 没往后挪）
+            runCatching { Dreamer.dream(ctx, force = true, now = base + (dayIndex + 1) * dayMs - 1) }
+                .onFailure { stages.dreamFailures += "第 ${dayIndex + 1} 天：${it.javaClass.simpleName}"; println("[记忆考场/全考] 第 ${dayIndex + 1} 天做梦失败：$it") }
             stages.dream += spent(store) - beforeDream
             guard(store, previous)
             println("[记忆考场/全考] 第 ${dayIndex + 1}/30 天完成，累计 ${used(store)} token")

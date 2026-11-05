@@ -210,16 +210,16 @@ Output only one JSON object, in this format:
             append(transcript)
         }
         val client = DeepSeekClient(store::addUsage)
-        val raw = client.complete(
-            ep,
-            listOf(
-                buildJsonObject { put("role", "system"); put("content", Persona.fill(KaviSelf.also { it.ensure(ctx) }.text(editable = false) + Persona.nameLine(settings).let { if (it.isEmpty()) "" else "\n\n$it" } + "\n\n" + INSTRUCTIONS, settings)) },
-                buildJsonObject { put("role", "user"); put("content", input) },
-            ),
-            maxTokens = 16384,
-            jsonMode = true,
+        val messages = listOf(
+            buildJsonObject { put("role", "system"); put("content", Persona.fill(KaviSelf.also { it.ensure(ctx) }.text(editable = false) + Persona.nameLine(settings).let { if (it.isEmpty()) "" else "\n\n$it" } + "\n\n" + INSTRUCTIONS, settings)) },
+            buildJsonObject { put("role", "user"); put("content", input) },
         )
-        val obj = Json.parseToJsonElement(raw.trim().removePrefix("```json").removeSuffix("```").trim()).jsonObject
+        // 偶尔交回来的不是合法 JSON（日记里的引号没转义之类）：再问一次，不然这一天的整理就白做了
+        val obj = (1..2).firstNotNullOfOrNull { attempt ->
+            val raw = client.complete(ep, messages, maxTokens = 16384, jsonMode = true)
+            runCatching { Json.parseToJsonElement(raw.trim().removePrefix("```json").removeSuffix("```").trim()).jsonObject }
+                .getOrElse { if (attempt == 2) throw it else null }
+        }!!
         fun str(k: String) = (obj[k] as? JsonPrimitive)?.content.orEmpty()
         // 日记是这次整理的凭证：先校验再写记忆。原来是先写完记忆、存档、清暂存，才在建条目时因日记为空抛错，
         // 记忆已经改了、日记却没留，等于一次没凭证的整理
