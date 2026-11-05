@@ -259,7 +259,9 @@ class KaviAccessibility : AccessibilityService() {
         val b = e.bounds
         val l = b[0].coerceAtLeast(0); val t = b[1].coerceAtLeast(0)
         val r = b[2].coerceAtMost(w); val bottom = b[3].coerceAtMost(h)
-        if (l < r && t < bottom && (node == null || node.isVisibleToUser && sameSpot(node, e))) {
+        // 后台虚拟屏幕上的手势派发还没在真机验证过，那边保持原来的顺序（先节点点击、再按中心点一下）
+        val gestureFirst = displayId == Display.DEFAULT_DISPLAY
+        if (gestureFirst && l < r && t < bottom && (node == null || node.isVisibleToUser && sameSpot(node, e))) {
             val (x, y) = gesturePacing().within(l, t, r, bottom)
             // 手势即便回调取消，也可能已经触发按钮；此时绝不再用 ACTION_CLICK 补点。
             return tapAt(x, y, long, displayId)
@@ -272,7 +274,7 @@ class KaviAccessibility : AccessibilityService() {
                 n = n.parent
             }
         }
-        return false
+        return if (gestureFirst) false else tap(e.centerX, e.centerY, long, displayId)
     }
 
     private fun sameSpot(n: AccessibilityNodeInfo, e: Element): Boolean {
