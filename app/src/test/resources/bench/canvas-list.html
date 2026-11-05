@@ -1,0 +1,7 @@
+<!doctype html><meta charset="utf-8"><title>Canvas 商品</title>
+<canvas id="board" width="760" height="560"></canvas>
+<script>window.__benchReady=false;fetch("/api/items").then(r=>r.json()).then(data=>{
+const ctx=document.querySelector("#board").getContext("2d");ctx.font="18px sans-serif";
+data.items.forEach((item,i)=>ctx.fillText(item.name+" "+item.price+" "+item.shop,15,30+i*38));
+window.__benchReady=true;
+});</script>

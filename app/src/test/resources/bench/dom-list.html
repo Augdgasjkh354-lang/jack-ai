@@ -1,0 +1,7 @@
+<!doctype html><meta charset="utf-8"><title>DOM 商品</title>
+<table border="1"><thead><tr><th>名称</th><th>价格</th><th>店铺</th><th>销量</th></tr></thead><tbody></tbody></table>
+<script>window.__benchReady=false;fetch("/api/items").then(r=>r.json()).then(data=>{
+const tbody=document.querySelector("tbody");
+data.items.forEach((item,i)=>{const tr=document.createElement("tr");[item.name,item.price,item.shop,String(100+i)].forEach(t=>{const td=document.createElement("td");td.textContent=t;tr.appendChild(td)});tbody.appendChild(tr)});
+window.__benchReady=true;fetch("/api/recommend").then(r=>r.json());
+});</script>

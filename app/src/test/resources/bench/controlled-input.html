@@ -1,0 +1,8 @@
+<!doctype html><meta charset="utf-8"><title>受控输入</title>
+<input id="query" placeholder="输入关键词" style="margin:40px;width:360px;height:45px">
+<div id="state"></div><script>
+let state="";window.__benchResult="";
+const input=document.querySelector("#query");
+input.addEventListener("beforeinput",e=>{if(e.isTrusted)window.__benchStarted=true});
+input.addEventListener("input",e=>{if(e.isTrusted && window.__benchStarted){state=input.value;window.__benchResult=state;document.querySelector("#state").textContent=state;}});
+</script>

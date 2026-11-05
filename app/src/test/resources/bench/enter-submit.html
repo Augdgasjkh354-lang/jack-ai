@@ -1,0 +1,7 @@
+<!doctype html><meta charset="utf-8"><title>回车提交</title>
+<input id="query" placeholder="搜索内容" style="margin:40px;width:360px;height:45px">
+<div id="result"></div><script>
+window.__benchResult="";document.querySelector("#query").addEventListener("keydown",e=>{
+if(e.key==="Enter"&&e.isTrusted){window.__benchResult=e.target.value;document.querySelector("#result").textContent=e.target.value;}
+});
+</script>

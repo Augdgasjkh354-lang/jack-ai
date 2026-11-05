@@ -1,0 +1,7 @@
+<!doctype html><meta charset="utf-8"><title>封闭 Shadow</title>
+<div id="host" style="margin:40px"></div><script>
+window.__benchResult="";
+const root=document.querySelector("#host").attachShadow({mode:"closed"});
+const b=document.createElement("button");b.textContent="Shadow 按钮";
+b.style.cssText="width:200px;height:60px";b.addEventListener("click",()=>window.__benchResult="clicked");root.appendChild(b);
+</script>
