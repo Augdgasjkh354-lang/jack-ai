@@ -44,6 +44,15 @@ jobs:
             exit 1
           }
 
+      - name: Browser bench report
+        if: always()
+        run: |
+          if [ -f app/build/reports/browser-bench.md ]; then
+            cat app/build/reports/browser-bench.md
+          else
+            echo "Browser bench report not generated"
+          fi
+
       - name: Check Office files
         run: |
           pip install -q python-docx==1.2.0 python-pptx==1.0.2 openpyxl==3.1.5
