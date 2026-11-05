@@ -184,6 +184,7 @@ Worth saving:
 2. A stable fact about {user}: who they are, important people, ongoing situations, habits.
 3. A fix to a memory below that this exchange shows is now wrong or outdated.
 Not worth saving: one-off questions, things only this conversation needs, your own views, guesses, and anything the memories already say.
+If {user} asks you not to remember something, don't record it in any form, not even a memory saying it must not be recorded, since that memory would itself repeat it; if a memory below already contains it, delete that memory.
 Most of the time nothing needs to change; then return no ops.
 Reply with JSON only: {"ops":[...]}, at most 3, each one of
 {"op":"add","text":"..."}
