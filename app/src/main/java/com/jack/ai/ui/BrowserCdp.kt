@@ -158,12 +158,12 @@ internal object BrowserCdp {
             return Outcome.FALLBACK
         }
         var eventAttempted = false
-        val input = CdpInputScript { method, params ->
+        val input = CdpInputScript(send = { method, params ->
             // 单纯移动鼠标失败时，没有发生点击或编辑，可以退回脚本。
             if (method != "Input.dispatchMouseEvent" ||
                 params["type"]?.jsonPrimitive?.contentOrNull != "mouseMoved") eventAttempted = true
             s.send(method, params, timeoutMs = 2_000)
-        }
+        })
         return try {
             input.block()
             tab.diag.add("CDP 输入成功：$action")
