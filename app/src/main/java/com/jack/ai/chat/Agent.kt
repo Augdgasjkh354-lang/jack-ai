@@ -89,6 +89,7 @@ class Agent(
         var attempts = 0
         var hiccups = 0
         var imageRetried = false
+        var leakRetried = false
         while (true) {
             // 每次请求前都瘦身，包括第一次：上一条回答跑了几百步，追问时旧工具结果会整个带进来
             slim?.invoke(messages)
@@ -149,6 +150,25 @@ class Agent(
             onRound()
             imageRetried = false
             if (calls.isEmpty()) {
+                // 工具调用漏成了正文（服务没把它解析成调用）：这不是回答，退回一次让它经工具接口重新调；再漏就把那段乱码去掉、告诉用户
+                val leaked = currentTools?.let { LeakedToolCall.find(roundContent.toString(), toolNames(it)) }
+                if (leaked != null) {
+                    content.setLength(roundStart)
+                    if (!leakRetried) {
+                        leakRetried = true
+                        onText()
+                        messages += buildJsonObject {
+                            put("role", "assistant"); put("content", roundContent.toString())
+                            if (sendReasoning) put("reasoning_content", roundReasoning.toString())
+                        }
+                        messages += buildJsonObject { put("role", "user"); put("content", LeakedToolCall.retry(leaked)) }
+                        continue
+                    }
+                    val before = LeakedToolCall.before(roundContent.toString()).trim()
+                    content.append(if (before.isNotEmpty()) "$before\n\n" else "").append(LeakedToolCall.NOTICE)
+                    roundContent.setLength(0); roundContent.append(content.substring(roundStart))
+                    onText()
+                }
                 // 挪走了进度说明、最后却什么都没说（比如「好的，记住了」加一个存记忆就完了）：把最后一句放回回答
                 if (splitNotes && content.isBlank() && notes.isNotEmpty()) {
                     content.setLength(0)
@@ -173,6 +193,7 @@ class Agent(
             }
 
             round++
+            leakRetried = false
             // 这一轮说的是调工具前的一句进度：从回答里拿掉，记进 notes
             val said = roundContent.toString().trim()
             if (splitNotes && said.isNotEmpty() && said.length <= NOTE_MAX) {
