@@ -158,6 +158,9 @@ class ToolSession(
     @Volatile internal var phoneControl: com.jack.ai.a11y.PhoneControl? = null
     internal val phoneActionCounts = java.util.concurrent.ConcurrentHashMap<String, Int>()
     internal val phoneLastActionAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    /** 同一轮手机任务共享停留状态，模型思考时间计入停留。 */
+    internal val phoneDwell = com.wangzan101.mika.core.cap.phone.AppDwell(com.wangzan101.mika.core.cap.phone.AppPacing.human())
+    @Volatile internal var phoneLimitStop: String? = null
     @Volatile internal var phoneCloseSummary: String? = null
 
     internal suspend fun claimPhone(service: com.jack.ai.a11y.KaviAccessibility, forceMain: Boolean = false): com.jack.ai.a11y.PhoneControl {
