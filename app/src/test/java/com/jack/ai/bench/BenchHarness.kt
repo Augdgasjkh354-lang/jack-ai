@@ -1,7 +1,6 @@
 package com.jack.ai.bench
 
 import com.jack.ai.ui.BrowserNetworkRows
-import com.sun.net.httpserver.HttpServer
 import com.wangzan101.mika.core.cap.web.NetworkLedger
 import com.wangzan101.mika.core.cap.web.cdp.CdpDiscovery
 import com.wangzan101.mika.core.cap.web.cdp.CdpSession
@@ -31,6 +30,8 @@ import java.io.Closeable
 import java.io.File
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.lang.reflect.InvocationHandler
+import java.lang.reflect.Proxy
 import java.nio.file.Files
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -40,49 +41,66 @@ import kotlin.concurrent.thread
 
 /** 随机端口的本地网站，不访问互联网。 */
 internal class BenchServer : Closeable {
-    private val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+    // Android 测试编译器的 bootclasspath 没有 jdk.httpserver；JVM 运行时仍使用 JDK 自带服务。
+    private val http = Class.forName("com.sun.net.httpserver.HttpServer")
+    private val exchangeType = Class.forName("com.sun.net.httpserver.HttpExchange")
+    private val handlerType = Class.forName("com.sun.net.httpserver.HttpHandler")
+    private val server = http.getMethod("create", InetSocketAddress::class.java, Int::class.javaPrimitiveType)
+        .invoke(null, InetSocketAddress("127.0.0.1", 0), 0)
     private val executor = Executors.newCachedThreadPool()
-    val port: Int get() = server.address.port
+    val port: Int get() = (http.getMethod("getAddress").invoke(server) as InetSocketAddress).port
 
     init {
-        server.executor = executor
-        server.createContext("/") { exchange ->
-            val path = exchange.requestURI.path.removePrefix("/")
-            val status = if (path == "rate-limited.html") 429 else 200
-            val data: String
-            val mime: String
-            when (path) {
-                "api/items" -> {
-                    data = "{\"items\":[" + (1..12).joinToString(",") { i ->
-                        "{\"name\":\"商品" + i + "\",\"price\":\"" + i + "9.00\",\"shop\":\"店铺" + i +
-                            "\",\"url\":\"https://example.com/item/" + i + "\",\"sales\":" + (100 + i) + "}"
-                    } + "]}"
-                    mime = "application/json; charset=utf-8"
-                }
-                "api/recommend" -> {
-                    data = """{"items":[{"name":"推荐商品","price":"5.00","shop":"推荐店铺"}]}"""
-                    mime = "application/json; charset=utf-8"
-                }
-                else -> {
-                    val stream = javaClass.classLoader.getResourceAsStream("bench/" + path)
-                    data = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
-                        ?.replace("%PORT%", port.toString()) ?: "<h1>Not Found</h1>"
-                    mime = "text/html; charset=utf-8"
-                }
+        http.getMethod("setExecutor", java.util.concurrent.Executor::class.java).invoke(server, executor)
+        val handler = Proxy.newProxyInstance(handlerType.classLoader, arrayOf(handlerType),
+            InvocationHandler { _, method, args ->
+                if (method.name == "handle") handle(requireNotNull(args?.firstOrNull()))
+                null
+            })
+        http.getMethod("createContext", String::class.java, handlerType).invoke(server, "/", handler)
+        http.getMethod("start").invoke(server)
+    }
+
+    private fun handle(exchange: Any) {
+        val path = (exchangeType.getMethod("getRequestURI").invoke(exchange) as java.net.URI)
+            .path.removePrefix("/")
+        val status = if (path == "rate-limited.html") 429 else 200
+        val data: String
+        val mime: String
+        when (path) {
+            "api/items" -> {
+                data = "{\"items\":[" + (1..12).joinToString(",") { i ->
+                    "{\"name\":\"商品" + i + "\",\"price\":\"" + i + "9.00\",\"shop\":\"店铺" + i +
+                        "\",\"url\":\"https://example.com/item/" + i + "\",\"sales\":" + (100 + i) + "}"
+                } + "]}"
+                mime = "application/json; charset=utf-8"
             }
-            val bytes = data.toByteArray(Charsets.UTF_8)
-            exchange.responseHeaders.add("Content-Type", mime)
-            exchange.responseHeaders.add("Cache-Control", "no-store")
-            exchange.sendResponseHeaders(status, bytes.size.toLong())
-            exchange.responseBody.use { it.write(bytes) }
+            "api/recommend" -> {
+                data = """{"items":[{"name":"推荐商品","price":"5.00","shop":"推荐店铺"}]}"""
+                mime = "application/json; charset=utf-8"
+            }
+            else -> {
+                val stream = javaClass.classLoader.getResourceAsStream("bench/" + path)
+                data = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+                    ?.replace("%PORT%", port.toString()) ?: "<h1>Not Found</h1>"
+                mime = "text/html; charset=utf-8"
+            }
         }
-        server.start()
+        val bytes = data.toByteArray(Charsets.UTF_8)
+        val headers = exchangeType.getMethod("getResponseHeaders").invoke(exchange)
+        headers.javaClass.getMethod("add", String::class.java, String::class.java)
+            .invoke(headers, "Content-Type", mime)
+        headers.javaClass.getMethod("add", String::class.java, String::class.java)
+            .invoke(headers, "Cache-Control", "no-store")
+        exchangeType.getMethod("sendResponseHeaders", Int::class.javaPrimitiveType, Long::class.javaPrimitiveType)
+            .invoke(exchange, status, bytes.size.toLong())
+        (exchangeType.getMethod("getResponseBody").invoke(exchange) as java.io.OutputStream).use { it.write(bytes) }
     }
 
     fun url(page: String, host: String = "a.localhost") = "http://" + host + ":" + port + "/" + page
 
     override fun close() {
-        server.stop(0)
+        http.getMethod("stop", Int::class.javaPrimitiveType).invoke(server, 0)
         executor.shutdownNow()
     }
 }
