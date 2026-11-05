@@ -43,14 +43,15 @@ object WebBarrier {
     )
 
     fun classify(url: String, title: String, text: String, mainStatus: Int?,
-                 frameUrls: List<String>, apiMessage: String? = null): Block? {
+                 frameUrls: List<String>, apiMessage: String? = null,
+                 longPage: Boolean = false): Block? {
         if (mainStatus in riskStatuses) return Block(Kind.LIMITED, "HTTP $mainStatus")
         frameUrls.firstOrNull { captchaFrame(it, url) }?.let {
             return Block(Kind.CAPTCHA, "验证码框架")
         }
         // 只对短的拦截页判敏感词；不能把讲解风控的普通文章误认成拦截页。
         val compact = (title + "\n" + text).lowercase().filterNot(Char::isWhitespace)
-        if (compact.length <= 800) {
+        if (compact.length <= 800 && !longPage) {
             if (challengeWords.any { it in compact }) return Block(Kind.CAPTCHA, "需要人机验证")
             if (riskWords.any { it in compact } ||
                 (riskTitles.any { it in compact } && riskCues.any { it in compact })) {
