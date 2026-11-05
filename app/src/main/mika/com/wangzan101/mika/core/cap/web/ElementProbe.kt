@@ -241,7 +241,8 @@ class ElementProbe(private val session: CdpSession) {
 
     private suspend fun details(backend: Int): Pair<String, String> {
         val node = runCatching {
-            session.send("DOM.describeNode", buildJsonObject { put("backendNodeId", backend) }, timeoutMs = CALL_MS)["node"] as? JsonObject
+            session.send("DOM.describeNode", buildJsonObject { put("backendNodeId", backend) },
+                backendSessions[backend], CALL_MS)["node"] as? JsonObject
         }.getOrNull() ?: return "" to ""
         val attrs = (node["attributes"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
         val attrMap = attrs.chunked(2).filter { it.size == 2 }.associate { it[0] to it[1] }
@@ -251,21 +252,36 @@ class ElementProbe(private val session: CdpSession) {
     private suspend fun box(backend: Int, content: Boolean = false): Box? = runCatching {
         val model = session.send("DOM.getBoxModel", buildJsonObject {
             put("backendNodeId", backend)
-        }, timeoutMs = CALL_MS)["model"] as? JsonObject
+        }, backendSessions[backend], CALL_MS)["model"] as? JsonObject
         quad(model?.get(if (content) "content" else "border") as? JsonArray)
     }.getOrNull()
 
-    suspend fun locate(backend: Int, owner: Int?, viewport: Box): Placed? =
-        withTimeoutOrNull(1_500) {
+    suspend fun locate(backend: Int, owner: Int?, viewport: Box,
+                       frame: String? = null, hits: Set<Int> = setOf(backend)): Placed? =
+        withTimeoutOrNull(3_000) {
+            if (owner != null && !frame.isNullOrBlank()) {
+                attachFrame(frame)?.let { backendSessions[backend] = it }
+            }
             runCatching { session.send("DOM.scrollIntoViewIfNeeded",
-                buildJsonObject { put("backendNodeId", backend) }, timeoutMs = 1_000) }
+                buildJsonObject { put("backendNodeId", backend) }, backendSessions[backend], 1_000) }
             // 滚动后重新取所属 iframe 的可见区域，旧快照的框可能已移位。
-            place(backend, setOf(backend), owner?.let { box(it, content = true) }, owner, viewport)
+            place(backend, hits, owner?.let { box(it, content = true) }, owner, viewport)
         }
 
     /** 尝试顶层坐标；部分 WebView 把子框架的 BoxModel 坐标算在框架内，再加上框架偏移重试。 */
     private suspend fun place(backend: Int, hits: Set<Int>, clip: Box?, owner: Int?, viewport: Box): Placed? {
         val raw = box(backend) ?: return null
+        val child = backendSessions[backend]
+        if (child != null && owner != null) {
+            // 在 iframe 子进程验证命中，再把局部坐标换到主页面。
+            val localHit = hitAt(raw.x, raw.y, child)
+            if (localHit !in hits) return null
+            val frame = box(owner, content = true) ?: return null
+            val shifted = Box(raw.l + frame.l, raw.t + frame.t, raw.r + frame.l, raw.b + frame.t)
+            val visible = shifted.intersect(viewport)?.let { clip?.let(it::intersect) ?: it } ?: return null
+            val hit = hitAt(visible.x, visible.y)
+            return if (hit == owner) Placed(shifted, visible.x, visible.y, hit) else null
+        }
         suspend fun trial(rect: Box): Placed? {
             val visible = rect.intersect(viewport)?.let { clip?.let(it::intersect) ?: it } ?: return null
             val hit = hitAt(visible.x, visible.y)
@@ -282,11 +298,11 @@ class ElementProbe(private val session: CdpSession) {
         return direct
     }
 
-    private suspend fun hitAt(x: Double, y: Double): Int? = runCatching {
+    private suspend fun hitAt(x: Double, y: Double, sid: String? = null): Int? = runCatching {
         session.send("DOM.getNodeForLocation", buildJsonObject {
             put("x", x.roundToInt()); put("y", y.roundToInt())
             put("includeUserAgentShadowDOM", false)
-        }, timeoutMs = CALL_MS).int("backendNodeId")
+        }, sid, CALL_MS).int("backendNodeId")
     }.getOrNull()
 
     companion object {
