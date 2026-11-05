@@ -11,6 +11,14 @@ import com.wangzan101.mika.core.uistate.ActionEffect
 import com.wangzan101.mika.core.uistate.EffectElement
 import com.wangzan101.mika.core.uistate.EffectKind
 import com.wangzan101.mika.core.uistate.EffectScreen
+import com.wangzan101.mika.core.uistate.LimitNotice
+import com.wangzan101.mika.core.uistate.ScreenDiagnosis
+import com.wangzan101.mika.core.uistate.ScreenFacts
+import com.wangzan101.mika.core.uistate.ScreenState
+import com.wangzan101.mika.core.cap.phone.OperatingPace
+import com.wangzan101.mika.core.cap.phone.PageLimitReached
+import com.jack.ai.a11y.UiNode
+import kotlinx.coroutines.withTimeoutOrNull
 import com.jack.ai.data.AppUsageNotes
 import com.jack.ai.data.SearchRecord
 import kotlinx.coroutines.Dispatchers
@@ -26,6 +34,10 @@ import kotlinx.serialization.json.JsonObject
  */
 internal suspend fun ToolSession.phone(args: JsonObject): String {
     val action = args["action"].text().trim()
+    phoneLimitStop?.let {
+        if (action !in setOf("apps", "read", "screenshot", "flow", "save_flow"))
+            return "$it 请停止这一轮自动操作，由用户确认后重新发起。"
+    }
     val allowed = settings.phoneApps
     if (allowed.isEmpty()) return "用户还没勾 Kavi 能操作的 App。请用户到 设置 → 操作其他 App 里勾上要用的 App（涉及钱的勾不了）。"
     val accessibility = KaviAccessibility.instance
@@ -77,35 +89,83 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
         return null
     }
 
-    /** 读当前屏幕：查能不能碰、是不是付款页面，记下来给后面按编号操作。 */
-    suspend fun read(): Pair<Screen?, String> {
+    /** 主屏弹悬浮卡片；后台暂停并交给用户，用户点「继续后台」后自动重读。 */
+    suspend fun takeOver(pkg: String, reason: String): Boolean {
+        val hint = "「${label(pkg)}」需要你亲自处理${reason}。处理好以后再继续自动操作。"
+        if (!interactive) {
+            com.jack.ai.data.Routines.notify(app, "phone-human", "Kavi 需要你来操作", hint)
+            return false
+        }
+        val background = svc.background
+        if (background != null) {
+            if (!background.handOver()) return false
+            com.jack.ai.data.Routines.notify(app, "phone-human", "Kavi 已暂停后台操作", "$hint 回到后台屏幕页点「继续后台」。")
+            ui.progress("等用户接管「${label(pkg)}」并继续后台")
+            return withTimeoutOrNull(180_000L) { background.ready(); true } == true
+        }
+        return ToolTimeout.waiting {
+            if (remote) ui.confirm("请你来做：${label(pkg)}", hint, "已经处理好")
+            else accessibility.confirm("请你来做：${label(pkg)}", hint, "已经处理好")
+        }
+    }
+
+    fun UiNode.anyNode(test: (UiNode) -> Boolean): Boolean = test(this) || children.any { it.anyNode(test) }
+
+    /** 读当前屏幕：先检查 App 权限和付款，再识别登录、验证码与加载状态。 */
+    suspend fun read(allowTakeover: Boolean = true): Pair<Screen?, String> {
         val (pkg, root) = svc.snapshot() ?: return null to "读不到屏幕（可能在锁屏或系统界面上）。"
         refuse(pkg)?.let { phoneSeen = null; return null to it }
         val raw = Screen(pkg, label(pkg), ScreenText.elements(root))
         PhoneGuard.payPage(raw.texts())?.let { phoneSeen = null; return null to "到了付款或输密码的页面（看到「$it」），Kavi 不碰。停下，告诉用户这一步要自己来。" }
-        AppUsageNotes.policyForPackage(pkg).signedOutMarker(raw.texts())?.let {
+        val signedOut = AppUsageNotes.policyForPackage(pkg).signedOutMarker(raw.texts())
+        val diagnosis = ScreenDiagnosis.classify(ScreenFacts(
+            currentApp = pkg, readableElements = raw.elements.size, texts = raw.texts(),
+            passwordField = root.anyNode { it.password }, signedOut = signedOut != null,
+            changing = root.anyNode { it.cls.endsWith("ProgressBar") } ||
+                raw.texts().any { it.contains("加载中") || it.contains("正在加载") },
+        ))
+        if (diagnosis.needsHuman) {
             phoneSeen = null
-            return null to "检测到「$it」，账号已经回到登录页。为保护账号，这一轮停止操作；请用户在主屏手动登录后再继续。"
+            val why = if (diagnosis.reason == "captcha") "验证码或人机验证" else "登录或验证码"
+            if (allowTakeover && takeOver(pkg, why)) {
+                phoneDwell.userAnswered()
+                return read(false)
+            }
+            return null to "检测到「${label(pkg)}」需要${why}。Kavi 已暂停，不再自动点击或输入；请用户自己处理，完成后重新 read。"
         }
         val size = svc.screenSize()
         val screen = PhoneScreenAnalysis.stabilize(phoneSeen, raw, size)
         val quality = PhoneScreenAnalysis.quality(root, size)
         phoneSeen = screen
         val note = StringBuilder(flowHint(pkg)).append(ScreenText.format(screen))
-        // 树正常时沿用原来的纯文字读屏；缺块或读不到才附标号截图。
+        if (diagnosis.state == ScreenState.LOADING) note.append("这一屏还在加载中，先用 wait 等它稳定再继续。\n")
+        // 树正常时只给文字；缺块时才附标号截图。
         if (quality.poor && action != "screenshot") {
             if (!canSee) note.append("这一屏树读不全，当前模型看不了截图，请用户来查看这一屏。\n")
             else {
-                // 截图前再查一次目标 App，避免用户切屏时拍到未授权或付款 App。
                 if (svc.foreground() != pkg) {
                     phoneSeen = null
                     return null to "截图前 App 已切换，先重新 read 确认当前屏幕，不读取其他 App。"
                 }
-                val capture = svc.checkedScreenshot(screen.elements)
-                when {
-                    PhoneScreenAnalysis.withFrame(quality, capture?.black == true).quality == TreeQuality.Protected -> {
+                var capture = svc.checkedScreenshot(screen.elements)
+                val firstBlack = capture?.black == true
+                if (firstBlack) {
+                    svc.settle(600)
+                    if (svc.foreground() != pkg) {
                         phoneSeen = null
-                        return null to "这一屏防截屏，画面全黑。Kavi 无法安全辨认，请用户自己完成这一步；处理完再重新 read。"
+                        return null to "截图时 App 已切换，先重新 read 确认当前屏幕。"
+                    }
+                    capture = svc.checkedScreenshot(screen.elements)
+                }
+                when {
+                    ScreenDiagnosis.classify(ScreenFacts(pkg, screen.elements.size, screen.texts(),
+                        blackFrames = if (firstBlack && capture?.black == true) listOf(true, true) else emptyList())).state == ScreenState.PROTECTED -> {
+                        phoneSeen = null
+                        if (allowTakeover && takeOver(pkg, "防截屏页面")) {
+                            phoneDwell.userAnswered()
+                            return read(false)
+                        }
+                        return null to "这一屏防截屏，画面持续全黑；Kavi 已暂停，请用户处理后重新 read。"
                     }
                     capture?.image != null -> {
                         val (img, k) = capture.image
