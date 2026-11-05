@@ -37,7 +37,7 @@ import kotlin.math.roundToInt
 class ElementProbe(private val session: CdpSession) {
     data class Snapshot(
         val pageIds: List<Int?>, val ax: List<AxNode>, val frames: List<Frame>,
-        val extras: List<Extra>, val stats: String,
+        val extras: List<Extra>, val stats: String, val coveredPageNumbers: Set<Int> = emptySet(),
     )
     data class Listener(val label: String, val box: Box)
     data class Placed(val box: Box, val x: Double, val y: Double, val hit: Int?)
@@ -110,8 +110,36 @@ class ElementProbe(private val session: CdpSession) {
                     placed.box, null, null, placed.hit, setOf(id))
             }
         }.awaitAll().filterNotNull()
+        val covered = coveredPageNumbers(page)
         Snapshot(pageIds, ax, frameList, axExtras + listenerExtras,
-            "script=${page.size}, matched=${pageIds.count { it != null }}, ax=${ax.size}, extras=${axExtras.size}, listeners=${listenerExtras.size}")
+            "script=${page.size}, matched=${pageIds.count { it != null }}, ax=${ax.size}, extras=${axExtras.size}, listeners=${listenerExtras.size}, covered=${covered.size}",
+            covered)
+    }
+
+    /** 旧脚本只看 CSS 可见性；这里用真实命中目标剔除被覆盖的旧编号。 */
+    private suspend fun coveredPageNumbers(page: List<ElementFusion.PageNode>): Set<Int> {
+        val expression = """
+            (window.__jackRefs || []).map(function(el) {
+              if (!el || !el.getBoundingClientRect) return false;
+              var rect = el.getBoundingClientRect();
+              var doc = el.ownerDocument;
+              var view = doc.defaultView;
+              var x = rect.left + rect.width / 2, y = rect.top + rect.height / 2;
+              if (!view || x < 0 || y < 0 || x >= view.innerWidth || y >= view.innerHeight) return false;
+              var hit = doc.elementFromPoint(x, y);
+              return !!hit && hit !== el && !el.contains(hit);
+            })
+        """.trimIndent()
+        val flags = runCatching {
+            val result = session.send("Runtime.evaluate", buildJsonObject {
+                put("expression", expression)
+                put("returnByValue", true)
+            }, timeoutMs = CALL_MS)["result"] as? JsonObject
+            result?.get("value") as? JsonArray
+        }.getOrNull() ?: return emptySet()
+        if (flags.size != page.size) return emptySet()
+        return page.indices.filter { (flags[it] as? JsonPrimitive)?.booleanOrNull == true }
+            .mapTo(HashSet()) { page[it].n }
     }
 
     /** 同一次求值里的数组节点引用与页面快照对齐；页面跳转后长度不一致则放弃融合。 */
