@@ -344,11 +344,13 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
                     check(s, e.label, verb)?.let { return@runTool it to SearchRecord(toolLabel) }
                     if (!e.enabled) return@runTool "「${e.label}」现在点不了（灰的）。" to SearchRecord(toolLabel)
                     if (!svc.click(e, long)) return@runTool fail(s.app, "failed", "没点成「${e.label}」。可以 read 重看一下，或者截图按坐标点。")
+                    if (PhoneGuard.risk(e.label) == PhoneGuard.Risk.ASK) phoneDwell.outwardDone(s.pkg)
                     after("已${verb}「${e.label.ifBlank { "第 ${e.n} 项" }}」。", s)
                 } else {
                     val px = (x!! * phoneScale).toInt(); val py = (y!! * phoneScale).toInt()
                     s.at(px, py)?.let { under -> check(s, under.label, verb)?.let { return@runTool it to SearchRecord(toolLabel) } }
                     if (!svc.tap(px, py, long)) return@runTool fail(s.app, "failed", "没点成。")
+                    if (s.at(px, py)?.let { PhoneGuard.risk(it.label) } == PhoneGuard.Risk.ASK) phoneDwell.outwardDone(s.pkg)
                     after("已${verb}屏幕上 ($px, $py)。", s)
                 }
             }
@@ -373,6 +375,7 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
                     return@runTool "用户没同意按回车，没有按。" to SearchRecord(toolLabel)
                 }
                 if (!svc.imeEnter()) return@runTool fail(s.app, "failed", "按不了回车（要安卓 11 以上，或者输入框不支持）。找一下页面上的「发送」「搜索」按钮。")
+                if (!search) phoneDwell.outwardDone(s.pkg)
                 after("已按回车。", s)
             }
             "scroll", "swipe" -> {
