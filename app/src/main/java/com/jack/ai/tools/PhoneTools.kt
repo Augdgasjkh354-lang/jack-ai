@@ -5,6 +5,10 @@ import com.jack.ai.a11y.KaviAccessibility
 import com.jack.ai.a11y.PhoneGuard
 import com.jack.ai.a11y.Screen
 import com.jack.ai.a11y.ScreenText
+import com.wangzan101.mika.core.uistate.ActionEffect
+import com.wangzan101.mika.core.uistate.EffectElement
+import com.wangzan101.mika.core.uistate.EffectKind
+import com.wangzan101.mika.core.uistate.EffectScreen
 import com.jack.ai.data.AppUsageNotes
 import com.jack.ai.data.SearchRecord
 import kotlinx.coroutines.Dispatchers
@@ -114,12 +118,28 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
     /** 现在前台的 App 名（只算用户勾过的）。 */
     fun fgName(): String = svc.foreground()?.takeIf { it in allowed }?.let { label(it) }.orEmpty()
 
-    /** 做完一步：等界面停下来，再读一遍；和做之前那一屏比，一点没变就记成「做了但屏幕没变」。 */
-    suspend fun after(done: String, before: Screen?): String {
+    /** 把 Kavi 的控件清单转成 Mika 效果判断的纯逻辑输入，不暴露密码内容。 */
+    fun Screen.effectScreen() = EffectScreen(pkg, elements.map { e ->
+        EffectElement(e.role, e.label, if (e.password) "" else e.value, e.bounds.toList(), e.checked, e.password)
+    })
+
+    /** 动作后读回：没看见变化就提醒模型先检查，绝不自动补点。 */
+    suspend fun after(done: String, before: Screen?, typed: String? = null): String {
         svc.settle()
-        val (now, text) = read()
-        before?.let { stat(it.app, if (now != null && now.signature() == it.signature()) "no_change" else "ok") }
-        return "$done\n\n$text"
+        val (now, screenText) = read()
+        val effect = ActionEffect.classify(before?.effectScreen(), now?.effectScreen(), typed)
+        before?.let { stat(it.app, if (effect == EffectKind.NO_EFFECT) "no_change" else "ok") }
+        val result = when (effect) {
+            EffectKind.CHANGED -> "操作效果：界面明显变了。"
+            EffectKind.NO_EFFECT -> when (action) {
+                "tap", "long_press" -> "操作效果：点了没反应（控件树前后没有变化）。先检查新清单或截图，不要原样重试，避免重复发送或提交。"
+                "type" -> "操作效果：输入后控件树没变化，文字可能没填进去；先检查输入框。"
+                "swipe", "scroll" -> "操作效果：划动后控件树没变化，先检查是不是已经到底。"
+                else -> "操作效果：控件树没有变化，先检查实际界面。"
+            }
+            EffectKind.UNCERTAIN -> "操作效果：拿不准（界面变化太小或控件树读不全），先查看新清单再决定下一步。"
+        }
+        return "$done\n$result\n\n$screenText"
     }
 
     fun needScreen(): Screen? = phoneSeen?.takeIf { it.pkg == svc.foreground() }
@@ -209,8 +229,8 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
                     ?: return@runTool fail(s.app, "miss", "这一屏没有输入框。先点开要输入的地方。")
                 if (e.password) return@runTool "这是密码框，Kavi 不填。请用户自己输入。" to SearchRecord(toolLabel)
                 if (!e.editable) return@runTool fail(s.app, "miss", "第 ${e.n} 项不是输入框。")
-                if (!svc.type(e, content)) return@runTool fail(s.app, "failed", "没填进去。可以先 tap 点一下输入框再试。")
-                after("已在输入框里填好（还没发出去；要发就点「发送」或用 enter）。", s)
+                if (!svc.type(e, content, settings.phonePace.typing())) return@runTool fail(s.app, "failed", "没填进去。可以先 tap 点一下输入框再试。")
+                after("已在输入框里填好（还没发出去；要发就点「发送」或用 enter）。", s, typed = content)
             }
             "enter" -> {
                 val s = needScreen() ?: return@runTool fail(fgName(), "stale", "先用 read 看一下现在的屏幕。")
@@ -232,13 +252,14 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
                     if (x1 == null || y1 == null || x2 == null || y2 == null) return@runTool "swipe 要填 x、y、x2、y2（截图上的像素）。翻列表用 scroll 更简单。" to SearchRecord(toolLabel)
                     if (s == null) return@runTool fail(fgName(), "stale", "先用 read 看一下现在的屏幕。")
                     val k = phoneScale
-                    svc.swipe((x1 * k).toInt(), (y1 * k).toInt(), (x2 * k).toInt(), (y2 * k).toInt())
+                    if (!svc.swipe((x1 * k).toInt(), (y1 * k).toInt(), (x2 * k).toInt(), (y2 * k).toInt()))
+                        return@runTool fail(s.app, "failed", "没划成，先用 read 看一下屏幕。")
                     after("已划过。", s)
                 } else {
                     if (s == null) return@runTool fail(fgName(), "stale", "先用 read 看一下现在的屏幕。")
                     val dir = args["direction"].text().ifBlank { "down" }
                     val list = args["n"].text().toIntOrNull()?.let { s.byNumber(it) } ?: s.elements.filter { it.scrollable }.maxByOrNull { (it.bounds[2] - it.bounds[0]).toLong() * (it.bounds[3] - it.bounds[1]) }
-                    svc.scroll(list, dir)
+                    if (!svc.scroll(list, dir)) return@runTool fail(s.app, "failed", "没翻成，先用 read 看一下屏幕。")
                     after(before = s, done = "已往${mapOf("down" to "下", "up" to "上", "left" to "左", "right" to "右")[dir] ?: dir}翻。")
                 }
             }
