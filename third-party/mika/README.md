@@ -44,6 +44,6 @@ Jack AI 适配（2026-11-02）：
 
 - 固定来源提交：`0091d2d67b541a417df913a23fefbb8e3a04e4a7`（Mika，Apache-2.0）。
 - 第 1 步移植 `GesturePacing.kt`、`TypingPacing.kt`、`OperatingPace.kt`、`ActionEffect.kt` 及直接依赖 `Pace.kt`，保留上游命名空间，源码放在 `app/src/main/mika/`。
-- Jack AI modification：删去对 Mika 的 TextField、AppPacing、ScreenSnapshot、Agent 的依赖，改用 Kavi 的无障碍控件树作为薄适配输入；手机手势优先真实触摸，失败或坐标不可用才尝试节点动作。后台虚拟屏幕同样调用无障碍的目标显示编号。
+- Jack AI modification：删去对 Mika 的 TextField、AppPacing、ScreenSnapshot、Agent 的依赖，改用 Kavi 的无障碍控件树作为薄适配输入；手机手势优先真实触摸；坐标不可用、控件不在可见区域时才尝试节点动作。触摸派发一旦开始，取消也不补点，避免重复提交。后台虚拟屏幕同样调用无障碍的目标显示编号。
 - 「像人」模式采用轻微落点偏移、落指前短停顿、续接的弧线滑动和按词递增输入；「快」模式保留固定手势、整段输入。动作之间按 App 节奏停顿和限流识别留到第 3 步。
 - 判断效果只使用本次动作前后的控件树；界面有变化、无变化、读不准分别告知模型。无变化不自动重复触摸，防止发送、提交等按钮重复执行。
