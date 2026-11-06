@@ -831,6 +831,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     // 带工具的请求被拒（比如旧记录格式接口不认）：先去掉旧的工具调用过程再试，工具照样能用；
                     // 还不行就不用工具，改成“先搜再答”
                     interjections = { generateSequence { myInterjections.poll() }.toList() },
+                    steerPending = { myInterjections.isNotEmpty() },
                     images = { session.takeImages() },
                     // use_skill 打开了新技能：下一轮把它的工具加上
                     retool = { PromptBuilder.toolSet(settings, skills, conv, project, session.unlocked.toSet()) },

@@ -50,6 +50,25 @@ class AgentTest {
     private fun reject() = { flow<StreamEvent> { throw ApiException("bad request", 400) } }
 
     @Test
+    fun steerCutsTheStreamKeepsShownTextAndAsksAgain() = runBlocking {
+        val queue = java.util.concurrent.ConcurrentLinkedQueue<String>()
+        val api = FakeApi({ flow {
+            emit(StreamEvent.Text("", "我先写北京"))
+            queue += "改成上海"
+            emit(StreamEvent.Text("", "的天气……"))
+        } }, text("好的，上海今天晴"))
+        val agent = Agent(api::stream)
+        val msgs = mutableListOf(userMsg("天气"))
+        agent.run(msgs, someTools, { 5 }, { _, _ -> "" },
+            interjections = { generateSequence { queue.poll() }.toList() }, steerPending = { queue.isNotEmpty() })
+        // 第二次请求带上了：已经显示的那半句 + 插话
+        assertEquals(listOf(1, 3), api.sizes)
+        assertTrue(msgs.any { it.toString().contains("我先写北京") && it.toString().contains("assistant") })
+        assertTrue(msgs.any { it.toString().contains("改成上海") })
+        assertTrue(agent.content.toString().endsWith("好的，上海今天晴"))
+    }
+
+    @Test
     fun shortToolRoundTextBecomesANoteNotPartOfTheAnswer() = runBlocking {
         val api = FakeApi(toolCall("web_search", say = "我先搜一下天气"), text("今天晴"))
         val agent = Agent(api::stream, splitNotes = true)

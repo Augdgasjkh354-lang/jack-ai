@@ -46,6 +46,14 @@ class Agent(
     }
 
     private class Call(var id: String = "", var name: String = "", val args: StringBuilder = StringBuilder())
+    /** 模型还在写的时候用户插话了：撤掉这次请求。 */
+    private class Steered : Exception()
+
+    /** 插话接进对话：和工具做完后取的插话同一种写法。 */
+    private fun steerMessage(text: String) = buildJsonObject {
+        put("role", "user")
+        put("content", "【用户在你干活时插话，考虑进去后继续】\n$text")
+    }
 
     /**
      * maxRounds 每轮都重新读（用了「深度研究」技能后会放宽）。到了上限就不再给工具，模型只能直接回答。
@@ -63,6 +71,8 @@ class Agent(
         recovery: Recovery? = null,
         /** 用户在回答进行中插的话：每做完一轮工具取一次，放进下一轮请求。 */
         interjections: () -> List<String> = { emptyList() },
+        /** 有没有还没交给模型的插话（只看不取）：模型还在写这一轮时来了插话，就撤掉这次请求、带上插话重问。 */
+        steerPending: () -> Boolean = { false },
         /** 工具这一轮产生的图片（浏览器截图，data URL）：作为一条用户消息补在工具结果后面。 */
         images: () -> List<String> = { emptyList() },
         /** 每轮工具做完后重新算一次工具列表（use_skill 打开了新技能，它的工具下一轮就能用）。不给就一直用 tools。 */
@@ -103,6 +113,7 @@ class Agent(
             if (content.isNotEmpty() && !content.endsWith("\n")) content.append("\n\n")
             try {
                 stream(messages, currentTools).collect { ev ->
+                    if (steerPending()) throw Steered()
                     when (ev) {
                         is StreamEvent.Text -> {
                             reasoning.append(ev.reasoning); roundReasoning.append(ev.reasoning)
@@ -124,6 +135,21 @@ class Agent(
                 hiccups = 0
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
+                // 插话打断：已经显示出来的字留着、作为一条只有文字的回复记进去（模型看到的和用户看到的一样），
+                // 写了一半的工具调用不要；接上插话马上重问。思路来自 Mika 的 RunInbox 插话，Apache-2.0。
+                if (e is Steered) {
+                    if (roundContent.isNotBlank()) {
+                        val shown = buildJsonObject {
+                            put("role", "assistant"); put("content", roundContent.toString())
+                            if (sendReasoning) put("reasoning_content", roundReasoning.toString())
+                        }
+                        messages += shown
+                        trail += shown.toString()
+                    } else content.setLength(roundStart)
+                    interjections().forEach { text -> steerMessage(text).let { messages += it; trail += it.toString() } }
+                    onText()
+                    continue
+                }
                 // 服务一时忙不过来、网断了一下：这一轮还什么都没收到，就等几秒重发（最多两次），长任务不至于半路断掉
                 if (isHiccup(e) && hiccups < RETRY_DELAYS.size && roundContent.isEmpty() && roundReasoning.isEmpty() && calls.isEmpty()) {
                     kotlinx.coroutines.delay(RETRY_DELAYS[hiccups++])
@@ -253,10 +279,7 @@ class Agent(
                 imageAt += messages.lastIndex
             }
             interjections().forEach { text ->
-                val m = buildJsonObject {
-                    put("role", "user")
-                    put("content", "【用户在你干活时插话，考虑进去后继续】\n$text")
-                }
+                val m = steerMessage(text)
                 messages += m
                 trail += m.toString()
             }
