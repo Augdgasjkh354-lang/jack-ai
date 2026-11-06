@@ -17,6 +17,8 @@ data class BrowserFlow(
     val whenToUse: String = "",
     /** 编号的文字步骤；每次会变的写成 {关键词} 这样的空。 */
     val steps: String,
+    /** 手机流程能直接重放的动作（phone 的 steps 写法，JSON 数组）；空的就只能照文字步骤做。 */
+    val actions: String = "",
     val createdAt: Long = System.currentTimeMillis(),
     val usedAt: Long = 0,
     val uses: Int = 0,

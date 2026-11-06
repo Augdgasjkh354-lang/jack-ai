@@ -163,6 +163,8 @@ class ToolSession(
     @Volatile internal var phoneLimitStop: String? = null
     /** 上一次 phone 调用做成了没有（steps 一串动作靠它决定要不要接着做）。 */
     @Volatile internal var phoneStepOk = false
+    /** 这一轮做成的手机动作（按字找的写法，JSON），存手机流程时拿来当能重放的路线。 */
+    internal val phoneTrail = java.util.Collections.synchronizedList(mutableListOf<String>())
     @Volatile internal var phoneCloseSummary: String? = null
 
     internal suspend fun claimPhone(service: com.jack.ai.a11y.KaviAccessibility, forceMain: Boolean = false): com.jack.ai.a11y.PhoneControl {

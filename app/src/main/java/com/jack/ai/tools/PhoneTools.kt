@@ -52,6 +52,7 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
     // 存流程、读流程不用碰屏幕
     if (action == "flow" || action == "save_flow") return phoneFlow(action, args)
     if (action == "steps") return phoneSteps(args)
+    if (action == "replay") return phoneReplay(args)
     val openWant = if (action == "open") args["app"].text().trim() else ""
     val openPkg = if (action == "open") {
         if (openWant.isBlank()) return "open 要填 app（App 名字或包名）。"
@@ -323,7 +324,9 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
         stat(appName, outcome)
         return msg to SearchRecord(toolLabel)
     }
-    return runTool(toolLabel) {
+    // 做成了的这一步记下来（按字找的写法，不记编号和坐标），存手机流程时一起存，下次能直接重放
+    var rec: JsonObject? = null
+    val out = runTool(toolLabel) {
         if (action != "apps") svc.showBar(bar)
         val text: String = when (action) {
             "apps" -> withContext(Dispatchers.IO) {
@@ -333,6 +336,7 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
                 val pkg = openPkg ?: return@runTool "open 要填 app（App 名字或包名）。" to SearchRecord(toolLabel)
                 PhoneGuard.blocked(pkg, label(pkg), app.packageName)?.let { return@runTool "「${label(pkg)}」$it。" to SearchRecord(toolLabel) }
                 if (!svc.open(pkg)) return@runTool fail(label(pkg), "failed", "打不开「${label(pkg)}」（可能没装）。")
+                rec = buildJsonObject { put("action", "open"); put("app", pkg) }
                 // 冷启动慢：等它到前台
                 repeat(20) { if (svc.foreground() != pkg) delay(250) }
                 svc.settle(4000)
@@ -376,6 +380,7 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
                     check(s, e.label, verb)?.let { return@runTool it to SearchRecord(toolLabel) }
                     if (!e.enabled) return@runTool "「${e.label}」现在点不了（灰的）。" to SearchRecord(toolLabel)
                     if (!svc.click(e, long)) return@runTool fail(s.app, "failed", "没点成「${e.label}」。可以 read 重看一下，或者截图按坐标点。")
+                    if (e.label.isNotBlank()) rec = buildJsonObject { put("action", action); put("text", e.label) }
                     if (PhoneGuard.risk(e.label) == PhoneGuard.Risk.ASK) phoneDwell.outwardDone(s.pkg)
                     after("已${verb}「${e.label.ifBlank { "第 ${e.n} 项" }}」。", s)
                 } else {
@@ -395,6 +400,7 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
                 if (e.password) return@runTool "这是密码框，Kavi 不填。请用户自己输入。" to SearchRecord(toolLabel)
                 if (!e.editable) return@runTool fail(s.app, "miss", "第 ${e.n} 项不是输入框。")
                 if (!svc.type(e, content, settings.phonePace.typing())) return@runTool fail(s.app, "failed", "没填进去。可以先 tap 点一下输入框再试。")
+                rec = buildJsonObject { put("action", "type"); put("content", content) }
                 after("已在输入框里填好（还没发出去；要发就点「发送」或用 enter）。", s, typed = content)
             }
             "enter" -> {
@@ -407,6 +413,7 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
                     return@runTool "用户没同意按回车，没有按。" to SearchRecord(toolLabel)
                 }
                 if (!svc.imeEnter()) return@runTool fail(s.app, "failed", "按不了回车（要安卓 11 以上，或者输入框不支持）。找一下页面上的「发送」「搜索」按钮。")
+                rec = buildJsonObject { put("action", "enter") }
                 if (!search) phoneDwell.outwardDone(s.pkg)
                 after("已按回车。", s)
             }
@@ -426,6 +433,7 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
                     val dir = args["direction"].text().ifBlank { "down" }
                     val list = args["n"].text().toIntOrNull()?.let { s.byNumber(it) } ?: s.elements.filter { it.scrollable }.maxByOrNull { (it.bounds[2] - it.bounds[0]).toLong() * (it.bounds[3] - it.bounds[1]) }
                     if (!svc.scroll(list, dir)) return@runTool fail(s.app, "failed", "没翻成，先用 read 看一下屏幕。")
+                    rec = buildJsonObject { put("action", "scroll"); put("direction", dir) }
                     after(before = s, done = "已往${mapOf("down" to "下", "up" to "上", "left" to "左", "right" to "右")[dir] ?: dir}翻。")
                 }
             }
@@ -436,6 +444,7 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
                 val paceStop = before?.let { beforeAction(it) }
                 if (paceStop != null) return@runTool paceStop to SearchRecord(toolLabel)
                 svc.back()
+                rec = buildJsonObject { put("action", "back") }
                 after("已返回。", before)
             }
             "home" -> {
@@ -557,6 +566,8 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
         }
         text to SearchRecord(toolLabel)
     }
+    if (phoneStepOk) rec?.let { phoneTrail += it.toString() }
+    return out
 }
 
 private val PHONE_BATCHABLE = setOf("open", "tap", "long_press", "type", "enter", "scroll", "swipe", "back", "wait", "wheel")
@@ -566,10 +577,10 @@ private val PHONE_BATCHABLE = setOf("open", "tap", "long_press", "type", "enter"
  * 不用为「还在加载」再问一次模型。哪一步没做成、被拒、没等到就停下，最后只交一次当前屏幕。
  * 思路来自 Mika 的 do_steps（BatchRunner），Apache-2.0。
  */
-private suspend fun ToolSession.phoneSteps(args: JsonObject): String {
+private suspend fun ToolSession.phoneSteps(args: JsonObject, max: Int = 12): String {
     val steps = (args["actions"] as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { it as? JsonObject }
     if (steps.isEmpty()) return "actions 要填动作数组，比如 [{\"action\":\"open\",\"app\":\"微信\",\"expect\":\"通讯录\"},{\"action\":\"tap\",\"text\":\"搜索\"}]"
-    if (steps.size > 12) return "一次最多 12 步，分几次做。"
+    if (steps.size > max) return "一次最多 $max 步，分几次做。"
     steps.firstOrNull { it["action"].text() !in PHONE_BATCHABLE }?.let {
         return "steps 里只能用 " + PHONE_BATCHABLE.joinToString("、") + "；「${it["action"].text()}」要单独调用。"
     }
@@ -604,6 +615,37 @@ private suspend fun ToolSession.phoneSteps(args: JsonObject): String {
     return "连着做了 ${lines.count { !it.startsWith("   ") }}/${steps.size} 步" + (if (stop.isNotEmpty()) "（$stop）" else "") + "：\n" +
         lines.joinToString("\n") + "\n\n" + screen
 }
+
+/**
+ * 照着存下来的路线重放一个手机流程：不用模型一步步想，按存的动作连着做（按字找、照样问用户、照样守节奏），
+ * 对不上就停下，把做到哪和当前屏幕交还给模型接着做。思路来自 Mika 的经验回放（RouteReplay），Apache-2.0。
+ */
+private suspend fun ToolSession.phoneReplay(args: JsonObject): String {
+    val name = args["name"].text().trim()
+    val prefix = com.jack.ai.data.BrowserFlows.APP_PREFIX
+    val mine = withContext(Dispatchers.IO) { host.store.loadFlows() }.filter { it.site.startsWith(prefix) }
+    val f = com.jack.ai.data.BrowserFlows.find(mine, name)
+        ?: return "没有叫「$name」的手机流程。现有手机流程：\n" + com.jack.ai.data.BrowserFlows.index(mine)
+    val raw = runCatching { kotlinx.serialization.json.Json.parseToJsonElement(f.actions) as kotlinx.serialization.json.JsonArray }.getOrNull()
+    if (raw.isNullOrEmpty()) return "「${f.name}」没有录下动作，只能用 action=flow 读出文字步骤照着做。"
+    // {关键词} 换成这次的值；有空没给值就不重放，先问用户
+    val values = (args["values"] as? JsonObject).orEmpty().mapValues { it.value.text() }
+    val text = raw.toString()
+    // 只认写在字符串里的 {关键词}：动作本身的 {"action":"back"} 不算
+    val blanks = replayBlanks(text)
+    val missing = blanks.filter { values[it].isNullOrBlank() }
+    if (missing.isNotEmpty()) return "重放「${f.name}」要先给这些空填值（values）：" + missing.joinToString("、") { "{$it}" } + "。用户没说的先问用户。"
+    val filled = blanks.fold(text) { acc, k -> acc.replace("{$k}", values[k].orEmpty().replace("\\", "\\\\").replace("\"", "\\\"")) }
+    val actions = kotlinx.serialization.json.Json.parseToJsonElement(filled)
+    withContext(Dispatchers.IO) {
+        host.store.saveFlows(host.store.loadFlows().map { if (it.id == f.id) it.copy(uses = it.uses + 1, usedAt = System.currentTimeMillis()) else it })
+    }
+    return "【重放手机流程「${f.name}」】\n" + phoneSteps(buildJsonObject { put("actions", actions) }, max = 40) +
+        "\n\n重放停在哪一步就从那里接着手动做；做完告诉用户结果。界面变了导致对不上的，做成后用 save_flow 更新这个流程。"
+}
+
+internal fun replayBlanks(json: String): List<String> =
+    Regex("""\{([^{}"\\\n:,]{1,20})\}""").findAll(json).map { it.groupValues[1].trim() }.filter { it.isNotEmpty() }.distinct().toList()
 
 /** 手机锁着屏或屏幕灭着。 */
 private fun ToolSession.locked(): Boolean {
@@ -642,7 +684,9 @@ private suspend fun ToolSession.phoneFlow(action: String, args: JsonObject): Str
         val blanks = com.jack.ai.data.BrowserFlows.blanks(f.steps)
         return "【手机流程「${f.name}」】App：${f.site.removePrefix(prefix)}" + f.whenToUse.takeIf { it.isNotBlank() }?.let { "\n什么时候用：$it" }.orEmpty() +
             (if (blanks.isNotEmpty()) "\n要填的空：" + blanks.joinToString("、") { "{$it}" } + "（换成这次用户给的值；必须有又没给的先问用户）" else "") +
-            "\n步骤：\n${f.steps}\n\n先 open 这个 App，再照着做；界面和步骤对不上就按意思灵活处理，做完告诉用户哪一步变了、问要不要更新流程。"
+            "\n步骤：\n${f.steps}\n\n" + (if (f.actions.isNotBlank()) "这个流程录下了能直接重放的动作：用 action=replay name=「${f.name}」" +
+                (if (blanks.isNotEmpty()) "、values 填好这些空" else "") + "，一次连着做完，对不上会停下交还给你；重放不了再照下面的文字做。\n" else "") +
+            "先 open 这个 App，再照着做；界面和步骤对不上就按意思灵活处理，做完告诉用户哪一步变了、问要不要更新流程。"
     }
     val appArg = args["app"].text().trim()
     val pkg = settings.phoneApps.firstOrNull { it == appArg }
@@ -653,11 +697,20 @@ private suspend fun ToolSession.phoneFlow(action: String, args: JsonObject): Str
     val site = prefix + pkg
     // 只在手机流程里找同名的：同名的浏览器流程不能被改成手机流程
     val old = mine.firstOrNull { it.name == name }
-    val saved = (old ?: com.jack.ai.data.BrowserFlow(name = name, site = site, steps = steps)).copy(name = name, site = site, whenToUse = args["when"].text().trim().take(200), steps = steps)
+    // 能重放的动作：模型给了 actions 就用它的（可以把会变的字写成 {关键词}），没给就用这一轮在这个 App 里做成的那几步
+    val given = (args["actions"] as? kotlinx.serialization.json.JsonArray)?.takeIf { it.isNotEmpty() }?.toString()
+    val recorded = phoneTrail.map { kotlinx.serialization.json.Json.parseToJsonElement(it) as JsonObject }.let { all ->
+        val from = all.indexOfLast { it["action"].text() == "open" && it["app"].text() == pkg }
+        if (from < 0) emptyList() else all.drop(from)
+    }.takeIf { it.size >= 2 }?.let { kotlinx.serialization.json.JsonArray(it).toString() }
+    val actions = given ?: recorded ?: old?.actions.orEmpty()
+    val saved = (old ?: com.jack.ai.data.BrowserFlow(name = name, site = site, steps = steps)).copy(name = name, site = site, whenToUse = args["when"].text().trim().take(200), steps = steps, actions = actions)
     withContext(Dispatchers.IO) {
         val now = store.loadFlows()
         store.saveFlows(if (now.any { it.id == saved.id }) now.map { if (it.id == saved.id) saved else it } else now + saved)
     }
     ui.notice((if (old != null) "已更新" else "已存成") + "手机流程「$name」，在 技能 → 浏览器流程 里能改、能删")
-    return (if (old != null) "已更新" else "已存下") + "手机流程「$name」。下次打开这个 App 时会提醒，用 action=flow 读出步骤照着做；也能用 schedule 定时让 Kavi 照着跑。"
+    val n = runCatching { (kotlinx.serialization.json.Json.parseToJsonElement(actions) as kotlinx.serialization.json.JsonArray).size }.getOrDefault(0)
+    return (if (old != null) "已更新" else "已存下") + "手机流程「$name」。下次打开这个 App 时会提醒，用 action=flow 读出步骤照着做；也能用 schedule 定时让 Kavi 照着跑。" +
+        (if (n > 0) "还录下了 $n 步能直接重放的动作（action=replay）" + (if (given == null) "；里面是这次的原话，会变的字（搜索词、联系人）要换成 {关键词} 的话，用 actions 参数把改好的动作再存一次" else "") + "。" else "")
 }
