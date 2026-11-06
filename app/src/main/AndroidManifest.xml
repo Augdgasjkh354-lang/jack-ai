@@ -60,6 +60,9 @@
             tools:ignore="ExportedContentProvider" />
         <receiver android:name=".a11y.PhonePairingReceiver" android:exported="false" />
         <activity android:name=".ui.BackgroundPhoneActivity" android:exported="false" />
+        <!-- 放到桌面的小工具：桌面图标直接打开（每个小工具单独一个任务） -->
+        <activity android:name=".ui.MiniAppActivity" android:exported="false" android:documentLaunchMode="always"
+            android:windowSoftInputMode="adjustResize" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

@@ -223,6 +223,10 @@ fun AppViewer(file: File, onDismiss: () -> Unit) {
                     title = { Text(file.name.removeSuffix(".html"), maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     navigationIcon = { IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, "关闭") } },
                     actions = {
+                        // 放到桌面：以后点桌面图标直接打开这个小工具
+                        TextButton(onClick = {
+                            if (!MiniAppActivity.pin(ctx, file)) android.widget.Toast.makeText(ctx, "这个桌面不支持放快捷方式", android.widget.Toast.LENGTH_SHORT).show()
+                        }) { Text("放到桌面") }
                         TextButton(onClick = {
                             shareFile(ctx, GeneratedFile(file.name, file.absolutePath, "text/html", file.length()))
                         }) { Text("分享") }
