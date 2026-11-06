@@ -354,6 +354,7 @@ fun SettingsScreen(
                     )
                 }
                 FullAuthRow(vm, settings)
+                AllowRulesRow(vm, settings)
                 MemoryResetRow(vm)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = {
@@ -707,5 +708,22 @@ private fun MemoryResetRow(vm: ChatViewModel) {
             confirmButton = { TextButton(onClick = { vm.resetMemory(withChat); asking = false; refresh++ }) { Text("重置", color = MaterialTheme.colorScheme.error) } },
             dismissButton = { TextButton(onClick = { asking = false }) { Text("取消") } },
         )
+    }
+}
+
+
+/** 确认卡片上点过「以后都允许」的那几类事：列出来，点「撤销」以后又会问。 */
+@Composable
+private fun AllowRulesRow(vm: ChatViewModel, settings: com.jack.ai.data.Settings) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text("以后都允许的事")
+        if (settings.alwaysAllow.isEmpty()) Text("还没有。Kavi 问「要不要发送、提交」时点「以后都允许」，同一类事以后就不再问（花钱的、删除的不在此列）。",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        settings.alwaysAllow.sortedByDescending { it.at }.forEach { r ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(r.label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                TextButton(onClick = { vm.revokeAllow(r.key) }) { Text("撤销") }
+            }
+        }
     }
 }

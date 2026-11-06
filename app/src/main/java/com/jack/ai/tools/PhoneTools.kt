@@ -214,7 +214,8 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
         PhoneGuard.Risk.MONEY -> "「$what」会花钱，Kavi 不点。停下，告诉用户这一步要自己来。"
         PhoneGuard.Risk.ASK -> {
             val typed = s.elements.filter { it.editable && !it.password && it.value.isNotBlank() }.joinToString("\n") { "输入框里：${it.value.take(200)}" }
-            if (approve("让 Kavi 在「${s.app}」$verb「$what」？", (if (typed.isNotEmpty()) "$typed\n\n" else "") + "点了可能就发出去、删掉或提交了。", verb)) null
+            if (approve("让 Kavi 在「${s.app}」$verb「$what」？", (if (typed.isNotEmpty()) "$typed\n\n" else "") + "点了可能就发出去、删掉或提交了。", verb,
+                    kind = ("phone:${s.pkg}:${what.take(20)}" to "在「${s.app}」里$verb「${what.take(20)}」").takeIf { what.isNotBlank() })) null
             else "用户没同意$verb「$what」，没有点。不要换个办法再点它，问用户想怎么做。"
         }
         PhoneGuard.Risk.OK -> null
@@ -410,7 +411,8 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
                 val typed = s.elements.firstOrNull { it.editable && !it.password && it.value.isNotBlank() }?.value.orEmpty()
                 // 回车常常就是「发送」「搜索」：搜索不问，别的按发送算
                 val search = s.elements.any { it.editable && "搜索" in (it.label + it.value) }
-                if (!search && !approve("让 Kavi 在「${s.app}」按回车（可能直接发出去）？", if (typed.isNotEmpty()) "输入框里：${typed.take(200)}" else "输入框是空的。", "按")) {
+                if (!search && !approve("让 Kavi 在「${s.app}」按回车（可能直接发出去）？", if (typed.isNotEmpty()) "输入框里：${typed.take(200)}" else "输入框是空的。", "按",
+                        kind = "phone:${s.pkg}:enter" to "在「${s.app}」里按回车发出")) {
                     return@runTool "用户没同意按回车，没有按。" to SearchRecord(toolLabel)
                 }
                 if (!svc.imeEnter()) return@runTool fail(s.app, "failed", "按不了回车（要安卓 11 以上，或者输入框不支持）。找一下页面上的「发送」「搜索」按钮。")

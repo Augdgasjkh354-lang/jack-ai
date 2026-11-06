@@ -442,6 +442,7 @@ class Store(context: Context) {
             providers = secret("providers", null)?.let {
                 runCatching { json.decodeFromString(ListSerializer(Provider.serializer()), it) }.getOrNull()
             } ?: emptyList(),
+            alwaysAllow = prefs.getString("alwaysAllow", null)?.let { runCatching { json.decodeFromString(ListSerializer(AllowRule.serializer()), it) }.getOrNull() }.orEmpty(),
             mcpServers = secret("mcpServers", null)?.let {
                 runCatching { json.decodeFromString(ListSerializer(McpServer.serializer()), it) }.getOrNull()
             } ?: emptyList(),
@@ -529,6 +530,7 @@ class Store(context: Context) {
             .putLong("fullAuthUntil", s.fullAuthUntil)
             .remove("mail")
             .putString("mails", Secrets.seal(json.encodeToString(ListSerializer(MailAccount.serializer()), s.mails)))
+            .putString("alwaysAllow", json.encodeToString(ListSerializer(AllowRule.serializer()), s.alwaysAllow))
             .putString("mcpServers", Secrets.seal(json.encodeToString(ListSerializer(McpServer.serializer()), s.mcpServers)))
             .putBoolean("proxyEnabled", s.proxyEnabled)
             .putString("proxySub", Secrets.seal(s.proxySub))

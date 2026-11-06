@@ -38,8 +38,8 @@ class AppCore(val app: Application, val store: Store, val scope: CoroutineScope)
      * 弹窗问用户，等他点了再继续。几个回答同时要问时排队，一个一个问。
      * 用户停止回答（协程被取消）时这个弹窗自动收起，排在后面的接着出来。
      */
-    suspend fun confirm(title: String, body: String, action: String): Boolean {
-        val req = com.jack.ai.ConfirmRequest(com.jack.ai.data.newId(), title, body, action)
+    suspend fun confirm(title: String, body: String, action: String, always: com.jack.ai.data.AllowRule? = null): Boolean {
+        val req = com.jack.ai.ConfirmRequest(com.jack.ai.data.newId(), title, body, action, always)
         val answer = kotlinx.coroutines.CompletableDeferred<Boolean>()
         waiting[req.id] = answer
         synchronized(asks) { asks += req }

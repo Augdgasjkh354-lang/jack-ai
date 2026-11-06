@@ -72,6 +72,8 @@ interface ToolUi {
     fun attach(file: File)
     /** 做了就收不回的操作（发邮件等）先问用户，返回 true 才执行。工具里别直接调，用 ToolSession.approve。 */
     suspend fun confirm(title: String, body: String, action: String): Boolean
+    /** 能「以后都允许」的确认：不支持的界面（后台、远程、悬浮卡片）照普通确认问。 */
+    suspend fun confirmAlways(title: String, body: String, action: String, always: com.jack.ai.data.AllowRule): Boolean = confirm(title, body, action)
     /** Work 模式的任务清单（步骤和验收标准）更新了。 */
     fun plan(items: List<PlanItem>, criteria: List<PlanItem>) {}
     /** 要让用户一眼看到的事（比如 Kavi 改了自己），在回答里显示成一张小卡片。 */
@@ -131,18 +133,29 @@ class ToolSession(
      * 做了就收不回的操作先问用户。设置里开了「完全授权」就直接放行；每次现读设置，到点关掉或用户手动关掉立刻生效。
      * strict 的操作（读过外部内容后发信给新地址）完全授权下也要问。
      */
-    suspend fun approve(title: String, body: String, action: String, strict: Boolean = false): Boolean =
-        ((!goalRun && !strict && withContext(Dispatchers.IO) { host.store.loadSettings().fullAuth }) ||
-            // 这一轮读到过疑似注入的内容：弹窗最上面先说一声
-            ask(title, injection?.let { "⚠️ 这一轮读到了疑似提示词注入的内容（$it），确认这是你想让 Kavi 做的。\n\n" }.orEmpty() + body, action))
-            .also { if (!it) rejected.incrementAndGet() }
+    /**
+     * [kind]：这一类事的标识和给人看的说法（「在微信里点发送」）。用户点过「以后都允许」的直接做（只报一句）；
+     * strict 的（读过外部内容后发给新地址这类）和读到疑似注入的这一轮，照样每次问。思路来自 Momoding 的「总是允许」。
+     */
+    suspend fun approve(title: String, body: String, action: String, strict: Boolean = false, kind: Pair<String, String>? = null): Boolean {
+        val s = withContext(Dispatchers.IO) { host.store.loadSettings() }
+        if (!goalRun && !strict && s.fullAuth) return true
+        val allowable = kind?.takeIf { !strict && injection == null }
+        if (allowable != null && s.alwaysAllow.any { it.key == allowable.first }) {
+            ui.notice("按你设的「以后都允许」直接做了：${allowable.second}（设置 → 隐私和数据 里能撤销）")
+            return true
+        }
+        // 这一轮读到过疑似注入的内容：弹窗最上面先说一声
+        val shown = injection?.let { "⚠️ 这一轮读到了疑似提示词注入的内容（$it），确认这是你想让 Kavi 做的。\n\n" }.orEmpty() + body
+        return ask(title, shown, action, allowable?.let { com.jack.ai.data.AllowRule(it.first, it.second) }).also { if (!it) rejected.incrementAndGet() }
+    }
 
     /** 正在替用户操作别的 App 时，Kavi 的弹窗用户看不到：改在屏幕下方的悬浮卡片里问。 */
-    private suspend fun ask(title: String, body: String, action: String): Boolean {
+    private suspend fun ask(title: String, body: String, action: String, always: com.jack.ai.data.AllowRule? = null): Boolean {
         if (goalRun) return ui.confirm(title, body, action)
         val svc = com.jack.ai.a11y.KaviAccessibility.instance
         if (!remote && phoneSeen != null && svc != null && com.jack.ai.a11y.KaviAccessibility.othersInFront(app)) return ToolTimeout.waiting { svc.confirm(title, body, action) }
-        return ui.confirm(title, body, action)
+        return if (always != null) ui.confirmAlways(title, body, action, always) else ui.confirm(title, body, action)
     }
 
     /** 浏览器里的 Kavi：用户问的就是眼前这一页，浏览器要用当前页，不开后台标签页。 */

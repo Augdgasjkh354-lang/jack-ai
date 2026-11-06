@@ -196,7 +196,8 @@ private suspend fun ToolSession.browseNow(args: JsonObject, action: String): Str
                 if (action == "type" && args["submit"].flag() == true) {
                     val why = BrowserNet.confirmReason("key", info["label"].text(), false, info["formPost"].flag() == true,
                         info["formPassword"].flag() == true, info["formButtons"].text(), "enter")
-                    if (why == null || approve("让 Kavi 提交这个表单？", "网页：${JackBrowser.address}\n\n$why", "提交")) {
+                    if (why == null || approve("让 Kavi 提交这个表单？", "网页：${JackBrowser.address}\n\n$why", "提交",
+                            kind = webKind("submit", "提交表单"))) {
                         JackBrowser.act(ctx, id, "key", "enter")?.let { note.append("提交出错：$it\n") }
                         if (submitReason("key", info, "enter") != null) submitted += submitKey
                     } else note.append("已输入，但用户没同意提交。\n")
@@ -686,7 +687,16 @@ private suspend fun ToolSession.checkRisk(action: String, info: JsonObject, key:
         info["formPassword"].flag() == true, info["formButtons"].text(), key) ?: return null
     val body = "网页：${JackBrowser.title.ifBlank { JackBrowser.address }}\n${JackBrowser.address}\n\n要${actionName(action, key)}：$what" +
         (if (action == "type") "\n输入：${text.take(200)}" else "") + "\n\n$why"
-    return if (approve("让 Kavi 在网页上${actionName(action, key)}？", body, "继续")) null else "用户没有同意，这一步没做。"
+    // 花钱的（下单、付款）不给「以后都允许」
+    val money = com.jack.ai.a11y.PhoneGuard.risk(info["label"].text().ifBlank { what }) == com.jack.ai.a11y.PhoneGuard.Risk.MONEY
+    val kind = if (money) null else webKind("$action:${info["label"].text().ifBlank { what }.take(20)}", "${actionName(action, key)}「${info["label"].text().ifBlank { what }.take(20)}」")
+    return if (approve("让 Kavi 在网页上${actionName(action, key)}？", body, "继续", kind = kind)) null else "用户没有同意，这一步没做。"
+}
+
+/** 网页上一类事的标识：按网站分（同一个网站同一种按钮才算一类）。 */
+private fun webKind(what: String, label: String): Pair<String, String>? {
+    val host = runCatching { java.net.URI(JackBrowser.address).host?.removePrefix("www.") }.getOrNull()?.takeIf { it.isNotBlank() } ?: return null
+    return "web:$host:$what" to "在 $host 上$label"
 }
 
 /**

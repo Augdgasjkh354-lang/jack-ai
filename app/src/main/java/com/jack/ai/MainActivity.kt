@@ -302,7 +302,13 @@ class MainActivity : FragmentActivity() {
                             Text(req.body, Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
                                 style = MaterialTheme.typography.bodyMedium)
                         },
-                        confirmButton = { TextButton(onClick = { vm.answerConfirm(req.id, true) }) { Text(req.action) } },
+                        confirmButton = {
+                            androidx.compose.foundation.layout.Row {
+                                // 这一类事以后都不问（只认这一类，设置里能撤销）
+                                req.always?.let { TextButton(onClick = { vm.answerAlways(req) }) { Text("以后都允许") } }
+                                TextButton(onClick = { vm.answerConfirm(req.id, true) }) { Text(req.action) }
+                            }
+                        },
                         dismissButton = { TextButton(onClick = { vm.answerConfirm(req.id, false) }) { Text("取消") } },
                     )
                 }

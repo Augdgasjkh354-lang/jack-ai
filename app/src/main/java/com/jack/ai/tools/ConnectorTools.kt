@@ -16,7 +16,9 @@ internal suspend fun ToolSession.callConnector(name: String, args: JsonObject): 
         if (Mcp.needsConfirm(server, tool)) {
             val preview = pretty.encodeToString(JsonElement.serializer(), args).take(2000)
             val why = if (server.askFirst) "你设置了这个连接器每次调用都要确认。" else "这个工具标明会改动数据。"
-            if (!approve("用「${server.name}」执行 ${tool.name}？", "$why\n\n参数：\n$preview", "执行")) {
+            // 用户自己设了「每次都问」的不给「以后都允许」
+            if (!approve("用「${server.name}」执行 ${tool.name}？", "$why\n\n参数：\n$preview", "执行",
+                    kind = if (server.askFirst) null else "mcp:${server.id}:${tool.name}" to "用「${server.name}」执行 ${tool.name}")) {
                 return@runTool "用户没有同意，这次没有调用。" to SearchRecord("$label：已取消")
             }
         }

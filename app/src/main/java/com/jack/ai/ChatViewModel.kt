@@ -69,7 +69,8 @@ import java.io.File
 import java.io.IOException
 
 /** 一次「执行前确认」：标题、要确认的内容、确认按钮的字。 */
-data class ConfirmRequest(val id: String, val title: String, val body: String, val action: String)
+/** [always]：这一类事能「以后都允许」时，给人看的那句（比如「在微信里点发送」）；null 就只有允许和取消。 */
+data class ConfirmRequest(val id: String, val title: String, val body: String, val action: String, val always: com.jack.ai.data.AllowRule? = null)
 
 data class UiState(
     val conversations: List<Conversation> = emptyList(),
@@ -198,6 +199,12 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 用户在确认弹窗里点了确认或取消。 */
     fun answerConfirm(id: String, ok: Boolean) = core.answerConfirm(id, ok)
+    /** 「以后都允许」：这次允许，再把这一类记下，以后不问。 */
+    fun answerAlways(req: ConfirmRequest) {
+        req.always?.let { rule -> updateSettings { s -> s.copy(alwaysAllow = s.alwaysAllow.filterNot { it.key == rule.key } + rule) } }
+        core.answerConfirm(req.id, true)
+    }
+    fun revokeAllow(key: String) = updateSettings { s -> s.copy(alwaysAllow = s.alwaysAllow.filterNot { it.key == key }) }
 
     // ---------- 对话管理 ----------
 
@@ -663,8 +670,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             // 回答期间开前台服务，切到后台也接着跑
             WorkService.start(getApplication(), convId, workTitle, false)
             /** 几个对话同时在答时，弹窗上写明是哪个对话在问。 */
-            suspend fun ask(title: String, body: String, action: String) =
-                core.confirm(title, (if (_state.value.streamingIds.size > 1) "对话「$workTitle」：\n" else "") + body, action)
+            suspend fun ask(title: String, body: String, action: String, always: com.jack.ai.data.AllowRule? = null) =
+                core.confirm(title, (if (_state.value.streamingIds.size > 1) "对话「$workTitle」：\n" else "") + body, action, always)
             val limit = settings.workCostLimit
             // 接着做（自动或手动）沿用这件事已经花的钱；新消息、重新回答、复核从 0 算
             val carried = if (extraUser != null && extraUser != REVIEW_PROMPT) taskSpend[convId] else null
@@ -695,6 +702,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 }
 
                 override suspend fun confirm(title: String, body: String, action: String) = ask(title, body, action)
+                override suspend fun confirmAlways(title: String, body: String, action: String, always: com.jack.ai.data.AllowRule) = ask(title, body, action, always)
 
                 /** 把生成或修改过的文件挂到这条回答上，显示成卡片。 */
                 override fun attach(file: File) {

@@ -153,7 +153,8 @@ internal suspend fun ToolSession.sendEmail(args: JsonObject): String {
         val strict = sawExternal && unknown.isNotEmpty()
         val title = if (strict) "发给新的收件人？" else "发送这封邮件？"
         val warn = if (strict) "以前没给 ${unknown.joinToString("、")} 发过信，而且这次读过邮件或网页，所以即使开着完全授权也要你确认。\n\n" else ""
-        if (!approve(title, warn + preview, "发送", strict = strict)) {
+        if (!approve(title, warn + preview, "发送", strict = strict,
+                kind = recipients.sorted().joinToString(",").takeIf { it.isNotEmpty() }?.let { "mail:send:$it" to "给 ${recipients.joinToString("、")} 发邮件" })) {
             return@runTool "用户取消了发送，邮件没有发出。" to SearchRecord("发邮件：已取消")
         }
         val result = withContext(Dispatchers.IO) {

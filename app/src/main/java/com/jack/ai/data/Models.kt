@@ -265,6 +265,8 @@ data class Settings(
     val workConfirmPlan: String = "big",
     val compressTokens: Int = COMPRESS_MIN,
     val memoryEnabled: Boolean = true,
+    /** 确认卡片上点过「以后都允许」的那几类事（只认这一类，比如「在微信里点发送」），不再问。设置 → 隐私和数据 里能撤销。 */
+    val alwaysAllow: List<AllowRule> = emptyList(),
     val dreamEnabled: Boolean = true,
     /** Kavi 主动找你：每天早上、傍晚回看一次，有值得打扰的事才推送（一天最多两次，深夜不找）。 */
     val proactive: Boolean = true,
@@ -693,3 +695,7 @@ const val INBOX_PROMPT = """This is {user}'s inbox. {User} shares text, links, i
    - Long-term information about {user} themselves: save_memory with scope global
 5. Don't ask follow-up questions; if unsure, just file it in the library. If {user} is just chatting or asking a question, answer normally without filing anything.
 End with one line saying where it went ("Filed: ...", in {user}'s language). Keep it short overall."""
+
+/** 一类以后都允许的事：[key] 机器认的（phone:包名:按钮、web:网站:提交……），[label] 给人看的。 */
+@kotlinx.serialization.Serializable
+data class AllowRule(val key: String, val label: String, val at: Long = System.currentTimeMillis())
