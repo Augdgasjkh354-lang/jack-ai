@@ -311,7 +311,7 @@ class Store(context: Context) {
                 }.getOrDefault("")
                 // 连接器的 Key 也不进备份
                 else if (k == "mcpServers" && opened is String) runCatching {
-                    val list = json.decodeFromString(ListSerializer(McpServer.serializer()), opened).map { it.copy(key = "") }
+                    val list = json.decodeFromString(ListSerializer(McpServer.serializer()), opened).map { it.copy(key = "", oauth = "") }
                     json.encodeToString(ListSerializer(McpServer.serializer()), list)
                 }.getOrDefault("[]")
                 else if (k == "mails" && opened is String) runCatching {

@@ -19,6 +19,14 @@ class KaviApp : Application() {
             override fun onActivityDestroyed(activity: Activity) = Unit
         })
         CrashLog.install(this)
+        // 连接器的登录令牌续过了：存回设置（前台、后台任务都走这里）
+        com.jack.ai.data.McpLogin.save = { s ->
+            val store = com.jack.ai.data.Store(this)
+            synchronized(com.jack.ai.data.McpLogin) {
+                val cur = store.loadSettings()
+                store.saveSettings(cur.copy(mcpServers = cur.mcpServers.map { if (it.id == s.id) it.copy(oauth = s.oauth) else it }))
+            }
+        }
         // 上次攒下的闪退报告：后台发到 GitHub Issues。只在主进程发（别的进程也会走到这里，免得重复发）；单元测试里不发
         val main = android.os.Build.VERSION.SDK_INT < 28 || getProcessName() == packageName
         if (!main || android.os.Build.FINGERPRINT == "robolectric") return

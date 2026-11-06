@@ -80,6 +80,8 @@ private fun ConnectorDialog(vm: ChatViewModel, server: McpServer, isNew: Boolean
     var key by remember { mutableStateOf(server.key) }
     var askFirst by remember { mutableStateOf(server.askFirst) }
     var route by remember { mutableStateOf(server.route) }
+    var oauth by remember { mutableStateOf(server.oauth) }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -92,8 +94,25 @@ private fun ConnectorDialog(vm: ChatViewModel, server: McpServer, isNew: Boolean
                 OutlinedTextField(name, { name = it }, label = { Text("名字") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(url, { url = it.trim() }, label = { Text("网址") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
                     placeholder = { Text("https://…/mcp 或 …/sse") })
-                OutlinedTextField(key, { key = it }, label = { Text("Key（没有就空着）") }, singleLine = true,
+                if (oauth.isNotBlank()) Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("已用账号登录", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                    TextButton(onClick = { oauth = "" }) { Text("退出登录") }
+                } else OutlinedTextField(key, { key = it }, label = { Text("Key（没有就空着）") }, singleLine = true,
                     visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+                // 支持账号登录的服务（Notion 这类）：不用找 Key，浏览器里点同意就行
+                if (oauth.isBlank()) OutlinedButton(
+                    enabled = !busy && name.isNotBlank() && url.startsWith("https"),
+                    onClick = {
+                        busy = true; error = null
+                        scope.launch {
+                            val r = vm.loginConnector(server.copy(name = name.trim(), url = url.trim(), askFirst = askFirst, route = route)) { link ->
+                                runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(link)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                            }
+                            busy = false
+                            r.onSuccess { onDone() }.onFailure { error = "登录没成功：" + (it.message ?: it.javaClass.simpleName) + "（这个服务可能不支持账号登录，那就填 Key）" }
+                        }
+                    },
+                ) { Text("用账号登录（不用填 Key）") }
                 Text(
                     Mcp.PRESETS.firstOrNull { it.url == url }?.keyHelp
                         ?: "Key 一般直接粘贴；服务要求特殊请求头时写成「名字: 值」；要放进网址的，在网址里写 {key}。",
@@ -129,7 +148,7 @@ private fun ConnectorDialog(vm: ChatViewModel, server: McpServer, isNew: Boolean
                     busy = true
                     error = null
                     scope.launch {
-                        val r = vm.saveConnector(server.copy(name = name.trim(), url = url.trim(), key = key.trim(), askFirst = askFirst, route = route))
+                        val r = vm.saveConnector(server.copy(name = name.trim(), url = url.trim(), key = if (oauth.isNotBlank()) "" else key.trim(), askFirst = askFirst, route = route, oauth = oauth))
                         busy = false
                         r.onSuccess { onDone() }.onFailure { error = "连不上：" + (it.message ?: it.javaClass.simpleName) }
                     }

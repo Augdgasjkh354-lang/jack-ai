@@ -1216,6 +1216,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun checkBalance() = settingsFeature.checkBalance()
     suspend fun testMail(acc: com.jack.ai.data.MailAccount) = settingsFeature.testMail(acc)
     suspend fun saveConnector(server: com.jack.ai.data.McpServer) = settingsFeature.saveConnector(server)
+    suspend fun loginConnector(server: com.jack.ai.data.McpServer, open: (String) -> Unit) = settingsFeature.loginConnector(server, open)
     fun setConnector(server: com.jack.ai.data.McpServer) = settingsFeature.setConnector(server)
     fun deleteConnector(id: String) = settingsFeature.deleteConnector(id)
     suspend fun importProxy(input: String) = settingsFeature.importProxy(input)

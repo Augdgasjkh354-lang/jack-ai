@@ -52,6 +52,8 @@ data class McpServer(
     val tools: List<McpTool> = emptyList(),
     /** 网络路线：auto 按规则（国内直连、国外走 Kavi 专用代理）、direct 直连、proxy 走代理。 */
     val route: String = "auto",
+    /** 用账号登录（OAuth）拿到的令牌（McpOAuthTokens 的 JSON）；有它就不用 Key。随设置加密，不进备份。 */
+    val oauth: String = "",
 )
 
 class McpException(message: String) : Exception(message)
@@ -71,6 +73,9 @@ object Mcp {
     val PRESETS = listOf(
         Preset("高德地图", "https://mcp.amap.com/mcp?key={key}",
             "到高德开放平台 lbs.amap.com 登录 → 控制台 → 应用管理 → 创建应用 → 添加 Key，服务平台选「Web 服务」，免费额度够个人用。"),
+        Preset("Notion", "https://mcp.notion.com/mcp",
+            "不用填 Key：点「用账号登录」，在浏览器里登录 Notion、选好给哪些页面权限、点同意。要能连上海外（网络用「自动」或「走代理」）。"),
+        Preset("Linear", "https://mcp.linear.app/mcp", "不用填 Key：点「用账号登录」，在浏览器里登录 Linear 点同意。"),
     )
     private const val PROTOCOL = "2025-06-18"
     private val json = Json { ignoreUnknownKeys = true }
@@ -115,7 +120,8 @@ object Mcp {
     }
 
     /** 连上去拿工具列表（添加、刷新连接器时用）。 */
-    suspend fun listTools(server: McpServer): List<McpTool> = withContext(Dispatchers.IO) {
+    suspend fun listTools(server0: McpServer): List<McpTool> = withContext(Dispatchers.IO) {
+        val server = McpLogin.fresh(server0)
         Session(server).use { s ->
             val out = mutableListOf<McpTool>()
             var cursor: String? = null
@@ -143,7 +149,8 @@ object Mcp {
     }
 
     /** 调一个工具，返回给模型看的文字。 */
-    suspend fun call(server: McpServer, tool: McpTool, args: JsonObject): String = withContext(Dispatchers.IO) {
+    suspend fun call(server0: McpServer, tool: McpTool, args: JsonObject): String = withContext(Dispatchers.IO) {
+        val server = McpLogin.fresh(server0)
         Session(server).use { s ->
             resultText(s.request("tools/call", buildJsonObject { put("name", tool.name); put("arguments", args) }))
         }
@@ -244,6 +251,7 @@ object Mcp {
         }
 
         fun auth(b: Request.Builder): Request.Builder {
+            McpLogin.tokens(server)?.let { return b.header("Authorization", "Bearer ${it.accessToken}") }
             val k = server.key.trim()
             if (k.isEmpty() || KEY_SLOT in server.url) return b
             val colon = k.indexOf(':')
@@ -294,7 +302,8 @@ object Mcp {
                 .build()
             http.newCall(req).execute().use { resp ->
                 resp.header("Mcp-Session-Id")?.let { sessionId = it }
-                if (resp.code == 401 || resp.code == 403) throw McpException("连接器拒绝了（${resp.code}）：Key 不对或没有权限")
+                if (resp.code == 401 || resp.code == 403) throw McpException("连接器拒绝了（${resp.code}）：" +
+                    if (server.oauth.isNotBlank()) "登录过期了，请到 设置 → 连接 → MCP 连接器 里重新登录" else "Key 不对或没有权限")
                 if (!resp.isSuccessful) throw HttpStatus(resp.code, "连接器出错（${resp.code}）")
                 if (expectId == null) return null
                 val type = resp.header("Content-Type").orEmpty()
