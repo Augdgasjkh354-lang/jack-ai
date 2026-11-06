@@ -31,6 +31,9 @@ class Store(context: Context) {
 
     private fun <T> load(name: String, ser: KSerializer<T>): List<T> = synchronized(LOCK) { loadUnlocked(name, ser) }
 
+    /** 一整段读写不让别的线程插进来（重置记忆时挪文件用）。 */
+    fun <T> locked(block: () -> T): T = synchronized(LOCK, block)
+
     /**
      * 读一个 JSON 列表。文件坏了不闪退、也不悄悄清空：把坏文件改名留着（.corrupt-时间），
      * 换用最近一份副本（.prev）；连副本都没有才返回空列表。恢复过的文件记进 [recovered]，界面会提示。

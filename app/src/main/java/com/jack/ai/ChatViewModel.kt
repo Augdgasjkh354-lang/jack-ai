@@ -169,6 +169,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             core.toast("上次录音被系统打断了，救回了 ${if (mins > 0) "$mins 分钟" else "录到的部分"}，已放进输入框，发出去就整理成纪要")
         }
         com.jack.ai.data.Retired.cleanup(app)
+        viewModelScope.launch(Dispatchers.IO) { com.jack.ai.data.MemoryReset.expire(app) }
         // 桌面图标和设置对不上（比如从备份恢复了别的选择）：照设置改过来
         runCatching { com.jack.ai.ui.AppIcon.ensure(app, _state.value.settings.appIcon) }
         com.jack.ai.data.Proactive.schedule(app, _state.value.settings.proactive)
@@ -1229,6 +1230,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun updateMemory(id: String, text: String) { snapshots.clear(); knowledge.updateMemory(id, text) }
     fun deleteMemory(id: String) { snapshots.clear(); knowledge.deleteMemory(id) }
     fun clearMemories() { snapshots.clear(); knowledge.clearMemories() }
+    fun resetMemory(withChatFiles: Boolean) { snapshots.clear(); knowledge.resetMemory(withChatFiles) }
+    fun restoreMemory() { snapshots.clear(); knowledge.restoreMemory() }
     fun promoteMemory(id: String) { snapshots.clear(); knowledge.promoteMemory(id) }
     fun demoteMemory(id: String) { snapshots.clear(); knowledge.demoteMemory(id) }
     fun markDreamsSeen() = knowledge.markDreamsSeen()

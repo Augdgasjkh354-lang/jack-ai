@@ -55,6 +55,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -353,6 +354,7 @@ fun SettingsScreen(
                     )
                 }
                 FullAuthRow(vm, settings)
+                MemoryResetRow(vm)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = {
                         val date = java.text.SimpleDateFormat("yyyyMMdd", Locale.US).format(java.util.Date())
@@ -652,5 +654,58 @@ private fun SettingsGroup(title: String, entries: List<SettingsEntry>) {
                 }
             }
         }
+    }
+}
+
+
+/** 隐私和数据里的「重置记忆」：清掉关于你的，留下做事的经验；7 天内能恢复。 */
+@Composable
+private fun MemoryResetRow(vm: ChatViewModel) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current.applicationContext
+    var asking by remember { mutableStateOf(false) }
+    var withChat by remember { mutableStateOf(false) }
+    var refresh by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    // 重置、恢复是在后台做的：做完记忆列表会变，跟着它重查一次
+    val memories = vm.state.collectAsState().value.memories
+    val backup by androidx.compose.runtime.produceState<com.jack.ai.data.MemoryReset.Backup?>(null, refresh, memories) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.jack.ai.data.MemoryReset.latest(ctx) }
+    }
+    val day = remember { java.text.SimpleDateFormat("M月d日 HH:mm", Locale.CHINA) }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("重置记忆")
+                Text("忘掉关于你的一切，从头认识你；浏览器、手机操作的经验都留着。", style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            OutlinedButton(onClick = { withChat = false; asking = true }) { Text("重置") }
+        }
+        backup?.let { b ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("${day.format(java.util.Date(b.at))} 重置过，${day.format(java.util.Date(b.expiresAt))} 前能恢复", Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                TextButton(onClick = { vm.restoreMemory(); refresh++ }) { Text("恢复") }
+            }
+        }
+    }
+    if (asking) {
+        AlertDialog(
+            onDismissRequest = { asking = false },
+            title = { Text("重置 Kavi 的记忆？") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("会清掉：关于你的记忆（常记、深处、作废的、历史版本）、心里挂着的事、最近聊过什么的经历、夜间整理记录。")
+                    Text("会留着：浏览器流程和手机流程、网站和 App 备忘、技能、事实库、做事经验，聊天记录也不删。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        androidx.compose.material3.Checkbox(withChat, { withChat = it })
+                        Text("各个对话、项目里的记忆也一起清", style = MaterialTheme.typography.bodyMedium)
+                    }
+                    Text("清掉的先存 ${com.jack.ai.data.MemoryReset.KEEP_DAYS} 天，这期间能在这里恢复（会换掉重置后新记下的），之后自动删掉。",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            confirmButton = { TextButton(onClick = { vm.resetMemory(withChat); asking = false; refresh++ }) { Text("重置", color = MaterialTheme.colorScheme.error) } },
+            dismissButton = { TextButton(onClick = { asking = false }) { Text("取消") } },
+        )
     }
 }
