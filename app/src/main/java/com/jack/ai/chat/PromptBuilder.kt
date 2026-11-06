@@ -196,7 +196,7 @@ object PromptBuilder {
             add(SkillTools.SELF_CHECK)
             if (settings.phoneFolders.isNotEmpty()) add(SkillTools.PHONE_FILES)
             // 操作其他 App：勾了 App 才有（无障碍没开时工具自己会告诉 Kavi 让用户去开）
-            if (settings.phoneApps.isNotEmpty()) add(SkillTools.PHONE)
+            if (settings.phoneApps.isNotEmpty()) add(if (SkillIds.PHONE_FULL in unlocked) SkillTools.PHONE else SkillTools.PHONE_ENTRY)
             if (settings.phoneDataOn) add(SkillTools.PHONE_DATA)
             // 开着 Python 就只留 run_python，两个都给模型会犹豫用哪个；算数一直能用，画图要先读「计算与图表」
             if (SkillIds.CALC in all && SkillIds.PYTHON !in all) add(SkillTools.RUN_JS)

@@ -472,6 +472,15 @@ class PromptBuilderTest {
     }
 
     @Test
+    fun phoneStartsWithShortEntryAndExpandsAfterFirstUse() {
+        val s = settings.copy(phoneApps = listOf("com.tencent.mm"))
+        val entry = tool(Conversation(), "phone", s)!!
+        val full = tool(Conversation(skillTools = setOf(com.jack.ai.data.SkillIds.PHONE_FULL)), "phone", s)!!
+        assertTrue(entry.toString().length * 3 < full.toString().length)
+        assertTrue(full.toString().contains("\"collect\""))
+    }
+
+    @Test
     fun noFreeTimeToolsAndEndConversationInChats() {
         val names = toolNames(Conversation())
         listOf("free_time", "my_savings", "own_history", "update_self").forEach { assertFalse(it in names) }

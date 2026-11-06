@@ -394,7 +394,8 @@ class ToolSession(
             name == "convert_file" -> convertFile(args)
             name == "self_check" -> selfCheck(args)
             name == "phone_files" -> phoneFiles(args)
-            name == "phone" -> phone(args)
+            // 用过一次就换成完整说明（下一步起带着，见 SkillIds.PHONE_FULL）
+            name == "phone" -> { unlocked.add(SkillIds.PHONE_FULL); phone(args) }
             name == "phone_data" -> phoneData(args)
             name == "notion_search" && SkillIds.NOTION in skillIds -> notionSearch(args)
             name == "notion_read" && SkillIds.NOTION in skillIds -> notionRead(args)
