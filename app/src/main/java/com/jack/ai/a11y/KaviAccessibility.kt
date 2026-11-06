@@ -269,6 +269,7 @@ class KaviAccessibility : AccessibilityService() {
         val action = if (long) AccessibilityNodeInfo.ACTION_LONG_CLICK else AccessibilityNodeInfo.ACTION_CLICK
         var n = node
         if (n != null && sameSpot(n, e)) {
+            if (displayId == Display.DEFAULT_DISPLAY) showPointer(e.centerX, e.centerY)
             while (n != null) {
                 if ((if (long) n.isLongClickable else n.isClickable) && n.performAction(action)) return true
                 n = n.parent
@@ -291,6 +292,7 @@ class KaviAccessibility : AccessibilityService() {
     }
 
     private suspend fun tapAt(x: Int, y: Int, long: Boolean, displayId: Int): Boolean {
+        if (displayId == Display.DEFAULT_DISPLAY) showPointer(x, y)
         val pace = gesturePacing()
         if (pace.paced) delay(pace.approach())
         val duration = if (long) maxOf(700L, pace.duration(700)) else if (pace.paced) pace.press() else 60L
@@ -298,6 +300,7 @@ class KaviAccessibility : AccessibilityService() {
     }
 
     suspend fun swipe(x1: Int, y1: Int, x2: Int, y2: Int, ms: Long = 350, displayId: Int = Display.DEFAULT_DISPLAY): Boolean {
+        if (displayId == Display.DEFAULT_DISPLAY) showPointer(x1, y1, x2, y2, ms)
         val pace = gesturePacing()
         if (pace.paced) delay(pace.approach())
         val stroke = pace.stroke(listOf(x1.toDouble() to y1.toDouble(), x2.toDouble() to y2.toDouble()),
@@ -487,6 +490,36 @@ class KaviAccessibility : AccessibilityService() {
     // ---------- 悬浮条和确认卡片 ----------
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+
+    /**
+     * 在主屏上画一下 Kavi 点在哪（滑动时从起点移到终点），一会儿就消失。不接触摸，不挡手势。
+     * 思路来自 Zafiro 的操作指针（只借思路）。后台虚拟屏上看不到，不画。
+     */
+    private fun showPointer(x: Int, y: Int, toX: Int = x, toY: Int = y, moveMs: Long = 0) = main.post {
+        runCatching {
+            val size = dp(30)
+            val v = android.view.View(this).apply {
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL; setColor(Color.argb(70, 66, 133, 244)); setStroke(dp(2), Color.argb(220, 66, 133, 244))
+                }
+            }
+            val lp = WindowManager.LayoutParams(size, size, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT,
+            ).apply { gravity = Gravity.TOP or Gravity.START; this.x = x - size / 2; this.y = y - size / 2 }
+            wm.addView(v, lp)
+            if (moveMs > 0 && (toX != x || toY != y)) android.animation.ValueAnimator.ofFloat(0f, 1f).apply {
+                duration = moveMs
+                addUpdateListener { a ->
+                    val f = a.animatedValue as Float
+                    lp.x = (x + (toX - x) * f).toInt() - size / 2; lp.y = (y + (toY - y) * f).toInt() - size / 2
+                    runCatching { wm.updateViewLayout(v, lp) }
+                }
+                start()
+            }
+            v.animate().alpha(0f).setStartDelay(moveMs + 450).setDuration(250).withEndAction { runCatching { wm.removeView(v) } }.start()
+        }
+    }
 
     /** 屏幕上方的小条：「Kavi 正在操作：……  停止」。一段时间没有新操作就自己收起来。 */
     fun showBar(text: String, keepMs: Long = 20_000) = main.post {
