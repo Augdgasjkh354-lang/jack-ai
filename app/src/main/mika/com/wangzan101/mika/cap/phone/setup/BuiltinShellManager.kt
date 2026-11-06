@@ -96,6 +96,24 @@ class BuiltinShellManager(context: Context, private val hub: HelperHub, private 
         }
     }
 
+    /** 这台手机有没有 su（只看文件，不弹授权框）。 */
+    fun suPresent(): Boolean = RootStart.su() != null
+
+    /** 「用 root 启动」开着没有。 */
+    fun rootStart(): Boolean = platform.rootOn()
+
+    /**
+     * 打开或关掉「用 root 启动」。打开时问 su 一次（会弹授权框），能切到 shell 身份才打开，然后马上起助手。返回最后是不是开着。
+     * Jack AI modification（来自 Mika 8bc745e）：只有这一个开关。
+     */
+    suspend fun setRootStart(on: Boolean): Boolean = withContext(Dispatchers.IO) {
+        if (!on) { platform.setRootOn(false); return@withContext false }
+        if (!RootStart.ask()) return@withContext false
+        platform.setRootOn(true)
+        start(); need()
+        true
+    }
+
     /** 「用电脑启动」的脚本:跟着助手在不在重写。 */
     val usbScript = UsbStartScript(app, hub)
 
@@ -153,7 +171,13 @@ class BuiltinShellManager(context: Context, private val hub: HelperHub, private 
             override fun save(port: Int) { prefs.edit().putInt("port", port).apply() }
         }
 
-        override fun paired() = Build.VERSION.SDK_INT >= MIN_SDK && prefs.getBoolean("paired", false)
+        /** 用户打开了「用 root 启动」、su 答应过、su 还在。 */
+        fun rootOn() = Build.VERSION.SDK_INT >= MIN_SDK && prefs.getBoolean("rootStart", false) && RootStart.su() != null
+
+        fun setRootOn(on: Boolean) { prefs.edit().putBoolean("rootStart", on).apply() }
+
+        // 用 root 启动时不用配对：看门狗照样当它「配过了」去起助手
+        override fun paired() = Build.VERSION.SDK_INT >= MIN_SDK && (prefs.getBoolean("paired", false) || rootOn())
 
         override fun setPaired(paired: Boolean) {
             prefs.edit().putBoolean("paired", paired).apply()
@@ -166,7 +190,7 @@ class BuiltinShellManager(context: Context, private val hub: HelperHub, private 
         }
 
         // 这一项没写过时读出 null:看不清就不拦着
-        override fun wirelessDebugging(): Boolean? =
+        override fun wirelessDebugging(): Boolean? = if (rootOn()) null else
             Settings.Global.getString(app.contentResolver, DeveloperSettings.ADB_WIFI_ENABLED)?.let { it == "1" }
 
         override fun wifiConnected(): Boolean = runCatching {
@@ -182,9 +206,17 @@ class BuiltinShellManager(context: Context, private val hub: HelperHub, private 
         }
 
         override suspend fun launchHelper() {
-            val tls = AndroidAdb.tls(AndroidAdb.identity(app))
             // 助手每次交接前都核对 Mika 的签名
             val command = HelperHandoff.command(app.applicationInfo.sourceDir, app.packageName, Process.myUid(), ownCertPin(app))
+            // 用 root 启动：不走无线调试；su 不答应了就退回无线调试（配过对的话）
+            if (rootOn()) {
+                val before = hub.shell.value
+                val ok = RootStart.launch(command, HelperHandoff.stdinLine(hub.issueLaunchNonce())) {
+                    withTimeoutOrNull(HANDOFF_WAIT_MS) { hub.shell.first { s -> s != null && s !== before } }
+                }
+                if (ok || !prefs.getBoolean("paired", false)) return
+            }
+            val tls = AndroidAdb.tls(AndroidAdb.identity(app))
             val connection = connect(tls)
             // 流开着 sh 就一直等;交接到了(或超时)再关,交接结果仍由引擎从 HelperHub 判断
             val before = hub.shell.value
@@ -218,6 +250,7 @@ class BuiltinShellManager(context: Context, private val hub: HelperHub, private 
         }
 
         override fun forget() {
+            setRootOn(false)
             hub.forget()
             AndroidAdb.forget(app)
             prefs.edit().remove("port").apply()

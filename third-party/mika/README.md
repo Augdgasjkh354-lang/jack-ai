@@ -68,3 +68,8 @@ Jack AI 适配（2026-11-02）：
 
 - 固定来源提交：`9fbbc89`（Mika，Apache-2.0）：`core/oauth/Pkce.kt`、`core/oauth/LoopbackCallback.kt`、`core/cap/mcp/McpOAuth.kt`，保留上游命名空间和版权。
 - Jack AI modification：注册时客户端名写 Kavi；令牌存在连接器设置里（随设置一起用手机密钥库加密，不进备份），调用前快过期就自动续，接回 Kavi 原有的连接器客户端和网络路线。
+
+## Root 启动手机助手（2026-11-06）
+
+- 参考 Mika `8bc745e`（RootShell、SuProbe、launchHelperAsRoot）：已 root 的手机经 `su 2000 -c` 以 shell 身份起同一个助手，先读到 uid 2000 才交口令，交接核对不变。
+- Jack AI modification：合成一个文件 `cap/phone/setup/RootStart.kt`，设置里只有一个「用 root 启动」开关（找得到 su 才显示，打开时问一次授权）；不移植 root 命令工具。su 不答应了、而配过对时退回无线调试。

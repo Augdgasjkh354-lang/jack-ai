@@ -96,6 +96,27 @@ fun BackgroundPhoneSection(vm: ChatViewModel, settings: Settings) {
                 OutlinedButton(onClick = { manager.start(); scope.launch { engine.retry() } }) { Text("重新连接") }
             }
             Text("在开发者选项打开无线调试，点「使用配对码配对设备」，保持窗口打开，在通知栏填六位码。不需要 root。", style = MaterialTheme.typography.bodySmall)
+            // 已 root 的手机：经 su 起助手，不用配无线调试，重启后自己恢复（找得到 su 才显示）
+            val hasSu by androidx.compose.runtime.produceState(false) { value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { manager.suPresent() } }
+            if (hasSu) {
+                var rootOn by remember { mutableStateOf(manager.rootStart()) }
+                var asking by remember { mutableStateOf(false) }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("用 root 启动")
+                        Text(if (asking) "正在问 root 授权，请在弹出的授权框里允许…" else "这台手机已 root：不用无线调试配对，重启后自己恢复。打开时会问一次 root 授权。",
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                    Switch(checked = rootOn, enabled = !asking, onCheckedChange = { on ->
+                        asking = on
+                        scope.launch {
+                            rootOn = manager.setRootStart(on)
+                            asking = false
+                            if (on && !rootOn) android.widget.Toast.makeText(ctx, "没拿到 root 授权（拒绝了、没回应，或切不到 shell 身份）", android.widget.Toast.LENGTH_LONG).show()
+                        }
+                    })
+                }
+            }
             TextButton(onClick = { manual = true }) { Text("手动填配对码 / 端口") }
             Text("首次配对可分屏打开系统设置和 Kavi；配对端口与无线调试首页的连接端口不同。", style = MaterialTheme.typography.bodySmall)
             if (current != null) OutlinedButton(onClick = { ctx.startActivity(Intent(ctx, BackgroundPhoneActivity::class.java)) }) { Text("查看正在运行的后台屏幕") }
