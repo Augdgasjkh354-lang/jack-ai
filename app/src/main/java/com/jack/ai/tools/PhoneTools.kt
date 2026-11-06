@@ -154,6 +154,7 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
         val screen = PhoneScreenAnalysis.stabilize(phoneSeen, raw, size)
         val quality = PhoneScreenAnalysis.quality(root, size)
         phoneSeen = screen
+        screen.texts().forEach { if (it.isNotBlank() && phoneSeenTexts.size < 5000) phoneSeenTexts += it }
         val note = StringBuilder(if (chooser) "" else flowHint(pkg)).append(ScreenText.format(screen))
         if (chooser) note.append("这是系统在问用哪个 App 打开（或装了两份的 App 问打开哪一个）。只能点用户勾过的 App 或「仅此一次」这类按钮；用户说了用哪个就选哪个，没说就选刚才要打开的那个 App，拿不准就问用户。\n")
         if (diagnosis.state == ScreenState.LOADING) note.append("这一屏还在加载中，先用 wait 等它稳定再继续。\n")

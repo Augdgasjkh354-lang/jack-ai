@@ -95,6 +95,8 @@ suspend fun runBackgroundWork(
     model: String? = null,
     /** 思路来自 deepseek-ai/deepseek-harness packages/goal/goal-round-driver/，MIT。目标续做使用同一份断点。 */
     goalId: String? = null,
+    /** 拿到这次的工具会话（手机操作考试看它读到过哪些屏幕）。 */
+    onSession: (ToolSession) -> Unit = {},
     onProgress: (String) -> Unit = {},
 ): TaskResult {
     val startedAt = System.currentTimeMillis()
@@ -165,6 +167,7 @@ suspend fun runBackgroundWork(
         }
     })
     session.interactive = false
+    onSession(session)
     session.goalRun = goalId != null
     session.unlocked.addAll(conv.skillTools)
     // 接着断点做：清单和验收标准从断点里找回来

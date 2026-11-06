@@ -13,6 +13,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -111,6 +114,7 @@ fun PhoneControlSection(vm: ChatViewModel, settings: Settings) {
         ) { Text("教 Kavi 一个手机流程") }
         Text("点了回到桌面，你在勾过的 App 里做一遍，上方的条点「完成」，Kavi 把步骤整理成流程存下来，以后照着做、也能定时跑。",
             style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+        PhoneExamRow(enabled = KaviAccessibility.instance != null && settings.phoneApps.isNotEmpty())
         Text(
             "支付宝、银行、证券、钱包和付款页面一律不碰；发送、删除、提交这类操作先问你（开着完全授权时直接做、事后告诉你）；密码框不读不填。" +
                 "操作时屏幕上方有一条「Kavi 正在操作 · 停止」，随时能停。有的手机会自己关掉无障碍，用不了时回来看一眼。",
@@ -243,5 +247,46 @@ fun PhoneDataSection(vm: ChatViewModel, settings: Settings) {
     if (pickingSkip) AppPicker("不记这些 App 的通知", settings.noticeSkip.toSet(), onDismiss = { pickingSkip = false }) { chosen ->
         pickingSkip = false
         vm.updateSettings { it.copy(noticeSkip = chosen.sorted()) }
+    }
+}
+
+
+/** 手机操作考试：用勾过的 App 跑一组只看不改的题，自动打分（见 PhoneExam）。 */
+@Composable
+private fun PhoneExamRow(enabled: Boolean) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val st by com.jack.ai.data.PhoneExam.state.collectAsState()
+    var show by remember { mutableStateOf(false) }
+    OutlinedButton(
+        onClick = { if (st is com.jack.ai.data.PhoneExam.State.Running) show = true else { com.jack.ai.data.PhoneExam.start(ctx); show = true } },
+        enabled = enabled, modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(when (val s = st) {
+            is com.jack.ai.data.PhoneExam.State.Running -> "手机操作考试进行中（${s.done}/${s.total}）"
+            else -> "跑一遍手机操作考试"
+        })
+    }
+    Text("用你勾过的 App（勾上手机自带的计算器能多考几道）跑几道只看不改的题，自动打分，看 Kavi 操作手机靠不靠谱。每道题花一两分钱，跑的时候别碰手机。",
+        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    if (show) {
+        val clip = androidx.compose.ui.platform.LocalClipboardManager.current
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { show = false },
+            title = { Text("手机操作考试") },
+            text = {
+                when (val s = st) {
+                    is com.jack.ai.data.PhoneExam.State.Running -> Text("正在考第 ${s.done + 1}/${s.total} 道：${s.now}\n跑完会在这里出报告，关掉这个窗口也会接着跑。")
+                    is com.jack.ai.data.PhoneExam.State.Done -> androidx.compose.foundation.layout.Column(Modifier.verticalScroll(rememberScrollState())) {
+                        Text(s.report, style = MaterialTheme.typography.bodySmall)
+                    }
+                    else -> Text("准备开始…")
+                }
+            },
+            confirmButton = {
+                val s = st
+                if (s is com.jack.ai.data.PhoneExam.State.Done) androidx.compose.material3.TextButton(onClick = { clip.setText(androidx.compose.ui.text.AnnotatedString(s.report)); show = false }) { Text("复制报告") }
+                else androidx.compose.material3.TextButton(onClick = { show = false }) { Text("好") }
+            },
+        )
     }
 }
