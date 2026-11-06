@@ -29,6 +29,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import com.jack.ai.a11y.PhoneCollect
 import com.jack.ai.a11y.ScreenOcr
+import com.jack.ai.a11y.PhoneWheel
 
 /**
  * 操作其他 App（phone 工具，无障碍）：apps 列出能操作的 App、open 打开、read 读屏幕、tap / long_press 点、type 填字、
@@ -123,8 +124,11 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
     /** 读当前屏幕：先检查 App 权限和付款，再识别登录、验证码与加载状态。 */
     suspend fun read(allowTakeover: Boolean = true): Pair<Screen?, String> {
         val (pkg, root) = svc.snapshot() ?: return null to "读不到屏幕（可能在锁屏或系统界面上）。"
-        refuse(pkg)?.let { phoneSeen = null; return null to it }
-        val raw = Screen(pkg, label(pkg), ScreenText.elements(root))
+        val rawElements = ScreenText.elements(root)
+        // 系统问「用哪个 App 打开」：不在勾选里也能看、能点用户勾过的那个 App
+        val chooser = pkg !in allowed && PhoneWheel.isChooser(pkg, rawElements.map { it.label })
+        if (!chooser) refuse(pkg)?.let { phoneSeen = null; return null to it }
+        val raw = Screen(pkg, label(pkg), rawElements)
         PhoneGuard.payPage(raw.texts())?.let { phoneSeen = null; return null to "到了付款或输密码的页面（看到「$it」），Kavi 不碰。停下，告诉用户这一步要自己来。" }
         val signedOut = AppUsageNotes.policyForPackage(pkg).signedOutMarker(raw.texts())
         val diagnosis = ScreenDiagnosis.classify(ScreenFacts(
@@ -149,7 +153,8 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
         val screen = PhoneScreenAnalysis.stabilize(phoneSeen, raw, size)
         val quality = PhoneScreenAnalysis.quality(root, size)
         phoneSeen = screen
-        val note = StringBuilder(flowHint(pkg)).append(ScreenText.format(screen))
+        val note = StringBuilder(if (chooser) "" else flowHint(pkg)).append(ScreenText.format(screen))
+        if (chooser) note.append("这是系统在问用哪个 App 打开（或装了两份的 App 问打开哪一个）。只能点用户勾过的 App 或「仅此一次」这类按钮；用户说了用哪个就选哪个，没说就选刚才要打开的那个 App，拿不准就问用户。\n")
         if (diagnosis.state == ScreenState.LOADING) note.append("这一屏还在加载中，先用 wait 等它稳定再继续。\n")
         // 树正常时只给文字；缺块时离线识别截图里的字补上，模型能看图的再附标号截图。
         if (quality.poor && action != "screenshot") {
@@ -309,6 +314,7 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
         "type" -> "输入文字"
         "read", "screenshot", "wait", "apps" -> "看屏幕"
         "collect" -> "逐屏读列表"
+        "wheel" -> "转滚轮到 " + args["value"].text()
         else -> action
     }
     val toolLabel = "操作手机：$bar"
@@ -364,6 +370,8 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
                 val x = args["x"].text().toFloatOrNull(); val y = args["y"].text().toFloatOrNull()
                 val e = target(s)
                 if (e == null && (x == null || y == null)) return@runTool fail(s.app, "miss", "要填 n（清单编号）、text（按钮上的字）或 x、y（截图上的坐标）。清单里没有对得上的。")
+                if (s.pkg !in allowed && !PhoneWheel.chooserTapOk(e?.label ?: s.at(((x ?: 0f) * phoneScale).toInt(), ((y ?: 0f) * phoneScale).toInt())?.label.orEmpty(), allowed.map(::label)))
+                    return@runTool "这是系统的选择弹窗，只能点用户勾过的 App 或「仅此一次」这类按钮。" to SearchRecord(toolLabel)
                 if (e != null) {
                     check(s, e.label, verb)?.let { return@runTool it to SearchRecord(toolLabel) }
                     if (!e.enabled) return@runTool "「${e.label}」现在点不了（灰的）。" to SearchRecord(toolLabel)
@@ -434,6 +442,48 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
                 if (svc.background != null) "后台屏幕没有手机桌面。要换 App 请用 open；不要操作主屏。"
                 else { svc.home(); phoneSeen = null; delay(500); "已回到桌面。" }
             }
+            "wheel" -> {
+                val s = needScreen() ?: return@runTool fail(fgName(), "stale", "先用 read 看一下现在的屏幕。")
+                beforeAction(s)?.let { return@runTool it to SearchRecord(toolLabel) }
+                val want = args["value"].text().ifBlank { args["content"].text() }.trim()
+                if (want.isEmpty()) return@runTool "wheel 要填 value（要转到的值，比如 9、30、2026、3月）。" to SearchRecord(toolLabel)
+                val start = target(s) ?: return@runTool fail(s.app, "miss", "要填 n：滚轮的编号，或它现在显示的那一项的编号。")
+                // 给的可以是滚轮本身，也可以是它显示的一项：找包着这一项的最小的能滚动的框
+                val wheel = if (start.scrollable) start else s.elements.filter { it.scrollable && it.contains(start.centerX, start.centerY) }
+                    .minByOrNull { (it.bounds[2] - it.bounds[0]).toLong() * (it.bounds[3] - it.bounds[1]) } ?: start
+                val box = wheel.bounds
+                var screen = s
+                var dir: Int? = null
+                var flipped = false
+                var steps = 0
+                var done = false
+                while (steps < 40) {
+                    val items = PhoneWheel.items(screen, box)
+                    val cur = PhoneWheel.current(items, box)
+                    if (cur != null && PhoneWheel.matches(cur.label, want)) { done = true; break }
+                    // 目标看得到：直接点它（原版滚轮点哪一项就转到哪一项）
+                    val seen = items.firstOrNull { PhoneWheel.matches(it.label, want) }
+                    val before = screen.signature()
+                    if (seen != null && steps % 3 == 0) svc.click(seen, false)
+                    else {
+                        val d = PhoneWheel.direction(items, cur, want) ?: dir ?: 1
+                        dir = d
+                        val col = screen.elements.firstOrNull { it.scrollable && it.bounds.contentEquals(box) } ?: wheel
+                        if (!svc.scroll(col, if (d > 0) "down" else "up")) break
+                    }
+                    steps++
+                    svc.settle(800)
+                    screen = read().first ?: break
+                    if (screen.signature() == before) {
+                        // 转不动了：到头了就反过来转一次
+                        if (flipped || dir == null) break
+                        dir = -dir; flipped = true
+                    }
+                }
+                phoneStepOk = done
+                val now = PhoneWheel.current(PhoneWheel.items(screen, box), box)?.label.orEmpty()
+                after(if (done) "滚轮已转到「$want」（转了 $steps 下）。" else "滚轮没转到「$want」，现在是「$now」（试了 $steps 下）。可以换成 tap 点那一项，或截图看看。", s).also { phoneStepOk = done }
+            }
             "wait" -> {
                 val want = args["text"].text().trim()
                 val gone = args["gone"].text().trim()
@@ -503,13 +553,13 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
                     (if (dir == "up") "；按从早到晚排好" else "") + "：\n" + body +
                     "\n现在停在最后读的那一屏。要接着点、输入，先 read 看一下当前屏幕。"
             }
-            else -> return@runTool "action 要填 apps、open、read、tap、long_press、type、enter、scroll、swipe、back、home、wait、screenshot、steps、collect、flow 或 save_flow。" to SearchRecord(toolLabel)
+            else -> return@runTool "action 要填 apps、open、read、tap、long_press、type、enter、scroll、swipe、back、home、wait、screenshot、steps、collect、wheel、flow 或 save_flow。" to SearchRecord(toolLabel)
         }
         text to SearchRecord(toolLabel)
     }
 }
 
-private val PHONE_BATCHABLE = setOf("open", "tap", "long_press", "type", "enter", "scroll", "swipe", "back", "wait")
+private val PHONE_BATCHABLE = setOf("open", "tap", "long_press", "type", "enter", "scroll", "swipe", "back", "wait", "wheel")
 
 /**
  * 一次做一串手机动作：每步照单独调用走（该问用户的照样问、节奏照样等），做完可以等某几个字出现或消失再做下一步，
