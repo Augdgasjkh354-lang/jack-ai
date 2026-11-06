@@ -60,6 +60,10 @@
             tools:ignore="ExportedContentProvider" />
         <receiver android:name=".a11y.PhonePairingReceiver" android:exported="false" />
         <activity android:name=".ui.BackgroundPhoneActivity" android:exported="false" />
+        <!-- Shizuku 把它的 Binder 交给 Kavi 的落点（Shizuku 官方要求的写法） -->
+        <provider android:name="rikka.shizuku.ShizukuProvider" android:authorities="${applicationId}.shizuku"
+            android:multiprocess="false" android:enabled="true" android:exported="true"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
         <!-- 放到桌面的小工具：桌面图标直接打开（每个小工具单独一个任务） -->
         <activity android:name=".ui.MiniAppActivity" android:exported="false" android:documentLaunchMode="always"
             android:windowSoftInputMode="adjustResize" />

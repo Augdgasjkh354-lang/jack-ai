@@ -99,6 +99,26 @@ class BuiltinShellManager(context: Context, private val hub: HelperHub, private 
     /** 这台手机有没有 su（只看文件，不弹授权框）。 */
     fun suPresent(): Boolean = RootStart.su() != null
 
+    /** Shizuku 在跑没有（没装、没启动都是 false）。 */
+    fun shizukuRunning(): Boolean = ShizukuStart.running()
+
+    /** 「用 Shizuku 启动」开着没有（开着但 Shizuku 这会儿没跑也算开着）。 */
+    fun shizukuStart(): Boolean = platform.shizukuWanted()
+
+    /**
+     * 打开或关掉「用 Shizuku 启动」。打开时问 Shizuku 授权；Shizuku 是 root 身份的不行（用 root 启动）。返回结果说明，成功为 null。
+     * Jack AI addition。
+     */
+    suspend fun setShizukuStart(on: Boolean): String? {
+        if (!on) { platform.setShizukuOn(false); return null }
+        if (!ShizukuStart.running()) return "Shizuku 没在运行：先在 Shizuku App 里启动它"
+        if (!ShizukuStart.request()) return "没拿到 Shizuku 授权"
+        if (!ShizukuStart.asShell()) return "Shizuku 是以 root 身份运行的，这台手机直接用「用 root 启动」"
+        platform.setShizukuOn(true)
+        start(); need()
+        return null
+    }
+
     /** 「用 root 启动」开着没有。 */
     fun rootStart(): Boolean = platform.rootOn()
 
@@ -153,6 +173,8 @@ class BuiltinShellManager(context: Context, private val hub: HelperHub, private 
             )
         }
         e.start()
+        // Shizuku 的 Binder 是 App 启动后过一会儿才到的：到了再叫看门狗起一次助手
+        if (platform.shizukuWanted()) ShizukuStart.onReady { e.need() }
     }
 
     private class AndroidPlatform(
@@ -176,8 +198,14 @@ class BuiltinShellManager(context: Context, private val hub: HelperHub, private 
 
         fun setRootOn(on: Boolean) { prefs.edit().putBoolean("rootStart", on).apply() }
 
-        // 用 root 启动时不用配对：看门狗照样当它「配过了」去起助手
-        override fun paired() = Build.VERSION.SDK_INT >= MIN_SDK && (prefs.getBoolean("paired", false) || rootOn())
+        /** 用户打开了「用 Shizuku 启动」、Shizuku 在跑、授权了、是 shell 身份。 */
+        fun shizukuOn() = Build.VERSION.SDK_INT >= MIN_SDK && prefs.getBoolean("shizukuStart", false) && ShizukuStart.granted() && ShizukuStart.asShell()
+
+        fun setShizukuOn(on: Boolean) { prefs.edit().putBoolean("shizukuStart", on).apply() }
+        fun shizukuWanted() = prefs.getBoolean("shizukuStart", false)
+
+        // 用 root、Shizuku 启动时不用配对：看门狗照样当它「配过了」去起助手
+        override fun paired() = Build.VERSION.SDK_INT >= MIN_SDK && (prefs.getBoolean("paired", false) || rootOn() || shizukuOn())
 
         override fun setPaired(paired: Boolean) {
             prefs.edit().putBoolean("paired", paired).apply()
@@ -190,7 +218,7 @@ class BuiltinShellManager(context: Context, private val hub: HelperHub, private 
         }
 
         // 这一项没写过时读出 null:看不清就不拦着
-        override fun wirelessDebugging(): Boolean? = if (rootOn()) null else
+        override fun wirelessDebugging(): Boolean? = if (rootOn() || shizukuOn()) null else
             Settings.Global.getString(app.contentResolver, DeveloperSettings.ADB_WIFI_ENABLED)?.let { it == "1" }
 
         override fun wifiConnected(): Boolean = runCatching {
@@ -208,6 +236,14 @@ class BuiltinShellManager(context: Context, private val hub: HelperHub, private 
         override suspend fun launchHelper() {
             // 助手每次交接前都核对 Mika 的签名
             val command = HelperHandoff.command(app.applicationInfo.sourceDir, app.packageName, Process.myUid(), ownCertPin(app))
+            // 用 Shizuku 启动：不走无线调试；不成就往下试 root、无线调试
+            if (shizukuOn()) {
+                val before = hub.shell.value
+                val ok = ShizukuStart.launch(command, HelperHandoff.stdinLine(hub.issueLaunchNonce())) {
+                    withTimeoutOrNull(HANDOFF_WAIT_MS) { hub.shell.first { s -> s != null && s !== before } }
+                }
+                if (ok || (!rootOn() && !prefs.getBoolean("paired", false))) return
+            }
             // 用 root 启动：不走无线调试；su 不答应了就退回无线调试（配过对的话）
             if (rootOn()) {
                 val before = hub.shell.value
@@ -251,6 +287,7 @@ class BuiltinShellManager(context: Context, private val hub: HelperHub, private 
 
         override fun forget() {
             setRootOn(false)
+            setShizukuOn(false)
             hub.forget()
             AndroidAdb.forget(app)
             prefs.edit().remove("port").apply()

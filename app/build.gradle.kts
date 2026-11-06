@@ -150,6 +150,9 @@ dependencies {
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     // 照片里的表格转 Excel：离线中文文字识别，模型打包在 App 里，不需要谷歌服务
     implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
+    // Shizuku：装了 Shizuku 的手机用它以 shell 身份起后台手机助手，不用无线调试配对
+    implementation("dev.rikka.shizuku:api:13.1.5")
+    implementation("dev.rikka.shizuku:provider:13.1.5")
     // 本地向量模型（设置 → 本地模型）：ONNX Runtime 在手机上跑，模型文件另外下载，不打进安装包
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.31.1")
 }

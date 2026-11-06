@@ -96,6 +96,29 @@ fun BackgroundPhoneSection(vm: ChatViewModel, settings: Settings) {
                 OutlinedButton(onClick = { manager.start(); scope.launch { engine.retry() } }) { Text("重新连接") }
             }
             Text("在开发者选项打开无线调试，点「使用配对码配对设备」，保持窗口打开，在通知栏填六位码。不需要 root。", style = MaterialTheme.typography.bodySmall)
+            // 装了 Shizuku 的手机：经 Shizuku 起助手，不用无线调试配对、不用 root
+            val shizukuUp by androidx.compose.runtime.produceState(false) { value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { manager.shizukuRunning() } }
+            var shizukuOn by remember { mutableStateOf(manager.shizukuStart()) }
+            if (shizukuUp || shizukuOn) {
+                var asking by remember { mutableStateOf(false) }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("用 Shizuku 启动")
+                        Text(if (asking) "正在问 Shizuku 授权…" else if (!shizukuUp) "Shizuku 现在没在运行，到 Shizuku App 里启动它后会自动连上。"
+                            else "装了 Shizuku：不用在这里配对，经 Shizuku 起后台助手。Shizuku 本身重启后要在它的 App 里再启动一次。",
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                    Switch(checked = shizukuOn, enabled = !asking, onCheckedChange = { on ->
+                        asking = on
+                        scope.launch {
+                            val err = manager.setShizukuStart(on)
+                            shizukuOn = on && err == null
+                            asking = false
+                            if (err != null) android.widget.Toast.makeText(ctx, err, android.widget.Toast.LENGTH_LONG).show()
+                        }
+                    })
+                }
+            } else Text("装了 Shizuku（并在它的 App 里启动）的话，这里会多一个「用 Shizuku 启动」，不用无线调试配对。", style = MaterialTheme.typography.bodySmall)
             // 已 root 的手机：经 su 起助手，不用配无线调试，重启后自己恢复（找得到 su 才显示）
             val hasSu by androidx.compose.runtime.produceState(false) { value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { manager.suPresent() } }
             if (hasSu) {
