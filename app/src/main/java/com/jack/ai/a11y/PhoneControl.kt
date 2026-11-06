@@ -7,7 +7,8 @@ import com.wangzan101.mika.core.cap.phone.TypingPacing
 import java.io.IOException
 
 /** 主屏、后台屏幕共用的截图判断结果。 */
-data class PhoneCapture(val image: Pair<String, Float>? = null, val black: Boolean = false)
+/** [ocr]：要了文字识别时，截图里认出的字（屏幕像素坐标）。 */
+data class PhoneCapture(val image: Pair<String, Float>? = null, val black: Boolean = false, val ocr: List<ScreenOcr.Line> = emptyList())
 
 /** 同一轮任务固定使用主屏或后台屏幕；后台出错时不退回主屏。 */
 class PhoneControl(val service: KaviAccessibility, val background: BackgroundPhone?) {
@@ -53,13 +54,17 @@ class PhoneControl(val service: KaviAccessibility, val background: BackgroundPho
     suspend fun screenshot(marks: List<Element>): Pair<String, Float>? = checkedScreenshot(marks)?.image
 
     /** 主屏用无障碍截图，后台只从虚拟屏幕取画面，绝不落回主屏。 */
-    suspend fun checkedScreenshot(marks: List<Element>): PhoneCapture? = control {
+    suspend fun checkedScreenshot(marks: List<Element>, ocr: Boolean = false): PhoneCapture? = control {
         val shot: Bitmap = (if (background == null) service.rawShot() else background.display.latestFrameBitmap())
             ?: return@control null
         if (service.blackFrame(shot)) {
             shot.recycle()
             PhoneCapture(black = true)
-        } else PhoneCapture(image = service.mark(shot, marks))
+        } else {
+            // 识别要在标号之前做（标号会把原图回收），认的是没画红框的原图
+            val lines = if (ocr) ScreenOcr.read(shot) else emptyList()
+            PhoneCapture(image = service.mark(shot, marks), ocr = lines)
+        }
     }
 
     suspend fun close(): String? = background?.close()

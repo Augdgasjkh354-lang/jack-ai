@@ -28,6 +28,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import com.jack.ai.a11y.PhoneCollect
+import com.jack.ai.a11y.ScreenOcr
 
 /**
  * 操作其他 App（phone 工具，无障碍）：apps 列出能操作的 App、open 打开、read 读屏幕、tap / long_press 点、type 填字、
@@ -150,15 +151,14 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
         phoneSeen = screen
         val note = StringBuilder(flowHint(pkg)).append(ScreenText.format(screen))
         if (diagnosis.state == ScreenState.LOADING) note.append("这一屏还在加载中，先用 wait 等它稳定再继续。\n")
-        // 树正常时只给文字；缺块时才附标号截图。
+        // 树正常时只给文字；缺块时离线识别截图里的字补上，模型能看图的再附标号截图。
         if (quality.poor && action != "screenshot") {
-            if (!canSee) note.append("这一屏树读不全，当前模型看不了截图，请用户来查看这一屏。\n")
-            else {
+            run {
                 if (svc.foreground() != pkg) {
                     phoneSeen = null
                     return null to "截图前 App 已切换，先重新 read 确认当前屏幕，不读取其他 App。"
                 }
-                var capture = svc.checkedScreenshot(screen.elements)
+                var capture = svc.checkedScreenshot(screen.elements, ocr = true)
                 val firstBlack = capture?.black == true
                 if (firstBlack) {
                     svc.settle(600)
@@ -166,8 +166,15 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
                         phoneSeen = null
                         return null to "截图时 App 已切换，先重新 read 确认当前屏幕。"
                     }
-                    capture = svc.checkedScreenshot(screen.elements)
+                    capture = svc.checkedScreenshot(screen.elements, ocr = true)
                 }
+                // 控件树看不见的付款页、输密码页，认出来的字里有就照样不碰
+                capture?.ocr?.takeIf { it.isNotEmpty() }?.let { lines ->
+                    PhoneGuard.payPage(lines.map { it.text })?.let { phoneSeen = null; return null to "到了付款或输密码的页面（看到「$it」），Kavi 不碰。停下，告诉用户这一步要自己来。" }
+                }
+                val k = capture?.image?.second ?: 1f
+                val ocrText = capture?.ocr?.let { ScreenOcr.format(it, screen.texts(), k) }.orEmpty()
+                if (ocrText.isNotEmpty()) { note.append(ocrText); phoneScale = k }
                 when {
                     ScreenDiagnosis.classify(ScreenFacts(pkg, screen.elements.size, screen.texts(),
                         blackFrames = if (firstBlack && capture?.black == true) listOf(true, true) else emptyList())).state == ScreenState.PROTECTED -> {
@@ -178,11 +185,13 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
                         }
                         return null to "这一屏防截屏，画面持续全黑；Kavi 已暂停，请用户处理后重新 read。"
                     }
-                    capture?.image != null -> {
-                        val (img, k) = capture.image
-                        images += img; phoneScale = k
+                    capture?.image != null && canSee -> {
+                        val (img, k2) = capture.image
+                        images += img; phoneScale = k2
                         note.append("这一屏树读不全，已附截图（在下一条消息里）；红框数字与清单编号一致，可以按截图坐标 tap。\n")
                     }
+                    ocrText.isNotEmpty() -> note.append("这一屏树读不全，上面是文字识别补读的字；当前模型看不了截图，按字的位置 tap 的 x、y。\n")
+                    !canSee -> note.append("这一屏树读不全，文字识别也没认出字，当前模型看不了截图，请用户来查看这一屏。\n")
                     else -> note.append("这一屏树读不全，截图暂时拿不到，请用户查看这一屏后再继续。\n")
                 }
             }
