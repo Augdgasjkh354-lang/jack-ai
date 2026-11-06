@@ -2,11 +2,12 @@ package com.jack.ai
 
 /** 按 Android debuggerd 的 tombstone.proto 读取崩溃线程，避免把其他线程的库名当成堆栈。 */
 internal object NativeTombstone {
-    fun frames(bytes: ByteArray): List<String> = runCatching {
+    fun frames(bytes: ByteArray): List<String> {
         var tid = 0L
         var signalName = ""
         var codeName = ""
-        fields(bytes) { n, number, data ->
+        // 记录超过读取上限会被截断：线程（16）排在内存映射、日志（17、18）前面，截断前解析到的照样用
+        runCatching { fields(bytes) { n, number, data ->
             when (n) {
                 6 -> tid = number ?: 0L
                 10 -> if (data != null) fields(data) { k, _, v ->
@@ -16,10 +17,10 @@ internal object NativeTombstone {
                     }
                 }
             }
-        }
+        } }
         var threadName = ""
         val backtrace = ArrayList<String>()
-        fields(bytes) { n, _, entry ->
+        runCatching { fields(bytes) { n, _, entry ->
             if (n != 16 || entry == null) return@fields
             var key = -1L
             var thread: ByteArray? = null
@@ -37,13 +38,22 @@ internal object NativeTombstone {
                     4 -> if (v != null && backtrace.size < 20) backtrace += frame(v, backtrace.size)
                 }
             }
-        }
-        buildList {
+        } }
+        // 没信号也没回溯说明不是 tombstone（或坏了），别凭乱码编一个崩溃线程出来
+        if (signalName.isBlank() && backtrace.isEmpty()) return emptyList()
+        return buildList {
             if (signalName.isNotBlank()) add(signalName + if (codeName.isBlank()) "" else " ($codeName)")
             if (tid != 0L) add("崩溃线程 tid=$tid" + if (threadName.isBlank()) "" else " ($threadName)")
             addAll(backtrace)
         }
-    }.getOrDefault(emptyList())
+    }
+
+    /** 去重用：有函数名就用「库名+函数名」，地址每次发版、系统组件更新都会变；没函数名只能留地址。 */
+    fun signatureOf(frame: String): String {
+        val m = Regex("""^#\d+ pc [0-9a-f]+ (\S+)(?: \((.+?)(?:\+0x[0-9a-f]+)?\))?$""").matchEntire(frame) ?: return frame
+        val (file, function) = m.destructured
+        return if (function.isBlank()) frame.substringAfter(' ') else "$file $function"
+    }
 
     private fun frame(bytes: ByteArray, index: Int): String {
         var pc = 0L

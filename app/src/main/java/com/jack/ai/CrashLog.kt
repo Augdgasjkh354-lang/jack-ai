@@ -116,7 +116,7 @@ object CrashLog {
         if (!file(app).exists()) file(app).writeText(head + e.description.orEmpty().take(300) + "\n\n" + detail)
         val top = if (anr) frames.firstOrNull { "com.jack.ai" in it || "com.wangzan101" in it } ?: frames.firstOrNull().orEmpty()
             else frames.firstOrNull { it.startsWith("#00 ") } ?: frames.firstOrNull().orEmpty()
-        val signatureFrames = if (anr) top else frames.filter { it.startsWith("#") }.take(3).joinToString("|").ifBlank { top }
+        val signatureFrames = if (anr) top else frames.filter { it.startsWith("#") }.take(3).joinToString("|") { NativeTombstone.signatureOf(it) }.ifBlank { top }
         val sig = MessageDigest.getInstance("SHA-1").digest("$kind|${e.processName}|$signatureFrames".toByteArray()).take(4).joinToString("") { "%02x".format(it) }
         val dir = reports(app).apply { mkdirs() }
         File(dir, "${e.timestamp}.txt").writeText("sig: $sig\n闪退：$kind @ ${top.take(80).ifBlank { e.processName }}\n" + head + "\n" + detail)

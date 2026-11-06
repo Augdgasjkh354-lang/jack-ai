@@ -41,6 +41,23 @@ class CrashLogExitTest {
         assertTrue(frames.none { "webview" in it || "sk-private-token" in it })
     }
 
+    @Test fun truncatedNativeTombstoneKeepsCrashedThread() {
+        val crashed = field(1, 7) + field(4, field(1, 16) + field(6, "libc.so") + field(4, "abort"))
+        val full = field(6, 7) + field(10, field(2, "SIGABRT")) + field(16, field(1, 7) + field(2, crashed)) +
+            field(17, ByteArray(64) { 1 })
+        val frames = CrashLog.nativeFrames(full.copyOf(full.size - 20))
+
+        assertEquals("SIGABRT", frames[0])
+        assertTrue(frames[2].startsWith("#00 pc 00000010 libc.so (abort)"))
+    }
+
+    @Test fun nativeSignatureIgnoresAddressesWhenSymbolKnown() {
+        assertEquals("libc.so abort", NativeTombstone.signatureOf("#00 pc 0004a1c0 libc.so (abort+0x14)"))
+        assertEquals("libc.so abort", NativeTombstone.signatureOf("#00 pc 0004b200 libc.so (abort+0x18)"))
+        assertEquals("libx.so foo(int)", NativeTombstone.signatureOf("#01 pc 00001000 libx.so (foo(int)+0x8)"))
+        assertEquals("pc 00002000 libx.so", NativeTombstone.signatureOf("#02 pc 00002000 libx.so"))
+    }
+
     @Test fun malformedNativeTombstoneDoesNotInventStack() {
         val bytes = byteArrayOf(0x82.toByte(), 0x80.toByte()) + "libonnxruntime.so".toByteArray()
         assertTrue(CrashLog.nativeFrames(bytes).isEmpty())
