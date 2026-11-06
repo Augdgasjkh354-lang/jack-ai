@@ -20,6 +20,10 @@ object TaskCheckpoint {
     const val RESUME_NOTE = "（这个任务上次做到一半被系统打断了，上面是已经做完的步骤。接着把剩下的做完：已经成功的步骤别重做，" +
         "尤其是发送、提交、下单、删除这类；浏览器的网页没了，要用就重新打开。）"
 
+    /** 做到一半被杀的那一步：可能做了、也可能没做。思路来自 Mika「结果不明，不自动重复操作」，Apache-2.0。 */
+    const val UNKNOWN = "（任务在这一步做到一半时被系统打断，结果不明：可能已经做了，也可能没做。发送、提交、下单、删除、付款这类往外做的事，" +
+        "先查清楚有没有做成（看已发送、订单、对话记录、网页上的状态），确认没做过才做；查不清就别做，在结果里写明这一步需要用户确认。只读的步骤重做就行。）"
+
     data class Saved(val messages: List<JsonObject>, val spent: Double)
 
     fun file(dir: File, id: String) = File(File(dir, "checkpoints"), "${id.replace(Regex("[^\\w-]"), "_")}.json")
@@ -71,6 +75,6 @@ object TaskCheckpoint {
         val ids = runCatching { (msgs[i]["tool_calls"] as JsonArray).map { (it.jsonObject["id"] as JsonPrimitive).content } }.getOrDefault(emptyList())
         val done = msgs.drop(i + 1).mapNotNull { (it["tool_call_id"] as? JsonPrimitive)?.content }.toSet()
         val missing = ids.filter { it !in done }
-        return msgs + missing.map { id -> buildJsonObject { put("role", "tool"); put("tool_call_id", id); put("content", "（任务在这里被打断了，这一步没做。）") } }
+        return msgs + missing.map { id -> buildJsonObject { put("role", "tool"); put("tool_call_id", id); put("content", UNKNOWN) } }
     }
 }

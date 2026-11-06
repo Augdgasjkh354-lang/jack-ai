@@ -69,6 +69,8 @@ class Agent(
         retool: (() -> JsonArray?)? = null,
         /** 每个工具做完、结果放进 messages 以后调（后台任务在这里存断点）。 */
         onTools: () -> Unit = {},
+        /** 模型要调工具、还没开始做时调（后台任务在这里存一次断点：做到一半被杀，下次知道哪几步结果不明）。 */
+        beforeTools: () -> Unit = {},
         /**
          * 模型这一轮没调工具、想直接收尾时问一声（Work 的收尾关卡，见 WorkGate）：返回 null 就收尾；
          * 返回一段话就把它当作一条消息塞回去，接着做。已经不给工具了（到了轮数上限）就不问。
@@ -221,6 +223,7 @@ class Agent(
             }
             messages += assistantCall
             trail += assistantCall.toString()
+            beforeTools()
             for (c in calls.values) {
                 val result = if (toolCalls >= maxToolCalls()) "工具调用次数已到上限，请根据已有结果回答。" else {
                     toolCalls++

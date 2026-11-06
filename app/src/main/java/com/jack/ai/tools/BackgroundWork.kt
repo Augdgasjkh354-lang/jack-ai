@@ -216,6 +216,7 @@ suspend fun runBackgroundWork(
             },
             retool = { toolsFor(session.unlocked.toSet()) },
             onTools = { TaskCheckpoint.save(checkpoint, cpKey, messages, spent) },
+            beforeTools = { TaskCheckpoint.save(checkpoint, cpKey, messages, spent) },
             beforeFinish = gate?.let { g -> { answer -> g.beforeFinish(answer) } },
             slim = { msgs -> com.jack.ai.chat.ContextSlim.slim(msgs) },
             beforeRequest = { _, _ ->

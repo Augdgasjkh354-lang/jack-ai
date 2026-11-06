@@ -8,6 +8,7 @@ import com.jack.ai.api.ApiException
 import com.jack.ai.chat.Agent
 import com.jack.ai.chat.ContextSlim
 import com.jack.ai.chat.PromptBuilder
+import com.jack.ai.chat.StopReport
 import com.jack.ai.tools.ToolHost
 import com.jack.ai.tools.ToolSession
 import com.jack.ai.tools.ToolUi
@@ -523,8 +524,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
      * 会先等它收尾完（撤掉「正在回答」、保存），这样点了停止马上再发也不会乱。
      */
     fun stop(convId: String? = _state.value.currentId) {
-        convId?.let { jobs[it]?.cancel() }
+        convId?.let { id -> jobs[id]?.takeIf { it.isActive }?.let { stopping.add(id); it.cancel() } }
     }
+
+    /** 用户按了停止的对话：回答收尾时补一段做到哪了（见 StopReport）。 */
+    private val stopping = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
     /** 这个对话有回答正在进行（停止后立刻就不算了，不用等收尾）。 */
     private fun busy(convId: String) = jobs[convId]?.isActive == true
@@ -867,6 +871,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 }
             } catch (e: CancellationException) {
                 flush()
+                // 用户按的停止：补一段做到哪了（别的原因取消的，比如删对话，不补）
+                if (stopping.remove(convId)) patchMessage(convId, reply.id) { m ->
+                    StopReport.build(m).takeIf { it.isNotEmpty() }?.let { m.copy(content = m.content.trimEnd() + it) } ?: m
+                }
                 throw e
             } catch (e: ApiException) {
                 flush()
@@ -880,6 +888,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 flush()
                 patchMessage(convId, reply.id) { it.copy(error = "出错了：${e.message}") }
             } finally {
+                stopping.remove(convId)
                 summarizer?.cancel()
                 // 停止或出错时，把还在“搜索中”的标记清掉
                 patchMessage(convId, reply.id) { m ->
