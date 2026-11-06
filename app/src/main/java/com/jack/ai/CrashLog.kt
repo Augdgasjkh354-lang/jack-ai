@@ -105,7 +105,7 @@ object CrashLog {
     private fun record(app: Context, e: android.app.ApplicationExitInfo) {
         val anr = e.reason == android.app.ApplicationExitInfo.REASON_ANR
         val kind = if (anr) "无响应（卡死）" else "底层崩溃"
-        val raw = runCatching { e.traceInputStream?.use { it.readNBytesCompat(256 * 1024) } }.getOrNull()
+        val raw = runCatching { e.traceInputStream?.use { it.readNBytesCompat(if (anr) 256 * 1024 else 2 * 1024 * 1024) } }.getOrNull()
         val frames = if (raw == null) emptyList() else if (anr) anrMainThread(String(raw)) else nativeFrames(raw)
         val ver = runCatching { app.packageManager.getPackageInfo(app.packageName, 0).versionName }.getOrNull()
         val whenText = java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.CHINA).format(java.util.Date(e.timestamp))
@@ -114,9 +114,10 @@ object CrashLog {
         val detail = frames.joinToString("\n") { "    $it" }.ifBlank { "    （系统没给调用栈）" }
         // 给用户看的带系统的描述（可能有窗口名）；上报的不带
         if (!file(app).exists()) file(app).writeText(head + e.description.orEmpty().take(300) + "\n\n" + detail)
-        val ours = frames.firstOrNull { "com.jack.ai" in it || "com.wangzan101" in it }
-        val top = ours ?: frames.firstOrNull { "webview" in it.lowercase() || ".so" in it } ?: frames.firstOrNull().orEmpty()
-        val sig = MessageDigest.getInstance("SHA-1").digest("$kind|${e.processName}|$top".toByteArray()).take(4).joinToString("") { "%02x".format(it) }
+        val top = if (anr) frames.firstOrNull { "com.jack.ai" in it || "com.wangzan101" in it } ?: frames.firstOrNull().orEmpty()
+            else frames.firstOrNull { it.startsWith("#00 ") } ?: frames.firstOrNull().orEmpty()
+        val signatureFrames = if (anr) top else frames.filter { it.startsWith("#") }.take(3).joinToString("|").ifBlank { top }
+        val sig = MessageDigest.getInstance("SHA-1").digest("$kind|${e.processName}|$signatureFrames".toByteArray()).take(4).joinToString("") { "%02x".format(it) }
         val dir = reports(app).apply { mkdirs() }
         File(dir, "${e.timestamp}.txt").writeText("sig: $sig\n闪退：$kind @ ${top.take(80).ifBlank { e.processName }}\n" + head + "\n" + detail)
     }
@@ -137,18 +138,8 @@ object CrashLog {
             .filter { it.startsWith("at ") || it.startsWith("native:") || it.startsWith("- ") || it.startsWith("\"main\"") }.take(40)
     }
 
-    /** 底层崩溃的记录是二进制的：只捞出里面能读的库名、函数名，够判断是不是网页组件崩的。 */
-    internal fun nativeFrames(bytes: ByteArray): List<String> {
-        val runs = mutableListOf<String>()
-        val sb = StringBuilder()
-        for (b in bytes) {
-            val c = b.toInt() and 0xff
-            if (c in 0x20..0x7e) sb.append(c.toChar()) else { if (sb.length >= 6) runs += sb.toString(); sb.setLength(0) }
-        }
-        if (sb.length >= 6) runs += sb.toString()
-        return runs.filter { r -> ".so" in r || "Java_" in r || "chromium" in r.lowercase() || "signal" in r.lowercase() || r.startsWith("SIG") || "abort" in r.lowercase() }
-            .map { it.take(160) }.distinct().take(30)
-    }
+    /** Android 12+ 的原生记录按 tombstone.proto 提取崩溃线程及回溯，不混入其他线程。 */
+    internal fun nativeFrames(bytes: ByteArray): List<String> = NativeTombstone.frames(bytes)
 
     private class Handler(val app: Context, val previous: Thread.UncaughtExceptionHandler?) : Thread.UncaughtExceptionHandler {
         override fun uncaughtException(t: Thread, e: Throwable) {
