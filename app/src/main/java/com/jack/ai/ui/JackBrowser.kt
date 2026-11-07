@@ -870,9 +870,13 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
     private fun uaFor(url: String) = if (isDesktopAt(url)) BrowserPages.desktopUserAgent(mobileUa) else mobileUa
 
     /** 换网页前按网站选手机版还是电脑版的标识。返回有没有换。 */
+    private fun needsUa(w: WebView, url: String): Boolean = mobileUa.isNotEmpty() && w.settings.userAgentString != uaFor(url)
+
     private fun applyUa(w: WebView, url: String): Boolean {
+        if (!needsUa(w, url)) return false
         val ua = uaFor(url)
-        if (mobileUa.isEmpty() || w.settings.userAgentString == ua) return false
+        // 正在加载时换标识，网页组件会自己重载当前页；调用方换完都会自己打开网址，先停掉，免得两次加载撞在一起
+        w.stopLoading()
         w.settings.userAgentString = ua
         // 新式设备标识（请求里的 Sec-CH-UA-*、网页里的 userAgentData）跟着换，不然大网站照样认出是手机
         val meta = if (ua == mobileUa) mobileMeta else mobileMeta?.let { desktopMeta(it) }
@@ -1290,8 +1294,10 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
                     else if (!request.hasGesture() && BrowserAds.isAd(request.url.host.orEmpty()) && blocksAds(t.site)) { t.diag.add("没让网页自己跳到广告网站 $url"); true }
                     else {
                         t.clearError()
-                        // 从手机版网站跳到电脑版网站（或反过来）：换好标识重新打开这个网址
-                        if (applyUa(view, url)) { view.loadUrl(url); true } else false
+                        // 从手机版网站跳到电脑版网站（或反过来）：换好标识重新打开这个网址。
+                        // 不能在这个回调里直接换：网页组件正处在跳转当中，换标识会让它马上重载，跳转里套跳转，
+                        // 新版网页组件直接断言崩掉（SIGTRAP @ setUserAgentString）。先拦下，等回调返回后再换、再打开
+                        if (needsUa(view, url)) { view.post { if (applyUa(view, url)) view.loadUrl(url) }; true } else false
                     }
                 }
                 BrowserNet.Kind.EXTERNAL -> { t.diag.add("网页要打开别的 App：${url.take(120)}"); if (userViewing && request.hasGesture()) external = url; true }
