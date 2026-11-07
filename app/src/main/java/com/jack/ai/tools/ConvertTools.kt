@@ -5,10 +5,17 @@ import com.jack.ai.data.AudioPcm
 import com.jack.ai.data.MediaMux
 import com.jack.ai.data.PyRunner
 import com.jack.ai.data.SearchRecord
+import com.jack.ai.data.Subtitles
 import com.jack.ai.data.ToolSizes
 import com.jack.ai.data.VideoEdit
 import com.jack.ai.data.Workspace
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -19,11 +26,11 @@ import java.io.File
 
 /**
  * 文件工具箱（convert_file）：图片转 PDF、合并拆分 PDF、PDF 转图片、压缩图片、换图片格式、
- * 剪视频、压视频、取出声音、录音和视频转文字。都在对话文件夹里做，原文件不动，结果另存一份挂在聊天里。
+ * 剪视频、压视频、剪辑（拼片段、烧字幕、配音乐）、取出声音、录音和视频转文字（可以带时间，出字幕）。都在对话文件夹里做，原文件不动，结果另存一份挂在聊天里。
  */
 
 private val ACTIONS = listOf("images_to_pdf", "merge_pdf", "split_pdf", "pdf_to_images", "compress_image", "convert_image",
-    "cut_video", "compress_video", "extract_audio", "transcribe")
+    "cut_video", "compress_video", "edit_video", "extract_audio", "transcribe")
 
 /** 转文字最长多久（再长要几十分钟，也贵）。 */
 private const val MAX_TRANSCRIBE_SEC = 3L * 3600
@@ -64,6 +71,7 @@ internal suspend fun ToolSession.convertFile(args: JsonObject): String {
         "convert_image" -> "图片转成 ${args["format"].text().ifBlank { "jpg" }}"
         "cut_video" -> "剪视频"
         "compress_video" -> "压缩视频"
+        "edit_video" -> "剪辑视频"
         "extract_audio" -> "取出声音"
         else -> "转文字"
     } + "：" + names.first().take(40) + if (names.size > 1) " 等 ${names.size} 个" else ""
@@ -133,13 +141,56 @@ internal suspend fun ToolSession.convertFile(args: JsonObject): String {
                 made = listOf(dst)
                 note = "${ToolSizes.text(f.length())} → ${ToolSizes.text(dst.length())}"
             }
+            "edit_video" -> {
+                val f = files.first()
+                val (dur, w, _) = withContext(Dispatchers.IO) { VideoEdit.info(f) }
+                if (dur <= 0 && w == 0) throw IllegalStateException("「${f.name}」读不出来，可能不是视频")
+                val segSpec = (args["segments"] as? JsonArray)?.joinToString(",") { it.text() } ?: args["segments"].text()
+                val segs = if (segSpec.isBlank()) null else {
+                    val (list, err) = Subtitles.parseSegments(segSpec, VideoEdit::parseTime)
+                    list ?: throw IllegalStateException(err)
+                    if (dur > 0) list.firstOrNull { it.startMs >= dur }?.let { throw IllegalStateException("视频只有 ${Subtitles.stamp(dur)} 长，「${Subtitles.stamp(it.startMs)}」开始的那段超出了") }
+                    // 结尾写过了头（模型按字幕估的）：截到视频结尾
+                    if (dur > 0) list.map { it.copy(endMs = minOf(it.endMs, dur)) } else list
+                }
+                val srtName = args["subtitles"].text().trim()
+                val cues = if (srtName.isEmpty()) emptyList() else withContext(Dispatchers.IO) { Subtitles.parseSrt(wsFile(srtName).readText()) }
+                    .ifEmpty { throw IllegalStateException("「$srtName」里没读出字幕，要 .srt 格式（transcribe 加 timestamps=true 会做一份）") }
+                val music = args["music"].text().trim().takeIf { it.isNotEmpty() }?.let { withContext(Dispatchers.IO) { inputs(listOf(it)).first() } }
+                if (segs == null && cues.isEmpty() && music == null) throw IllegalStateException("edit_video 要填 segments（剪哪几段）、subtitles（字幕文件）、music（背景音乐）至少一个")
+                val vol = (args["music_volume"].text().toFloatOrNull() ?: 0.3f).coerceIn(0f, 1f)
+                val dst = outFile(out, f, "成片", "mp4")
+                var tmp: File? = null
+                try {
+                    var src = f
+                    if (segs != null) {
+                        // 只剪拼的话一步到位；还要字幕、音乐就先拼到临时文件，再在拼好的上面加（时间都按成片算，最稳）
+                        val target = if (cues.isEmpty() && music == null) dst else File(wsCache.apply { mkdirs() }, "edit-${System.currentTimeMillis()}.mp4").also { tmp = it }
+                        VideoEdit.concat(app, f, segs, target) { ui.progress("$label 拼片段 $it%") }
+                        src = target
+                    }
+                    if (cues.isNotEmpty() || music != null) {
+                        val onScreen = if (segs != null) Subtitles.remap(cues, segs) else cues
+                        val step = listOfNotNull("烧字幕".takeIf { cues.isNotEmpty() }, "配音乐".takeIf { music != null }).joinToString("、")
+                        VideoEdit.decorate(app, src, dst, onScreen, music, vol) { ui.progress("$label $step $it%") }
+                    }
+                } finally {
+                    tmp?.delete()
+                }
+                made = listOf(dst)
+                val length = segs?.sumOf { it.endMs - it.startMs } ?: dur
+                note = listOfNotNull(
+                    segs?.let { "${it.size} 段拼成 ${Subtitles.stamp(length)}" },
+                    "带字幕".takeIf { cues.isNotEmpty() }, music?.let { "配乐「${it.name}」" },
+                ).joinToString("，") + "，${ToolSizes.text(dst.length())}"
+            }
             "extract_audio" -> {
                 val f = files.first()
                 val dst = outFile(out, f, "声音", "m4a")
                 withContext(Dispatchers.IO) { MediaMux.mux(listOf(f), dst, audioOnly = true) }
                 made = listOf(dst)
             }
-            else -> return@runTool transcribe(files.first(), out)
+            else -> return@runTool if (args["timestamps"].text() == "true") transcribeTimed(files.first(), out) else transcribe(files.first(), out)
         }
         made.take(10).forEach { ui.attach(it) }
         val list = made.joinToString("、") { "「${it.name}」（${ToolSizes.text(it.length())}）" }
@@ -218,4 +269,74 @@ private suspend fun ToolSession.transcribe(f: File, out: String): Pair<String, S
     } finally {
         work.deleteRecursively()
     }
+}
+
+/**
+ * 带时间的转文字（剪辑用，思路来自 modelscope/FunClip）：按说话的停顿切成一句句，每句单独识别（同时 4 句），
+ * 得到「[0:12.3-0:18.9] 文字」的文字稿和一份 .srt 字幕。模型照着时间挑片段，交给 edit_video 剪。
+ */
+private suspend fun ToolSession.transcribeTimed(f: File, out: String): Pair<String, SearchRecord> {
+    val engine = Transcriber.engine(settings.providers) ?: return Transcriber.NO_ENGINE to SearchRecord("转文字：没有可用的服务")
+    val work = File(wsCache, "asr-${System.currentTimeMillis()}").apply { mkdirs() }
+    try {
+        class Piece(val file: File, val startMs: Long, val endMs: Long)
+        val pieces = mutableListOf<Piece>()
+        val splitter = AudioPcm.SpeechSplitter({ start, samples, n ->
+            val pf = File(work, "s-%05d.wav".format(pieces.size))
+            AudioPcm.writeWav(pf, samples, n)
+            pieces += Piece(pf, start * 1000 / AudioPcm.RATE, (start + n) * 1000 / AudioPcm.RATE)
+        })
+        val samples = withContext(Dispatchers.IO) {
+            MediaMux.decode16k(f, MAX_TRANSCRIBE_SEC, { at, total -> if (total > 0) ui.progress("转文字：解出声音 ${at * 100 / total}%") }) { splitter.push(it) }
+                .also { splitter.finish() }
+        }
+        val secs = samples / AudioPcm.RATE
+        if (pieces.isEmpty()) return "「${f.name}」（${AudioPcm.stamp(secs)}）里没听出有人说话。" to SearchRecord("转文字：${f.name}")
+        val texts = arrayOfNulls<String>(pieces.size)
+        var done = 0
+        val lock = Any()
+        coroutineScope {
+            val gate = Semaphore(4)
+            pieces.mapIndexed { i, p ->
+                async(Dispatchers.IO) {
+                    gate.withPermit {
+                        texts[i] = transcribeRetrying(engine, p.file)
+                        p.file.delete()
+                        val n = synchronized(lock) { ++done }
+                        ui.progress("转文字：$n/${pieces.size} 句")
+                    }
+                }
+            }.awaitAll()
+        }
+        val cues = pieces.indices.mapNotNull { i -> texts[i]?.trim()?.takeIf { it.isNotEmpty() }?.let { Subtitles.Cue(pieces[i].startMs, pieces[i].endMs, it) } }
+        if (cues.isEmpty()) return "「${f.name}」（${AudioPcm.stamp(secs)}）没听出字。" to SearchRecord("转文字：${f.name}")
+        val timed = Subtitles.timed(cues)
+        val srt = outFile(if (out.isBlank()) "" else out.substringBeforeLast('.'), f, "字幕", "srt")
+        val txt = outFile(if (out.isBlank()) "" else out.substringBeforeLast('.'), f, "文字稿", "txt")
+        withContext(Dispatchers.IO) {
+            srt.writeText(Subtitles.toSrt(cues))
+            txt.writeText("「${f.name}」的文字稿（${AudioPcm.stamp(secs)}，${engine.name} ${engine.model.substringAfterLast('/')} 转写，带时间）\n\n$timed\n")
+        }
+        ui.attach(txt); ui.attach(srt)
+        val shown = if (timed.length > 30_000) timed.take(30_000) + "\n…（后面还有，完整的在「${txt.name}」里，用 read_file 读）" else timed
+        return ("转好了，${AudioPcm.stamp(secs)}，${cues.size} 句，文字稿「${txt.name}」，字幕「${srt.name}」。机器转写可能有错字、同音字；" +
+            "要烧进视频的字幕有错字可以先改「${srt.name}」。剪片段：挑好时间后用 edit_video（segments 填 开始-结束，几段用逗号隔开，可以加 subtitles=「${srt.name}」）。" +
+            "文字稿：\n\n$shown") to SearchRecord("转文字：${f.name}")
+    } finally {
+        work.deleteRecursively()
+    }
+}
+
+/** 一句一句识别时请求多，容易被限流（429）：等一会儿重试，最多 5 次。 */
+private suspend fun transcribeRetrying(engine: Transcriber.Engine, wav: File): String {
+    var wait = 2000L
+    repeat(4) {
+        try {
+            return Transcriber.transcribe(engine, wav)
+        } catch (e: com.jack.ai.api.ApiException) {
+            if (e.code != 429 && e.code < 500) throw e
+            delay(wait); wait *= 2
+        }
+    }
+    return Transcriber.transcribe(engine, wav)
 }

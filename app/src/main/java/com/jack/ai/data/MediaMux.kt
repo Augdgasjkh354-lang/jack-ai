@@ -135,9 +135,22 @@ object MediaMux {
      * progress(已解到第几微秒, 总微秒或 -1)。
      */
     fun toWav(input: File, dir: File, chunkSec: Int, maxSec: Long, progress: (Long, Long) -> Unit = { _, _ -> }): Pair<List<File>, Long> {
+        val chunks = AudioPcm.WavChunks(dir.apply { mkdirs() }, chunkSec)
+        try {
+            val written = decode16k(input, maxSec, progress) { chunks.write(it) }
+            chunks.close()
+            return chunks.files to written / AudioPcm.RATE
+        } catch (e: Exception) {
+            chunks.close()
+            chunks.files.forEach { it.delete() }
+            throw e
+        }
+    }
+
+    /** 解码第一条音轨，换成 16 kHz 单声道，一个个采样交给 sink。返回采样数（没解出声音、超过上限都抛错）。 */
+    fun decode16k(input: File, maxSec: Long, progress: (Long, Long) -> Unit = { _, _ -> }, sink: (Float) -> Unit): Long {
         val ex = MediaExtractor()
         var codec: MediaCodec? = null
-        val chunks = AudioPcm.WavChunks(dir.apply { mkdirs() }, chunkSec)
         try {
             ex.setDataSource(input.absolutePath)
             val track = (0 until ex.trackCount).firstOrNull { ex.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true }
@@ -180,8 +193,8 @@ object MediaMux {
                         if (shorts.size < len) { shorts = ShortArray(len); mono = FloatArray(len) }
                         sb.get(shorts, 0, len)
                         val frames = AudioPcm.mono(shorts, len, channels, mono)
-                        resampler.push(mono, frames) { chunks.write(it); written++ }
-                        // 元数据里没写时长时上面的上限拦不住：按实际解出来的采样数算，超了就停（已写的文件由外层 catch 删掉）
+                        resampler.push(mono, frames) { sink(it); written++ }
+                        // 元数据里没写时长时上面的上限拦不住：按实际解出来的采样数算，超了就停（已写的文件由调用方删掉）
                         if (written > maxSec * AudioPcm.RATE) throw IllegalStateException("转出来已超过 ${AudioPcm.stamp(maxSec)} 的上限")
                         progress(info.presentationTimeUs, total)
                     }
@@ -189,13 +202,8 @@ object MediaMux {
                     if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) break
                 }
             }
-            chunks.close()
             if (written == 0L) throw IllegalStateException("没解出声音")
-            return chunks.files to written / AudioPcm.RATE
-        } catch (e: Exception) {
-            chunks.close()
-            chunks.files.forEach { it.delete() }
-            throw e
+            return written
         } finally {
             runCatching { codec?.stop() }
             runCatching { codec?.release() }

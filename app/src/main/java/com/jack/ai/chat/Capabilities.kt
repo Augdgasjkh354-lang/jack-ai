@@ -16,7 +16,7 @@ object Capabilities {
         if ("web_search" in tools) lines += "Look things up: web_search; read a full web page: read_webpage"
         if ("download_file" in tools) lines += "Download a file by URL (m3u8 video included): download_file; add to=phone to save it to the phone"
         skill(SkillIds.BROWSER)?.let { lines += "Operate web pages, save video or music from a page (download_media), grab all images and attachments on a page (download_all): 「$it」" }
-        if ("convert_file" in tools) lines += "Images to PDF, merge or split PDFs, compress images, trim or compress video, extract audio, transcribe recordings and video (transcribe; when {user} sends a recording or video and wants its content, transcribe it first): convert_file" +
+        if ("convert_file" in tools) lines += "Images to PDF, merge or split PDFs, compress images, trim or compress video, edit video (cut highlight segments and join them, burn subtitles, add background music: edit_video after transcribe with timestamps=true), extract audio, transcribe recordings and video (transcribe; when {user} sends a recording or video and wants its content, transcribe it first): convert_file" +
             if (Transcriber.engine(settings.providers) == null) " (transcription has no service set up yet; when it's needed, ask {user} to add SiliconFlow under 设置 → 其他模型服务)" else ""
         if ("phone_files" in tools) lines += "Phone folders (authorized: ${settings.phoneFolders.joinToString(", ") { it.name }}): phone_files; import a file into the conversation folder before reading or editing it"
         if ("phone" in tools) lines += "Operate other apps on {user}'s phone for them (only the apps {user} ticked; never payment, bank or brokerage apps): phone"

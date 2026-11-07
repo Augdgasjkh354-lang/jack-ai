@@ -55,7 +55,7 @@ object Transcriber {
                     .newCall(req).execute().use { resp ->
                         val text = resp.body?.string().orEmpty()
                         if (!resp.isSuccessful) throw ApiException(
-                            "${e.name} 转文字出错（${resp.code}）：" + text.take(200) + if (resp.code == 401) "。Key 可能不对，请用户到设置里检查。" else "")
+                            "${e.name} 转文字出错（${resp.code}）：" + text.take(200) + if (resp.code == 401) "。Key 可能不对，请用户到设置里检查。" else "", resp.code)
                         val o = runCatching { Json.parseToJsonElement(text) as? JsonObject }.getOrNull()
                         return clean((o?.get("text") as? JsonPrimitive)?.content ?: text)
                     }

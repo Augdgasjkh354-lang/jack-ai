@@ -84,12 +84,102 @@ object AudioPcm {
             raf = null
         }
 
-        fun header(dataBytes: Long): ByteArray {
-            val b = java.nio.ByteBuffer.allocate(44).order(java.nio.ByteOrder.LITTLE_ENDIAN)
-            b.put("RIFF".toByteArray()); b.putInt((36 + dataBytes).toInt()); b.put("WAVE".toByteArray())
-            b.put("fmt ".toByteArray()); b.putInt(16); b.putShort(1); b.putShort(1); b.putInt(RATE); b.putInt(RATE * 2); b.putShort(2); b.putShort(16)
-            b.put("data".toByteArray()); b.putInt(dataBytes.toInt())
-            return b.array()
+        fun header(dataBytes: Long): ByteArray = wavHeader(dataBytes)
+    }
+
+    /** 16 kHz 单声道 16 位 WAV 的文件头。 */
+    fun wavHeader(dataBytes: Long): ByteArray {
+        val b = java.nio.ByteBuffer.allocate(44).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        b.put("RIFF".toByteArray()); b.putInt((36 + dataBytes).toInt()); b.put("WAVE".toByteArray())
+        b.put("fmt ".toByteArray()); b.putInt(16); b.putShort(1); b.putShort(1); b.putInt(RATE); b.putInt(RATE * 2); b.putShort(2); b.putShort(16)
+        b.put("data".toByteArray()); b.putInt(dataBytes.toInt())
+        return b.array()
+    }
+
+    /** 一段 16 kHz 单声道写成一个 WAV。 */
+    fun writeWav(f: File, samples: FloatArray, n: Int) {
+        val out = ByteArray(n * 2)
+        for (i in 0 until n) {
+            val v = (samples[i].coerceIn(-1f, 1f) * 32767).toInt()
+            out[i * 2] = v.toByte(); out[i * 2 + 1] = (v shr 8).toByte()
+        }
+        f.outputStream().use { it.write(wavHeader(n * 2L)); it.write(out) }
+    }
+
+    /**
+     * 按说话的停顿切成一句句（带时间的文字稿、字幕用）：30 毫秒一帧算音量，比背景噪声响很多算在说话。
+     * 说了至少 [minSec] 秒、又停了 0.3 秒就切；一直不停（背景音乐、语速快）到 [maxSec] 秒就在最近 2 秒里最安静的地方切。
+     * 开头的静音不算进句子里（字幕不会提前出来），句尾留 0.15 秒。整段都没说话的丢掉。
+     * onSegment(这句从第几个采样开始, 采样, 个数)。
+     */
+    class SpeechSplitter(
+        private val onSegment: (startSample: Long, samples: FloatArray, n: Int) -> Unit,
+        minSec: Double = 1.5, maxSec: Double = 15.0,
+    ) {
+        private val frame = RATE * 30 / 1000
+        private val minFrames = (minSec * 1000 / 30).toInt()
+        private val maxFrames = (maxSec * 1000 / 30).toInt()
+        private val buf = FloatArray((maxFrames + 2) * frame)
+        private var len = 0
+        private val loud = ArrayList<Float>()
+        private val voiced = ArrayList<Boolean>()
+        private var start = 0L
+        private var floor = 0.003f
+
+        fun push(sample: Float) {
+            buf[len++] = sample
+            if (len % frame == 0) onFrame()
+        }
+
+        fun finish() {
+            val frames = voiced.size
+            // 句尾的静音只留 5 帧
+            var end = frames
+            while (end > 0 && !voiced[end - 1]) end--
+            val k = minOf(frames, end + 5)
+            emit(k, tail = if (k == frames) len - frames * frame else 0)
+            len = 0; loud.clear(); voiced.clear()
+        }
+
+        private fun onFrame() {
+            var sum = 0.0
+            for (i in len - frame until len) sum += buf[i] * buf[i]
+            val r = kotlin.math.sqrt(sum / frame).toFloat()
+            // 噪声底：往下立刻跟，往上慢慢跟（说话时不会被拉上去）
+            floor = if (r < floor) r else floor * 0.998f + r * 0.002f
+            // 阈值有上限：一直很响（背景音乐、不停顿）时噪声底会慢慢涨上去，不能把整段都当成静音
+            val v = r >= maxOf(0.006f, minOf(floor * 3, 0.03f))
+            loud += r; voiced += v
+            val frames = voiced.size
+            val anyVoice = voiced.any { it }
+            var silence = 0
+            while (silence < frames && !voiced[frames - 1 - silence]) silence++
+            when {
+                !anyVoice && frames > 5 -> drop(1)
+                anyVoice && silence >= 10 && frames - silence >= minFrames -> cut(frames - silence + 5)
+                frames >= maxFrames -> {
+                    val from = maxOf(minFrames, frames - 66)
+                    var q = frames - 1
+                    for (i in from until frames) if (loud[i] < loud[q]) q = i
+                    cut(q + 1)
+                }
+            }
+        }
+
+        private fun cut(k: Int) { emit(k, 0); drop(k) }
+
+        /** 前 k 帧（加上 tail 个不满一帧的采样）里说话够 5 帧就交出去。 */
+        private fun emit(k: Int, tail: Int) {
+            if (voiced.take(k).count { it } < 5) return
+            val n = minOf(len, k * frame + maxOf(0, tail))
+            onSegment(start, buf.copyOf(n), n)
+        }
+
+        private fun drop(k: Int) {
+            val n = minOf(len, k * frame)
+            System.arraycopy(buf, n, buf, 0, len - n)
+            len -= n; start += n
+            repeat(minOf(k, voiced.size)) { loud.removeAt(0); voiced.removeAt(0) }
         }
     }
 
