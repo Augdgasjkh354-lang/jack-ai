@@ -78,6 +78,8 @@ interface ToolUi {
     fun plan(items: List<PlanItem>, criteria: List<PlanItem>) {}
     /** 要让用户一眼看到的事（比如 Kavi 改了自己），在回答里显示成一张小卡片。 */
     fun notice(text: String) {}
+    /** 问题卡片（ask_user）挂到这条回答下面；返回 false 表示这里显示不了（后台、远程），让模型直接用文字问。 */
+    fun ask(cards: List<com.jack.ai.data.AskCard>): Boolean = false
     /** Kavi 结束了这个对话（极端辱骂时）。 */
     fun endConversation(reason: String) {}
     /** 慢的工具（下载大文件）的进度，显示在通知栏上。 */
@@ -433,6 +435,7 @@ class ToolSession(
             name == "search_my_data" -> searchMyData(args)
             name == "facts" -> if (args["action"].text() == "save") saveFact(args) else recallFacts(args)
             name == "end_conversation" && interactive -> endConversation(args)
+            name == "ask_user" -> askUser(args)
             name == "schedule" && SkillIds.ROUTINE in skillIds -> schedule(args)
             name == "cancel_schedule" && SkillIds.ROUTINE in skillIds -> cancelSchedule(args)
             name == "save_flashcards" && SkillIds.LEARN in skillIds -> saveCards(args)

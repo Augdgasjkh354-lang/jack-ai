@@ -17,6 +17,13 @@ data class Attachment(
 )
 
 /** 思考过程里的一步：kind 是 note（Kavi 调工具前对用户说的一句）或 summary（一段思考的小标题）。 */
+/**
+ * Kavi 问用户的一个问题（ask_user）：几个能点的选项，界面上另外总有「其他（我自己说）」。
+ * multi = 能多选。用户回答后（对话里有了更新的消息）卡片变灰，不能再点。
+ */
+@Serializable
+data class AskCard(val question: String, val options: List<String>, val multi: Boolean = false)
+
 @Serializable
 data class ThinkStep(val kind: String, val text: String, val at: Long = System.currentTimeMillis())
 
@@ -40,6 +47,8 @@ data class ChatMessage(
     val criteria: List<PlanItem> = emptyList(),
     /** 要让用户一眼看到的事，比如「Kavi 改了自己」。 */
     val notices: List<String> = emptyList(),
+    /** Kavi 问用户的问题卡片（ask_user），挂在回答下面点着答。 */
+    val asks: List<AskCard> = emptyList(),
     /** 回答出来之前的进度：Kavi 调工具前说的话（note）和思考摘要（summary），按时间排。 */
     val steps: List<ThinkStep> = emptyList(),
     /** Work 的交付清单：这一轮对话文件夹里新建、改动、删除了哪些文件（比对文件夹得出，见 [Deliverables]）。 */
@@ -261,6 +270,8 @@ data class Settings(
     val thinkSummary: Boolean = true,
     /** 回答出来后思考摘要折叠起来；默认展开着。 */
     val summaryCollapsed: Boolean = false,
+    /** 新对话空白页上显示「做生意」入口（发朋友圈、写小红书、回客户……）。 */
+    val bizStarts: Boolean = true,
     /** Work 开工前要不要先给用户确认清单：always 每次、big 大任务（步骤多或模型觉得要问）、never 从不。 */
     val workConfirmPlan: String = "big",
     val compressTokens: Int = COMPRESS_MIN,

@@ -514,6 +514,18 @@ private fun EmptyState(
             }
             Spacer(Modifier.height(12.dp))
         }
+        // 做生意：点一下直接发出去，Kavi 用问题卡片把要知道的问清楚
+        if (state.settings.bizStarts) {
+            Text("做生意", style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant,
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 10.dp))
+            com.jack.ai.data.BizStarts.ALL.chunked(2).forEach { row ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    row.forEach { b -> SuggestionCard(AppIcons.Chat, Color(b.tint), b.title, Modifier.weight(1f)) { vm.send(b.prompt) } }
+                    if (row.size == 1) Spacer(Modifier.weight(1f))
+                }
+                Spacer(Modifier.height(12.dp))
+            }
+        }
         // Chat 和 Work 合并了：常做的任务模板也放在空白页，在建议下面
         Text("常做的任务", style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant,
             modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 10.dp))
@@ -647,6 +659,7 @@ private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolea
                                 onContinueWriting = vm::continueWriting,
                                 onReport = { note -> vm.reportIssue(msg.id, note) },
                                 onFixApp = { text -> vm.send(text) },
+                                onAnswer = { text -> vm.send(text) },
                                 // 列了清单的（在做任务）工具步骤按时间线显示
                                 work = msg.plan.isNotEmpty(),
                                 stepsCollapsed = summaryCollapsed,

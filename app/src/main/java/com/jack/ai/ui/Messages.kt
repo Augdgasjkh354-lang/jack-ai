@@ -241,6 +241,8 @@ fun AssistantMessage(
     stepsCollapsed: Boolean = false,
     /** 这条回答所在的对话：它在后台标签页里用浏览器时，实时画面放那一页。 */
     convId: String = "",
+    /** 问题卡片上选好的答案：当成用户的下一条消息发出去。 */
+    onAnswer: ((String) -> Unit)? = null,
 ) {
     var restyling by remember { mutableStateOf(false) }
     if (restyling && onRestyle != null) {
@@ -347,6 +349,10 @@ fun AssistantMessage(
                         color = colors.onPrimaryContainer.copy(alpha = 0.6f), modifier = Modifier.padding(top = 4.dp))
                 }
             }
+        }
+        if (msg.asks.isNotEmpty()) {
+            Spacer(Modifier.height(10.dp))
+            AskCards(msg.id, msg.asks, active = isLast && !streaming && onAnswer != null) { onAnswer?.invoke(it) }
         }
         if (msg.delivered.isNotEmpty() && !streaming) {
             Spacer(Modifier.height(8.dp))

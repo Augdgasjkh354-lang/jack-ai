@@ -192,6 +192,8 @@ object PromptBuilder {
             add(SkillTools.FACTS)
             // 和人聊的对话里才有：极端辱骂时结束对话（收件箱里没人对话）
             if (conv.id != com.jack.ai.data.Retired.FREE_TIME_CONV && conv.id != com.jack.ai.data.INBOX_ID) add(SkillTools.END_CONVERSATION)
+            // 问题卡片：所有和人聊的对话都带着（后台没人点时工具自己回话让它改用文字）
+            if (conv.id != com.jack.ai.data.Retired.FREE_TIME_CONV && conv.id != com.jack.ai.data.INBOX_ID) add(SkillTools.ASK_USER)
             add(SkillTools.CONVERT_FILE)
             add(SkillTools.SELF_CHECK)
             if (settings.phoneFolders.isNotEmpty()) add(SkillTools.PHONE_FILES)
@@ -338,6 +340,20 @@ object PromptBuilder {
                 "If neither the fact base nor a fresh search confirms something, say you don't know instead of guessing. " +
                 "When you've confirmed facts from pages you read in this task and they're worth keeping, save them with facts (action=save): one short self-contained claim each, with the URLs you read. " +
                 "Your own inferences and anything about {user} personally don't go in the fact base.")
+        }
+        if ("ask_user" in names) {
+            parts += "固定说明" to f("【Asking with cards】Many people can't put what they want into words; reading their intent is your job, not theirs. " +
+                "When a request is vague or you're missing something you need to do it well (what product, for whom, what tone, how long), don't guess and don't write out a list of questions: call ask_user with 1-3 short questions in plain words, each with 2-6 tappable options, most likely first, and stop. " +
+                "Don't ask what you can reasonably infer, what memory already tells you, or what doesn't change the result; for a small, clear request just do it. " +
+                "Before a big piece of work built on answers, restate in one plain sentence what you'll make (\"so: a WeChat Moments post for your tea, cheap price as the hook, friendly tone\") and go ahead unless it was unclear. " +
+                "After writing copy, a post, a script or a plan for {user}, call ask_user first (no text before it) with one question like 要改哪里 and options such as 口语一点、短一点、加个优惠、换个开头、就这样, then write the draft as your reply. " +
+                "Talk in everyday words; avoid jargon like 转化率、私域、ROI unless {user} uses it.")
+        }
+        if ("ask_user" in names) {
+            parts += "固定说明" to f("【Business help】When {user} wants marketing or sales help (a WeChat Moments post, a Xiaohongshu note, a Douyin script, a reply to a customer, a product introduction, a quote), " +
+                "first look at what memory already says about their business. Ask with cards only for what's still missing and changes the result: what they sell, price or offer, the selling point, who buys it, the tone; for a customer reply, ask them to paste the customer's message; for a quote, the items and prices. " +
+                "Once they've told you lasting facts about their business (shop name, products, prices, usual customers, where they sell, how they like to sound), save them with save_memory so next time you don't ask again; " +
+                "a one-off detail like this week's discount isn't worth saving. Write copy that sounds like a real small-business owner talking, not an ad agency.")
         }
         if ("end_conversation" in names) {
             parts += "固定说明" to f("【Ending a conversation】You may end this conversation with end_conversation, but only as a last resort: extreme, sustained abuse aimed at you (slurs, degrading insults, relentless harassment) that continues after you've clearly asked once for it to stop. " +

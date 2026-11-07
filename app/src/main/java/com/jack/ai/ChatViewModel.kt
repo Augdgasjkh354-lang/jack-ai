@@ -693,6 +693,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
                 override fun notice(text: String) = patchMessage(convId, reply.id) { it.copy(notices = it.notices + text) }
 
+                override fun ask(cards: List<com.jack.ai.data.AskCard>): Boolean {
+                    patchMessage(convId, reply.id) { it.copy(asks = cards) }
+                    return true
+                }
+
                 override fun endConversation(reason: String) = updateConv(convId) { it.copy(closedReason = reason) }
 
                 override fun progress(text: String) = WorkService.progress(getApplication(), convId, workTitle, text, tasked)
