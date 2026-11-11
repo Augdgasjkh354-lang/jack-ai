@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -507,23 +508,23 @@ private fun EmptyState(
             color = colors.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
-        Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.height(28.dp))
         SUGGESTIONS.chunked(2).forEach { row ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 row.forEach { sg -> SuggestionCard(sg.icon, Color(sg.tint), sg.title, Modifier.weight(1f)) { onSuggest(sg.prompt) } }
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(10.dp))
         }
         // 做生意：点一下直接发出去，Kavi 用问题卡片把要知道的问清楚
         if (state.settings.bizStarts) {
             Text("做生意", style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 10.dp))
             com.jack.ai.data.BizStarts.ALL.chunked(2).forEach { row ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     row.forEach { b -> SuggestionCard(AppIcons.Chat, Color(b.tint), b.title, Modifier.weight(1f)) { vm.send(b.prompt) } }
                     if (row.size == 1) Spacer(Modifier.weight(1f))
                 }
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(10.dp))
             }
         }
         // Chat 和 Work 合并了：常做的任务模板也放在空白页，在建议下面
@@ -533,43 +534,40 @@ private fun EmptyState(
     }
 }
 
-/** 空白页的一张建议卡：左上一个浅色底的彩色小图标，下面是标题，右边一个小箭头。 */
+/** 空白页的一张建议卡：左边一个浅色底的彩色小图标，右边是标题。矮矮的一行，一屏能多放几张。 */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun SuggestionCard(icon: ImageVector?, tint: Color, title: String, modifier: Modifier = Modifier, muted: Boolean = false,
                            onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
-    val shape = RoundedCornerShape(20.dp)
+    val shape = RoundedCornerShape(18.dp)
     // 按下去时卡片微微缩一下，手感更实
     val press = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     val pressed by press.collectIsPressedAsState()
     val scale by androidx.compose.animation.core.animateFloatAsState(if (pressed) 0.97f else 1f, label = "press")
-    Box(
+    Row(
         modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
+            .height(64.dp)
             .clip(shape)
             .border(1.dp, colors.outlineVariant, shape)
             .background(colors.surfaceContainerLowest)
             .combinedClickable(interactionSource = press, indication = androidx.compose.foundation.LocalIndication.current,
                 onClick = onClick, onLongClick = onLongClick)
-            .padding(16.dp),
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column {
-            Box(
-                Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(tint.copy(alpha = 0.12f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (icon != null) Icon(icon, null, Modifier.size(20.dp), tint = tint)
-                else Text("＋", color = tint, style = MaterialTheme.typography.titleMedium)
-            }
-            Spacer(Modifier.height(14.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = if (muted) null else FontWeight.SemiBold,
-                    color = if (muted) colors.onSurfaceVariant else colors.onSurface,
-                    maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                Icon(Icons.Default.KeyboardArrowRight, null, Modifier.size(18.dp), tint = colors.outline)
-            }
+        Box(
+            Modifier.size(36.dp).clip(RoundedCornerShape(11.dp)).background(tint.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (icon != null) Icon(icon, null, Modifier.size(19.dp), tint = tint)
+            else Text("＋", color = tint, style = MaterialTheme.typography.titleMedium)
         }
+        Spacer(Modifier.width(10.dp))
+        Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = if (muted) null else FontWeight.SemiBold,
+            color = if (muted) colors.onSurfaceVariant else colors.onSurface,
+            maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
     }
 }
 

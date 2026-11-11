@@ -285,7 +285,10 @@ private fun ProjectRow(name: String, sub: String, color: Color, selected: Boolea
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 10.dp),
     ) {
-        Box(Modifier.size(30.dp).clip(RoundedCornerShape(9.dp)).background(color))
+        // 和别处的图标一个样子：项目颜色的浅底，上面一个同色的文件夹
+        Box(Modifier.size(32.dp).clip(RoundedCornerShape(10.dp)).background(color.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
+            Icon(AppIcons.Folder, null, Modifier.size(17.dp), tint = color)
+        }
         Spacer(Modifier.size(12.dp))
         Column(Modifier.weight(1f)) {
             Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)

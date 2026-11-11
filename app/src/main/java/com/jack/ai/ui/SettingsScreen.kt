@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.Search
 import com.jack.ai.data.hasAnyKey
 import com.jack.ai.data.phoneDataOn
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -597,28 +598,28 @@ private fun SettingsHome(
         SettingsEntry(icon, p.title, value, warn) { onPick(p) }
     val noKey = !settings.hasAnyKey()
     val model = settings.modelChoices().firstOrNull { it.key == settings.model }?.label
-    SettingsGroup("关于你", listOf(
+    SettingsGroup("关于你", Color(0xFF3B82F6), listOf(
         go(SettingsPage.PROFILE, Icons.Default.Person, settings.userName.ifBlank { "未设置" }),
     ))
-    SettingsGroup("模型", listOf(
+    SettingsGroup("模型", Color(0xFF8B5CF6), listOf(
         go(SettingsPage.KEY, AppIcons.Lock, if (settings.apiKey.isNotBlank()) "已填" else "未填", warn = noKey),
         go(SettingsPage.PROVIDERS, AppIcons.Code, if (settings.providers.isEmpty()) "未添加" else "${settings.providers.size} 个"),
         go(SettingsPage.MODEL, AppIcons.Brain, listOfNotNull(model, settings.thinking.label).joinToString(" · ")),
         go(SettingsPage.LOCAL, AppIcons.Chip),
         go(SettingsPage.COMPRESS, AppIcons.Compress, "${settings.compressTokens / 1000}k"),
     ))
-    SettingsGroup("Kavi 能用的", listOf(
+    SettingsGroup("Kavi 能用的", Color(0xFF16A34A), listOf(
         go(SettingsPage.CONNECT, AppIcons.Globe),
         SettingsEntry(Icons.Default.Build, "技能", onClick = onOpenSkills),
         go(SettingsPage.REMOTE, AppIcons.Share),
     ))
-    SettingsGroup("手机", listOf(
+    SettingsGroup("手机", Color(0xFFF59E0B), listOf(
         go(SettingsPage.PHONE, AppIcons.Phone, if (settings.phoneApps.isEmpty()) "未开启" else "${settings.phoneApps.size} 个 App"),
         go(SettingsPage.ASK, Icons.Default.Search),
         go(SettingsPage.PHONEDATA, Icons.AutoMirrored.Filled.List, if (settings.phoneDataOn) "已开" else "全关"),
         go(SettingsPage.FOLDERS, AppIcons.Folder, if (settings.phoneFolders.isEmpty()) "未授权" else "${settings.phoneFolders.size} 个"),
     ))
-    SettingsGroup("应用", listOf(
+    SettingsGroup("应用", Color(0xFF6B7280), listOf(
         go(SettingsPage.LOOK, AppIcons.Moon, settings.themeMode.label),
         SettingsEntry(Icons.Default.Info, "统计", monthSpent?.let { "本月 " + yuan(it) }, onClick = onOpenUsage),
         go(SettingsPage.PRIVACY, Icons.Default.Lock, when {
@@ -631,9 +632,9 @@ private fun SettingsHome(
     ))
 }
 
-/** 一组入口：灰色小标题，下面一张圆角卡片，行和行之间一道从文字起头的细线。 */
+/** 一组入口：灰色小标题，下面一张圆角卡片，行和行之间一道从文字起头的细线。图标放在浅色小方块里，一组一个颜色，好找。 */
 @Composable
-private fun SettingsGroup(title: String, entries: List<SettingsEntry>) {
+private fun SettingsGroup(title: String, tint: Color, entries: List<SettingsEntry>) {
     val colors = MaterialTheme.colorScheme
     val dark = colors.background.luminance() < 0.5f
     Column(Modifier.fillMaxWidth()) {
@@ -646,13 +647,16 @@ private fun SettingsGroup(title: String, entries: List<SettingsEntry>) {
         ) {
             Column {
                 entries.forEachIndexed { i, e ->
-                    if (i > 0) androidx.compose.material3.HorizontalDivider(Modifier.padding(start = 54.dp), color = colors.outlineVariant.copy(alpha = 0.6f))
+                    if (i > 0) androidx.compose.material3.HorizontalDivider(Modifier.padding(start = 62.dp), color = colors.outlineVariant.copy(alpha = 0.6f))
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth().clickable(onClick = e.onClick).padding(horizontal = 16.dp, vertical = 15.dp),
+                        modifier = Modifier.fillMaxWidth().clickable(onClick = e.onClick).padding(horizontal = 16.dp, vertical = 11.dp),
                     ) {
-                        Icon(e.icon, null, Modifier.size(22.dp), tint = colors.onSurface)
-                        Spacer(Modifier.size(16.dp))
+                        Box(Modifier.size(32.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)).background(tint.copy(alpha = if (dark) 0.2f else 0.12f)),
+                            contentAlignment = Alignment.Center) {
+                            Icon(e.icon, null, Modifier.size(18.dp), tint = tint)
+                        }
+                        Spacer(Modifier.size(14.dp))
                         Text(e.title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         e.value?.takeIf { it.isNotBlank() }?.let {
                             Text(it, style = MaterialTheme.typography.bodyMedium, color = if (e.warn) colors.error else colors.onSurfaceVariant,
