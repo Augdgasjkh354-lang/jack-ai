@@ -32,7 +32,12 @@ object Backup {
                 f.inputStream().use { it.copyTo(zip) }
                 zip.closeEntry()
             }
-            put("prefs.json", Store(ctx).exportPrefs().toByteArray())
+            val store = Store(ctx)
+            put("prefs.json", store.exportPrefs().toByteArray())
+            // 对话在手机上是一个对话一个文件，备份里还是拼成一整个 conversations.json（新旧版本的备份通用）
+            zip.putNextEntry(ZipEntry(Store.LEGACY_CONVS))
+            store.exportConversations(zip)
+            zip.closeEntry()
             (JSONS + TEXTS).forEach { n -> File(dir, n).takeIf { it.exists() }?.let { put(n, it) } }
             DIRS.forEach { d ->
                 File(dir, d).listFiles()?.filter { it.isFile }?.forEach { f -> put("$d/${f.name}", f) }
@@ -98,7 +103,10 @@ object Backup {
             staging.walkTopDown().filter { it.isFile }.forEach { incoming ->
                 val relative = incoming.relativeTo(staging).invariantSeparatorsPath
                 val target = File(dir, relative)
-                if (target.exists()) {
+                // 对话在手机上已经拆成一个对话一个文件：反悔用的那份现拼出来
+                if (relative == Store.LEGACY_CONVS) {
+                    File(rollback, relative).outputStream().buffered().use { Store(ctx).exportConversations(it) }
+                } else if (target.exists()) {
                     val original = File(rollback, relative)
                     original.parentFile?.mkdirs()
                     target.copyTo(original, overwrite = true)

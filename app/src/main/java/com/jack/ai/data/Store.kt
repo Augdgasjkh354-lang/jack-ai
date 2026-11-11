@@ -9,6 +9,7 @@ import kotlinx.serialization.json.Json
 import java.io.File
 
 private val LOCK = Any()
+private class CachedConv(val modified: Long, val length: Long, val conv: Conversation)
 private const val PREV_INTERVAL = 60 * 60 * 1000L
 
 /** 聊天记录和项目存成手机里的 JSON 文件，设置存在 SharedPreferences。 */
@@ -18,6 +19,13 @@ class Store(context: Context) {
         val recovered = java.util.concurrent.ConcurrentLinkedQueue<String>()
         /** 用量页列出最近多少次请求。 */
         const val RECENT_REQUESTS = 60
+        const val CONV_DIR = "conversations"
+        const val LEGACY_CONVS = "conversations.json"
+        /** 拆分前的旧对话文件留几天。 */
+        const val MIGRATED_KEEP_DAYS = 7
+        private val SAFE_ID = Regex("[A-Za-z0-9_-]{1,100}")
+        /** 读过的对话（按存储目录分开），连同当时文件的修改时间和大小；只在存储锁里读写。 */
+        private val convCaches = java.util.concurrent.ConcurrentHashMap<String, HashMap<String, CachedConv>>()
     }
 
     private val app = context.applicationContext
@@ -84,15 +92,136 @@ class Store(context: Context) {
         atomicWrite(name, json.encodeToString(ListSerializer(ser), list))
     }
 
-    /** Chat 和 Work 合并了：旧的 Work 对话读出来就当普通对话。 */
-    fun loadConversations() = load("conversations.json", Conversation.serializer()).map { if (it.work) it.copy(work = false) else it }
-    /** 思路来自 deepseek-ai/deepseek-harness packages/goal/goal/，MIT。后台更新的目标不能被前台旧快照盖掉。 */
+    // ---------- 对话：每个对话一个文件（conversations/<编号>.json） ----------
+    // 以前所有对话挤在一个 conversations.json 里，每次保存都要把全部对话读一遍、再写一遍，聊得越多越慢。
+    // 现在只写有变化的那个对话；读过的留在内存里，文件没被别人动过就不再读盘。
+
+    private val convDir = File(dir, CONV_DIR)
+    private val convCache get() = convCaches.getOrPut(convDir.absolutePath) { HashMap() }
+
+    /** 对话编号当文件名：普通编号原样用，带别的字符的换成十六进制，太长的取指纹。 */
+    private fun convFile(id: String): File {
+        val name = if (SAFE_ID.matches(id)) id else {
+            val hex = id.toByteArray(Charsets.UTF_8).joinToString("") { "%02x".format(it) }
+            "x" + if (hex.length <= 120) hex else java.security.MessageDigest.getInstance("SHA-256")
+                .digest(id.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+        }
+        return File(convDir, "$name.json")
+    }
+
+    private fun writeConv(c: Conversation) {
+        val f = convFile(c.id)
+        convDir.mkdirs()
+        atomicWrite("$CONV_DIR/${f.name}", json.encodeToString(Conversation.serializer(), c))
+        convCache[f.name] = CachedConv(f.lastModified(), f.length(), c)
+    }
+
+    private fun deleteConv(id: String) {
+        val f = convFile(id)
+        AtomicFile(f).delete()
+        File(convDir, f.name + ".prev").delete()
+        convCache.remove(f.name)
+    }
+
+    /** 读一个对话文件；坏了改名留着，换用副本（和 [loadUnlocked] 一个规矩）。读不出来返回 null。 */
+    private fun readConv(f: File): Conversation? {
+        val text = try {
+            String(AtomicFile(f).readFully(), Charsets.UTF_8)
+        } catch (e: java.io.IOException) {
+            return null
+        }
+        val ser = Conversation.serializer()
+        return try {
+            json.decodeFromString(ser, text)
+        } catch (e: Exception) {
+            f.renameTo(File(convDir, "${f.name}.corrupt-${System.currentTimeMillis()}"))
+            val prev = File(convDir, f.name + ".prev")
+            val restored = runCatching { json.decodeFromString(ser, prev.readText()) }.getOrNull()
+            if (restored != null) prev.copyTo(f, overwrite = true)
+            recovered += "$CONV_DIR/${f.name}:" + if (restored != null) "prev" else "empty"
+            restored
+        }
+    }
+
+    /**
+     * 手机上还有旧的 conversations.json（升级后第一次打开，或者刚从备份恢复）：拆成一个对话一个文件。
+     * 先把每个对话都写好，最后才把旧文件改名成 .migrated；中途被杀的话旧文件还在，下次重来一遍。
+     * 旧文件留 [MIGRATED_KEEP_DAYS] 天再删，万一拆坏了还能找回。
+     */
+    private fun migrateLegacyConversations() {
+        val legacy = File(dir, LEGACY_CONVS)
+        val kept = File(dir, "$LEGACY_CONVS.migrated")
+        if (!legacy.exists()) {
+            if (kept.exists() && System.currentTimeMillis() - kept.lastModified() > MIGRATED_KEEP_DAYS * 86_400_000L) kept.delete()
+            return
+        }
+        val list = loadUnlocked(LEGACY_CONVS, Conversation.serializer())
+        // 旧文件坏了又没有副本（这时它已经被改名留着了）：不动已经拆好的对话
+        if (legacy.exists()) {
+            // 目录里原有的（上次拆到一半留下的，或者恢复备份前的对话）整个换掉；不去读它们，半截文件也不会被当成「损坏」报出来
+            convDir.listFiles()?.filter { ".corrupt-" !in it.name }?.forEach { it.delete() }
+            convCache.clear()
+            list.forEach { writeConv(it) }
+        }
+        if (legacy.exists()) {
+            kept.delete()
+            if (legacy.renameTo(kept)) kept.setLastModified(System.currentTimeMillis()) else legacy.delete()
+        }
+        File(dir, "$LEGACY_CONVS.prev").delete()
+    }
+
+    private fun loadConversationFiles(): List<Conversation> {
+        val cache = convCache
+        // 写到一半被杀时正式文件可能暂时只剩 .bak / .new，AtomicFile 读的时候会接上，所以这两种也算
+        val names = convDir.list().orEmpty().map { it.removeSuffix(".bak").removeSuffix(".new") }.filter { it.endsWith(".json") }.toSet()
+        val out = ArrayList<Conversation>(names.size)
+        for (name in names) {
+            val f = File(convDir, name)
+            // 内存里这份还是不是文件现在的样子：看修改时间和大小，再看有没有没写完留下的 .bak
+            val hit = cache[name]?.takeIf { it.modified == f.lastModified() && it.length == f.length() && !File(convDir, "$name.bak").exists() }
+            if (hit != null) { out += hit.conv; continue }
+            cache.remove(name)
+            val conv = readConv(f) ?: continue
+            // 文件名和里面的编号对不上（被人改过名）：不认，免得存的时候写到另一个文件、变成两份
+            if (convFile(conv.id).name != name) continue
+            cache[name] = CachedConv(f.lastModified(), f.length(), conv)
+            out += conv
+        }
+        cache.keys.retainAll(names)
+        // Chat 和 Work 合并了：旧的 Work 对话读出来就当普通对话
+        return out.map { if (it.work) it.copy(work = false) else it }.sortedByDescending { it.updatedAt }
+    }
+
+    /** 全部对话，最近更新的在前。 */
+    fun loadConversations(): List<Conversation> = synchronized(LOCK) {
+        migrateLegacyConversations()
+        loadConversationFiles()
+    }
+
+    /**
+     * 存下全部对话：只写内容变了的，列表里没有的删掉。
+     * 思路来自 deepseek-ai/deepseek-harness packages/goal/goal/，MIT。后台更新的目标不能被前台旧快照盖掉。
+     */
     fun saveConversations(list: List<Conversation>) = synchronized(LOCK) {
         val disk = loadConversations().associateBy { it.id }
-        save("conversations.json", Conversation.serializer(), list.map { c ->
-            val newer = disk[c.id]?.takeIf { it.goalChangedAt > c.goalChangedAt }
-            if (newer == null) c else c.copy(goal = newer.goal, goalChangedAt = newer.goalChangedAt)
-        })
+        val keep = HashSet<String>()
+        for (c in list) {
+            if (!keep.add(c.id)) continue
+            val old = disk[c.id]
+            val next = if (old != null && old.goalChangedAt > c.goalChangedAt) c.copy(goal = old.goal, goalChangedAt = old.goalChangedAt) else c
+            if (old != next) writeConv(next)
+        }
+        disk.keys.filter { it !in keep }.forEach { deleteConv(it) }
+    }
+
+    /** 全部对话拼成旧格式的一整个 JSON 数组，边读边写（备份用，备份文件的格式不变）。 */
+    fun exportConversations(out: java.io.OutputStream) = synchronized(LOCK) {
+        out.write('['.code)
+        loadConversations().forEachIndexed { i, c ->
+            if (i > 0) out.write(','.code)
+            out.write(json.encodeToString(Conversation.serializer(), c).toByteArray(Charsets.UTF_8))
+        }
+        out.write(']'.code)
     }
 
     /** 思路来自 deepseek-ai/deepseek-harness packages/goal/goal/，MIT。读改写在同一存储锁内，进展与续做计数一起落盘。 */
