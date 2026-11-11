@@ -515,10 +515,8 @@ private fun EmptyState(
             }
             Spacer(Modifier.height(10.dp))
         }
-        // 做生意：点一下直接发出去，Kavi 用问题卡片把要知道的问清楚
+        // 写文案、回客户这些：点一下直接发出去，Kavi 用问题卡片把要知道的问清楚。不单独起标题，接着上面的卡片排
         if (state.settings.bizStarts) {
-            Text("做生意", style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant,
-                modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 10.dp))
             com.jack.ai.data.BizStarts.ALL.chunked(2).forEach { row ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     row.forEach { b -> SuggestionCard(AppIcons.Chat, Color(b.tint), b.title, Modifier.weight(1f)) { vm.send(b.prompt) } }
