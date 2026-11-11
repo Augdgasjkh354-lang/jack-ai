@@ -215,7 +215,8 @@ class BrowserBenchTest {
             if (placed.hit !in extra.hits && placed.hit != extra.ownerId)
                 return Check(false, "定位点被其他节点挡住")
             sender(tab).act(placed.x, placed.y, "click")
-            val ok = tab.waitUntil(700) { tab.string("window.__benchResult") == "clicked" }
+            // 点击要跨进程送进 iframe，再由 postMessage 传回来；机器忙的时候（CI）700 毫秒不够，会误报「未触发」
+            val ok = tab.waitUntil(4_000) { tab.string("window.__benchResult") == "clicked" }
             return Check(ok, if (ok) "" else "融合节点定位后点击未触发事件")
         } finally {
             tab.close()
