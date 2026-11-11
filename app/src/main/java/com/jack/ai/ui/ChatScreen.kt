@@ -229,12 +229,12 @@ fun ChatScreen(
             snackbarHost = { androidx.compose.material3.SnackbarHost(snackbar) },
             topBar = {
                 Column {
-                // 顶栏透明：背景色从上往下渐变到全透明，消息滚上去时自然淡出
+                // 顶栏透明：标题那一段背景几乎不透（滚上来的消息不和标题、模型名叠在一起看不清），只在最下面一小段淡出到全透明
                 CenterAlignedTopAppBar(
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                         containerColor = Color.Transparent, scrolledContainerColor = Color.Transparent,
                     ),
-                    modifier = Modifier.background(Brush.verticalGradient(listOf(bg, bg.copy(alpha = 0.9f), bg.copy(alpha = 0f)))),
+                    modifier = Modifier.background(Brush.verticalGradient(0f to bg, 0.8f to bg.copy(alpha = 0.96f), 1f to bg.copy(alpha = 0f))),
                     title = {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
@@ -299,6 +299,8 @@ fun ChatScreen(
         ) { padding ->
             // 消息铺满整屏，从上下两个半透明的框后面滚过去
             Box(Modifier.fillMaxSize().swipeToOpen { scope.launch { drawerState.open() } }) {
+                // Kavi 在用浏览器、回答里的实时画面又不在屏幕上时，网页窗口的落点（看不见，垫在消息下面、顶栏后面）
+                BrowserHiddenHost(Modifier.align(Alignment.TopStart).padding(top = padding.calculateTopPadding() / 2), working = state.streaming, convId = conv?.id.orEmpty())
                 if (conv == null || conv.messages.isEmpty()) {
                     Box(Modifier.padding(padding)) { EmptyState(vm, state, conv, onOpenMemory, onSuggest = { text = it; focusInput++ }) }
                 } else {
@@ -309,8 +311,6 @@ fun ChatScreen(
                         focusInput++
                     })
                 }
-                // 只在 Kavi 还在回答时出来；答完就收起，免得盖住回答
-                BrowserPeek(Modifier.align(Alignment.TopEnd).padding(top = padding.calculateTopPadding() + 4.dp, end = 12.dp), working = state.streaming, convId = conv?.id.orEmpty())
             }
         }
     }

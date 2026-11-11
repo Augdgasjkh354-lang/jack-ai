@@ -52,7 +52,7 @@ import kotlinx.coroutines.withContext
 
 /**
  * Kavi 正在操作网页时，回答里显示的实时画面：网页按整屏排版、缩到回答的宽度，能看到它点了哪、输了什么。
- * 点一下进完整浏览器接手（比如自己登录）。它在的时候，聊天页右上角的小窗就不出来。
+ * 点一下进完整浏览器接手（比如自己登录）。它不在屏幕上时网页窗口放在 BrowserHiddenHost（看不见）。
  */
 @Composable
 fun BrowserLive(convId: String = "") {
@@ -68,7 +68,7 @@ fun BrowserLive(convId: String = "") {
     val fullH = with(density) { dm.heightPixels.toDp() }
     DisposableEffect(Unit) {
         b.inlineHosts++
-        // 离开时让小窗（或浏览器页）重新来要网页窗口
+        // 离开时让聊天页的落点（或浏览器页）重新来要网页窗口
         onDispose { b.inlineHosts--; b.release(ctx) }
     }
     Surface(

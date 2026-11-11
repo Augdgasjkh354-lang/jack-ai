@@ -245,7 +245,8 @@ fun HistoryDrawer(
                 Spacer(Modifier.size(12.dp))
                 Text(name.ifEmpty { "设置" }, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodyMedium)
-                Icon(Icons.Default.Settings, "设置", Modifier.size(20.dp), tint = colors.onSurfaceVariant)
+                // 没填名字时左边已经是齿轮了，右边不再放一个
+                if (name.isNotEmpty()) Icon(Icons.Default.Settings, "设置", Modifier.size(20.dp), tint = colors.onSurfaceVariant)
             }
         }
     }

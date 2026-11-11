@@ -516,16 +516,16 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
     /** 下载在后台跑，离开浏览器页也不停。 */
     private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
 
-    /** Kavi 最近一次操作网页的时刻；聊天页据此显示小窗。 */
+    /** Kavi 最近一次操作网页的时刻；聊天页据此留一个放网页窗口的落点（见 BrowserHiddenHost）。 */
     var agentAt by mutableLongStateOf(0L)
     /** 用户最后一次碰网页的时间（弹窗是不是点出来的，要看它）。 */
     @Volatile var touchedAt = 0L
-    /** 网页窗口换了地方（浏览器页 ↔ 聊天小窗）就加一，让原来的地方重新来要。 */
+    /** 网页窗口换了地方（浏览器页 ↔ 聊天页）就加一，让原来的地方重新来要。 */
     var hostGen by mutableIntStateOf(0)
     /** Kavi 在等用户亲手做的事（登录、人机验证），回答里的网页画面上会写出来；null = 没在等。 */
     var waitingUser by mutableStateOf<String?>(null)
 
-    /** 对话里正显示着 Kavi 操作网页的实时画面（这时聊天页右上角的小窗就不出来）。 */
+    /** 对话里正显示着 Kavi 操作网页的实时画面（这时聊天页那个看不见的落点就不用了）。 */
     var inlineHosts by mutableIntStateOf(0)
     /** 用户正开着浏览器页。 */
     var userViewing = false
@@ -1157,7 +1157,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
     }
 
     /**
-     * 浏览器页回到前台：网页窗口在它不在前台时被聊天里的小窗拿走了（浏览器页是 singleTask，切走不销毁），
+     * 浏览器页回到前台：网页窗口在它不在前台时被聊天页拿走了（浏览器页是 singleTask，切走不销毁），
      * 它的框里就空了、只剩灰底。让所有放网页的地方重新来要，前台这个会拿回来。
      */
     fun reclaim(ctx: Context) {
@@ -1165,7 +1165,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         if (w.parent == null || wrapper.baseContext !== ctx) hostGen++
     }
 
-    /** 那个界面不用了：Context 换回 App；handBack 时让别的地方（聊天小窗）重新来要。 */
+    /** 那个界面不用了：Context 换回 App；handBack 时让别的地方（聊天页）重新来要。 */
     fun release(ctx: Context, handBack: Boolean = true) {
         if (::wrapper.isInitialized && wrapper.baseContext === ctx) wrapper.baseContext = app
         if (handBack) hostGen++
