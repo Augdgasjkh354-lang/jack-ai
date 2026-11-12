@@ -670,8 +670,20 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             // 回答期间开前台服务，切到后台也接着跑
             WorkService.start(getApplication(), convId, workTitle, false)
             /** 几个对话同时在答时，弹窗上写明是哪个对话在问。 */
-            suspend fun ask(title: String, body: String, action: String, always: com.jack.ai.data.AllowRule? = null) =
-                core.confirm(title, (if (_state.value.streamingIds.size > 1) "对话「$workTitle」：\n" else "") + body, action, always)
+            suspend fun ask(title: String, body: String, action: String, always: com.jack.ai.data.AllowRule? = null): Boolean = kotlinx.coroutines.coroutineScope {
+                // 弹窗只在聊天页里看得到：用户切到别的 App（或 Kavi 浏览器）时推一条通知，不然任务就一直悄悄等着
+                val nid = "confirm-$convId"
+                val nag = launch {
+                    while (MainActivity.visible) delay(1500)
+                    com.jack.ai.data.Routines.notify(getApplication(), nid, "Kavi 等你确认：$title", "「${workTitle.take(20)}」停在这一步，点开回答后接着做。\n" + body.take(200), openChat = convId)
+                }
+                try {
+                    core.confirm(title, (if (_state.value.streamingIds.size > 1) "对话「$workTitle」：\n" else "") + body, action, always)
+                } finally {
+                    nag.cancel()
+                    runCatching { androidx.core.app.NotificationManagerCompat.from(getApplication<Application>()).cancel(nid.hashCode()) }
+                }
+            }
             val limit = settings.workCostLimit
             // 接着做（自动或手动）沿用这件事已经花的钱；新消息、重新回答、复核从 0 算
             val carried = if (extraUser != null && extraUser != REVIEW_PROMPT) taskSpend[convId] else null
