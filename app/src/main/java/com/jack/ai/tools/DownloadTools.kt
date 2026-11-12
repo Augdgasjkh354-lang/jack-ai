@@ -3,6 +3,7 @@ package com.jack.ai.tools
 import com.jack.ai.api.BrowserDownload
 import com.jack.ai.api.BrowserPages
 import com.jack.ai.api.MediaGrab
+import com.jack.ai.data.BrowserDownloads
 import com.jack.ai.data.Downloads
 import com.jack.ai.data.MediaMux
 import com.jack.ai.data.SearchRecord
@@ -14,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
@@ -30,6 +32,8 @@ import java.io.File
 
 /** 一次最多给几个网址。 */
 private const val MAX_URLS = 50
+/** download_file 最多在前台等这么久，还没下完的转到后台（下完系统自动告诉 Kavi）。 */
+private const val FOREGROUND_WAIT_MS = 60_000L
 /** 批量下载一次最多几个。 */
 private const val MAX_BATCH = 200
 /** 视频默认最高要多清楚（手机上看 1080p 够了，再高文件大好几倍）。 */
@@ -74,6 +78,9 @@ internal suspend fun ToolSession.downloadFile(args: JsonObject): String {
         val saved = mutableListOf<Downloads.Saved>()
         val failed = mutableListOf<String>()
         val pages = mutableListOf<String>()
+        // 进了下载队列的：先等一会儿，没下完的转到后台接着下
+        val queued = mutableListOf<Pair<String, BrowserDownloads.Task>>()
+        var live = true
         for (url in urls) {
             try {
                 if (MediaGrab.kindOf(url) == "hls") {
@@ -89,14 +96,11 @@ internal suspend fun ToolSession.downloadFile(args: JsonObject): String {
                 if (BrowserDownload.isPage(type)) { pages += url; continue }
                 val refuse = checkDownload(size, url)
                 if (refuse != null) { failed += "${url.take(80)}：$refuse"; continue }
-                val target = withContext(Dispatchers.IO) {
-                    var t: Downloads.Target? = null
-                    BrowserDownload.download(p, cookie, route, BrowserDownload.HARD_LIMIT, { n, mime ->
-                        (if (phone) Downloads.toPhone(app, n, mime) else Downloads.toDir(app, wsDir, n, mime)).also { t = it }.sink
-                    }, rejectPage = true, progress = { got, total -> ui.progress(progressLine(p.name.ifBlank { url.substringAfterLast('/') }, got, total)) })
-                    t!!
+                // 和浏览器共用一个下载队列（最多三个一起下、锁屏接着下、下载页里看得到）
+                queued += url to withContext(Dispatchers.Main) {
+                    BrowserDownloads.enqueueDirect(app, p, cookie, route,
+                        { n, mime -> if (phone) Downloads.toPhone(app, n, mime) else Downloads.toDir(app, wsDir, n, mime) }) { text -> if (live) ui.progress(text) }
                 }
-                saved += withContext(Dispatchers.IO) { target.finish().also { Downloads.log(app, it, url) } }
             } catch (e: BrowserDownload.PageException) {
                 pages += url
             } catch (e: kotlinx.coroutines.CancellationException) {
@@ -105,7 +109,42 @@ internal suspend fun ToolSession.downloadFile(args: JsonObject): String {
                 failed += "${url.take(80)}：" + (e.message ?: ToolSession.errorText(e))
             }
         }
+        // 一共等 FOREGROUND_WAIT_MS：下完的照常交回；还在下的不干等，转到后台，下完系统再告诉 Kavi
+        val later = mutableListOf<Pair<String, BrowserDownloads.Task>>()
+        val deadline = System.nanoTime() + FOREGROUND_WAIT_MS * 1_000_000
+        try {
+            for ((url, task) in queued) {
+                try {
+                    val left = (deadline - System.nanoTime()) / 1_000_000
+                    val done = if (task.result.isCompleted) task.result.await()
+                        else if (left > 0) kotlinx.coroutines.withTimeoutOrNull(left) { task.result.await() } else null
+                    if (done == null) later += url to task
+                    else saved += done.also { withContext(Dispatchers.IO) { Downloads.log(app, it, url) } }
+                } catch (e: BrowserDownload.PageException) {
+                    pages += url
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                    failed += "${url.take(80)}：下载已取消"
+                } catch (e: Exception) {
+                    failed += "${url.take(80)}：" + (e.message ?: ToolSession.errorText(e))
+                }
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // 用户按了停止：还没下完的一起停
+            withContext(kotlinx.coroutines.NonCancellable + Dispatchers.Main) { queued.forEach { BrowserDownloads.cancel(it.second) } }
+            throw e
+        }
+        live = false
+        later.forEach { (url, task) -> com.jack.ai.data.BackgroundReports.watchDownload(app, conv.id, task, url, phone) }
         val text = buildString {
+            if (later.isNotEmpty()) {
+                append("${later.size} 个文件比较大，已转到后台接着下：")
+                append(later.joinToString("、") { (url, t) ->
+                    "「${t.saved?.name ?: t.request.name.ifBlank { url.substringAfterLast('/').substringBefore('?').take(40) }}」" +
+                        if (t.total > 0) "（已下 ${t.got * 100 / t.total}%，共 ${ToolSizes.text(t.total)}）" else "（已下 ${ToolSizes.text(t.got)}）"
+                })
+                append("。不用等，也不要重新下载：下好（或没下成）系统会自动告诉你，到时再接着处理。现在先做别的；没别的可做就告诉用户下好后你会接着做，然后结束这次回答。\n")
+            }
             if (saved.isNotEmpty()) {
                 val attach = saved.size <= 5
                 append("已下载 ${saved.size} 个文件" + (if (phone) "到${saved[0].where}" else "到对话文件夹") + "：")
@@ -126,8 +165,8 @@ internal suspend fun ToolSession.downloadFile(args: JsonObject): String {
                 append("没下成 ${failed.size} 个：\n" + failed.joinToString("\n") { "- $it" })
             }
         }
-        if (saved.isEmpty() && pages.isEmpty()) throw IllegalStateException(text)
-        text to SearchRecord(label + if (saved.isEmpty()) "：没下成" else "")
+        if (saved.isEmpty() && pages.isEmpty() && later.isEmpty()) throw IllegalStateException(text)
+        text to SearchRecord(label + if (later.isNotEmpty()) "：转到后台接着下" else if (saved.isEmpty()) "：没下成" else "")
     }
 }
 

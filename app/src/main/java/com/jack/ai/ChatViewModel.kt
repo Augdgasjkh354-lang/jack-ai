@@ -153,6 +153,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             memories = store.loadMemories(),
             dreams = store.loadDreams(),
         )
+        // 转到后台的下载做完了：告诉对应对话里的 Kavi（界面被回收期间攒下的，这里一并取走）
+        com.jack.ai.data.BackgroundReports.listener = { deliverReports() }
+        // 排到主线程稍后再取：这时下面的成员还没初始化完
+        android.os.Handler(android.os.Looper.getMainLooper()).post { deliverReports() }
         // 思路来自 deepseek-ai/deepseek-harness packages/goal/goal/，MIT。后台只更新目标字段，不替换正在生成的消息。
         viewModelScope.launch {
             com.jack.ai.data.Goals.changes.collect { id ->
@@ -260,6 +264,46 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     /** 回答进行中用户插的话（按对话分开），等下一轮工具做完时交给 AI。 */
     private val interjections = java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.ConcurrentLinkedQueue<String>>()
     private fun interjectionsOf(convId: String) = interjections.getOrPut(convId) { java.util.concurrent.ConcurrentLinkedQueue() }
+
+    /** 后台做完的事（下载）要告诉 Kavi 的话：回答还在进行时先放这里，下一步带给模型。 */
+    private val reports = java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.ConcurrentLinkedQueue<String>>()
+    private fun reportsOf(convId: String) = reports.getOrPut(convId) { java.util.concurrent.ConcurrentLinkedQueue() }
+
+    /** 把文件挂到一条回答上，显示成卡片。 */
+    private fun attachTo(convId: String, replyId: String, file: java.io.File) {
+        val gen = GeneratedFile(file.name, file.absolutePath, ToolSession.mimeOf(file.name), file.length())
+        patchMessage(convId, replyId) { m -> m.copy(files = m.files.filterNot { it.path == gen.path } + gen) }
+    }
+
+    /** 取走后台报告：对话正在回答就插进下一步，否则叫醒 Kavi 接着做。 */
+    private fun deliverReports() {
+        com.jack.ai.data.BackgroundReports.drain().forEach { r ->
+            if (_state.value.conversations.none { it.id == r.convId }) return@forEach
+            val replyId = running[r.convId]
+            if (busy(r.convId) && replyId != null) {
+                reportsOf(r.convId) += r.text
+                r.file?.takeIf { it.exists() }?.let { attachTo(r.convId, replyId, it) }
+            } else wake(r.convId, r.text, r.file)
+        }
+    }
+
+    /** 回答已经结束：后台的事做完了，开一条新回答让 Kavi 接着做。同时在答的太多就等一等。 */
+    private fun wake(convId: String, text: String, file: java.io.File? = null) {
+        viewModelScope.launch {
+            while (jobs.filter { (id, j) -> id != convId && j.isActive }.size >= MAX_PARALLEL) delay(3000)
+            jobs[convId]?.takeIf { it.isActive }?.let { reportsOf(convId) += text; return@launch }
+            val conv = _state.value.conversations.firstOrNull { it.id == convId } ?: return@launch
+            if (conv.closedReason.isNotEmpty()) return@launch
+            startReply(convId, extraUser = text)
+            val reply = _state.value.conversations.firstOrNull { it.id == convId }?.messages?.lastOrNull { it.role == "assistant" }
+            if (reply != null && file?.exists() == true) attachTo(convId, reply.id, file)
+        }
+    }
+
+    override fun onCleared() {
+        com.jack.ai.data.BackgroundReports.listener = null
+        super.onCleared()
+    }
     /** 正在进行的回答：对话 id → 回答消息 id。 */
     private val running = java.util.concurrent.ConcurrentHashMap<String, String>()
 
@@ -755,6 +799,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             // 插话队列就是这条活队列本身：上一条回答收尾时还没读到的插话，由这一条接着处理（回答结束时没用上的还会重发成新消息）。
             // 这里不能 clear()：上一条回答在收尾、新回答还没开始跑的窗口里，用户发的话会被 send() 当成插话塞进队列，clear 会把它静默丢掉
             val myInterjections = interjectionsOf(convId)
+            val myReports = reportsOf(convId)
             running[convId] = reply.id
             val reasoning = agent.reasoning
             val content = agent.content
@@ -856,6 +901,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     // 带工具的请求被拒（比如旧记录格式接口不认）：先去掉旧的工具调用过程再试，工具照样能用；
                     // 还不行就不用工具，改成“先搜再答”
                     interjections = { generateSequence { myInterjections.poll() }.toList() },
+                    notices = { generateSequence { myReports.poll() }.toList() },
                     steerPending = { myInterjections.isNotEmpty() },
                     images = { session.takeImages() },
                     // use_skill 打开了新技能：下一轮把它的工具加上
@@ -939,6 +985,12 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 // 插的话没来得及用上（回答已经收尾了）：等这次结束后当成新消息发出去
                 val leftover = generateSequence { myInterjections.poll() }.toList()
                 val me = jobs[convId]
+                // 后台下好的消息来晚了（回答已经收尾，没带给模型）：等这次结束后叫醒 Kavi 接着做
+                val lateReports = generateSequence { myReports.poll() }.toList()
+                if (lateReports.isNotEmpty()) viewModelScope.launch {
+                    me?.join()
+                    wake(convId, lateReports.joinToString("\n\n"))
+                }
                 if (leftover.isNotEmpty()) viewModelScope.launch {
                     me?.join()
                     if (_state.value.currentId == convId) send(leftover.joinToString("\n"))

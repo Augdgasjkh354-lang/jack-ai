@@ -1927,7 +1927,7 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
      * 存一个网页要下载的文件到 target（对话文件夹或手机「下载」）：普通网址带 Cookie 下（能断点续传），
      * 网页生成的（blob:）从网页里读，data: 直接解。progress 报进度文字。
      */
-    internal suspend fun storeDirect(p: BrowserDownload.Pending, target: (String, String) -> Downloads.Target, progress: (String) -> Unit = {}, control: BrowserDownload.Control? = null, privateDownload: Boolean = false, requestCookie: String? = null, requestRoute: String = route, onBytes: (Long, Long) -> Unit = { _, _ -> }): Downloads.Saved {
+    internal suspend fun storeDirect(p: BrowserDownload.Pending, target: (String, String) -> Downloads.Target, progress: (String) -> Unit = {}, control: BrowserDownload.Control? = null, privateDownload: Boolean = false, requestCookie: String? = null, requestRoute: String = route, rejectPage: Boolean = false, onBytes: (Long, Long) -> Unit = { _, _ -> }): Downloads.Saved {
         var finish: (() -> Downloads.Saved)? = null
         fun sink(name: String, mime: String) = target(name, mime).also { finish = it.finish }.sink
         if (p.url.startsWith("blob:", true)) {
@@ -1940,7 +1940,7 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
             }
         } else {
             withContext(Dispatchers.IO) {
-                BrowserDownload.download(p, requestCookie, requestRoute, BrowserDownload.HARD_LIMIT, ::sink,
+                BrowserDownload.download(p, requestCookie, requestRoute, BrowserDownload.HARD_LIMIT, ::sink, rejectPage = rejectPage,
                     progress = { got, total -> onBytes(got, total); progress(progressText(p.name, got, total)) }, control = control)
             }
         }

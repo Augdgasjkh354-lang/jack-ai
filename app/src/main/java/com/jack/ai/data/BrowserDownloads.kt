@@ -26,6 +26,8 @@ object BrowserDownloads {
         var pauseRequested = false
         var cancelled = false
         val pausable = request.url.startsWith("http", true)
+        /** 拿到的是网页不是文件就停下（Kavi 按网址下载时用）。 */
+        var rejectPage = false
     }
     val tasks = mutableStateListOf<Task>()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -37,6 +39,20 @@ object BrowserDownloads {
         val tab = JackBrowser.tabs.find { it.id == p.tab } ?: JackBrowser.tab
         val cookie = if (p.url.startsWith("http", true)) runCatching { JackBrowser.cookiesOf(tab).getCookie(p.url) }.getOrNull() else null
         val task = Task(tab.incognito, cookie, JackBrowser.routeFor(ctx), p.copy(tab = tab.id), target, progress)
+        task.control.restart = { scope.launch { task.message = "网站不支持续传，已从头下载" } }
+        tasks.add(task)
+        pump()
+        return task
+    }
+    /**
+     * Kavi 按网址直接下（download_file）：不看浏览器当前标签页，Cookie 和线路由调用方给。
+     * 记进下载列表由调用方自己做（这里按「不记」传给 storeDirect，免得记两次）。在主线程调。
+     */
+    fun enqueueDirect(ctx: Context, p: BrowserDownload.Pending, cookie: String?, route: String,
+                      target: (String, String) -> Downloads.Target, progress: (String) -> Unit = {}): Task {
+        app = ctx.applicationContext
+        val task = Task(true, cookie, route, p, target, progress)
+        task.rejectPage = true
         task.control.restart = { scope.launch { task.message = "网站不支持续传，已从头下载" } }
         tasks.add(task)
         pump()
@@ -55,7 +71,7 @@ object BrowserDownloads {
                 try {
                     val saved = JackBrowser.storeDirect(t.request, { name, mime ->
                         t.destination ?: t.target(name, mime).also { t.destination = it }
-                    }, { text -> t.progress(text) }, t.control, t.incognito, t.cookie, t.route) { got, total ->
+                    }, { text -> t.progress(text) }, t.control, t.incognito, t.cookie, t.route, t.rejectPage) { got, total ->
                         val now = System.currentTimeMillis()
                         val speed = (got - lastBytes).coerceAtLeast(0) * 1000 / (now - lastTime).coerceAtLeast(1)
                         lastTime = now; lastBytes = got
