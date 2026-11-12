@@ -20,11 +20,33 @@ object BrowserAds {
         "irs01.com", "mediav.com", "adkwai.com", "allyes.com", "ipinyou.com",
     )
 
+    /**
+     * 跟踪器：只记录你在网页上点了什么、看了多久、录屏回放的统计服务，拦掉网页照常能用。
+     * 同样保守：登录、支付、防刷要用的（facebook.net、fpjs、umeng、阿里的 mmstat）不拦。
+     */
+    private val TRACKERS = setOf(
+        // 国外：行为分析、录屏回放、广告转化像素
+        "hotjar.com", "hotjar.io", "mouseflow.com", "fullstory.com", "clarity.ms", "crazyegg.com", "luckyorange.com", "luckyorange.net",
+        "inspectlet.com", "smartlook.com", "logrocket.io", "mixpanel.com", "amplitude.com", "heap.io", "heapanalytics.com",
+        "segment.io", "segment.com", "kissmetrics.com", "chartbeat.com", "chartbeat.net", "parsely.com", "comscore.com",
+        "bat.bing.com", "analytics.tiktok.com", "ct.pinterest.com", "px.ads.linkedin.com", "snap.licdn.com", "sc-static.net",
+        "analytics.twitter.com", "static.ads-twitter.com", "nr-data.net", "quantcount.com", "omtrdc.net", "demdex.net",
+        "everesttech.net", "bluekai.com", "krxd.net", "exelator.com", "agkn.com", "rlcdn.com", "tapad.com", "adsymptotic.com",
+        // 国内：统计和行为分析
+        "growingio.com", "zhugeio.com", "51.la", "talkingdata.com", "tongji.baidu.com", "sensorsdata.cn", "gridsumdissector.com",
+        "cnzz.net", "umtrack.com", "ta.qq.com", "pingjs.qq.com", "tajs.qq.com", "log.mmstat.cn", "hm.baidu.com",
+    )
+
     /** 这个网站名是不是广告（名单里的网站和它的子域名）。 */
-    fun isAd(host: String): Boolean {
+    fun isAd(host: String): Boolean = inList(host, DOMAINS)
+
+    /** 这个网站名是不是跟踪器（广告名单之外的）。 */
+    fun isTracker(host: String): Boolean = inList(host, TRACKERS)
+
+    private fun inList(host: String, list: Set<String>): Boolean {
         var h = host.lowercase().trimEnd('.')
         while (true) {
-            if (h in DOMAINS) return true
+            if (h in list) return true
             val dot = h.indexOf('.')
             if (dot < 0 || h.indexOf('.', dot + 1) < 0) return false
             h = h.substring(dot + 1)

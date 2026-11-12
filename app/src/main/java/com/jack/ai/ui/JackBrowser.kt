@@ -93,6 +93,15 @@ object JackBrowser {
         /** 这一页拦下的广告请求数。拦截在后台线程，先累加在 blockedNow，再交给界面。 */
         val blockedNow = java.util.concurrent.atomic.AtomicInteger(0)
         var blocked by mutableIntStateOf(0)
+        /** 这一页拦下的跟踪器请求数（同上）。 */
+        val trackersNow = java.util.concurrent.atomic.AtomicInteger(0)
+        var trackers by mutableIntStateOf(0)
+        /** 只用加密连接：这次自动换成的 https 网址（还没打开成功）。 */
+        var httpsTry: String? = null
+        /** 加密打不开：用户可以选「仍然打开」去的 http 网址。 */
+        var httpFallback by mutableStateOf<String?>(null)
+        /** 这一页在跑的网页脚本。 */
+        var scriptsRan by mutableStateOf(listOf<String>())
         /** 这一页现在显示的是译文；translating 是翻译进度（null = 没在翻）。 */
         var translated by mutableStateOf(false)
         var translating by mutableStateOf<String?>(null)
@@ -252,6 +261,92 @@ object JackBrowser {
 
     /** 这个网站名下拦不拦广告。 */
     private fun blocksAds(site: String) = adBlockNow && adAllowNow.none { site == it || site.endsWith(".$it") }
+
+    // ---------- 网页脚本（像油猴脚本） ----------
+    var scripts by mutableStateOf(listOf<com.jack.ai.api.UserScripts.Script>())
+        private set
+    private val scriptList = kotlinx.serialization.builtins.ListSerializer(com.jack.ai.api.UserScripts.Script.serializer())
+    private fun scriptsFile() = java.io.File(app.filesDir, "user_scripts.json")
+    private fun loadScripts() {
+        scripts = runCatching { listJson.decodeFromString(scriptList, scriptsFile().readText()) }.getOrNull().orEmpty()
+    }
+    private fun saveScripts() { runCatching { scriptsFile().writeText(listJson.encodeToString(scriptList, scripts)) } }
+
+    /** 新建或改一个（id 一样就是改）。返回存下的。 */
+    fun saveScript(s: com.jack.ai.api.UserScripts.Script): com.jack.ai.api.UserScripts.Script {
+        if (!::app.isInitialized) return s
+        val clean = s.copy(name = s.name.trim().take(40).ifEmpty { "网页脚本" }, code = s.code.take(com.jack.ai.api.UserScripts.MAX_CODE))
+        scripts = (if (scripts.any { it.id == clean.id }) scripts.map { if (it.id == clean.id) clean else it } else scripts + clean)
+            .takeLast(com.jack.ai.api.UserScripts.MAX)
+        saveScripts()
+        return clean
+    }
+
+    fun removeScript(id: String) { scripts = scripts.filterNot { it.id == id }; saveScripts() }
+    fun toggleScript(id: String) { scripts = scripts.map { if (it.id == id) it.copy(enabled = !it.enabled) else it }; saveScripts() }
+
+    /** 在这个网站上会跑的脚本。 */
+    fun scriptsFor(url: String): List<com.jack.ai.api.UserScripts.Script> {
+        val host = runCatching { java.net.URI(url).host }.getOrNull() ?: return emptyList()
+        return scripts.filter { com.jack.ai.api.UserScripts.matches(it, host) }
+    }
+
+    /** 网页加载完：跑这个网站的脚本（每个脚本一页只跑一次）。 */
+    private fun runScripts(t: Tab, view: WebView, url: String) {
+        if (!BrowserPages.isWeb(url)) return
+        val list = scriptsFor(url)
+        if (list.isEmpty()) return
+        list.forEach { sc -> view.evaluateJavascript(com.jack.ai.api.UserScripts.wrap(sc), null) }
+        t.scriptsRan = list.map { it.name }
+    }
+
+    /** 改了脚本后让当前网页马上用上（重新打开这一页）。 */
+    fun rerunScripts() = reloadCurrent()
+
+    // ---------- 跟踪器、只用加密连接 ----------
+    var trackBlock by mutableStateOf(true)
+        private set
+    @Volatile private var trackBlockNow = true
+    fun changeTrackBlock(on: Boolean) {
+        trackBlock = on; trackBlockNow = on
+        prefs().edit().putBoolean("trackblock", on).apply()
+        reloadCurrent()
+    }
+    private fun blocksTrackers(site: String) = trackBlockNow && adAllowNow.none { site == it || site.endsWith(".$it") }
+
+    var httpsOnly by mutableStateOf(true)
+        private set
+    /** 用户选过「仍然打开」的不加密网站（按网站记住）。 */
+    private var httpOk = setOf<String>()
+    fun changeHttpsOnly(on: Boolean) {
+        httpsOnly = on
+        prefs().edit().putBoolean("httpsonly", on).apply()
+    }
+
+    /** 这个 http 网址要不要换成 https：开着「只用加密连接」、用户没放过这个网站。 */
+    private fun upgradeOf(url: String): String? {
+        if (!httpsOnly) return null
+        val up = BrowserNet.httpsOf(url) ?: return null
+        val host = runCatching { java.net.URI(url).host }.getOrNull()?.lowercase() ?: return null
+        return up.takeIf { httpOk.none { host == it || host.endsWith(".$it") } }
+    }
+
+    /** 加密打不开、用户选「仍然打开」：记住这个网站，用 http 打开。 */
+    fun allowHttp(url: String): String {
+        val host = runCatching { java.net.URI(url).host }.getOrNull()?.lowercase()?.removePrefix("www.").orEmpty()
+        if (host.isNotEmpty()) { httpOk = httpOk + host; prefs().edit().putStringSet("httpok", httpOk).apply() }
+        tab.httpFallback = null; tab.httpsTry = null
+        return url
+    }
+
+    /** 加密打不开：出错页上给「仍然打开」。 */
+    private fun httpsFailed(t: Tab, httpsUrl: String) {
+        t.httpsTry = null
+        t.httpFallback = BrowserNet.httpOf(httpsUrl)
+        t.error = "这个网站不支持加密连接（HTTPS），为了安全没打开。不加密的网页，同一个网络里的人能看到、改掉你看的内容和填的东西。\n\n" +
+            "确定要看就点「仍然打开」（这个网站以后不再拦）。"
+        t.pageFailed = true
+    }
 
     fun changeAdBlock(on: Boolean) {
         adBlock = on; adBlockNow = on
@@ -954,6 +1049,10 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         proxySites = prefs().getStringSet("proxysites", emptySet()).orEmpty().toSet()
         webrtcAllowed = prefs().getBoolean("webrtc", false)
         adBlock = prefs().getBoolean("adblock", true); adBlockNow = adBlock
+        trackBlock = prefs().getBoolean("trackblock", true); trackBlockNow = trackBlock
+        httpsOnly = prefs().getBoolean("httpsonly", true)
+        httpOk = prefs().getStringSet("httpok", emptySet()).orEmpty().toSet()
+        loadScripts()
         adAllow = prefs().getStringSet("adallow", emptySet()).orEmpty().toSet(); adAllowNow = adAllow
         permYes = prefs().getStringSet("permyes", emptySet()).orEmpty().toSet()
         permNo = prefs().getStringSet("permno", emptySet()).orEmpty().toSet()
@@ -1422,7 +1521,8 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
                 val state = t.sleepState?.takeIf { t.restore == url }
                 t.pageDone = d; t.restore = null; t.sleepState = null
                 applyUa(w, url)
-                if (state == null || runCatching { w.restoreState(state) }.getOrNull() == null) w.loadUrl(url)
+                val go = upgradeOf(url)?.also { t.httpsTry = it } ?: url.also { if (it != t.httpFallback) t.httpsTry = null }
+                if (state == null || runCatching { w.restoreState(state) }.getOrNull() == null) w.loadUrl(go)
             }
         }
         withTimeoutOrNull(timeoutMs) { done.await() }
@@ -1474,6 +1574,13 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
             return when (BrowserNet.classify(url)) {
                 BrowserNet.Kind.OPEN -> {
                     if (!request.isForMainFrame) false
+                    // 只用加密连接：跳到 http 的换成 https；换过一次又被网站跳回 http，就是不支持加密
+                    else if (upgradeOf(url) != null) {
+                        val up = upgradeOf(url)!!
+                        if (t.httpsTry == up) { t.diag.add("网站从 https 又跳回 http：$url"); httpsFailed(t, up) }
+                        else { t.httpsTry = up; view.post { view.loadUrl(up) } }
+                        true
+                    }
                     // 网页没经过用户点击就自己跳到广告网站：不去
                     else if (!request.hasGesture() && BrowserAds.isAd(request.url.host.orEmpty()) && blocksAds(t.site)) { t.diag.add("没让网页自己跳到广告网站 $url"); true }
                     else {
@@ -1505,6 +1612,12 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
                 while (t.media.size > 40) t.media.pollFirst()
             }
             // 去广告：网页里的广告和跟踪请求直接不发（网页本身不拦）
+            if (!request.isForMainFrame && BrowserAds.isTracker(host) && blocksTrackers(t.site)) {
+                t.diag.add("拦下跟踪器 $host")
+                val n = t.trackersNow.incrementAndGet()
+                main.post { if (t.trackersNow.get() == n) t.trackers = n }
+                return WebResourceResponse("text/plain", "utf-8", 403, "Blocked", emptyMap(), java.io.ByteArrayInputStream(ByteArray(0)))
+            }
             if (!request.isForMainFrame && BrowserAds.isAd(host) && blocksAds(t.site)) {
                 t.diag.add("去广告拦下请求 $host")
                 val n = t.blockedNow.incrementAndGet()
@@ -1531,12 +1644,18 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
             // 证书不对一律不继续：可能是假网站或被劫持
             handler.cancel()
             t.diag.add("证书有问题，没打开：${e.url}（${e.primaryError}）")
-            if (e.url == view.url || e.url == t.address) { t.error = "这个网站的安全证书有问题，已停止打开（${e.url}）"; t.pageFailed = true }
+            if (e.url == t.httpsTry) httpsFailed(t, e.url)
+            else if (e.url == view.url || e.url == t.address) { t.error = "这个网站的安全证书有问题，已停止打开（${e.url}）"; t.pageFailed = true }
         }
 
         override fun onReceivedError(view: WebView, request: WebResourceRequest, e: WebResourceError) {
             t.diag.add((if (request.isForMainFrame) "网页没打开" else "加载失败") + "（${e.errorCode} ${e.description}）${request.url.toString().take(160)}")
-            if (request.isForMainFrame) { t.error = describe(e.errorCode, e.description?.toString().orEmpty()); t.pageFailed = true }
+            if (request.isForMainFrame) {
+                val u = request.url.toString()
+                // 自动换成 https 后连不上（不是没网）：多半是网站不支持加密
+                if (u == t.httpsTry && e.errorCode != WebViewClient.ERROR_HOST_LOOKUP && e.errorCode != WebViewClient.ERROR_TIMEOUT) httpsFailed(t, u)
+                else { t.error = describe(e.errorCode, e.description?.toString().orEmpty()); t.pageFailed = true }
+            }
         }
 
         override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, r: WebResourceResponse) {
@@ -1568,6 +1687,9 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
             t.address = url
             t.site = BrowserPages.site(url)
             t.blockedNow.set(0); t.blocked = 0
+            t.trackersNow.set(0); t.trackers = 0
+            if (url != t.httpsTry && url != t.httpFallback) t.httpFallback = null
+            t.scriptsRan = emptyList()
             t.canBack = view.canGoBack(); t.canForward = view.canGoForward()
         }
 
@@ -1584,7 +1706,9 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         }
 
         override fun onPageFinished(view: WebView, url: String) {
+            if (!t.pageFailed && url == t.httpsTry) t.httpsTry = null
             view.evaluateJavascript(BrowserPages.KEEP_PLAYING_JS + BrowserPages.MEDIA_JS + if (t.rate != 1f) BrowserPages.rateJs(t.rate) else "", null)
+            if (!t.pageFailed) runScripts(t, view, url)
             widenIfDesktop(view, url)
             if (blocksAds(t.site)) view.evaluateJavascript(BrowserAds.INJECT_JS, null)
             t.pageDone?.complete(Unit)

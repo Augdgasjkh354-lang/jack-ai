@@ -144,6 +144,9 @@ class BrowserActivity : ComponentActivity() {
     private var reader by mutableStateOf<Pair<String, String>?>(null)
     /** 选视频倍速。 */
     private var ratePick by mutableStateOf(false)
+    /** 网页脚本列表开着；正在改的脚本（新建的 id 是新的）。 */
+    private var showScripts by mutableStateOf(false)
+    private var editScript by mutableStateOf<com.jack.ai.api.UserScripts.Script?>(null)
     /** 标签页列表只看哪个分组（null = 全部）；长按的标签页（换分组）；分组的菜单（"" = 全部）；新建 / 改名分组。 */
     private var tabGroup by mutableStateOf<String?>(null)
     private var tabMove by mutableStateOf<JackBrowser.Tab?>(null)
@@ -480,6 +483,8 @@ class BrowserActivity : ComponentActivity() {
                 offlineView != null -> offlineView = null
                 showOffline -> showOffline = false
                 showMarks -> showMarks = false
+                editScript != null -> editScript = null
+                showScripts -> showScripts = false
                 else -> {
                     val w = b.webView(this)
                     when {
@@ -531,6 +536,7 @@ class BrowserActivity : ComponentActivity() {
                                 b.notice = "开始记录：照常在网页上操作一遍，做完点底下的「做完了」。密码只记「这里要填密码」，不记内容。"
                             }
                         })
+                        DropdownMenuItem(text = { Text("网页脚本" + b.tab.scriptsRan.size.takeIf { it > 0 }?.let { "（这页 $it 个在跑）" }.orEmpty()) }, onClick = { menu = false; showScripts = true })
                         DropdownMenuItem(text = { Text("自动填密码") }, onClick = { menu = false; autofillInfo = true })
                         DropdownMenuItem(text = { Text("屏蔽网页上的东西" + b.blocksHere().size.takeIf { it > 0 }?.let { "（$it）" }.orEmpty()) }, enabled = has, onClick = {
                             menu = false
@@ -625,8 +631,16 @@ class BrowserActivity : ComponentActivity() {
                         })
                         HorizontalDivider()
                         DropdownMenuItem(text = { Text((if (b.adBlock) "✓ " else "    ") + "去广告") }, onClick = { menu = false; b.changeAdBlock(!b.adBlock) })
-                        if (b.adBlock && has) DropdownMenuItem(text = { Text((if (b.adAllowedHere()) "✓ " else "    ") + "这个网站不去广告") },
+                        DropdownMenuItem(text = { Text((if (b.trackBlock) "✓ " else "    ") + "拦跟踪器" +
+                            (if (b.trackBlock && b.tab.trackers > 0) "（这页 ${b.tab.trackers} 个）" else "")) }, onClick = { menu = false; b.changeTrackBlock(!b.trackBlock) })
+                        if ((b.adBlock || b.trackBlock) && has) DropdownMenuItem(text = { Text((if (b.adAllowedHere()) "✓ " else "    ") + "这个网站不拦广告和跟踪器") },
                             onClick = { menu = false; b.toggleAdAllow() })
+                        DropdownMenuItem(text = { Text((if (b.httpsOnly) "✓ " else "    ") + "只用加密连接（HTTPS）") }, onClick = {
+                            menu = false
+                            b.changeHttpsOnly(!b.httpsOnly)
+                            b.notice = if (b.httpsOnly) "不加密（http://）的网址会自动换成加密的；网站不支持时先拦下，你可以选「仍然打开」。"
+                                else "已关掉：不加密的网站也直接打开（同一个网络里的人能看到、改掉网页内容）。"
+                        })
                         if (has && BrowserPages.isWeb(b.address)) DropdownMenuItem(text = { Text("这个网站的数据") }, onClick = {
                             menu = false
                             lifecycleScope.launch { b.siteData()?.let { siteData = it } ?: run { b.notice = "看不出这是哪个网站" } }
@@ -758,6 +772,8 @@ class BrowserActivity : ComponentActivity() {
         if (showMarks && b.userViewing) Box(Modifier.fillMaxSize().safeDrawingPadding()) { MarksPanel() }
         if (showOffline && b.userViewing) Box(Modifier.fillMaxSize().safeDrawingPadding()) { OfflinePanel() }
         offlineView?.let { p -> Box(Modifier.fillMaxSize().safeDrawingPadding()) { OfflineViewer(p) } }
+        if (showScripts && b.userViewing) Box(Modifier.fillMaxSize().safeDrawingPadding()) { ScriptsPanel() }
+        editScript?.let { sc -> Box(Modifier.fillMaxSize().safeDrawingPadding()) { ScriptEditor(sc) } }
         // 视频全屏：盖满整个屏幕
         full?.let { (view, _) ->
             // 碰一下屏幕，顶上露出倍速按钮，三秒后藏起来
@@ -1073,7 +1089,10 @@ class BrowserActivity : ComponentActivity() {
             else -> host != null && (Net.shouldProxy(host) || (Net.config.enabled && JackBrowser.proxyForcedHere()))
         }
         val mode = when (route) { BrowserNet.PROXY -> "🛡 全部走代理"; BrowserNet.DIRECT -> "全部直连"; else -> "自动" }
-        val ads = JackBrowser.tab.blocked.takeIf { it > 0 }?.let { " · 拦了 $it 个广告" }.orEmpty()
+        val t = JackBrowser.tab
+        val ads = listOfNotNull(t.blocked.takeIf { it > 0 }?.let { "$it 个广告" }, t.trackers.takeIf { it > 0 }?.let { "$it 个跟踪器" })
+            .takeIf { it.isNotEmpty() }?.joinToString("、", prefix = " · 拦了 ").orEmpty() +
+            (if (JackBrowser.address.startsWith("http://")) " · ⚠ 不加密" else "")
         return if (host == null) "线路：$mode" + if (route != BrowserNet.DIRECT && !Net.config.enabled) "（代理没开，现在都是直连）" else ""
         else "$mode · 这个网站" + (if (proxied) "走代理" else "直连（看得到你的 IP）") + ads
     }
@@ -1729,6 +1748,101 @@ class BrowserActivity : ComponentActivity() {
         }
     }
 
+    /** 网页脚本：按网站自动跑的小脚本，能开关、改、删，新建或让 Kavi 写。 */
+    @Composable
+    private fun ScriptsPanel() {
+        val b = JackBrowser
+        val colors = MaterialTheme.colorScheme
+        val site = BrowserPages.site(b.address)
+        var ask by remember { mutableStateOf<String?>(null) }
+        Surface(Modifier.fillMaxSize(), color = colors.background) {
+            Column(Modifier.fillMaxSize()) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { showScripts = false }) { Icon(Icons.Default.Close, "收起") }
+                    Text("网页脚本", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                    TextButton(onClick = { ask = "" }) { Text("让 Kavi 写") }
+                    TextButton(onClick = {
+                        editScript = com.jack.ai.api.UserScripts.Script(java.util.UUID.randomUUID().toString().take(8), "", listOfNotNull(site.ifEmpty { null }), "", at = System.currentTimeMillis())
+                    }) { Text("新建") }
+                }
+                Text("打开对得上的网站时自动跑，比如自动展开全文、去掉烦人的弹层、把价格换算成人民币。能直接贴油猴脚本（GM_addStyle、GM_getValue 这类常用的能用，复杂的可能不行）。" +
+                    "脚本和网页自己的脚本一样，只能动这个网页，碰不到手机上的文件。只用信得过的脚本。",
+                    Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                if (b.scripts.isEmpty()) Text("还没有脚本。", Modifier.padding(24.dp), color = colors.onSurfaceVariant)
+                LazyColumn(Modifier.fillMaxSize()) {
+                    items(b.scripts.sortedByDescending { site.isNotEmpty() && com.jack.ai.api.UserScripts.matches(it.copy(enabled = true), site) }, key = { "us" + it.id }) { sc ->
+                        Row(Modifier.fillMaxWidth().clickable { editScript = sc }.padding(start = 16.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(sc.name + (if (sc.by == "kavi") "（Kavi 写的）" else ""), style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text((if (sc.name in b.tab.scriptsRan) "这页在跑 · " else "") + com.jack.ai.api.UserScripts.sitesText(sc),
+                                    style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                            androidx.compose.material3.Switch(sc.enabled, { b.toggleScript(sc.id); b.rerunScripts() })
+                        }
+                    }
+                }
+            }
+        }
+        ask?.let { text ->
+            var want by remember { mutableStateOf(text) }
+            AlertDialog(
+                onDismissRequest = { ask = null }, title = { Text("让 Kavi 写一个网页脚本") },
+                text = { Column {
+                    Text(if (site.isEmpty()) "想让网页自动做什么？" else "想让 $site 自动做什么？", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                    OutlinedTextField(want, { want = it }, Modifier.fillMaxWidth().padding(top = 8.dp), placeholder = { Text("比如：自动展开全文，去掉底部的「打开 App」") }, minLines = 2)
+                } },
+                confirmButton = { TextButton(enabled = want.isNotBlank(), onClick = {
+                    ask = null; showScripts = false
+                    BrowserChat.open = true
+                    BrowserChat.send(this@BrowserActivity, "给" + (if (site.isEmpty()) "网页" else "这个网站（$site）") + "写一个网页脚本，用 browser 的 save_script 存下来：" + want.trim())
+                }) { Text("交给 Kavi") } },
+                dismissButton = { TextButton(onClick = { ask = null }) { Text("取消") } },
+            )
+        }
+    }
+
+    /** 改一个网页脚本：名字、网站、代码。贴进来的油猴脚本自动读出名字和网站。 */
+    @Composable
+    private fun ScriptEditor(start: com.jack.ai.api.UserScripts.Script) {
+        val b = JackBrowser
+        val colors = MaterialTheme.colorScheme
+        var name by remember(start.id) { mutableStateOf(start.name) }
+        var sites by remember(start.id) { mutableStateOf(start.sites.joinToString(", ")) }
+        var code by remember(start.id) { mutableStateOf(start.code) }
+        var confirmDelete by remember { mutableStateOf(false) }
+        val exists = b.scripts.any { it.id == start.id }
+        Surface(Modifier.fillMaxSize(), color = colors.background) {
+            Column(Modifier.fillMaxSize()) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { editScript = null }) { Icon(Icons.Default.Close, "不改了") }
+                    Text(if (exists) "改网页脚本" else "新网页脚本", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                    if (exists) TextButton(onClick = { confirmDelete = true }) { Text("删除", color = colors.error) }
+                    TextButton(enabled = code.isNotBlank(), onClick = {
+                        val head = com.jack.ai.api.UserScripts.header(code)
+                        val list = com.jack.ai.api.UserScripts.cleanSites(sites).ifEmpty { head?.second.orEmpty() }
+                        if (list.isEmpty()) { b.notice = "填一下在哪些网站上跑（比如 taobao.com；所有网站填 *）"; return@TextButton }
+                        b.saveScript(start.copy(name = name.ifBlank { head?.first.orEmpty() }, sites = list, code = code, at = System.currentTimeMillis()))
+                        editScript = null
+                        b.rerunScripts()
+                    }) { Text("保存") }
+                }
+                Column(Modifier.fillMaxSize().padding(horizontal = 16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(name, { name = it.take(40) }, Modifier.fillMaxWidth(), label = { Text("名字") }, singleLine = true)
+                    OutlinedTextField(sites, { sites = it }, Modifier.fillMaxWidth(), label = { Text("在哪些网站上跑") }, singleLine = true,
+                        supportingText = { Text("网站名，几个用逗号隔开，子域名也算；所有网站填 *。贴油猴脚本可以不填") })
+                    OutlinedTextField(code, { code = it }, Modifier.fillMaxWidth().heightIn(min = 240.dp), label = { Text("JavaScript 代码") },
+                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = CodeFont))
+                }
+            }
+        }
+        if (confirmDelete) AlertDialog(
+            onDismissRequest = { confirmDelete = false }, title = { Text("删掉「${start.name}」？") },
+            confirmButton = { TextButton(onClick = { confirmDelete = false; editScript = null; b.removeScript(start.id); b.rerunScripts() }) { Text("删除", color = colors.error) } },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("取消") } },
+        )
+    }
+
     /** 网页没打开：盖一层干净的说明，不露出网页组件自带的英文出错页。 */
     @Composable
     private fun ErrorPage(msg: String) {
@@ -1738,6 +1852,7 @@ class BrowserActivity : ComponentActivity() {
             Text(msg, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = { reload() }) { Text("重试") }
+                JackBrowser.tab.httpFallback?.let { http -> OutlinedButton(onClick = { open(JackBrowser.allowHttp(http)) }) { Text("仍然打开") } }
                 val url = JackBrowser.address.ifEmpty { editing }
                 if (BrowserPages.isWeb(url)) OutlinedButton(onClick = { Links.system(this@BrowserActivity, url) }) { Text("用系统浏览器打开") }
             }

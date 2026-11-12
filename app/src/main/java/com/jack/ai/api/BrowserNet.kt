@@ -65,6 +65,14 @@ object BrowserNet {
         }
     }
 
+    /** 只用加密连接：http:// 换成 https://（别的原样返回 null，不用换）。 */
+    fun httpsOf(url: String): String? =
+        if (url.startsWith("http://", ignoreCase = true)) "https://" + url.substring(7) else null
+
+    /** https:// 的网址换回 http://（加密打不开、用户选「仍然打开」时用）。 */
+    fun httpOf(url: String): String =
+        if (url.startsWith("https://", ignoreCase = true)) "http://" + url.substring(8) else url
+
     /** 浏览器里一个网址该怎么处理。 */
     enum class Kind { OPEN, EXTERNAL, BLOCKED }
 
