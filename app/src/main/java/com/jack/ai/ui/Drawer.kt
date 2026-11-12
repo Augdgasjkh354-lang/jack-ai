@@ -39,6 +39,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.foundation.lazy.LazyColumn
@@ -114,31 +118,27 @@ fun HistoryDrawer(
         ChatItem(c, c.id == state.currentId, { onSelect(c.id) }, { renaming = c }, { deleting = c }, onPin = { onPin(c.id) },
             onMemory = { onMemory(c) }, showMore = c.id == state.currentId, answering = c.id in state.streamingIds)
     }
-    ModalDrawerSheet(drawerContainerColor = colors.surfaceContainerLow) {
+    // 搜索收在右上角的圆按钮里，点开才出现输入框
+    var searching by remember { mutableStateOf(false) }
+    ModalDrawerSheet(drawerContainerColor = colors.background, drawerShape = RoundedCornerShape(topEnd = 30.dp, bottomEnd = 30.dp)) {
         Column(Modifier.fillMaxSize()) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(start = 20.dp, top = 20.dp, bottom = 16.dp),
+                modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 16.dp, top = 16.dp, bottom = 10.dp),
             ) {
                 LogoMark(32.dp)
                 Spacer(Modifier.size(10.dp))
-                Text("Kavi", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            }
-            Surface(
-                onClick = onNew,
-                shape = Radii.m,
-                color = drawerCard(),
-                contentColor = colors.onSurface,
-                border = androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant),
-                modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
-            ) {
-                Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(AppIcons.NewChat, null, Modifier.size(20.dp))
-                    Spacer(Modifier.size(10.dp))
-                    Text("新对话", style = MaterialTheme.typography.titleSmall)
+                Text("Kavi", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                CircleIconButton(if (searching) Icons.Default.Close else Icons.Default.Search, if (searching) "收起搜索" else "搜索对话") {
+                    searching = !searching
+                    if (!searching) query = ""
                 }
             }
-            SearchField(query, { query = it }, Modifier.padding(start = 16.dp, end = 16.dp, top = 10.dp))
+            androidx.compose.animation.AnimatedVisibility(searching) {
+                val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+                LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+                SearchField(query, { query = it }, Modifier.padding(start = 16.dp, end = 16.dp, bottom = 6.dp), focus)
+            }
             if (query.isNotBlank()) {
                 LazyColumn(Modifier.weight(1f).padding(top = 4.dp)) {
                     item { SectionLabel(if (results.isEmpty()) "没有找到相关对话" else "找到 ${results.size} 个对话") }
@@ -146,35 +146,36 @@ fun HistoryDrawer(
                         SearchResultRow(c.title, snippet, query, state.project(c.projectId)?.name) { onSelect(c.id) }
                     }
                 }
-            } else LazyColumn(Modifier.weight(1f).padding(top = 8.dp)) {
-                // 常用功能：最常用的四个一行露在外面，其余的收进「更多」，侧边栏主要留给对话
+            } else LazyColumn(Modifier.weight(1f)) {
+                // 常用功能：和 ChatGPT 一样是一行行「图标 + 名字」，最常用的四个露在外面，其余的收进「更多」，侧边栏主要留给对话
                 item {
                     val now = System.currentTimeMillis()
                     val due = state.cards.count { it.due <= now }
                     val main = listOf(
-                        Tool(Icons.Default.Notifications, "提醒和任务", badge = state.routines.count { it.enabled }.takeIf { it > 0 }?.toString(), tint = 0xFFEF5A5A, onClick = onOpenRoutines),
-                        Tool(AppIcons.Moon, "记忆", dot = state.dreams.any { !it.seen }, tint = 0xFF8B5CF6, onClick = onOpenMemory),
-                        Tool(AppIcons.Folder, "资料库", tint = 0xFF3B82F6, onClick = onOpenLibrary),
-                        Tool(AppIcons.Globe, "浏览器", tint = 0xFF22A06B, onClick = { ctx.startActivity(android.content.Intent(ctx, BrowserActivity::class.java)) }),
+                        Tool(Icons.Default.Notifications, "提醒和任务", badge = state.routines.count { it.enabled }.takeIf { it > 0 }?.toString(), onClick = onOpenRoutines),
+                        Tool(AppIcons.Moon, "记忆", dot = state.dreams.any { !it.seen }, onClick = onOpenMemory),
+                        Tool(AppIcons.Folder, "资料库", onClick = onOpenLibrary),
+                        Tool(AppIcons.Globe, "浏览器", onClick = { ctx.startActivity(android.content.Intent(ctx, BrowserActivity::class.java)) }),
                     )
                     val more = listOf(
-                        Tool(Icons.Default.List, "表格", tint = 0xFF14B8A6, onClick = onOpenTables),
-                        Tool(Icons.Default.Star, "复习卡片", badge = due.takeIf { it > 0 }?.toString(), tint = 0xFFF59E0B, onClick = onOpenReview),
-                        Tool(Icons.Default.Build, "技能", tint = 0xFF64748B, onClick = onOpenSkills),
-                        Tool(AppIcons.Code, "小工具", tint = 0xFF6366F1, onClick = onOpenApps),
-                        Tool(AppIcons.Download, "下载", tint = 0xFF0EA5E9, onClick = onOpenDownloads),
+                        Tool(Icons.Default.List, "表格", onClick = onOpenTables),
+                        Tool(Icons.Default.Star, "复习卡片", badge = due.takeIf { it > 0 }?.toString(), onClick = onOpenReview),
+                        Tool(Icons.Default.Build, "技能", onClick = onOpenSkills),
+                        Tool(AppIcons.Code, "小工具", onClick = onOpenApps),
+                        Tool(AppIcons.Download, "下载", onClick = onOpenDownloads),
                     )
-                    ToolGrid(if (showMoreTools) main + more else main)
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 12.dp).fillMaxWidth().clip(Radii.s)
-                            .clickable { showMoreTools = !showMoreTools }.padding(horizontal = 16.dp, vertical = 6.dp),
-                    ) {
-                        Text(if (showMoreTools) "收起" else "更多：表格、复习卡片、技能、小工具", Modifier.weight(1f),
-                            style = MaterialTheme.typography.labelMedium, color = colors.outline, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        if (!showMoreTools && due > 0) Box(Modifier.padding(end = 6.dp).size(6.dp).clip(RoundedCornerShape(3.dp)).background(colors.primary))
-                        Icon(if (showMoreTools) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, null,
-                            Modifier.size(16.dp), tint = colors.outline)
+                    Column {
+                        (if (showMoreTools) main + more else main).forEach { NavRow(it) }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 12.dp).fillMaxWidth().clip(Radii.m)
+                                .clickable { showMoreTools = !showMoreTools }.padding(horizontal = 16.dp, vertical = 10.dp),
+                        ) {
+                            Text(if (showMoreTools) "收起" else "更多", Modifier.weight(1f),
+                                style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant, maxLines = 1)
+                            if (!showMoreTools && due > 0) Box(Modifier.padding(end = 6.dp).size(6.dp).clip(RoundedCornerShape(3.dp)).background(colors.primary))
+                            Chevron(showMoreTools, Modifier.size(20.dp))
+                        }
                     }
                 }
                 if (pinned.isNotEmpty()) {
@@ -185,11 +186,8 @@ fun HistoryDrawer(
                 // 项目多了只露出最近的 3 个，其余收起来，免得把聊天记录挤到下面去
                 val shownProjects = if (showAllProjects) state.projects else state.projects.take(PROJECTS_SHOWN)
                 items(shownProjects, key = { "p" + it.id }) { p ->
-                    val count = state.conversations.count { it.projectId == p.id && it.messages.isNotEmpty() }
                     ProjectRow(
                         name = p.name + if (p.isolated) " 🔒" else "",
-                        sub = listOfNotNull("$count 个对话", "${p.files.size} 份资料".takeIf { p.files.isNotEmpty() }).joinToString(" · "),
-                        color = Color(PROJECT_COLORS[(p.id.hashCode() and 0x7fffffff) % PROJECT_COLORS.size]),
                         selected = state.currentProjectId == p.id,
                         onClick = { onOpenProject(p.id) },
                     )
@@ -222,31 +220,36 @@ fun HistoryDrawer(
                     item(key = "g$group") { SectionLabel(group) }
                     items(list, key = { it.id }) { c -> chatRow(c)() }
                 }
+                item { Spacer(Modifier.height(12.dp)) }
             }
-            HorizontalDivider(color = colors.outlineVariant)
-            // 底部只留一行：名字和设置
+            // 底部：左边一个大药丸「新对话」，右边一个圆的设置按钮（填了名字就是名字的首字）
             val name = state.settings.userName.trim()
+            val haptics = rememberHaptics()
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
-                    .fillMaxWidth()
-                    .clip(Radii.s)
-                    .clickable(onClick = onSettings)
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp),
             ) {
-                Box(
-                    Modifier.size(30.dp).clip(Radii.m).background(colors.secondaryContainer),
-                    contentAlignment = Alignment.Center,
+                val press = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                Row(
+                    Modifier.pressScale(press, 0.95f).clip(androidx.compose.foundation.shape.CircleShape).background(colors.primary)
+                        .clickable(interactionSource = press, indication = androidx.compose.foundation.LocalIndication.current) { haptics.tick(); onNew() }
+                        .padding(horizontal = 20.dp, vertical = 13.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (name.isNotEmpty()) Text(name.take(1), style = MaterialTheme.typography.labelLarge, color = colors.onSecondaryContainer)
-                    else Icon(Icons.Default.Settings, null, Modifier.size(16.dp), tint = colors.onSecondaryContainer)
+                    Icon(AppIcons.NewChat, null, Modifier.size(20.dp), tint = colors.onPrimary)
+                    Spacer(Modifier.size(8.dp))
+                    Text("新对话", style = MaterialTheme.typography.titleSmall, color = colors.onPrimary)
                 }
-                Spacer(Modifier.size(12.dp))
-                Text(name.ifEmpty { "设置" }, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodyMedium)
-                // 没填名字时左边已经是齿轮了，右边不再放一个
-                if (name.isNotEmpty()) Icon(Icons.Default.Settings, "设置", Modifier.size(20.dp), tint = colors.onSurfaceVariant)
+                Spacer(Modifier.weight(1f))
+                if (name.isEmpty()) CircleIconButton(Icons.Default.Settings, "设置", onClick = onSettings)
+                else {
+                    val settingsPress = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                    Box(
+                        Modifier.pressScale(settingsPress, 0.9f).size(42.dp).clip(androidx.compose.foundation.shape.CircleShape).background(raisedColor).hairline(androidx.compose.foundation.shape.CircleShape)
+                            .clickable(interactionSource = settingsPress, indication = androidx.compose.foundation.LocalIndication.current) { haptics.tick(); onSettings() },
+                        contentAlignment = Alignment.Center,
+                    ) { Text(name.take(1), style = MaterialTheme.typography.titleSmall, color = colors.onSurface) }
+                }
             }
         }
     }
@@ -263,87 +266,50 @@ fun HistoryDrawer(
 
 private const val PROJECTS_SHOWN = 3
 
-/** 抽屉里卡片的底色：浅色是白的，深色比抽屉底亮一层（抽屉本身是 surfaceContainerLow）。 */
+/** 抽屉里的一个项目：文件夹图标加名字，不带框；当前项目有一层淡底。 */
 @Composable
-private fun drawerCard(): Color = MaterialTheme.colorScheme.let { if (it.background.luminance() < 0.5f) it.surfaceContainerHigh else it.surfaceContainerLowest }
-
-/** 项目的小色块，按项目编号固定挑一个。 */
-private val PROJECT_COLORS = listOf(0xFF8B5CF6, 0xFF3B82F6, 0xFF22A06B, 0xFFF59E0B, 0xFFEF5A5A, 0xFF14B8A6, 0xFF6366F1)
-
-/** 抽屉里的一个项目：左边圆角色块，名字，下面一行灰字（几个对话、几份资料）。 */
-@Composable
-private fun ProjectRow(name: String, sub: String, color: Color, selected: Boolean, onClick: () -> Unit) {
+private fun ProjectRow(name: String, selected: Boolean, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
-            .padding(horizontal = 12.dp, vertical = 3.dp)
+            .padding(horizontal = 12.dp)
             .fillMaxWidth()
             .clip(Radii.m)
-            .border(1.dp, colors.outlineVariant, Radii.m)
-            .background(if (selected) colors.secondaryContainer else drawerCard())
+            .background(if (selected) colors.secondaryContainer else Color.Transparent)
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .heightIn(min = 48.dp)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
-        // 和别处的图标一个样子：项目颜色的浅底，上面一个同色的文件夹
-        Box(Modifier.size(32.dp).clip(Radii.s).background(color.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
-            Icon(AppIcons.Folder, null, Modifier.size(17.dp), tint = color)
-        }
-        Spacer(Modifier.size(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-            Text(sub, maxLines = 1, style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
-        }
+        Icon(AppIcons.Folder, null, Modifier.size(24.dp), tint = colors.onSurface)
+        Spacer(Modifier.size(14.dp))
+        Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
     }
 }
 
-private class Tool(val icon: ImageVector, val label: String, val badge: String? = null, val dot: Boolean = false, val tint: Long = 0xFF6B7280, val onClick: () -> Unit)
+private class Tool(val icon: ImageVector, val label: String, val badge: String? = null, val dot: Boolean = false, val onClick: () -> Unit)
 
-/** 常用功能：四个一行的小方块，图标在上、字在下，有待办的右上角标数字或小红点。 */
+/** 常用功能的一行：左边图标、中间名字；有待办的右边标数字或一个小点。 */
 @Composable
-private fun ToolGrid(tools: List<Tool>) {
+private fun NavRow(t: Tool) {
     val colors = MaterialTheme.colorScheme
-    Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
-        tools.chunked(4).forEach { row ->
-            Row(Modifier.fillMaxWidth()) {
-                row.forEach { t ->
-                    Box(
-                        Modifier
-                            .weight(1f)
-                            .padding(2.dp)
-                            .clip(Radii.m)
-                            .clickable(onClick = t.onClick)
-                            .padding(vertical = 8.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            val tint = Color(t.tint)
-                            Box(
-                                Modifier.size(46.dp).clip(androidx.compose.foundation.shape.CircleShape).background(tint.copy(alpha = 0.14f)),
-                                contentAlignment = Alignment.Center,
-                            ) { Icon(t.icon, null, Modifier.size(21.dp), tint = tint) }
-                            Spacer(Modifier.size(5.dp))
-                            Text(t.label, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                color = colors.onSurface)
-                        }
-                        when {
-                            t.badge != null -> Text(
-                                t.badge,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = colors.onPrimary,
-                                modifier = Modifier.align(Alignment.TopEnd).padding(end = 8.dp)
-                                    .clip(Radii.xs).background(colors.primary).padding(horizontal = 5.dp),
-                            )
-                            t.dot -> Box(
-                                Modifier.align(Alignment.TopEnd).padding(end = 12.dp).size(7.dp)
-                                    .clip(RoundedCornerShape(4.dp)).background(colors.primary),
-                            )
-                        }
-                    }
-                }
-                // 最后一行不满时补空位，方块大小保持一致
-                repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
-            }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .padding(horizontal = 12.dp)
+            .fillMaxWidth()
+            .clip(Radii.m)
+            .clickable(onClick = t.onClick)
+            .heightIn(min = 48.dp)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+    ) {
+        Icon(t.icon, null, Modifier.size(24.dp), tint = colors.onSurface)
+        Spacer(Modifier.size(14.dp))
+        Text(t.label, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
+        when {
+            t.badge != null -> Text(t.badge, style = MaterialTheme.typography.labelMedium, color = colors.onPrimary,
+                modifier = Modifier.clip(androidx.compose.foundation.shape.CircleShape).background(colors.primary).padding(horizontal = 8.dp, vertical = 1.dp))
+            t.dot -> Box(Modifier.size(8.dp).clip(androidx.compose.foundation.shape.CircleShape).background(colors.primary))
         }
     }
 }
@@ -369,10 +335,10 @@ internal fun dayGroup(at: Long, now: Long = System.currentTimeMillis()): String 
 private fun SectionLabel(text: String, action: String? = null, onAction: (() -> Unit)? = null) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().padding(start = 28.dp, end = 16.dp, top = 20.dp, bottom = 6.dp),
+        modifier = Modifier.fillMaxWidth().padding(start = 28.dp, end = 16.dp, top = 22.dp, bottom = 6.dp),
     ) {
-        Text(text, Modifier.weight(1f), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface)
+        Text(text, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (action != null && onAction != null) {
             Text(
                 "+ $action",
@@ -406,26 +372,21 @@ fun ChatItem(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(Radii.s)
+                .clip(Radii.m)
                 .background(if (selected) colors.secondaryContainer else Color.Transparent)
                 .combinedClickable(onClick = onClick, onLongClick = { menu = true })
-                .heightIn(min = 44.dp)
+                .heightIn(min = 48.dp)
                 .padding(start = 16.dp, end = if (showMore) 4.dp else 16.dp, top = 2.dp, bottom = 2.dp),
         ) {
             if (c.pinned) {
                 Icon(AppIcons.Pin, null, Modifier.padding(end = 6.dp).size(14.dp), tint = colors.primary)
             }
-            Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
-                Text(
-                    c.title, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium,
-                    color = if (selected) colors.onSecondaryContainer else colors.onSurface,
-                )
-                // 最后一句话（用户问的或 Kavi 答的）露一行，找起来快
-                val last = remember(c.messages.size, c.updatedAt) { preview(c) }
-                if (last.isNotEmpty()) Text(last, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
-            }
+            Text(
+                c.title, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (selected) colors.onSecondaryContainer else colors.onSurface,
+                modifier = Modifier.weight(1f).padding(vertical = 10.dp),
+            )
             if (answering) {
                 Box(Modifier.padding(start = 8.dp).size(7.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Hue.BLUE.color))
                 Text("回答中", style = MaterialTheme.typography.labelSmall, color = Hue.BLUE.color, modifier = Modifier.padding(start = 4.dp))
@@ -436,36 +397,12 @@ fun ChatItem(
                 }
             }
         }
-        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-            if (onPin != null) {
-                DropdownMenuItem(
-                    text = { Text(if (c.pinned) "取消置顶" else "置顶") },
-                    leadingIcon = { Icon(AppIcons.Pin, null) },
-                    onClick = { menu = false; onPin() },
-                )
-            }
-            if (onMemory != null) {
-                DropdownMenuItem(
-                    text = { Text("记忆") },
-                    leadingIcon = { Icon(AppIcons.Moon, null) },
-                    onClick = { menu = false; onMemory() },
-                )
-            }
-            DropdownMenuItem(
-                text = { Text("用量") },
-                leadingIcon = { Icon(Icons.Default.Info, null) },
-                onClick = { menu = false; showUsage = true },
-            )
-            DropdownMenuItem(
-                text = { Text("重命名") },
-                leadingIcon = { Icon(Icons.Default.Edit, null) },
-                onClick = { menu = false; onRename() },
-            )
-            DropdownMenuItem(
-                text = { Text("删除", color = colors.error) },
-                leadingIcon = { Icon(Icons.Default.Delete, null, tint = colors.error) },
-                onClick = { menu = false; onDelete() },
-            )
+        RoundMenu(expanded = menu, onDismiss = { menu = false }) {
+            if (onPin != null) MenuRow(if (c.pinned) "取消置顶" else "置顶", icon = AppIcons.Pin) { menu = false; onPin() }
+            if (onMemory != null) MenuRow("记忆", icon = AppIcons.Moon) { menu = false; onMemory() }
+            MenuRow("用量", icon = Icons.Default.Info) { menu = false; showUsage = true }
+            MenuRow("重命名", icon = Icons.Default.Edit) { menu = false; onRename() }
+            MenuRow("删除", icon = Icons.Default.Delete, danger = true) { menu = false; onDelete() }
         }
     }
     if (showUsage) ConversationUsageDialog(c) { showUsage = false }
@@ -538,21 +475,21 @@ internal fun searchConversations(all: List<Conversation>, query: String): List<P
 }
 
 @Composable
-private fun SearchField(value: String, onChange: (String) -> Unit, modifier: Modifier = Modifier) {
+private fun SearchField(value: String, onChange: (String) -> Unit, modifier: Modifier = Modifier, focus: androidx.compose.ui.focus.FocusRequester? = null) {
     val colors = MaterialTheme.colorScheme
-    Surface(shape = Radii.m, color = colors.surfaceContainerHigh, modifier = modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 12.dp)) {
-            Icon(Icons.Default.Search, null, Modifier.size(18.dp), tint = colors.onSurfaceVariant)
-            Spacer(Modifier.size(8.dp))
-            Box(Modifier.weight(1f).padding(vertical = 11.dp)) {
-                if (value.isEmpty()) Text("搜索对话", style = MaterialTheme.typography.bodyMedium, color = colors.outline)
+    Surface(shape = androidx.compose.foundation.shape.CircleShape, color = raisedColor, modifier = modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 16.dp)) {
+            Icon(Icons.Default.Search, null, Modifier.size(20.dp), tint = colors.onSurfaceVariant)
+            Spacer(Modifier.size(10.dp))
+            Box(Modifier.weight(1f).padding(vertical = 13.dp)) {
+                if (value.isEmpty()) Text("搜索对话", style = MaterialTheme.typography.bodyLarge, color = colors.outline)
                 BasicTextField(
                     value = value,
                     onValueChange = onChange,
                     singleLine = true,
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = colors.onSurface),
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = colors.onSurface),
                     cursorBrush = SolidColor(colors.primary),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().let { if (focus != null) it.focusRequester(focus) else it },
                 )
             }
             if (value.isNotEmpty()) {

@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
@@ -119,14 +120,13 @@ fun SettingsScreen(
         // 浅灰的底，上面一张张白卡片
         containerColor = if (dark) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.surfaceContainerLow,
         topBar = {
-            TopAppBar(
+            androidx.compose.material3.CenterAlignedTopAppBar(
                 title = { Text(page?.title ?: "设置", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
-                colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
-                    containerColor = if (dark) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.surfaceContainerLow),
+                colors = androidx.compose.material3.TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = if (dark) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.surfaceContainerLow,
+                    scrolledContainerColor = if (dark) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.surfaceContainerLow),
                 navigationIcon = {
-                    IconButton(onClick = { if (page != null) page = null else onBack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                    }
+                    CircleIconButton(Icons.AutoMirrored.Filled.ArrowBack, "返回", Modifier.padding(start = 12.dp)) { if (page != null) page = null else onBack() }
                 },
             )
         },
@@ -463,8 +463,8 @@ private fun Section(hint: String? = null, content: @Composable () -> Unit) {
     Column(Modifier.fillMaxWidth()) {
         androidx.compose.material3.Surface(
             shape = Radii.l,
-            color = if (dark) colors.surfaceContainer else colors.surfaceContainerLowest,
-            border = androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant),
+            color = if (dark) colors.surfaceContainerHigh else colors.surfaceContainerLowest,
+            border = androidx.compose.foundation.BorderStroke(1.dp, if (dark) androidx.compose.ui.graphics.Color.White.copy(alpha = 0.06f) else colors.outlineVariant),
             modifier = Modifier.fillMaxWidth(),
         ) {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -493,7 +493,7 @@ private fun ThemeTiles(selected: ThemeMode, onPick: (ThemeMode) -> Unit) {
             ) {
                 // 小预览：一张「页面」上两道「文字」
                 val light = androidx.compose.ui.graphics.Color(0xFFF3F4F6) to androidx.compose.ui.graphics.Color(0xFFD1D5DB)
-                val darkC = androidx.compose.ui.graphics.Color(0xFF1D212B) to androidx.compose.ui.graphics.Color(0xFF3A4150)
+                val darkC = androidx.compose.ui.graphics.Color(0xFF1C1C1E) to androidx.compose.ui.graphics.Color(0xFF3A3A3C)
                 Row(Modifier.fillMaxWidth().height(44.dp).clip(Radii.xs)) {
                     listOfNotNull(if (m != ThemeMode.DARK) light else null, if (m != ThemeMode.LIGHT) darkC else null).forEach { (bg, line) ->
                         Column(Modifier.weight(1f).fillMaxSize().background(bg).padding(8.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -597,28 +597,28 @@ private fun SettingsHome(
         SettingsEntry(icon, p.title, value, warn) { onPick(p) }
     val noKey = !settings.hasAnyKey()
     val model = settings.modelChoices().firstOrNull { it.key == settings.model }?.label
-    SettingsGroup("关于你", Hue.BLUE, listOf(
+    SettingsGroup("关于你", listOf(
         go(SettingsPage.PROFILE, Icons.Default.Person, settings.userName.ifBlank { "未设置" }),
     ))
-    SettingsGroup("模型", Hue.VIOLET, listOf(
+    SettingsGroup("模型", listOf(
         go(SettingsPage.KEY, AppIcons.Lock, if (settings.apiKey.isNotBlank()) "已填" else "未填", warn = noKey),
         go(SettingsPage.PROVIDERS, AppIcons.Code, if (settings.providers.isEmpty()) "未添加" else "${settings.providers.size} 个"),
         go(SettingsPage.MODEL, AppIcons.Brain, listOfNotNull(model, settings.thinking.label).joinToString(" · ")),
         go(SettingsPage.LOCAL, AppIcons.Chip),
         go(SettingsPage.COMPRESS, AppIcons.Compress, "${settings.compressTokens / 1000}k"),
     ))
-    SettingsGroup("Kavi 能用的", Hue.GREEN, listOf(
+    SettingsGroup("Kavi 能用的", listOf(
         go(SettingsPage.CONNECT, AppIcons.Globe),
         SettingsEntry(Icons.Default.Build, "技能", onClick = onOpenSkills),
         go(SettingsPage.REMOTE, AppIcons.Share),
     ))
-    SettingsGroup("手机", Hue.AMBER, listOf(
+    SettingsGroup("手机", listOf(
         go(SettingsPage.PHONE, AppIcons.Phone, if (settings.phoneApps.isEmpty()) "未开启" else "${settings.phoneApps.size} 个 App"),
         go(SettingsPage.ASK, Icons.Default.Search),
         go(SettingsPage.PHONEDATA, Icons.AutoMirrored.Filled.List, if (settings.phoneDataOn) "已开" else "全关"),
         go(SettingsPage.FOLDERS, AppIcons.Folder, if (settings.phoneFolders.isEmpty()) "未授权" else "${settings.phoneFolders.size} 个"),
     ))
-    SettingsGroup("应用", Hue.GRAY, listOf(
+    SettingsGroup("应用", listOf(
         go(SettingsPage.LOOK, AppIcons.Moon, settings.themeMode.label),
         SettingsEntry(Icons.Default.Info, "统计", monthSpent?.let { "本月 " + yuan(it) }, onClick = onOpenUsage),
         go(SettingsPage.PRIVACY, Icons.Default.Lock, when {
@@ -631,31 +631,27 @@ private fun SettingsHome(
     ))
 }
 
-/** 一组入口：灰色小标题，下面一张圆角卡片，行和行之间一道从文字起头的细线。图标放在浅色小方块里，一组一个颜色，好找。 */
+/** 一组入口：灰色粗体小标题，下面一张大圆角卡片，行和行之间一道从文字起头的细线。图标是素色线条，和聊天页一样克制。 */
 @Composable
-private fun SettingsGroup(title: String, hue: Hue, entries: List<SettingsEntry>) {
-    val tint = hue.color
+private fun SettingsGroup(title: String, entries: List<SettingsEntry>) {
     val colors = MaterialTheme.colorScheme
     val dark = colors.background.luminance() < 0.5f
     Column(Modifier.fillMaxWidth()) {
         Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-            color = colors.onSurfaceVariant, modifier = Modifier.padding(start = 6.dp, bottom = 8.dp))
+            color = colors.onSurfaceVariant, modifier = Modifier.padding(start = 10.dp, bottom = 8.dp))
         androidx.compose.material3.Surface(
-            shape = Radii.l,
-            color = if (dark) colors.surfaceContainer else colors.surfaceContainerLowest,
-            modifier = Modifier.fillMaxWidth().hairline(Radii.l),
+            shape = Radii.xl,
+            color = if (dark) colors.surfaceContainerHigh else colors.surfaceContainerLowest,
+            modifier = Modifier.fillMaxWidth().hairline(Radii.xl),
         ) {
             Column {
                 entries.forEachIndexed { i, e ->
-                    if (i > 0) androidx.compose.material3.HorizontalDivider(Modifier.padding(start = 62.dp), color = colors.outlineVariant.copy(alpha = 0.6f))
+                    if (i > 0) androidx.compose.material3.HorizontalDivider(Modifier.padding(start = 58.dp, end = 20.dp), color = colors.outlineVariant.copy(alpha = 0.6f))
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth().clickable(onClick = e.onClick).padding(horizontal = 16.dp, vertical = 11.dp),
+                        modifier = Modifier.fillMaxWidth().clickable(onClick = e.onClick).heightIn(min = 56.dp).padding(horizontal = 20.dp, vertical = 12.dp),
                     ) {
-                        Box(Modifier.size(32.dp).clip(Radii.s).background(hue.wash),
-                            contentAlignment = Alignment.Center) {
-                            Icon(e.icon, null, Modifier.size(18.dp), tint = tint)
-                        }
+                        Icon(e.icon, null, Modifier.size(24.dp), tint = colors.onSurface)
                         Spacer(Modifier.size(14.dp))
                         Text(e.title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         e.value?.takeIf { it.isNotBlank() }?.let {

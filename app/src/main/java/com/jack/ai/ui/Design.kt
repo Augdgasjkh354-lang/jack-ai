@@ -274,10 +274,10 @@ fun RoundMenu(expanded: Boolean, onDismiss: () -> Unit, modifier: Modifier = Mod
  */
 @Composable
 fun MenuRow(label: String, icon: ImageVector? = null, glyph: String? = null, sub: String? = null, checked: Boolean = false,
-            enabled: Boolean = true, onClick: () -> Unit) {
+            enabled: Boolean = true, danger: Boolean = false, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     val press = remember { MutableInteractionSource() }
-    val ink = (if (checked) colors.primary else colors.onSurface).copy(alpha = if (enabled) 1f else 0.4f)
+    val ink = (if (danger) colors.error else if (checked) colors.primary else colors.onSurface).copy(alpha = if (enabled) 1f else 0.4f)
     Row(
         Modifier.fillMaxWidth().pressScale(press, 0.97f).heightIn(min = 54.dp)
             .clickable(interactionSource = press, indication = androidx.compose.foundation.LocalIndication.current, enabled = enabled, onClick = onClick)
