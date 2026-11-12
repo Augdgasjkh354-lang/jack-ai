@@ -143,6 +143,47 @@ class BrowserActivity : ComponentActivity() {
     private var reader by mutableStateOf<Pair<String, String>?>(null)
     /** 选视频倍速。 */
     private var ratePick by mutableStateOf(false)
+    /** 书签页、离线网页列表开着；正在看的离线网页。 */
+    private var showMarks by mutableStateOf(false)
+    private var showOffline by mutableStateOf(false)
+    private var offlineView by mutableStateOf<BrowserPages.OfflinePage?>(null)
+    /** 这个网站的数据（null = 没打开）。 */
+    private var siteData by mutableStateOf<JackBrowser.SiteData?>(null)
+
+    /** 导入别的浏览器导出的 bookmarks.html。 */
+    private val importMarks = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri ?: return@registerForActivityResult
+        lifecycleScope.launch {
+            val html = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching { contentResolver.openInputStream(uri)?.use { String(it.readNBytesCompat(20 shl 20), Charsets.UTF_8) } }.getOrNull()
+            }
+            if (html == null) { JackBrowser.notice = "文件没读出来"; return@launch }
+            val (found, added) = JackBrowser.importMarks(html)
+            JackBrowser.notice = when {
+                found == 0 -> "这个文件里没找到书签。要用浏览器「导出书签」得到的 .html 文件。"
+                added == 0 -> "文件里的 $found 个书签都已经有了。"
+                else -> "导入了 $added 个书签" + (if (found > added) "（另外 ${found - added} 个已经有了）" else "") + "。"
+            }
+        }
+    }
+    /** 导出书签成 bookmarks.html，别的浏览器能导入。 */
+    private val exportMarks = registerForActivityResult(ActivityResultContracts.CreateDocument("text/html")) { uri ->
+        uri ?: return@registerForActivityResult
+        val html = com.jack.ai.api.BrowserBookmarks.export(JackBrowser.marks)
+        lifecycleScope.launch {
+            val ok = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching { contentResolver.openOutputStream(uri)?.use { it.write(html.toByteArray()) } != null }.getOrDefault(false)
+            }
+            JackBrowser.notice = if (ok) "已导出 ${JackBrowser.marks.size} 个书签。" else "没导出成"
+        }
+    }
+
+    private fun java.io.InputStream.readNBytesCompat(max: Int): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        val buf = ByteArray(64 * 1024)
+        while (out.size() < max) { val n = read(buf); if (n < 0) break; out.write(buf, 0, n) }
+        return out.toByteArray()
+    }
     /** 添加到主屏幕：(网址, 图标名字)，等用户改名字。 */
     private var shortcutAsk by mutableStateOf<Pair<String, String>?>(null)
 
@@ -423,6 +464,9 @@ class BrowserActivity : ComponentActivity() {
                 showDownloads -> showDownloads = false
                 showLater -> showLater = false
                 showHistory -> showHistory = false
+                offlineView != null -> offlineView = null
+                showOffline -> showOffline = false
+                showMarks -> showMarks = false
                 else -> {
                     val w = b.webView(this)
                     when {
@@ -505,6 +549,11 @@ class BrowserActivity : ComponentActivity() {
                         DropdownMenuItem(text = { Text("分享") }, enabled = has, onClick = { menu = false; share(b.address, b.title) })
                         DropdownMenuItem(text = { Text("长截图") }, enabled = has && !shooting, onClick = { menu = false; takeLongShot() })
                         DropdownMenuItem(text = { Text("存成 PDF") }, enabled = has, onClick = { menu = false; savePdf() })
+                        DropdownMenuItem(text = { Text("存成离线网页") }, enabled = has && !b.tab.incognito, onClick = {
+                            menu = false
+                            lifecycleScope.launch { b.notice = b.saveOffline() }
+                        })
+                        DropdownMenuItem(text = { Text("离线网页" + b.offline.size.takeIf { it > 0 }?.let { "（$it）" }.orEmpty()) }, onClick = { menu = false; showOffline = true })
                         DropdownMenuItem(text = { Text("页内查找") }, enabled = has, onClick = { menu = false; finding = "" })
                         DropdownMenuItem(text = { Text("搜索引擎") }, onClick = { menu = false; searchPick = true })
                         DropdownMenuItem(text = { Text("下载管理") }, onClick = { menu = false; showDownloads = true })
@@ -516,6 +565,7 @@ class BrowserActivity : ComponentActivity() {
                             b.toggleMark()
                             b.notice = if (adding) "已加入书签，起始页能看到" else "已移出书签"
                         })
+                        DropdownMenuItem(text = { Text("书签" + b.marks.size.takeIf { it > 0 }?.let { "（$it）" }.orEmpty()) }, onClick = { menu = false; showMarks = true })
                         DropdownMenuItem(text = { Text("添加到主屏幕") }, enabled = has && BrowserPages.isWeb(b.address) && !b.tab.incognito, onClick = {
                             menu = false
                             if (WebShortcut.supported(this@BrowserActivity)) shortcutAsk = b.address to b.title.ifBlank { WebShortcut.host(b.address) }
@@ -564,6 +614,10 @@ class BrowserActivity : ComponentActivity() {
                         DropdownMenuItem(text = { Text((if (b.adBlock) "✓ " else "    ") + "去广告") }, onClick = { menu = false; b.changeAdBlock(!b.adBlock) })
                         if (b.adBlock && has) DropdownMenuItem(text = { Text((if (b.adAllowedHere()) "✓ " else "    ") + "这个网站不去广告") },
                             onClick = { menu = false; b.toggleAdAllow() })
+                        if (has && BrowserPages.isWeb(b.address)) DropdownMenuItem(text = { Text("这个网站的数据") }, onClick = {
+                            menu = false
+                            lifecycleScope.launch { b.siteData()?.let { siteData = it } ?: run { b.notice = "看不出这是哪个网站" } }
+                        })
                         if (has && b.permsHere()) DropdownMenuItem(text = { Text("重置这个网站的权限") }, onClick = {
                             menu = false; b.resetPermsHere(); b.notice = "这个网站下次要用相机、麦克风或位置时会再问你。"
                         })
@@ -681,9 +735,16 @@ class BrowserActivity : ComponentActivity() {
         if (showDownloads && b.userViewing) Box(Modifier.fillMaxSize().safeDrawingPadding()) { BrowserDownloadsPanel { showDownloads = false } }
         if (showLater && b.userViewing) Box(Modifier.fillMaxSize().safeDrawingPadding()) { LaterPanel() }
         LaunchedEffect(b.pageFailed, b.address) {
-            if (b.pageFailed && b.userViewing && !b.tab.incognito) b.offlineLater(b.address)?.let { reader = it; b.notice = "网络打不开，显示已保存的正文" }
+            if (!b.pageFailed || !b.userViewing || b.tab.incognito) return@LaunchedEffect
+            // 存过整页的先用整页，没有再用阅读列表存的正文
+            val page = b.offline.firstOrNull { it.url == b.address && b.offlineFile(it).exists() }
+            if (page != null) { offlineView = page; b.notice = "网络打不开，显示存下的离线网页" }
+            else b.offlineLater(b.address)?.let { reader = it; b.notice = "网络打不开，显示已保存的正文" }
         }
         if (showHistory) Box(Modifier.fillMaxSize().safeDrawingPadding()) { HistoryPanel() }
+        if (showMarks && b.userViewing) Box(Modifier.fillMaxSize().safeDrawingPadding()) { MarksPanel() }
+        if (showOffline && b.userViewing) Box(Modifier.fillMaxSize().safeDrawingPadding()) { OfflinePanel() }
+        offlineView?.let { p -> Box(Modifier.fillMaxSize().safeDrawingPadding()) { OfflineViewer(p) } }
         // 视频全屏：盖满整个屏幕
         full?.let { (view, _) ->
             // 碰一下屏幕，顶上露出倍速按钮，三秒后藏起来
@@ -729,6 +790,22 @@ class BrowserActivity : ComponentActivity() {
                     Modifier.fillMaxWidth().clickable { b.changeSearchEngine(key); searchPick = false }.padding(vertical = 12.dp))
             } } }, confirmButton = { TextButton(onClick = { searchPick = false }) { Text("关闭") } },
         )
+        siteData?.let { d ->
+            AlertDialog(
+                onDismissRequest = { siteData = null }, title = { Text(d.root) },
+                text = { Text(
+                    "Cookie（登录状态）：${d.cookies} 个\n网页存储：${com.jack.ai.api.BrowserSiteData.sizeText(d.storage)}" +
+                        (if (d.origins.size > 1) "（${d.origins.size} 个子网站）" else "") +
+                        "\n\n清掉后这个网站会退出登录、忘掉设置，别的网站不受影响。" +
+                        (if (b.tab.account > 0) "\n只清「分身${b.tab.account}」里的。" else ""),
+                    style = MaterialTheme.typography.bodyMedium) },
+                confirmButton = { TextButton(onClick = {
+                    siteData = null
+                    lifecycleScope.launch { b.clearSite(d); b.notice = "已清掉 ${d.root} 的登录状态和网页存储。" }
+                }) { Text("清掉这个网站的", color = colors.error) } },
+                dismissButton = { TextButton(onClick = { siteData = null }) { Text("关闭") } },
+            )
+        }
         if (ratePick) AlertDialog(
             onDismissRequest = { ratePick = false }, title = { Text("视频倍速") },
             text = { Column {
@@ -1433,6 +1510,135 @@ class BrowserActivity : ComponentActivity() {
         )
     }
 
+    /** 书签：搜索、删除、按文件夹看，导入别的浏览器的书签、导出给别的浏览器。 */
+    @Composable
+    private fun MarksPanel() {
+        val b = JackBrowser
+        val colors = MaterialTheme.colorScheme
+        var query by remember { mutableStateOf("") }
+        var folder by remember { mutableStateOf<String?>(null) }
+        val folders = remember(b.marks) { b.marks.map { it.folder }.filter { it.isNotBlank() }.distinct() }
+        val shown = remember(b.marks, query, folder) {
+            val words = query.trim().lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
+            b.marks.filter { m -> (folder == null || m.folder == folder) &&
+                words.all { w -> m.title.lowercase().contains(w) || m.url.lowercase().contains(w) || m.folder.lowercase().contains(w) } }
+        }
+        Surface(Modifier.fillMaxSize(), color = colors.background) {
+            Column(Modifier.fillMaxSize()) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { showMarks = false }) { Icon(Icons.Default.Close, "收起") }
+                    Text("书签（${b.marks.size}）", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                    TextButton(onClick = { runCatching { importMarks.launch(arrayOf("text/html", "*/*")) } }) { Text("导入") }
+                    TextButton(enabled = b.marks.isNotEmpty(), onClick = { runCatching { exportMarks.launch("bookmarks.html") } }) { Text("导出") }
+                }
+                if (b.marks.isEmpty()) {
+                    Text("还没有书签。网页菜单里点「加入书签」，或者从 Chrome、Edge 导入：在电脑上打开 书签管理 →「导出书签」，" +
+                        "把得到的 .html 文件传到手机，再点上面的「导入」。", Modifier.padding(24.dp), color = colors.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium)
+                    return@Column
+                }
+                OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    placeholder = { Text("搜标题、网址或文件夹") }, singleLine = true, textStyle = MaterialTheme.typography.bodyMedium)
+                if (folders.isNotEmpty()) androidx.compose.foundation.lazy.LazyRow(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    item { androidx.compose.material3.FilterChip(folder == null, { folder = null }, { Text("全部") }) }
+                    items(folders) { f -> androidx.compose.material3.FilterChip(folder == f, { folder = if (folder == f) null else f }, { Text(f, maxLines = 1) }) }
+                }
+                if (shown.isEmpty()) Text("没找到。", Modifier.padding(24.dp), color = colors.onSurfaceVariant)
+                LazyColumn(Modifier.fillMaxSize()) {
+                    items(shown, key = { "bm" + it.url }) { m ->
+                        Row(Modifier.fillMaxWidth().clickable { showMarks = false; open(m.url) }.padding(start = 16.dp, top = 4.dp, bottom = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(BrowserPages.label(m), style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text((if (m.folder.isNotBlank() && folder == null) m.folder + " · " else "") + BrowserPages.host(m.url),
+                                    style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                            IconButton(onClick = { b.removeMark(m.url) }) { Icon(Icons.Default.Close, "删掉这个书签") }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** 离线网页列表：存下的整页，没网也能打开。 */
+    @Composable
+    private fun OfflinePanel() {
+        val b = JackBrowser
+        val colors = MaterialTheme.colorScheme
+        val date = remember { java.text.SimpleDateFormat("M月d日 HH:mm", java.util.Locale.getDefault()) }
+        Surface(Modifier.fillMaxSize(), color = colors.background) {
+            Column(Modifier.fillMaxSize()) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { showOffline = false }) { Icon(Icons.Default.Close, "收起") }
+                    Text("离线网页", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                    if (b.offline.isNotEmpty()) Text("共 " + com.jack.ai.api.BrowserSiteData.sizeText(b.offline.sumOf { it.size }),
+                        Modifier.padding(end = 12.dp), style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+                }
+                if (b.offline.isEmpty()) Text("还没有。网页菜单里点「存成离线网页」，整页连图片和排版一起存下来，没网也能看。" +
+                    "（只存正文用「加入阅读列表」更省地方。）", Modifier.padding(24.dp), color = colors.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                LazyColumn(Modifier.fillMaxSize()) {
+                    items(b.offline, key = { "off" + it.file }) { p ->
+                        Row(Modifier.fillMaxWidth().clickable { offlineView = p }.padding(start = 16.dp, top = 4.dp, bottom = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(p.title.ifBlank { BrowserPages.host(p.url) }, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(date.format(java.util.Date(p.at)) + " · " + com.jack.ai.api.BrowserSiteData.sizeText(p.size) + " · " + BrowserPages.host(p.url),
+                                    style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                            IconButton(onClick = { b.removeOffline(p) }) { Icon(Icons.Default.Close, "删掉") }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * 看一个离线网页：单独的网页窗口，只读本机这个文件，不联网、不跑脚本（存下的页面是死的，跑脚本也没用，还更安全）。
+     * 点里面的链接回到 Kavi 浏览器在线打开。
+     */
+    @Composable
+    private fun OfflineViewer(p: BrowserPages.OfflinePage) {
+        val b = JackBrowser
+        val colors = MaterialTheme.colorScheme
+        val file = remember(p) { b.offlineFile(p) }
+        Surface(Modifier.fillMaxSize(), color = colors.background) {
+            Column(Modifier.fillMaxSize()) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { offlineView = null }) { Icon(Icons.Default.Close, "关掉") }
+                    Column(Modifier.weight(1f)) {
+                        Text(p.title.ifBlank { BrowserPages.host(p.url) }, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("离线 · " + BrowserPages.host(p.url), style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+                    }
+                    TextButton(onClick = { offlineView = null; showOffline = false; open(p.url) }) { Text("打开原网页") }
+                }
+                if (!file.exists()) { Text("文件不见了。", Modifier.padding(24.dp), color = colors.onSurfaceVariant); return@Column }
+                AndroidView(factory = { c ->
+                    android.webkit.WebView(c).apply {
+                        settings.javaScriptEnabled = false
+                        settings.allowFileAccess = true
+                        settings.allowContentAccess = false
+                        settings.blockNetworkLoads = true
+                        settings.builtInZoomControls = true
+                        settings.displayZoomControls = false
+                        settings.useWideViewPort = true
+                        settings.loadWithOverviewMode = true
+                        webViewClient = object : android.webkit.WebViewClient() {
+                            override fun shouldOverrideUrlLoading(view: android.webkit.WebView, request: android.webkit.WebResourceRequest): Boolean {
+                                val u = request.url.toString()
+                                if (BrowserPages.isWeb(u)) { offlineView = null; showOffline = false; open(u) }
+                                return true
+                            }
+                        }
+                        loadUrl(Uri.fromFile(file).toString())
+                    }
+                }, onRelease = { it.destroy() }, modifier = Modifier.fillMaxSize())
+            }
+        }
+    }
+
     /** 网页没打开：盖一层干净的说明，不露出网页组件自带的英文出错页。 */
     @Composable
     private fun ErrorPage(msg: String) {
@@ -1567,10 +1773,11 @@ class BrowserActivity : ComponentActivity() {
                     Text(BrowserPages.host(e.url), style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
                 }
             }
-            if (b.marks.isNotEmpty()) {
-                item { Section("书签") }
-                items(b.marks, key = { "m" + it.url }) { PageRow(it) }
-            }
+            item { Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(1f)) { Section("书签") }
+                TextButton(onClick = { showMarks = true }) { Text(if (b.marks.isEmpty()) "导入" else "全部（${b.marks.size}）") }
+            } }
+            items(b.marks.take(12), key = { "m" + it.url }) { PageRow(it) }
             if (b.visits.isNotEmpty()) {
                 item {
                     Row(verticalAlignment = Alignment.CenterVertically) {

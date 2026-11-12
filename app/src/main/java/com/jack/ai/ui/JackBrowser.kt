@@ -861,6 +861,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
     private fun loadLists() {
         fun read(k: String) = prefs().getString(k, null)?.let { runCatching { listJson.decodeFromString(visitList, it) }.getOrNull() }.orEmpty()
         visits = read("visits"); marks = read("marks")
+        offline = prefs().getString("offline", null)?.let { runCatching { listJson.decodeFromString(offlineList, it) }.getOrNull() }.orEmpty()
         later = prefs().getString("readlater", null)?.let { runCatching { listJson.decodeFromString(laterList, it) }.getOrNull() }.orEmpty()
         searchEngine = prefs().getString("searchEngine", BrowserNet.AUTO) ?: BrowserNet.AUTO
         desktopSites = prefs().getStringSet("desktop", emptySet()).orEmpty().toSet()
@@ -1112,6 +1113,90 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
     fun toggleMark() {
         marks = BrowserPages.toggle(marks, address, title, System.currentTimeMillis())
         saveLists()
+    }
+
+    fun removeMark(url: String) {
+        marks = marks.filterNot { it.url == url }
+        saveLists()
+    }
+
+    /** 导入别的浏览器导出的 bookmarks.html。返回 (文件里有几个, 新加了几个)。 */
+    fun importMarks(html: String): Pair<Int, Int> {
+        val parsed = com.jack.ai.api.BrowserBookmarks.parse(html)
+        val (merged, added) = com.jack.ai.api.BrowserBookmarks.merge(marks, parsed)
+        if (added > 0) { marks = merged; saveLists() }
+        return parsed.size to added
+    }
+
+    // ---------- 离线网页（整页存成 MHTML） ----------
+    var offline by mutableStateOf(listOf<BrowserPages.OfflinePage>())
+        private set
+    private val offlineList = kotlinx.serialization.builtins.ListSerializer(BrowserPages.OfflinePage.serializer())
+    private fun offlineDir() = java.io.File(app.filesDir, "offline_pages").apply { mkdirs() }
+    fun offlineFile(p: BrowserPages.OfflinePage) = java.io.File(offlineDir(), p.file)
+    private fun saveOfflineList() { prefs().edit().putString("offline", listJson.encodeToString(offlineList, offline)).apply() }
+
+    /** 把当前网页整页存下来（同一个网址再存就换成新的）。返回给用户看的一句话。 */
+    suspend fun saveOffline(): String = withContext(Dispatchers.Main) {
+        val w = web ?: return@withContext "没有打开的网页"
+        val url = address
+        if (!BrowserPages.isWeb(url)) return@withContext "这一页存不了"
+        if (tab.incognito) return@withContext "隐身标签页不存离线网页"
+        val name = "${System.currentTimeMillis()}.mht"
+        val f = java.io.File(offlineDir(), name)
+        val path = withTimeoutOrNull(60_000) { suspendCancellableCoroutine<String?> { c -> w.saveWebArchive(f.path, false) { c.resume(it) } } }
+        if (path == null || !f.exists() || f.length() == 0L) { f.delete(); return@withContext "没存成（这个网页不让存，或者还没加载完）" }
+        offline.filter { it.url == url }.forEach { offlineFile(it).delete() }
+        offline = listOf(BrowserPages.OfflinePage(url, title.ifBlank { BrowserPages.host(url) }, System.currentTimeMillis(), name, f.length())) +
+            offline.filterNot { it.url == url }
+        saveOfflineList()
+        "已存成离线网页（${com.jack.ai.api.BrowserSiteData.sizeText(f.length())}），没网也能看：菜单 →「离线网页」"
+    }
+
+    fun removeOffline(p: BrowserPages.OfflinePage) {
+        offlineFile(p).delete()
+        offline = offline.filterNot { it.file == p.file }
+        saveOfflineList()
+    }
+
+    // ---------- 这个网站的数据 ----------
+    /** 一个网站（主域名）在这个标签页的资料夹里存了什么。 */
+    data class SiteData(val root: String, val cookies: Int, val storage: Long, val origins: List<String>)
+
+    private fun storageOf(t: Tab): WebStorage {
+        val name = if (t.incognito) INCOGNITO else if (t.account > 0) accountProfile(t.account) else null
+        return name?.takeIf { incognitoSupported() }?.let { androidx.webkit.ProfileStore.getInstance().getProfile(it)?.webStorage } ?: WebStorage.getInstance()
+    }
+
+    /** 当前网页所在网站的 Cookie 个数、网页存储大小（主域名和子域名一起算）。 */
+    suspend fun siteData(): SiteData? = withContext(Dispatchers.Main) {
+        val host = runCatching { java.net.URI(address).host }.getOrNull()?.lowercase() ?: return@withContext null
+        val root = com.jack.ai.api.BrowserSiteData.root(host)
+        val origins = withTimeoutOrNull(5_000) {
+            suspendCancellableCoroutine<Map<*, *>?> { c -> storageOf(tab).getOrigins { c.resume(it) } }
+        }.orEmpty().values.filterIsInstance<WebStorage.Origin>()
+            .filter { o -> runCatching { java.net.URI(o.origin).host }.getOrNull()?.let { com.jack.ai.api.BrowserSiteData.belongs(it, root) } == true }
+        val names = cookieHosts(host, root, origins.map { it.origin }).flatMap { h ->
+            com.jack.ai.api.BrowserSiteData.names(cookiesOf(tab).getCookie("https://$h"))
+        }.toSet()
+        SiteData(root, names.size, origins.sumOf { it.usage }, origins.map { it.origin })
+    }
+
+    private fun cookieHosts(host: String, root: String, origins: List<String>): List<String> =
+        (listOf(host, root, "www.$root") + origins.mapNotNull { runCatching { java.net.URI(it).host }.getOrNull() }).map { it.lowercase() }.distinct()
+
+    /** 只清这个网站的 Cookie（登录状态）和网页存储，然后重新打开这一页。 */
+    suspend fun clearSite(d: SiteData) = withContext(Dispatchers.Main) {
+        val host = runCatching { java.net.URI(address).host }.getOrNull()?.lowercase() ?: d.root
+        val path = runCatching { java.net.URI(address).path }.getOrNull().orEmpty()
+        val cm = cookiesOf(tab)
+        val hosts = cookieHosts(host, d.root, d.origins)
+        val names = hosts.flatMap { h -> com.jack.ai.api.BrowserSiteData.names(cm.getCookie("https://$h")) + com.jack.ai.api.BrowserSiteData.names(cm.getCookie("http://$h")) }.toSet()
+        com.jack.ai.api.BrowserSiteData.expire(names, hosts, d.root, path).forEach { (u, c) -> cm.setCookie(u, c) }
+        cm.flush()
+        val ws = storageOf(tab)
+        d.origins.forEach { ws.deleteOrigin(it) }
+        reloadCurrent()
     }
 
     /** 网页跟着 App 的深浅色：浅色主题时不变暗。跟着系统深色走（网页组件看的是系统设置）。 */

@@ -4,9 +4,13 @@ import kotlinx.serialization.Serializable
 
 /** Kavi 浏览器的小规则（纯逻辑）：最近访问、书签、浏览器标识、选文件的类型。 */
 object BrowserPages {
-    /** 一个网页：最近访问和书签都用它。 */
+    /** 一个网页：最近访问和书签都用它。folder：书签从别的浏览器导进来时所在的文件夹。 */
     @Serializable
-    data class Visit(val url: String, val title: String = "", val at: Long = 0)
+    data class Visit(val url: String, val title: String = "", val at: Long = 0, val folder: String = "")
+
+    /** 存成离线的整页网页（MHTML，连图片带排版）：file 是 App 里 offline_pages 下的文件名。 */
+    @Serializable
+    data class OfflinePage(val url: String, val title: String = "", val at: Long = 0, val file: String = "", val size: Long = 0)
 
     @Serializable
     data class Later(val url: String, val title: String = "", val at: Long = 0, val read: Boolean = false)
