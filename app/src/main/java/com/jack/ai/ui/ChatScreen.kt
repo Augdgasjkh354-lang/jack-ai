@@ -296,7 +296,7 @@ fun ChatScreen(
                 if (conv == null || conv.messages.isEmpty()) {
                     // 和记忆页同一片天：右上角一轮跟着钟点变色的光，深色模式下有星星
                     SkyBackdrop(Modifier.fillMaxWidth().height(320.dp), key = conv?.id)
-                    Box(Modifier.padding(padding)) { EmptyState(vm, state, conv, onOpenMemory, onSuggest = { text = it; focusInput++ }) }
+                    Box(Modifier.padding(padding)) { EmptyState(vm, state, conv, onOpenMemory) }
                 } else {
                     MessageList(vm, conv, state.streamingHere, padding, editingId = editing?.id, onDeleted = ::onDeleted, summaryCollapsed = state.settings.summaryCollapsed, onEdit = { m ->
                         if (editing == null) editBackup = text
@@ -465,7 +465,6 @@ private fun EmptyState(
     state: UiState,
     conv: Conversation?,
     onOpenMemory: () -> Unit,
-    onSuggest: (String) -> Unit,
 ) {
     val project = state.project(state.currentProjectId)
     val colors = MaterialTheme.colorScheme
@@ -475,9 +474,9 @@ private fun EmptyState(
     Column(
         Modifier.fillMaxSize()
             .graphicsLayer { alpha = enter.value; translationY = (1f - enter.value) * 24.dp.toPx() }
-            .verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp),
+            .padding(horizontal = 20.dp, vertical = 16.dp),
     ) {
-        // 靠左的一句大问候，下面一行小字；建议是不带框的几行，留白多一些
+        // 靠左的一句大问候，下面一行小字；入口是不带框的几行，沉在底部、离输入框近，单手好点
         Spacer(Modifier.height(56.dp))
         val name = state.settings.userName.trim()
         Text(
@@ -494,24 +493,12 @@ private fun EmptyState(
             color = colors.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp),
         )
-        Spacer(Modifier.height(28.dp))
-        // 写文案、回客户这些：点一下直接发出去，Kavi 用问题卡片把要知道的问清楚。不单独起标题，接着上面的卡片排
+        Spacer(Modifier.weight(1f))
+        // 写文案这些：点一下直接发出去，Kavi 用问题卡片把要知道的问清楚
         if (state.settings.bizStarts) {
             com.jack.ai.data.BizStarts.ALL.forEach { b -> SuggestionRow(startIcon(b.key), Hue.of(b.tint).color, b.title) { vm.send(b.prompt) } }
         }
-        // 常做的任务模板：默认收着，只留一行小字，点开才展开（平时用不上，不占地方）
-        var showTemplates by rememberSaveable { mutableStateOf(false) }
-        Row(
-            Modifier.padding(top = 12.dp).clip(Radii.s).clickable { showTemplates = !showTemplates }.padding(horizontal = 4.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text("常做的任务", style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
-            Spacer(Modifier.width(2.dp))
-            Chevron(showTemplates, Modifier.size(18.dp))
-        }
-        androidx.compose.animation.AnimatedVisibility(showTemplates) {
-            Column(Modifier.padding(top = 6.dp)) { WorkTemplates(vm, state.settings.workTemplates, onSuggest) }
-        }
+        Spacer(Modifier.height(8.dp))
     }
 }
 
@@ -528,41 +515,6 @@ private fun SuggestionRow(icon: ImageVector, tint: Color, title: String, onClick
         Icon(icon, null, Modifier.size(24.dp), tint = tint)
         Spacer(Modifier.width(16.dp))
         Text(title, style = MaterialTheme.typography.bodyLarge, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-    }
-}
-
-/** 空白页的一张建议卡：左边一个浅色底的彩色小图标，右边是标题。矮矮的一行，一屏能多放几张。 */
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
-@Composable
-private fun SuggestionCard(icon: ImageVector?, tint: Color, title: String, modifier: Modifier = Modifier, muted: Boolean = false,
-                           onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
-    val colors = MaterialTheme.colorScheme
-    val shape = Radii.l
-    // 按下去时卡片微微缩一下，手感更实
-    val press = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-    Row(
-        modifier
-            .pressScale(press, 0.97f)
-            .height(64.dp)
-            .clip(shape)
-            .background(raisedColor)
-            .hairline(shape)
-            .combinedClickable(interactionSource = press, indication = androidx.compose.foundation.LocalIndication.current,
-                onClick = onClick, onLongClick = onLongClick)
-            .padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            Modifier.size(36.dp).clip(Radii.s).background(tint.copy(alpha = if (isDarkSurface) 0.2f else 0.12f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (icon != null) Icon(icon, null, Modifier.size(19.dp), tint = tint)
-            else Text("＋", color = tint, style = MaterialTheme.typography.titleMedium)
-        }
-        Spacer(Modifier.width(10.dp))
-        Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = if (muted) null else FontWeight.SemiBold,
-            color = if (muted) colors.onSurfaceVariant else colors.onSurface,
-            maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
     }
 }
 
@@ -1190,63 +1142,6 @@ private fun withMention(text: String, name: String): String {
 }
 
 /** 新对话顶部的 Chat / Work 切换。Work 不限工具轮数。 */
-/** 空白页的任务模板：点一下填进输入框，长按修改或删除，最后一格新建。 */
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
-@Composable
-private fun WorkTemplates(vm: ChatViewModel, templates: List<com.jack.ai.data.Preset>, onUse: (String) -> Unit) {
-    val colors = MaterialTheme.colorScheme
-    var editing by remember { mutableStateOf<com.jack.ai.data.Preset?>(null) }
-    val tiles: List<com.jack.ai.data.Preset?> = templates + null
-    tiles.chunked(2).forEach { row ->
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            row.forEach { t ->
-                SuggestionCard(
-                    icon = if (t != null) AppIcons.Work else null,
-                    tint = colors.onSurface,
-                    title = t?.name ?: "新模板",
-                    modifier = Modifier.weight(1f),
-                    muted = t == null,
-                    onLongClick = { if (t != null) editing = t },
-                ) { if (t == null) editing = com.jack.ai.data.Preset(name = "", prompt = "") else onUse(t.prompt) }
-            }
-            if (row.size == 1) Spacer(Modifier.weight(1f))
-        }
-        Spacer(Modifier.height(12.dp))
-    }
-    editing?.let { t ->
-        var name by remember(t.id) { mutableStateOf(t.name) }
-        var prompt by remember(t.id) { mutableStateOf(t.prompt) }
-        val exists = templates.any { it.id == t.id }
-        AlertDialog(
-            onDismissRequest = { editing = null },
-            title = { Text(if (exists) "修改模板" else "新模板") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(name, { name = it }, label = { Text("名字") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(prompt, { prompt = it }, label = { Text("要 AI 做什么") }, minLines = 4, maxLines = 8,
-                        modifier = Modifier.fillMaxWidth())
-                }
-            },
-            confirmButton = {
-                TextButton(enabled = name.isNotBlank() && prompt.isNotBlank(), onClick = {
-                    val u = t.copy(name = name.trim(), prompt = prompt.trim())
-                    vm.updateSettings { s -> s.copy(workTemplates = if (exists) s.workTemplates.map { if (it.id == u.id) u else it } else s.workTemplates + u) }
-                    editing = null
-                }) { Text("保存") }
-            },
-            dismissButton = {
-                Row {
-                    if (exists) TextButton(onClick = {
-                        vm.updateSettings { s -> s.copy(workTemplates = s.workTemplates.filterNot { it.id == t.id }) }
-                        editing = null
-                    }) { Text("删除", color = colors.error) }
-                    TextButton(onClick = { editing = null }) { Text("取消") }
-                }
-            },
-        )
-    }
-}
-
 /** 聊天列表的「跟着往下走」：on 为真时内容一长就贴到底；用户往上翻就关掉，回到底部再打开。 */
 internal class FollowBottom {
     var on by mutableStateOf(true)
