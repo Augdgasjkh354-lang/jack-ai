@@ -499,10 +499,19 @@ private fun EmptyState(
         if (state.settings.bizStarts) {
             com.jack.ai.data.BizStarts.ALL.forEach { b -> SuggestionRow(startIcon(b.key), Hue.of(b.tint).color, b.title) { vm.send(b.prompt) } }
         }
-        // Chat 和 Work 合并了：常做的任务模板也放在空白页，在建议下面
-        Text("常做的任务", style = MaterialTheme.typography.titleSmall, color = colors.onSurfaceVariant,
-            modifier = Modifier.fillMaxWidth().padding(start = 4.dp, top = 24.dp, bottom = 12.dp))
-        WorkTemplates(vm, state.settings.workTemplates, onSuggest)
+        // 常做的任务模板：默认收着，只留一行小字，点开才展开（平时用不上，不占地方）
+        var showTemplates by rememberSaveable { mutableStateOf(false) }
+        Row(
+            Modifier.padding(top = 12.dp).clip(Radii.s).clickable { showTemplates = !showTemplates }.padding(horizontal = 4.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("常做的任务", style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
+            Spacer(Modifier.width(2.dp))
+            Chevron(showTemplates, Modifier.size(18.dp))
+        }
+        androidx.compose.animation.AnimatedVisibility(showTemplates) {
+            Column(Modifier.padding(top = 6.dp)) { WorkTemplates(vm, state.settings.workTemplates, onSuggest) }
+        }
     }
 }
 
