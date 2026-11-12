@@ -129,6 +129,14 @@ object JackBrowser {
         var rate by androidx.compose.runtime.mutableFloatStateOf(1f)
         /** 网页的小图标（加到主屏幕用）。 */
         var icon: Bitmap? = null
+        /** 分组名（空 = 不分组）。 */
+        var group by mutableStateOf("")
+        /** 上次切到这一页的时间：标签页多了，最久没看的先休眠。 */
+        var usedAt = System.currentTimeMillis()
+        /** 休眠时存下的前进后退记录：醒来时恢复，后退还能用。 */
+        var sleepState: android.os.Bundle? = null
+        /** 休眠了：网页窗口收掉省内存，切过来再打开（见 [restore]）。 */
+        val asleep get() = web == null
 
         fun clearError() { error = null; pageFailed = false }
     }
@@ -458,7 +466,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
     fun snap(t: Tab = tab) {
         val w = t.web ?: return
         if (w.width <= 0 || w.height <= 0 || !w.isAttachedToWindow || t.address.isEmpty()) return
-        val s = 0.33f
+        val s = 0.25f
         runCatching {
             val bmp = android.graphics.Bitmap.createBitmap((w.width * s).toInt().coerceAtLeast(1), (w.height * s).toInt().coerceAtLeast(1), android.graphics.Bitmap.Config.RGB_565)
             val c = android.graphics.Canvas(bmp)
@@ -560,6 +568,8 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
     @SuppressLint("SetJavaScriptEnabled")
     fun webView(ctx: Context): WebView {
         web?.let { return it }
+        // 眼前这页在休眠：补开网页窗口，不另开新页
+        if (::wrapper.isInitialized && tab in tabs) { wake(tab); web?.let { return it } }
         // 已经初始化过（只是这一页没有网页窗口，比如 Kavi 用着的那页被关了）：只补开一页。
         // 再走一遍初始化会换掉 wrapper（别的标签页的弹窗、下拉框就没了 Context）、清掉开着的隐身页
         if (::wrapper.isInitialized) return newTab().web!!
@@ -584,13 +594,36 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
      * 新开一个标签页（switch 就切过去）；incognito 开隐身的（网页组件不支持时开普通的）。
      */
     @SuppressLint("SetJavaScriptEnabled")
-    fun newTab(switch: Boolean = true, incognito: Boolean = false, account: Int = 0): Tab {
+    fun newTab(switch: Boolean = true, incognito: Boolean = false, account: Int = 0, group: String = "", build: Boolean = true): Tab {
         val ok = incognitoSupported()
         val t = Tab(nextTabId++, incognito && ok, if (ok && !incognito) account.coerceIn(0, ACCOUNTS) else 0)
-        t.web = buildWeb(t)
+        t.group = group
+        if (build) t.web = buildWeb(t)
         tabs += t
+        // Kavi 在后台开的（switch = false）不在这里收别的页：它刚开的页还没登记成 Kavi 的，可能被误收
         if (switch) switchTo(tabs.lastIndex)
         return t
+    }
+
+    // ---------- 标签页分组 ----------
+    /** 现在有的分组（按第一次出现的先后）。 */
+    fun groups(): List<String> = tabs.map { it.group }.filter { it.isNotBlank() }.distinct()
+
+    fun setGroup(t: Tab, group: String) { t.group = group.trim().take(20); saveTabs() }
+
+    fun renameGroup(from: String, to: String) {
+        val name = to.trim().take(20)
+        if (name.isEmpty()) return
+        tabs.filter { it.group == from }.forEach { it.group = name }
+        saveTabs()
+    }
+
+    fun ungroup(group: String) { tabs.filter { it.group == group }.forEach { it.group = "" }; saveTabs() }
+
+    /** 关掉一组（或 null = 全部）标签页。最后剩一个时回起始页。 */
+    fun closeGroup(group: String?) {
+        tabs.filter { group == null || it.group == group }.forEach { closeTab(it) }
+        saveTabs()
     }
 
     /** 给标签页建网页窗口（新开时，或网页进程崩了重建时）。 */
@@ -728,7 +761,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
     /** 记下现在开着的标签页（隐身的不记），离开浏览器页时调。 */
     fun saveTabs() {
         if (!::app.isInitialized || tabs.isEmpty()) return
-        val s = BrowserPages.tabsToSave(tabs.map { BrowserPages.SavedTab(it.restore ?: it.address, it.title, it.account) to (it.incognito || com.jack.ai.tools.BrowserLock.isAgentTab(it)) }, current, MAX_TABS)
+        val s = BrowserPages.tabsToSave(tabs.map { BrowserPages.SavedTab(it.restore ?: it.address, it.title, it.account, it.group) to (it.incognito || com.jack.ai.tools.BrowserLock.isAgentTab(it)) }, current, MAX_TABS)
         prefs().edit().putString("tabs", listJson.encodeToString(savedTabs, s)).apply()
     }
 
@@ -741,8 +774,11 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         webView(ctx)
         val s = prefs().getString("tabs", null)?.let { runCatching { listJson.decodeFromString(savedTabs, it) }.getOrNull() }
         if (s == null || s.tabs.isEmpty()) return false
-        s.tabs.take(MAX_TABS).forEach { st ->
-            newTab(switch = false, account = st.account).apply { address = st.url; title = st.title; restore = st.url }
+        // 只建要显示的那页的网页窗口，别的先休眠，切过去再开
+        s.tabs.take(MAX_TABS).forEachIndexed { i, st ->
+            newTab(switch = false, account = st.account, group = st.group, build = i == s.current).apply {
+                address = st.url; title = st.title; restore = st.url; usedAt = if (i == s.current) System.currentTimeMillis() else i.toLong()
+            }
         }
         // 第一个空白页是 webView() 建的，不要了
         closeTab(0)
@@ -786,17 +822,63 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         BrowserPages.suggest(query, marks, visits + historyList.orEmpty().map { BrowserPages.Visit(it.url, it.title, it.at) })
 
     /** 最多开几个标签页（每个都是一个网页窗口，占内存）。 */
-    const val MAX_TABS = 10
+    const val MAX_TABS = 50
 
     /** 切到第 i 个标签页：网页窗口换了，让浏览器页重新来要。 */
     fun switchTo(i: Int) {
         if (i !in tabs.indices) return
         // Kavi 在自己的后台标签页里切标签：只换它钉住的那页，不动用户眼前的
-        pinLocal.get()?.let { it.t = tabs[i]; return }
+        pinLocal.get()?.let { it.t = tabs[i]; wake(tabs[i]); return }
         if (i != current) snap()
         barsHidden = false
         current = i
+        tabs[i].usedAt = System.currentTimeMillis()
+        wake(tabs[i])
         hostGen++
+        sleepIdle()
+    }
+
+    // ---------- 标签页休眠 ----------
+    /** 最多几个标签页同时开着网页（别的休眠，切过去再打开）。 */
+    const val LIVE_MAX = 6
+
+    /** 休眠的标签页切过来时：补开网页窗口（要打开的网址在 restore 里，由浏览器页或 load 打开）。 */
+    private fun wake(t: Tab) {
+        if (t.web != null || t !in tabs || !::wrapper.isInitialized) return
+        t.web = buildWeb(t)
+        hostGen++
+    }
+
+    /** 能不能休眠：眼前的、Kavi 正用着的、在放声音的、在下载的、在录教学或诊断的都不动。 */
+    private fun canSleep(t: Tab): Boolean = t.web != null && t !== tabs.getOrNull(current) && t !== pinLocal.get()?.t &&
+        !com.jack.ai.tools.BrowserLock.isAgentTab(t) && !t.audible && !t.mediaFromUser && pending?.tab != t.id && !t.diagOn &&
+        !(teaching && t === tab) && t.loading >= 100
+
+    /** 开着网页的标签页超过 [LIVE_MAX] 个：最久没看的先休眠。 */
+    private fun sleepIdle() {
+        val live = tabs.filter { it.web != null }
+        BrowserPages.toSleep(live.map { Triple(it.id, it.usedAt, canSleep(it)) }, LIVE_MAX).forEach { id -> live.firstOrNull { it.id == id }?.let(::sleep) }
+    }
+
+    /** 手机内存紧：眼前这页以外能休眠的全休眠。 */
+    fun sleepAllBackground() { tabs.filter(::canSleep).forEach(::sleep) }
+
+    private fun sleep(t: Tab) {
+        val w = t.web ?: return
+        if (t.restore == null && BrowserPages.isWeb(t.address)) {
+            t.sleepState = android.os.Bundle().also { b -> runCatching { w.saveState(b) } }.takeIf { !it.isEmpty }
+            t.restore = t.address
+        }
+        (w.parent as? ViewGroup)?.removeView(w)
+        BrowserCdp.release(t)
+        BrowserNetwork.release(t.id)
+        BrowserPacing.release(t.id)
+        runCatching { w.destroy() }
+        t.web = null
+        t.netScript = null; t.diagScript = null; t.teachScript = null; t.rtcScript = null; t.deskScript = null
+        t.pageDone?.complete(Unit)
+        t.loading = 100
+        t.media.clear(); t.mediaFrames.clear()
     }
 
     /** 关掉一个标签页（最后一个不关，只回起始页）。 */
@@ -1318,7 +1400,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
     /** 打开网址；等到加载完（最多 timeoutMs）。返回出错原因，成功返回 null。 */
     suspend fun load(ctx: Context, url: String, timeoutMs: Long = 25_000, agent: Boolean = true): String? {
         // 并行抓取时在指定的标签页里开，平时在当前页
-        val t = withContext(Dispatchers.Main) { pinned() ?: webView(ctx).let { tab } }
+        val t = withContext(Dispatchers.Main) { pinned()?.also { wake(it) } ?: webView(ctx).let { tab } }
         // 恢复的标签页等真开始加载了才算恢复完：半路被打断（页面关掉、代理没起来）下次切过来还会再开，不会一直空白
         withContext(Dispatchers.Main) { t.clearError() }
         when (BrowserNet.classify(url)) {
@@ -1334,7 +1416,14 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         }
         BrowserCdp.observeNetwork(t)
         val done = withContext(Dispatchers.Main) {
-            CompletableDeferred<Unit>().also { t.pageDone = it; t.restore = null; t.web!!.let { w -> applyUa(w, url); w.loadUrl(url) } }
+            CompletableDeferred<Unit>().also { d ->
+                val w = t.web ?: webView(ctx)
+                // 休眠醒来：连前进后退记录一起恢复（恢复不了就直接打开）
+                val state = t.sleepState?.takeIf { t.restore == url }
+                t.pageDone = d; t.restore = null; t.sleepState = null
+                applyUa(w, url)
+                if (state == null || runCatching { w.restoreState(state) }.getOrNull() == null) w.loadUrl(url)
+            }
         }
         withTimeoutOrNull(timeoutMs) { done.await() }
         BrowserPacing.seen(t, withContext(Dispatchers.Main) { t.address })

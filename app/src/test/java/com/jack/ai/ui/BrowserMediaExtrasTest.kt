@@ -84,3 +84,15 @@ class BrowserMediaExtrasTest {
         assertEquals(Locale.CHINA, PageReader.localeFor("这是一篇中文文章，里面有 Chrome 和 WebView。"))
     }
 }
+
+class BrowserTabSleepTest {
+    @Test
+    fun picksOldestSleepable() {
+        val live = listOf(Triple(1, 10L, true), Triple(2, 5L, false), Triple(3, 20L, true), Triple(4, 1L, true), Triple(5, 30L, true))
+        assertEquals(emptyList<Int>(), BrowserPages.toSleep(live, 5))
+        // 超两个：最久没看的 4、1（2 不能收，跳过）
+        assertEquals(listOf(4, 1), BrowserPages.toSleep(live, 3))
+        // 能收的不够：全收了也只能这么多
+        assertEquals(listOf(4, 1, 3, 5), BrowserPages.toSleep(live, 0))
+    }
+}

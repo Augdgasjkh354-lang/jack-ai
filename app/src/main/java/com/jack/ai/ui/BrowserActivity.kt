@@ -20,6 +20,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -143,6 +144,11 @@ class BrowserActivity : ComponentActivity() {
     private var reader by mutableStateOf<Pair<String, String>?>(null)
     /** 选视频倍速。 */
     private var ratePick by mutableStateOf(false)
+    /** 标签页列表只看哪个分组（null = 全部）；长按的标签页（换分组）；分组的菜单（"" = 全部）；新建 / 改名分组。 */
+    private var tabGroup by mutableStateOf<String?>(null)
+    private var tabMove by mutableStateOf<JackBrowser.Tab?>(null)
+    private var groupMenu by mutableStateOf<String?>(null)
+    private var groupName by mutableStateOf<Pair<String, JackBrowser.Tab?>?>(null)
     /** 书签页、离线网页列表开着；正在看的离线网页。 */
     private var showMarks by mutableStateOf(false)
     private var showOffline by mutableStateOf(false)
@@ -318,6 +324,13 @@ class BrowserActivity : ComponentActivity() {
         JackBrowser.reclaim(this)
     }
 
+    /** 手机内存紧：看不见的标签页先休眠，免得系统把整个 App 杀掉。 */
+    @Suppress("DEPRECATION")
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) JackBrowser.sleepAllBackground()
+    }
+
     override fun onPause() {
         super.onPause()
         JackBrowser.userViewing = false
@@ -394,7 +407,7 @@ class BrowserActivity : ComponentActivity() {
         finding = null
         if (b.tabs.size >= JackBrowser.MAX_TABS) b.notice = "最多开 ${JackBrowser.MAX_TABS} 个标签页，这次在当前页打开。可以点底栏的数字关掉几个。"
         else {
-            b.newTab(incognito = incognito, account = account)
+            b.newTab(incognito = incognito, account = account, group = tabGroup?.takeIf { it in b.groups() }.orEmpty())
             if (account > 0) b.notice = "分身 $account：这里登录的账号和别的标签页分开。"
             if (incognito) b.notice = "隐身标签页：不带登录状态，不记最近访问；关掉最后一个隐身页，它的 Cookie 和网页数据就全清掉。"
         }
@@ -1355,32 +1368,46 @@ class BrowserActivity : ComponentActivity() {
     }
 
     /** 标签页列表：点一个切过去，× 关掉，顶上新开一个。 */
+    @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
     @Composable
     private fun TabsPanel() {
         val b = JackBrowser
         val colors = MaterialTheme.colorScheme
+        val groups = b.groups()
+        // 选着的分组被关光了：回到全部
+        if (tabGroup != null && tabGroup !in groups) tabGroup = null
+        val shown = b.tabs.indices.filter { tabGroup == null || b.tabs[it].group == tabGroup }
+        val full = b.tabs.size >= JackBrowser.MAX_TABS
         Surface(Modifier.fillMaxSize(), color = colors.background) {
             Column(Modifier.fillMaxSize()) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { showTabs = false }) { Icon(Icons.Default.Close, "收起") }
                     Text("标签页（${b.tabs.size}）", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
                     if (b.incognitoSupported()) {
-                        TextButton(enabled = b.tabs.size < JackBrowser.MAX_TABS, onClick = { accountPick = true }) { Text("分身") }
-                        TextButton(enabled = b.tabs.size < JackBrowser.MAX_TABS, onClick = { showTabs = false; openInNewTab(null, incognito = true) }) { Text("隐身") }
+                        TextButton(enabled = !full, onClick = { accountPick = true }) { Text("分身") }
+                        TextButton(enabled = !full, onClick = { showTabs = false; openInNewTab(null, incognito = true) }) { Text("隐身") }
                     }
-                    TextButton(enabled = b.tabs.size < JackBrowser.MAX_TABS, onClick = { showTabs = false; openInNewTab(null) }) { Text("新标签页") }
+                    TextButton(enabled = !full, onClick = { showTabs = false; openInNewTab(null) }) { Text("新标签页") }
+                }
+                // 分组：点一下只看这组（这时新开的标签页也进这组），长按改名、关掉整组
+                androidx.compose.foundation.lazy.LazyRow(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    item { GroupChip("全部 ${b.tabs.size}", tabGroup == null, { tabGroup = null }, { groupMenu = "" }) }
+                    items(groups) { g -> GroupChip("$g ${b.tabs.count { it.group == g }}", tabGroup == g, { tabGroup = if (tabGroup == g) null else g }, { groupMenu = g }) }
+                    item { GroupChip("+ 分组", false, { groupName = "" to null }, null) }
                 }
                 HorizontalDivider()
-                // 两列卡片：上面是这一页的缩略图（没拍过的写网站名），下面是标题和关闭
+                // 两列卡片：上面是这一页的缩略图（没拍过的写网站名），下面是标题和关闭；长按换分组
                 LazyVerticalGrid(GridCells.Fixed(2), Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    items(b.tabs.size, key = { b.tabs[it].id }) { i ->
+                    items(shown.size, key = { b.tabs[shown[it]].id }) { k ->
+                        val i = shown[k]
                         val t = b.tabs[i]
                         val on = i == b.current
                         Column(
                             Modifier.clip(Radii.s)
                                 .border(if (on) 2.dp else 1.dp, if (on) colors.primary else colors.outlineVariant, Radii.s)
-                                .clickable { switchTab(i) },
+                                .combinedClickable(onClick = { switchTab(i) }, onLongClick = { tabMove = t }),
                         ) {
                             Row(Modifier.fillMaxWidth().background(if (on) colors.primaryContainer else colors.surfaceVariant).padding(start = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically) {
@@ -1397,12 +1424,75 @@ class BrowserActivity : ComponentActivity() {
                                     contentScale = ContentScale.Crop, alignment = Alignment.TopCenter)
                                 else Text(if (t.address.isEmpty()) "起始页" else BrowserPages.host(t.address), Modifier.padding(8.dp),
                                     style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, maxLines = 2)
+                                if (t.group.isNotBlank() && tabGroup == null) Text(t.group,
+                                    Modifier.align(Alignment.BottomStart).padding(6.dp).clip(Radii.s).background(colors.secondaryContainer).padding(horizontal = 6.dp, vertical = 1.dp),
+                                    style = MaterialTheme.typography.labelSmall, color = colors.onSecondaryContainer, maxLines = 1)
                             }
                         }
                     }
                 }
             }
         }
+        // 长按一个标签页：移到哪个分组
+        tabMove?.let { t ->
+            AlertDialog(
+                onDismissRequest = { tabMove = null },
+                title = { Text("移到分组") },
+                text = { Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {
+                    groups.forEach { g ->
+                        Text((if (t.group == g) "✓ " else "    ") + g, Modifier.fillMaxWidth().clickable { b.setGroup(t, g); tabMove = null }.padding(vertical = 12.dp))
+                    }
+                    Text("    新分组…", Modifier.fillMaxWidth().clickable { tabMove = null; groupName = "" to t }.padding(vertical = 12.dp))
+                    if (t.group.isNotBlank()) Text("    不分组", Modifier.fillMaxWidth().clickable { b.setGroup(t, ""); tabMove = null }.padding(vertical = 12.dp))
+                } },
+                confirmButton = { TextButton(onClick = { tabMove = null }) { Text("取消") } },
+            )
+        }
+        // 新分组 / 改名：(原来的名字, 要放进去的标签页)；原来的名字空 = 新建
+        groupName?.let { (from, t) ->
+            var name by remember(from) { mutableStateOf(from) }
+            AlertDialog(
+                onDismissRequest = { groupName = null },
+                title = { Text(if (from.isEmpty()) "新分组" else "分组改名") },
+                text = { Column {
+                    if (from.isEmpty() && t == null) Text("当前这个标签页会放进新分组。", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                    OutlinedTextField(name, { name = it.take(20) }, singleLine = true, placeholder = { Text("比如：工作、购物") },
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+                } },
+                confirmButton = { TextButton(enabled = name.isNotBlank(), onClick = {
+                    groupName = null
+                    if (from.isEmpty()) { b.setGroup(t ?: b.tab, name); tabGroup = name.trim() } else { b.renameGroup(from, name); if (tabGroup == from) tabGroup = name.trim() }
+                }) { Text("好") } },
+                dismissButton = { TextButton(onClick = { groupName = null }) { Text("取消") } },
+            )
+        }
+        // 长按分组：改名、解散、关掉整组；长按「全部」：关掉所有标签页
+        groupMenu?.let { g ->
+            AlertDialog(
+                onDismissRequest = { groupMenu = null },
+                title = { Text(if (g.isEmpty()) "所有标签页" else "分组「$g」") },
+                text = { Column {
+                    if (g.isNotEmpty()) {
+                        Text("改名", Modifier.fillMaxWidth().clickable { groupMenu = null; groupName = g to null }.padding(vertical = 12.dp))
+                        Text("解散分组（标签页留着）", Modifier.fillMaxWidth().clickable { groupMenu = null; b.ungroup(g) }.padding(vertical = 12.dp))
+                    }
+                    Text(if (g.isEmpty()) "关掉全部 ${b.tabs.size} 个标签页" else "关掉这组 ${b.tabs.count { it.group == g }} 个标签页",
+                        Modifier.fillMaxWidth().clickable { groupMenu = null; b.closeGroup(g.ifEmpty { null }); if (g.isEmpty()) showTabs = false }.padding(vertical = 12.dp),
+                        color = colors.error)
+                } },
+                confirmButton = { TextButton(onClick = { groupMenu = null }) { Text("取消") } },
+            )
+        }
+    }
+
+    @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+    @Composable
+    private fun GroupChip(label: String, selected: Boolean, onClick: () -> Unit, onLongClick: (() -> Unit)?) {
+        val colors = MaterialTheme.colorScheme
+        Text(label, Modifier.clip(Radii.s).border(1.dp, if (selected) colors.primary else colors.outlineVariant, Radii.s)
+            .background(if (selected) colors.primaryContainer else Color.Transparent)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick).padding(horizontal = 12.dp, vertical = 6.dp),
+            style = MaterialTheme.typography.labelLarge, color = if (selected) colors.onPrimaryContainer else colors.onSurface, maxLines = 1)
     }
 
     /** 选一个百分比的小弹窗（网页字号）。 */

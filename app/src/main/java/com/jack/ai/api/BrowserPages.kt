@@ -94,12 +94,21 @@ object BrowserPages {
 
     /** 存下来的一个标签页（隐身的不存）。 */
     @Serializable
-    data class SavedTab(val url: String, val title: String = "", val account: Int = 0)
+    data class SavedTab(val url: String, val title: String = "", val account: Int = 0, val group: String = "")
 
     @Serializable
     data class SavedTabs(val tabs: List<SavedTab> = emptyList(), val current: Int = 0)
 
     /** 要存的标签页：只要网页的、不要隐身的；current 跟着换算（当前页是隐身或空白时取它前面最近的一个）。 */
+    /**
+     * 标签页开多了先收哪些：live 是开着网页的 (编号, 上次看的时间, 能不能收)，超过 max 个时
+     * 从最久没看的、能收的里挑够数（不能收的照样占名额，可能收不到 max 以下）。
+     */
+    fun toSleep(live: List<Triple<Int, Long, Boolean>>, max: Int): List<Int> {
+        if (live.size <= max) return emptyList()
+        return live.filter { it.third }.sortedBy { it.second }.take(live.size - max).map { it.first }
+    }
+
     fun tabsToSave(all: List<Pair<SavedTab, Boolean>>, current: Int, max: Int): SavedTabs {
         // Pair：(标签页, 是不是隐身)
         val kept = all.withIndex().filter { (_, t) -> !t.second && isWeb(t.first.url) }.take(max)
