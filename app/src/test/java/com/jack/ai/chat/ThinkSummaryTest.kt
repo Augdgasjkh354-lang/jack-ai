@@ -8,10 +8,11 @@ import org.junit.Test
 
 class ThinkSummaryTest {
     @Test fun cleansHeading() {
-        assertEquals("核对两家的报价", ThinkSummary.clean("「核对两家的报价。」\n多余的", emptyList()))
+        assertEquals("比较两家报价", ThinkSummary.clean("「比较两家报价。」\n多余的", emptyList()))
         assertEquals("Checking the path", ThinkSummary.clean("1. \"Checking the path.\"", emptyList()))
         assertNull(ThinkSummary.clean("核对报价", listOf("核对报价")))
         assertNull(ThinkSummary.clean("  \n ", emptyList()))
+        assertNull(ThinkSummary.clean("发现路径写错了", emptyList()))
     }
 
     @Test fun dueWhenEnoughOrAnswerStarted() {

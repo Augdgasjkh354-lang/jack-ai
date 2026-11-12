@@ -26,6 +26,9 @@ Given the headings so far and a new stretch of the assistant's private thinking,
 - no punctuation at the end, no quotes, no numbering, don't repeat an earlier heading
 Reply with the heading only."""
 
+    /** 提示词里写的例子。 */
+    private val EXAMPLES = listOf("Comparing the two plans", "Checking where the numbers came from", "核对两家的报价", "发现路径写错了", "思考中", "分析问题")
+
     fun input(previous: List<String>, chunk: String): String =
         (if (previous.isEmpty()) "" else "Headings so far:\n" + previous.joinToString("\n") { "- $it" } + "\n\n") +
             "New thinking:\n" + chunk.takeLast(INPUT)
@@ -38,6 +41,7 @@ Reply with the heading only."""
             .trim('"', '“', '”', '「', '」', '\'', '*', ' ')
             .trimEnd('。', '.', '，', ',', '；', ';', '：', ':', '！', '!')
             .take(40)
-        return t.takeIf { it.isNotEmpty() && it != previous.lastOrNull() }
+        // 小模型（手机上的 0.8B）常把提示词里的例子原样抄回来：那不是摘要，不要
+        return t.takeIf { it.isNotEmpty() && it != previous.lastOrNull() && EXAMPLES.none { e -> e.equals(it, ignoreCase = true) } }
     }
 }

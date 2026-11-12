@@ -898,6 +898,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                         }
                     },
                     onRound = { flush() },
+                    // 调工具前那句话挪进了进度：马上刷一下界面，不然工具跑得久（下载）时回答里一直挂着这句
+                    beforeTools = { flush() },
                     // 带工具的请求被拒（比如旧记录格式接口不认）：先去掉旧的工具调用过程再试，工具照样能用；
                     // 还不行就不用工具，改成“先搜再答”
                     interjections = { generateSequence { myInterjections.poll() }.toList() },
