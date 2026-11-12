@@ -93,6 +93,8 @@
         <service android:name=".BrowserPlaybackService" android:exported="false" android:foregroundServiceType="mediaPlayback">
             <intent-filter><action android:name="android.intent.action.MEDIA_BUTTON" /></intent-filter>
         </service>
+        <!-- 浏览器「朗读这页」：锁屏接着念（不加 MEDIA_BUTTON 过滤，那个只能有一个服务接） -->
+        <service android:name=".ReadAloudService" android:exported="false" android:foregroundServiceType="mediaPlayback" />
         <receiver android:name="androidx.media.session.MediaButtonReceiver" android:exported="false">
             <intent-filter><action android:name="android.intent.action.MEDIA_BUTTON" /></intent-filter>
         </receiver>

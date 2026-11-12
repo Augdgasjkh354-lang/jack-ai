@@ -142,11 +142,40 @@ var id=Math.random().toString(36).slice(2),last=false;
 function report(){var on=false;[].forEach.call(document.querySelectorAll('video,audio'),function(m){if(!m.paused&&!m.ended&&!m.muted&&m.volume>0){on=true;m.__kaviResume=true;}});
 if(on||on!==last)console.log('KAVI_MEDIA:'+JSON.stringify({id:id,on:on}));last=on;}
 ['play','pause','ended','volumechange','emptied'].forEach(function(e){document.addEventListener(e,report,true);});
-function cmd(op){document.querySelectorAll('video,audio').forEach(function(m){if(op==='play'){if(m.__kaviResume){var p=m.play();if(p)p.catch(function(){});}}
+var R=1,H=0,lp=null,badge=null,eat=0;
+function rate(m){var r=H||R;if(r===1&&!m.__kaviRated)return;try{m.playbackRate=r;m.__kaviRated=r!==1;}catch(e){}}
+function rateAll(){[].forEach.call(document.querySelectorAll('video,audio'),rate);}
+['play','playing','loadedmetadata'].forEach(function(n){document.addEventListener(n,function(e){var m=e.target;if(m&&/^(VIDEO|AUDIO)$/.test(m.tagName||''))rate(m);},true);});
+function vidAt(x,y){var vs=document.querySelectorAll('video');for(var i=0;i<vs.length;i++){var v=vs[i],b=v.getBoundingClientRect();
+if(!v.paused&&!v.ended&&b.width>80&&b.height>60&&x>=b.left&&x<=b.right&&y>=b.top&&y<=b.bottom)return v;}return null;}
+function unhold(){if(!lp)return;clearTimeout(lp.t);if(lp.on){H=0;rate(lp.v);eat=Date.now();if(badge&&badge.parentNode)badge.parentNode.removeChild(badge);badge=null;}lp=null;}
+document.addEventListener('touchstart',function(e){unhold();if(e.touches.length!==1)return;var p=e.touches[0],v=vidAt(p.clientX,p.clientY);if(!v)return;
+lp={v:v,x:p.clientX,y:p.clientY,on:false,t:setTimeout(function(){if(!lp)return;lp.on=true;H=R<2?2:3;rate(lp.v);
+var fe=document.fullscreenElement||document.webkitFullscreenElement,host=fe&&fe.tagName!=='VIDEO'?fe:(fe?null:(document.body||document.documentElement));if(!host)return;
+var b=lp.v.getBoundingClientRect();badge=document.createElement('div');badge.textContent='\u25B6\u25B6 '+H+'\u00D7 \u5FEB\u8FDB\u4E2D';
+badge.style.cssText='position:fixed;left:50%;transform:translateX(-50%);top:'+Math.max(12,b.top+12)+'px;z-index:2147483647;background:rgba(0,0,0,.6);color:#fff;padding:6px 14px;border-radius:16px;font:14px/1.4 sans-serif;pointer-events:none';
+host.appendChild(badge);},450)};},{capture:true,passive:true});
+document.addEventListener('touchmove',function(e){if(lp&&!lp.on&&e.touches.length===1){var p=e.touches[0];if(Math.abs(p.clientX-lp.x)>12||Math.abs(p.clientY-lp.y)>12){clearTimeout(lp.t);lp=null;}}},{capture:true,passive:true});
+document.addEventListener('touchend',unhold,{capture:true,passive:true});document.addEventListener('touchcancel',unhold,{capture:true,passive:true});
+document.addEventListener('click',function(e){if(eat&&Date.now()-eat<500){eat=0;e.preventDefault();e.stopPropagation();}},true);
+document.addEventListener('contextmenu',function(e){if(lp&&lp.on)e.preventDefault();},true);
+function cmd(op){if(op.indexOf('rate:')===0){R=parseFloat(op.slice(5))||1;rateAll();}
+else document.querySelectorAll('video,audio').forEach(function(m){if(op==='play'){if(m.__kaviResume){var p=m.play();if(p)p.catch(function(){});}}
 else {if(!m.paused&&!m.ended)m.__kaviResume=true;if(op==='stop')m.__kaviResume=false;m.pause();}});
 for(var i=0;i<frames.length;i++)frames[i].postMessage({kaviMedia:op},'*');report();}
-window.__kaviMediaCommand=cmd;window.addEventListener('message',function(e){if(e.source===parent&&e.data&&e.data.kaviMedia)cmd(e.data.kaviMedia);});
+window.__kaviMediaCommand=cmd;window.addEventListener('message',function(e){var d=e.data;if(!d)return;
+if(e.source===parent&&d.kaviMedia)cmd(d.kaviMedia);else if(d.kaviRateAsk&&R!==1&&e.source)e.source.postMessage({kaviMedia:'rate:'+R},'*');});
+if(window!==top)try{parent.postMessage({kaviRateAsk:1},'*');}catch(e){}
 setInterval(report,1000);})();"""
+
+    /** 视频倍速能选的档位。 */
+    val VIDEO_RATES = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f, 3f)
+
+    /** 倍速写成「1.5×」「1×」。 */
+    fun rateText(r: Float): String = (if (r == r.toInt().toFloat()) r.toInt().toString() else r.toString().trimEnd('0').trimEnd('.')) + "×"
+
+    /** 让网页（含各层嵌入框）里的视频、音频按这个倍速放。 */
+    fun rateJs(r: Float): String = "window.__kaviMediaCommand&&window.__kaviMediaCommand('rate:$r');"
 
     /** 暂停网页里所有在放的声音和视频（关掉浏览器、关掉画中画时）。 */
     const val PAUSE_ALL_JS = "(function(){try{document.querySelectorAll('video,audio').forEach(function(m){m.pause();});}catch(e){}})();"

@@ -1,6 +1,9 @@
 package com.jack.ai.ui
 
 import androidx.compose.foundation.layout.size
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.draw.clip
 
 import androidx.compose.foundation.layout.widthIn
@@ -138,6 +141,46 @@ class BrowserActivity : ComponentActivity() {
     private var accountPick by mutableStateOf(false)
     /** 阅读模式：(标题, 正文 Markdown)。 */
     private var reader by mutableStateOf<Pair<String, String>?>(null)
+    /** 选视频倍速。 */
+    private var ratePick by mutableStateOf(false)
+    /** 添加到主屏幕：(网址, 图标名字)，等用户改名字。 */
+    private var shortcutAsk by mutableStateOf<Pair<String, String>?>(null)
+
+    /** 地址栏的语音输入：说完直接打开（网址就去，别的就搜）。 */
+    private val voice = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
+        r.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }?.let { open(it) }
+    }
+    /** 地址栏的扫一扫：网址直接打开，别的弹出来能复制。 */
+    private val scan = registerForActivityResult(com.journeyapps.barcodescanner.ScanContract()) { r ->
+        val text = r.contents?.trim()?.takeIf { it.isNotEmpty() } ?: return@registerForActivityResult
+        if (BrowserPages.isWeb(text)) open(text) else qr = text
+    }
+
+    private fun startVoice() {
+        val i = Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_WEB_SEARCH)
+            .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
+            .putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "说要搜的内容或网址")
+        runCatching { voice.launch(i) }.onFailure { JackBrowser.notice = "手机没有语音识别服务，可以用输入法自带的语音输入" }
+    }
+
+    private fun startScan() {
+        runCatching {
+            scan.launch(com.journeyapps.barcodescanner.ScanOptions().setPrompt("扫网址二维码").setBeepEnabled(false)
+                .setOrientationLocked(false).setDesiredBarcodeFormats(com.journeyapps.barcodescanner.ScanOptions.QR_CODE))
+        }.onFailure { JackBrowser.notice = "打不开扫码：${it.message}" }
+    }
+
+    /** 朗读这页：取正文念（隐身页通知栏上不显示标题）。 */
+    private fun readAloud() {
+        val b = JackBrowser
+        lifecycleScope.launch {
+            val page = b.readable(this@BrowserActivity)
+            if (page == null) { b.notice = "这一页找不出能念的正文（可能不是文章页，或者还没加载完）"; return@launch }
+            val title = if (b.tab.incognito) "隐身标签页" else page.first.ifBlank { b.title }
+            PageReader.start(this@BrowserActivity, title, page.second)
+        }
+    }
     /** 网页诊断报告（null = 没打开）。 */
     private var diag by mutableStateOf<String?>(null)
     /** 页内查找：null 没在找，否则是要找的字。 */
@@ -279,7 +322,7 @@ class BrowserActivity : ComponentActivity() {
 
     override fun onDestroy() {
         // 用户自己关掉浏览器：网页里在放的声音也停（只是切到后台时接着放）
-        if (isFinishing) JackBrowser.pauseAll()
+        if (isFinishing) { JackBrowser.pauseAll(); PageReader.stop() }
         JackBrowser.userViewing = false
         if (JackBrowser.chooser == ::chooseFiles) JackBrowser.chooser = null
         if (JackBrowser.systemPerms == ::systemPerms) JackBrowser.systemPerms = null
@@ -406,6 +449,13 @@ class BrowserActivity : ComponentActivity() {
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
                     keyboardActions = KeyboardActions(onGo = { focus.clearFocus(); open(editing) }),
                     textStyle = MaterialTheme.typography.bodyMedium,
+                    // 打字时、起始页上：语音说、扫二维码
+                    trailingIcon = if (typing || b.address.isEmpty()) { {
+                        Row {
+                            IconButton(onClick = { focus.clearFocus(); startVoice() }) { Icon(AppIcons.Mic, "语音输入", Modifier.size(20.dp)) }
+                            IconButton(onClick = { focus.clearFocus(); startScan() }) { Icon(AppIcons.QrScan, "扫二维码", Modifier.size(20.dp)) }
+                        }
+                    } } else null,
                     modifier = Modifier.weight(1f).onFocusChanged { typing = it.isFocused },
                 )
                 Box {
@@ -438,6 +488,11 @@ class BrowserActivity : ComponentActivity() {
                             menu = false
                             lifecycleScope.launch { b.readable(this@BrowserActivity)?.let { reader = it } ?: run { b.notice = "这一页找不出正文（可能不是文章页，或者还没加载完）" } }
                         })
+                        DropdownMenuItem(text = { Text(if (PageReader.active) "停止朗读" else "朗读这页") }, enabled = has || PageReader.active, onClick = {
+                            menu = false
+                            if (PageReader.active) PageReader.stop() else readAloud()
+                        })
+                        DropdownMenuItem(text = { Text("视频倍速：" + BrowserPages.rateText(b.tab.rate)) }, enabled = has, onClick = { menu = false; ratePick = true })
                         DropdownMenuItem(text = { Text(if (b.tab.translated) "显示原文" else "翻译成中文") }, enabled = has && b.tab.translating == null, onClick = {
                             menu = false
                             if (b.tab.translated) b.showOriginal() else lifecycleScope.launch { b.translate(this@BrowserActivity)?.let { b.notice = it } }
@@ -460,6 +515,11 @@ class BrowserActivity : ComponentActivity() {
                             val adding = b.marks.none { it.url == b.address }
                             b.toggleMark()
                             b.notice = if (adding) "已加入书签，起始页能看到" else "已移出书签"
+                        })
+                        DropdownMenuItem(text = { Text("添加到主屏幕") }, enabled = has && BrowserPages.isWeb(b.address) && !b.tab.incognito, onClick = {
+                            menu = false
+                            if (WebShortcut.supported(this@BrowserActivity)) shortcutAsk = b.address to b.title.ifBlank { WebShortcut.host(b.address) }
+                            else b.notice = "这个桌面不支持添加网页图标。"
                         })
                         DropdownMenuItem(text = { Text("复制链接") }, enabled = has, onClick = {
                             menu = false
@@ -575,6 +635,7 @@ class BrowserActivity : ComponentActivity() {
                     }
                 }
             }
+            if (PageReader.active) ReadingBar()
             b.downloading?.let { msg ->
                 Text(msg, Modifier.fillMaxWidth().clickable { showDownloads = true }.background(colors.secondaryContainer).padding(horizontal = 12.dp, vertical = 6.dp),
                     style = MaterialTheme.typography.labelSmall, color = colors.onSecondaryContainer, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -625,8 +686,20 @@ class BrowserActivity : ComponentActivity() {
         if (showHistory) Box(Modifier.fillMaxSize().safeDrawingPadding()) { HistoryPanel() }
         // 视频全屏：盖满整个屏幕
         full?.let { (view, _) ->
-            Box(Modifier.fillMaxSize().background(Color.Black)) {
+            // 碰一下屏幕，顶上露出倍速按钮，三秒后藏起来
+            var chip by remember { mutableStateOf(true) }
+            var pokes by remember { mutableIntStateOf(0) }
+            LaunchedEffect(pokes) { kotlinx.coroutines.delay(3000); chip = false }
+            Box(Modifier.fillMaxSize().background(Color.Black).pointerInput(Unit) {
+                awaitPointerEventScope { while (true) { awaitPointerEvent(PointerEventPass.Initial); chip = true; pokes++ } }
+            }) {
                 AndroidView(factory = { (view.parent as? android.view.ViewGroup)?.removeView(view); view }, modifier = Modifier.fillMaxSize())
+                AnimatedVisibility(chip, Modifier.align(Alignment.TopCenter).padding(top = 16.dp)) {
+                    Text("倍速 " + BrowserPages.rateText(b.tab.rate),
+                        Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = 0.55f))
+                            .clickable { ratePick = true }.padding(horizontal = 14.dp, vertical = 6.dp),
+                        color = Color.White, style = MaterialTheme.typography.labelLarge)
+                }
             }
         }
         }
@@ -656,6 +729,36 @@ class BrowserActivity : ComponentActivity() {
                     Modifier.fillMaxWidth().clickable { b.changeSearchEngine(key); searchPick = false }.padding(vertical = 12.dp))
             } } }, confirmButton = { TextButton(onClick = { searchPick = false }) { Text("关闭") } },
         )
+        if (ratePick) AlertDialog(
+            onDismissRequest = { ratePick = false }, title = { Text("视频倍速") },
+            text = { Column {
+                Text("这个标签页里的视频、音频都按这个速度放，换网页也保持。长按正在放的视频能临时快进（2 倍，松手恢复）。",
+                    style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                BrowserPages.VIDEO_RATES.forEach { r ->
+                    Text((if (b.tab.rate == r) "✓ " else "    ") + BrowserPages.rateText(r) + if (r == 1f) "（正常）" else "",
+                        Modifier.fillMaxWidth().clickable { ratePick = false; b.changeRate(r) }.padding(vertical = 10.dp),
+                        style = MaterialTheme.typography.bodyLarge)
+                }
+            } }, confirmButton = { TextButton(onClick = { ratePick = false }) { Text("关闭") } },
+        )
+        shortcutAsk?.let { (url, first) ->
+            var name by remember(url) { mutableStateOf(first.take(24)) }
+            AlertDialog(
+                onDismissRequest = { shortcutAsk = null }, title = { Text("添加到主屏幕") },
+                text = { Column {
+                    Text(url.take(120), style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    OutlinedTextField(value = name, onValueChange = { name = it.take(24) }, singleLine = true, label = { Text("图标名字") },
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+                } },
+                confirmButton = { TextButton(onClick = {
+                    shortcutAsk = null
+                    val ok = WebShortcut.pin(this@BrowserActivity, url, name, b.tabs.firstOrNull { it.address == url }?.icon)
+                    b.notice = if (ok) "已请桌面添加「${name.trim().ifBlank { WebShortcut.host(url) }}」。\n\n桌面上没出现的话：到 系统设置 → 应用 → Kavi → 权限 里打开「桌面快捷方式」，再加一次。"
+                        else "桌面没让加。可以到 系统设置 → 应用 → Kavi → 权限 里打开「桌面快捷方式」再试。"
+                }) { Text("添加") } },
+                dismissButton = { TextButton(onClick = { shortcutAsk = null }) { Text("取消") } },
+            )
+        }
         if (textPick) ZoomDialog("网页字号", "网页里的字太大或太小时调一下，所有网页都用这个字号。排版不变，只改字。",
             BrowserPages.TEXT_ZOOMS, b.textZoom, { textPick = false }) { b.changeTextZoom(it) }
         if (zoomPick) AlertDialog(
@@ -750,7 +853,10 @@ class BrowserActivity : ComponentActivity() {
                 onDismiss = { reader = null },
                 subtitle = BrowserPages.host(b.address),
                 onShare = { share(md, title) },
-                extra = listOf("让 Kavi 总结" to { reader = null; askKavi("总结一下这篇") }),
+                extra = listOf(
+                    "让 Kavi 总结" to { reader = null; askKavi("总结一下这篇") },
+                    "朗读" to { PageReader.start(this@BrowserActivity, if (b.tab.incognito) "隐身标签页" else title.ifBlank { b.title }, md) },
+                ),
             )
         }
         diag?.let { report ->
@@ -849,6 +955,21 @@ class BrowserActivity : ComponentActivity() {
                 text = { Text(msg) },
                 confirmButton = { TextButton(onClick = { b.notice = null }) { Text("好") } },
             )
+        }
+    }
+
+    /** 正在朗读时底栏上面的一条：念到哪、语速、暂停 / 继续、停止。 */
+    @Composable
+    private fun ReadingBar() {
+        val colors = MaterialTheme.colorScheme
+        Row(Modifier.fillMaxWidth().background(colors.secondaryContainer).padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(AppIcons.Speaker, null, Modifier.size(16.dp), tint = colors.onSecondaryContainer)
+            Text((if (PageReader.paused) "已暂停：" else "正在朗读：") + PageReader.title.orEmpty() + "（${PageReader.index + 1}/${PageReader.total}）",
+                Modifier.weight(1f).padding(start = 6.dp), style = MaterialTheme.typography.labelSmall, color = colors.onSecondaryContainer,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+            TextButton(onClick = { PageReader.nextSpeed() }) { Text(BrowserPages.rateText(PageReader.speed)) }
+            TextButton(onClick = { PageReader.toggle() }) { Text(if (PageReader.paused) "继续" else "暂停") }
+            TextButton(onClick = { PageReader.stop() }) { Text("停止") }
         }
     }
 

@@ -125,6 +125,10 @@ object JackBrowser {
         val badge get() = if (incognito) "隐身 · " else if (account > 0) "分身$account · " else ""
         /** 关掉 App 前存下的标签页刚建回来、还没加载：切到它时再打开这个网址（省得一开 App 十个网页一起加载）。 */
         var restore: String? = null
+        /** 视频倍速：这个标签页往后打开的网页都按这个放，选回 1× 才恢复。 */
+        var rate by androidx.compose.runtime.mutableFloatStateOf(1f)
+        /** 网页的小图标（加到主屏幕用）。 */
+        var icon: Bitmap? = null
 
         fun clearError() { error = null; pageFailed = false }
     }
@@ -475,6 +479,12 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         val fallback = if (action == "play") "" else BrowserPages.PAUSE_ALL_JS
         tabs.find { it.id == id }?.web?.evaluateJavascript("if(window.__kaviMediaCommand){window.__kaviMediaCommand('$action');}else{$fallback}", null)
     }
+    /** 当前标签页的视频倍速。 */
+    fun changeRate(r: Float) {
+        tab.rate = r
+        tab.web?.evaluateJavascript(BrowserPages.rateJs(r), null)
+    }
+
     fun backgroundPlayback() {
         if (::app.isInitialized) tabs.lastOrNull { it.audible && it.mediaFromUser }?.let { com.jack.ai.BrowserPlaybackService.start(app, it) }
     }
@@ -1371,6 +1381,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
             BrowserCdp.forget(t)
             BrowserNetwork.navigated(t.id)
             t.mainHttpStatus = null
+            t.icon = favicon
             if (url.startsWith("http://") || url.startsWith("https://")) BrowserPacing.navigated(t, url)
             else BrowserPacing.release(t.id)
             if (t === tab) barsHidden = false
@@ -1392,14 +1403,14 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
             // 不支持开头注入的旧网页组件：页面露出来时补装钩子
             if (t.diagOn && t.diagScript == null) view.evaluateJavascript(BrowserDiag.HOOK_JS, null)
             if (t.netScript == null) view.evaluateJavascript(BrowserNetWatch.JS, null)
-            view.evaluateJavascript(BrowserPages.KEEP_PLAYING_JS + BrowserPages.MEDIA_JS, null)
+            view.evaluateJavascript(BrowserPages.KEEP_PLAYING_JS + BrowserPages.MEDIA_JS + if (t.rate != 1f) BrowserPages.rateJs(t.rate) else "", null)
             widenIfDesktop(view, url)
             if (blocksAds(t.site)) view.evaluateJavascript(BrowserAds.INJECT_JS, null)
             applyBlocks(view, t.site)
         }
 
         override fun onPageFinished(view: WebView, url: String) {
-            view.evaluateJavascript(BrowserPages.KEEP_PLAYING_JS + BrowserPages.MEDIA_JS, null)
+            view.evaluateJavascript(BrowserPages.KEEP_PLAYING_JS + BrowserPages.MEDIA_JS + if (t.rate != 1f) BrowserPages.rateJs(t.rate) else "", null)
             widenIfDesktop(view, url)
             if (blocksAds(t.site)) view.evaluateJavascript(BrowserAds.INJECT_JS, null)
             t.pageDone?.complete(Unit)
@@ -1453,6 +1464,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
             }
             return false
         }
+        override fun onReceivedIcon(view: WebView, icon: Bitmap?) { t.icon = icon }
         override fun onReceivedTitle(view: WebView, newTitle: String?) {
             t.title = newTitle.orEmpty()
             val url = view.url.orEmpty()
