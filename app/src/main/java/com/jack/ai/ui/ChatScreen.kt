@@ -187,6 +187,14 @@ fun ChatScreen(
     var showFiles by remember { mutableStateOf(false) }
     var memoryOf by remember { mutableStateOf<Conversation?>(null) }
     val bg = MaterialTheme.colorScheme.background
+    // 眼前这个对话答完了：轻轻震一下（换对话引起的变化不算）
+    val haptics = rememberHaptics()
+    var wasStreaming by remember { mutableStateOf(conv?.id to state.streamingHere) }
+    LaunchedEffect(conv?.id, state.streamingHere) {
+        val (id, on) = wasStreaming
+        if (id == conv?.id && on && !state.streamingHere) haptics.done()
+        wasStreaming = conv?.id to state.streamingHere
+    }
     // 分享进来或语音识别的文字，接到输入框后面
     LaunchedEffect(state.incomingText) {
         state.incomingText?.let { t ->
@@ -235,7 +243,9 @@ fun ChatScreen(
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                         containerColor = Color.Transparent, scrolledContainerColor = Color.Transparent,
                     ),
-                    modifier = Modifier.background(Brush.verticalGradient(0f to bg, 0.8f to bg.copy(alpha = 0.96f), 1f to bg.copy(alpha = 0f))),
+                    // 空白页没有消息会滚上来，顶栏全透明，让那一角天露出来
+                    modifier = if (conv == null || conv.messages.isEmpty()) Modifier
+                        else Modifier.background(Brush.verticalGradient(0f to bg, 0.8f to bg.copy(alpha = 0.96f), 1f to bg.copy(alpha = 0f))),
                     title = {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
@@ -303,6 +313,8 @@ fun ChatScreen(
                 // Kavi 在用浏览器、回答里的实时画面又不在屏幕上时，网页窗口的落点（看不见，垫在消息下面、顶栏后面）
                 BrowserHiddenHost(Modifier.align(Alignment.TopStart).padding(top = padding.calculateTopPadding() / 2), working = state.streaming, convId = conv?.id.orEmpty())
                 if (conv == null || conv.messages.isEmpty()) {
+                    // 和记忆页同一片天：右上角一轮跟着钟点变色的光，深色模式下有星星
+                    SkyBackdrop(Modifier.fillMaxWidth().height(320.dp), key = conv?.id)
                     Box(Modifier.padding(padding)) { EmptyState(vm, state, conv, onOpenMemory, onSuggest = { text = it; focusInput++ }) }
                 } else {
                     MessageList(vm, conv, state.streamingHere, padding, editingId = editing?.id, onDeleted = ::onDeleted, summaryCollapsed = state.settings.summaryCollapsed, onEdit = { m ->
@@ -442,14 +454,14 @@ private fun ModelPicker(settings: Settings, projectName: String?, onPick: (Strin
 }
 
 /** 空白页的建议：图标、图标底色（浅色、深色模式各一个）、标题、点了填进输入框的话。 */
-private data class Suggestion(val icon: ImageVector, val tint: Long, val title: String, val prompt: String)
+private data class Suggestion(val icon: ImageVector, val hue: Hue, val title: String, val prompt: String)
 
 // 点一下只是填进输入框，不直接发；要补的内容放在最后，光标就在那里
 private val SUGGESTIONS = listOf(
-    Suggestion(AppIcons.Globe, 0xFF3B82F6, "今天有什么新闻", "今天有什么值得关注的新闻？"),
-    Suggestion(AppIcons.Calendar, 0xFFEF5A5A, "帮我记一件事", "提醒我"),
-    Suggestion(AppIcons.Speaker, 0xFF8B5CF6, "读个网页给我听", "帮我打开这个网页，读完告诉我重点："),
-    Suggestion(AppIcons.File, 0xFF22A06B, "整理成表格", "帮我把下面的内容整理成表格：\n"),
+    Suggestion(AppIcons.Globe, Hue.BLUE, "今天有什么新闻", "今天有什么值得关注的新闻？"),
+    Suggestion(AppIcons.Calendar, Hue.RED, "帮我记一件事", "提醒我"),
+    Suggestion(AppIcons.Speaker, Hue.VIOLET, "读个网页给我听", "帮我打开这个网页，读完告诉我重点："),
+    Suggestion(AppIcons.File, Hue.GREEN, "整理成表格", "帮我把下面的内容整理成表格：\n"),
 )
 
 private fun greeting(): String = when (Calendar.getInstance().get(Calendar.HOUR_OF_DAY)) {
@@ -511,7 +523,7 @@ private fun EmptyState(
         Spacer(Modifier.height(28.dp))
         SUGGESTIONS.chunked(2).forEach { row ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                row.forEach { sg -> SuggestionCard(sg.icon, Color(sg.tint), sg.title, Modifier.weight(1f)) { onSuggest(sg.prompt) } }
+                row.forEach { sg -> SuggestionCard(sg.icon, sg.hue.color, sg.title, Modifier.weight(1f)) { onSuggest(sg.prompt) } }
             }
             Spacer(Modifier.height(10.dp))
         }
@@ -519,7 +531,7 @@ private fun EmptyState(
         if (state.settings.bizStarts) {
             com.jack.ai.data.BizStarts.ALL.chunked(2).forEach { row ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    row.forEach { b -> SuggestionCard(AppIcons.Chat, Color(b.tint), b.title, Modifier.weight(1f)) { vm.send(b.prompt) } }
+                    row.forEach { b -> SuggestionCard(AppIcons.Chat, Hue.of(b.tint).color, b.title, Modifier.weight(1f)) { vm.send(b.prompt) } }
                     if (row.size == 1) Spacer(Modifier.weight(1f))
                 }
                 Spacer(Modifier.height(10.dp))
@@ -538,14 +550,12 @@ private fun EmptyState(
 private fun SuggestionCard(icon: ImageVector?, tint: Color, title: String, modifier: Modifier = Modifier, muted: Boolean = false,
                            onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
-    val shape = RoundedCornerShape(18.dp)
+    val shape = Radii.l
     // 按下去时卡片微微缩一下，手感更实
     val press = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-    val pressed by press.collectIsPressedAsState()
-    val scale by androidx.compose.animation.core.animateFloatAsState(if (pressed) 0.97f else 1f, label = "press")
     Row(
         modifier
-            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .pressScale(press, 0.97f)
             .height(64.dp)
             .clip(shape)
             .border(1.dp, colors.outlineVariant, shape)
@@ -556,7 +566,7 @@ private fun SuggestionCard(icon: ImageVector?, tint: Color, title: String, modif
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            Modifier.size(36.dp).clip(RoundedCornerShape(11.dp)).background(tint.copy(alpha = 0.12f)),
+            Modifier.size(36.dp).clip(Radii.s).background(tint.copy(alpha = if (isDarkSurface) 0.2f else 0.12f)),
             contentAlignment = Alignment.Center,
         ) {
             if (icon != null) Icon(icon, null, Modifier.size(19.dp), tint = tint)
@@ -579,12 +589,18 @@ private fun Pill(
     onClick: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
+    val haptics = rememberHaptics()
+    // 开关时底色、字色、边框渐变过去
+    val spec = androidx.compose.animation.core.tween<Color>(Motion.NORMAL)
+    val fill by androidx.compose.animation.animateColorAsState(if (active) colors.primaryContainer else colors.primaryContainer.copy(alpha = 0f), spec, label = "pill")
+    val ink by androidx.compose.animation.animateColorAsState(if (active) colors.onPrimaryContainer else colors.onSurfaceVariant, spec, label = "pillInk")
+    val edge by androidx.compose.animation.animateColorAsState(if (active) colors.outlineVariant.copy(alpha = 0f) else colors.outlineVariant, spec, label = "pillEdge")
     Surface(
-        onClick = onClick,
+        onClick = { haptics.tick(); onClick() },
         shape = CircleShape,
-        color = if (active) colors.primaryContainer else Color.Transparent,
-        contentColor = if (active) colors.onPrimaryContainer else colors.onSurfaceVariant,
-        border = if (active) null else BorderStroke(1.dp, colors.outlineVariant),
+        color = fill,
+        contentColor = ink,
+        border = BorderStroke(1.dp, edge),
     ) {
         Row(
             Modifier.padding(start = if (icon != null) 10.dp else 14.dp, end = if (dropdown) 6.dp else 14.dp, top = 7.dp, bottom = 7.dp),
@@ -677,7 +693,8 @@ private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolea
         androidx.compose.animation.AnimatedVisibility(
             visible = !follow.on && listState.canScrollForward,
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = bars.calculateBottomPadding() + 12.dp),
-            enter = androidx.compose.animation.fadeIn(), exit = androidx.compose.animation.fadeOut(),
+            enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.scaleIn(initialScale = 0.7f),
+            exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.scaleOut(targetScale = 0.7f),
         ) {
             androidx.compose.material3.SmallFloatingActionButton(
                 onClick = { follow.on = true; scope.launch { val n = listState.layoutInfo.totalItemsCount; if (n > 0) listState.animateScrollToItem(n - 1, Int.MAX_VALUE) } },
@@ -746,13 +763,13 @@ private fun RecordBar(session: com.jack.ai.RecordService.Session) {
         }
     }
     val paused = session.pausedAt != null
-    Surface(shape = RoundedCornerShape(18.dp), color = colors.errorContainer, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+    Surface(shape = Radii.l, color = colors.errorContainer, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp)) {
             Box(Modifier.size(10.dp).background(if (paused) colors.outline else colors.error, CircleShape))
             Spacer(Modifier.size(8.dp))
             Column(Modifier.weight(1f)) {
                 Text((if (paused) "暂停 " else "录音 ") + com.jack.ai.data.AudioPcm.stamp(session.elapsed(now) / 1000),
-                    style = MaterialTheme.typography.titleSmall, color = colors.onErrorContainer)
+                    style = MaterialTheme.typography.titleSmall.tabular, color = colors.onErrorContainer)
                 Box(Modifier.padding(top = 4.dp).fillMaxWidth(0.8f).height(3.dp).background(colors.onErrorContainer.copy(alpha = 0.15f), CircleShape)) {
                     Box(Modifier.fillMaxWidth(if (paused) 0f else level.coerceIn(0.02f, 1f)).height(3.dp).background(colors.onErrorContainer, CircleShape))
                 }
@@ -789,6 +806,7 @@ private fun InputBar(
     var thinkMenu by remember { mutableStateOf(false) }
     val settings = state.settings
     val colors = MaterialTheme.colorScheme
+    val haptics = rememberHaptics()
     val dark = colors.background.red < 0.5f
 
     val pickImages = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(9)) {
@@ -957,7 +975,7 @@ private fun InputBar(
             }
         }
         Surface(
-            shape = RoundedCornerShape(28.dp),
+            shape = Radii.xl,
             // 浮在消息上面的白色大胶囊，带一点柔和的阴影
             color = if (dark) colors.surfaceContainerHigh else colors.surfaceContainerLowest,
             border = BorderStroke(1.dp, colors.outlineVariant),
@@ -1156,7 +1174,7 @@ private fun InputBar(
                     }
                     if (editing == null && state.streamingHere && text.isNotBlank()) {
                         // 回答进行中也能发：作为插话，下一步就会看到
-                        Surface(onClick = { if (vm.send(text)) onTextChange("") }, shape = CircleShape, color = colors.primary,
+                        Surface(onClick = { if (vm.send(text)) { haptics.tick(); onTextChange("") } }, shape = CircleShape, color = colors.primary,
                             modifier = Modifier.size(42.dp)) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(AppIcons.ArrowUp, "插话", Modifier.size(20.dp), tint = colors.onPrimary)
@@ -1181,7 +1199,7 @@ private fun InputBar(
                         label = "send",
                     ) { a ->
                         when (a) {
-                            SendAction.STOP -> Surface(onClick = { vm.stop() }, shape = CircleShape, color = colors.onSurface, modifier = Modifier.size(42.dp)) {
+                            SendAction.STOP -> Surface(onClick = { haptics.tick(); vm.stop() }, shape = CircleShape, color = colors.onSurface, modifier = Modifier.size(42.dp)) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(AppIcons.Stop, "停止", Modifier.size(16.dp), tint = colors.surface)
                                 }
@@ -1196,7 +1214,7 @@ private fun InputBar(
                                 val canSend = if (edit) text.isNotBlank() || editing?.attachments?.isNotEmpty() == true
                                     else (text.isNotBlank() || state.pending.isNotEmpty()) && !state.importing
                                 Surface(
-                                    onClick = { if (edit) onSubmitEdit() else if (vm.send(text)) onTextChange("") },
+                                    onClick = { haptics.tick(); if (edit) onSubmitEdit() else if (vm.send(text)) onTextChange("") },
                                     enabled = canSend,
                                     shape = CircleShape,
                                     color = if (canSend) colors.primary else colors.surfaceVariant,

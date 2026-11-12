@@ -96,7 +96,7 @@ internal fun inline(text: String, codeBg: androidx.compose.ui.graphics.Color): A
         val g = m.groupValues
         when {
             g[1].isNotEmpty() || g[2].isNotEmpty() -> withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(g[1].ifEmpty { g[2] }) }
-            g[3].isNotEmpty() -> withStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = codeBg)) { append(g[3]) }
+            g[3].isNotEmpty() -> withStyle(SpanStyle(fontFamily = CodeFont, background = codeBg)) { append(g[3]) }
             g[4].isNotEmpty() -> append(g[4])
             g[6].isNotEmpty() -> withStyle(SpanStyle(textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough)) { append(g[6]) }
             g[7].isNotEmpty() -> withStyle(SpanStyle(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)) { append(g[7]) }
@@ -135,7 +135,7 @@ internal fun fitColumns(widths: List<Float>, room: Float): List<Float> {
 @Composable
 internal fun MarkdownTable(t: Table, modifier: Modifier = Modifier) {
     val colors = MaterialTheme.colorScheme
-    val shape = RoundedCornerShape(12.dp)
+    val shape = Radii.s
     val widths = t.header.indices.map { c -> columnWidth(listOf(t.header[c]) + t.rows.map { it.getOrElse(c) { "" } }) }
     BoxWithConstraints(modifier) {
         val w: List<Dp> = fitColumns(widths, maxWidth.value - 2).map { it.dp }

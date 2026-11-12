@@ -151,7 +151,7 @@ fun AskScreenSection(vm: ChatViewModel, settings: Settings) {
                     style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
                 )
             }
-            androidx.compose.material3.Switch(checked = settings.floatBall, enabled = a11y || settings.floatBall,
+            Switch(checked = settings.floatBall, enabled = a11y || settings.floatBall,
                 onCheckedChange = { on -> vm.updateSettings { it.copy(floatBall = on) } })
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -202,7 +202,7 @@ fun PhoneDataSection(vm: ChatViewModel, settings: Settings) {
                 Text(title)
                 Text(hint, style = MaterialTheme.typography.bodySmall, color = if (warn) colors.error else colors.onSurfaceVariant)
             }
-            androidx.compose.material3.Switch(checked = on, onCheckedChange = onChange)
+            Switch(checked = on, onCheckedChange = onChange)
         }
     }
 

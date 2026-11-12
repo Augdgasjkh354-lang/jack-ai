@@ -18,6 +18,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -250,48 +252,59 @@ class MainActivity : FragmentActivity() {
                     LockScreen(onUnlock = ::unlock)
                 } else {
                 val top = stack.lastOrNull()
+                val lastDepth = remember { intArrayOf(stack.size) }
                 val back: () -> Unit = { if (stack.isNotEmpty()) stack.removeAt(stack.lastIndex) }
                 if (top != null) BackHandler(onBack = back)
-                when (top) {
-                    null -> ChatScreen(
-                        vm = vm,
-                        state = state,
-                        onOpenSettings = { stack.add(Screen.Settings) },
-                        onOpenProject = { stack.add(Screen.ProjectPage(it)) },
-                        onNewProject = { creatingProject = true },
-                        onOpenMemory = { stack.add(Screen.Memory) },
-                        onOpenSkills = { stack.add(Screen.Skills) },
-                        onOpenRoutines = { stack.add(Screen.Routines) },
-                        onOpenLibrary = { stack.add(Screen.Library) },
-                        onOpenTables = { stack.add(Screen.Tables) },
-                        onOpenReview = { stack.add(Screen.Review) },
-                        onOpenApps = { stack.add(Screen.Apps) },
-                        onOpenDownloads = { stack.add(Screen.Downloads) },
-                    )
-                    Screen.Routines -> RoutinesScreen(vm = vm, state = state, onBack = back)
-                    Screen.Library -> LibraryScreen(vm = vm, state = state, onBack = back)
-                    Screen.Tables -> TablesScreen(onBack = back)
-                    Screen.Review -> ReviewScreen(vm = vm, state = state, onBack = back)
-                    Screen.Apps -> com.jack.ai.ui.AppsScreen(state = state, onBack = back)
-                    Screen.Downloads -> com.jack.ai.ui.DownloadsScreen(onBack = back)
-                    Screen.Memory -> MemoryScreen(vm = vm, state = state, onBack = back)
-                    Screen.Skills -> SkillsScreen(vm = vm, settings = state.settings, onBack = back)
-                    Screen.Usage -> UsageScreen(vm = vm, state = state, onBack = back)
-                    Screen.Settings -> SettingsScreen(
-                        vm = vm,
-                        settings = state.settings,
-                        onBack = back,
-                        onOpenSkills = { stack.add(Screen.Skills) },
-                        onOpenUsage = { stack.add(Screen.Usage) },
-                        canLock = ::canLock,
-                    )
-                    is Screen.ProjectPage -> ProjectScreen(
-                        vm = vm,
-                        state = state,
-                        projectId = top.id,
-                        onBack = back,
-                        onOpenChat = { stack.clear() },
-                    )
+                // 进一页：新页从右边滑进来；返回：往右滑出去。底下垫一层背景色，交替的那一下不透出窗口的白底
+                val forward = stack.size >= lastDepth[0]
+                androidx.compose.runtime.SideEffect { lastDepth[0] = stack.size }
+                androidx.compose.animation.AnimatedContent(
+                    targetState = top,
+                    transitionSpec = { com.jack.ai.ui.pageTransition(forward) },
+                    modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+                    label = "page",
+                ) { screen ->
+                    when (screen) {
+                        null -> ChatScreen(
+                            vm = vm,
+                            state = state,
+                            onOpenSettings = { stack.add(Screen.Settings) },
+                            onOpenProject = { stack.add(Screen.ProjectPage(it)) },
+                            onNewProject = { creatingProject = true },
+                            onOpenMemory = { stack.add(Screen.Memory) },
+                            onOpenSkills = { stack.add(Screen.Skills) },
+                            onOpenRoutines = { stack.add(Screen.Routines) },
+                            onOpenLibrary = { stack.add(Screen.Library) },
+                            onOpenTables = { stack.add(Screen.Tables) },
+                            onOpenReview = { stack.add(Screen.Review) },
+                            onOpenApps = { stack.add(Screen.Apps) },
+                            onOpenDownloads = { stack.add(Screen.Downloads) },
+                        )
+                        Screen.Routines -> RoutinesScreen(vm = vm, state = state, onBack = back)
+                        Screen.Library -> LibraryScreen(vm = vm, state = state, onBack = back)
+                        Screen.Tables -> TablesScreen(onBack = back)
+                        Screen.Review -> ReviewScreen(vm = vm, state = state, onBack = back)
+                        Screen.Apps -> com.jack.ai.ui.AppsScreen(state = state, onBack = back)
+                        Screen.Downloads -> com.jack.ai.ui.DownloadsScreen(onBack = back)
+                        Screen.Memory -> MemoryScreen(vm = vm, state = state, onBack = back)
+                        Screen.Skills -> SkillsScreen(vm = vm, settings = state.settings, onBack = back)
+                        Screen.Usage -> UsageScreen(vm = vm, state = state, onBack = back)
+                        Screen.Settings -> SettingsScreen(
+                            vm = vm,
+                            settings = state.settings,
+                            onBack = back,
+                            onOpenSkills = { stack.add(Screen.Skills) },
+                            onOpenUsage = { stack.add(Screen.Usage) },
+                            canLock = ::canLock,
+                        )
+                        is Screen.ProjectPage -> ProjectScreen(
+                            vm = vm,
+                            state = state,
+                            projectId = screen.id,
+                            onBack = back,
+                            onOpenChat = { stack.clear() },
+                        )
+                    }
                 }
                 // 工具执行前的确认（发邮件之类），在哪个页面都能弹出来
                 state.confirm?.let { req ->

@@ -25,7 +25,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -108,8 +107,8 @@ fun UsageScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                     Card(Modifier.weight(1f)) {
                         Column(Modifier.padding(14.dp)) {
                             Text(label, style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
-                            Text(yuan(l.money), style = MaterialTheme.typography.titleLarge, fontFamily = FontFamily.Serif)
-                            Text(tokens(l.total) + " token", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
+                            Text(yuan(l.money), style = MaterialTheme.typography.titleLarge.tabular, fontFamily = FontFamily.Serif)
+                            Text(tokens(l.total) + " token", style = MaterialTheme.typography.labelMedium.tabular, color = colors.onSurfaceVariant)
                         }
                     }
                 }

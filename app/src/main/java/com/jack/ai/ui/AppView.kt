@@ -180,7 +180,7 @@ fun AppCard(f: GeneratedFile, onFix: ((String) -> Unit)?) {
         return
     }
     Surface(
-        shape = RoundedCornerShape(14.dp),
+        shape = Radii.m,
         color = colors.surfaceContainerLowest,
         border = androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant),
         modifier = Modifier.widthIn(max = 520.dp).fillMaxWidth(),

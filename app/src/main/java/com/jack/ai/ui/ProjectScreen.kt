@@ -124,7 +124,7 @@ fun ProjectScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("隐私项目", style = MaterialTheme.typography.titleSmall,
                                 color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
-                            androidx.compose.material3.Switch(project.isolated, { on -> vm.saveProject(project.copy(isolated = on)) })
+                            Switch(project.isolated, { on -> vm.saveProject(project.copy(isolated = on)) })
                         }
                         Text(
                             if (project.isolated) "和外面完全隔开：这里的对话不用全局记忆、不往全局记忆里存、不参与夜间整理，别的对话也翻不到这里的聊天。只用下面的项目记忆。"

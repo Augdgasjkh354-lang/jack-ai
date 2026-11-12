@@ -15,7 +15,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -78,7 +77,7 @@ fun LocalModelsSection(vm: ChatViewModel, settings: Settings) {
             val isReady = ready[m.id] == true
             Column(
                 Modifier.fillMaxWidth()
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp))
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Radii.m)
                     .padding(start = 4.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {

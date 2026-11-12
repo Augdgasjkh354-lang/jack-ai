@@ -125,7 +125,7 @@ fun TextViewer(
                             SelectionContainer {
                                 Text(
                                     part,
-                                    style = if (code) MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace, lineHeight = 18.sp)
+                                    style = if (code) MaterialTheme.typography.bodySmall.copy(fontFamily = CodeFont, lineHeight = 18.sp)
                                     else MaterialTheme.typography.bodyLarge,
                                     color = colors.onSurface,
                                 )

@@ -6,6 +6,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -41,8 +42,6 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -97,7 +96,7 @@ fun Thumbnail(path: String, size: Dp, onClick: (() -> Unit)? = null) {
     val bmp by produceState<Bitmap?>(null, path) {
         value = withContext(Dispatchers.IO) { Attachments.thumbnail(path, px * 2) }
     }
-    val shape = RoundedCornerShape(10.dp)
+    val shape = Radii.s
     Box(
         Modifier
             .size(size)
@@ -157,10 +156,10 @@ fun UserBubble(msg: ChatMessage, onDelete: () -> Unit, onEdit: (() -> Unit)? = n
         }
         files.forEach { f ->
             Surface(
-                shape = RoundedCornerShape(10.dp),
+                shape = Radii.s,
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 modifier = Modifier.widthIn(max = 280.dp).padding(bottom = 6.dp)
-                    .clip(RoundedCornerShape(10.dp)).clickable { reading = f },
+                    .clip(Radii.s).clickable { reading = f },
             ) {
                 Row(Modifier.padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(AppIcons.File, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
@@ -177,10 +176,11 @@ fun UserBubble(msg: ChatMessage, onDelete: () -> Unit, onEdit: (() -> Unit)? = n
             Surface(
                 // 正在输入框里改这条：气泡换成浅陶土色，看得出改的是哪条
                 color = if (editing) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
-                shape = RoundedCornerShape(22.dp, 8.dp, 22.dp, 22.dp),
+                shape = Radii.bubbleMine,
                 modifier = Modifier
                     .widthIn(max = 320.dp)
-                    .clip(RoundedCornerShape(22.dp, 8.dp, 22.dp, 22.dp))
+                    .clip(Radii.bubbleMine)
+                    .hairline(Radii.bubbleMine)
                     .combinedClickable(onClick = {}, onLongClick = {
                         haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                         menu = true
@@ -328,12 +328,12 @@ fun AssistantMessage(
                 modifier = Modifier.fillMaxWidth(),
             )
         } else if (streaming && msg.reasoning.isEmpty() && msg.searches.isEmpty()) {
-            // 只在什么都还没有的最开始转圈；有了工具框，转圈挪到工具框的标题上，不再一会儿出一会儿没
-            CircularProgressIndicator(Modifier.size(20.dp).padding(2.dp), strokeWidth = 2.dp)
+            // 只在什么都还没有的最开始亮这颗星；有了工具框，转圈挪到工具框的标题上，不再一会儿出一会儿没
+            BreathingStar(size = 22.dp)
         }
         msg.notices.forEach { n ->
             Spacer(Modifier.height(8.dp))
-            Surface(color = colors.primaryContainer.copy(alpha = 0.55f), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
+            Surface(color = colors.primaryContainer.copy(alpha = 0.55f), shape = Radii.m, modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
                     val lines = n.lines()
                     Text((if (n.startsWith(com.jack.ai.data.InjectionGuard.NOTICE_PREFIX)) "🛡️ " else "✏️ ") + lines.first(), style = MaterialTheme.typography.labelLarge, color = colors.onPrimaryContainer)
@@ -368,13 +368,17 @@ fun AssistantMessage(
         }
         msg.error?.let { err ->
             Spacer(Modifier.height(6.dp))
-            Surface(color = colors.errorContainer.copy(alpha = 0.6f), shape = RoundedCornerShape(14.dp)) {
+            Surface(color = colors.errorContainer.copy(alpha = 0.6f), shape = Radii.m) {
                 Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
                     Icon(Icons.Default.Warning, null, Modifier.padding(top = 2.dp).size(16.dp), tint = colors.error)
                     Spacer(Modifier.size(8.dp))
                     Text(err, color = colors.onErrorContainer, style = MaterialTheme.typography.bodyMedium)
                 }
             }
+        }
+        // 正在写：正文下面那颗星一明一暗，写完原地换成下面那排按钮（一样高，不跳）
+        if (streaming && shown.isNotEmpty()) {
+            Box(Modifier.padding(top = 10.dp).height(34.dp), contentAlignment = Alignment.CenterStart) { BreathingStar() }
         }
         if (!streaming) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -443,8 +447,8 @@ private fun ChartImage(f: GeneratedFile) {
             Image(
                 it.asImageBitmap(), f.name,
                 Modifier.fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp))
+                    .clip(Radii.m)
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Radii.m)
                     .clickable { viewing = true },
                 contentScale = ContentScale.FillWidth,
             )
@@ -465,28 +469,29 @@ internal fun GeneratedFileCard(f: GeneratedFile) {
     val opener = rememberFileOpener()
     val open = { opener(f) }
     val (tag, tagColor) = when (f.name.substringAfterLast('.').lowercase()) {
-        "docx" -> "W" to Color(0xFF2B579A)
-        "pptx" -> "P" to Color(0xFFD24726)
-        "xlsx" -> "X" to Color(0xFF217346)
-        "pdf" -> "PDF" to Color(0xFFB3261E)
-        "png", "jpg", "jpeg", "webp", "gif" -> "图" to Color(0xFF4BA3A8)
-        "txt", "md", "csv", "json" -> "TXT" to Color(0xFF7A7A7A)
-        "html", "htm", "js", "py", "kt", "java", "css", "ts" -> "</>" to Color(0xFF7B5BA6)
-        else -> "F" to colors.primary
+        "docx" -> "W" to FileColors.word
+        "pptx" -> "P" to FileColors.slides
+        "xlsx" -> "X" to FileColors.sheet
+        "pdf" -> "PDF" to FileColors.pdf
+        "png", "jpg", "jpeg", "webp", "gif" -> "图" to FileColors.image
+        "txt", "md", "csv", "json" -> "TXT" to FileColors.text
+        "html", "htm", "js", "py", "kt", "java", "css", "ts" -> "</>" to FileColors.code
+        // 认不出的类型用中性的灰，不用强调色（黑白主题深色模式下强调色是白的，白字压上去看不见）
+        else -> "F" to FileColors.text
     }
     val path = File(f.path)
     Surface(
-        shape = RoundedCornerShape(18.dp),
+        shape = Radii.l,
         color = colors.surfaceContainerLowest,
         border = androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant),
         modifier = Modifier.widthIn(max = 380.dp).fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
+            .clip(Radii.l)
             .clickable { open() },
     ) {
         Row(Modifier.padding(start = 14.dp, top = 12.dp, bottom = 12.dp, end = 8.dp),
             verticalAlignment = Alignment.CenterVertically) {
             Box(
-                Modifier.size(44.dp).clip(RoundedCornerShape(10.dp)).background(tagColor),
+                Modifier.size(44.dp).clip(Radii.s).background(tagColor),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(tag, color = Color.White, fontWeight = FontWeight.Bold, fontSize = if (tag.length > 1) 12.sp else 19.sp)
@@ -501,7 +506,7 @@ internal fun GeneratedFileCard(f: GeneratedFile) {
                     color = colors.onSurfaceVariant,
                 )
             }
-            Surface(onClick = { open() }, shape = RoundedCornerShape(12.dp), color = Color.Transparent,
+            Surface(onClick = { open() }, shape = Radii.s, color = Color.Transparent,
                 border = androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant)) {
                 Text("打开", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp))
             }
@@ -604,12 +609,12 @@ private fun ProgressSteps(steps: List<com.jack.ai.data.ThinkStep>, busy: Boolean
     Column(Modifier.fillMaxWidth()) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(enabled = !busy) { open = !open }.padding(vertical = 2.dp),
+            modifier = Modifier.clip(Radii.xs).clickable(enabled = !busy) { open = !open }.padding(vertical = 2.dp),
         ) {
             Icon(AppIcons.Brain, null, Modifier.size(15.dp), tint = colors.onSurfaceVariant)
             Spacer(Modifier.size(6.dp))
             Text(if (busy) "思考中" else "思考摘要 · ${steps.size} 步", style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant)
-            if (!busy) Icon(if (show) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, null, Modifier.size(18.dp), tint = colors.outline)
+            if (!busy) Chevron(show, Modifier.size(18.dp), tint = colors.outline)
         }
         androidx.compose.animation.AnimatedVisibility(show) {
             Column(Modifier.padding(start = 7.dp, top = 6.dp)) {
@@ -642,8 +647,9 @@ private fun ProgressSteps(steps: List<com.jack.ai.data.ThinkStep>, busy: Boolean
 /** 回答下面的小圆按钮：浅灰底，图标灰色。 */
 @Composable
 private fun SmallAction(icon: ImageVector, desc: String, onClick: () -> Unit) {
-    Surface(onClick = onClick, shape = androidx.compose.foundation.shape.CircleShape,
-        color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.size(34.dp)) {
+    val press = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    Surface(onClick = onClick, shape = androidx.compose.foundation.shape.CircleShape, interactionSource = press,
+        color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.size(34.dp).pressScale(press, 0.9f)) {
         Box(contentAlignment = Alignment.Center) {
             Icon(icon, desc, Modifier.size(17.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -666,10 +672,12 @@ private fun ActionPill(label: String, onClick: () -> Unit) {
 private fun CollapsiblePill(expanded: Boolean, content: @Composable () -> Unit) {
     val colors = MaterialTheme.colorScheme
     Surface(
-        color = if (expanded) colors.surfaceContainerLow else colors.surfaceContainerLow,
-        shape = RoundedCornerShape(if (expanded) 16.dp else 20.dp),
+        color = colors.surfaceContainerLow,
+        shape = if (expanded) Radii.m else Radii.l,
         border = androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant),
-        modifier = if (expanded) Modifier.fillMaxWidth() else Modifier,
+        // 点开、收起时框的大小滑过去，不是一下子变
+        modifier = (if (expanded) Modifier.fillMaxWidth() else Modifier)
+            .animateContentSize(androidx.compose.animation.core.tween(Motion.NORMAL)),
     ) { content() }
 }
 
@@ -694,11 +702,7 @@ private fun ThinkingBox(reasoning: String, thinking: Boolean) {
                     modifier = Modifier.weight(1f, fill = expanded || thinking),
                 )
                 Spacer(Modifier.size(4.dp))
-                Icon(
-                    if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                    contentDescription = if (expanded) "收起" else "展开",
-                    Modifier.size(18.dp), tint = colors.onSurfaceVariant,
-                )
+                Chevron(expanded, Modifier.size(18.dp))
             }
             if (thinking && !expanded) {
                 Text(
@@ -755,11 +759,7 @@ private fun SearchBox(searches: List<SearchRecord>, busy: Boolean = false) {
                     modifier = Modifier.weight(1f, fill = expanded || spinning),
                 )
                 Spacer(Modifier.size(4.dp))
-                Icon(
-                    if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                    contentDescription = if (expanded) "收起" else "展开",
-                    Modifier.size(18.dp), tint = colors.onSurfaceVariant,
-                )
+                Chevron(expanded, Modifier.size(18.dp))
             }
             AnimatedVisibility(expanded) {
                 Column(Modifier.padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -824,7 +824,7 @@ private fun PlanCard(items: List<com.jack.ai.data.PlanItem>, cost: Double = 0.0,
             Text("任务清单", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             Text(
                 "${items.count { it.status == "done" || it.status == "skipped" }}/${items.size}" + if (cost > 0) " · 已花 ¥%.2f".format(cost) else "",
-                style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant,
+                style = MaterialTheme.typography.labelMedium.tabular, color = colors.onSurfaceVariant,
             )
         }
         Column(Modifier.padding(start = 8.dp, end = 8.dp, bottom = 10.dp)) {
@@ -832,10 +832,14 @@ private fun PlanCard(items: List<com.jack.ai.data.PlanItem>, cost: Double = 0.0,
                 val doing = item.status == "doing"
                 val done = item.status == "done"
                 val skipped = item.status == "skipped"
+                // 做到哪一条，高亮就滑到哪一条
+                val rowBg by androidx.compose.animation.animateColorAsState(
+                    if (doing) colors.surfaceContainerHigh else colors.surfaceContainerHigh.copy(alpha = 0f),
+                    androidx.compose.animation.core.tween(Motion.NORMAL), label = "plan")
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                        .background(if (doing) colors.surfaceContainerHigh else Color.Transparent)
+                    modifier = Modifier.fillMaxWidth().clip(Radii.s)
+                        .background(rowBg)
                         .padding(horizontal = 8.dp, vertical = 7.dp),
                 ) {
                     Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) {
@@ -903,25 +907,25 @@ private fun WorkCard(content: @Composable () -> Unit) {
     val colors = MaterialTheme.colorScheme
     Surface(
         color = colors.surfaceContainerLowest,
-        shape = RoundedCornerShape(18.dp),
+        shape = Radii.l,
         border = androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant),
         modifier = Modifier.fillMaxWidth(),
     ) { Column { content() } }
 }
 
 /** 一步工具用什么图标、什么颜色（按显示的名字认）。 */
-private fun toolLook(label: String): Pair<ImageVector, Color> = when {
-    label.startsWith("浏览器") -> AppIcons.Globe to Color(0xFF3B82F6)
-    label.startsWith("生成") || label.startsWith("修改") || label.startsWith("写入") -> AppIcons.File to Color(0xFF8B5CF6)
-    label.startsWith("读取") || label.startsWith("查看") || label.startsWith("翻") -> AppIcons.File to Color(0xFF6B7280)
-    label.contains("表") || label.startsWith("查「") -> Icons.Default.List to Color(0xFF22A06B)
-    label.contains("邮件") || label.contains("邮箱") -> Icons.Default.Email to Color(0xFFEA580C)
-    label.contains("提醒") || label.contains("日程") || label.contains("闹钟") || label.contains("任务") || label.contains("监控") -> AppIcons.Calendar to Color(0xFFEF5A5A)
-    label.startsWith("运行") || label.startsWith("计算") -> AppIcons.Code to Color(0xFF0EA5E9)
-    label.startsWith("下载") || label.startsWith("存") -> AppIcons.Download to Color(0xFF0EA5E9)
-    label.startsWith("使用技能") -> AppIcons.Brain to Color(0xFF6B7280)
-    label.startsWith("💬") -> AppIcons.Chat to Color(0xFF6B7280)
-    else -> AppIcons.Globe to Color(0xFF3B82F6)
+private fun toolLook(label: String): Pair<ImageVector, Hue> = when {
+    label.startsWith("浏览器") -> AppIcons.Globe to Hue.BLUE
+    label.startsWith("生成") || label.startsWith("修改") || label.startsWith("写入") -> AppIcons.File to Hue.VIOLET
+    label.startsWith("读取") || label.startsWith("查看") || label.startsWith("翻") -> AppIcons.File to Hue.GRAY
+    label.contains("表") || label.startsWith("查「") -> Icons.Default.List to Hue.GREEN
+    label.contains("邮件") || label.contains("邮箱") -> Icons.Default.Email to Hue.ORANGE
+    label.contains("提醒") || label.contains("日程") || label.contains("闹钟") || label.contains("任务") || label.contains("监控") -> AppIcons.Calendar to Hue.RED
+    label.startsWith("运行") || label.startsWith("计算") -> AppIcons.Code to Hue.SKY
+    label.startsWith("下载") || label.startsWith("存") -> AppIcons.Download to Hue.SKY
+    label.startsWith("使用技能") -> AppIcons.Brain to Hue.GRAY
+    label.startsWith("💬") -> AppIcons.Chat to Hue.GRAY
+    else -> AppIcons.Globe to Hue.BLUE
 }
 
 /**
@@ -952,11 +956,12 @@ private fun ToolTimeline(searches: List<SearchRecord>, busy: Boolean) {
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp))
         Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             shown.forEach { rec ->
-                val (icon, tint) = toolLook(rec.query)
+                val (icon, hue) = toolLook(rec.query)
+                val tint = hue.color
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(if (rec.at > 0) time.format(java.util.Date(rec.at)) else "", style = MaterialTheme.typography.labelSmall,
+                    Text(if (rec.at > 0) time.format(java.util.Date(rec.at)) else "", style = MaterialTheme.typography.labelSmall.tabular,
                         color = colors.outline, modifier = Modifier.width(40.dp))
-                    Box(Modifier.size(28.dp).clip(RoundedCornerShape(8.dp)).background(tint.copy(alpha = 0.13f)), contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(28.dp).clip(Radii.xs).background(hue.wash), contentAlignment = Alignment.Center) {
                         if (rec.pending) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp, color = tint)
                         else Icon(icon, null, Modifier.size(16.dp), tint = tint)
                     }
@@ -977,7 +982,7 @@ private fun ToolTimeline(searches: List<SearchRecord>, busy: Boolean) {
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 @Composable
                 fun link(text: String, onClick: () -> Unit) = Text(text, style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant,
-                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick).padding(vertical = 2.dp))
+                    modifier = Modifier.clip(Radii.xs).clickable(onClick = onClick).padding(vertical = 2.dp))
                 val earlier = pool.size - shown.size
                 when {
                     !all && (pool.size > 5 || searches.any { it.sources.isNotEmpty() }) ->
@@ -996,7 +1001,7 @@ private fun ToolTimeline(searches: List<SearchRecord>, busy: Boolean) {
 @Composable
 private fun DeliveredBox(list: List<Delivered>) {
     val colors = MaterialTheme.colorScheme
-    Surface(color = colors.surfaceVariant.copy(alpha = 0.6f), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
+    Surface(color = colors.surfaceVariant.copy(alpha = 0.6f), shape = Radii.m, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
             Text("交付清单 · " + Deliverables.summary(list), style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant)
             list.forEach { d ->

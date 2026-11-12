@@ -41,7 +41,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
@@ -118,7 +117,7 @@ fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
             item { KindFilter(filter) { filter = it } }
             if (!canNotify && Build.VERSION.SDK_INT >= 33) {
                 item {
-                    androidx.compose.material3.Surface(shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+                    androidx.compose.material3.Surface(shape = Radii.l,
                         color = MaterialTheme.colorScheme.surfaceContainerLow,
                         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -130,7 +129,7 @@ fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
             }
             if (!canCalendar) {
                 item {
-                    androidx.compose.material3.Surface(shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+                    androidx.compose.material3.Surface(shape = Radii.l,
                         color = MaterialTheme.colorScheme.surfaceContainerLow,
                         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -216,7 +215,7 @@ private fun RoutineCard(r: Routine, onClick: () -> Unit, onToggle: (Boolean) -> 
     var menu by remember { mutableStateOf(false) }
     androidx.compose.material3.Surface(
         onClick = onClick,
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
+        shape = Radii.l,
         color = colors.surfaceContainerLowest,
         border = androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant),
         modifier = Modifier.fillMaxWidth(),
@@ -229,7 +228,7 @@ private fun RoutineCard(r: Routine, onClick: () -> Unit, onToggle: (Boolean) -> 
                         contentAlignment = Alignment.Center,
                     ) { Icon(icon, null, Modifier.size(24.dp), tint = tint) }
                     Text(kindName, style = MaterialTheme.typography.labelSmall, color = tint,
-                        modifier = Modifier.padding(top = 6.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+                        modifier = Modifier.padding(top = 6.dp).clip(Radii.xs)
                             .background(tint.copy(alpha = 0.1f)).padding(horizontal = 7.dp, vertical = 2.dp))
                 }
                 Spacer(Modifier.size(10.dp))
@@ -373,9 +372,11 @@ private fun RunHistory(routineId: String) {
     }
     val last = runs.first()
     // ✓ 绿、○ 橙、✗ △ 红，和左边的图标对齐
+    val green = Hue.GREEN.color
+    val amber = Hue.AMBER.color
     fun tone(m: String) = when (m) {
-        "✓" -> androidx.compose.ui.graphics.Color(0xFF22A06B)
-        "○" -> androidx.compose.ui.graphics.Color(0xFFE08600)
+        "✓" -> green
+        "○" -> amber
         "✗", "△" -> colors.error
         else -> colors.onSurfaceVariant
     }

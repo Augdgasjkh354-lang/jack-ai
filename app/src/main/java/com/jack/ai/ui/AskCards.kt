@@ -62,7 +62,7 @@ fun AskCards(msgId: String, cards: List<AskCard>, active: Boolean, onAnswer: (St
 
     Column(Modifier.fillMaxWidth().testTag("ask-cards"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         cards.forEachIndexed { i, card ->
-            Surface(color = colors.secondaryContainer.copy(alpha = if (enabled) 0.6f else 0.3f), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
+            Surface(color = colors.secondaryContainer.copy(alpha = if (enabled) 0.6f else 0.3f), shape = Radii.m, modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
                     Text(card.question + if (card.multi) "（可以选几个）" else "", style = MaterialTheme.typography.titleSmall,
                         color = colors.onSecondaryContainer.copy(alpha = if (enabled) 1f else 0.6f))

@@ -768,7 +768,7 @@ class BrowserActivity : ComponentActivity() {
                         androidx.compose.foundation.text.selection.SelectionContainer(
                             Modifier.padding(top = 8.dp).heightIn(max = 420.dp).verticalScroll(rememberScrollState())
                         ) {
-                            Text(report, style = MaterialTheme.typography.bodySmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace))
+                            Text(report, style = MaterialTheme.typography.bodySmall.copy(fontFamily = CodeFont))
                         }
                     }
                 },
@@ -923,7 +923,7 @@ class BrowserActivity : ComponentActivity() {
         Surface(
             Modifier.fillMaxWidth().height(h),
             color = colors.surface,
-            shape = androidx.compose.foundation.shape.RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp),
+            shape = Radii.sheetTop,
             shadowElevation = 12.dp,
             border = androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant),
         ) {
@@ -954,14 +954,14 @@ class BrowserActivity : ComponentActivity() {
                     items(chat.lines.size) { i ->
                         val l = chat.lines[i]
                         if (l.role == "user") Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-                            Text(l.text, Modifier.widthIn(max = 280.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(18.dp, 6.dp, 18.dp, 18.dp))
+                            Text(l.text, Modifier.widthIn(max = 280.dp).clip(Radii.bubbleMine)
                                 .background(colors.surfaceContainerHigh).padding(horizontal = 14.dp, vertical = 9.dp),
                                 style = MaterialTheme.typography.bodyMedium, maxLines = 6, overflow = TextOverflow.Ellipsis)
                         }
                         else Column(Modifier.fillMaxWidth()) {
                             if (l.steps.isNotEmpty()) Text(l.steps.joinToString(" → "), style = MaterialTheme.typography.labelSmall,
                                 color = colors.onSurfaceVariant, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(bottom = 4.dp))
-                            if (l.text.isNotBlank()) Box(Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(6.dp, 18.dp, 18.dp, 18.dp))
+                            if (l.text.isNotBlank()) Box(Modifier.clip(Radii.bubbleTheirs)
                                 .background(colors.surfaceContainer).padding(horizontal = 14.dp, vertical = 10.dp)) {
                                 MarkdownBlocks(l.text, colors.onSurface, colors.surface, Modifier.fillMaxWidth(), textSizeSp = 15f)
                             }
@@ -981,9 +981,9 @@ class BrowserActivity : ComponentActivity() {
                                     maxLines = 6, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp, bottom = 10.dp))
                                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                     androidx.compose.material3.Button(onClick = { a.answer.complete(true) }, modifier = Modifier.weight(1f).height(48.dp),
-                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp)) { Text(a.action) }
+                                        shape = Radii.m) { Text(a.action) }
                                     androidx.compose.material3.FilledTonalButton(onClick = { a.answer.complete(false) }, modifier = Modifier.weight(1f).height(48.dp),
-                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp)) { Text("先不要") }
+                                        shape = Radii.m) { Text("先不要") }
                                 }
                             }
                         }
@@ -991,7 +991,7 @@ class BrowserActivity : ComponentActivity() {
                 }
                 // 输入：和聊天页一样的圆角胶囊，右边黑色圆按钮
                 Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 10.dp)
-                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(24.dp)).background(colors.surfaceContainer)
+                    .clip(Radii.xl).background(colors.surfaceContainer)
                     .padding(start = 4.dp, end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     androidx.compose.material3.TextField(
                         value = input,
@@ -1180,8 +1180,8 @@ class BrowserActivity : ComponentActivity() {
                         val t = b.tabs[i]
                         val on = i == b.current
                         Column(
-                            Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
-                                .border(if (on) 2.dp else 1.dp, if (on) colors.primary else colors.outlineVariant, androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+                            Modifier.clip(Radii.s)
+                                .border(if (on) 2.dp else 1.dp, if (on) colors.primary else colors.outlineVariant, Radii.s)
                                 .clickable { switchTab(i) },
                         ) {
                             Row(Modifier.fillMaxWidth().background(if (on) colors.primaryContainer else colors.surfaceVariant).padding(start = 10.dp),

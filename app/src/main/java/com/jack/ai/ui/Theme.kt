@@ -1,7 +1,6 @@
 package com.jack.ai.ui
 
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
@@ -81,20 +80,29 @@ private val DarkColors = darkColorScheme(
 )
 
 private val AppShapes = Shapes(
-    extraSmall = RoundedCornerShape(8.dp),
-    small = RoundedCornerShape(12.dp),
-    medium = RoundedCornerShape(18.dp),
-    large = RoundedCornerShape(24.dp),
-    extraLarge = RoundedCornerShape(28.dp),
+    extraSmall = Radii.xs,
+    small = Radii.s,
+    medium = Radii.m,
+    large = Radii.l,
+    extraLarge = Radii.xl,
 )
 
+// 层级靠字重和字距拉开：大标题粗、字距收紧；正文和小字的行高按中文放宽（默认的行高是给英文定的，中文挤）；
+// 小标签的字距收回来（默认给英文大写加的宽字距，用在中文上显得散）
 private val AppTypography = Typography().let { t ->
     t.copy(
-        bodyLarge = t.bodyLarge.copy(fontSize = 16.sp, lineHeight = 26.sp),
-        bodyMedium = t.bodyMedium.copy(lineHeight = 22.sp),
-        titleLarge = t.titleLarge.copy(fontWeight = FontWeight.SemiBold),
-        titleMedium = t.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-        titleSmall = t.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+        headlineLarge = t.headlineLarge.copy(fontWeight = FontWeight.Bold, letterSpacing = (-0.4).sp),
+        headlineMedium = t.headlineMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = (-0.3).sp),
+        headlineSmall = t.headlineSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = (-0.2).sp),
+        titleLarge = t.titleLarge.copy(fontWeight = FontWeight.Bold, letterSpacing = (-0.1).sp),
+        titleMedium = t.titleMedium.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 0.sp),
+        titleSmall = t.titleSmall.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 0.sp),
+        bodyLarge = t.bodyLarge.copy(fontSize = 16.sp, lineHeight = 26.sp, letterSpacing = 0.1.sp),
+        bodyMedium = t.bodyMedium.copy(lineHeight = 22.sp, letterSpacing = 0.1.sp),
+        bodySmall = t.bodySmall.copy(lineHeight = 18.sp, letterSpacing = 0.1.sp),
+        labelLarge = t.labelLarge.copy(letterSpacing = 0.sp),
+        labelMedium = t.labelMedium.copy(letterSpacing = 0.1.sp),
+        labelSmall = t.labelSmall.copy(letterSpacing = 0.1.sp),
     )
 }
 

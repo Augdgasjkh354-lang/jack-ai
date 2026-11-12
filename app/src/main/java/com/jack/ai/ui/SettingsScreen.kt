@@ -51,7 +51,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -287,9 +286,9 @@ fun SettingsScreen(
                         val on = settings.appIcon == o.id
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.weight(1f).clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
+                            modifier = Modifier.weight(1f).clip(Radii.m)
                                 .border(if (on) 2.dp else 1.dp, if (on) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outlineVariant,
-                                    androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
+                                    Radii.m)
                                 .clickable { if (!on) vm.updateSettings { it.copy(appIcon = o.id) } }
                                 .padding(vertical = 10.dp),
                         ) {
@@ -463,7 +462,7 @@ private fun Section(hint: String? = null, content: @Composable () -> Unit) {
     val dark = colors.background.luminance() < 0.5f
     Column(Modifier.fillMaxWidth()) {
         androidx.compose.material3.Surface(
-            shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+            shape = Radii.l,
             color = if (dark) colors.surfaceContainer else colors.surfaceContainerLowest,
             border = androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant),
             modifier = Modifier.fillMaxWidth(),
@@ -488,14 +487,14 @@ private fun ThemeTiles(selected: ThemeMode, onPick: (ThemeMode) -> Unit) {
             val on = m == selected
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.weight(1f).clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
-                    .border(if (on) 2.dp else 1.dp, if (on) colors.onSurface else colors.outlineVariant, androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
+                modifier = Modifier.weight(1f).clip(Radii.m)
+                    .border(if (on) 2.dp else 1.dp, if (on) colors.onSurface else colors.outlineVariant, Radii.m)
                     .clickable { onPick(m) }.padding(10.dp),
             ) {
                 // 小预览：一张「页面」上两道「文字」
                 val light = androidx.compose.ui.graphics.Color(0xFFF3F4F6) to androidx.compose.ui.graphics.Color(0xFFD1D5DB)
                 val darkC = androidx.compose.ui.graphics.Color(0xFF1D212B) to androidx.compose.ui.graphics.Color(0xFF3A4150)
-                Row(Modifier.fillMaxWidth().height(44.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))) {
+                Row(Modifier.fillMaxWidth().height(44.dp).clip(Radii.xs)) {
                     listOfNotNull(if (m != ThemeMode.DARK) light else null, if (m != ThemeMode.LIGHT) darkC else null).forEach { (bg, line) ->
                         Column(Modifier.weight(1f).fillMaxSize().background(bg).padding(8.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                             Box(Modifier.fillMaxWidth(0.8f).height(4.dp).clip(androidx.compose.foundation.shape.CircleShape).background(line))
@@ -598,28 +597,28 @@ private fun SettingsHome(
         SettingsEntry(icon, p.title, value, warn) { onPick(p) }
     val noKey = !settings.hasAnyKey()
     val model = settings.modelChoices().firstOrNull { it.key == settings.model }?.label
-    SettingsGroup("关于你", Color(0xFF3B82F6), listOf(
+    SettingsGroup("关于你", Hue.BLUE, listOf(
         go(SettingsPage.PROFILE, Icons.Default.Person, settings.userName.ifBlank { "未设置" }),
     ))
-    SettingsGroup("模型", Color(0xFF8B5CF6), listOf(
+    SettingsGroup("模型", Hue.VIOLET, listOf(
         go(SettingsPage.KEY, AppIcons.Lock, if (settings.apiKey.isNotBlank()) "已填" else "未填", warn = noKey),
         go(SettingsPage.PROVIDERS, AppIcons.Code, if (settings.providers.isEmpty()) "未添加" else "${settings.providers.size} 个"),
         go(SettingsPage.MODEL, AppIcons.Brain, listOfNotNull(model, settings.thinking.label).joinToString(" · ")),
         go(SettingsPage.LOCAL, AppIcons.Chip),
         go(SettingsPage.COMPRESS, AppIcons.Compress, "${settings.compressTokens / 1000}k"),
     ))
-    SettingsGroup("Kavi 能用的", Color(0xFF16A34A), listOf(
+    SettingsGroup("Kavi 能用的", Hue.GREEN, listOf(
         go(SettingsPage.CONNECT, AppIcons.Globe),
         SettingsEntry(Icons.Default.Build, "技能", onClick = onOpenSkills),
         go(SettingsPage.REMOTE, AppIcons.Share),
     ))
-    SettingsGroup("手机", Color(0xFFF59E0B), listOf(
+    SettingsGroup("手机", Hue.AMBER, listOf(
         go(SettingsPage.PHONE, AppIcons.Phone, if (settings.phoneApps.isEmpty()) "未开启" else "${settings.phoneApps.size} 个 App"),
         go(SettingsPage.ASK, Icons.Default.Search),
         go(SettingsPage.PHONEDATA, Icons.AutoMirrored.Filled.List, if (settings.phoneDataOn) "已开" else "全关"),
         go(SettingsPage.FOLDERS, AppIcons.Folder, if (settings.phoneFolders.isEmpty()) "未授权" else "${settings.phoneFolders.size} 个"),
     ))
-    SettingsGroup("应用", Color(0xFF6B7280), listOf(
+    SettingsGroup("应用", Hue.GRAY, listOf(
         go(SettingsPage.LOOK, AppIcons.Moon, settings.themeMode.label),
         SettingsEntry(Icons.Default.Info, "统计", monthSpent?.let { "本月 " + yuan(it) }, onClick = onOpenUsage),
         go(SettingsPage.PRIVACY, Icons.Default.Lock, when {
@@ -634,16 +633,17 @@ private fun SettingsHome(
 
 /** 一组入口：灰色小标题，下面一张圆角卡片，行和行之间一道从文字起头的细线。图标放在浅色小方块里，一组一个颜色，好找。 */
 @Composable
-private fun SettingsGroup(title: String, tint: Color, entries: List<SettingsEntry>) {
+private fun SettingsGroup(title: String, hue: Hue, entries: List<SettingsEntry>) {
+    val tint = hue.color
     val colors = MaterialTheme.colorScheme
     val dark = colors.background.luminance() < 0.5f
     Column(Modifier.fillMaxWidth()) {
         Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
             color = colors.onSurfaceVariant, modifier = Modifier.padding(start = 6.dp, bottom = 8.dp))
         androidx.compose.material3.Surface(
-            shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
+            shape = Radii.l,
             color = if (dark) colors.surfaceContainer else colors.surfaceContainerLowest,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().hairline(Radii.l),
         ) {
             Column {
                 entries.forEachIndexed { i, e ->
@@ -652,7 +652,7 @@ private fun SettingsGroup(title: String, tint: Color, entries: List<SettingsEntr
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth().clickable(onClick = e.onClick).padding(horizontal = 16.dp, vertical = 11.dp),
                     ) {
-                        Box(Modifier.size(32.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)).background(tint.copy(alpha = if (dark) 0.2f else 0.12f)),
+                        Box(Modifier.size(32.dp).clip(Radii.s).background(hue.wash),
                             contentAlignment = Alignment.Center) {
                             Icon(e.icon, null, Modifier.size(18.dp), tint = tint)
                         }

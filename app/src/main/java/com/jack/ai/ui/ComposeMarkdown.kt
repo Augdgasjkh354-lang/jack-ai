@@ -127,7 +127,7 @@ internal fun inlineMarkdown(text: String, codeBg: Color, link: Color): Annotated
         val g = m.groupValues
         when {
             g[1].isNotEmpty() || g[2].isNotEmpty() -> withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(g[1].ifEmpty { g[2] }) }
-            g[3].isNotEmpty() -> withStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = codeBg, fontSize = 0.9.em)) { append(g[3]) }
+            g[3].isNotEmpty() -> withStyle(SpanStyle(fontFamily = CodeFont, background = codeBg, fontSize = 0.9.em)) { append(g[3]) }
             g[4].isNotEmpty() -> withLink(LinkAnnotation.Url(g[5], linkStyle)) { append(g[4]) }
             g[6].isNotEmpty() -> withStyle(SpanStyle(textDecoration = TextDecoration.LineThrough)) { append(g[6]) }
             g[7].isNotEmpty() || g[8].isNotEmpty() -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { append(g[7].ifEmpty { g[8] }) }
@@ -201,10 +201,10 @@ internal fun ComposeMarkdown(block: String, color: Color, codeBackground: Color,
                         modifier = Modifier.padding(start = 12.dp))
                 }
                 is MdPart.Code -> Box(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(codeBackground)
+                    Modifier.fillMaxWidth().clip(Radii.s).background(codeBackground)
                         .horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 10.dp),
                 ) {
-                    Text(p.code, style = body.copy(fontFamily = FontFamily.Monospace, fontSize = (textSizeSp * 0.86f).sp,
+                    Text(p.code, style = body.copy(fontFamily = CodeFont, fontSize = (textSizeSp * 0.86f).sp,
                         lineHeight = (textSizeSp * 1.35f).sp, letterSpacing = 0.sp), softWrap = false)
                 }
                 MdPart.Rule -> HorizontalDivider(Modifier.padding(vertical = 10.dp), color = colors.outlineVariant)

@@ -126,7 +126,7 @@ fun HistoryDrawer(
             }
             Surface(
                 onClick = onNew,
-                shape = RoundedCornerShape(16.dp),
+                shape = Radii.m,
                 color = drawerCard(),
                 contentColor = colors.onSurface,
                 border = androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant),
@@ -167,7 +167,7 @@ fun HistoryDrawer(
                     ToolGrid(if (showMoreTools) main + more else main)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 12.dp).fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                        modifier = Modifier.padding(horizontal = 12.dp).fillMaxWidth().clip(Radii.s)
                             .clickable { showMoreTools = !showMoreTools }.padding(horizontal = 16.dp, vertical = 6.dp),
                     ) {
                         Text(if (showMoreTools) "收起" else "更多：表格、复习卡片、技能、小工具", Modifier.weight(1f),
@@ -231,12 +231,12 @@ fun HistoryDrawer(
                 modifier = Modifier
                     .padding(horizontal = 12.dp, vertical = 8.dp)
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(Radii.s)
                     .clickable(onClick = onSettings)
                     .padding(horizontal = 12.dp, vertical = 8.dp),
             ) {
                 Box(
-                    Modifier.size(30.dp).clip(RoundedCornerShape(15.dp)).background(colors.secondaryContainer),
+                    Modifier.size(30.dp).clip(Radii.m).background(colors.secondaryContainer),
                     contentAlignment = Alignment.Center,
                 ) {
                     if (name.isNotEmpty()) Text(name.take(1), style = MaterialTheme.typography.labelLarge, color = colors.onSecondaryContainer)
@@ -279,14 +279,14 @@ private fun ProjectRow(name: String, sub: String, color: Color, selected: Boolea
         modifier = Modifier
             .padding(horizontal = 12.dp, vertical = 3.dp)
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .border(1.dp, colors.outlineVariant, RoundedCornerShape(14.dp))
+            .clip(Radii.m)
+            .border(1.dp, colors.outlineVariant, Radii.m)
             .background(if (selected) colors.secondaryContainer else drawerCard())
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 10.dp),
     ) {
         // 和别处的图标一个样子：项目颜色的浅底，上面一个同色的文件夹
-        Box(Modifier.size(32.dp).clip(RoundedCornerShape(10.dp)).background(color.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(32.dp).clip(Radii.s).background(color.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
             Icon(AppIcons.Folder, null, Modifier.size(17.dp), tint = color)
         }
         Spacer(Modifier.size(12.dp))
@@ -311,7 +311,7 @@ private fun ToolGrid(tools: List<Tool>) {
                         Modifier
                             .weight(1f)
                             .padding(2.dp)
-                            .clip(RoundedCornerShape(14.dp))
+                            .clip(Radii.m)
                             .clickable(onClick = t.onClick)
                             .padding(vertical = 8.dp),
                         contentAlignment = Alignment.Center,
@@ -332,7 +332,7 @@ private fun ToolGrid(tools: List<Tool>) {
                                 style = MaterialTheme.typography.labelSmall,
                                 color = colors.onPrimary,
                                 modifier = Modifier.align(Alignment.TopEnd).padding(end = 8.dp)
-                                    .clip(RoundedCornerShape(8.dp)).background(colors.primary).padding(horizontal = 5.dp),
+                                    .clip(Radii.xs).background(colors.primary).padding(horizontal = 5.dp),
                             )
                             t.dot -> Box(
                                 Modifier.align(Alignment.TopEnd).padding(end = 12.dp).size(7.dp)
@@ -378,7 +378,7 @@ private fun SectionLabel(text: String, action: String? = null, onAction: (() -> 
                 "+ $action",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onAction).padding(horizontal = 8.dp, vertical = 2.dp),
+                modifier = Modifier.clip(Radii.xs).clickable(onClick = onAction).padding(horizontal = 8.dp, vertical = 2.dp),
             )
         }
     }
@@ -406,7 +406,7 @@ fun ChatItem(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
+                .clip(Radii.s)
                 .background(if (selected) colors.secondaryContainer else Color.Transparent)
                 .combinedClickable(onClick = onClick, onLongClick = { menu = true })
                 .heightIn(min = 44.dp)
@@ -427,8 +427,8 @@ fun ChatItem(
                     style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
             }
             if (answering) {
-                Box(Modifier.padding(start = 8.dp).size(7.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Color(0xFF3B82F6)))
-                Text("回答中", style = MaterialTheme.typography.labelSmall, color = Color(0xFF3B82F6), modifier = Modifier.padding(start = 4.dp))
+                Box(Modifier.padding(start = 8.dp).size(7.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Hue.BLUE.color))
+                Text("回答中", style = MaterialTheme.typography.labelSmall, color = Hue.BLUE.color, modifier = Modifier.padding(start = 4.dp))
             }
             if (showMore) {
                 IconButton(onClick = { menu = true }, modifier = Modifier.size(36.dp)) {
@@ -540,7 +540,7 @@ internal fun searchConversations(all: List<Conversation>, query: String): List<P
 @Composable
 private fun SearchField(value: String, onChange: (String) -> Unit, modifier: Modifier = Modifier) {
     val colors = MaterialTheme.colorScheme
-    Surface(shape = RoundedCornerShape(14.dp), color = colors.surfaceContainerHigh, modifier = modifier.fillMaxWidth()) {
+    Surface(shape = Radii.m, color = colors.surfaceContainerHigh, modifier = modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 12.dp)) {
             Icon(Icons.Default.Search, null, Modifier.size(18.dp), tint = colors.onSurfaceVariant)
             Spacer(Modifier.size(8.dp))
@@ -571,7 +571,7 @@ private fun SearchResultRow(title: String, snippet: String, query: String, proje
         Modifier
             .padding(horizontal = 12.dp)
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(Radii.s)
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
@@ -614,7 +614,7 @@ private fun DrawerRow(
         modifier = Modifier
             .padding(horizontal = 12.dp)
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(Radii.s)
             .background(if (selected) colors.secondaryContainer else Color.Transparent)
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 11.dp),

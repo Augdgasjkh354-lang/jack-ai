@@ -72,7 +72,7 @@ fun BrowserLive(convId: String = "") {
         onDispose { b.inlineHosts--; b.release(ctx) }
     }
     Surface(
-        shape = RoundedCornerShape(14.dp),
+        shape = Radii.m,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = Modifier.fillMaxWidth(),
     ) {
@@ -116,7 +116,7 @@ fun BrowserSteps(steps: List<SearchRecord>) {
     val colors = MaterialTheme.colorScheme
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         steps.forEachIndexed { i, s ->
-            Column(Modifier.width(112.dp).clip(RoundedCornerShape(10.dp)).clickable { viewing = s.shot }) {
+            Column(Modifier.width(112.dp).clip(Radii.s).clickable { viewing = s.shot }) {
                 StepImage(s.shot)
                 Text(
                     "${i + 1}. " + s.query.removePrefix("浏览器"),
@@ -135,7 +135,7 @@ fun BrowserSteps(steps: List<SearchRecord>) {
 @Composable
 private fun StepImage(path: String) {
     val bmp by produceState<Bitmap?>(null, path) { value = withContext(Dispatchers.IO) { Attachments.thumbnail(path, 360) } }
-    Box(Modifier.width(112.dp).height(150.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
+    Box(Modifier.width(112.dp).height(150.dp).clip(Radii.s).background(MaterialTheme.colorScheme.surfaceVariant)) {
         bmp?.let { Image(it.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop, alignment = Alignment.TopCenter) }
         if (bmp == null) Text("截图没了", Modifier.align(Alignment.Center), style = MaterialTheme.typography.labelSmall)
     }

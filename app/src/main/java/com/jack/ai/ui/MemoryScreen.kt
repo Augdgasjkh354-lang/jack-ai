@@ -32,7 +32,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -63,7 +62,7 @@ fun MemoryScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
     // 这一页始终是夜晚：深蓝夜色、星点、月亮色的强调，不跟着浅色 / 深色模式变
     MaterialTheme(colorScheme = NightColors, shapes = MaterialTheme.shapes, typography = MaterialTheme.typography) {
         androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().background(NIGHT_SKY)) {
-            Stars(Modifier.fillMaxWidth().height(320.dp))
+            NightStars(Modifier.fillMaxWidth().height(320.dp))
             MemoryPage(vm, state, onBack)
         }
     }
@@ -97,26 +96,6 @@ private val NightColors = androidx.compose.material3.darkColorScheme(
     outlineVariant = androidx.compose.ui.graphics.Color(0xFF283160),
     error = androidx.compose.ui.graphics.Color(0xFFFF8A80),
 )
-
-/** 页面上方稀稀落落的星星（位置固定，每次打开一样）。 */
-@Composable
-private fun Stars(modifier: Modifier) {
-    val stars = remember {
-        val r = java.util.Random(27)
-        List(46) { Triple(r.nextFloat(), r.nextFloat(), 0.6f + r.nextFloat() * 1.6f) }
-    }
-    androidx.compose.foundation.Canvas(modifier) {
-        stars.forEach { (x, y, rad) ->
-            drawCircle(androidx.compose.ui.graphics.Color.White.copy(alpha = 0.25f + y.let { 1 - it } * 0.45f), rad.dp.toPx() / 2 + 0.5f,
-                androidx.compose.ui.geometry.Offset(x * size.width, y * y * size.height))
-        }
-        // 右上角一轮月光
-        drawCircle(androidx.compose.ui.graphics.Brush.radialGradient(
-            listOf(androidx.compose.ui.graphics.Color(0x33F2D38A), androidx.compose.ui.graphics.Color.Transparent),
-            center = androidx.compose.ui.geometry.Offset(size.width * 0.82f, 70.dp.toPx()), radius = 120.dp.toPx()),
-            radius = 120.dp.toPx(), center = androidx.compose.ui.geometry.Offset(size.width * 0.82f, 70.dp.toPx()))
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -201,7 +180,7 @@ private fun MemoryPage(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
             }
             items(state.memories, key = { it.id }) { m ->
                 // 一条一张半透明的小卡
-                androidx.compose.material3.Surface(color = NIGHT_CARD, shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                androidx.compose.material3.Surface(color = NIGHT_CARD, shape = Radii.m,
                     border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), modifier = Modifier.fillMaxWidth()) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 14.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
                         Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
