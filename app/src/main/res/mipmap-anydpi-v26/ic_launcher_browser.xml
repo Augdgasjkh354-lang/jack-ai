@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 「Kavi 浏览器」桌面图标：品牌色底，白色地球 -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/browser_icon_bg" />
+    <foreground android:drawable="@drawable/ic_browser_fg" />
+    <monochrome android:drawable="@drawable/ic_browser_fg" />
+</adaptive-icon>

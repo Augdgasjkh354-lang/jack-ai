@@ -102,11 +102,29 @@
         <activity
             android:name=".ui.BrowserActivity"
             android:exported="false"
+            android:label="@string/browser_name"
+            android:icon="@mipmap/ic_launcher_browser"
+            android:roundIcon="@mipmap/ic_launcher_browser"
+            android:taskAffinity="com.jack.ai.browser"
             android:launchMode="singleTask"
             android:supportsPictureInPicture="true"
             android:resizeableActivity="true"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:windowSoftInputMode="adjustResize" />
+        <!-- 桌面上单独的「Kavi 浏览器」图标：直接打开浏览器，在最近任务里也单独一格 -->
+        <activity-alias
+            android:name=".LauncherBrowser"
+            android:enabled="true"
+            android:exported="true"
+            android:label="@string/browser_name"
+            android:icon="@mipmap/ic_launcher_browser"
+            android:roundIcon="@mipmap/ic_launcher_browser"
+            android:targetActivity=".ui.BrowserActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
         <!-- 能当默认浏览器：别的 App 里点的网页链接从这里转进 Kavi 浏览器 -->
         <activity
             android:name=".ui.LinkActivity"

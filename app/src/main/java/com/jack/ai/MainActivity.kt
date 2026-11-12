@@ -87,6 +87,7 @@ class MainActivity : FragmentActivity() {
 
     override fun onPause() {
         super.onPause()
+        if (!locked) lastActive = SystemClock.elapsedRealtime()
         visible = false
         Widgets.refreshAll(applicationContext)
     }
@@ -340,7 +341,8 @@ class MainActivity : FragmentActivity() {
 
     companion object {
         /** 最后一次在前台（已解锁）的时间，跨页面重建保留。 */
-        private var lastActive = 0L
+        /** 上次用 Kavi 的时间（聊天页和浏览器共用）：离开超过 30 秒再回来才上锁，两边来回切不锁。 */
+        var lastActive = 0L
         /** App 现在是否在眼前（Work 任务做完时据此决定要不要发通知）。 */
         @Volatile var visible = false
 

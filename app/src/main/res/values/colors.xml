@@ -15,4 +15,5 @@
     <color name="widget_tag_green">#22A06B</color>
     <color name="widget_mint">#BFF0D6</color>
     <color name="widget_on_mint">#0B3D2A</color>
+    <color name="browser_icon_bg">#C4673F</color>
 </resources>
