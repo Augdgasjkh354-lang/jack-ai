@@ -68,6 +68,8 @@ internal val sharedHttp: OkHttpClient = OkHttpClient.Builder()
     // 不然任务会在这里干等五分钟。要等模型思考的用下面的 modelHttp。
     .readTimeout(60, TimeUnit.SECONDS)
     .writeTimeout(30, TimeUnit.SECONDS)
+    // 工具调用里发的请求记下来，工具超时或用户按停止时能直接断开（见 ActiveCalls）
+    .addInterceptor { chain -> ActiveCalls.track(chain.call()); chain.proceed(chain.request()) }
     // 开了 Kavi 专用代理时按规则分流；没开时和原来一样跟随系统
     .proxySelector(Net.selector)
     .proxyAuthenticator(Net.authenticator)
