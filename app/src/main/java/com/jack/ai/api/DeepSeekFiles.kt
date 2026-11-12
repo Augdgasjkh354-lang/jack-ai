@@ -92,7 +92,7 @@ class DeepSeekFiles(private val dir: File) {
             .header("Authorization", "Bearer ${ep.apiKey}")
             .post(body)
             .build()
-        sharedHttp.newCall(request).execute().use { resp ->
+        modelHttp.newCall(request).execute().use { resp ->
             val text = resp.body?.string().orEmpty()
             if (!resp.isSuccessful) throw ApiException("上传图片失败（${resp.code}）", resp.code)
             return json.parseToJsonElement(text).jsonObject["id"].str().ifBlank { throw ApiException("上传图片失败", 0) }

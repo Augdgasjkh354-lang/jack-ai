@@ -3,6 +3,8 @@ package com.jack.ai.api
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.channels.trySendBlocking
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flowOn
@@ -62,7 +64,9 @@ internal fun parseBailianModels(body: String?): Pair<List<String>, Int> {
 
 internal val sharedHttp: OkHttpClient = OkHttpClient.Builder()
     .connectTimeout(30, TimeUnit.SECONDS)
-    .readTimeout(5, TimeUnit.MINUTES) // 深度思考模型可能很久才出第一个字
+    // 搜索、读网页、连接器这类请求：一分钟一个字节都没来就是连接死了，早点报错让 Kavi 换办法，
+    // 不然任务会在这里干等五分钟。要等模型思考的用下面的 modelHttp。
+    .readTimeout(60, TimeUnit.SECONDS)
     .writeTimeout(30, TimeUnit.SECONDS)
     // 开了 Kavi 专用代理时按规则分流；没开时和原来一样跟随系统
     .proxySelector(Net.selector)
@@ -71,11 +75,20 @@ internal val sharedHttp: OkHttpClient = OkHttpClient.Builder()
     .dns(SecureDns)
     .build()
 
+/** 调模型用的：深度思考模型可能很久才出第一个字，等得久一些。 */
+internal val modelHttp: OkHttpClient = sharedHttp.newBuilder().readTimeout(5, TimeUnit.MINUTES).build()
+
+/** 回答已经开始往回传之后，这么久一行都没来就算卡住。DeepSeek 等待时会一直发 keep-alive，别家不一定，放宽些。 */
+internal fun streamIdleMs(ep: Endpoint): Long = streamIdleOverrideMs ?: if (ep.deepseek) 90_000L else 180_000L
+
+/** 测试里把卡住的时限调小。 */
+@Volatile internal var streamIdleOverrideMs: Long? = null
+
 class DeepSeekClient(
     /** 非流式请求的用量回调：模型、输入、缓存命中、输出。 */
     private val onUsage: ((Endpoint, Int, Int?, Int) -> Unit)? = null,
 ) {
-    private val http = sharedHttp
+    private val http = modelHttp
     private val json = Json { ignoreUnknownKeys = true }
 
     fun stream(
@@ -115,6 +128,22 @@ class DeepSeekClient(
             .build()
 
         val call = http.newCall(request)
+        // 最近一次收到一行的时间；0 表示还没开始传（第一个字之前按 modelHttp 的五分钟算）
+        val lastLineAt = java.util.concurrent.atomic.AtomicLong(0)
+        // 传到一半没了动静（代理、基站悄悄把连接丢了，手机这边收不到断开）：不干等五分钟，到点就断开报错，
+        // 外面会按「网络断了一下」重试或自动接着做
+        val limit = streamIdleMs(ep)
+        val watchdog = launch {
+            while (true) {
+                delay((limit / 4).coerceIn(50, 5_000))
+                val at = lastLineAt.get()
+                if (at != 0L && (System.nanoTime() - at) / 1_000_000 > limit) {
+                    close(IOException("回答传到一半卡住了（${limit / 1000} 秒没有新内容）"))
+                    call.cancel()
+                    break
+                }
+            }
+        }
         call.enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 close(e)
@@ -138,6 +167,7 @@ class DeepSeekClient(
                         )
                         while (true) {
                             val line = source.readUtf8Line() ?: break
+                            lastLineAt.set(System.nanoTime())
                             if (raw.length < 65_536) {
                                 if (raw.isNotEmpty()) raw.append('\n')
                                 raw.append(line.take(65_536 - raw.length))
@@ -195,7 +225,7 @@ class DeepSeekClient(
             }
         })
         // Collector 被取消时立即断开 HTTP 连接，而不是等同步读取自行返回。
-        awaitClose { call.cancel() }
+        awaitClose { watchdog.cancel(); call.cancel() }
     }.flowOn(kotlinx.coroutines.Dispatchers.IO) // 拼请求体（可能带大图）不占主线程
 
     /**

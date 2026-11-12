@@ -205,6 +205,8 @@ object Mcp {
          * 跳过去的那一跳去掉 Key 所在的请求头，不把 Key 带给别人。
          */
         val http = com.jack.ai.api.sharedHttp.newBuilder()
+            // 连接器的工具可能安静地跑很久才回话
+            .readTimeout(5, TimeUnit.MINUTES)
             // 这个连接器走哪条路：按规则、直连，还是 Kavi 专用代理
             .proxySelector(com.jack.ai.api.Net.selectorFor(server.route))
             .addNetworkInterceptor { chain ->
