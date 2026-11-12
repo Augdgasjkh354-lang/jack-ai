@@ -115,6 +115,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.jack.ai.ChatViewModel
 import com.jack.ai.UiState
 import com.jack.ai.data.Attachment
@@ -247,38 +248,20 @@ fun ChatScreen(
                     modifier = if (conv == null || conv.messages.isEmpty()) Modifier
                         else Modifier.background(Brush.verticalGradient(0f to bg, 0.8f to bg.copy(alpha = 0.96f), 1f to bg.copy(alpha = 0f))),
                     title = {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                conv?.takeIf { it.messages.isNotEmpty() }?.title ?: "Kavi",
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                style = MaterialTheme.typography.titleMedium,
-                                modifier = Modifier.widthIn(max = 220.dp),
-                            )
-                            ModelPicker(state.settings, project?.name) { m -> vm.updateSettings { it.copy(model = m) } }
-                        }
+                        // 中间一个胶囊：对话标题，下面是模型名，点一下换模型
+                        ModelPicker(conv?.takeIf { it.messages.isNotEmpty() }?.title ?: "Kavi", state.settings, project?.name) { m -> vm.updateSettings { it.copy(model = m) } }
                     },
                     navigationIcon = {
-                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(AppIcons.Menu, contentDescription = "菜单", Modifier.size(24.dp))
-                        }
+                        CircleIconButton(AppIcons.Menu, "菜单", Modifier.padding(start = 12.dp)) { scope.launch { drawerState.open() } }
                     },
                     actions = {
-                        if (conv != null && conv.messages.isNotEmpty()) {
-                            IconButton(onClick = { showFiles = true }) {
-                                // 文件夹图标上标出做出来的文件数
-                                val made = conv.messages.flatMap { it.files }.distinctBy { it.path }.size
-                                if (made > 0) {
-                                    androidx.compose.material3.BadgedBox(badge = { androidx.compose.material3.Badge { Text("$made") } }) {
-                                        Icon(AppIcons.Folder, contentDescription = "交付物", Modifier.size(22.dp))
-                                    }
-                                } else Icon(AppIcons.Folder, contentDescription = "文件夹", Modifier.size(22.dp))
-                            }
+                        Row(Modifier.padding(end = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            CircleIconButton(AppIcons.NewChat, "新对话") { vm.newChat(state.currentProjectId) }
+                            // 文件夹收在「更多」里（做出了文件时，「更多」上标个数），顶栏右边只留两个圆按钮，标题胶囊才居中
+                            if (conv != null && conv.messages.isNotEmpty()) ExportMenu(vm,
+                                made = conv.messages.flatMap { it.files }.distinctBy { it.path }.size,
+                                onFiles = { showFiles = true }, onMemory = { memoryOf = conv })
                         }
-                        IconButton(onClick = { vm.newChat(state.currentProjectId) }) {
-                            Icon(AppIcons.NewChat, contentDescription = "新对话", Modifier.size(22.dp))
-                        }
-                        if (conv != null && conv.messages.isNotEmpty()) ExportMenu(vm, onMemory = { memoryOf = conv })
                     },
                 )
                 // 思路来自 deepseek-ai/deepseek-harness packages/goal/goal/，MIT。
@@ -366,35 +349,27 @@ internal fun Modifier.swipeToOpen(open: () -> Unit): Modifier = pointerInput(Uni
 }
 
 @Composable
-private fun ExportMenu(vm: ChatViewModel, onMemory: () -> Unit) {
+private fun ExportMenu(vm: ChatViewModel, made: Int, onFiles: () -> Unit, onMemory: () -> Unit) {
     var open by remember { mutableStateOf(false) }
     val busy by vm.exporting.collectAsState()
     val ctx = LocalContext.current
     Box {
-        IconButton(onClick = { open = true }, enabled = !busy) {
-            if (busy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-            else Icon(Icons.Default.MoreVert, contentDescription = "更多")
-        }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            DropdownMenuItem(
-                text = { Text("记忆") },
-                leadingIcon = { Icon(AppIcons.Moon, null) },
-                onClick = { open = false; onMemory() },
-            )
-            HorizontalDivider()
+        if (busy) Box(Modifier.size(42.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) }
+        else if (made > 0) androidx.compose.material3.BadgedBox(badge = { androidx.compose.material3.Badge { Text("$made") } }) {
+            CircleIconButton(Icons.Default.MoreVert, "更多") { open = true }
+        } else CircleIconButton(Icons.Default.MoreVert, "更多") { open = true }
+        RoundMenu(expanded = open, onDismiss = { open = false }) {
+            MenuRow("文件夹", icon = AppIcons.Folder, sub = if (made > 0) "做出了 $made 个文件" else null) { open = false; onFiles() }
+            MenuRow("记忆", icon = AppIcons.Moon) { open = false; onMemory() }
             listOf(
                 ChatExport.Format.IMAGE to "分享为长图",
                 ChatExport.Format.PDF to "导出为 PDF",
                 ChatExport.Format.MARKDOWN to "导出为 Markdown",
             ).forEach { (fmt, label) ->
-                DropdownMenuItem(
-                    text = { Text(label) },
-                    leadingIcon = { Icon(AppIcons.Share, null) },
-                    onClick = {
-                        open = false
-                        vm.exportChat(fmt) { file -> shareExport(ctx, file, fmt.mime) }
-                    },
-                )
+                MenuRow(label, icon = AppIcons.Share) {
+                    open = false
+                    vm.exportChat(fmt) { file -> shareExport(ctx, file, fmt.mime) }
+                }
             }
         }
     }
@@ -410,44 +385,51 @@ private fun shareExport(ctx: android.content.Context, file: java.io.File, mime: 
 }
 
 @Composable
-private fun ModelPicker(settings: Settings, projectName: String?, onPick: (String) -> Unit) {
+private fun ModelPicker(title: String, settings: Settings, projectName: String?, onPick: (String) -> Unit) {
     val model = settings.model
     var open by remember { mutableStateOf(false) }
     val colors = MaterialTheme.colorScheme
+    val press = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     Box {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.clickable { open = true }.padding(horizontal = 6.dp, vertical = 1.dp),
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.pressScale(press, 0.95f).heightIn(min = 42.dp).clip(CircleShape).background(raisedColor).hairline(CircleShape)
+                .clickable(interactionSource = press, indication = androidx.compose.foundation.LocalIndication.current) { open = true }
+                .padding(horizontal = 18.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.Center,
         ) {
-            Text(
-                (projectName?.let { "$it · " } ?: "") + modelLabel(model),
-                style = MaterialTheme.typography.labelMedium,
-                color = colors.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = 200.dp),
-            )
-            Icon(Icons.Default.KeyboardArrowDown, null, Modifier.size(16.dp), tint = colors.onSurfaceVariant)
+            Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.widthIn(max = 150.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    (projectName?.let { "$it · " } ?: "") + modelLabel(model),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = 136.dp),
+                )
+                Icon(Icons.Default.KeyboardArrowDown, null, Modifier.size(14.dp), tint = colors.onSurfaceVariant)
+            }
         }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.heightIn(max = 460.dp)) {
+        RoundMenu(expanded = open, onDismiss = { open = false }, modifier = Modifier.heightIn(max = 460.dp)) {
             val choices = settings.modelChoices()
             val groups = choices.map { it.group }.distinct()
             choices.forEachIndexed { i, c ->
                 // 有多个服务时，每组前面标一下服务名
                 if (groups.size > 1 && (i == 0 || choices[i - 1].group != c.group)) {
-                    if (i > 0) HorizontalDivider()
                     Text(c.group, style = MaterialTheme.typography.labelMedium, color = colors.outline,
-                        modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 2.dp))
+                        modifier = Modifier.padding(start = 20.dp, top = if (i > 0) 14.dp else 8.dp, bottom = 2.dp))
                 }
-                DropdownMenuItem(
-                    text = {
-                        Column {
-                            Text(c.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        }
-                    },
-                    leadingIcon = { if (c.key == model) Icon(Icons.Default.Check, null, tint = colors.primary) else Spacer(Modifier.size(24.dp)) },
-                    onClick = { onPick(c.key); open = false },
-                )
+                Row(
+                    Modifier.fillMaxWidth().clickable { onPick(c.key); open = false }.heightIn(min = 48.dp).padding(horizontal = 20.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(c.label, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+                        color = if (c.key == model) colors.primary else colors.onSurface,
+                        fontWeight = if (c.key == model) FontWeight.SemiBold else null)
+                    if (c.key == model) { Spacer(Modifier.width(12.dp)); Icon(Icons.Default.Check, "当前", Modifier.size(20.dp), tint = colors.primary) }
+                }
             }
         }
     }
@@ -500,17 +482,15 @@ private fun EmptyState(
         Modifier.fillMaxSize()
             .graphicsLayer { alpha = enter.value; translationY = (1f - enter.value) * 24.dp.toPx() }
             .verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Spacer(Modifier.height(36.dp))
-        LogoMark(64.dp)
-        Spacer(Modifier.height(22.dp))
+        // 靠左的一句大问候，下面一行小字；建议是不带框的几行，留白多一些
+        Spacer(Modifier.height(56.dp))
         val name = state.settings.userName.trim()
         Text(
             greeting() + if (name.isNotEmpty()) "，$name" else "",
-            style = MaterialTheme.typography.headlineMedium,
+            style = MaterialTheme.typography.headlineLarge,
             fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 4.dp),
         )
         Spacer(Modifier.height(8.dp))
         Text(
@@ -518,29 +498,34 @@ private fun EmptyState(
             else todayLine(state.routines) ?: "今天想聊点什么？",
             style = MaterialTheme.typography.bodyLarge,
             color = colors.onSurfaceVariant,
-            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 4.dp),
         )
         Spacer(Modifier.height(28.dp))
-        SUGGESTIONS.chunked(2).forEach { row ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                row.forEach { sg -> SuggestionCard(sg.icon, sg.hue.color, sg.title, Modifier.weight(1f)) { onSuggest(sg.prompt) } }
-            }
-            Spacer(Modifier.height(10.dp))
-        }
+        SUGGESTIONS.forEach { sg -> SuggestionRow(sg.icon, sg.hue.color, sg.title) { onSuggest(sg.prompt) } }
         // 写文案、回客户这些：点一下直接发出去，Kavi 用问题卡片把要知道的问清楚。不单独起标题，接着上面的卡片排
         if (state.settings.bizStarts) {
-            com.jack.ai.data.BizStarts.ALL.chunked(2).forEach { row ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    row.forEach { b -> SuggestionCard(AppIcons.Chat, Hue.of(b.tint).color, b.title, Modifier.weight(1f)) { vm.send(b.prompt) } }
-                    if (row.size == 1) Spacer(Modifier.weight(1f))
-                }
-                Spacer(Modifier.height(10.dp))
-            }
+            com.jack.ai.data.BizStarts.ALL.forEach { b -> SuggestionRow(AppIcons.Chat, Hue.of(b.tint).color, b.title) { vm.send(b.prompt) } }
         }
         // Chat 和 Work 合并了：常做的任务模板也放在空白页，在建议下面
-        Text("常做的任务", style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant,
-            modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 10.dp))
+        Text("常做的任务", style = MaterialTheme.typography.titleSmall, color = colors.onSurfaceVariant,
+            modifier = Modifier.fillMaxWidth().padding(start = 4.dp, top = 24.dp, bottom = 12.dp))
         WorkTemplates(vm, state.settings.workTemplates, onSuggest)
+    }
+}
+
+/** 空白页的一行建议：一个彩色图标加一行字，不带框；按下去微微缩一下。 */
+@Composable
+private fun SuggestionRow(icon: ImageVector, tint: Color, title: String, onClick: () -> Unit) {
+    val press = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    Row(
+        Modifier.fillMaxWidth().pressScale(press, 0.98f).clip(Radii.m)
+            .clickable(interactionSource = press, indication = androidx.compose.foundation.LocalIndication.current, onClick = onClick)
+            .heightIn(min = 52.dp).padding(horizontal = 4.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, null, Modifier.size(24.dp), tint = tint)
+        Spacer(Modifier.width(16.dp))
+        Text(title, style = MaterialTheme.typography.bodyLarge, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -558,8 +543,8 @@ private fun SuggestionCard(icon: ImageVector?, tint: Color, title: String, modif
             .pressScale(press, 0.97f)
             .height(64.dp)
             .clip(shape)
-            .border(1.dp, colors.outlineVariant, shape)
-            .background(colors.surfaceContainerLowest)
+            .background(raisedColor)
+            .hairline(shape)
             .combinedClickable(interactionSource = press, indication = androidx.compose.foundation.LocalIndication.current,
                 onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 12.dp),
@@ -976,13 +961,13 @@ private fun InputBar(
         }
         Surface(
             shape = Radii.xl,
-            // 浮在消息上面的白色大胶囊，带一点柔和的阴影
+            // 浮在消息上面的一个大胶囊：左边加号，中间打字，右边一个圆按钮（话筒 / 发送 / 停止）
             color = if (dark) colors.surfaceContainerHigh else colors.surfaceContainerLowest,
-            border = BorderStroke(1.dp, colors.outlineVariant),
+            border = BorderStroke(1.dp, if (dark) Color.White.copy(alpha = 0.08f) else colors.outlineVariant),
             shadowElevation = if (dark) 0.dp else 6.dp,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Column(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 8.dp)) {
+            Column(Modifier.padding(6.dp)) {
                 if (state.pending.isNotEmpty() || state.importing || showClip) {
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1025,153 +1010,87 @@ private fun InputBar(
                         }
                     }
                 }
-                Row(verticalAlignment = Alignment.Top) {
-                    Box(Modifier.padding(top = 8.dp)) {
-                        Surface(
-                            onClick = { attachMenu = true },
-                            shape = CircleShape,
-                            color = colors.surfaceContainer,
-                            modifier = Modifier.size(40.dp),
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Box(Modifier.padding(bottom = 2.dp)) {
+                        val plusPress = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                        // 开着思考或联网时，加号用强调色，不点开也看得出来
+                        val modeOn = settings.thinking != ThinkLevel.OFF && settings.endpoint()?.reasoning != false
+                        Box(
+                            Modifier.pressScale(plusPress, 0.88f).size(42.dp).clip(CircleShape)
+                                .clickable(interactionSource = plusPress, indication = androidx.compose.foundation.LocalIndication.current) { haptics.tick(); attachMenu = true },
+                            contentAlignment = Alignment.Center,
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(Icons.Default.Add, "更多", Modifier.size(22.dp), tint = colors.onSurface)
-                            }
+                            Icon(Icons.Default.Add, "更多", Modifier.size(26.dp), tint = if (modeOn) colors.primary else colors.onSurface)
                         }
-                        DropdownMenu(expanded = attachMenu, onDismissRequest = { attachMenu = false }) {
-                            DropdownMenuItem(
-                                text = { Text("拍照") },
-                                leadingIcon = { Icon(AppIcons.Camera, null) },
-                                onClick = {
-                                    attachMenu = false
-                                    startCamera()
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("录音纪要") },
-                                leadingIcon = { Icon(AppIcons.Mic, null) },
-                                enabled = com.jack.ai.RecordService.current == null,
-                                onClick = {
-                                    attachMenu = false
-                                    startRecord()
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("图片") },
-                                leadingIcon = { Icon(AppIcons.Image, null) },
-                                onClick = {
-                                    attachMenu = false
-                                    try { pickImages.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) } catch (e: Exception) { Toast.makeText(ctx, "打不开：${e.message}", Toast.LENGTH_LONG).show() }
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("文件") },
-                                leadingIcon = { Icon(AppIcons.File, null) },
-                                onClick = {
-                                    attachMenu = false
-                                    try { pickFiles.launch(arrayOf("*/*")) } catch (e: Exception) { Toast.makeText(ctx, "打不开：${e.message}", Toast.LENGTH_LONG).show() }
-                                },
-                            )
+                        RoundMenu(expanded = attachMenu, onDismiss = { attachMenu = false }) {
+                            MenuRow("拍照", icon = AppIcons.Camera) { attachMenu = false; startCamera() }
+                            MenuRow("图片", icon = AppIcons.Image) {
+                                attachMenu = false
+                                try { pickImages.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) } catch (e: Exception) { Toast.makeText(ctx, "打不开：${e.message}", Toast.LENGTH_LONG).show() }
+                            }
+                            MenuRow("文件", icon = AppIcons.File) {
+                                attachMenu = false
+                                try { pickFiles.launch(arrayOf("*/*")) } catch (e: Exception) { Toast.makeText(ctx, "打不开：${e.message}", Toast.LENGTH_LONG).show() }
+                            }
+                            MenuRow("录音纪要", icon = AppIcons.Mic, enabled = com.jack.ai.RecordService.current == null) { attachMenu = false; startRecord() }
                             val skillNames = settings.activeSkills().map { it.name }
-                            if (skillNames.isNotEmpty()) DropdownMenuItem(
-                                text = { Text("@技能") },
-                                leadingIcon = { Text("@", style = MaterialTheme.typography.titleMedium) },
-                                onClick = { attachMenu = false; mentionPick = skillNames },
-                            )
+                            if (skillNames.isNotEmpty()) MenuRow("@技能", glyph = "@") { attachMenu = false; mentionPick = skillNames }
                             val mailNames = settings.readyMails.map { it.address }
-                            if (mailNames.isNotEmpty() && settings.activeSkills().any { it.id == com.jack.ai.data.SkillIds.MAIL }) DropdownMenuItem(
-                                text = { Text("@邮箱") },
-                                leadingIcon = { Icon(Icons.Default.Email, null) },
-                                onClick = {
-                                    attachMenu = false
-                                    // 只有一个邮箱就直接插进去
-                                    if (mailNames.size == 1) onTextChange(withMention(text, mailNames[0])) else mentionPick = mailNames
-                                },
-                            )
+                            if (mailNames.isNotEmpty() && settings.activeSkills().any { it.id == com.jack.ai.data.SkillIds.MAIL }) MenuRow("@邮箱", icon = Icons.Default.Email) {
+                                attachMenu = false
+                                // 只有一个邮箱就直接插进去
+                                if (mailNames.size == 1) onTextChange(withMention(text, mailNames[0])) else mentionPick = mailNames
+                            }
+                            HorizontalDivider(Modifier.padding(horizontal = 20.dp, vertical = 6.dp), color = colors.onSurface.copy(alpha = 0.08f))
+                            // 不支持深度思考的模型不显示思考开关
+                            if (settings.endpoint()?.reasoning != false) MenuRow(settings.thinking.label, icon = AppIcons.Brain, checked = settings.thinking != ThinkLevel.OFF) {
+                                attachMenu = false; thinkMenu = true
+                            }
+                            MenuRow("联网搜索", icon = AppIcons.Globe, checked = settings.webSearch && settings.webReady()) {
+                                attachMenu = false
+                                if (!settings.webReady()) onNeedTavily()
+                                else vm.updateSettings { it.copy(webSearch = !it.webSearch) }
+                            }
                             val conv = state.current
-                            if (conv != null && conv.messages.size >= 4) {
-                                HorizontalDivider()
-                                DropdownMenuItem(
-                                    text = {
-                                        Column {
-                                            Text("压缩上下文")
-                                            Text(
-                                                "${conv.lastPromptTokens / 1000}k / ${settings.compressTokens / 1000}k",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = colors.onSurfaceVariant,
-                                            )
-                                        }
-                                    },
-                                    leadingIcon = { Icon(AppIcons.Compress, null) },
-                                    enabled = !state.streamingHere && state.compressingId == null,
-                                    onClick = {
-                                        attachMenu = false
-                                        vm.compress()
-                                    },
-                                )
+                            if (conv != null && conv.messages.size >= 4) MenuRow(
+                                "压缩上下文", icon = AppIcons.Compress,
+                                sub = "${conv.lastPromptTokens / 1000}k / ${settings.compressTokens / 1000}k",
+                                enabled = !state.streamingHere && state.compressingId == null,
+                            ) { attachMenu = false; vm.compress() }
+                        }
+                        // 思考档位：从上面那一行点进来
+                        RoundMenu(expanded = thinkMenu, onDismiss = { thinkMenu = false }) {
+                            ThinkLevel.entries.forEach { lv ->
+                                MenuRow(lv.label, icon = AppIcons.Brain, checked = lv == settings.thinking) {
+                                    vm.updateSettings { it.copy(thinking = lv) }; thinkMenu = false
+                                }
                             }
                         }
                     }
-                    TextField(
+                    androidx.compose.foundation.text.BasicTextField(
                         value = field,
                         onValueChange = { field = it; if (it.text != text) onTextChange(it.text) },
-                        placeholder = { Text("问 Kavi…", color = colors.outline) },
                         maxLines = 6,
-                        textStyle = MaterialTheme.typography.bodyLarge,
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = Color.Transparent,
-                            unfocusedContainerColor = Color.Transparent,
-                            disabledContainerColor = Color.Transparent,
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent,
-                            disabledIndicatorColor = Color.Transparent,
-                        ),
-                        modifier = Modifier.weight(1f).focusRequester(focus)
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = colors.onSurface),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(colors.primary),
+                        modifier = Modifier.weight(1f).padding(start = 4.dp, end = 8.dp, top = 10.dp, bottom = 10.dp).focusRequester(focus)
                             .onFocusChanged { if (it.isFocused) checkClip() },
-                    )
-                }
-                // 第二行：思考、联网两个小药丸，右边是话筒 / 发送 / 停止
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.padding(top = 2.dp)) {
-                    // 不支持深度思考的模型不显示思考开关
-                    if (settings.endpoint()?.reasoning != false) Box {
-                        Pill(
-                            label = settings.thinking.label,
-                            active = settings.thinking != ThinkLevel.OFF,
-                            icon = AppIcons.Brain,
-                            dropdown = true,
-                            onClick = { thinkMenu = true },
-                        )
-                        DropdownMenu(expanded = thinkMenu, onDismissRequest = { thinkMenu = false }) {
-                            ThinkLevel.entries.forEach { lv ->
-                                DropdownMenuItem(
-                                    text = { Text(lv.label) },
-                                    leadingIcon = {
-                                        if (lv == settings.thinking) Icon(Icons.Default.Check, null, tint = colors.primary)
-                                        else Spacer(Modifier.size(24.dp))
-                                    },
-                                    onClick = { vm.updateSettings { it.copy(thinking = lv) }; thinkMenu = false },
-                                )
+                        decorationBox = { inner ->
+                            Box {
+                                if (field.text.isEmpty()) Text("问 Kavi…", color = colors.outline, style = MaterialTheme.typography.bodyLarge)
+                                inner()
                             }
-                        }
-                    }
-                    Pill(
-                        label = "联网",
-                        active = settings.webSearch && (settings.webReady()),
-                        icon = AppIcons.Globe,
-                        onClick = {
-                            if (!settings.webReady()) onNeedTavily()
-                            else vm.updateSettings { it.copy(webSearch = !it.webSearch) }
                         },
                     )
-                    Spacer(Modifier.weight(1f))
+                    Row(Modifier.padding(bottom = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     // DeepSeek 高峰时段价格翻倍，提示一下（每分钟刷新）
                     val now by produceState(System.currentTimeMillis()) {
                         while (true) { kotlinx.coroutines.delay(60_000); value = System.currentTimeMillis() }
                     }
                     if (settings.endpoint()?.deepseek == true && Pricing.isPeak(now)) {
-                        Text("高峰 ×2", style = MaterialTheme.typography.labelSmall, color = colors.outline,
-                            modifier = Modifier.padding(end = 2.dp))
+                        Text("高峰 ×2", style = MaterialTheme.typography.labelSmall, color = colors.outline)
                     }
+                    val sendPress = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
                     if (editing == null && state.streamingHere && text.isNotBlank()) {
                         // 回答进行中也能发：作为插话，下一步就会看到
                         Surface(onClick = { if (vm.send(text)) { haptics.tick(); onTextChange("") } }, shape = CircleShape, color = colors.primary,
@@ -1181,7 +1100,7 @@ private fun InputBar(
                             }
                         }
                     }
-                    // 右下角的圆按钮：话筒、发送、停止之间换的时候缩放淡入，不生硬地闪一下
+                    // 右下角的圆按钮：话筒、发送、停止之间换的时候缩放淡入，不生硬地闪一下；按下去缩一下
                     val action = when {
                         editing != null -> SendAction.EDIT
                         state.streamingHere -> SendAction.STOP
@@ -1190,6 +1109,7 @@ private fun InputBar(
                     }
                     androidx.compose.animation.AnimatedContent(
                         targetState = action,
+                        modifier = Modifier.pressScale(sendPress, 0.88f),
                         transitionSpec = {
                             (androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(160)) +
                                 androidx.compose.animation.scaleIn(androidx.compose.animation.core.tween(160), initialScale = 0.6f)) togetherWith
@@ -1199,12 +1119,12 @@ private fun InputBar(
                         label = "send",
                     ) { a ->
                         when (a) {
-                            SendAction.STOP -> Surface(onClick = { haptics.tick(); vm.stop() }, shape = CircleShape, color = colors.onSurface, modifier = Modifier.size(42.dp)) {
+                            SendAction.STOP -> Surface(onClick = { haptics.tick(); vm.stop() }, shape = CircleShape, color = colors.onSurface, modifier = Modifier.size(42.dp), interactionSource = sendPress) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(AppIcons.Stop, "停止", Modifier.size(16.dp), tint = colors.surface)
                                 }
                             }
-                            SendAction.MIC -> Surface(onClick = { startVoice() }, shape = CircleShape, color = colors.primary, modifier = Modifier.size(42.dp)) {
+                            SendAction.MIC -> Surface(onClick = { haptics.tick(); startVoice() }, shape = CircleShape, color = colors.primary, modifier = Modifier.size(42.dp), interactionSource = sendPress) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(AppIcons.Mic, "语音输入", Modifier.size(20.dp), tint = colors.onPrimary)
                                 }
@@ -1219,6 +1139,7 @@ private fun InputBar(
                                     shape = CircleShape,
                                     color = if (canSend) colors.primary else colors.surfaceVariant,
                                     modifier = Modifier.size(42.dp),
+                                    interactionSource = sendPress,
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
                                         Icon(if (edit) Icons.Default.Check else AppIcons.ArrowUp, if (edit) "改好发送" else "发送", Modifier.size(20.dp),
@@ -1227,6 +1148,7 @@ private fun InputBar(
                                 }
                             }
                         }
+                    }
                     }
                 }
             }

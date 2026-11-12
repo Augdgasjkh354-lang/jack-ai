@@ -18,7 +18,27 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.interaction.InteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.size
@@ -53,20 +73,20 @@ import com.jack.ai.R
  * 新写界面时从这里拿，不再各处写死数字和色值。
  */
 
-/** 圆角只有这五档：小标签 8、小方块和按钮 12、提示条和图片 16、卡片和气泡 20、输入框和底部面板 28。 */
+/** 圆角只有这五档：小标签 8、小方块和按钮 12、提示条和图片 16、卡片和气泡 22、输入框、弹出菜单和底部面板 30。 */
 object Radii {
     val xs = RoundedCornerShape(8.dp)
     val s = RoundedCornerShape(12.dp)
     val m = RoundedCornerShape(16.dp)
-    val l = RoundedCornerShape(20.dp)
-    val xl = RoundedCornerShape(28.dp)
+    val l = RoundedCornerShape(22.dp)
+    val xl = RoundedCornerShape(30.dp)
 
     /** 聊天气泡：自己说的右上角收小，对方说的左上角收小。 */
-    val bubbleMine = RoundedCornerShape(20.dp, 8.dp, 20.dp, 20.dp)
-    val bubbleTheirs = RoundedCornerShape(8.dp, 20.dp, 20.dp, 20.dp)
+    val bubbleMine = RoundedCornerShape(22.dp, 8.dp, 22.dp, 22.dp)
+    val bubbleTheirs = RoundedCornerShape(8.dp, 22.dp, 22.dp, 22.dp)
 
     /** 从底下升起来的面板：只有上面两个角是圆的。 */
-    val sheetTop = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+    val sheetTop = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp)
 }
 
 /** 现在是不是深色的底（记忆页那种自带夜色的也算）。 */
@@ -208,4 +228,74 @@ fun Switch(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?, modifier: Mo
         modifier = modifier,
         enabled = enabled,
     )
+}
+
+/** 浮在底色上面的那一层（圆按钮、胶囊、输入框、弹出菜单）用的颜色：深色是比纯黑亮一档的灰，浅色是很浅的灰。 */
+val raisedColor: Color
+    @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.let { if (isDarkSurface) it.surfaceContainerHigh else it.surfaceContainer }
+
+/**
+ * 圆形的图标按钮：一块比底色亮一点的圆，深色模式描一道淡边；按下去缩一下、轻轻震一下。
+ * 顶栏的菜单、新对话这类都用它。
+ */
+@Composable
+fun CircleIconButton(icon: ImageVector, label: String, modifier: Modifier = Modifier, size: Dp = 42.dp, iconSize: Dp = 22.dp,
+                     enabled: Boolean = true, onClick: () -> Unit) {
+    val press = remember { MutableInteractionSource() }
+    val haptics = rememberHaptics()
+    Box(
+        modifier.pressScale(press, 0.9f).size(size).clip(CircleShape).background(raisedColor).hairline(CircleShape)
+            .clickable(interactionSource = press, indication = androidx.compose.foundation.LocalIndication.current, enabled = enabled) { haptics.tick(); onClick() },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, label, Modifier.size(iconSize), tint = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else 0.4f))
+    }
+}
+
+/** 弹出菜单：大圆角、比底色亮一档、深色模式带一道淡边。里面放 [MenuRow]。 */
+@Composable
+fun RoundMenu(expanded: Boolean, onDismiss: () -> Unit, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    androidx.compose.material3.DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismiss,
+        modifier = modifier.widthIn(min = 220.dp),
+        shape = Radii.xl,
+        containerColor = raisedColor,
+        tonalElevation = 0.dp,
+        shadowElevation = 12.dp,
+        border = if (isDarkSurface) androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)) else null,
+        content = content,
+    )
+}
+
+/**
+ * 弹出菜单里的一行：左边一个圆底的图标，右边是字；选中的用强调色、末尾打勾。
+ * 图标没有现成的就给一个字（比如 @）。
+ */
+@Composable
+fun MenuRow(label: String, icon: ImageVector? = null, glyph: String? = null, sub: String? = null, checked: Boolean = false,
+            enabled: Boolean = true, onClick: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    val press = remember { MutableInteractionSource() }
+    val ink = (if (checked) colors.primary else colors.onSurface).copy(alpha = if (enabled) 1f else 0.4f)
+    Row(
+        Modifier.fillMaxWidth().pressScale(press, 0.97f).heightIn(min = 54.dp)
+            .clickable(interactionSource = press, indication = androidx.compose.foundation.LocalIndication.current, enabled = enabled, onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(38.dp).clip(CircleShape).background(colors.onSurface.copy(alpha = 0.08f)), contentAlignment = Alignment.Center) {
+            if (icon != null) Icon(icon, null, Modifier.size(20.dp), tint = ink)
+            else Text(glyph.orEmpty(), color = ink, style = MaterialTheme.typography.titleMedium)
+        }
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(label, color = ink, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (sub != null) Text(sub, color = colors.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, maxLines = 1)
+        }
+        if (checked) {
+            Spacer(Modifier.width(10.dp))
+            Icon(Icons.Default.Check, "已选", Modifier.size(20.dp), tint = colors.primary)
+        }
+    }
 }
