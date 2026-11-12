@@ -22,7 +22,8 @@ class DesignTest {
     fun `常用开场的颜色都认得出、不全挤成一种`() {
         val hues = BizStarts.ALL.map { Hue.of(it.tint) }
         assertEquals(BizStarts.ALL.size, hues.size)
-        assert(hues.toSet().size >= 5) { "颜色挤在一起了：$hues" }
+        // 只留三个入口，各用各的颜色
+        assert(hues.toSet().size == hues.size) { "颜色挤在一起了：$hues" }
     }
 
     @Test

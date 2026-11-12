@@ -54,8 +54,6 @@ import androidx.compose.runtime.collectAsState
 import com.jack.ai.data.activeSkills
 import com.jack.ai.data.readyMails
 import com.jack.ai.data.ChatExport
-import com.jack.ai.data.Pricing
-import androidx.compose.runtime.produceState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
@@ -435,16 +433,12 @@ private fun ModelPicker(title: String, settings: Settings, projectName: String?,
     }
 }
 
-/** 空白页的建议：图标、图标底色（浅色、深色模式各一个）、标题、点了填进输入框的话。 */
-private data class Suggestion(val icon: ImageVector, val hue: Hue, val title: String, val prompt: String)
-
-// 点一下只是填进输入框，不直接发；要补的内容放在最后，光标就在那里
-private val SUGGESTIONS = listOf(
-    Suggestion(AppIcons.Globe, Hue.BLUE, "今天有什么新闻", "今天有什么值得关注的新闻？"),
-    Suggestion(AppIcons.Calendar, Hue.RED, "帮我记一件事", "提醒我"),
-    Suggestion(AppIcons.Speaker, Hue.VIOLET, "读个网页给我听", "帮我打开这个网页，读完告诉我重点："),
-    Suggestion(AppIcons.File, Hue.GREEN, "整理成表格", "帮我把下面的内容整理成表格：\n"),
-)
+/** 空白页那几行入口各用什么图标。 */
+private fun startIcon(key: String): ImageVector = when (key) {
+    "xhs" -> AppIcons.Image
+    "intro" -> AppIcons.File
+    else -> AppIcons.Chat
+}
 
 private fun greeting(): String = when (Calendar.getInstance().get(Calendar.HOUR_OF_DAY)) {
     in 5..10 -> "早上好"
@@ -501,10 +495,9 @@ private fun EmptyState(
             modifier = Modifier.padding(horizontal = 4.dp),
         )
         Spacer(Modifier.height(28.dp))
-        SUGGESTIONS.forEach { sg -> SuggestionRow(sg.icon, sg.hue.color, sg.title) { onSuggest(sg.prompt) } }
         // 写文案、回客户这些：点一下直接发出去，Kavi 用问题卡片把要知道的问清楚。不单独起标题，接着上面的卡片排
         if (state.settings.bizStarts) {
-            com.jack.ai.data.BizStarts.ALL.forEach { b -> SuggestionRow(AppIcons.Chat, Hue.of(b.tint).color, b.title) { vm.send(b.prompt) } }
+            com.jack.ai.data.BizStarts.ALL.forEach { b -> SuggestionRow(startIcon(b.key), Hue.of(b.tint).color, b.title) { vm.send(b.prompt) } }
         }
         // Chat 和 Work 合并了：常做的任务模板也放在空白页，在建议下面
         Text("常做的任务", style = MaterialTheme.typography.titleSmall, color = colors.onSurfaceVariant,
@@ -1083,13 +1076,6 @@ private fun InputBar(
                         },
                     )
                     Row(Modifier.padding(bottom = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // DeepSeek 高峰时段价格翻倍，提示一下（每分钟刷新）
-                    val now by produceState(System.currentTimeMillis()) {
-                        while (true) { kotlinx.coroutines.delay(60_000); value = System.currentTimeMillis() }
-                    }
-                    if (settings.endpoint()?.deepseek == true && Pricing.isPeak(now)) {
-                        Text("高峰 ×2", style = MaterialTheme.typography.labelSmall, color = colors.outline)
-                    }
                     val sendPress = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
                     if (editing == null && state.streamingHere && text.isNotBlank()) {
                         // 回答进行中也能发：作为插话，下一步就会看到

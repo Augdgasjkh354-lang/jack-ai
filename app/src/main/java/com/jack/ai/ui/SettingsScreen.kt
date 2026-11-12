@@ -256,7 +256,7 @@ fun SettingsScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("空白页显示写文案的快捷入口")
-                        Text("新对话里点一下就开始：发朋友圈、写小红书、抖音脚本、回客户、产品介绍、报价单",
+                        Text("新对话里点一下就开始：写小红书笔记、产品介绍、发营销朋友圈",
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(checked = settings.bizStarts, onCheckedChange = { on -> vm.updateSettings { it.copy(bizStarts = on) } })
