@@ -21,11 +21,40 @@ import java.io.IOException
 class KnowledgeFeature(core: AppCore) : Feature(core) {
     @Volatile private var libraryIndex: LibraryIndex? = null
 
-    internal fun index(): LibraryIndex = libraryIndex ?: LibraryIndex(
-        store.loadLibrary().map { it.name to store.libraryText(it.id) },
-    ).also { libraryIndex = it }
+    internal fun index(): LibraryIndex = libraryIndex ?: LibraryIndex(KnowledgeBases.searchable(store)).also { libraryIndex = it }
 
-    fun addLibraryFiles(uris: List<Uri>) {
+    /** 资料库或知识库变了：重建索引、刷新界面，后台把新段落的向量补上（顺便清掉删了的）。 */
+    fun libraryChanged() {
+        libraryIndex = null
+        state.update { it.copy(library = store.loadLibrary(), kbs = store.loadKbs()) }
+        kickVectors()
+    }
+
+    private fun kickVectors() =
+        LibraryVectors.kick(app, state.value.settings, LibraryVectors.LIBRARY, { KnowledgeBases.allTexts(store).flatMap { LibraryIndex.split(it) } })
+
+    /** 开 App 时：补算向量；从 GitHub 装的知识库一天查一次更新（没变化不打扰）。 */
+    fun startup() {
+        scope.launch(Dispatchers.IO) {
+            kotlinx.coroutines.delay(8_000)
+            kickVectors()
+            // 项目资料的向量：删了的项目、改了的文件，旧向量清掉
+            runCatching {
+                val live = store.loadProjects().flatMap { p -> p.files.filter { it.text.length > PromptBuilder.PROJECT_INLINE_CHARS } }
+                    .flatMap { LibraryIndex.split(it.text) }.mapTo(HashSet()) { LibraryVectors.key(it) }
+                LibraryVectors.prune(app, LibraryVectors.PROJECTS, live)
+            }
+            if (!KnowledgeBases.syncDue(KnowledgeBases.checkedAt(app), store.loadKbs())) return@launch
+            val (results, _) = runCatching { KnowledgeBases.sync(app, store, state.value.settings.githubToken) }.getOrNull() ?: return@launch
+            val changed = results.filter { it.changed }
+            if (changed.isNotEmpty()) {
+                withContext(Dispatchers.Main) { libraryChanged() }
+                state.update { it.copy(toast = "知识库有更新：" + changed.joinToString("；") { r -> r.line() }) }
+            }
+        }
+    }
+
+    fun addLibraryFiles(uris: List<Uri>, kb: String = "") {
         if (uris.isEmpty()) return
         state.update { it.copy(importing = true) }
         scope.launch {
@@ -33,7 +62,7 @@ class KnowledgeFeature(core: AppCore) : Feature(core) {
             for (uri in uris) {
                 try {
                     val att = Attachments.importFile(app, uri)
-                    val doc = LibraryDoc(name = att.name, chars = att.text.length)
+                    val doc = LibraryDoc(name = att.name, chars = att.text.length, kb = kb)
                     withContext(ioSerial) {
                         store.saveLibraryText(doc.id, att.text)
                         store.saveLibrary(store.loadLibrary() + doc)
@@ -43,8 +72,8 @@ class KnowledgeFeature(core: AppCore) : Feature(core) {
                     state.update { it.copy(toast = e.message ?: "导入失败") }
                 }
             }
-            libraryIndex = null
-            state.update { it.copy(importing = false, library = store.loadLibrary(), toast = if (added > 0) "已加入资料库：$added 份" else it.toast) }
+            libraryChanged()
+            state.update { it.copy(importing = false, toast = if (added > 0) "已加入资料库：$added 份" else it.toast) }
         }
     }
 
@@ -52,30 +81,110 @@ class KnowledgeFeature(core: AppCore) : Feature(core) {
     fun addNote(title: String, content: String) {
         val doc = LibraryDoc(name = "$title.md", chars = content.length)
         store.saveLibraryText(doc.id, content)
-        val list = store.loadLibrary() + doc
-        store.saveLibrary(list)
-        libraryIndex = null
-        state.update { it.copy(library = list) }
+        store.saveLibrary(store.loadLibrary() + doc)
+        libraryChanged()
     }
 
     /** 别处（浏览器「存进资料库」）往资料库里加了东西：回到 App 时重新读一遍。 */
     fun reloadLibrary() {
         scope.launch(ioSerial) {
             val list = store.loadLibrary()
-            if (list.map { it.id } != state.value.library.map { it.id }) {
-                libraryIndex = null
-                state.update { it.copy(library = list) }
-            }
+            if (list.map { it.id } != state.value.library.map { it.id }) withContext(Dispatchers.Main) { libraryChanged() }
         }
     }
 
     fun deleteLibraryDoc(id: String) {
         scope.launch(ioSerial) {
             store.deleteLibraryText(id)
-            val list = store.loadLibrary().filterNot { it.id == id }
-            store.saveLibrary(list)
-            libraryIndex = null
-            state.update { it.copy(library = list) }
+            store.saveLibrary(store.loadLibrary().filterNot { it.id == id })
+            withContext(Dispatchers.Main) { libraryChanged() }
+        }
+    }
+
+    fun coverage(): Pair<Int, Int>? = LibraryVectors.coverage(app, state.value.settings, LibraryVectors.LIBRARY,
+        KnowledgeBases.searchable(store).flatMap { LibraryIndex.split(it.second) })
+
+    // ---------- 知识库 ----------
+
+    private fun busy(what: String?) = state.update { it.copy(kbBusy = what) }
+
+    /** 打开「下载知识库」：列出仓库里的知识库（默认官方仓库，也可以是任意 GitHub 项目）。 */
+    fun loadCatalog(input: String) {
+        val repo = GitHub.repoOf(input.ifBlank { KbRepo.OFFICIAL })
+        if (repo == null) { state.update { it.copy(toast = "看不懂这个地址，填「作者/项目名」或 GitHub 项目网址") }; return }
+        val ref = Regex("""github\.com/[\w.-]+/[\w.-]+/tree/([^/?#]+)""").find(input)?.groupValues?.get(1).orEmpty()
+        busy("正在读取 $repo…")
+        state.update { it.copy(kbCatalog = null) }
+        scope.launch(Dispatchers.IO) {
+            try {
+                val c = KnowledgeBases.catalog(store, state.value.settings.githubToken, repo, ref)
+                state.update { it.copy(kbCatalog = c) }
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
+                state.update { it.copy(toast = (if (repo == KbRepo.OFFICIAL) "官方知识库读不到：" else "读不到 $repo：") + (e.message ?: "网络问题")) }
+            } finally { busy(null) }
+        }
+    }
+
+    fun closeCatalog() = state.update { it.copy(kbCatalog = null) }
+
+    /** 装目录里的一个知识库（dir 是它在仓库里的文件夹），装过的就是更新。 */
+    fun installKb(dir: String) {
+        val (l, entries) = state.value.kbCatalog ?: return
+        val e = entries.firstOrNull { it.found.dir == dir } ?: return
+        if (state.value.kbBusy != null) return
+        busy("正在下载「${e.name}」（${e.found.files.size} 份）…")
+        scope.launch(Dispatchers.IO) {
+            try {
+                val r = KnowledgeBases.install(app, store, state.value.settings.githubToken, l, e.found, e.name, e.description)
+                withContext(Dispatchers.Main) { libraryChanged() }
+                state.update { st ->
+                    st.copy(toast = "已装好：" + r.line(),
+                        kbCatalog = st.kbCatalog?.let { (cl, list) -> cl to list.map { x -> if (x.found.dir == dir) x.copy(installed = r.kb) else x } })
+                }
+            } catch (e: CancellationException) { throw e } catch (ex: Exception) {
+                state.update { it.copy(toast = "没装成：" + (ex.message ?: "网络问题")) }
+            } finally { busy(null) }
+        }
+    }
+
+    fun syncKbs() {
+        if (state.value.kbBusy != null) return
+        busy("正在检查知识库更新…")
+        scope.launch(Dispatchers.IO) {
+            try {
+                val (results, failed) = KnowledgeBases.sync(app, store, state.value.settings.githubToken)
+                withContext(Dispatchers.Main) { libraryChanged() }
+                val msg = when {
+                    results.isEmpty() && failed.isEmpty() -> "还没有从 GitHub 装的知识库"
+                    results.none { it.changed } && failed.isEmpty() -> "知识库都是最新的"
+                    else -> (results.filter { it.changed }.map { it.line() } + failed).joinToString("；")
+                }
+                state.update { it.copy(toast = msg) }
+            } catch (e: CancellationException) { throw e } catch (ex: Exception) {
+                state.update { it.copy(toast = "检查更新失败：" + (ex.message ?: "网络问题")) }
+            } finally { busy(null) }
+        }
+    }
+
+    fun removeKb(id: String) {
+        scope.launch(ioSerial) {
+            KnowledgeBases.remove(store, id)
+            withContext(Dispatchers.Main) { libraryChanged() }
+        }
+    }
+
+    fun toggleKb(id: String, on: Boolean) {
+        scope.launch(ioSerial) {
+            KnowledgeBases.setEnabled(store, id, on)
+            withContext(Dispatchers.Main) { libraryChanged() }
+        }
+    }
+
+    fun createKb(name: String) {
+        if (name.isBlank()) return
+        scope.launch(ioSerial) {
+            KnowledgeBases.create(store, name)
+            withContext(Dispatchers.Main) { libraryChanged() }
         }
     }
 
@@ -94,7 +203,7 @@ class KnowledgeFeature(core: AppCore) : Feature(core) {
 
 
     /** 资料库变了（导入、删除、恢复备份）之后要重建索引。 */
-    fun resetIndex() { libraryIndex = null }
+    fun resetIndex() { libraryIndex = null; state.update { it.copy(kbs = store.loadKbs()) } }
 
     fun reloadMemory() {
         scope.launch(Dispatchers.IO) {

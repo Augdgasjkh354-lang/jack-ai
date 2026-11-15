@@ -189,6 +189,7 @@ object PromptBuilder {
             if (word || SkillIds.PPT in skillIds || SkillIds.EXCEL in skillIds) { add(SkillTools.REVISE_FILE); add(SkillTools.MY_TEMPLATES) }
             // 一直带着、选项写全：工具说明不随对话变，缓存才能跨对话命中；眼下搜不了的地方由工具自己回话
             add(SkillTools.SEARCH_MY_DATA)
+            if (SkillIds.LIBRARY in skillIds) add(SkillTools.KNOWLEDGE_BASE)
             add(SkillTools.FACTS)
             // 和人聊的对话里才有：极端辱骂时结束对话（收件箱里没人对话）
             if (conv.id != com.jack.ai.data.Retired.FREE_TIME_CONV && conv.id != com.jack.ai.data.INBOX_ID) add(SkillTools.END_CONVERSATION)

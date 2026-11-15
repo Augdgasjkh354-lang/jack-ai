@@ -13,7 +13,7 @@ object Backup {
     private val JSONS = listOf("conversations.json", "projects.json", "memories.json", "dreams.json", "usage.json", "routines.json", "library.json", "flashcards.json", "kavi_self.json", "browser_flows.json", "browser_site_notes.json", "browser_history.json", "price_log.json", "free_state.json", "own_memories.json", "dream_originals.json", "reading_log.json", "autobiography.json", "checkups.json", "deep_memories.json", "memories_archive.json", "timeline_state.json", "threads.json",
         // 后来加的：我的模板、Work 的网站备忘、发过信的地址（发信核对用）、各种统计和记录
         "style_templates.json", "site_notes.json", "recipients.json", "runlogs.json", "tool_stats.json", "tool_errors.json",
-        "feedback.json", "injection_log.json", "downloads.json", "nudges.json", "usage_recent.json", "browser_stats.json")
+        "feedback.json", "injection_log.json", "downloads.json", "nudges.json", "usage_recent.json", "browser_stats.json", "knowledge_bases.json")
     private val TEXTS = listOf("timeline.jsonl")
     // facts：Kavi 的事实库；memories_versions：记忆改动前存的版本（出了问题能找回）
     private val DIRS = listOf("images", "outputs", "library", "tables", "facts", "memories_versions")

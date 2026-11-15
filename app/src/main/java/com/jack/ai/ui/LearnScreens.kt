@@ -53,65 +53,6 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LibraryScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
-    val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { vm.addLibraryFiles(it) }
-    var deleting by remember { mutableStateOf<String?>(null) }
-    val fmt = remember { SimpleDateFormat("M月d日", Locale.CHINA) }
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("资料库") },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") } },
-                actions = { IconButton(onClick = { pick.launch(arrayOf("*/*")) }) { Icon(Icons.Default.Add, "导入") } },
-            )
-        },
-    ) { padding ->
-        LazyColumn(
-            Modifier.padding(padding).fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            item {
-                Spacer(Modifier.size(10.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedButton(onClick = { pick.launch(arrayOf("*/*")) }, enabled = !state.importing) { Text("导入文档") }
-                    if (state.importing) {
-                        Spacer(Modifier.size(12.dp))
-                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                        Spacer(Modifier.size(8.dp))
-                        Text("正在读取…", style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-            }
-            if (state.library.isEmpty()) {
-                item { Text("资料库还是空的。", color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(top = 12.dp)) }
-            }
-            items(state.library.sortedByDescending { it.addedAt }, key = { it.id }) { d ->
-                Card(Modifier.fillMaxWidth()) {
-                    Row(Modifier.padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(AppIcons.File, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.size(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(d.name, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            Text("${d.chars} 字 · ${fmt.format(Date(d.addedAt))} 加入", style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        IconButton(onClick = { deleting = d.id }) { Icon(Icons.Default.Delete, "删除") }
-                    }
-                }
-            }
-        }
-    }
-    deleting?.let { id ->
-        val name = state.library.firstOrNull { it.id == id }?.name.orEmpty()
-        ConfirmDeleteDialog("从资料库删除？", "「$name」会从资料库移除。", onDismiss = { deleting = null }) {
-            vm.deleteLibraryDoc(id); deleting = null
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
 fun ReviewScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
     var reviewing by remember { mutableStateOf<String?>(null) } // 正在复习的卡组，"*" 表示全部
     var deletingDeck by remember { mutableStateOf<String?>(null) }

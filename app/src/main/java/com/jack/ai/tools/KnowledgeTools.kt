@@ -31,7 +31,12 @@ private suspend fun ToolSession.findChats(query: String): String {
 }
 
 private suspend fun ToolSession.findLibrary(query: String): String {
-    val hits = withContext(Dispatchers.IO) { host.libraryIndex().search(query) }
+    val hits = withContext(Dispatchers.IO) {
+        com.jack.ai.data.LibraryVectors.search(host.app, settings, com.jack.ai.data.LibraryVectors.LIBRARY, host.libraryIndex(), query)
+    }
+    // 从 GitHub 装的知识库是外部内容：和网页一样查注入，之后往外做事也要多一道确认
+    val outside = withContext(Dispatchers.IO) { host.store.loadKbs().filter { it.source.isNotEmpty() }.map { it.name + "/" } }
+    if (hits.any { h -> outside.any { h.doc.startsWith(it) } }) { sawExternal = true; scanResult = true }
     return if (hits.isEmpty()) "资料库里没有找到和“$query”相关的内容。" else hits.joinToString("\n\n") {
         "【《${it.doc}》第 ${it.part} 段】\n${it.text}"
     }
@@ -39,7 +44,9 @@ private suspend fun ToolSession.findLibrary(query: String): String {
 
 private suspend fun ToolSession.findProject(query: String): String {
     val p = project ?: throw IllegalStateException("不在项目里")
-    val hits = withContext(Dispatchers.Default) { host.projectIndex(p).search(query) }
+    val hits = withContext(Dispatchers.IO) {
+        com.jack.ai.data.LibraryVectors.search(host.app, settings, com.jack.ai.data.LibraryVectors.PROJECTS, host.projectIndex(p), query)
+    }
     return if (hits.isEmpty()) "项目资料里没有找到和“$query”相关的内容。" else hits.joinToString("\n\n") {
         "【《${it.doc}》第 ${it.part} 段】\n${it.text}"
     }
@@ -47,8 +54,17 @@ private suspend fun ToolSession.findProject(query: String): String {
 
 private fun ToolSession.libraryDocs(): String {
     val docs = host.store.loadLibrary()
-    return if (docs.isEmpty()) "资料库是空的。用户可以在左侧菜单「资料库」里导入文档。"
-    else docs.joinToString("\n") { "《${it.name}》${it.chars} 字" }
+    val kbs = host.store.loadKbs().associateBy { it.id }
+    if (docs.isEmpty()) return "资料库是空的。用户可以在左侧菜单「资料库」里导入文档，或者下载知识库（knowledge_base）。"
+    val mine = docs.filter { it.kb.isEmpty() }
+    val parts = ArrayList<String>()
+    if (mine.isNotEmpty()) parts += "【我的资料】\n" + mine.joinToString("\n") { "《${it.name}》${it.chars} 字" }
+    docs.filter { it.kb.isNotEmpty() }.groupBy { it.kb }.forEach { (id, list) ->
+        val kb = kbs[id] ?: return@forEach
+        val shown = list.take(40).joinToString("\n") { "《${kb.name}/${it.name}》${it.chars} 字" } + if (list.size > 40) "\n……还有 ${list.size - 40} 份" else ""
+        parts += "【知识库：${kb.name}${if (kb.enabled) "" else "（关着，不参与检索）"}】${kb.description.take(100)}\n$shown"
+    }
+    return parts.joinToString("\n\n")
 }
 
 private val SOURCE_NAMES = mapOf("chats" to "以前的聊天", "history" to "本对话较早的原话", "library" to "资料库", "project" to "项目资料")

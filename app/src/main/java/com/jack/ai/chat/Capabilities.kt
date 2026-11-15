@@ -28,6 +28,7 @@ object Capabilities {
         skill(SkillIds.TABLES)?.let { lines += "Bookkeeping, lists, clients and other tables: 「$it」" }
         skill(SkillIds.GITHUB)?.let { lines += "Install skills from a GitHub repo (SKILL.md format, shared with Claude Code, Codex…) and sync their updates: 「$it」" }
         skill(SkillIds.RECEIPTS)?.let { lines += "Record invoices, receipts, delivery slips and business cards from photos into tables: 「$it」" }
+        if ("knowledge_base" in tools) lines += "Knowledge bases in {user}'s library: download from the official repo or install any GitHub project as one, update, turn on/off: knowledge_base (search their content with search_my_data)"
         if ("schedule" in tools) lines += "Reminders, scheduled tasks, watching a web page for changes: schedule"
         listOf(SkillIds.MAIL, SkillIds.CALENDAR, SkillIds.GITHUB, SkillIds.NOTION, SkillIds.TRAIN, SkillIds.WORD, SkillIds.PPT, SkillIds.EXCEL, SkillIds.PDF, SkillIds.APP, SkillIds.TONE, SkillIds.XHS)
             .mapNotNull { skill(it) }.takeIf { it.isNotEmpty() }?.let { lines += "Other skills: " + it.joinToString(", ") { n -> "「$n」" } }

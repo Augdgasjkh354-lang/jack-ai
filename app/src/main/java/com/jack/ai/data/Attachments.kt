@@ -117,12 +117,34 @@ object Attachments {
     }
 
     private fun readPdf(ctx: Context, uri: Uri): String =
-        ctx.contentResolver.openInputStream(uri)?.use { input ->
-            PDDocument.load(LimitedInputStream(input, MAX_ORIGINAL_BYTES)).use { doc -> PDFTextStripper().getText(doc) }
-        } ?: ""
+        ctx.contentResolver.openInputStream(uri)?.use { pdfText(it) } ?: ""
 
-    private fun readDocx(ctx: Context, uri: Uri): String {
-        ctx.contentResolver.openInputStream(uri)?.use { input ->
+    private fun pdfText(input: java.io.InputStream): String =
+        PDDocument.load(LimitedInputStream(input, MAX_ORIGINAL_BYTES)).use { doc -> PDFTextStripper().getText(doc) }
+
+    /**
+     * 从下载来的字节里读文字（知识库从 GitHub 拉的文件）：PDF、docx 照导入时的办法读，其他当文字；不是文字的抛异常。
+     * 太长的截到和导入一样的上限。
+     */
+    fun textOf(name: String, bytes: ByteArray): String {
+        val lower = name.lowercase()
+        val text = when {
+            lower.endsWith(".pdf") -> pdfText(bytes.inputStream())
+            lower.endsWith(".docx") -> docxText(bytes.inputStream())
+            else -> {
+                if (bytes.size > MAX_TEXT_BYTES) throw IllegalArgumentException("文件太大，没法当文字读")
+                if (bytes.take(4000).any { it == 0.toByte() }) throw IllegalArgumentException("这个文件不是文字格式，暂时读不了")
+                decodeText(bytes)
+            }
+        }.trim()
+        return if (text.length > MAX_FILE_CHARS) text.take(MAX_FILE_CHARS) + "\n…（文件太长，后面省略）" else text
+    }
+
+    private fun readDocx(ctx: Context, uri: Uri): String =
+        ctx.contentResolver.openInputStream(uri)?.use { docxText(it) } ?: ""
+
+    private fun docxText(input: java.io.InputStream): String {
+        run {
             ZipInputStream(input).use { zip ->
                 while (true) {
                     val entry = zip.nextEntry ?: break

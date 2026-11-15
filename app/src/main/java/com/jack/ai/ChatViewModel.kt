@@ -96,6 +96,12 @@ data class UiState(
     val cameraRequest: Boolean = false,
     val routines: List<Routine> = emptyList(),
     val library: List<LibraryDoc> = emptyList(),
+    /** 知识库（从 GitHub 装的、自己建的）。 */
+    val kbs: List<com.jack.ai.data.KnowledgeBase> = emptyList(),
+    /** 「下载知识库」里列出的仓库内容；null 是还没打开或在加载。 */
+    val kbCatalog: Pair<com.jack.ai.data.KbRepo.Listing, List<com.jack.ai.data.KnowledgeBases.Entry>>? = null,
+    /** 知识库正在做的事（加载目录、下载、同步），界面显示一行进度；null 是空闲。 */
+    val kbBusy: String? = null,
     val cards: List<Flashcard> = emptyList(),
     /** 工具执行前等用户确认（比如发邮件），界面弹窗。 */
     val confirm: ConfirmRequest? = null,
@@ -182,7 +188,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         // 上次开着按 App 分流、进程被收掉了：授权还在就接着开
         if (_state.value.settings.proxyAppsOn && _state.value.settings.proxyHardened && !com.jack.ai.vpn.KaviVpnService.running && com.jack.ai.vpn.TProxyService.available &&
             runCatching { com.jack.ai.vpn.KaviVpnService.consent(app) == null }.getOrDefault(false)) com.jack.ai.vpn.KaviVpnService.start(app)
-        _state.update { it.copy(routines = store.loadRoutines(), library = store.loadLibrary(), cards = store.loadCards()) }
+        _state.update { it.copy(routines = store.loadRoutines(), library = store.loadLibrary(), kbs = store.loadKbs(), cards = store.loadCards()) }
+        knowledge.startup()
         Routines.scheduleAll(app)
         runCatching { com.jack.ai.data.Updater.schedule(app, _state.value.settings) }
         // 选了本地模型：开 App 后稍等一会在后台加载好，聊天时不用现等
@@ -1214,6 +1221,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         override fun saveRoutine(r: Routine) = routines.saveRoutine(r)
         override fun deleteRoutine(id: String) = routines.deleteRoutine(id)
         override fun libraryIndex() = knowledge.index()
+        override fun libraryChanged() = knowledge.libraryChanged()
         override fun projectIndex(p: Project) = projects.projectIndex(p)
         override fun refreshWidget() = core.refreshWidget()
         override fun updateSettings(transform: (Settings) -> Settings) = this@ChatViewModel.updateSettings(transform)
@@ -1308,7 +1316,16 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun compress(convId: String? = _state.value.currentId, manual: Boolean = true) = compression.compress(convId, manual)
 
     // 资料库、复习卡片、记忆和梦
-    fun addLibraryFiles(uris: List<Uri>) = knowledge.addLibraryFiles(uris)
+    fun addLibraryFiles(uris: List<Uri>, kb: String = "") = knowledge.addLibraryFiles(uris, kb)
+    fun loadKbCatalog(repo: String) = knowledge.loadCatalog(repo)
+    fun closeKbCatalog() = knowledge.closeCatalog()
+    fun installKb(dir: String) = knowledge.installKb(dir)
+    fun syncKbs() = knowledge.syncKbs()
+    fun removeKb(id: String) = knowledge.removeKb(id)
+    fun toggleKb(id: String, on: Boolean) = knowledge.toggleKb(id, on)
+    fun createKb(name: String) = knowledge.createKb(name)
+    /** 按意思搜备好了多少段：(有向量的, 全部)；没有向量来源是 null。后台线程调。 */
+    fun libraryCoverage() = knowledge.coverage()
     fun deleteLibraryDoc(id: String) = knowledge.deleteLibraryDoc(id)
     fun reviewCard(id: String, grade: Int) = knowledge.reviewCard(id, grade)
     fun deleteCard(id: String) = knowledge.deleteCard(id)

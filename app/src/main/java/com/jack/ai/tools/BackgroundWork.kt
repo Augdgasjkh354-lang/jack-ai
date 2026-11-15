@@ -52,7 +52,7 @@ class BackgroundToolHost(ctx: Context) : ToolHost {
         Routines.cancel(app, id)
         store.saveRoutines(store.loadRoutines().filterNot { it.id == id })
     }
-    override fun libraryIndex() = LibraryIndex(store.loadLibrary().map { it.name to store.libraryText(it.id) })
+    override fun libraryIndex() = LibraryIndex(com.jack.ai.data.KnowledgeBases.searchable(store))
     override fun projectIndex(p: Project) =
         LibraryIndex(p.files.filter { it.text.length > PromptBuilder.PROJECT_INLINE_CHARS }.map { it.name to it.text })
     override fun refreshWidget() = AskWidget.refresh(app)

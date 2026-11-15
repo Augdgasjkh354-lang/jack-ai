@@ -262,6 +262,8 @@ class Store(context: Context) {
         SafeFile.writeText(File(File(dir, "library"), "$id.txt"), text)
     }
     fun deleteLibraryText(id: String) { File(File(dir, "library"), "$id.txt").delete() }
+    fun loadKbs() = load("knowledge_bases.json", KnowledgeBase.serializer())
+    fun saveKbs(list: List<KnowledgeBase>) = save("knowledge_bases.json", KnowledgeBase.serializer(), list)
 
     fun loadCards() = load("flashcards.json", Flashcard.serializer())
     fun saveCards(list: List<Flashcard>) = save("flashcards.json", Flashcard.serializer(), list)

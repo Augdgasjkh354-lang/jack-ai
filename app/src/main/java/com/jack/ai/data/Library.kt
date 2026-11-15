@@ -10,6 +10,28 @@ data class LibraryDoc(
     val name: String,
     val chars: Int,
     val addedAt: Long = System.currentTimeMillis(),
+    /** 属于哪个知识库（[KnowledgeBase.id]）；空的是自己导入的「我的资料」。 */
+    val kb: String = "",
+    /** 从 GitHub 来的：在仓库里的路径和 blob sha（同步时比 sha 判断要不要重新下）。 */
+    val path: String = "",
+    val sha: String = "",
+)
+
+/**
+ * 一个知识库：一组文档，整个开关、更新、删除。从 GitHub 装的 source 是「作者/项目@分支:文件夹」，自己建的是空的。
+ * 文档本身还是 [LibraryDoc]（kb 指向这里），检索时和「我的资料」一起搜，关掉的不搜。
+ */
+@Serializable
+data class KnowledgeBase(
+    val id: String = newId(),
+    val name: String,
+    val description: String = "",
+    val source: String = "",
+    /** 装的那一版的指纹（里面每个文件的 sha 合起来），同步时比它。 */
+    val hash: String = "",
+    val enabled: Boolean = true,
+    val addedAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis(),
 )
 
 /** 复习卡片（间隔重复）。interval 单位是天。 */
@@ -54,7 +76,7 @@ object Recall {
 class LibraryIndex(docs: List<Pair<String, String>>) {
     data class Chunk(val doc: String, val part: Int, val text: String)
 
-    private val chunks = docs.flatMap { (name, text) -> split(text).mapIndexed { i, t -> Chunk(name, i + 1, t) } }
+    val chunks = docs.flatMap { (name, text) -> split(text).mapIndexed { i, t -> Chunk(name, i + 1, t) } }
     private val termFreqs = chunks.map { c -> tokens(c.text).groupingBy { it }.eachCount() }
     private val lengths = termFreqs.map { it.values.sum().coerceAtLeast(1) }
     private val avgLen = if (lengths.isEmpty()) 1.0 else lengths.average()
@@ -62,7 +84,10 @@ class LibraryIndex(docs: List<Pair<String, String>>) {
 
     val size get() = chunks.size
 
-    fun search(query: String, top: Int = 6): List<Chunk> {
+    fun search(query: String, top: Int = 6): List<Chunk> = rank(query, top).map { chunks[it] }
+
+    /** 关键词排名：返回段落在 [chunks] 里的位置，最相关的在前。 */
+    fun rank(query: String, top: Int = 6): List<Int> {
         val q = tokens(query).distinct()
         if (q.isEmpty() || chunks.isEmpty()) return emptyList()
         val n = chunks.size.toDouble()
@@ -76,7 +101,7 @@ class LibraryIndex(docs: List<Pair<String, String>>) {
             }
             i to s
         }
-        return scores.filter { it.second > 0 }.sortedByDescending { it.second }.take(top).map { chunks[it.first] }
+        return scores.filter { it.second > 0 }.sortedByDescending { it.second }.take(top).map { it.first }
     }
 
     companion object {
