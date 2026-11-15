@@ -53,7 +53,8 @@ object BrowserFlows {
         if (url.startsWith(APP_PREFIX)) return AppUsageNotes.forPackage(url.removePrefix(APP_PREFIX))
         val h = BrowserPages.site(url)
         if (h.isEmpty()) return emptyList()
-        return BUILTIN_NOTES.filter { (site, _) -> h == site || h.endsWith(".$site") }.map { (site, text) -> SiteNote(id = "builtin-$site", site = site, text = text, at = 0) }
+        return BUILTIN_NOTES.filter { (site, _) -> h == site || h.endsWith(".$site") }.map { (site, text) -> SiteNote(id = "builtin-$site", site = site, text = text, at = 0) } +
+            AppUsageNotes.forSite(h)
     }
 
     /** 这个网站或 app:包名 上的用户备忘。 */
@@ -109,6 +110,6 @@ object BrowserFlows {
         val place = if (app) " App " else "网站"
         if (flows.isNotEmpty()) append("【这个${place}存了流程】" + flows.joinToString("；") { f -> "「${f.name}」" + f.whenToUse.takeIf { it.isNotBlank() }?.let { "（$it）" }.orEmpty() } +
             "。和用户要做的事对得上，就先用 action=flow 填 name 读出步骤照着做；对不上就照常做。\n")
-        if (notes.isNotEmpty()) append("【这个${place}的备忘】" + notes.joinToString(if (app) "\n\n" else "；") { it.text } + "\n")
+        if (notes.isNotEmpty()) append("【这个${place}的备忘】" + notes.joinToString(if (app || notes.any { '\n' in it.text }) "\n\n" else "；") { it.text } + "\n")
     }
 }

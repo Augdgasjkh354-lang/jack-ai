@@ -9,7 +9,7 @@ class AppUsageNotesTest {
         fun resource(path: String) = javaClass.getResourceAsStream("/knowledge/apps/$path")!!
             .bufferedReader(Charsets.UTF_8).use { it.readText() }
         val ids = resource("index.txt").lineSequence().filter { it.isNotBlank() }.toList()
-        assertEquals(23, ids.size)
+        assertEquals(36, ids.size)
         ids.forEach { id ->
             val parts = resource("$id/APP.md").split("---", limit = 3)
             val metadata = Yaml().load<Map<String, Any>>(parts[1])
@@ -17,7 +17,7 @@ class AppUsageNotesTest {
                 val note = BrowserFlows.builtinNotesFor("app:$pkg").single()
                 assertEquals("builtin-app-$id", note.id)
                 assertEquals("app:$pkg", note.site)
-                assertTrue(note.text.endsWith(parts[2].trim()))
+                assertTrue(note.text.contains(parts[2].trim()))
             }
         }
         val gmail = BrowserFlows.builtinNotesFor("app:com.google.android.gm").single().text
@@ -29,7 +29,7 @@ class AppUsageNotesTest {
         assertTrue(BrowserFlows.builtinNotesFor("app:com.hpbr.bosszhipin").single().text.contains("没有不登录浏览的入口"))
         assertTrue(BrowserFlows.builtinNotesFor("app:com.hpbr.bosszhipin.fake").isEmpty())
         assertTrue(BrowserFlows.builtinNotesFor("app:unknown.app").isEmpty())
-        assertTrue(BrowserFlows.builtinNotesFor("https://zhipin.com").isEmpty())
+        assertFalse(BrowserFlows.builtinNotesFor("https://zhipin.com").any { it.id.startsWith("builtin-app-") })
     }
 
 
@@ -59,5 +59,31 @@ class AppUsageNotesTest {
         assertFalse(hint.contains("网站备忘"))
         assertEquals(2, all.size) // 内置知识不写回、不挤掉用户备忘。
         assertEquals(saved, BrowserFlows.notesFor(all, site))
+    }
+
+    @Test fun siteKnowledgeMatchesDomainsAndSubdomainsMostSpecificFirst() {
+        fun one(url: String) = BrowserFlows.builtinNotesFor(url).single()
+        assertEquals("builtin-site-zhihu.com", one("https://www.zhihu.com/question/1").id)
+        assertEquals("builtin-site-tieba.baidu.com", one("https://tieba.baidu.com/f?kw=x").id)
+        assertEquals("builtin-site-baidu.com", one("https://www.baidu.com/s?wd=x").id)
+        assertEquals("builtin-site-jd.com", one("https://item.jd.com/1.html").id)
+        assertEquals("builtin-site-youtube.com", one("https://youtu.be/abc").id)
+        assertTrue(one("https://www.zhihu.com/").text.startsWith("【知乎 网站使用知识 · Mika】"))
+        assertTrue(BrowserFlows.builtinNotesFor("https://notzhihu.com/").isEmpty())
+        assertTrue(BrowserFlows.builtinNotesFor("https://example.com/").isEmpty())
+    }
+
+    @Test fun referencedFilesAreAppendedToTheBody() {
+        val boss = BrowserFlows.builtinNotesFor("https://www.zhipin.com/web/geek/job").single().text
+        assertTrue(boss.contains("### 附：references/cities.md"))
+        assertTrue(boss.contains("### 附：references/filters.md"))
+        val wechat = BrowserFlows.builtinNotesFor("app:com.tencent.mm").single().text
+        assertTrue(wechat.contains("### 附：references/send-moments.md"))
+    }
+
+    @Test fun longSiteNotesAreSeparatedByBlankLines() {
+        val notes = BrowserFlows.builtinNotesFor("https://www.zhihu.com/")
+        val hint = BrowserFlows.hint(emptyList(), notes + SiteNote(site = "zhihu.com", text = "短备忘", at = 1))
+        assertTrue(hint.contains("\n\n短备忘"))
     }
 }

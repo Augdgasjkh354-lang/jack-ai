@@ -77,3 +77,11 @@ Jack AI 适配（2026-11-02）：
 ## Shizuku 启动（2026-11-06，Kavi 自己加的）
 
 - `cap/phone/setup/ShizukuStart.kt` 不是 Mika 的代码：用 Shizuku（RikkaApps，Apache-2.0）的 `newProcess` 以 shell 身份跑和无线调试同样的交接命令，起的是同一个助手；接在移植来的看门狗上，顺序是 Shizuku → root → 无线调试。
+
+## App 与网站使用知识更新（2026-11-15）
+
+- 固定来源提交：`65c65b0d3c205e77c2ffa9e084f40c6bb2a7316a`（Mika，Apache-2.0）。
+- `core/src/main/resources/knowledge/apps/` 更新到 36 份 `APP.md`（新增阿里巴巴 1688、支付宝、百度、大众点评、京东、美团、美团外卖、拼多多、QQ、QQ 音乐、淘宝、小黑盒、X），微信同步上游新增的「常用流程」；`knowledge/sites/` 新移植 29 份 `SITE.md`。随附的 `references/*.md` 一并复制。知识正文未改动。
+- Jack AI modification：BOSS 直聘 `APP.md` 保留 Kavi 加的 `background`、`signed_out` 两项；`AppUsageNotes` 按 `domains` 把网站知识转成内置网站备忘（子域名也算，最具体的优先，每个网站一份），正文提到的 `references/*.md` 直接附在后面，因为 Kavi 没有单独读附件的工具。`index.txt` 自建，用于枚举资源。
+- BOSS 直聘网站知识里提到的 `web_capture` 是 Mika 的工具名；Kavi 里对应的是浏览器读接口（`extract`）。
+
