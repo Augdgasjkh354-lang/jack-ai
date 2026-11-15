@@ -53,7 +53,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import java.io.IOException
 
-/** 常见的 OpenAI 兼容服务，点一下填好名字和地址。 */
+/** 常见的模型服务，点一下填好名字和地址。 */
 private val PROVIDER_PRESETS = listOf(
     "Kimi" to "https://api.moonshot.cn/v1",
     "通义千问" to "https://dashscope.aliyuncs.com/compatible-mode/v1",
@@ -62,6 +62,9 @@ private val PROVIDER_PRESETS = listOf(
     "硅基流动" to "https://api.siliconflow.cn/v1",
     "OpenRouter" to "https://openrouter.ai/api/v1",
     "OpenAI" to "https://api.openai.com/v1",
+    // 这两家用自己的原生接口格式，Kavi 按地址自动认出来
+    "Claude" to "https://api.anthropic.com/v1",
+    "Gemini" to "https://generativelanguage.googleapis.com/v1beta",
 )
 
 /** 设置页里的「其他模型服务」：列出已加的服务，可以添加、修改、删除。 */

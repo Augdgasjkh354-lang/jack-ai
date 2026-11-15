@@ -291,8 +291,11 @@ data class Settings(
     val fontScale: Float = 1f,
     val accent: String = "mono",
     val appLock: Boolean = false,
-    /** 用户自己加的 OpenAI 兼容服务（Kimi、通义、OpenRouter 等）。 */
+    /** 用户自己加的模型服务（Kimi、通义、OpenRouter 等 OpenAI 兼容的，和 Claude、Gemini 原生接口）。 */
     val providers: List<Provider> = emptyList(),
+    /** 定时任务的免打扰时段（几点到几点，按手机时间）；quietStart 小于 0 表示不开。这段时间里任务结果静音送达，提醒照常响。 */
+    val quietStart: Int = -1,
+    val quietEnd: Int = 8,
     /** 备用模型（最多 2 个，按顺序）：主模型报错、限流、没余额时自动换着用，见 Failover。 */
     val fallbackModels: List<String> = emptyList(),
     /** 每月预算（元），0 表示不设。 */
@@ -411,7 +414,7 @@ fun mailPresetFor(address: String): MailAccount? {
     return MailAccount(address = address.trim(), imapHost = imap, smtpHost = smtp, smtpPort = port)
 }
 
-/** OpenAI 兼容的模型服务。 */
+/** 模型服务：OpenAI 兼容的，或 Anthropic、Gemini 原生接口（按地址认，见 ApiFormat）。 */
 @Serializable
 data class Provider(
     val id: String = newId(),
@@ -513,7 +516,8 @@ fun guessVision(id: String): Boolean {
 fun guessReasoning(id: String): Boolean {
     val s = id.lowercase()
     return Regex("""(^|[/\-_.])(o1|o3|o4)([\-_.]|$)""").containsMatchIn(s) ||
-        listOf("reason", "r1", "think", "qwq", "gpt-5", "deepseek-r", "grok-3-mini", "grok-4").any { it in s }
+        listOf("reason", "r1", "think", "qwq", "gpt-5", "deepseek-r", "grok-3-mini", "grok-4",
+            "claude-opus-4", "claude-sonnet-4", "claude-opus-5", "claude-sonnet-5", "claude-fable", "claude-haiku-5", "gemini-2.5", "gemini-3").any { it in s }
 }
 
 /** 用户点「这条有问题」时存下的现场：问了什么、答了什么、中间调了哪些工具、哪里出错。导出发给开发者看。 */

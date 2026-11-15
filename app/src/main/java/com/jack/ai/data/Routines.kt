@@ -193,10 +193,31 @@ object Routines {
     fun canNotify(ctx: Context) = Build.VERSION.SDK_INT < 33 ||
         ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
-    fun notify(ctx: Context, id: String, title: String, text: String, openChat: String? = null, open: Intent? = null) {
+    /** 免打扰时段里用的静音渠道。 */
+    private const val QUIET_CHANNEL = "routines_quiet"
+
+    /** 现在（hour 点）在不在免打扰时段 [start, end)；跨午夜的（22 到 8）也算。start 小于 0 或两头一样表示没开。 */
+    fun quietNow(start: Int, end: Int, hour: Int): Boolean = when {
+        start !in 0..23 || end !in 0..23 || start == end -> false
+        start < end -> hour in start until end
+        else -> hour >= start || hour < end
+    }
+
+    /**
+     * 弹通知。important = false 的（定时任务、监控的结果）碰上免打扰时段就静音送达：通知栏里有，不响不亮屏；
+     * 用户自己定的提醒传 important = true，照常响。
+     */
+    fun notify(ctx: Context, id: String, title: String, text: String, openChat: String? = null, open: Intent? = null, important: Boolean = false) {
         val nm = ctx.getSystemService(NotificationManager::class.java)
         if (nm.getNotificationChannel(CHANNEL) == null) {
             nm.createNotificationChannel(NotificationChannel(CHANNEL, "提醒和定时任务", NotificationManager.IMPORTANCE_HIGH))
+        }
+        val quiet = !important && runCatching {
+            val s = Store(ctx).loadSettings()
+            quietNow(s.quietStart, s.quietEnd, java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY))
+        }.getOrDefault(false)
+        if (quiet && nm.getNotificationChannel(QUIET_CHANNEL) == null) {
+            nm.createNotificationChannel(NotificationChannel(QUIET_CHANNEL, "定时任务（免打扰时段）", NotificationManager.IMPORTANCE_LOW))
         }
         if (!canNotify(ctx)) return
         val open = PendingIntent.getActivity(
@@ -205,12 +226,13 @@ object Routines {
                 .putExtra("convId", openChat).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val n = NotificationCompat.Builder(ctx, CHANNEL)
+        val n = NotificationCompat.Builder(ctx, if (quiet) QUIET_CHANNEL else CHANNEL)
             .setSmallIcon(R.drawable.ic_widget_chat)
             .setContentTitle(title)
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setPriority(if (quiet) NotificationCompat.PRIORITY_LOW else NotificationCompat.PRIORITY_HIGH)
+            .setSilent(quiet)
             .setAutoCancel(true)
             .setContentIntent(open)
             .build()
@@ -227,7 +249,7 @@ object Routines {
         val r = list.firstOrNull { it.id == id } ?: return
         if (!r.enabled) return
         if (r.kind == "reminder") {
-            notify(ctx, r.id, "⏰ 提醒", r.title)
+            notify(ctx, r.id, "⏰ 提醒", r.title, important = true)
             if (canNotify(ctx)) RunLog.once(ctx, r, "ok", "已弹出通知")
             else RunLog.once(ctx, r, "failed", error = "App 没有通知权限，提醒没弹出来。下一步：打开左侧菜单「提醒和任务」授权通知")
         } else {

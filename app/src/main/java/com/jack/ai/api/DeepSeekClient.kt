@@ -131,8 +131,20 @@ class DeepSeekClient(
         thinking: ThinkLevel,
         temperature: Float,
         tools: JsonArray? = null,
+        jsonMode: Boolean = false,
     ): Flow<StreamEvent> = callbackFlow {
-        val body = buildJsonObject {
+        val format = ApiFormat.of(ep)
+        val native = when (format) {
+            ApiFormat.ANTHROPIC -> AnthropicApi.request(ep, messages, thinking, tools, stream = true)
+            ApiFormat.GEMINI -> GeminiApi.request(ep, messages, thinking, temperature, tools, stream = true, jsonMode = jsonMode)
+            ApiFormat.OPENAI -> null
+        }
+        val parser: SseParser? = when (format) {
+            ApiFormat.ANTHROPIC -> AnthropicApi.Parser()
+            ApiFormat.GEMINI -> GeminiApi.Parser()
+            ApiFormat.OPENAI -> null
+        }
+        val body = native?.body ?: buildJsonObject {
             put("model", ep.model)
             put("stream", true)
             if (ep.deepseek) {
@@ -155,8 +167,8 @@ class DeepSeekClient(
         }.toString()
 
         val request = Request.Builder()
-            .url(ep.baseUrl.trimEnd('/') + "/chat/completions")
-            .header("Authorization", "Bearer ${ep.apiKey}")
+            .url(native?.url ?: (ep.baseUrl.trimEnd('/') + "/chat/completions"))
+            .apply { if (native != null) native.headers.forEach { (k, v) -> header(k, v) } else header("Authorization", "Bearer ${ep.apiKey}") }
             .header("Accept", "text/event-stream")
             .post(body.toRequestBody("application/json".toMediaType()))
             .build()
@@ -205,6 +217,12 @@ class DeepSeekClient(
                             if (raw.length < 65_536) {
                                 if (raw.isNotEmpty()) raw.append('\n')
                                 raw.append(line.take(65_536 - raw.length))
+                            }
+                            if (parser != null) {
+                                for (ev in parser.feed(line)) if (trySendBlocking(ev).isFailure) return
+                                validData = parser.sawData
+                                if (parser.finished) { finished = true; if (format == ApiFormat.ANTHROPIC) break }
+                                continue
                             }
                             if (!line.startsWith("data:")) continue
                             val data = line.removePrefix("data:").trim()
@@ -289,6 +307,18 @@ class DeepSeekClient(
         maxTokens: Int,
         jsonMode: Boolean,
     ): String = withContext(Dispatchers.IO) {
+        // Anthropic、Gemini 原生接口：借流式请求收齐全文（不开思考），用量照样记
+        if (ApiFormat.of(ep) != ApiFormat.OPENAI) {
+            val text = StringBuilder()
+            streamOne(ep, messages, ThinkLevel.OFF, 0.7f, null, jsonMode).collect { ev ->
+                when (ev) {
+                    is StreamEvent.Text -> text.append(ev.content)
+                    is StreamEvent.Usage -> onUsage?.invoke(ep, ev.promptTokens, ev.cacheHit, ev.completionTokens)
+                    else -> {}
+                }
+            }
+            return@withContext text.toString().ifBlank { throw ApiException("模型没有返回内容") }
+        }
         val body = buildJsonObject {
             put("model", ep.model)
             put("stream", false)
@@ -347,6 +377,29 @@ class DeepSeekClient(
     suspend fun listModels(baseUrl: String, apiKey: String, workspaceId: String = ""): Pair<String, List<Pair<String, Price?>>> = withContext(Dispatchers.IO) {
         val base = baseUrl.trim().trimEnd('/')
         if (!base.startsWith("http")) throw ApiException("接口地址要以 http:// 或 https:// 开头")
+        // Anthropic、Gemini 原生接口各有自己的模型列表
+        when (ApiFormat.of(base)) {
+            ApiFormat.ANTHROPIC -> {
+                val ep = Endpoint(base, apiKey, "", deepseek = false, vision = false, reasoning = false)
+                val req = Request.Builder().url(AnthropicApi.url(base, "models?limit=1000")).apply { AnthropicApi.headers(ep).forEach { (k, v) -> header(k, v) } }.get().build()
+                val ids = http.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string()
+                    if (!resp.isSuccessful) throw ApiException(describeError(resp.code, text), resp.code)
+                    AnthropicApi.parseModels(text)
+                }
+                return@withContext base to ids.map { it to null }
+            }
+            ApiFormat.GEMINI -> {
+                val req = Request.Builder().url(GeminiApi.base(base) + "/models?pageSize=1000").header("x-goog-api-key", apiKey).get().build()
+                val ids = http.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string()
+                    if (!resp.isSuccessful) throw ApiException(describeError(resp.code, text), resp.code)
+                    GeminiApi.parseModels(text)
+                }
+                return@withContext base to ids.map { it to null }
+            }
+            ApiFormat.OPENAI -> {}
+        }
         val host = runCatching { java.net.URI(base).host.orEmpty().lowercase() }.getOrDefault("")
         // 百炼的模型目录：北京要填业务空间 ID；没填就照常走 OpenAI 兼容的 /models（以前就是这么拿列表的）
         val bailian = host == "dashscope-intl.aliyuncs.com" || host == "cn-hongkong.dashscope.aliyuncs.com" || host.endsWith(".cn-beijing.maas.aliyuncs.com") ||

@@ -139,6 +139,7 @@ fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                     }
                 }
             }
+            item { QuietHoursCard(state.settings) { start, end -> vm.updateSettings { it.copy(quietStart = start, quietEnd = end) } } }
             if (state.routines.none { it.title == "早安问候" }) {
                 item {
                     OutlinedButton(onClick = {
@@ -157,7 +158,9 @@ fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
             items(shown.sortedBy { it.nextAt() ?: Long.MAX_VALUE }, key = { it.id }) { r ->
                 // 监控在聊天里让 AI 设，这里只能开关和删除
                 RoutineCard(r, onClick = { if (r.kind != "watch") editing = r }, onToggle = { on -> vm.saveRoutine(r.copy(enabled = on)) },
-                    onDelete = { deleting = r })
+                    onDelete = { deleting = r },
+                    // 复制一份：新的 id 和对话，先打开编辑框改时间、改内容再存
+                    onCopy = { editing = r.copy(id = com.jack.ai.data.newId(), convId = com.jack.ai.data.newId(), title = r.title + "（副本）", lastRunAt = 0, enabled = true) })
             }
         }
     }
@@ -172,6 +175,39 @@ fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
             vm.saveRoutine(saved)
             editing = null
             if (!canNotify && Build.VERSION.SDK_INT >= 33) permission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+}
+
+/** 免打扰时段：开着时这段时间里定时任务、监控的结果静音送达，提醒照常响。 */
+@Composable
+private fun QuietHoursCard(settings: com.jack.ai.data.Settings, onChange: (Int, Int) -> Unit) {
+    val on = settings.quietStart in 0..23
+    val start = if (on) settings.quietStart else 22
+    val end = settings.quietEnd.coerceIn(0, 23)
+    androidx.compose.foundation.layout.Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            androidx.compose.foundation.layout.Column(Modifier.weight(1f)) {
+                Text("免打扰时段", style = MaterialTheme.typography.titleSmall)
+                Text(if (on) "${start}:00 到 ${end}:00，定时任务和监控的结果静音送达；你自己定的提醒照常响" else "关着：定时任务的结果随时响铃提醒",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            androidx.compose.material3.Switch(on, { v -> onChange(if (v) start else -1, end) })
+        }
+        if (on) androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            HourPicker("从", start) { onChange(it, end) }
+            HourPicker("到", end) { onChange(start, it) }
+        }
+    }
+}
+
+@Composable
+private fun HourPicker(label: String, hour: Int, onPick: (Int) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    androidx.compose.foundation.layout.Box {
+        TextButton(onClick = { open = true }) { Text("$label ${hour}:00") }
+        androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            (0..23).forEach { h -> androidx.compose.material3.DropdownMenuItem(text = { Text("${h}:00") }, onClick = { open = false; onPick(h) }) }
         }
     }
 }
@@ -208,7 +244,7 @@ private fun KindFilter(value: String, onChange: (String) -> Unit) {
 
 /** 一条提醒 / 任务 / 监控：左边彩色圆图标和种类，中间时间和标题，右边开关；下面一行是上次跑得怎么样。 */
 @Composable
-private fun RoutineCard(r: Routine, onClick: () -> Unit, onToggle: (Boolean) -> Unit, onDelete: () -> Unit) {
+private fun RoutineCard(r: Routine, onClick: () -> Unit, onToggle: (Boolean) -> Unit, onDelete: () -> Unit, onCopy: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     val (kindName, icon, tintLong) = kindLook(r.kind)
     val tint = androidx.compose.ui.graphics.Color(tintLong)
@@ -248,6 +284,7 @@ private fun RoutineCard(r: Routine, onClick: () -> Unit, onToggle: (Boolean) -> 
                     IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "更多", tint = colors.outline) }
                     androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                         if (r.kind != "watch") androidx.compose.material3.DropdownMenuItem(text = { Text("修改") }, onClick = { menu = false; onClick() })
+                        if (r.kind != "watch") androidx.compose.material3.DropdownMenuItem(text = { Text("复制一份") }, onClick = { menu = false; onCopy() })
                         androidx.compose.material3.DropdownMenuItem(text = { Text("删除", color = colors.error) }, onClick = { menu = false; onDelete() })
                     }
                 }
