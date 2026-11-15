@@ -97,12 +97,12 @@ fun LibraryScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                     TextButton(onClick = { creating = true }) { Text("新建") }
                     if (state.kbs.any { it.source.isNotEmpty() }) TextButton(onClick = { vm.syncKbs() }, enabled = state.kbBusy == null) { Text("检查更新") }
                 }
-                FilledTonalButton(onClick = { catalog = true; vm.loadKbCatalog("") }, modifier = Modifier.fillMaxWidth()) { Text("下载知识库") }
+                FilledTonalButton(onClick = { catalog = true }, modifier = Modifier.fillMaxWidth()) { Text("从 GitHub 下载") }
                 state.kbBusy?.let { BusyRow(it) }
             }
             if (state.kbs.isEmpty()) {
                 item {
-                    Text("还没有知识库。可以下载官方整理的，也可以把任意 GitHub 项目装成知识库，或者新建一个自己往里放文件。",
+                    Text("还没有知识库。可以新建一个往里放文件，或者把 GitHub 项目装成知识库；也可以跟 Kavi 说「帮我整理一个 XX 的知识库」，它自己建、自己往里写。",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
                 }
             }
@@ -237,7 +237,7 @@ private fun NewKbDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
     )
 }
 
-/** 下载知识库：默认列官方仓库里的，也能填任意 GitHub 项目。 */
+/** 下载知识库：填 GitHub 项目，列出里面的知识库。 */
 @Composable
 private fun CatalogDialog(vm: ChatViewModel, state: UiState, onDismiss: () -> Unit) {
     var repo by remember { mutableStateOf("") }
@@ -245,17 +245,17 @@ private fun CatalogDialog(vm: ChatViewModel, state: UiState, onDismiss: () -> Un
     val entries = state.kbCatalog?.second.orEmpty()
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("下载知识库") },
+        title = { Text("从 GitHub 下载知识库") },
         text = {
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(repo, { repo = it }, modifier = Modifier.weight(1f), singleLine = true,
-                        label = { Text("GitHub 项目（不填是官方的）") }, placeholder = { Text("作者/项目名 或 网址") })
-                    TextButton(onClick = { vm.loadKbCatalog(repo) }, enabled = state.kbBusy == null) { Text("读取") }
+                        label = { Text("GitHub 项目") }, placeholder = { Text("作者/项目名 或 网址") })
+                    TextButton(onClick = { vm.loadKbCatalog(repo) }, enabled = state.kbBusy == null && repo.isNotBlank()) { Text("读取") }
                 }
                 state.kbBusy?.let { BusyRow(it) }
                 listing?.let {
-                    Text("${it.repo}（${it.branch}）" + if (it.repo == KbRepo.OFFICIAL) " · 官方" else "",
+                    Text("${it.repo}（${it.branch}）",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(top = 8.dp))
                 }
                 if (listing != null && entries.all { it.found.files.isEmpty() }) {

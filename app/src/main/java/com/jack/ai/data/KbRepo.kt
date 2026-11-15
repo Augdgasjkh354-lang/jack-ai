@@ -14,8 +14,6 @@ import java.security.MessageDigest
  * 只读文字，不运行任何东西。
  */
 object KbRepo {
-    /** 官方知识库仓库：「下载知识库」里默认列它里面的。 */
-    const val OFFICIAL = "augdgasjkh354-lang/kavi-knowledge"
     const val MARKER = "KB.md"
 
     /** 仓库里的一份文档。 */

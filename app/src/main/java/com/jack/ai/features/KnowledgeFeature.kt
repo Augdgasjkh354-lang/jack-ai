@@ -108,9 +108,9 @@ class KnowledgeFeature(core: AppCore) : Feature(core) {
 
     private fun busy(what: String?) = state.update { it.copy(kbBusy = what) }
 
-    /** 打开「下载知识库」：列出仓库里的知识库（默认官方仓库，也可以是任意 GitHub 项目）。 */
+    /** 「下载知识库」：列出一个 GitHub 项目里的知识库。 */
     fun loadCatalog(input: String) {
-        val repo = GitHub.repoOf(input.ifBlank { KbRepo.OFFICIAL })
+        val repo = GitHub.repoOf(input)
         if (repo == null) { state.update { it.copy(toast = "看不懂这个地址，填「作者/项目名」或 GitHub 项目网址") }; return }
         val ref = Regex("""github\.com/[\w.-]+/[\w.-]+/tree/([^/?#]+)""").find(input)?.groupValues?.get(1).orEmpty()
         busy("正在读取 $repo…")
@@ -120,7 +120,7 @@ class KnowledgeFeature(core: AppCore) : Feature(core) {
                 val c = KnowledgeBases.catalog(store, state.value.settings.githubToken, repo, ref)
                 state.update { it.copy(kbCatalog = c) }
             } catch (e: CancellationException) { throw e } catch (e: Exception) {
-                state.update { it.copy(toast = (if (repo == KbRepo.OFFICIAL) "官方知识库读不到：" else "读不到 $repo：") + (e.message ?: "网络问题")) }
+                state.update { it.copy(toast = "读不到 $repo：" + (e.message ?: "网络问题")) }
             } finally { busy(null) }
         }
     }

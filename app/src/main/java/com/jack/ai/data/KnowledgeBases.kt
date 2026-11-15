@@ -29,7 +29,7 @@ object KnowledgeBases {
     fun installedFrom(store: Store, l: KbRepo.Listing, f: KbRepo.Found) = store.loadKbs().firstOrNull { it.source == KbRepo.source(l.repo, l.branch, f.dir) }
 
     /** 列出仓库里的知识库（要联网，在后台线程调）。 */
-    fun catalog(store: Store, token: String, repo: String = KbRepo.OFFICIAL, ref: String = ""): Pair<KbRepo.Listing, List<Entry>> {
+    fun catalog(store: Store, token: String, repo: String, ref: String = ""): Pair<KbRepo.Listing, List<Entry>> {
         val l = KbRepo.list(token, repo, ref)
         return l to l.bases.map { f ->
             val m = KbRepo.meta(token, l, f)
@@ -120,6 +120,34 @@ object KnowledgeBases {
 
     fun setEnabled(store: Store, kbId: String, on: Boolean) = synchronized(lock) {
         store.saveKbs(store.loadKbs().map { if (it.id == kbId) it.copy(enabled = on) else it })
+    }
+
+    /**
+     * Kavi 往自己建的知识库里写一份文档：同名的就是改（content 为空就是删）。从 GitHub 装的不能写（同步时会被盖掉）。
+     * 返回给 Kavi 看的一句话；出错抛异常。
+     */
+    fun write(store: Store, kbId: String, title: String, content: String): String = synchronized(lock) {
+        val kb = store.loadKbs().firstOrNull { it.id == kbId } ?: throw IllegalArgumentException("没有这个知识库")
+        if (kb.source.isNotEmpty()) throw IllegalArgumentException("「${kb.name}」是从 GitHub 装的，内容跟着仓库走，不能在这里改。可以新建一个自己的知识库")
+        val name = title.trim().take(80).let { if ('.' in it.substringAfterLast('/')) it else "$it.md" }
+        val docs = store.loadLibrary().toMutableList()
+        val i = docs.indexOfFirst { it.kb == kbId && (it.name == name || it.name == title.trim()) }
+        val now = System.currentTimeMillis()
+        val msg = when {
+            content.isBlank() && i < 0 -> throw IllegalArgumentException("「${kb.name}」里没有「$title」")
+            content.isBlank() -> { store.deleteLibraryText(docs[i].id); docs.removeAt(i); "已从「${kb.name}」删掉「${title.trim()}」" }
+            i >= 0 -> {
+                store.saveLibraryText(docs[i].id, content.trim())
+                docs[i] = docs[i].copy(chars = content.trim().length); "已改好「${kb.name}」里的「${docs[i].name}」"
+            }
+            else -> {
+                val d = LibraryDoc(name = name, chars = content.trim().length, kb = kbId)
+                store.saveLibraryText(d.id, content.trim()); docs += d; "已存进「${kb.name}」：「$name」"
+            }
+        }
+        store.saveLibrary(docs)
+        store.saveKbs(store.loadKbs().map { if (it.id == kbId) it.copy(updatedAt = now) else it })
+        msg
     }
 
     /** 新建一个空的本地知识库（自己往里导入文件）。 */
