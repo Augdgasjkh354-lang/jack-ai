@@ -236,8 +236,9 @@ suspend fun runBackgroundWork(
                 }
             },
             onUsage = { ev ->
-                store.addUsage(ep, ev.promptTokens, ev.cacheHit, ev.completionTokens, label = "任务「${r.title.take(12)}」")
-                spent += Pricing.priceAt(ep, System.currentTimeMillis())
+                val used = ev.endpoint ?: ep
+                store.addUsage(used, ev.promptTokens, ev.cacheHit, ev.completionTokens, label = "任务「${r.title.take(12)}」")
+                spent += Pricing.priceAt(used, System.currentTimeMillis())
                     ?.let { Pricing.cost(it, ev.promptTokens, ev.cacheHit ?: 0, ev.completionTokens) } ?: 0.0
             },
         )

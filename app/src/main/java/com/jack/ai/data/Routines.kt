@@ -369,7 +369,7 @@ object Routines {
                     log(RunLog.stepOf(name, status, it))
                 }
             },
-            onUsage = { ev -> store.addUsage(ep, ev.promptTokens, ev.cacheHit, ev.completionTokens) },
+            onUsage = { ev -> store.addUsage(ev.endpoint ?: ep, ev.promptTokens, ev.cacheHit, ev.completionTokens) },
         )
         val text = agent.lastRound.trim()
         if (text.isBlank()) return Outcome(if (watch) "unknown" else "failed", "（这次没有生成内容）")

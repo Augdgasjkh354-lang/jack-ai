@@ -92,7 +92,7 @@ internal suspend fun ToolSession.delegateTasks(args: JsonObject): String {
                                 if (name !in SUB_TOOLS || (name == "facts" && action?.get("action").text() != "recall")) "这个操作子任务不能用"
                                 else execute(name, a)
                             },
-                            onUsage = { ev -> host.store.addUsage(ep, ev.promptTokens, ev.cacheHit, ev.completionTokens, label = "子 agent「${title.take(12)}」") },
+                            onUsage = { ev -> host.store.addUsage(ev.endpoint ?: ep, ev.promptTokens, ev.cacheHit, ev.completionTokens, label = "子 agent「${title.take(12)}」") },
                         )
                         "## $title\n" + agent.lastRound.trim().ifBlank { agent.content.toString().trim() }.ifBlank { "（没有结果）" }
                     } catch (e: kotlinx.coroutines.CancellationException) {

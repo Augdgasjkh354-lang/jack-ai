@@ -417,7 +417,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 client.stream(ep, hist, ThinkLevel.OFF, settings.temperature, null).collect { ev ->
                     when (ev) {
                         is StreamEvent.Text -> if (ev.content.isNotEmpty()) patchMessage(convId, m.id) { it.copy(content = it.content + ev.content) }
-                        is StreamEvent.Usage -> core.recordSpend(convId, ep0, ev.promptTokens, ev.cacheHit, ev.completionTokens)
+                        is StreamEvent.Usage -> core.recordSpend(convId, ev.endpoint ?: ep0, ev.promptTokens, ev.cacheHit, ev.completionTokens)
                         is StreamEvent.Finish -> cut = ev.reason == "length"
                         else -> {}
                     }
@@ -888,9 +888,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     onUsage = { ev ->
                         val total = ev.promptTokens + ev.completionTokens
                         updateConvQuiet(convId) { it.copy(lastPromptTokens = total) }
-                        core.recordSpend(convId, ep, ev.promptTokens, ev.cacheHit, ev.completionTokens)
+                        val used = ev.endpoint ?: ep
+                        core.recordSpend(convId, used, ev.promptTokens, ev.cacheHit, ev.completionTokens)
                         if (work) {
-                            val c = com.jack.ai.data.Pricing.priceAt(ep, System.currentTimeMillis())
+                            val c = com.jack.ai.data.Pricing.priceAt(used, System.currentTimeMillis())
                                 ?.let { com.jack.ai.data.Pricing.cost(it, ev.promptTokens, ev.cacheHit ?: 0, ev.completionTokens) } ?: 0.0
                             spent += c
                             val total = spent

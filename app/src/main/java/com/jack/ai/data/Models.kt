@@ -293,6 +293,8 @@ data class Settings(
     val appLock: Boolean = false,
     /** 用户自己加的 OpenAI 兼容服务（Kimi、通义、OpenRouter 等）。 */
     val providers: List<Provider> = emptyList(),
+    /** 备用模型（最多 2 个，按顺序）：主模型报错、限流、没余额时自动换着用，见 Failover。 */
+    val fallbackModels: List<String> = emptyList(),
     /** 每月预算（元），0 表示不设。 */
     val monthlyBudget: Double = 0.0,
     /** 邮箱账号（IMAP 收信、SMTP 发信），没设置时为空。 */
@@ -442,6 +444,8 @@ data class Endpoint(
     val key: String = model,
     /** 自定义模型的价格；DeepSeek 的价格按时段另算。 */
     val price: Price? = null,
+    /** 这个模型出错时按顺序换用的备用模型（自己不带备用）。 */
+    val fallbacks: List<Endpoint> = emptyList(),
 )
 
 /** 自定义模型在设置里存成 "c:服务id:模型id"，内置 DeepSeek 模型直接存模型名。 */
@@ -454,7 +458,17 @@ private fun parseCustomKey(key: String): Pair<String, String>? {
     return if (i <= 0) null else rest.substring(0, i) to rest.substring(i + 1)
 }
 
+/** 最多几个备用模型。 */
+const val MAX_FALLBACKS = 2
+
 fun Settings.endpoint(key: String = model): Endpoint? {
+    val main = rawEndpoint(key) ?: return null
+    val backups = fallbackModels.asSequence().filter { it != key }.distinct()
+        .mapNotNull { rawEndpoint(it) }.filter { it.apiKey.isNotBlank() }.take(MAX_FALLBACKS).toList()
+    return main.copy(fallbacks = backups)
+}
+
+private fun Settings.rawEndpoint(key: String): Endpoint? {
     val custom = parseCustomKey(key)
     if (custom == null) {
         return Endpoint(baseUrl, apiKey, key, deepseek = true, vision = key != MODEL_PRO, reasoning = true)

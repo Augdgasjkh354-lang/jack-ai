@@ -236,6 +236,30 @@ fun SettingsScreen(
                         )
                     }
                 }
+                // 备用模型：主模型出错、限流、没余额时按顺序换用
+                val backups = settings.modelChoices().filter { it.key != settings.model }
+                if (backups.isNotEmpty()) {
+                    Column {
+                        Text("备用模型（最多 ${com.jack.ai.data.MAX_FALLBACKS} 个）")
+                        Text("主模型报错、限流、余额不足时，自动换成备用的接着答；换过以后 10 分钟内先用备用，之后再试主模型。按点的先后排顺序",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        backups.forEach { c ->
+                            val pos = settings.fallbackModels.filter { it != settings.model }.indexOf(c.key)
+                            FilterChip(
+                                selected = pos >= 0,
+                                onClick = {
+                                    vm.updateSettings { st ->
+                                        val cur = st.fallbackModels.filter { it != st.model }
+                                        st.copy(fallbackModels = if (c.key in cur) cur - c.key else (cur + c.key).takeLast(com.jack.ai.data.MAX_FALLBACKS))
+                                    }
+                                },
+                                label = { Text((if (pos >= 0) "${pos + 1}. " else "") + c.label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                            )
+                        }
+                    }
+                }
                 // 思考摘要：思考时一行行小标题；回答出来后展开还是折叠
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {

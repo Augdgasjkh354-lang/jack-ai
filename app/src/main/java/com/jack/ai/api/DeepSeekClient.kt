@@ -42,7 +42,8 @@ sealed interface StreamEvent {
     data class ToolCall(val index: Int, val id: String, val name: String, val arguments: String) : StreamEvent
     /** 本次请求用掉的 token（最后一个数据块里返回）。 */
     /** cacheHit 为 null 表示服务没告诉我们缓存命中了多少。 */
-    data class Usage(val promptTokens: Int, val completionTokens: Int, val cacheHit: Int? = null) : StreamEvent
+    /** endpoint：换成备用模型答的时候是那个备用（记账要记到它头上）；主模型答的为 null。 */
+    data class Usage(val promptTokens: Int, val completionTokens: Int, val cacheHit: Int? = null, val endpoint: Endpoint? = null) : StreamEvent
     /** 这一轮怎么结束的：length 表示写到长度上限被截断了。 */
     data class Finish(val reason: String) : StreamEvent
 }
@@ -97,7 +98,34 @@ class DeepSeekClient(
     private val http = modelHttp
     private val json = Json { ignoreUnknownKeys = true }
 
+    /** 流式请求；主模型还没回字就出错时按顺序换备用模型（见 Failover）。 */
     fun stream(
+        ep: Endpoint,
+        messages: List<JsonObject>,
+        thinking: ThinkLevel,
+        temperature: Float,
+        tools: JsonArray? = null,
+    ): Flow<StreamEvent> {
+        if (ep.fallbacks.isEmpty()) return streamOne(ep, messages, thinking, temperature, tools)
+        return kotlinx.coroutines.flow.flow {
+            val order = Failover.order(ep)
+            for ((i, cand) in order.withIndex()) {
+                var started = false
+                try {
+                    streamOne(cand, messages, if (cand.reasoning) thinking else ThinkLevel.OFF, temperature, tools).collect { ev ->
+                        started = true
+                        emit(if (ev is StreamEvent.Usage && cand.key != ep.key) ev.copy(endpoint = cand) else ev)
+                    }
+                    Failover.succeeded(ep, cand)
+                    return@flow
+                } catch (e: Throwable) {
+                    if (started || i == order.lastIndex || !Failover.worthSwitching(e)) throw e
+                }
+            }
+        }
+    }
+
+    private fun streamOne(
         ep: Endpoint,
         messages: List<JsonObject>,
         thinking: ThinkLevel,
@@ -242,6 +270,24 @@ class DeepSeekClient(
         messages: List<JsonObject>,
         maxTokens: Int = 16384,
         jsonMode: Boolean = false,
+    ): String {
+        if (ep.fallbacks.isEmpty()) return completeOne(ep, messages, maxTokens, jsonMode)
+        val order = Failover.order(ep)
+        for ((i, cand) in order.withIndex()) {
+            try {
+                return completeOne(cand, messages, maxTokens, jsonMode).also { Failover.succeeded(ep, cand) }
+            } catch (e: Throwable) {
+                if (i == order.lastIndex || !Failover.worthSwitching(e)) throw e
+            }
+        }
+        error("unreachable")
+    }
+
+    private suspend fun completeOne(
+        ep: Endpoint,
+        messages: List<JsonObject>,
+        maxTokens: Int,
+        jsonMode: Boolean,
     ): String = withContext(Dispatchers.IO) {
         val body = buildJsonObject {
             put("model", ep.model)

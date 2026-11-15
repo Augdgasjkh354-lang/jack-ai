@@ -146,7 +146,7 @@ object RemoteChat {
                     execute = { name, args -> session.execute(name, args) },
                     images = { session.takeImages() },
                     retool = { tools(session.unlocked.toSet()) },
-                    onUsage = { ev -> store.addUsage(ep, ev.promptTokens, ev.cacheHit, ev.completionTokens, label = "远程") },
+                    onUsage = { ev -> store.addUsage(ev.endpoint ?: ep, ev.promptTokens, ev.cacheHit, ev.completionTokens, label = "远程") },
                 )
             }
         } catch (e: CancellationException) {
