@@ -20,7 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
-      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      # 暂停（Jack 2026-11-15：API 余额不多）：不传 Key，测试会自动跳过、不花钱。恢复时把下一行的 # 去掉。
+      # DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
       MEMORY_BENCH_MODE: ${{ inputs.mode }}
     steps:
       - uses: actions/checkout@v4
