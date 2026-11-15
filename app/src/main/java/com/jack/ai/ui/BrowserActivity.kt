@@ -514,7 +514,8 @@ class BrowserActivity : androidx.fragment.app.FragmentActivity() {
         // 网页跳转后地址栏跟着变（用户正在改的时候除外：改完按前往才算）
         LaunchedEffect(b.address) { editing = b.address }
         // 切到恢复回来、还没加载的标签页：这时才打开
-        LaunchedEffect(b.current, b.tabs.size) { b.tab.restore?.let { url -> open(url) } }
+        // （眼前这页的网页窗口被重建时 fresh 会变，也再看一眼：位置没变但窗口换了的情况）
+        LaunchedEffect(b.current, b.tabs.size, b.tab.fresh) { b.tab.restore?.let { url -> open(url) } }
         val focus = LocalFocusManager.current
         // 视频全屏时藏起状态栏和导航栏
         val full = b.fullscreen
@@ -589,7 +590,13 @@ class BrowserActivity : androidx.fragment.app.FragmentActivity() {
                         }
                     }, modifier = Modifier.fillMaxSize())
                 }
-                if (b.address.isEmpty() && b.loading >= 100 && !b.pageFailed) StartPage()
+                // 起始页一直盖到新网页真显示出来（地址有了）为止：网页窗口这时是一整块空白，露出来就是灰的一屏。
+                // 网页自己弹的窗口不盖（它往空白页里直接写内容）
+                if (!b.pageFailed && b.tab.openedBy == null) {
+                    if (b.address.isEmpty()) StartPage()
+                    // 恢复的、休眠醒来的标签页：网页还没显示出来之前，网页窗口同样是空白的
+                    else if (b.tab.fresh) OpeningPage(b.address)
+                }
                 b.error?.takeIf { b.pageFailed }?.let { ErrorPage(it) }
                 // 从边缘滑：拉够了圆圈变实，松手就后退 / 前进
                 b.edgeSwipe?.let { (side, p) ->
@@ -1519,7 +1526,8 @@ class BrowserActivity : androidx.fragment.app.FragmentActivity() {
         val groups = b.groups()
         // 选着的分组被关光了：回到全部
         if (tabGroup != null && tabGroup !in groups) tabGroup = null
-        val shown = b.tabs.indices.filter { tabGroup == null || b.tabs[it].group == tabGroup }
+        // 记标签页本身、不记位置：关掉一个后列表先变短、这里晚一拍才重排，按位置去取会越界（闪退过）
+        val shown = b.tabs.filter { tabGroup == null || it.group == tabGroup }
         val full = b.tabs.size >= JackBrowser.MAX_TABS
         Surface(Modifier.fillMaxSize(), color = colors.background) {
             Column(Modifier.fillMaxSize()) {
@@ -1543,21 +1551,19 @@ class BrowserActivity : androidx.fragment.app.FragmentActivity() {
                 // 两列卡片：上面是这一页的缩略图（没拍过的写网站名），下面是标题和关闭；长按换分组
                 LazyVerticalGrid(GridCells.Fixed(2), Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    items(shown.size, key = { b.tabs[shown[it]].id }) { k ->
-                        val i = shown[k]
-                        val t = b.tabs[i]
-                        val on = i == b.current
+                    items(shown, key = { it.id }) { t ->
+                        val on = t === b.tabs.getOrNull(b.current)
                         Column(
                             Modifier.clip(Radii.s)
                                 .border(if (on) 2.dp else 1.dp, if (on) colors.primary else colors.outlineVariant, Radii.s)
-                                .combinedClickable(onClick = { switchTab(i) }, onLongClick = { tabMove = t }),
+                                .combinedClickable(onClick = { b.tabs.indexOf(t).takeIf { it >= 0 }?.let { switchTab(it) } }, onLongClick = { tabMove = t }),
                         ) {
                             Row(Modifier.fillMaxWidth().background(if (on) colors.primaryContainer else colors.surfaceVariant).padding(start = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically) {
                                 Text(t.badge + t.title.ifBlank { if (t.address.isEmpty()) "起始页" else BrowserPages.host(t.address) }, Modifier.weight(1f),
                                     style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
                                     color = if (on) colors.onPrimaryContainer else colors.onSurfaceVariant)
-                                IconButton(onClick = { b.closeTab(i); if (b.tabs.isEmpty()) showTabs = false }, Modifier.size(36.dp)) {
+                                IconButton(onClick = { b.closeTab(t); if (b.tabs.isEmpty()) showTabs = false }, Modifier.size(36.dp)) {
                                     Icon(Icons.Default.Close, "关闭这个标签页", Modifier.size(18.dp))
                                 }
                             }
@@ -1980,6 +1986,17 @@ class BrowserActivity : androidx.fragment.app.FragmentActivity() {
                 val url = JackBrowser.address.ifEmpty { editing }
                 if (BrowserPages.isWeb(url)) OutlinedButton(onClick = { Links.system(this@BrowserActivity, url) }) { Text("用系统浏览器打开") }
             }
+        }
+    }
+
+    /** 网页还没显示出来时盖在空白网页窗口上的一页：写着在打开哪个网站。 */
+    @Composable
+    private fun OpeningPage(url: String) {
+        val colors = MaterialTheme.colorScheme
+        Column(Modifier.fillMaxSize().background(colors.background).padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            Text(BrowserPages.host(url).ifEmpty { url.take(60) }, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("正在打开…", Modifier.padding(top = 6.dp), style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
         }
     }
 

@@ -41,6 +41,8 @@ fun BrowserHiddenHost(modifier: Modifier = Modifier, working: Boolean = true, co
         while (true) { now = System.currentTimeMillis(); delay(5_000) }
     }
     if (!working || !b.agentActive(now) || b.inlineHosts > 0) return
+    // 用户正开着浏览器页看这一页：不从它那里拿走（拿走的话浏览器页只剩一块空底），等用户离开浏览器页再来要
+    if (!b.chatMayHost(agentTab?.web ?: b.tab.web)) return
     val dm = ctx.resources.displayMetrics
     val density = LocalDensity.current
     val fullW = with(density) { dm.widthPixels.toDp() }

@@ -146,6 +146,11 @@ object JackBrowser {
         var sleepState: android.os.Bundle? = null
         /** 休眠了：网页窗口收掉省内存，切过来再打开（见 [restore]）。 */
         val asleep get() = web == null
+        /**
+         * 网页窗口是新建的（恢复的、休眠醒来的、崩溃后重开的），还没有任何网页显示出来：
+         * 这时窗口里是一整块空白（深色下是灰的），浏览器页盖一层「正在打开」。
+         */
+        var fresh by mutableStateOf(true)
 
         fun clearError() { error = null; pageFailed = false }
     }
@@ -640,8 +645,14 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
 
     /** 对话里正显示着 Kavi 操作网页的实时画面（这时聊天页那个看不见的落点就不用了）。 */
     var inlineHosts by mutableIntStateOf(0)
-    /** 用户正开着浏览器页。 */
-    var userViewing = false
+    /** 用户正开着浏览器页。聊天页放网页窗口的地方也看它：浏览器页在前台时不来抢眼前这一页。 */
+    var userViewing by mutableStateOf(false)
+
+    /**
+     * 聊天页（回答里的实时画面、看不见的落点）现在能不能把这个网页窗口拿过去：
+     * 用户正开着浏览器页、它又是眼前那一页时不行——拿走的话浏览器页里就只剩一块空底。
+     */
+    fun chatMayHost(w: WebView?): Boolean = !(userViewing && w != null && w === tabs.getOrNull(current)?.web)
 
     private val web: WebView? get() = tab.web
     private lateinit var wrapper: MutableContextWrapper
@@ -725,6 +736,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
     @SuppressLint("SetJavaScriptEnabled")
     private fun buildWeb(t: Tab): WebView {
         val profile = if (t.incognito) INCOGNITO else if (t.account > 0) accountProfile(t.account) else null
+        t.fresh = true
         // 换资料夹要在网页窗口做任何别的事之前
         return JackWebView(wrapper).also { w -> profile?.let { androidx.webkit.WebViewCompat.setProfile(w, it) } }.apply {
             settings.apply {
@@ -875,7 +887,9 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
                 address = st.url; title = st.title; restore = st.url; usedAt = if (i == s.current) System.currentTimeMillis() else i.toLong()
             }
         }
-        // 第一个空白页是 webView() 建的，不要了
+        // 第一个空白页是 webView() 建的，不要了。先把「眼前这页」指到要显示的那一页：
+        // 不然关空白页时会先切到排第一的那页、白白给它建一个网页窗口
+        current = (s.current.coerceIn(0, tabs.lastIndex - 1) + 1).coerceAtMost(tabs.lastIndex)
         closeTab(0)
         switchTo(s.current.coerceIn(0, tabs.lastIndex))
         return true
@@ -1396,6 +1410,13 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         address = ""; title = ""
     }
 
+    /**
+     * 网页窗口到了这个网址，地址栏该显示什么。空白页（about:blank，回起始页时打开的那一页）算起始页，地址是空的：
+     * 后退、前进回到它时也一样，不然地址栏还留着别的网址、起始页不出来，只看到一整块空白（深色下是灰的）。
+     * 网页自己弹出的窗口（登录窗口先开空白页再往里写）不算。
+     */
+    internal fun shownAddress(t: Tab, url: String): String = if (url == "about:blank" && t.openedBy == null) "" else url
+
     /** 用户或 Kavi 开始一次新的跳转：上一页的出错提示不再适用。 */
     fun clearError() { error = null; pageFailed = false }
 
@@ -1507,6 +1528,17 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
             BrowserNet.Kind.EXTERNAL -> return "这是打开别的 App 的链接，浏览器里打不开：$url"
             BrowserNet.Kind.BLOCKED -> return "不能打开这个地址（本机、局域网和文件地址都不开）：$url"
         }
+        // 设代理、起代理内核可能要几秒，这期间网页窗口还没动静：先让进度条露出来，不然像是点了没反应
+        withContext(Dispatchers.Main) { if (t.loading >= 100) t.loading = STARTING }
+        try {
+            return loadPrepared(ctx, t, url, timeoutMs, agent)
+        } finally {
+            // 没真开始加载就结束了（代理没起来、被取消）：进度条收回去
+            withContext(kotlinx.coroutines.NonCancellable + Dispatchers.Main) { if (t.loading == STARTING) t.loading = 100 }
+        }
+    }
+
+    private suspend fun loadPrepared(ctx: Context, t: Tab, url: String, timeoutMs: Long, agent: Boolean): String? {
         prepare(ctx)?.let { reason -> withContext(Dispatchers.Main) { t.error = reason; t.pageFailed = true }; return reason }
         // 节奏和停手只管 Kavi 自己的操作；用户在地址栏打开网页（包括去处理验证）不拦也不等
         if (agent) {
@@ -1529,6 +1561,9 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         BrowserPacing.seen(t, withContext(Dispatchers.Main) { t.address })
         return withContext(Dispatchers.Main) { t.error }
     }
+
+    /** [load] 刚开始、网页窗口还没报进度时给进度条的值（网页窗口自己报的从 10 起）。 */
+    private const val STARTING = 3
 
     fun clearData() {
         web ?: return
@@ -1684,7 +1719,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
             t.media.clear()
             t.mediaFrames.clear()
             t.mediaFromUser = false
-            t.address = url
+            t.address = shownAddress(t, url)
             t.site = BrowserPages.site(url)
             t.blockedNow.set(0); t.blocked = 0
             t.trackersNow.set(0); t.trackers = 0
@@ -1694,6 +1729,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         }
 
         override fun onPageCommitVisible(view: WebView, url: String) {
+            t.fresh = false
             // 不支持开头注入的旧网页组件：页面露出来时补上防泄漏（晚了一点，聊胜于无）
             if (rtcBlocked() && t.rtcScript == null) view.evaluateJavascript(RTC_JS, null)
             // 不支持开头注入的旧网页组件：页面露出来时补装钩子
@@ -1706,6 +1742,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         }
 
         override fun onPageFinished(view: WebView, url: String) {
+            t.fresh = false
             if (!t.pageFailed && url == t.httpsTry) t.httpsTry = null
             view.evaluateJavascript(BrowserPages.KEEP_PLAYING_JS + BrowserPages.MEDIA_JS + if (t.rate != 1f) BrowserPages.rateJs(t.rate) else "", null)
             if (!t.pageFailed) runScripts(t, view, url)
@@ -1717,7 +1754,8 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
             // 选要屏蔽的东西时网页跳了：新页面上接着能选
             if (picking && t === tab) { picked = null; view.evaluateJavascript(BrowserBlocks.PICK_JS, null) }
             if (teaching && t === tab && BrowserPages.isWeb(url)) teachSteps = BrowserTeach.append(teachSteps, "→ 到了「${view.title.orEmpty().take(40)}」$url")
-            if (url != "about:blank") t.address = url
+            t.address = shownAddress(t, url)
+            if (t.address.isEmpty()) t.title = ""
             // 最近访问只记用户自己看的、打开成功的
             if (userViewing && !t.pageFailed && !t.incognito && BrowserPages.isWeb(url)) {
                 visits = BrowserPages.visit(visits, url, view.title.orEmpty().takeUnless { it == url }.orEmpty(), System.currentTimeMillis())
@@ -1734,13 +1772,17 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
                 BrowserNetwork.navigated(t.id)
                 BrowserPacing.navigated(t, url)
             }
-            if (url != "about:blank") t.address = url
+            t.address = shownAddress(t, url)
+            if (t.address.isEmpty()) t.title = ""
             t.canBack = view.canGoBack(); t.canForward = view.canGoForward()
         }
     }
 
     private class Chrome(val t: Tab) : WebChromeClient() {
-        override fun onProgressChanged(view: WebView, newProgress: Int) { t.loading = newProgress }
+        override fun onProgressChanged(view: WebView, newProgress: Int) {
+            t.loading = newProgress
+            if (newProgress >= 100 && t.address.isNotEmpty()) t.fresh = false
+        }
         override fun onConsoleMessage(m: android.webkit.ConsoleMessage): Boolean {
             val text = m.message().orEmpty()
             when {
@@ -1764,8 +1806,9 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         }
         override fun onReceivedIcon(view: WebView, icon: Bitmap?) { t.icon = icon }
         override fun onReceivedTitle(view: WebView, newTitle: String?) {
-            t.title = newTitle.orEmpty()
             val url = view.url.orEmpty()
+            // 空白页的「标题」就是 about:blank，不显示
+            t.title = if (shownAddress(t, url).isEmpty() && url.isNotEmpty()) "" else newTitle.orEmpty()
             if (newTitle != null && newTitle != url) BrowserPages.retitle(visits, url, newTitle).let { if (it !== visits) { visits = it; saveLists() } }
         }
         /** 网页要弹新窗口：用户点的、或 Kavi 刚点过（登录窗口）才开，开在新标签页并切过去；网页自己弹的（多半是广告）不开。 */

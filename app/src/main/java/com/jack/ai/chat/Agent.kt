@@ -150,8 +150,16 @@ class Agent(
                     onText()
                     continue
                 }
-                // 服务一时忙不过来、网断了一下：这一轮还什么都没收到，就等几秒重发（最多两次），长任务不至于半路断掉
-                if (isHiccup(e) && hiccups < RETRY_DELAYS.size && roundContent.isEmpty() && roundReasoning.isEmpty() && calls.isEmpty()) {
+                // 服务一时忙不过来、网断了一下：等几秒重发这一轮（最多两次），长任务不至于半路断掉。
+                // 限流、服务器出错只在这一轮还什么都没收到时重发；网络断开（传到一半没了）则把这一轮写了一半的
+                // 字、思考、工具调用都退掉再重发——用户看到的是这一段重新写一遍，而不是整条回答报错停下。
+                val nothingYet = roundContent.isEmpty() && roundReasoning.isEmpty() && calls.isEmpty()
+                if (isHiccup(e) && hiccups < RETRY_DELAYS.size && (nothingYet || e is java.io.IOException)) {
+                    if (!nothingYet) {
+                        content.setLength(roundStart)
+                        reasoning.setLength((reasoning.length - roundReasoning.length).coerceAtLeast(0))
+                        onText()
+                    }
                     kotlinx.coroutines.delay(RETRY_DELAYS[hiccups++])
                     continue
                 }

@@ -45,6 +45,30 @@ class WorkService : Service() {
         /** 正在进行的回答（几个对话可以同时答），一条通知里一起显示；全都结束才关前台服务。 */
         private val runs = java.util.concurrent.ConcurrentHashMap<String, Run>()
 
+        /**
+         * 回答期间不让手机睡着：前台服务只保证进程不被停掉，息屏后 CPU 照样会休眠，
+         * 模型的回答传到一半就卡住、断开。干完（或半小时没有新进度）就放开。
+         */
+        private var wake: android.os.PowerManager.WakeLock? = null
+        private var wakeAt = 0L
+        private const val WAKE_MS = 30 * 60_000L
+
+        @Synchronized
+        private fun keepAwake(ctx: Context) {
+            val now = android.os.SystemClock.elapsedRealtime()
+            if (wake?.isHeld == true && now - wakeAt < WAKE_MS / 6) return
+            runCatching {
+                val w = wake ?: (ctx.applicationContext.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager)
+                    .newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "Kavi:work").apply { setReferenceCounted(false) }.also { wake = it }
+                // 不计数的锁：再要一次就是把到期时间往后推
+                w.acquire(WAKE_MS)
+                wakeAt = now
+            }
+        }
+
+        @Synchronized
+        private fun letSleep() { runCatching { wake?.takeIf { it.isHeld }?.release() } }
+
         private fun channel(ctx: Context) {
             val nm = ctx.getSystemService(NotificationManager::class.java)
             if (nm.getNotificationChannel(CHANNEL) == null) {
@@ -95,6 +119,7 @@ class WorkService : Service() {
 
         fun start(ctx: Context, convId: String, title: String, work: Boolean) {
             runs[convId] = Run(title, "", work, System.currentTimeMillis())
+            keepAwake(ctx)
             // 已经在前台就只是更新通知；没开过就开（重复开会更新同一条通知）
             runCatching { androidx.core.content.ContextCompat.startForegroundService(ctx, Intent(ctx, WorkService::class.java)) }
         }
@@ -103,6 +128,7 @@ class WorkService : Service() {
         fun progress(ctx: Context, convId: String, title: String, text: String, work: Boolean) {
             val old = runs[convId] ?: return
             runs[convId] = old.copy(title = title, text = text, work = work)
+            keepAwake(ctx)
             val now = System.currentTimeMillis()
             if (now - lastUpdate < 1000) return
             lastUpdate = now
@@ -118,6 +144,7 @@ class WorkService : Service() {
         fun finish(ctx: Context, convId: String, title: String, result: String, work: Boolean, notifyResult: Boolean = true) {
             runs.remove(convId)
             if (runs.isEmpty()) {
+                letSleep()
                 ctx.stopService(Intent(ctx, WorkService::class.java))
                 // 前台服务没开成时，进度是普通的常驻通知，停服务撤不掉它，要自己撤（不然一直挂着「正在回答」划不掉）
                 runCatching { NotificationManagerCompat.from(ctx).cancel(ID) }

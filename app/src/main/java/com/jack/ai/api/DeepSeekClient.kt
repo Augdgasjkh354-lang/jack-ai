@@ -78,7 +78,11 @@ internal val sharedHttp: OkHttpClient = OkHttpClient.Builder()
     .build()
 
 /** 调模型用的：深度思考模型可能很久才出第一个字，等得久一些。 */
-internal val modelHttp: OkHttpClient = sharedHttp.newBuilder().readTimeout(5, TimeUnit.MINUTES).build()
+internal val modelHttp: OkHttpClient = sharedHttp.newBuilder().readTimeout(5, TimeUnit.MINUTES)
+    // 等第一个字的那几分钟里连接悄悄死了（代理、基站把它丢了）手机这边是不知道的：HTTP/2 连接每 30 秒探一次，
+    // 对面没回应就当连接断了，马上报错重发，不用干等到五分钟。只对 HTTP/2 的服务起作用。
+    .pingInterval(30, TimeUnit.SECONDS)
+    .build()
 
 /** 回答已经开始往回传之后，这么久一行都没来就算卡住。DeepSeek 等待时会一直发 keep-alive，别家不一定，放宽些。 */
 internal fun streamIdleMs(ep: Endpoint): Long = streamIdleOverrideMs ?: if (ep.deepseek) 90_000L else 180_000L

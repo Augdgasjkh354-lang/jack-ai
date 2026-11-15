@@ -232,6 +232,33 @@ class AgentTest {
     }
 
     @Test
+    fun streamDroppedHalfwayIsRetriedFromTheStartOfThatRound() = runBlocking {
+        Agent.RETRY_DELAYS = longArrayOf(1, 1)
+        // 第一轮调工具（顺利），第二轮写到一半断网，重发后写完
+        val dropped = { flow<StreamEvent> {
+            emit(StreamEvent.Text("想了一半", "结论是"))
+            emit(StreamEvent.ToolCall(0, "c9", "web_search", "{\"q\":"))
+            throw java.io.IOException("回答中途断开")
+        } }
+        val api = FakeApi(toolCall("web_search"), dropped, text("结论是晴天"))
+        val agent = Agent(api::stream)
+        val msgs = mutableListOf(userMsg("今天天气"))
+        var executed = 0
+        agent.run(msgs, someTools, { 5 }, { _, _ -> executed++; "晴" })
+        // 断掉那一轮的半截字、半截思考、半截工具调用都没留下
+        assertEquals("结论是晴天", agent.content.toString())
+        assertEquals("", agent.reasoning.toString())
+        assertEquals(1, executed)
+        // 重发的请求和断掉的那次带的消息一样多
+        assertEquals(api.sizes[1], api.sizes[2])
+        assertEquals(3, api.sizes.size)
+        // 连着断三次就不再试，报出来
+        val api2 = FakeApi(dropped, dropped, dropped)
+        try { Agent(api2::stream).run(mutableListOf(userMsg("x")), someTools, { 5 }, { _, _ -> "" }); fail("应该报错") }
+        catch (e: java.io.IOException) { assertEquals(3, api2.sizes.size) }
+    }
+
+    @Test
     fun giveUpWhenRecoveryReturnsNull() = runBlocking {
         val api = FakeApi(reject())
         try {

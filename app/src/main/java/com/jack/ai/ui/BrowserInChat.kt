@@ -81,7 +81,8 @@ fun BrowserLive(convId: String = "") {
             // 只露出上面一部分（大约半屏），够看清在干什么，不占满整个对话
             Box(Modifier.fillMaxWidth().height(fullH * scale * 0.55f).clipToBounds()) {
                 val own = agentTab
-                key(b.hostGen, own) {
+                // 用户正开着浏览器页看这一页（比如点了「接手」）：画面留在浏览器页，不抢回来
+                if (b.chatMayHost(own?.web ?: b.tab.web)) key(b.hostGen, own) {
                     AndroidView(
                         factory = {
                             own?.web?.let { w -> (w.parent as? android.view.ViewGroup)?.removeView(w); w } ?: b.claim(ctx)
