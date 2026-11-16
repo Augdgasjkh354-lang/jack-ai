@@ -62,6 +62,7 @@ sealed interface Screen {
     data object Review : Screen
     data object Apps : Screen
     data object Downloads : Screen
+    data object Files : Screen
     data class ProjectPage(val id: String) : Screen
 }
 
@@ -280,6 +281,7 @@ class MainActivity : FragmentActivity() {
                             onOpenReview = { stack.add(Screen.Review) },
                             onOpenApps = { stack.add(Screen.Apps) },
                             onOpenDownloads = { stack.add(Screen.Downloads) },
+                            onOpenFiles = { stack.add(Screen.Files) },
                         )
                         Screen.Routines -> RoutinesScreen(vm = vm, state = state, onBack = back)
                         Screen.Library -> LibraryScreen(vm = vm, state = state, onBack = back)
@@ -287,6 +289,7 @@ class MainActivity : FragmentActivity() {
                         Screen.Review -> ReviewScreen(vm = vm, state = state, onBack = back)
                         Screen.Apps -> com.jack.ai.ui.AppsScreen(state = state, onBack = back)
                         Screen.Downloads -> com.jack.ai.ui.DownloadsScreen(onBack = back)
+                        Screen.Files -> com.jack.ai.ui.FileLibraryScreen(state = state, onBack = back, onOpenChat = { id -> vm.select(id); stack.clear() })
                         Screen.Memory -> MemoryScreen(vm = vm, state = state, onBack = back)
                         Screen.Skills -> SkillsScreen(vm = vm, settings = state.settings, onBack = back)
                         Screen.Usage -> UsageScreen(vm = vm, state = state, onBack = back)

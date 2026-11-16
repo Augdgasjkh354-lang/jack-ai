@@ -25,6 +25,12 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import com.jack.ai.a11y.BackgroundPhone
+import com.jack.ai.a11y.PipInput
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import com.jack.ai.data.Store
 import kotlinx.coroutines.launch
 
@@ -41,6 +47,7 @@ class BackgroundPhoneActivity : ComponentActivity() {
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun BackgroundScreen() {
     val current by BackgroundPhone.current.collectAsState()
@@ -55,23 +62,61 @@ private fun BackgroundScreen() {
             return@Column
         }
         val paused by phone.paused.collectAsState()
+        val operating by phone.operating.collectAsState()
         val frame by phone.display.frames.collectAsState()
         Text(phone.title)
-        Text(if (paused) "已暂停，正在由你接管。处理后回到这里点「继续后台」。" else "Kavi 在这块屏幕里操作，主屏可照常使用其他 App。")
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(enabled = !busy && !phone.stopped, onClick = {
-                busy = true
-                scope.launch {
-                    try {
-                        val ok = if (paused) phone.resume() else phone.handOver()
-                        message = if (ok) "" else "没有切换成功，请稍后再试。"
-                    } catch (_: Exception) { message = "助手连接已断开，请重新连接。" }
-                    finally { busy = false }
-                }
-            }) { Text(if (paused) "继续后台" else "接管到主屏") }
-            Button(onClick = { phone.stop(); message = "已停止后台手机操作。" }) { Text("停止") }
+        Text(when {
+            operating -> "Kavi 已暂停，你直接在下面的画面上点、滑，弄好了点「继续后台」交还给 Kavi。"
+            paused -> "已暂停，正在由你接管。处理后回到这里点「继续后台」。"
+            else -> "Kavi 在这块屏幕里操作，主屏可照常使用其他 App。"
+        })
+        fun run(action: suspend () -> Boolean, fail: String) {
+            busy = true
+            scope.launch {
+                try { message = if (action()) "" else fail }
+                catch (_: Exception) { message = "助手连接已断开，请重新连接。" }
+                finally { busy = false }
+            }
+        }
+        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (paused) {
+                Button(enabled = !busy && !phone.stopped, onClick = { run({ phone.resume() }, "没有切换成功，请稍后再试。") }) { Text("继续后台") }
+                if (operating) androidx.compose.material3.OutlinedButton(enabled = !phone.stopped,
+                    onClick = { scope.launch { if (!phone.userBack()) message = "返回键没按成功。" } }) { Text("返回") }
+            } else {
+                Button(enabled = !busy && !phone.stopped, onClick = { run({ phone.operateHere() }, "没有暂停成功，请稍后再试。") }) { Text("在这里操作") }
+                androidx.compose.material3.OutlinedButton(enabled = !busy && !phone.stopped, onClick = { run({ phone.handOver() }, "没有切换成功，请稍后再试。") }) { Text("接管到主屏") }
+            }
+            androidx.compose.material3.OutlinedButton(onClick = { phone.stop(); message = "已停止后台手机操作。" }) { Text("停止") }
         }
         if (message.isNotBlank()) Text(message)
-        frame?.let { Image(it.asImageBitmap(), "后台 App 实时画面", Modifier.weight(1f), contentScale = ContentScale.Fit) }
+        frame?.let { bmp ->
+            val (screenW, screenH) = phone.display.width to phone.display.height
+            var box by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+            val touch = if (!operating) Modifier else Modifier.pointerInput(bmp.width, bmp.height, screenW, screenH) {
+                awaitEachGesture {
+                    val down = awaitFirstDown()
+                    val start = down.uptimeMillis
+                    val xs = mutableListOf(down.position.x); val ys = mutableListOf(down.position.y); val ts = mutableListOf(0L)
+                    while (true) {
+                        val ev = awaitPointerEvent()
+                        val c = ev.changes.firstOrNull { it.id == down.id } ?: break
+                        xs += c.position.x; ys += c.position.y; ts += c.uptimeMillis - start
+                        c.consume()
+                        if (!c.pressed) break
+                    }
+                    val g = PipInput.Gesture(xs, ys, ts)
+                    val w = box.width.toFloat(); val h = box.height.toFloat()
+                    val map = { x: Float, y: Float -> PipInput.map(x, y, w, h, bmp.width, bmp.height, screenW, screenH) }
+                    scope.launch {
+                        val ok = if (PipInput.isTap(g)) map(xs.first(), ys.first())?.let { phone.userTap(it.x, it.y) } ?: true
+                        else PipInput.stroke(g, map)?.let { (sx, sy, st) -> phone.userStroke(sx, sy, st) } ?: true
+                        if (!ok) message = "这一下没有发到后台屏幕。"
+                    }
+                }
+            }
+            Image(bmp.asImageBitmap(), "后台 App 实时画面", Modifier.weight(1f).fillMaxWidth()
+                .onSizeChanged { box = it }.then(touch), contentScale = ContentScale.Fit)
+        }
     }
 }

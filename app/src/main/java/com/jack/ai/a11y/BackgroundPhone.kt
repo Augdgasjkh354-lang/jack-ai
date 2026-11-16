@@ -65,6 +65,7 @@ class BackgroundPhone private constructor(
 
     fun stop() {
         stopped = true
+        _operating.value = false
         KaviAccessibility.stops.incrementAndGet()
     }
 
@@ -80,8 +81,39 @@ class BackgroundPhone private constructor(
         } catch (e: Exception) { _paused.value = false; throw e }
     } }
 
+    /** 正在由用户在后台画面上直接操作（没挪到主屏）。 */
+    private val _operating = MutableStateFlow(false)
+    val operating = _operating.asStateFlow()
+
+    /** 用户要在画面上直接点：先暂停模型，App 留在后台屏幕不挪。交回后模型要重新读屏。 */
+    suspend fun operateHere(): Boolean = withContext(Dispatchers.IO) { operations.withLock {
+        if (stopped || _paused.value) return@withLock false
+        _paused.value = true
+        _operating.value = true
+        revision++
+        true
+    } }
+
+    /** 用户在画面上的动作：只在「在这里操作」时有效，直接发到后台屏幕。 */
+    suspend fun userTap(x: Int, y: Int): Boolean = withContext(Dispatchers.IO) {
+        _operating.value && !stopped && runCatching { shell.injectTap(displayId, x, y) }.getOrDefault(false)
+    }
+
+    suspend fun userStroke(xs: IntArray, ys: IntArray, times: LongArray): Boolean = withContext(Dispatchers.IO) {
+        _operating.value && !stopped && runCatching { shell.injectStroke(displayId, xs, ys, times) }.getOrDefault(false)
+    }
+
+    suspend fun userBack(): Boolean = withContext(Dispatchers.IO) {
+        _operating.value && !stopped && runCatching { shell.injectKey(displayId, android.view.KeyEvent.KEYCODE_BACK) }.getOrDefault(false)
+    }
+
     suspend fun resume(): Boolean = withContext(Dispatchers.IO) { operations.withLock {
         if (stopped || !_paused.value) return@withLock false
+        if (_operating.value) {
+            // 在画面上操作完交回：App 本来就在后台屏幕，直接继续
+            _operating.value = false; revision++; _paused.value = false
+            return@withLock true
+        }
         val moved = handedTask >= 0 && shell.moveTask(handedTask, displayId)
         if (moved) { handedTask = -1; revision++; _paused.value = false }
         moved

@@ -95,6 +95,7 @@ fun HistoryDrawer(
     onOpenApps: () -> Unit,
     onOpenDownloads: () -> Unit,
     onSettings: () -> Unit,
+    onOpenFiles: () -> Unit = {},
 ) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     var renaming by remember { mutableStateOf<Conversation?>(null) }
@@ -162,6 +163,7 @@ fun HistoryDrawer(
                         Tool(Icons.Default.Star, "复习卡片", badge = due.takeIf { it > 0 }?.toString(), onClick = onOpenReview),
                         Tool(Icons.Default.Build, "技能", onClick = onOpenSkills),
                         Tool(AppIcons.Code, "小工具", onClick = onOpenApps),
+                        Tool(AppIcons.Folder, "文件库", onClick = onOpenFiles),
                         Tool(AppIcons.Download, "下载", onClick = onOpenDownloads),
                     )
                     Column {
