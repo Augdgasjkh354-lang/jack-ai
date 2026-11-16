@@ -401,6 +401,7 @@ class ToolSession(
             "read_webpage" -> "url"
             "use_skill" -> "name"
             "run_js", "run_python" -> "code"
+            "run_shell" -> "command"
             "delete_routine", "delete_calendar_event" -> "id"
             else -> "query"
         }
@@ -480,6 +481,7 @@ class ToolSession(
             name == "use_skill" -> useSkill(arg, args["file"].text().trim())
             name == "run_js" && SkillIds.CALC in skillIds -> runJs(arg)
             name == "run_python" && SkillIds.PYTHON in skillIds -> runPython(args)
+            name == "run_shell" && SkillIds.PYTHON in skillIds -> runShell(args)
             name == "check_page" && SkillIds.CODE in skillIds -> checkPage(args)
             name == "search_code" && SkillIds.CODE in skillIds -> searchCode(args)
             name == "file_history" && SkillIds.CODE in skillIds -> fileHistory(args)

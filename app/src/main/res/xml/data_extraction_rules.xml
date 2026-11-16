@@ -12,6 +12,8 @@
         <exclude domain="sharedpref" path="builtin_shell.xml" />
         <exclude domain="root" path="app_webview/" />
         <exclude domain="file" path="runlogs.json" />
+        <!-- Linux 沙箱的系统（约 230 MB），要用时重新下载 -->
+        <exclude domain="file" path="sandbox/" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="sharedpref" path="settings.xml" />
@@ -19,5 +21,7 @@
         <exclude domain="sharedpref" path="builtin_shell.xml" />
         <exclude domain="root" path="app_webview/" />
         <exclude domain="file" path="runlogs.json" />
+        <!-- Linux 沙箱的系统（约 230 MB），要用时重新下载 -->
+        <exclude domain="file" path="sandbox/" />
     </device-transfer>
 </data-extraction-rules>

@@ -125,6 +125,21 @@ jobs:
           name: Kavi-apk
           path: Kavi-*.apk
 
+      # Linux 沙箱带的 PRoot（GPL-2.0）和 talloc（LGPL-3.0）：每次发版把对应源码、补丁、编译脚本和许可证一起发出去
+      - name: Pack GPL sources
+        run: |
+          set -euo pipefail
+          NAME=Kavi-v${{ env.VERSION }}-gpl-sources
+          OUT=build/gpl-sources/$NAME
+          rm -rf "$OUT" && mkdir -p "$OUT"
+          while read -r name version url sum; do
+            case "$name" in ''|'#'*) continue ;; esac
+            curl -fsSL --retry 3 "$url" -o "$OUT/$name-$version.tar.gz"
+            echo "$sum  $OUT/$name-$version.tar.gz" | sha256sum -c -
+          done < third-party/mika-sandbox/sources.lock
+          cp -R third-party/mika-sandbox/. "$OUT/"
+          tar -czf "$NAME.tar.gz" -C build/gpl-sources "$NAME"
+
       - name: Publish release
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
@@ -135,4 +150,6 @@ jobs:
           body: |
             在手机上点下面的 Kavi-v${{ env.VERSION }}.apk 下载并安装。
             以后有新版本直接覆盖安装，聊天记录不会丢。
-          files: Kavi-*.apk
+          files: |
+            Kavi-*.apk
+            Kavi-*-gpl-sources.tar.gz

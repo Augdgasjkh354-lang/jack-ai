@@ -22,7 +22,7 @@ import kotlinx.serialization.json.put
  */
 private val SUB_TOOLS = setOf(
     "web_search", "read_webpage", "read_file", "write_file", "edit_file", "revise_file", "facts", "query_trains",
-    "run_js", "run_python", "create_document", "create_excel", "create_ppt", "create_chart", "create_diagram", "create_app",
+    "run_js", "run_python", "run_shell", "create_document", "create_excel", "create_ppt", "create_chart", "create_diagram", "create_app",
 )
 
 /**

@@ -206,6 +206,8 @@ object PromptBuilder {
             if (SkillIds.CALC in skillIds) { add(SkillTools.CREATE_CHART); add(SkillTools.CREATE_DIAGRAM) }
             if (SkillIds.LEARN in skillIds) add(SkillTools.SAVE_FLASHCARDS)
             if (SkillIds.PYTHON in skillIds) add(SkillTools.RUN_PYTHON)
+            // Linux 沙箱装好了才给（设置里装）；思路来自 Mika 的每对话 Linux 沙箱，Apache-2.0
+            if (SkillIds.PYTHON in skillIds && settings.linuxSandbox) add(SkillTools.RUN_SHELL)
             if (SkillIds.CODE in skillIds) { add(SkillTools.CHECK_PAGE); add(SkillTools.SEARCH_CODE); add(SkillTools.FILE_HISTORY) }
             if (SkillIds.ROUTINE in skillIds) { add(SkillTools.SCHEDULE); add(SkillTools.CANCEL_SCHEDULE) }
             if (SkillIds.CALENDAR in skillIds) { add(SkillTools.ADD_EVENT); add(SkillTools.LIST_EVENTS); add(SkillTools.DELETE_EVENT) }

@@ -131,3 +131,32 @@ internal suspend fun ToolSession.runCode(args: JsonObject): String {
         text to SearchRecord(description)
     }
 }
+
+/** run_shell：在 Linux 沙箱里跑命令（见 LinuxSandbox）。工作目录是对话文件夹，新建、改动的文件显示在聊天里。 */
+internal suspend fun ToolSession.runShell(args: JsonObject): String {
+    val command = args["command"].text()
+    if (command.isBlank()) return "command 不能为空"
+    val timeout = args["timeout"].text().toIntOrNull()?.coerceIn(5, 600) ?: 120
+    val network = args["network"].text() != "false"
+    if (!LinuxSandbox.ready(app)) {
+        return "Linux 沙箱没装好（可能被删了）。请用户到 设置 → 运行代码 里装上 Linux 沙箱；这次先用 run_python 或别的办法。"
+    }
+    val label = "运行命令：" + command.lineSequence().first().take(40)
+    return runTool(label) {
+        val before = Workspace.files(wsDir).associate { it.name to (it.lastModified() to it.length()) }
+        val r = LinuxSandbox.run(app, wsDir, command, timeout, network)
+        val changed = Workspace.files(wsDir).filter { f -> before[f.name] != f.lastModified() to f.length() }
+        changed.forEach { ui.attach(it) }
+        val text = buildString {
+            append(r.output.trimEnd().ifEmpty { "（没有输出）" })
+            if (r.dropped > 0) append("\n\n（输出太长，后面 ${r.dropped / 1024} KB 没显示；要看全就把输出写进文件再读。）")
+            append("\n\n退出码：${r.exitCode}")
+            when (r.exitCode) {
+                LinuxSandbox.EXIT_TIMEOUT -> append("（超过 $timeout 秒被停掉了；要跑更久就把 timeout 放大，最多 600）")
+                LinuxSandbox.EXIT_LAUNCHER -> append("（沙箱自己没起来，看上面最后一行原因）")
+            }
+            if (changed.isNotEmpty()) append("\n新建或改动的文件（已显示在聊天里）：" + changed.joinToString("、") { it.name })
+        }
+        text to SearchRecord(label)
+    }
+}

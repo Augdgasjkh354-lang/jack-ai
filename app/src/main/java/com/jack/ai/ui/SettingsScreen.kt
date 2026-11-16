@@ -212,6 +212,10 @@ fun SettingsScreen(
                 PhoneDataSection(vm, settings)
             }
 
+            if (page == SettingsPage.LINUX) Section(hint = "一个装在 App 里的小 Linux（Alpine）：Kavi 能在对话文件夹里跑命令、pip 装库、用 Node 和 git。系统包约 58 MB，第一次装时下载（来自开源项目 Mika 的固定版本，下载后核对校验值），装好后不联网也能用，解开后约占 230 MB。只支持 64 位手机。") {
+                LinuxSandboxSection(vm)
+            }
+
             if (page == SettingsPage.FOLDERS) Section(hint = "授权给 Kavi 的文件夹：它能在里面找文件、拷进对话处理、把做好的文件存回去，搬和删之前先问你。别的地方它碰不到。") {
                 PhoneFoldersSection(vm, settings)
             }
@@ -593,6 +597,7 @@ private enum class SettingsPage(val title: String) {
     PROFILE("个性化"), KEY("DeepSeek API Key"), PROVIDERS("其他模型服务"), MODEL("模型和思考"), LOCAL("本地模型"),
     COMPRESS("长对话自动压缩"), CONNECT("连接"), REMOTE("远程连接"), PHONE("操作其他 App"), ASK("问这一屏"),
     PHONEDATA("手机数据"), FOLDERS("手机文件夹"), LOOK("外观"), PRIVACY("隐私和数据"), UPDATE("版本更新"), ADVANCED("高级"),
+    LINUX("Linux 沙箱"),
 }
 
 /** 首页上的一行：图标、名字、右边灰字的当前状态（warn 时标红），点了进子页或跳到别的页面。 */
@@ -634,6 +639,7 @@ private fun SettingsHome(
     SettingsGroup("Kavi 能用的", listOf(
         go(SettingsPage.CONNECT, AppIcons.Globe),
         SettingsEntry(Icons.Default.Build, "技能", onClick = onOpenSkills),
+        go(SettingsPage.LINUX, AppIcons.Code, if (settings.linuxSandbox) "已装" else "未装"),
         go(SettingsPage.REMOTE, AppIcons.Share),
     ))
     SettingsGroup("手机", listOf(
@@ -759,3 +765,66 @@ private fun AllowRulesRow(vm: ChatViewModel, settings: com.jack.ai.data.Settings
         }
     }
 }
+
+/** Linux 沙箱：状态、装上（带进度）、删掉。 */
+@Composable
+private fun LinuxSandboxSection(vm: ChatViewModel) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    val status by com.jack.ai.data.LinuxSandbox.status.collectAsState()
+    LaunchedEffect(Unit) { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.jack.ai.data.LinuxSandbox.refresh(ctx) } }
+    var used by remember { mutableStateOf(0L) }
+    LaunchedEffect(status) {
+        if (status is com.jack.ai.data.LinuxSandbox.Status.Ready) used = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.jack.ai.data.LinuxSandbox.usedBytes(ctx) }
+        // 设置里的开关跟着实际状态走（装好了才给模型 run_shell）
+        val ready = status is com.jack.ai.data.LinuxSandbox.Status.Ready
+        if (status != null && status !is com.jack.ai.data.LinuxSandbox.Status.Installing) vm.updateSettings { if (it.linuxSandbox == ready) it else it.copy(linuxSandbox = ready) }
+    }
+    var confirmRemove by remember { mutableStateOf(false) }
+    val s = status
+    Text(when (s) {
+        null -> "正在检查…"
+        is com.jack.ai.data.LinuxSandbox.Status.Unsupported -> s.why
+        com.jack.ai.data.LinuxSandbox.Status.NotInstalled -> "还没装"
+        is com.jack.ai.data.LinuxSandbox.Status.Installing -> "${s.step}（${s.percent}%）"
+        com.jack.ai.data.LinuxSandbox.Status.Ready -> "已装好，占 ${used shr 20} MB。聊天里说「用命令行……」「pip 装个……」Kavi 就会用它"
+        is com.jack.ai.data.LinuxSandbox.Status.Broken -> "没装好：${s.why}"
+    })
+    if (s is com.jack.ai.data.LinuxSandbox.Status.Installing) {
+        androidx.compose.material3.LinearProgressIndicator(progress = { s.percent / 100f }, modifier = Modifier.fillMaxWidth())
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (s == com.jack.ai.data.LinuxSandbox.Status.NotInstalled || s is com.jack.ai.data.LinuxSandbox.Status.Broken) {
+            androidx.compose.material3.Button(onClick = {
+                // 装在 App 级的协程里：退出设置页也接着下
+                com.jack.ai.data.LinuxSandbox.startInstall(ctx, com.jack.ai.api.sharedHttp) { vm.updateSettings { it.copy(linuxSandbox = true) } }
+            }) { Text(if (s is com.jack.ai.data.LinuxSandbox.Status.Broken) "重新装" else "下载并安装（约 58 MB）") }
+        }
+        if (s == com.jack.ai.data.LinuxSandbox.Status.Ready || s is com.jack.ai.data.LinuxSandbox.Status.Broken) {
+            OutlinedButton(onClick = { confirmRemove = true }) { Text("删掉沙箱") }
+        }
+    }
+    var licenses by remember { mutableStateOf(false) }
+    TextButton(onClick = { licenses = true }) { Text("许可与源码") }
+    if (licenses) {
+        val text = remember {
+            listOf("README.md", "GPL-2.0.txt", "LGPL-3.0.txt", "GPL-3.0.txt").joinToString("\n\n————————\n\n") { name ->
+                runCatching { ctx.assets.open("licenses/mika-sandbox/$name").bufferedReader().use { it.readText() } }.getOrDefault("")
+            }
+        }
+        AlertDialog(
+            onDismissRequest = { licenses = false },
+            title = { Text("Linux 沙箱的许可与源码") },
+            text = { Text(text, style = MaterialTheme.typography.bodySmall, modifier = Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState())) },
+            confirmButton = { TextButton(onClick = { licenses = false }) { Text("关闭") } },
+        )
+    }
+    if (confirmRemove) AlertDialog(
+        onDismissRequest = { confirmRemove = false },
+        title = { Text("删掉 Linux 沙箱？") },
+        text = { Text("沙箱里装过的库、软件都会删掉，对话文件夹里的文件不动。以后要用再装一次（重新下载）。") },
+        confirmButton = { TextButton(onClick = { confirmRemove = false; scope.launch { com.jack.ai.data.LinuxSandbox.remove(ctx) } }) { Text("删掉") } },
+        dismissButton = { TextButton(onClick = { confirmRemove = false }) { Text("取消") } },
+    )
+}
+

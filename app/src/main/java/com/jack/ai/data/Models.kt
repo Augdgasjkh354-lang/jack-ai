@@ -293,6 +293,8 @@ data class Settings(
     val appLock: Boolean = false,
     /** 用户自己加的模型服务（Kimi、通义、OpenRouter 等 OpenAI 兼容的，和 Claude、Gemini 原生接口）。 */
     val providers: List<Provider> = emptyList(),
+    /** Linux 沙箱装好了（设置 → 运行代码里装；装好才给模型 run_shell）。 */
+    val linuxSandbox: Boolean = false,
     /** 定时任务的免打扰时段（几点到几点，按手机时间）；quietStart 小于 0 表示不开。这段时间里任务结果静音送达，提醒照常响。 */
     val quietStart: Int = -1,
     val quietEnd: Int = 8,

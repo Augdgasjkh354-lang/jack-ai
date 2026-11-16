@@ -147,6 +147,9 @@ dependencies {
     implementation("com.sun.mail:android-activation:1.6.7")
     // Jack 专用代理：读 Clash 订阅（YAML）、扫二维码（不依赖谷歌服务）
     implementation("org.yaml:snakeyaml:2.3")
+    // Linux 沙箱：解压下载来的根文件系统（tar.xz）
+    implementation("org.tukaani:xz:1.10")
+    implementation("org.apache.commons:commons-compress:1.28.0")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     // 照片里的表格转 Excel：离线中文文字识别，模型打包在 App 里，不需要谷歌服务
     implementation("com.google.mlkit:text-recognition-chinese:16.0.1")

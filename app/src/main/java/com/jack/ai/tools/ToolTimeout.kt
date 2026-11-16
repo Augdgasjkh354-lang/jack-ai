@@ -9,7 +9,7 @@ object ToolTimeout {
     val seconds = mapOf(
         "web_search" to 180L, "read_webpage" to 180L, "browser" to 360L,
         "download_file" to 600L, "phone" to 360L, "phone_files" to 180L,
-        "run_python" to 360L, "delegate_tasks" to 600L, "run_code" to 65L,
+        "run_python" to 360L, "run_shell" to 660L, "delegate_tasks" to 600L, "run_code" to 65L,
     )
     fun secondsFor(name: String) = seconds[name] ?: 90L
     private class Expired : CancellationException()
