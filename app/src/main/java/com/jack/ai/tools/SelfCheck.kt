@@ -52,7 +52,7 @@ internal suspend fun ToolSession.selfCheck(args: JsonObject): String = runTool("
             append("【设置】\n")
             val folders = settings.phoneFolders
             append("- 手机文件夹：" + if (folders.isEmpty()) "没有授权" else folders.joinToString("、") { it.name + if (PhoneFiles.alive(ctx, it)) "" else "（授权失效）" })
-            append("\n- 转文字：" + (Transcriber.engine(settings.providers)?.let { "${it.name} ${it.model}" } ?: "没配（要硅基流动、OpenAI 或 Groq 的 Key）"))
+            append("\n- 转文字：" + (Transcriber.engine(settings)?.let { "${it.name} ${it.model}" } ?: "没配（要 DeepSeek、硅基流动、OpenAI 或 Groq 的 Key）"))
             append("\n- 其他模型服务：" + settings.providers.filter { it.apiKey.isNotBlank() }.joinToString("、") { it.name }.ifBlank { "没有" })
             append("\n- 邮箱：" + settings.mails.filter { it.ready }.size + " 个能用")
             append("\n- 完全授权：" + if (settings.fullAuth) "开着（发信、删除这类不再弹窗问）" else "关着（做了收不回的事会先问用户）")

@@ -30,12 +30,13 @@ import java.io.File
  */
 
 private val ACTIONS = listOf("images_to_pdf", "merge_pdf", "split_pdf", "pdf_to_images", "compress_image", "convert_image",
-    "cut_video", "compress_video", "edit_video", "extract_audio", "transcribe")
+    "cut_video", "compress_video", "edit_video", "extract_audio", "transcribe", "ocr")
+
+/** ocr 收哪些文件（DeepSeek OCR 认文件内容，不看扩展名，这里先挡掉明显不对的）。 */
+private val OCR_EXT = setOf("pdf", "doc", "docx", "ppt", "pptx", "png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff")
 
 /** 转文字最长多久（再长要几十分钟，也贵）。 */
 private const val MAX_TRANSCRIBE_SEC = 3L * 3600
-/** 转文字一段多长（5 分钟的 16 kHz WAV 约 9.6 MB，各家接口都收）。 */
-private const val CHUNK_SEC = 300
 
 private val IMAGE_EXT = setOf("jpg", "jpeg", "png", "webp", "gif", "bmp", "heic", "heif", "avif")
 
@@ -73,6 +74,7 @@ internal suspend fun ToolSession.convertFile(args: JsonObject): String {
         "compress_video" -> "压缩视频"
         "edit_video" -> "剪辑视频"
         "extract_audio" -> "取出声音"
+        "ocr" -> "认字"
         else -> "转文字"
     } + "：" + names.first().take(40) + if (names.size > 1) " 等 ${names.size} 个" else ""
     return runTool(label) {
@@ -190,6 +192,7 @@ internal suspend fun ToolSession.convertFile(args: JsonObject): String {
                 withContext(Dispatchers.IO) { MediaMux.mux(listOf(f), dst, audioOnly = true) }
                 made = listOf(dst)
             }
+            "ocr" -> return@runTool ocr(files, out, args["layout"].text() == "true")
             else -> return@runTool if (args["timestamps"].text() == "true") transcribeTimed(files.first(), out) else transcribe(files.first(), out)
         }
         made.take(10).forEach { ui.attach(it) }
@@ -244,19 +247,19 @@ internal fun pageList(spec: String, n: Int): List<Int> {
 
 /** 录音、视频转文字：解出声音 → 5 分钟一段 → 交给语音识别 → 存成 txt。文字也交给模型（太长的截前面）。 */
 private suspend fun ToolSession.transcribe(f: File, out: String): Pair<String, SearchRecord> {
-    val engine = Transcriber.engine(settings.providers) ?: return Transcriber.NO_ENGINE to SearchRecord("转文字：没有可用的服务")
+    val engine = Transcriber.engine(settings) ?: return Transcriber.NO_ENGINE to SearchRecord("转文字：没有可用的服务")
     val work = File(wsCache, "asr-${System.currentTimeMillis()}")
     try {
         val (parts, secs) = withContext(Dispatchers.IO) {
-            MediaMux.toWav(f, work, CHUNK_SEC, MAX_TRANSCRIBE_SEC) { at, total ->
+            MediaMux.toWav(f, work, engine.chunkSec, MAX_TRANSCRIBE_SEC) { at, total ->
                 if (total > 0) ui.progress("转文字：解出声音 ${at * 100 / total}%")
             }
         }
         val text = StringBuilder()
         parts.forEachIndexed { i, p ->
             ui.progress("转文字：第 ${i + 1}/${parts.size} 段")
-            val t = withContext(Dispatchers.IO) { Transcriber.transcribe(engine, p) }
-            if (parts.size > 1) text.append("【${AudioPcm.stamp(i.toLong() * CHUNK_SEC)}】\n")
+            val t = withContext(Dispatchers.IO) { transcribeRetrying(engine, p) }
+            if (parts.size > 1) text.append("【${AudioPcm.stamp(i.toLong() * engine.chunkSec)}】\n")
             text.append(t.ifBlank { "（这一段没听出字）" }).append("\n\n")
             p.delete()
         }
@@ -276,7 +279,7 @@ private suspend fun ToolSession.transcribe(f: File, out: String): Pair<String, S
  * 得到「[0:12.3-0:18.9] 文字」的文字稿和一份 .srt 字幕。模型照着时间挑片段，交给 edit_video 剪。
  */
 private suspend fun ToolSession.transcribeTimed(f: File, out: String): Pair<String, SearchRecord> {
-    val engine = Transcriber.engine(settings.providers) ?: return Transcriber.NO_ENGINE to SearchRecord("转文字：没有可用的服务")
+    val engine = Transcriber.engine(settings) ?: return Transcriber.NO_ENGINE to SearchRecord("转文字：没有可用的服务")
     val work = File(wsCache, "asr-${System.currentTimeMillis()}").apply { mkdirs() }
     try {
         class Piece(val file: File, val startMs: Long, val endMs: Long)
@@ -327,16 +330,59 @@ private suspend fun ToolSession.transcribeTimed(f: File, out: String): Pair<Stri
     }
 }
 
-/** 一句一句识别时请求多，容易被限流（429）：等一会儿重试，最多 5 次。 */
-private suspend fun transcribeRetrying(engine: Transcriber.Engine, wav: File): String {
+/**
+ * 认字（DeepSeek OCR）：扫描版 PDF、拍的文件、老版 Word/PPT、图片里的字，逐页认出来存成 txt，文字也交给模型（太长的截前面）。
+ * 几个文件就各存一份。1.5 元/1000 页。
+ */
+private suspend fun ToolSession.ocr(files: List<File>, out: String, layout: Boolean): Pair<String, SearchRecord> {
+    val key = settings.apiKey
+    if (key.isBlank()) return "认字要用 DeepSeek Key：请用户在 设置 → DeepSeek API Key 里填好再试。" to SearchRecord("认字：没有 DeepSeek Key")
+    val bad = files.filter { it.extension.lowercase() !in OCR_EXT }
+    if (bad.isNotEmpty()) return "ocr 只收 PDF、Word、PPT 和图片，「${bad.first().name}」不行" to SearchRecord("认字")
+    val big = files.firstOrNull { it.length() > 100L * 1024 * 1024 }
+    if (big != null) return "「${big.name}」超过 100 MB，DeepSeek 认字收不了；可以先 split_pdf 拆小" to SearchRecord("认字")
+    val results = StringBuilder()
+    var totalPages = 0
+    for ((i, f) in files.withIndex()) {
+        ui.progress("认字：${f.name}" + if (files.size > 1) "（${i + 1}/${files.size}）" else "")
+        val pages = withContext(Dispatchers.IO) {
+            var wait = 3000L
+            var r: List<com.jack.ai.api.DeepSeekTools.OcrPage>? = null
+            for (attempt in 0 until 3) {
+                try { r = com.jack.ai.api.DeepSeekTools.ocr(key, f, layout); break }
+                catch (e: com.jack.ai.api.ApiException) {
+                    if ((e.code != 429 && e.code != 503) || attempt == 2) throw e
+                    delay(wait); wait *= 2
+                }
+            }
+            r!!
+        }
+        totalPages += pages.size
+        host.store.addPaidCall(com.jack.ai.api.DeepSeekTools.OCR_KEY, pages.size * com.jack.ai.api.DeepSeekTools.OCR_PRICE_PER_PAGE)
+        val body = pages.mapIndexed { n, p ->
+            (if (pages.size > 1) "【第 ${n + 1} 页】\n" else "") + p.text.ifBlank { "（这一页没认出字）" } + if (p.truncated) "\n（这一页太长，没认完）" else ""
+        }.joinToString("\n\n")
+        val dst = outFile(if (files.size == 1) out else "", f, "文字", "txt")
+        withContext(Dispatchers.IO) { dst.writeText("「${f.name}」认出的文字（${pages.size} 页，DeepSeek OCR）\n\n$body\n") }
+        ui.attach(dst)
+        results.append("「${f.name}」${pages.size} 页 → 「${dst.name}」\n\n").append(body).append("\n\n")
+    }
+    val all = results.toString().trim()
+    val shown = if (all.length > 30_000) all.take(30_000) + "\n…（后面还有，完整的在 txt 里，用 read_file 读）" else all
+    return "认好了，共 $totalPages 页。机器认字可能有错字，表格和公式可能走样，引用时留意。\n\n$shown" to SearchRecord("认字：${files.first().name}")
+}
+
+/** 一句一句识别时请求多，容易被限流（429）：等一会儿重试，最多 5 次。用 DeepSeek 时把花费记进用量统计。 */
+private suspend fun ToolSession.transcribeRetrying(engine: Transcriber.Engine, wav: File): String {
+    val spent: (Double) -> Unit = { host.store.addPaidCall(com.jack.ai.api.DeepSeekTools.ASR_KEY, it) }
     var wait = 2000L
     repeat(4) {
         try {
-            return Transcriber.transcribe(engine, wav)
+            return Transcriber.transcribe(engine, wav, spent)
         } catch (e: com.jack.ai.api.ApiException) {
             if (e.code != 429 && e.code < 500) throw e
             delay(wait); wait *= 2
         }
     }
-    return Transcriber.transcribe(engine, wav)
+    return Transcriber.transcribe(engine, wav, spent)
 }

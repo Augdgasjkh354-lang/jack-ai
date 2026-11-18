@@ -181,6 +181,21 @@ fun SettingsScreen(
                     }) { Text("查余额") }
                 }
                 balance?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                Text("这把 Key 也用来：录音和视频转文字（没配硅基流动时）、认扫描件和图片里的字（1.5 元/1000 页）。",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("朗读用 DeepSeek 语音")
+                        Text("比手机自带的朗读自然。1.5 元/万字符，一个汉字算 2 个（读 1000 字约 0.3 元）；关着用手机自带的，不花钱",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(checked = settings.dsVoice, onCheckedChange = { on -> vm.updateSettings { it.copy(dsVoice = on) } })
+                }
+                if (settings.dsVoice) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("stella" to "女声", "tide" to "男声").forEach { (id, label) ->
+                        FilterChip(selected = settings.dsVoiceId == id, onClick = { vm.updateSettings { it.copy(dsVoiceId = id) } }, label = { Text(label) })
+                    }
+                }
             }
 
             if (page == SettingsPage.PROVIDERS) Section {

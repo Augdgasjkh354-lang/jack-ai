@@ -327,6 +327,10 @@ data class Settings(
     val notionToken: String = "",
     /** GitHub 令牌（只读权限就够）。不填也能看公开项目；不进备份。 */
     val githubToken: String = "",
+    /** 朗读回答用 DeepSeek 的语音（要 DeepSeek Key，1.5 元/万字符，一个汉字算 2 个）；关着用手机自带的朗读引擎。 */
+    val dsVoice: Boolean = false,
+    /** DeepSeek 朗读的声音：stella（女）、tide（男）。 */
+    val dsVoiceId: String = "stella",
     /** 自动检查新版本（有就下载好、发通知）；只在 Wi-Fi 下检查和下载。 */
     val autoUpdate: Boolean = true,
     val updateWifiOnly: Boolean = false,
@@ -596,6 +600,9 @@ fun modelLabel(model: String): String = when {
     model == com.jack.ai.api.WebClient.USAGE_KEY -> "DeepSeek 联网"
     model == com.jack.ai.api.WebClient.EXA_KEY -> "Exa 搜索（免费额度）"
     model == com.jack.ai.api.WebClient.TAVILY_KEY -> "Tavily 搜索（免费额度）"
+    model == com.jack.ai.api.DeepSeekTools.ASR_KEY -> "DeepSeek 转文字"
+    model == com.jack.ai.api.DeepSeekTools.OCR_KEY -> "DeepSeek 认字"
+    model == com.jack.ai.api.DeepSeekTools.TTS_KEY -> "DeepSeek 朗读"
     // 自定义模型只显示模型名；OpenRouter 这类 "厂商/模型" 去掉厂商前缀
     else -> (parseCustomKey(model)?.second ?: model).substringAfterLast('/')
 }

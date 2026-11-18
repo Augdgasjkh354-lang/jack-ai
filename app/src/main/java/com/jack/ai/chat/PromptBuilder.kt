@@ -133,7 +133,7 @@ object PromptBuilder {
             files.forEach { f ->
                 // 放进文件夹后可能改了名（重名时加了编号），以文件夹里的名字为准
                 val name = if (f.path.isNotEmpty() && !f.path.contains("/staging/")) File(f.path).name else f.name
-                if (f.text.isBlank()) append("【File: $name】(saved in the conversation folder; its content can't be shown here, read it with read_file when needed)\n\n")
+                if (f.text.isBlank()) append("【File: $name】(saved in the conversation folder; its content can't be shown here, read it with read_file when needed; a scanned PDF, an old .doc/.ppt or a photo of a page: convert_file action=ocr)\n\n")
                 else append("【File: $name】\n${f.text}\n【End of file】\n\n")
             }
             if (!imagesOk && imgs.isNotEmpty()) append("(${imgs.size} image(s) were sent, but the current model can't see images)\n\n")

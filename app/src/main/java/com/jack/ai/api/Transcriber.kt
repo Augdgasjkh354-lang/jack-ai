@@ -14,11 +14,15 @@ import java.util.concurrent.TimeUnit
 
 /**
  * 语音转文字：借用「其他模型服务」里填过的 Key，走 OpenAI 格式的 /audio/transcriptions。
- * 优先硅基流动的 SenseVoice（中文好、便宜），其次 OpenAI、Groq 的 Whisper。
+ * 优先硅基流动的 SenseVoice（中文好、几乎免费），其次 DeepSeek 自己的语音识别（用设置里的 DeepSeek Key，一段最长 2 分钟），
+ * 再其次 Groq、OpenAI 的 Whisper。
  */
 object Transcriber {
     /** 用哪家：(服务, 模型)。 */
-    data class Engine(val name: String, val baseUrl: String, val apiKey: String, val model: String)
+    data class Engine(val name: String, val baseUrl: String, val apiKey: String, val model: String, val deepseek: Boolean = false) {
+        /** 一段最长多少秒：DeepSeek 接口只收 2 分钟以内的，别家 5 分钟一段。 */
+        val chunkSec: Int get() = if (deepseek) DeepSeekTools.ASR_MAX_SEC else 300
+    }
 
     private val KNOWN = listOf(
         "siliconflow" to "FunAudioLLM/SenseVoiceSmall",
@@ -26,21 +30,30 @@ object Transcriber {
         "api.openai.com" to "whisper-1",
     )
 
-    fun engine(providers: List<Provider>): Engine? {
+    fun engine(providers: List<Provider>, deepseekKey: String = ""): Engine? {
         for ((host, model) in KNOWN) {
             val p = providers.firstOrNull { it.apiKey.isNotBlank() && host in it.baseUrl.lowercase() } ?: continue
             return Engine(p.name, p.baseUrl.trimEnd('/'), p.apiKey, model)
         }
+        if (deepseekKey.isNotBlank()) return Engine("DeepSeek", "", deepseekKey, "语音识别", deepseek = true)
         return null
     }
 
-    const val NO_ENGINE = "转文字要用硅基流动（推荐，SenseVoice 中文准、几乎免费）、OpenAI 或 Groq 的 Key。" +
+    fun engine(s: com.jack.ai.data.Settings): Engine? = engine(s.providers, s.apiKey)
+
+    const val NO_ENGINE = "转文字要用 DeepSeek Key（设置里填的那个就行），或者硅基流动（推荐，SenseVoice 中文准、几乎免费）、OpenAI、Groq 的 Key。" +
         "请用户在 设置 → 其他模型服务 里添加「硅基流动」并填上 Key（cloud.siliconflow.cn 注册就有），填好再试。"
 
     /** SenseVoice 会在文字里带上语言、情绪的标记（<|zh|><|NEUTRAL|>），去掉。 */
     fun clean(text: String): String = text.replace(Regex("""<\|[^|>]*\|>"""), "").trim()
 
-    fun transcribe(e: Engine, wav: File): String {
+    /** onSpent：用 DeepSeek 时每段花了多少元（按音频时长算），用来记进用量统计。 */
+    fun transcribe(e: Engine, wav: File, onSpent: (Double) -> Unit = {}): String {
+        if (e.deepseek) {
+            val (text, ms) = DeepSeekTools.asr(e.apiKey, wav)
+            onSpent(maxOf(ms, 1000L) / 3_600_000.0 * DeepSeekTools.ASR_PRICE_PER_HOUR)
+            return text.trim()
+        }
         val body = MultipartBody.Builder().setType(MultipartBody.FORM)
             .addFormDataPart("model", e.model)
             .addFormDataPart("file", wav.name, wav.asRequestBody("audio/wav".toMediaType()))
