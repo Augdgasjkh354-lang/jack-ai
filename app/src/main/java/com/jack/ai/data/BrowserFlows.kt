@@ -5,7 +5,7 @@ import kotlinx.serialization.Serializable
 
 /**
  * 浏览器流程：在某个网站上办一件事的做法（文字步骤，不录点击位置——网页改版也能照着意思做）。
- * 平时不占上下文：技能列表里只有「浏览器流程」一行；打开对应网站时工具提醒一句，用到才读出步骤。
+ * 平时不占上下文：插件「操作浏览器」里带着流程的做法；打开对应网站时工具提醒一句，用到才读出步骤。
  */
 @Serializable
 data class BrowserFlow(
@@ -98,7 +98,7 @@ object BrowserFlows {
     /** 步骤里要填的空：{关键词}、{页数}……（去重，按出现顺序）。 */
     fun blanks(steps: String): List<String> = Regex("""\{([^{}\n]{1,20})\}""").findAll(steps).map { it.groupValues[1].trim() }.distinct().toList()
 
-    /** 给模型看的流程清单（读「浏览器流程」技能时附上）。 */
+    /** 给模型看的流程清单（读「操作浏览器」插件时附上）。 */
     fun index(flows: List<BrowserFlow>): String =
         if (flows.isEmpty()) "（还没有存过流程）"
         else flows.sortedByDescending { maxOf(it.usedAt, it.createdAt) }.joinToString("\n") { f ->

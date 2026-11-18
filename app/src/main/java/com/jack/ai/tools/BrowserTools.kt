@@ -588,9 +588,9 @@ private suspend fun ToolSession.flowAction(action: String, args: JsonObject): St
         store.saveFlows(if (now.any { it.id == saved.id }) now.map { if (it.id == saved.id) saved else it } else now + saved)
     }
     val ok = withContext(kotlinx.coroutines.Dispatchers.IO) { store.loadFlows().any { it.id == saved.id && it.steps == steps } }
-    if (ok) ui.notice((if (old != null) "已更新" else "已存成") + "浏览器流程「$name」，在 技能 → 浏览器流程 里能改、能删")
+    if (ok) ui.notice((if (old != null) "已更新" else "已存成") + "浏览器流程「$name」，在 技能 → 插件 → 操作浏览器 → 流程 里能改、能删")
     return if (!ok) "存完后没查到这个流程，可能没存成。" else
-        (if (old != null) "已更新" else "已存下") + "流程「$name」（$site）。下次打开 $site 时会提醒，用 action=flow 读出步骤照着做；用户可以在 技能 → 浏览器流程 里查看、修改、删除。"
+        (if (old != null) "已更新" else "已存下") + "流程「$name」（$site）。下次打开 $site 时会提醒，用 action=flow 读出步骤照着做；用户可以在 技能 → 插件 → 操作浏览器 → 流程 里查看、修改、删除。"
 }
 
 private val LOGIN_URL = Regex("(login|signin|sign-in|sign_in|passport|logon|/auth/|account/sign|://(auth|accounts|sso|id)\\.)")

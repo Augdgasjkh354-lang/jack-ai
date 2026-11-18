@@ -91,6 +91,20 @@ class PromptBuilderTest {
         assertEquals(order.sorted(), order)
     }
 
+    @Test
+    fun pluginsAndSkillsAreListedSeparately() {
+        val conv = Conversation()
+        val sys = PromptBuilder.systemPrompt(settings, conv, null, tools(conv), memories, settings.activeSkills())
+        val plugins = sys.substring(sys.indexOf("【Plugins】"), sys.indexOf("【Skills】"))
+        val skills = sys.substring(sys.indexOf("【Skills】")).substringBefore("【What you can do】")
+        // 带工具的在插件里，做法在技能里，各在各的清单
+        assertTrue(plugins, "- Word 文档 (open first)" in plugins && "- 表格:" in plugins)
+        assertFalse(skills, "Word 文档" in skills || "- 表格" in skills)
+        assertTrue(skills, "- 合同挑坑" in skills && "- 销售:" in skills && "- 小红书运营" in skills)
+        // 合并掉的不再单独出现
+        assertFalse(sys, "销售：参谋" in sys || "- 浏览器流程" in sys)
+    }
+
     // ---------- 当前时间加在最后一条用户消息上 ----------
 
     @Test

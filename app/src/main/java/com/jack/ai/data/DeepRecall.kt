@@ -20,15 +20,16 @@ object DeepRecall {
     /** 本地模型每轮最多现算几条（手机上一条几十毫秒，太多会拖慢回答；剩下的后台慢慢补）。 */
     private const val MAX_NEW_LOCAL = 16
     private val lock = Any()
-    private fun file(ctx: Context, e: Embedder.Engine) =
-        File(ctx.filesDir, if (e is Embedder.Remote) "memory_vectors.bin" else "memory_vectors-${e.id}.bin")
+    /** space：缓存放哪一份（memory 是记忆的；技能推荐用 skill，各管各的，清理时不互相删）。 */
+    private fun file(ctx: Context, e: Embedder.Engine, space: String = "memory") = File(ctx.filesDir,
+        if (space == "memory") { if (e is Embedder.Remote) "memory_vectors.bin" else "memory_vectors-${e.id}.bin" } else "${space}_vectors-${e.id}.bin")
 
     private fun key(id: String, text: String) = id + ":" + text.hashCode()
 
-    private fun load(ctx: Context, e: Embedder.Engine): MutableMap<String, ByteArray> = synchronized(lock) {
+    private fun load(ctx: Context, e: Embedder.Engine, space: String = "memory"): MutableMap<String, ByteArray> = synchronized(lock) {
         val map = HashMap<String, ByteArray>()
         runCatching {
-            DataInputStream(file(ctx, e).inputStream().buffered()).use { s ->
+            DataInputStream(file(ctx, e, space).inputStream().buffered()).use { s ->
                 while (true) {
                     val k = runCatching { s.readUTF() }.getOrNull() ?: break
                     map[k] = ByteArray(s.readInt()).also { s.readFully(it) }
@@ -38,17 +39,17 @@ object DeepRecall {
         map
     }
 
-    private fun save(ctx: Context, e: Embedder.Engine, map: Map<String, ByteArray>) = synchronized(lock) {
-        runCatching { DataOutputStream(file(ctx, e).outputStream().buffered()).use { o -> map.forEach { (k, v) -> o.writeUTF(k); o.writeInt(v.size); o.write(v) } } }
+    private fun save(ctx: Context, e: Embedder.Engine, map: Map<String, ByteArray>, space: String = "memory") = synchronized(lock) {
+        runCatching { DataOutputStream(file(ctx, e, space).outputStream().buffered()).use { o -> map.forEach { (k, v) -> o.writeUTF(k); o.writeInt(v.size); o.write(v) } } }
     }
 
     /** 这句话和每条记忆的意思有多近（键是 key(id, text)），和这个来源上「算想起来」的门槛。没有向量来源、都连不上、话太短时是空的。 */
-    internal suspend fun similarities(ctx: Context, settings: Settings, query: String, docs: List<Pair<String, String>>): Pair<Map<String, Float>, Float> {
+    internal suspend fun similarities(ctx: Context, settings: Settings, query: String, docs: List<Pair<String, String>>, space: String = "memory"): Pair<Map<String, Float>, Float> {
         if (docs.isEmpty() || query.trim().length < 4) return emptyMap<String, Float>() to 1f
         return withContext(Dispatchers.IO) {
             for (engine in Embedder.engines(ctx, settings)) {
                 val got = runCatching {
-                    val cache = load(ctx, engine)
+                    val cache = load(ctx, engine, space)
                     val missing = docs.filter { (k, _) -> k !in cache }.take(if (engine is Embedder.Local) MAX_NEW_LOCAL else MAX_NEW)
                     // 硅基流动不分问题和资料，一次请求一起算；本地模型两种前缀不同，分开算
                     val vecs = if (engine is Embedder.Remote) Embedder.embed(engine, listOf(query.take(2000)) + missing.map { it.second }, quick = true)
@@ -58,7 +59,7 @@ object DeepRecall {
                     missing.forEachIndexed { i, (k, _) -> cache[k] = Facts.quantize(vecs[i + 1]) }
                     // 已经不在的（删了、改了字）顺手清掉
                     val live = docs.map { it.first }.toSet()
-                    if (missing.isNotEmpty() || cache.keys.any { it !in live }) save(ctx, engine, cache.filterKeys { it in live })
+                    if (missing.isNotEmpty() || cache.keys.any { it !in live }) save(ctx, engine, cache.filterKeys { it in live }, space)
                     val qq = Facts.quantize(q)
                     docs.mapNotNull { (k, _) -> cache[k]?.let { k to Facts.cosine(qq, it) } }.toMap()
                 }.getOrNull()

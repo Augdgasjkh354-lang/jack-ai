@@ -75,43 +75,26 @@ fun SkillsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit) {
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
+            // 技能在上：装的、自己写的、Kavi 写的排最前，再是内置的做法；插件（自带的工具）放后面
+            val (plugins, playbooks) = skills.partition { it.id in SkillIds.PLUGINS }
+            val ordered = playbooks.sortedBy { if (it.builtin) 1 else 0 }
             item {
+                SectionHeader("技能", "做某一类活的方法（小红书运营、合同挑坑……）。你说要做什么，Kavi 会按意思挑出合适的技能照着做；" +
+                    "也能在输入框「+」里直接点名。从 GitHub 装：在对话里说「从 GitHub 装技能 作者/项目」。")
             }
-            items(skills, key = { it.id }) { s ->
-                Card(Modifier.fillMaxWidth().clickable { if (s.id == SkillIds.FLOWS) flows = true else if (s.builtin) viewing = s else editing = s }) {
-                    Row(Modifier.padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(s.name + if (s.builtin) "" else if (s.byKavi) "（Kavi 写的）" else if (s.source.isNotEmpty()) "（来自 GitHub：${com.jack.ai.data.SkillRepo.repoOf(s.source)}）" else "（自定义）", style = MaterialTheme.typography.titleSmall)
-                            if (s.id == SkillIds.WEB && !settings.webReady()) {
-                                Text("需要先在 设置 → 连接 → 联网搜索 里填 Exa 或 Tavily 的 Key（或者填 DeepSeek Key）", style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.error)
-                            }
-                            if (s.id == SkillIds.NOTION && settings.notionToken.isBlank()) {
-                                Text("需要先在设置里填 Notion 密钥", style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.error)
-                            }
-                            if (s.id == SkillIds.FLOWS) {
-                                Text(if (SkillIds.BROWSER in settings.disabledSkills) "要先打开「操作浏览器」" else "点开查看、修改存好的流程",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (SkillIds.BROWSER in settings.disabledSkills) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            if (s.id == SkillIds.MAIL && settings.mails.none { it.ready }) {
-                                Text("需要先在设置里填邮箱", style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.error)
-                            }
-                        }
-                        Spacer(Modifier.padding(4.dp))
-                        Switch(s.enabled, { on -> toggle(s, on) })
-                    }
-                }
-            }
+            items(ordered, key = { it.id }) { s -> SkillCard(s, settings, onOpen = { if (s.builtin) viewing = s else editing = s }, onToggle = { toggle(s, it) }) }
             item {
                 OutlinedButton(onClick = { editing = Skill(name = "", description = "", instructions = "") }) {
                     Icon(Icons.Default.Add, null)
                     Spacer(Modifier.padding(4.dp))
                     Text("写一个自己的技能")
                 }
+            }
+            item {
+                SectionHeader("插件", "Kavi 自带的工具：开着就能用，用到时它自己会调。关掉的那样 Kavi 就不会用。")
+            }
+            items(plugins, key = { it.id }) { s ->
+                SkillCard(s, settings, onOpen = { if (s.id == SkillIds.BROWSER) flows = true else viewing = s }, onToggle = { toggle(s, it) })
             }
         }
     }
@@ -176,6 +159,46 @@ fun SkillsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit) {
         ConfirmDeleteDialog("删除技能？", "「${s.name}」会被删除。", onDismiss = { deleting = null }) {
             vm.updateSettings { st -> st.copy(customSkills = st.customSkills.filterNot { it.id == s.id }) }
             deleting = null
+        }
+    }
+}
+
+@Composable
+private fun SectionHeader(title: String, hint: String) {
+    Column(Modifier.padding(top = 8.dp, bottom = 2.dp)) {
+        Text(title, style = MaterialTheme.typography.titleMedium)
+        Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** 一个技能或插件：名字、来源、要先配什么，右边开关。 */
+@Composable
+private fun SkillCard(s: Skill, settings: Settings, onOpen: () -> Unit, onToggle: (Boolean) -> Unit) {
+    Card(Modifier.fillMaxWidth().clickable(onClick = onOpen)) {
+        Row(Modifier.padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(s.name, style = MaterialTheme.typography.titleSmall)
+                val from = when {
+                    s.builtin -> ""
+                    s.byKavi -> "Kavi 自己总结的"
+                    s.source.isNotEmpty() -> "来自 GitHub：" + com.jack.ai.data.SkillRepo.repoOf(s.source)
+                    else -> "你自己写的"
+                }
+                if (from.isNotEmpty()) Text(from, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                Text(s.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis)
+                val need = when {
+                    s.id == SkillIds.WEB && !settings.webReady() -> "需要先在 设置 → 连接 → 联网搜索 里填 Exa 或 Tavily 的 Key（或者填 DeepSeek Key）"
+                    s.id == SkillIds.NOTION && settings.notionToken.isBlank() -> "需要先在设置里填 Notion 密钥"
+                    s.id == SkillIds.MAIL && settings.mails.none { it.ready } -> "需要先在设置里填邮箱"
+                    else -> ""
+                }
+                if (need.isNotEmpty()) Text(need, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                if (s.id == SkillIds.BROWSER) Text("点开查看、修改存好的流程", style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Spacer(Modifier.padding(4.dp))
+            Switch(s.enabled, onToggle)
         }
     }
 }

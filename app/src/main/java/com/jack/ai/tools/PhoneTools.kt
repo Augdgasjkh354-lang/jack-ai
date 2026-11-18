@@ -712,7 +712,7 @@ private suspend fun ToolSession.phoneFlow(action: String, args: JsonObject): Str
         val now = store.loadFlows()
         store.saveFlows(if (now.any { it.id == saved.id }) now.map { if (it.id == saved.id) saved else it } else now + saved)
     }
-    ui.notice((if (old != null) "已更新" else "已存成") + "手机流程「$name」，在 技能 → 浏览器流程 里能改、能删")
+    ui.notice((if (old != null) "已更新" else "已存成") + "手机流程「$name」，在 技能 → 插件 → 操作浏览器 → 流程 里能改、能删")
     val n = runCatching { (kotlinx.serialization.json.Json.parseToJsonElement(actions) as kotlinx.serialization.json.JsonArray).size }.getOrDefault(0)
     return (if (old != null) "已更新" else "已存下") + "手机流程「$name」。下次打开这个 App 时会提醒，用 action=flow 读出步骤照着做；也能用 schedule 定时让 Kavi 照着跑。" +
         (if (n > 0) "还录下了 $n 步能直接重放的动作（action=replay）" + (if (given == null) "；里面是这次的原话，会变的字（搜索词、联系人）要换成 {关键词} 的话，用 actions 参数把改好的动作再存一次" else "") + "。" else "")

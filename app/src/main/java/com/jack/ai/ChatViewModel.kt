@@ -699,6 +699,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     runCatching { com.jack.ai.data.Timeline.noteFor(getApplication(), settings, _state.value.conversations, _state.value.projects, conv) }.getOrDefault("") +
                     // 深处的记忆：和这句话相关的浮上来（不常用的不再每轮都带着）
                     (if (conv.globalAllowed(project)) runCatching { com.jack.ai.data.DeepRecall.note(getApplication(), settings, lastUser?.content.orEmpty()) }.getOrDefault("") else "") +
+                    // 按意思推荐一两个技能（技能多了模型容易挑错）
+                    runCatching { com.jack.ai.data.SkillMatcher.note(getApplication(), settings, lastUser?.content.orEmpty(), skills) }.getOrDefault("") +
                     // 很长的对话里重新锚定一下「我是谁」：越聊越长时开头的设定会被冲淡
                     (if (conv.messages.size >= ANCHOR_AFTER) com.jack.ai.data.Persona.fill("【Still you】" + com.jack.ai.data.KaviSelf.text() +
                         "\nThis conversation has run long: keep your own voice and the principles you started with.\n", settings) else "")

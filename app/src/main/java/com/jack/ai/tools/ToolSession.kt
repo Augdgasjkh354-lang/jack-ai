@@ -369,7 +369,18 @@ class ToolSession(
         val kind = Failures.classify(name, result, status)
         val note = kind?.let { Failures.note(it, failures.merge(it, 1, Int::plus) ?: 1, result, settings) }.orEmpty()
         recordSite(name, argsText, result, status, kind)
-        return ToolOutcome(result + note, status)
+        return ToolOutcome(result + note + pluginNotes(name), status)
+    }
+
+    /**
+     * 插件第一次用到：把它的用法附在结果后面（这个对话里只附一次，记在 unlocked 里，随对话存下）。
+     * 插件不进技能清单，模型不会先 use_skill 读它，靠这里补上做法。
+     */
+    private fun pluginNotes(tool: String): String {
+        val id = SkillIds.TOOL_PLUGIN[tool] ?: return ""
+        val p = skills.firstOrNull { it.id == id } ?: return ""
+        if (p.instructions.isBlank() || !unlocked.add(id)) return ""
+        return "\n\n【Usage notes for the 「${p.name}」 plugin (first use in this conversation; follow them from now on)】\n${p.instructions.trim()}"
     }
 
     /** 查外部内容里的提示词注入：有就标出可疑的行、附上给 Kavi 的提醒，第一次还在回答下面告诉用户、记进统计。 */

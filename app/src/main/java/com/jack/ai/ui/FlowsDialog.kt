@@ -46,7 +46,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** 技能 → 浏览器流程：看存好的流程，改、删、自己写一个。 */
+/** 技能 → 插件 → 操作浏览器 → 流程：看存好的流程，改、删、自己写一个。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FlowsDialog(vm: ChatViewModel, onDismiss: () -> Unit) {

@@ -119,7 +119,7 @@ object WeChat {
     }
 
     internal fun prompt(batch: List<WeChatMsg>): String {
-        val logSkill = BUILTIN_SKILLS.firstOrNull { it.id == SkillIds.SALES_LOG }?.instructions.orEmpty()
+        val logSkill = SALES_LOG_INSTRUCTIONS
         return """刚才微信上收到下面这些私聊消息（只有对方发来的，用户自己回了什么看不到），按人分组：
 
 <微信消息>
@@ -140,7 +140,7 @@ ${transcript(batch)}
 
 最后的结果：第一行，这批全都跟销售无关就只写 $QUIET，否则写【已处理】。第二行起简短列出：记了谁（编号 + 称呼，改了哪几栏）、哪些要用户确认（给出你的建议，用户在这个对话里回一句「对」或者改一下就行）、推送了什么、设了什么提醒。
 
-附：「销售：记客户」的做法（按它记，但上面说的「后台不能问用户」优先）：
+附：记客户的做法（按它记，但上面说的「后台不能问用户」优先）：
 $logSkill"""
     }
 }
