@@ -30,7 +30,8 @@ object Capabilities {
         skill(SkillIds.RECEIPTS)?.let { lines += "Record invoices, receipts, delivery slips and business cards from photos into tables: 「$it」" }
         if ("knowledge_base" in tools) lines += "Knowledge bases in {user}'s library: build your own and write documents into them, or install a GitHub project as one; update, turn on/off: knowledge_base (search their content with search_my_data)"
         if ("schedule" in tools) lines += "Reminders, scheduled tasks, watching a web page for changes: schedule"
-        listOf(SkillIds.MAIL, SkillIds.CALENDAR, SkillIds.GITHUB, SkillIds.NOTION, SkillIds.TRAIN, SkillIds.WORD, SkillIds.PPT, SkillIds.EXCEL, SkillIds.PDF, SkillIds.APP, SkillIds.TONE, SkillIds.XHS, SkillIds.AD_CHECK)
+        listOf(SkillIds.MAIL, SkillIds.CALENDAR, SkillIds.GITHUB, SkillIds.NOTION, SkillIds.TRAIN, SkillIds.WORD, SkillIds.PPT, SkillIds.EXCEL, SkillIds.PDF, SkillIds.APP, SkillIds.TONE, SkillIds.XHS, SkillIds.AD_CHECK,
+            SkillIds.DOUYIN, SkillIds.XIANYU, SkillIds.VIDEO_PROMPT, SkillIds.IMAGE_PROMPT, SkillIds.NOVEL, SkillIds.CONTRACT)
             .mapNotNull { skill(it) }.takeIf { it.isNotEmpty() }?.let { lines += "Other skills: " + it.joinToString(", ") { n -> "「$n」" } }
         // App 里用户自己点的入口：用得上时告诉用户
         lines += "Entry points on {user}'s side: 「+ → 录音纪要」 in the input box (you'll receive the recording; transcribe it and write up notes); 「分享 → 用 Kavi 下载 / 用 Kavi 总结」 in other apps; 「下载」 in the side menu for downloaded files" +
