@@ -20,7 +20,7 @@ class VideoPlanTest {
         p!!
         assertEquals(1080 to 1920, p.size)
         assertTrue(p.fade)
-        assertEquals(VideoPlan.Clip("a.mp4", false, 3000, 8500, speed = 2f, zoom = "in", filter = "warm"), p.clips[0])
+        assertEquals(VideoPlan.Clip("a.mp4", false, 3000, 8500, speed = 2f, zoom = "in", filter = "warm", follow = true), p.clips[0])
         assertEquals(VideoPlan.Clip("p.jpg", true, durationMs = 2500, fill = false), p.clips[1])
         assertEquals(VideoPlan.Text("重点\n来了", 1000, 3000, "highlight", "center"), p.texts[0])
         assertEquals(0.5f, p.musicVolume); assertEquals(false, p.duck)

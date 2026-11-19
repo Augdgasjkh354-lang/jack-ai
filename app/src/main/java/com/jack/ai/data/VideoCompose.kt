@@ -104,17 +104,36 @@ object VideoCompose {
         }
 
         // 2. 拼起来
-        val decorate = texts.isNotEmpty() || cues.isNotEmpty() || music != null || voiceFile != null
+        val sfx = (plan.sfx + if (plan.autoSfx) VideoPlan.autoSfx(plan, lengths) else emptyList())
+            .map { it.copy(atMs = it.atMs + plan.coverMs) }.filter { it.atMs < total }
+        val decorate = texts.isNotEmpty() || cues.isNotEmpty() || music != null || voiceFile != null || sfx.isNotEmpty()
         val joined = if (decorate) File(work, "joined.mp4") else out
+        // 横屏素材做竖屏（或反过来）要裁掉很多时：找人在哪，裁剪框跟着走
+        var followed = 0
+        val follow = clips.mapIndexed { i, c ->
+            val inf = infos[i] ?: return@mapIndexed null
+            if (!c.follow || inf.width <= 0 || inf.height <= 0) return@mapIndexed null
+            val window = (w.toFloat() / h) / (inf.width.toFloat() / inf.height)
+            if (window > 0.87f) return@mapIndexed null
+            progress("出片：第 ${i + 1} 段找人在哪（横屏转竖屏跟着人裁）")
+            val end = c.endMs ?: inf.durationMs
+            val path = withContext(Dispatchers.IO) { VideoPlan.followPath(VideoFollow.samples(File(c.file), c.startMs, end, c.speed)) }
+            followed++
+            path to window
+        }
+        if (followed > 0) notes += "$followed 段横屏素材是跟着人裁的"
         val items = clips.mapIndexed { i, c ->
             val endMs = c.endMs ?: infos[i]?.durationMs
             val clip = MediaItem.ClippingConfiguration.Builder().setStartPositionMs(c.startMs).apply { endMs?.let { setEndPositionMs(it) } }.build()
             val lenUs = lengths[i] * 1000
+            val tIn = plan.transitionInto(i); val tOut = plan.transitionOutOf(i)
             val video = buildList {
                 if (c.speed != 1f) add(SpeedChangeEffect(c.speed))
+                follow[i]?.let { (path, window) -> add(Follow(path, window)) }
                 add(Presentation.createForWidthAndHeight(w, h, if (c.fill) Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP else Presentation.LAYOUT_SCALE_TO_FIT))
-                if (c.zoom != "none") add(Zoom(c.zoom == "in", lenUs))
-                if (c.filter != "none" || plan.fade) add(Grade(c.filter, plan.fade, plan.fade, lenUs))
+                if (c.zoom != "none" || tIn in setOf("zoom", "shake") || tOut == "zoom") add(Motion(c.zoom, tIn, tOut, lenUs))
+                if (c.filter != "none" || tIn == "fade" || tOut == "fade") add(Grade(c.filter, tIn == "fade", tOut == "fade", lenUs))
+                if (tIn == "flash" || tOut == "flash") add(OverlayEffect(ImmutableList.of<TextureOverlay>(Flash(w, h, tIn == "flash", tOut == "flash", lenUs))))
             }
             val audio = buildList<AudioProcessor> {
                 if (c.speed != 1f) add(SpeedChangingAudioProcessor(ConstantSpeed(c.speed)))
@@ -140,6 +159,12 @@ object VideoCompose {
             val fx = if (plan.voiceVolume != 1f) Effects(listOf(volume(plan.voiceVolume)), emptyList()) else Effects.EMPTY
             sequences += EditedMediaItemSequence(EditedMediaItem.Builder(MediaItem.fromUri(Uri.fromFile(voiceFile))).setEffects(fx).build())
             notes += "配了音"
+        }
+        if (sfx.isNotEmpty()) {
+            val track = File(work, "sfx.wav")
+            withContext(Dispatchers.IO) { Wav.write(track, SfxSynth.track(sfx, total), SfxSynth.RATE) }
+            sequences += EditedMediaItemSequence(EditedMediaItem.Builder(MediaItem.fromUri(Uri.fromFile(track))).build())
+            notes += "配了 ${sfx.size} 个音效"
         }
         if (music != null) {
             val speech = if (!plan.duck) emptyList() else if (cues.isNotEmpty()) cues.map { it.startMs to it.endMs } else {
@@ -241,14 +266,53 @@ object VideoCompose {
         override fun getNextSpeedChangeTimeUs(timeUs: Long) = C.TIME_UNSET
     }
 
-    /** 推拉镜头：这一段从头到尾慢慢放大（in）或缩小（out）12%。时间从这一段的第一帧算。 */
-    private class Zoom(val zoomIn: Boolean, val lengthUs: Long) : MatrixTransformation {
+    /**
+     * 画面的动：推拉镜头（这一段从头到尾慢慢放大 in 或缩小 out 12%），加上转场的冲击——
+     * zoom：切点前后 0.22 秒猛地放大再落回；shake：切进来的 0.3 秒抖一下（放大一点免得露黑边）。时间从这一段的第一帧算。
+     */
+    private class Motion(val zoom: String, val tIn: String, val tOut: String, val lengthUs: Long) : MatrixTransformation {
         private var base = Long.MIN_VALUE
         override fun getMatrix(presentationTimeUs: Long): Matrix {
             if (base == Long.MIN_VALUE) base = presentationTimeUs
-            val p = ((presentationTimeUs - base).toFloat() / lengthUs.coerceAtLeast(1)).coerceIn(0f, 1f)
-            val s = if (zoomIn) 1f + 0.12f * p else 1.12f - 0.12f * p
-            return Matrix().apply { setScale(s, s) }
+            val t = (presentationTimeUs - base) / 1000f
+            val len = lengthUs / 1000f
+            val p = (t / len.coerceAtLeast(1f)).coerceIn(0f, 1f)
+            var s = when (zoom) { "in" -> 1f + 0.12f * p; "out" -> 1.12f - 0.12f * p; else -> 1f }
+            if (tIn == "zoom" && t < 220) s *= 1f + 0.3f * (1 - t / 220).let { it * it }
+            if (tOut == "zoom" && len - t < 220) s *= 1f + 0.3f * (1 - (len - t) / 220).let { it * it }
+            var dx = 0f; var dy = 0f
+            if (tIn == "shake" && t < 300) {
+                val d = 1 - t / 300
+                s *= 1.07f
+                dx = 0.035f * d * kotlin.math.sin(t * 0.09f); dy = 0.03f * d * kotlin.math.cos(t * 0.11f)
+            }
+            return Matrix().apply { setScale(s, s); postTranslate(dx, dy) }
+        }
+    }
+
+    /** 跟着人裁：在缩放裁剪之前把画面左右挪，让人落在裁剪框中间（path 是这一段里的毫秒 → 人的位置）。 */
+    private class Follow(val path: List<Pair<Long, Float>>, val window: Float) : MatrixTransformation {
+        private var base = Long.MIN_VALUE
+        override fun getMatrix(presentationTimeUs: Long): Matrix {
+            if (base == Long.MIN_VALUE) base = presentationTimeUs
+            val cx = VideoPlan.followAt(path, (presentationTimeUs - base) / 1000, window)
+            return Matrix().apply { setTranslate(-(cx - 0.5f) * 2f, 0f) }
+        }
+    }
+
+    /** 闪白：切进来的 0.15 秒从白渐出、切出去前 0.12 秒渐白。用一张小白图放大铺满。 */
+    private class Flash(w: Int, h: Int, val fIn: Boolean, val fOut: Boolean, val lengthUs: Long) : BitmapOverlay() {
+        private val bmp = Bitmap.createBitmap((w / 8).coerceAtLeast(2), (h / 8).coerceAtLeast(2), Bitmap.Config.ARGB_8888).apply { eraseColor(android.graphics.Color.WHITE) }
+        private var base = Long.MIN_VALUE
+        override fun getBitmap(presentationTimeUs: Long): Bitmap = bmp
+        override fun getOverlaySettings(presentationTimeUs: Long): OverlaySettings {
+            if (base == Long.MIN_VALUE) base = presentationTimeUs
+            val t = (presentationTimeUs - base) / 1000f
+            val r = lengthUs / 1000f - t
+            var a = 0f
+            if (fIn && t < 150) a = maxOf(a, 1 - t / 150)
+            if (fOut && r < 120) a = maxOf(a, 1 - r / 120)
+            return OverlaySettings.Builder().setAlphaScale(a.coerceIn(0f, 1f)).setScale(8.2f, 8.2f).build()
         }
     }
 
