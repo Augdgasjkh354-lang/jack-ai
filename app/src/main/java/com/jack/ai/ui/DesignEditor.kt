@@ -39,6 +39,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -167,6 +168,8 @@ private data class Picked(
     val lineHeight: Float = 1.4f, val letterSpacing: Float = 0f, val fx: String = "", val added: Boolean = false,
     val editing: Boolean = false, val styled: Boolean = false,
     val opacity: Int = 100, val locked: Boolean = false, val count: Int = 0, val multi: Boolean = false,
+    // 图片：有没有照片（占位色块没有）、是不是在裁剪、图片设置（data-kv-img：滤镜 f、蒙层 m、形状 r、描边 ol/olc、阴影 sh、调色 b/c/s/t、放大 z）
+    val photo: Boolean = false, val cropping: Boolean = false, val img: Map<String, String> = emptyMap(),
 )
 
 private val lenient = Json { ignoreUnknownKeys = true }
@@ -176,7 +179,9 @@ private fun parsePicked(raw: String): Picked = runCatching {
     fun s(k: String) = (o[k] as? JsonPrimitive)?.content.orEmpty()
     Picked(s("kind"), s("slot"), s("text"), s("color"), s("fontSize").toIntOrNull() ?: 0, s("fontFamily"), s("weight").toIntOrNull() ?: 400, s("align"), s("hidden") == "true",
         s("lineHeight").toFloatOrNull() ?: 1.4f, s("letterSpacing").toFloatOrNull() ?: 0f, s("fx"), s("added") == "true", s("editing") == "true", s("styled") == "true",
-        s("opacity").toIntOrNull() ?: 100, s("locked") == "true", s("count").toIntOrNull() ?: 0, s("multi") == "true")
+        s("opacity").toIntOrNull() ?: 100, s("locked") == "true", s("count").toIntOrNull() ?: 0, s("multi") == "true",
+        s("photo") == "true", s("cropping") == "true",
+        (o["img"] as? JsonObject)?.mapValues { (it.value as? JsonPrimitive)?.content.orEmpty() }.orEmpty())
 }.getOrDefault(Picked())
 
 /** 页面里的 rgb()/rgba() → Compose 颜色（画色块用）。 */
@@ -212,6 +217,7 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
     LaunchedEffect(picked.kind) {
         if (picked.kind == "none") panel = null
         if (picked.kind == "image" && panel == "style") panel = null
+        if (picked.kind != "image" && panel == "image") panel = null
     }
 
     // 一组的所有页（design action=series 出的「名字-01、名字-02……」）；单张就一页
@@ -455,7 +461,9 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
                     many -> "已选 ${picked.count} 个：拖动一起挪；长按别的再加"
                     picked.locked -> "已锁定：拖不动，点「解锁」再改位置"
                     picked.kind == "text" -> "文字" + (picked.slot.takeIf { it.isNotEmpty() }?.let { "（$it）" } ?: "") + " · ${picked.fontSize}px · 双击直接改字"
-                    picked.kind == "image" -> "图片"
+                    picked.cropping -> "裁剪：拖动照片挪位置，两指缩放（框不动）" + (picked.img["z"]?.toFloatOrNull()?.takeIf { it > 1.001f }?.let { " · %.1f 倍".format(it) } ?: "")
+                    panel == "image" && picked.kind == "image" -> "图片：滤镜、调色、蒙层、形状"
+                    picked.kind == "image" -> if (picked.photo) "图片 · 双击裁剪" else "图片（占位，换上照片后能裁剪、加蒙层）"
                     picked.kind == "group" -> "一组（列表的一项）"
                     picked.kind == "box" -> "图形"
                     else -> "点一下选中，双击改字，长按多选；拖四角缩放，拖顶上圆点旋转"
@@ -465,6 +473,10 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
                 if (!editingText && picked.kind != "none") {
                     if (panel == "style" && picked.kind in setOf("text", "group")) {
                         StylePanel(picked, vars = { webView }, onCmd = { op, kv -> cmd(op, *kv) }, onClose = { panel = null })
+                        return@Column
+                    }
+                    if (panel == "image" && picked.kind == "image" && !picked.cropping) {
+                        ImagePanel(picked, vars = { webView }, onCmd = { op, kv -> cmd(op, *kv) }, onClose = { panel = null })
                         return@Column
                     }
                     if (panel == "arrange") {
@@ -496,6 +508,12 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
                             if (group) Tool("同步到整组") { sheet = "syncTheme" }
                             Tool(if (group) "整组存到相册" else "存到相册") { exportAll() }
                         }
+                        picked.cropping -> {
+                            Tool("完成", bold = true) { cmd("crop", "on" to false) }
+                            Tool("放大") { cmd("cropZoom", "delta" to 0.2) }
+                            Tool("缩小") { cmd("cropZoom", "delta" to -0.2) }
+                            Tool("还原裁剪") { cmd("cropReset") }
+                        }
                         many || picked.multi -> {
                             if (picked.multi) Tool("选好了", bold = true) { multiMode(false) }
                             Tool("排列") { panel = "arrange" }
@@ -509,7 +527,11 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
                         }
                         else -> {
                             if (picked.kind == "text") Tool("改字", bold = true) { webView?.let { keyboard(it, true) }; cmd("edit") }
-                            if (picked.kind == "image") Tool("换图") { sheet = "image" }
+                            if (picked.kind == "image") {
+                                Tool("换图") { sheet = "image" }
+                                if (picked.photo) Tool("裁剪") { cmd("crop", "on" to true) }
+                                Tool("滤镜调色") { panel = "image" }
+                            }
                             if (picked.kind == "text" || picked.kind == "group") Tool("样式") { panel = "style" }
                             Tool("排列") { panel = "arrange" }
                             if (picked.kind != "image") Tool("颜色") { sheet = "color" }
@@ -687,6 +709,85 @@ private fun StylePanel(picked: Picked, vars: () -> WebView?, onCmd: (String, Arr
             Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf("title" to "大标题", "sub" to "小标题", "body" to "正文", "label" to "标签").forEach { (id, name) -> Chip(name, false) { cmd("preset", "name" to id) } }
             }
+            TextButton(onClick = onClose) { Text("收起", fontWeight = FontWeight.Bold) }
+        }
+    }
+}
+
+/**
+ * 图片面板：滤镜预设、调色（亮度、对比度、饱和度、色温）、蒙层（让压在照片上的字看得清）、形状、描边、阴影。
+ * 色温和蒙层要真照片才有（占位色块只调滤镜、形状、描边）。
+ */
+@Composable
+private fun ImagePanel(picked: Picked, vars: () -> WebView?, onCmd: (String, Array<Pair<String, Any>>) -> Unit, onClose: () -> Unit) {
+    val palette by produceState<Map<String, String>>(emptyMap()) {
+        val raw = vars()?.let { w -> suspendCancellableCoroutine<String> { c -> w.evaluateJavascript("kvEd.vars()") { if (c.isActive) c.resume(it ?: "") } } }.orEmpty()
+        value = runCatching {
+            val s = (Json.parseToJsonElement(raw) as JsonPrimitive).content
+            (Json.parseToJsonElement(s) as JsonObject).mapValues { (it.value as JsonPrimitive).content }
+        }.getOrDefault(emptyMap())
+    }
+    val img = picked.img
+    fun cmd(op: String, vararg kv: Pair<String, Any>) = onCmd(op, arrayOf(*kv))
+    fun set(vararg kv: Pair<String, Any>) = cmd("img", "set" to JsonObject(kv.associate { (k, v) ->
+        k to when (v) { is Boolean -> JsonPrimitive(v); is Number -> JsonPrimitive(v); else -> JsonPrimitive(v.toString()) }
+    }))
+    @Composable fun Chip(text: String, on: Boolean, onClick: () -> Unit) {
+        Surface(onClick = onClick, shape = Radii.s,
+            color = if (on) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh) {
+            Text(text, Modifier.padding(horizontal = 14.dp, vertical = 8.dp), style = MaterialTheme.typography.labelLarge)
+        }
+    }
+    @Composable fun Title(text: String) = Text(text, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp))
+    @Composable fun Chips(content: @Composable () -> Unit) =
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { content() }
+    @Composable fun Stepper(name: String, key: String) {
+        val v = img[key]?.toFloatOrNull()?.toInt() ?: 0
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(name, style = MaterialTheme.typography.labelLarge)
+            RepeatButton("－") { cmd("imgAdd", "key" to key, "delta" to -5) }
+            Text(if (v > 0) "+$v" else "$v", style = MaterialTheme.typography.labelLarge, modifier = Modifier.width(36.dp), maxLines = 1)
+            RepeatButton("＋") { cmd("imgAdd", "key" to key, "delta" to 5) }
+        }
+    }
+    Column(Modifier.fillMaxWidth().heightIn(max = 300.dp).verticalScroll(rememberScrollState()).padding(horizontal = 12.dp)) {
+        Title("滤镜")
+        Chips {
+            listOf("" to "原图", "film" to "胶片", "fresh" to "清新", "warm" to "暖阳", "cool" to "冷调", "vivid" to "鲜艳", "fade" to "褪色", "mono" to "黑白")
+                .forEach { (id, name) -> Chip(name, img["f"].orEmpty() == id) { set("f" to id) } }
+        }
+        Title("调色")
+        Row(Modifier.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
+            Stepper("亮度", "b"); Stepper("对比", "c"); Stepper("饱和", "s")
+            if (picked.photo) Stepper("色温", "t")
+        }
+        if (picked.photo) {
+            Title("蒙层（照片上压字时更清楚）")
+            Chips {
+                listOf("" to "无", "bottom" to "底部压暗", "top" to "顶部压暗", "dark" to "整体压暗", "light" to "整体提亮", "fade" to "渐隐到底色")
+                    .forEach { (id, name) -> Chip(name, img["m"].orEmpty() == id) { set("m" to id) } }
+            }
+        }
+        Title("形状")
+        Chips {
+            listOf("" to "直角", "16px" to "小圆角", "40px" to "大圆角", "50%" to "圆形").forEach { (id, name) -> Chip(name, img["r"].orEmpty() == id) { set("r" to id) } }
+            Chip(if (img["sh"] == "true") "阴影 ✓" else "阴影", img["sh"] == "true") { set("sh" to (img["sh"] != "true")) }
+        }
+        Title("描边")
+        Row(Modifier.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            val ol = img["ol"]?.toFloatOrNull()?.toInt() ?: 0
+            listOf(0 to "无", 6 to "细", 16 to "粗", 32 to "相框").forEach { (w, name) -> Chip(name, ol == w) { set("ol" to w) } }
+            val cur = img["olc"].orEmpty().ifEmpty { "var(--bg)" }
+            listOf("bg", "fg", "primary", "accent").forEach { k ->
+                val css = "var(--$k)"
+                Box(Modifier.size(30.dp).background(cssColor(palette[k].orEmpty()) ?: Color.Gray, CircleShape)
+                    .border(if (cur == css) 3.dp else 1.dp, if (cur == css) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, CircleShape)
+                    .clickable { if (ol == 0) set("olc" to css, "ol" to 6) else set("olc" to css) })
+            }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = { cmd("imgReset") }) { Text("全部还原") }
             TextButton(onClick = onClose) { Text("收起", fontWeight = FontWeight.Bold) }
         }
     }

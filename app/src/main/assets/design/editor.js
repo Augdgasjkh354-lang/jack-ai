@@ -89,6 +89,7 @@
       styled: !!el.querySelector("span[style]"),
       opacity: Math.round((parseFloat(cs.opacity) || 1) * 100), locked: el.hasAttribute("data-kv-lock"),
       count: sels.length, multi: multi, width: Math.round(el.offsetWidth),
+      photo: kind(el) === "image" && !!photoUrl(el), cropping: cropping === el, img: kind(el) === "image" ? imgOf(el) : null,
     };
   }
 
@@ -151,14 +152,14 @@
       var g = geom(el), locked = el.hasAttribute("data-kv-lock");
       b.style.display = "block";
       // 正在改字是虚线；锁住的是灰色；多选里不是主选中的浅一点
-      b.style.borderStyle = editing === el || locked ? "dashed" : "solid";
-      b.style.borderColor = locked ? "#8A8F98" : el === sel ? "#2F7CF6" : "#7FB0FA";
+      b.style.borderStyle = editing === el || locked || cropping === el ? "dashed" : "solid";
+      b.style.borderColor = locked ? "#8A8F98" : cropping === el ? "#F59E0B" : el === sel ? "#2F7CF6" : "#7FB0FA";
       b.style.width = px(g.w); b.style.height = px(g.h);
       b.style.left = px(g.cx + window.scrollX - g.w / 2); b.style.top = px(g.cy + window.scrollY - g.h / 2);
       b.style.transform = g.t.r ? "rotate(" + g.t.r + "deg)" : "";
     });
     // 手柄在第一个框上：只选了一个、没锁、没在打字时显示
-    var show = sels.length === 1 && sel && !sel.hasAttribute("data-kv-lock") && !editing;
+    var show = sels.length === 1 && sel && !sel.hasAttribute("data-kv-lock") && !editing && cropping !== sel;
     if (handles.rot && sels[0] !== sel) show = false;
     ["nw", "ne", "sw", "se", "rot", "stem"].forEach(function (key) { if (handles[key]) handles[key].style.display = show ? "block" : "none"; });
     if (handles.e) handles.e.style.display = show && kind(sel) === "text" ? "block" : "none";
@@ -166,7 +167,7 @@
   }
   // 手指按在哪个手柄上（按旋转后的真实位置算）
   function handleAt(x, y) {
-    if (sels.length !== 1 || !sel || sel.hasAttribute("data-kv-lock") || editing) return null;
+    if (sels.length !== 1 || !sel || sel.hasAttribute("data-kv-lock") || editing || cropping === sel) return null;
     var g = geom(sel), a = g.t.r * Math.PI / 180, cos = Math.cos(a), sin = Math.sin(a);
     var spots = { nw: [-g.w / 2, -g.h / 2], ne: [g.w / 2, -g.h / 2], sw: [-g.w / 2, g.h / 2], se: [g.w / 2, g.h / 2], rot: [0, -g.h / 2 - ROT_GAP] };
     if (kind(sel) === "text") spots.e = [g.w / 2, 0];
@@ -184,6 +185,7 @@
   function report() { bridge.select(JSON.stringify(info(sel))); }
   function select(el) {
     if (editing && el !== editing) endEdit();
+    if (cropping && el !== cropping) cropping = null;
     sel = el;
     sels = el ? [el] : [];
     drawBox();
@@ -410,6 +412,20 @@
     clearTimeout(pressTimer);
     pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
     var n = Object.keys(pointers).length;
+    // 裁剪中：在照片框里拖是挪照片，两指是缩放照片（框不动）
+    if (cropping && sel === cropping) {
+      var cr0 = cropping.getBoundingClientRect();
+      if (n === 1 && e.clientX >= cr0.left && e.clientX <= cr0.right && e.clientY >= cr0.top && e.clientY <= cr0.bottom) {
+        dragging = { mode: "crop", x: e.clientX, y: e.clientY, o0: imgOf(cropping), before: snapshot(), moved: false };
+        e.preventDefault();
+        return;
+      }
+      if (n === 2) {
+        dragging = { mode: "cropPinch", c: center(), o0: imgOf(cropping), before: dragging && dragging.before || snapshot(), moved: false };
+        e.preventDefault();
+        return;
+      }
+    }
     if (n === 1) {
       var h = handleAt(e.clientX, e.clientY);
       if (h) {
@@ -444,6 +460,20 @@
     pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
     if (!dragging || dragging.mode === "tap" || dragging.mode === "done") {
       if (dragging && dragging.mode === "tap" && Math.hypot(e.clientX - dragging.x, e.clientY - dragging.y) > 10) clearTimeout(pressTimer);
+      return;
+    }
+    if (dragging.mode === "crop" || dragging.mode === "cropPinch") {
+      if (!cropping) return;
+      if (dragging.mode === "crop") {
+        if (!dragging.moved && Math.hypot(e.clientX - dragging.x, e.clientY - dragging.y) < 4) return;
+        dragging.moved = true;
+        cropPan(cropping, dragging.o0, e.clientX - dragging.x, e.clientY - dragging.y);
+      } else if (Object.keys(pointers).length >= 2) {
+        var cc = center();
+        dragging.moved = true;
+        cropZoom(cropping, dragging.o0.z * cc.d / Math.max(1, dragging.c.d));
+      }
+      e.preventDefault();
       return;
     }
     if (dragging.mode === "move") {
@@ -505,6 +535,8 @@
       if (multi) { if (target) toggle(target); }
       // 同一段字连点两下：直接改字
       else if (target && target === lastTap.el && now - lastTap.t < 380 && kind(target) === "text") { select(target); startEdit(target); lastTap = { t: 0, el: null }; }
+      // 双击照片：进裁剪
+      else if (target && target === lastTap.el && now - lastTap.t < 380 && kind(target) === "image" && photoUrl(target)) { select(target); startCrop(target); lastTap = { t: 0, el: null }; }
       else { if (target !== sel || sels.length > 1) select(target); lastTap = { t: now, el: target }; }
       dragging = null;
       return;
@@ -613,6 +645,103 @@
     }
   }
 
+
+  // —— 图片：裁剪（框不动，框里的照片拖动、缩放）、滤镜调色、蒙层、圆角、描边、阴影 ——
+  // 设置记在元素的 data-kv-img（JSON），每次按它重新写 style；照片地址是 background-image 最后一层（fill.js 填的）。
+  // 大小、位置都写成百分比，出图时不靠脚本也一样。
+  var cropping = null;
+  var FILTERS = {
+    film: "contrast(1.08) saturate(.85) sepia(.18) brightness(1.03)", fresh: "brightness(1.07) saturate(1.18) contrast(.95)",
+    warm: "sepia(.28) saturate(1.2) brightness(1.04)", cool: "saturate(.9) hue-rotate(12deg) brightness(1.03)",
+    mono: "grayscale(1) contrast(1.1)", fade: "contrast(.85) brightness(1.08) saturate(.7) sepia(.15)", vivid: "saturate(1.45) contrast(1.08)",
+  };
+  var MASKS = {
+    bottom: "linear-gradient(to top, rgba(0,0,0,.62), rgba(0,0,0,0) 55%)",
+    top: "linear-gradient(to bottom, rgba(0,0,0,.55), rgba(0,0,0,0) 50%)",
+    dark: "linear-gradient(rgba(0,0,0,.36), rgba(0,0,0,.36))",
+    light: "linear-gradient(rgba(255,255,255,.4), rgba(255,255,255,.4))",
+    fade: "linear-gradient(to top, var(--bg) 4%, color-mix(in srgb, var(--bg) 0%, transparent) 58%)",
+  };
+  var IMG_DEF = { z: 1, px: 50, py: 50, b: 0, c: 0, s: 0, t: 0, f: "", m: "", r: "", ol: 0, olc: "", sh: false };
+  function imgOf(el) {
+    var o = {}; try { o = JSON.parse(el.getAttribute("data-kv-img") || "{}") || {}; } catch (e) {}
+    Object.keys(IMG_DEF).forEach(function (key) { if (o[key] == null) o[key] = IMG_DEF[key]; });
+    return o;
+  }
+  function photoUrl(el) {
+    if (el.tagName === "IMG") return el.getAttribute("src") || "";
+    var m = /url\(\s*["']?([^"')]+)["']?\s*\)\s*$/.exec(el.style.backgroundImage || "");
+    return m ? m[1] : "";
+  }
+  function photoSize(el, o) {
+    if (o.z <= 1.001) return "cover";
+    var W = el.offsetWidth || 1, H = el.offsetHeight || 1, z = Math.round(o.z * 1000) / 10;
+    if (!o.iw || !o.ih) return z + "% auto";
+    return o.iw / o.ih > W / H ? "auto " + z + "%" : z + "% auto";
+  }
+  function applyImg(el, o) {
+    var f = o.f && FILTERS[o.f] ? [FILTERS[o.f]] : [];
+    if (o.b) f.push("brightness(" + (1 + o.b / 100) + ")");
+    if (o.c) f.push("contrast(" + (1 + o.c / 100) + ")");
+    if (o.s) f.push("saturate(" + (1 + o.s / 100) + ")");
+    el.style.filter = f.join(" ");
+    el.style.borderRadius = o.r || "";
+    if (o.ol) { el.style.outline = o.ol + "px solid " + (o.olc || "var(--bg)"); el.style.outlineOffset = -o.ol + "px"; }
+    else { el.style.outline = ""; el.style.outlineOffset = ""; }
+    el.style.boxShadow = o.sh ? "0 18px 40px rgba(0,0,0,.28)" : "";
+    var url = photoUrl(el), pos = o.px + "% " + o.py + "%";
+    if (el.tagName === "IMG") { el.style.objectFit = "cover"; el.style.objectPosition = pos === "50% 50%" ? "" : pos; }
+    else if (url) {
+      var layers = [], sizes = [], at = [], blend = [];
+      if (o.m && MASKS[o.m]) { layers.push(MASKS[o.m]); sizes.push("100% 100%"); at.push("0 0"); blend.push("normal"); }
+      if (o.t) {
+        var a = Math.round(Math.min(60, Math.abs(o.t) * 0.6)) / 100, col = o.t > 0 ? "rgba(255,150,50," + a + ")" : "rgba(60,130,255," + a + ")";
+        layers.push("linear-gradient(" + col + ", " + col + ")"); sizes.push("100% 100%"); at.push("0 0"); blend.push("soft-light");
+      }
+      layers.push('url("' + url.replace(/"/g, "%22") + '")'); sizes.push(photoSize(el, o)); at.push(pos); blend.push("normal");
+      el.style.backgroundImage = layers.join(", ");
+      el.style.backgroundSize = sizes.join(", ");
+      el.style.backgroundPosition = at.join(", ");
+      el.style.backgroundRepeat = "no-repeat";
+      el.style.backgroundBlendMode = blend.indexOf("soft-light") >= 0 ? blend.join(", ") : "";
+    }
+    var keep = {};
+    Object.keys(o).forEach(function (key) { if (key === "iw" || key === "ih" || o[key] !== IMG_DEF[key]) keep[key] = o[key]; });
+    if (Object.keys(keep).length) el.setAttribute("data-kv-img", JSON.stringify(keep));
+    else el.removeAttribute("data-kv-img");
+    if (!el.getAttribute("style")) el.removeAttribute("style");
+  }
+  // 照片原来的宽高（裁剪时算能挪多少要用），读到了记下来
+  function loadSize(el, done) {
+    var o = imgOf(el), url = photoUrl(el);
+    if (o.iw || !url) { if (done) done(); return; }
+    var im = new Image();
+    im.onload = function () { var p = imgOf(el); p.iw = im.naturalWidth; p.ih = im.naturalHeight; applyImg(el, p); if (done) done(); };
+    im.src = url;
+  }
+  // 照片在框里实际铺多大（框自己的像素）
+  function photoBox(el, o) {
+    var W = el.offsetWidth || 1, H = el.offsetHeight || 1;
+    if (!o.iw || !o.ih) return { W: W, H: H, w: W * o.z, h: H * o.z };
+    var c = Math.max(W / o.iw, H / o.ih) * o.z;
+    return { W: W, H: H, w: o.iw * c, h: o.ih * c };
+  }
+  function cropPan(el, o0, dxScreen, dyScreen) {
+    var t = tf(el), sc = k() * t.s, r = -t.r * Math.PI / 180;
+    var dx = (dxScreen * Math.cos(r) - dyScreen * Math.sin(r)) / sc, dy = (dxScreen * Math.sin(r) + dyScreen * Math.cos(r)) / sc;
+    var b = photoBox(el, o0), o = imgOf(el);
+    function clamp(v) { return Math.max(0, Math.min(100, Math.round(v * 10) / 10)); }
+    if (b.w - b.W > 0.5) o.px = clamp(o0.px - dx / (b.w - b.W) * 100);
+    if (b.h - b.H > 0.5) o.py = clamp(o0.py - dy / (b.h - b.H) * 100);
+    applyImg(el, o);
+  }
+  function cropZoom(el, z) { var o = imgOf(el); o.z = Math.max(1, Math.min(5, Math.round(z * 100) / 100)); applyImg(el, o); }
+  function startCrop(el) {
+    cropping = el && kind(el) === "image" && photoUrl(el) ? el : null;
+    if (cropping) loadSize(cropping, report);
+    report();
+  }
+
   // —— App 发来的命令 ——
   function setText(el, value) {
     el.textContent = "";
@@ -690,7 +819,24 @@
       if (!sel || kind(sel) !== "image") return;
       if (sel.tagName === "IMG") sel.src = c.src;
       else { sel.style.backgroundImage = 'url("' + c.src.replace(/"/g, "%22") + '")'; sel.style.backgroundSize = "cover"; sel.style.backgroundPosition = "center"; sel.style.display = ""; }
+      // 换了照片：裁剪从头来，滤镜、蒙层这些留着
+      var o = imgOf(sel); delete o.iw; delete o.ih; o.z = 1; o.px = 50; o.py = 50; applyImg(sel, o); loadSize(sel);
     },
+    // 图片设置：img 一次改几项（滤镜、蒙层、形状、描边、阴影）；imgAdd 调色加减；imgReset 全部还原
+    img: function (c) { if (!sel || kind(sel) !== "image") return; var o = imgOf(sel); Object.keys(c.set || {}).forEach(function (key) { o[key] = c.set[key]; }); applyImg(sel, o); },
+    imgAdd: function (c) {
+      if (!sel || kind(sel) !== "image") return;
+      var o = imgOf(sel); o[c.key] = Math.max(-100, Math.min(100, (o[c.key] || 0) + c.delta)); applyImg(sel, o);
+    },
+    imgReset: function () {
+      if (!sel || kind(sel) !== "image") return;
+      var o = imgOf(sel), keep = { iw: o.iw, ih: o.ih, z: o.z, px: o.px, py: o.py };
+      Object.keys(IMG_DEF).forEach(function (key) { if (!(key in keep)) keep[key] = IMG_DEF[key]; });
+      applyImg(sel, keep);
+    },
+    crop: function (c) { startCrop(c.on ? sel : null); },
+    cropZoom: function (c) { if (cropping) loadSize(cropping, function () { cropZoom(cropping, imgOf(cropping).z + c.delta); report(); }); },
+    cropReset: function () { if (cropping) { var o = imgOf(cropping); o.z = 1; o.px = 50; o.py = 50; applyImg(cropping, o); } },
     fontCss: function (c) {
       var s = document.createElement("style"); s.setAttribute("data-kavi-temp", ""); s.textContent = c.css; document.head.appendChild(s);
     },
@@ -698,14 +844,14 @@
   // 新加的文字框：一进去就全选，直接打字就替换掉「双击改字」
   function selectAllIn(el) { var r = document.createRange(); r.selectNodeContents(el); var s = window.getSelection(); s.removeAllRanges(); s.addRange(r); }
   // 这些命令不进撤销历史（本身不改画布，或者自己管历史）
-  var NO_HISTORY = { fontCss: 1, edit: 1, done: 1, deselect: 1, addText: 0 };
+  var NO_HISTORY = { fontCss: 1, edit: 1, done: 1, deselect: 1, addText: 0, crop: 1 };
 
   window.kvEd = {
     cmd: function (c) {
       if (c.op === "undo" || c.op === "redo") {
         endEdit();
         var from = c.op === "undo" ? history : future, to = c.op === "undo" ? future : history;
-        if (from.length) { to.push(snapshot()); restore(from.pop()); state(); }
+        if (from.length) { to.push(snapshot()); restore(from.pop()); if (cropping) cropping = sel && kind(sel) === "image" ? sel : null; state(); report(); }
         return;
       }
       if (c.op === "deselect") { select(null); return; }
@@ -715,7 +861,7 @@
       if (!ops[c.op]) return;
       // 改字的过程中加的样式算在这次改字里（结束改字时一起进历史）
       // 连着按的微调、数值加减（一秒内同一种）合成一步撤销
-      var now = Date.now(), coalesce = (c.op === "nudge" || c.op === "tf" || c.op === "opacity") && lastOp.op === c.op && now - lastOp.t < 1000;
+      var now = Date.now(), coalesce = (c.op === "nudge" || c.op === "tf" || c.op === "opacity" || c.op === "imgAdd" || c.op === "cropZoom") && lastOp.op === c.op && now - lastOp.t < 1000;
       lastOp = { op: c.op, t: now };
       if (!NO_HISTORY[c.op] && !editing && !coalesce) remember();
       ops[c.op](c);
