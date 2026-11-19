@@ -286,6 +286,15 @@
     return out;
   }
 
+  // 编辑器里「Kavi 点评」用：现在这张图的检查结果
+  window.kaviLint = function () {
+    var notes = { problems: [] };
+    try { check(notes); } catch (e) {}
+    var advice = [];
+    try { advice = lint(); } catch (e) {}
+    return { problems: notes.problems, advice: advice };
+  };
+
   window.kaviFill = function (data) {
     window.__kaviDone = "";
     var notes = { problems: [], unknown: [] };

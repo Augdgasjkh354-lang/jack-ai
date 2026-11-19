@@ -73,6 +73,61 @@ Rules:
         return parse(raw) ?: error("Kavi 这次没改成，再说一遍试试")
     }
 
+    /** 点评的一条：贴在哪一块（path 为空是整张）、毛病、怎么改（直接当「让 Kavi 改」的话发）。 */
+    data class Advice(val label: Int, val path: List<Int>, val problem: String, val fix: String)
+
+    private const val REVIEW_RULES = """You are a strict design reviewer looking at one design (an HTML/CSS social-media card or poster). You get the automatic checks, a numbered list of the pieces on the canvas (position box x,y,w,h in px, text, font size, color, font), the page CSS and the canvas HTML.
+Find the 2 to 5 changes that would improve it most, worst first: problems from the automatic checks come first; then hierarchy (one clear focal point, title at least 2.5x body text), readability (size, contrast), spacing and alignment, clutter, too many colors or fonts, an AI-generated look (blue-purple gradients, glow, shadows everywhere, everything centered).
+Each item targets one numbered piece, or 0 for the whole canvas. Don't list things that are fine, and don't ask for photos.
+Output only one JSON object: {"items": [{"n": piece number or 0, "problem": "what's wrong, one short sentence in Chinese", "fix": "an instruction in Chinese for an editor who will change only that piece, e.g. 标题字号加大到 120px、加粗"}]}"""
+
+    suspend fun review(ctx: Context, reviewJson: String, target: Target): List<Advice> {
+        val store = Store(ctx)
+        val s = store.loadSettings()
+        com.jack.ai.data.Quota.blocked(ctx, s)?.let { error(com.jack.ai.data.Quota.message(it)) }
+        val ep = s.endpoint(s.model)?.takeIf { it.apiKey.isNotBlank() } ?: s.backgroundEndpoint()
+            ?: error("要用模型：先到设置里填好 DeepSeek Key")
+        val o = Json.parseToJsonElement(reviewJson).jsonObject
+        val pieces = (o["pieces"] as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { runCatching { it.jsonObject }.getOrNull() }
+        fun JsonObject.str(k: String) = (this[k] as? JsonPrimitive)?.content.orEmpty()
+        fun list(k: String) = (o[k] as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.content }
+        val checks = (list("problems") + list("advice"))
+        val input = buildString {
+            append("Canvas: ${target.w}×${target.h}px.\n\n【Automatic checks】\n")
+            append(checks.joinToString("\n") { "- $it" }.ifEmpty { "(none)" }).append("\n\n【Pieces】\n")
+            pieces.forEach { p ->
+                append("${p.str("n")}. ${p.str("slot")} (${p.str("kind")}) box=${p["box"]} size=${p.str("size")}px weight=${p.str("weight")} color=${p.str("color")} font=${p.str("font")}")
+                p.str("text").takeIf { it.isNotEmpty() }?.let { append(" text=「$it」") }
+                append("\n")
+            }
+            append("\n【Page CSS】\n").append(target.css.take(10_000))
+            append("\n\n【Canvas HTML】\n").append(target.html.take(24_000))
+        }
+        val raw = DeepSeekClient(store::addUsage).complete(
+            ep,
+            listOf(
+                buildJsonObject { put("role", "system"); put("content", REVIEW_RULES) },
+                buildJsonObject { put("role", "user"); put("content", input) },
+            ),
+            maxTokens = 2_000,
+            jsonMode = true,
+        )
+        val paths = pieces.associate { p -> p.str("n").toIntOrNull() to (p["path"] as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.content?.toIntOrNull() } }
+        return parseReview(raw, paths).ifEmpty { error("Kavi 这次没看出问题，再试一次") }
+    }
+
+    internal fun parseReview(raw: String, paths: Map<Int?, List<Int>>): List<Advice> = runCatching {
+        val o = Json.parseToJsonElement(raw.trim().removePrefix("```json").removeSuffix("```").trim()).jsonObject
+        (o["items"] as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { e ->
+            val it = runCatching { e.jsonObject }.getOrNull() ?: return@mapNotNull null
+            val n = (it["n"] as? JsonPrimitive)?.content?.toDoubleOrNull()?.toInt() ?: 0
+            val problem = (it["problem"] as? JsonPrimitive)?.content?.trim().orEmpty()
+            val fix = (it["fix"] as? JsonPrimitive)?.content?.trim().orEmpty()
+            if (problem.isEmpty() || fix.isEmpty()) return@mapNotNull null
+            (if (n == 0) emptyList() else paths[n]) to (problem to fix)
+        }.filter { it.first != null }.take(5).mapIndexed { i, (path, pf) -> Advice(i + 1, path!!, pf.first, pf.second) }
+    }.getOrDefault(emptyList())
+
     internal fun parse(raw: String): Result? = runCatching {
         val o: JsonObject = Json.parseToJsonElement(raw.trim().removePrefix("```json").removeSuffix("```").trim()).jsonObject
         val html = (o["html"] as? JsonPrimitive)?.content?.trim().orEmpty()

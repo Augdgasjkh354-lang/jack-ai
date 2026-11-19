@@ -4,6 +4,7 @@
 // 编辑器自己加的东西都带 data-kavi-temp，存底稿时 kaviSource() 会去掉。
 (function () {
   // sel 是主选中（工具栏、改字跟着它）；sels 是全部选中的（多选时一起挪、一起对齐）
+  var marksLayer = null;
   var canvas, overlay, boxes = [], handles = {}, guides = {}, sel = null, sels = [], multi = false, history = [], future = [], dragging = null;
   var editing = null, editBefore = null, lastRange = null, lastTap = { t: 0, el: null };
   var bridge = window.KaviEditor || { select: function () {}, state: function () {} };
@@ -918,15 +919,49 @@
       });
       return JSON.stringify(o);
     },
-    // 让 Kavi 改：选中的那一块（只选一个时）或整张，连同页面的 CSS
-    target: function () {
+    // 让 Kavi 改：选中的那一块（只选一个时）或整张，连同页面的 CSS；给了 path 就改那一块（空数组是整张）
+    target: function (path) {
       endEdit();
-      var el = sels.length === 1 && sel ? sel : null;
+      var el = path ? (path.length ? byPath(path) : null) : sels.length === 1 && sel ? sel : null;
       var css = Array.prototype.map.call(document.querySelectorAll("style:not([data-kavi-temp])"), function (x) { return x.textContent; }).join("\n");
       return JSON.stringify({
         scope: el ? "element" : "page", path: el ? pathOf(el) : [], html: (el || canvas).outerHTML, css: css,
         slot: el ? el.getAttribute("data-slot") || "" : "", kind: el ? kind(el) : "", text: el ? (el.innerText || "").trim() : "",
         w: canvas.offsetWidth, h: canvas.offsetHeight,
+      });
+    },
+    // Kavi 点评：检查结果，加上画布里每块能改的东西（编号、位置、字、字号）
+    review: function () {
+      endEdit();
+      var cr = canvas.getBoundingClientRect(), kk = cr.width / 1080 || 1, list = [];
+      Array.prototype.forEach.call(canvas.querySelectorAll("[data-slot],[data-item],[data-icon]"), function (el) {
+        if (list.length >= 40 || el.closest("[data-kavi-temp]")) return;
+        var r = el.getBoundingClientRect();
+        if (r.width < 2 || r.height < 2) return;
+        var cs = getComputedStyle(el), t = (el.innerText || "").trim().replace(/\s+/g, " ");
+        list.push({
+          n: list.length + 1, path: pathOf(el), slot: el.getAttribute("data-slot") || (el.hasAttribute("data-item") ? "item" : "icon"), kind: kind(el),
+          text: t.length > 30 ? t.slice(0, 30) + "…" : t, size: Math.round(parseFloat(cs.fontSize) / kk), weight: cs.fontWeight, color: cs.color,
+          font: cs.fontFamily.split(",")[0].replace(/["']/g, ""),
+          box: [Math.round((r.left - cr.left) / kk), Math.round((r.top - cr.top) / kk), Math.round(r.width / kk), Math.round(r.height / kk)],
+        });
+      });
+      var lint = window.kaviLint ? window.kaviLint() : { problems: [], advice: [] };
+      return JSON.stringify({ pieces: list, problems: lint.problems, advice: lint.advice, w: canvas.offsetWidth, h: canvas.offsetHeight });
+    },
+    // 点评的编号小圆点：贴在对应元素的左上角（path 为空的贴在画布左上角）
+    marks: function (items) {
+      if (!marksLayer) { marksLayer = document.createElement("div"); marksLayer.setAttribute("data-kavi-temp", ""); overlay.appendChild(marksLayer); }
+      marksLayer.innerHTML = "";
+      drawBox(); // 顺便把 overlay 撑到画布大小（没选中东西时它是 0×0，会把圆点剪掉）
+      (items || []).forEach(function (m) {
+        var el = m.path && m.path.length ? byPath(m.path) : canvas;
+        if (!el) return;
+        var r = el.getBoundingClientRect(), d = document.createElement("div");
+        d.textContent = m.label;
+        d.style.cssText = "position:absolute;width:64px;height:64px;margin:-24px 0 0 -24px;border-radius:50%;background:#FF3B7F;color:#fff;font:700 36px/64px sans-serif;text-align:center;box-shadow:0 0 0 5px #fff;left:" +
+          px(Math.max(r.left, 28) + window.scrollX) + ";top:" + px(Math.max(r.top, 28) + window.scrollY);
+        marksLayer.appendChild(d);
       });
     },
     // 选中的照片地址（抠图用）

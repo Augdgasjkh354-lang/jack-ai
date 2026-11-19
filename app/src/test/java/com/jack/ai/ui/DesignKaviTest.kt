@@ -16,4 +16,14 @@ class DesignKaviTest {
         assertEquals(listOf(2, 0), t.path)
         assertEquals(1080, t.w)
     }
+
+    @Test
+    fun reviewItemsMapToPiecesAndPage() {
+        val raw = """{"items":[{"n":3,"problem":"标题不够大","fix":"字号加到 120px"},{"n":0,"problem":"太挤","fix":"整体留白加大"},{"n":99,"problem":"不存在","fix":"x"},{"n":2,"problem":"","fix":"空的不要"}]}"""
+        val a = DesignKavi.parseReview(raw, mapOf(3 to listOf(2), 2 to listOf(1, 0)))
+        assertEquals(2, a.size)
+        assertEquals(listOf(2), a[0].path)
+        assertEquals(emptyList<Int>(), a[1].path)
+        assertEquals(listOf(1, 2), a.map { it.label })
+    }
 }

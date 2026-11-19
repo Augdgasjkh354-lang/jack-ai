@@ -220,11 +220,12 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
     // 抠图：正在抠（显示在工具栏上方）
     var cutting by remember { mutableStateOf(false) }
     var kaviBusy by remember { mutableStateOf(false) }
+    var advice by remember { mutableStateOf<List<DesignKavi.Advice>>(emptyList()) }
     val modelState by com.jack.ai.data.LocalModels.state.collectAsState()
     // 换配色后等着问「整组都换吗」的那套
     var pendingVars by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     LaunchedEffect(picked.kind) {
-        if (picked.kind == "none" && panel != "kavi") panel = null
+        if (picked.kind == "none" && panel != "kavi" && panel != "review") panel = null
         if (picked.kind == "image" && panel == "style") panel = null
         if (picked.kind != "image" && panel == "image") panel = null
     }
@@ -294,26 +295,59 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
         }
     }
 
-    // 让 Kavi 改：选中的一块（或整张）+ 一句话，单独请一次模型，换进画布（一步可撤销）
+    // 让 Kavi 改：选中的一块（或整张）+ 一句话，单独请一次模型，换进画布（一步可撤销）。path 不为空时改那一块（空列表是整张）
+    suspend fun kaviEdit(ask: String, path: List<Int>? = null): Boolean {
+        val r = runCatching {
+            val arg = path?.let { "[" + it.joinToString(",") + "]" } ?: ""
+            val t = DesignKavi.parseTarget(jsString(js("kvEd.target($arg)"))) ?: error("没拿到要改的内容")
+            val res = withContext(Dispatchers.IO) { DesignKavi.edit(ctx, t, ask) }
+            // 换了字体的先把字体下好、装进页面
+            val (css, _) = DesignRender.fontCss(ctx, res.html)
+            if (css.isNotEmpty()) webView?.evaluateJavascript("kvEd.cmd(${buildJsonObject { put("op", "fontCss"); put("css", css) }})", null)
+            cmd(buildJsonObject {
+                put("op", "kavi"); put("scope", t.scope); put("html", res.html)
+                put("path", kotlinx.serialization.json.JsonArray(t.path.map { JsonPrimitive(it) }))
+            })
+            res.note
+        }
+        r.onSuccess { if (path == null) Toast.makeText(ctx, it.ifEmpty { "改好了" } + "（不满意点撤销）", Toast.LENGTH_LONG).show() }
+            .onFailure { e -> Toast.makeText(ctx, e.message ?: "没改成", Toast.LENGTH_LONG).show() }
+        return r.isSuccess
+    }
     fun askKavi(ask: String) {
         if (ask.isBlank() || kaviBusy) return
+        scope.launch { kaviBusy = true; kaviEdit(ask); kaviBusy = false }
+    }
+    // Kavi 点评：跑一遍检查，请模型挑出最该改的几处，编号标在画布上
+    fun showMarks() {
+        val items = kotlinx.serialization.json.JsonArray(advice.map { a ->
+            buildJsonObject { put("label", a.label.toString()); put("path", kotlinx.serialization.json.JsonArray(a.path.map { JsonPrimitive(it) })) }
+        })
+        webView?.evaluateJavascript("kvEd.marks($items)", null)
+    }
+    fun startReview() {
+        if (kaviBusy) return
         scope.launch {
             kaviBusy = true
+            webView?.evaluateJavascript("kvEd.cmd({op:'deselect'})", null)
             val r = runCatching {
-                val t = DesignKavi.parseTarget(jsString(js("kvEd.target()"))) ?: error("没拿到要改的内容")
-                val res = withContext(Dispatchers.IO) { DesignKavi.edit(ctx, t, ask) }
-                // 换了字体的先把字体下好、装进页面
-                val (css, _) = DesignRender.fontCss(ctx, res.html)
-                if (css.isNotEmpty()) webView?.evaluateJavascript("kvEd.cmd(${buildJsonObject { put("op", "fontCss"); put("css", css) }})", null)
-                cmd(buildJsonObject {
-                    put("op", "kavi"); put("scope", t.scope); put("html", res.html)
-                    put("path", kotlinx.serialization.json.JsonArray(t.path.map { JsonPrimitive(it) }))
-                })
-                res.note
+                val t = DesignKavi.parseTarget(jsString(js("kvEd.target([])"))) ?: error("没拿到这张图")
+                withContext(Dispatchers.IO) { DesignKavi.review(ctx, jsString(js("kvEd.review()")), t) }
             }
             kaviBusy = false
-            r.onSuccess { Toast.makeText(ctx, it.ifEmpty { "改好了" } + "（不满意点撤销）", Toast.LENGTH_LONG).show() }
-                .onFailure { e -> Toast.makeText(ctx, e.message ?: "没改成", Toast.LENGTH_LONG).show() }
+            r.onSuccess { advice = it; panel = "review"; showMarks() }
+                .onFailure { e -> Toast.makeText(ctx, e.message ?: "没看成", Toast.LENGTH_LONG).show() }
+        }
+    }
+    fun applyAdvice(list: List<DesignKavi.Advice>) {
+        if (kaviBusy || list.isEmpty()) return
+        scope.launch {
+            kaviBusy = true
+            for (a in list) {
+                if (kaviEdit(a.fix, a.path)) { advice = advice - a; showMarks() } else break
+            }
+            kaviBusy = false
+            if (advice.isEmpty()) { panel = null; Toast.makeText(ctx, "改好了（不满意点撤销）", Toast.LENGTH_LONG).show() }
         }
     }
 
@@ -511,6 +545,7 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
                 val label = when {
                     cutting -> "正在抠图，十几秒…"
                     kaviBusy -> "Kavi 在改" + (if (picked.kind == "none") "整张" else "这一块") + "，几秒到十几秒…"
+                    panel == "review" -> "Kavi 点评：${advice.size} 处可以改，编号标在图上"
                     panel == "kavi" -> if (picked.kind == "none") "让 Kavi 改整张图：说说想怎么改" else if (picked.count > 1) "选了好几个：Kavi 改整张图" else "让 Kavi 改选中的这一块"
                     editingText -> "正在改字：选中几个字，可以单独换颜色、加粗、划重点"
                     panel == "style" && picked.kind != "none" -> "文字样式 · ${picked.fontSize}px"
@@ -528,6 +563,11 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
                 }
                 Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp), maxLines = 1)
+                if (!editingText && panel == "review") {
+                    ReviewPanel(advice, busy = kaviBusy, onApply = { applyAdvice(listOf(it)) }, onApplyAll = { applyAdvice(advice) },
+                        onClose = { panel = null; advice = emptyList(); showMarks() })
+                    return@Column
+                }
                 if (!editingText && panel == "kavi") {
                     KaviPanel(
                         quick = when { picked.kind == "none" || picked.count > 1 -> DesignKavi.QUICK_PAGE; picked.kind == "text" -> DesignKavi.QUICK_TEXT; else -> DesignKavi.QUICK_BOX },
@@ -568,6 +608,7 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
                         }
                         picked.kind == "none" -> {
                             Tool("让 Kavi 改", bold = true) { panel = "kavi" }
+                            Tool("Kavi 点评") { startReview() }
                             Tool("加文字") { webView?.requestFocus(); cmd("addText") }
                             Tool("换配色") { sheet = "palette" }
                             Tool(if (picked.multi) "退出多选" else "多选", bold = picked.multi) { multiMode(!picked.multi) }
@@ -1111,5 +1152,26 @@ private fun KaviPanel(quick: List<String>, busy: Boolean, onAsk: (String) -> Uni
             TextButton(onClick = { onAsk(text); text = "" }, enabled = !busy && text.isNotBlank()) { Text("发送", fontWeight = FontWeight.Bold) }
         }
         TextButton(onClick = onClose, enabled = !busy) { Text("收起") }
+    }
+}
+
+/** Kavi 点评的结果：一条一行，编号和图上的小圆点对应；点「应用」让 Kavi 照着改那一块。 */
+@Composable
+private fun ReviewPanel(advice: List<DesignKavi.Advice>, busy: Boolean, onApply: (DesignKavi.Advice) -> Unit, onApplyAll: () -> Unit, onClose: () -> Unit) {
+    Column(Modifier.fillMaxWidth().heightIn(max = 300.dp).verticalScroll(rememberScrollState()).padding(horizontal = 12.dp)) {
+        advice.forEach { a ->
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
+                Text("${a.label}", color = Color(0xFFFF3B7F), fontWeight = FontWeight.Bold, modifier = Modifier.width(24.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(a.problem, style = MaterialTheme.typography.bodyMedium)
+                    Text(a.fix, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                TextButton(onClick = { onApply(a) }, enabled = !busy) { Text("应用") }
+            }
+        }
+        Row {
+            TextButton(onClick = onApplyAll, enabled = !busy && advice.isNotEmpty()) { Text("全部应用", fontWeight = FontWeight.Bold) }
+            TextButton(onClick = onClose, enabled = !busy) { Text("收起") }
+        }
     }
 }
