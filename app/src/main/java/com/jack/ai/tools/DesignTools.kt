@@ -21,6 +21,7 @@ import java.io.File
  * - make：套模板（填文字、列表、图片、换配色），或者用 html 从头设计；出 PNG（可再出 PDF），旁边存一份底稿 .html；
  * - series：一组图（小红书一篇拆成几张），每页一个模板或 html，配色统一，文件名按 01、02… 编号，页码自动填；
  * - render：用 edit_file 改过底稿以后重新出图（同名覆盖，聊天里的图跟着变）；
+ * - resize：一键改尺寸，按新尺寸重新排版（不是拉伸），另存一份；
  * - cutout：抠图（去背景，出透明 PNG），用手机上的抠图模型，没下载时让 Kavi 先问用户下哪个。
  * 每次都检查文字有没有装不下、审美上有没有常见毛病，能看图的模型还会收到小图自己看一眼。
  */
@@ -43,8 +44,9 @@ internal suspend fun ToolSession.design(args: JsonObject): String = when (args["
     "render" -> renderDesign(args)
     "make" -> makeDesign(args)
     "series" -> makeSeries(args)
+    "resize" -> resizeDesign(args)
     "cutout" -> cutout(args)
-    else -> "action 只能是 templates、styles、fonts、make、series、render、cutout"
+    else -> "action 只能是 templates、styles、fonts、make、series、render、resize、cutout"
 }
 
 private suspend fun ToolSession.makeDesign(args: JsonObject): String {
@@ -127,6 +129,30 @@ internal suspend fun ToolSession.renderDesign(args: JsonObject): String {
         com.jack.ai.ui.DesignEditorActivity.bump(d.png)
         com.jack.ai.data.DesignEvents.changed(file)
         d.text to SearchRecord("$label：${d.png.name}" + if (d.problems > 0) "（${d.problems} 处要改）" else "")
+    }
+}
+
+/** 改尺寸：path 是设计图（.png 或底稿 .html），size 是新尺寸。原图不动，新图叫「原名-方图」这样。 */
+private suspend fun ToolSession.resizeDesign(args: JsonObject): String {
+    val path = args["path"].text().trim()
+    if (path.isEmpty()) return "要写 path：要改尺寸的设计图文件名"
+    val found = withContext(Dispatchers.IO) { Workspace.find(wsDir, path) } ?: return "对话文件夹里没有「$path」"
+    val src = File(found.parentFile, found.nameWithoutExtension + ".html")
+    if (!src.isFile || withContext(Dispatchers.IO) { DesignTemplates.savedSize(src.readText()) } == null)
+        return "「${found.name}」没有设计底稿，改不了尺寸（只有 design 做出来的图能改）"
+    val raw = args["size"].text().trim().lowercase()
+    val (w, h) = DesignTemplates.size(raw)?.takeIf { it.second > 0 } ?: return "size 要写新尺寸：${com.jack.ai.ui.DesignResize.TARGETS.joinToString("、")}，或「宽x高」像素"
+    val label = com.jack.ai.ui.DesignResize.LABELS[raw] ?: "${w}x$h"
+    return runTool("改尺寸：${found.nameWithoutExtension} → $label") {
+        val out = com.jack.ai.ui.DesignResize.resizeAll(app, wsDir, listOf(src), w, h, label).first()
+        ui.attach(out.png)
+        val text = buildString {
+            append("改好了：「${out.png.name}」（${w}×$h），底稿「${out.html.name}」，原图没动。")
+            if (out.note.isNotBlank()) append(out.note).append("。")
+            if (out.problems.isEmpty()) append("检查：文字都装得下，没有跑出画布。")
+            else append("\n检查还有这些毛病（用 edit_file 改新底稿，改完自动重新出图）：\n").append(out.problems.joinToString("\n") { "- $it" })
+        }
+        text to SearchRecord("改尺寸：${out.png.name}")
     }
 }
 

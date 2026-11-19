@@ -22,6 +22,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -220,6 +221,8 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
     // 抠图：正在抠（显示在工具栏上方）
     var cutting by remember { mutableStateOf(false) }
     var kaviBusy by remember { mutableStateOf(false) }
+    // 改尺寸：正在做时显示进度（null 是没在做）
+    var resizing by remember { mutableStateOf<String?>(null) }
     var advice by remember { mutableStateOf<List<DesignKavi.Advice>>(emptyList()) }
     val modelState by com.jack.ai.data.LocalModels.state.collectAsState()
     // 换配色后等着问「整组都换吗」的那套
@@ -479,6 +482,32 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
         Toast.makeText(ctx, if (n > 0) "已存 $n 张到相册（Pictures/Kavi）" else "没存成，看看是不是没给存储权限", Toast.LENGTH_LONG).show()
     }
 
+    // 一键改尺寸：先保存，再按新尺寸重排（一张或整组），出好的新图在编辑器里打开（原图不动）
+    fun resize(key: String, all: Boolean) {
+        if (resizing != null || kaviBusy) return
+        val (w, h) = DesignTemplates.SIZES[key]?.let { it.second to it.third } ?: return
+        val label = DesignResize.LABELS[key] ?: key
+        val run: suspend () -> Unit = {
+            val files = if (all && group) pages.mapNotNull { it.origin } else listOfNotNull(pages.getOrNull(cur)?.origin ?: src)
+            resizing = "正在改成$label…"
+            val r = runCatching {
+                DesignResize.resizeAll(ctx, root, files, w, h, label) { done, n ->
+                    resizing = if (n > 1) "正在改成$label：$done/$n 张，每张半分钟左右…" else "正在改成$label，半分钟左右…"
+                }
+            }
+            resizing = null
+            r.onSuccess { outs ->
+                val miss = files.size - outs.size
+                val bad = outs.count { it.problems.isNotEmpty() }
+                Toast.makeText(ctx, "改好了：${outs.first().png.nameWithoutExtension}" + (if (outs.size > 1) " 等 ${outs.size} 张" else "") +
+                    (if (miss > 0) "，有 $miss 张没改成" else "") + (if (bad > 0) "，有 $bad 张还有小毛病，可以接着调" else "") +
+                    "。原图没动，新图在对话文件夹里", Toast.LENGTH_LONG).show()
+                DesignEditorActivity.open(ctx, outs.first().png)
+            }.onFailure { e -> Toast.makeText(ctx, e.message ?: "没改成", Toast.LENGTH_LONG).show() }
+        }
+        if (anyDirty) save(false) { run() } else scope.launch { run() }
+    }
+
     // 把这页的配色和字体用到整组别的页
     fun syncTheme(theme: Map<String, String>) {
         for (i in pages.indices) if (i != cur) pages[i] = pages[i].copy(html = DesignSeries.withCanvasVars(pages[i].html, theme), dirty = true)
@@ -586,6 +615,7 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
                 val many = picked.count > 1
                 val label = when {
                     cutting -> "正在抠图，十几秒…"
+                    resizing != null -> resizing!!
                     kaviBusy -> "Kavi 在改" + (if (picked.kind == "none") "整张" else "这一块") + "，几秒到十几秒…"
                     panel == "review" -> "Kavi 点评：${advice.size} 处可以改，编号标在图上"
                     panel == "kavi" -> if (picked.kind == "none") "让 Kavi 改整张图：说说想怎么改" else if (picked.count > 1) "选了好几个：Kavi 改整张图" else "让 Kavi 改选中的这一块"
@@ -653,6 +683,7 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
                             Tool("Kavi 点评") { startReview() }
                             Tool("加文字") { webView?.requestFocus(); cmd("addText") }
                             Tool("换配色") { sheet = "palette" }
+                            Tool("改尺寸") { sheet = "resize" }
                             Tool(if (picked.multi) "退出多选" else "多选", bold = picked.multi) { multiMode(!picked.multi) }
                             if (group) Tool("同步到整组") { sheet = "syncTheme" }
                             Tool(if (group) "整组存到相册" else "存到相册") { exportAll() }
@@ -739,6 +770,36 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
                             if (failed.isNotEmpty()) Toast.makeText(ctx, "字体没下载下来，联网后再试", Toast.LENGTH_LONG).show()
                             webView?.evaluateJavascript("kvEd.cmd(${buildJsonObject { put("op", "fontCss"); put("css", css) }})", null)
                             cmd("font", "value" to "\"${f.family}\",\"Noto Sans CJK SC\",sans-serif")
+                        }
+                    }
+                }
+            }
+        }
+        "resize" -> ModalBottomSheet(onDismissRequest = { sheet = null }) {
+            var all by remember { mutableStateOf(true) }
+            val (cw, ch) = loaded?.let { it.second to it.third } ?: (0 to 0)
+            LazyColumn(Modifier.padding(bottom = 24.dp)) {
+                item { SheetTitle("改尺寸：Kavi 按新尺寸重新排版，另存一份，原图不动") }
+                if (group) item {
+                    Row(Modifier.fillMaxWidth().clickable { all = !all }.padding(horizontal = 20.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("整组 ${pages.size} 张一起改", Modifier.weight(1f))
+                        androidx.compose.material3.Switch(all, { all = it })
+                    }
+                }
+                items(DesignResize.TARGETS) { k ->
+                    val (label, w, h) = DesignTemplates.SIZES[k]!!
+                    val same = w == cw && h == ch
+                    Row(Modifier.fillMaxWidth().clickable(enabled = !same) { sheet = null; resize(k, all) }.padding(horizontal = 20.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        // 按比例画个小框，一眼看出横竖
+                        val scale = 36f / maxOf(w, h)
+                        Box(Modifier.width(44.dp), contentAlignment = Alignment.Center) {
+                            Box(Modifier.size((w * scale).dp, (h * scale).dp).border(1.5.dp, if (same) MaterialTheme.colorScheme.outlineVariant else MaterialTheme.colorScheme.primary, RoundedCornerShape(3.dp)))
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(label, color = if (same) MaterialTheme.colorScheme.onSurfaceVariant else Color.Unspecified)
+                            Text("$w×$h" + if (same) " · 现在就是这个尺寸" else "", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }

@@ -50,10 +50,6 @@ Rules:
 
     suspend fun edit(ctx: Context, target: Target, ask: String): Result {
         val store = Store(ctx)
-        val s = store.loadSettings()
-        com.jack.ai.data.Quota.blocked(ctx, s)?.let { error(com.jack.ai.data.Quota.message(it)) }
-        val ep = s.endpoint(s.model)?.takeIf { it.apiKey.isNotBlank() } ?: s.backgroundEndpoint()
-            ?: error("要用模型：先到设置里填好 DeepSeek Key")
         val input = buildString {
             append("Canvas: ${target.w}×${target.h}px.\n\n")
             append("【Page CSS】\n").append(target.css.take(12_000)).append("\n\n")
@@ -61,16 +57,26 @@ Rules:
             append(target.html.take(if (target.scope == "page") 40_000 else 8_000)).append("\n\n")
             append("【Request】\n").append(ask.trim())
         }
-        val raw = DeepSeekClient(store::addUsage).complete(
+        val raw = ask(ctx, Persona.fill(RULES, store.loadSettings()), input, if (target.scope == "page") 16_000 else 4_000)
+        return parse(raw) ?: error("Kavi 这次没改成，再说一遍试试")
+    }
+
+    /** 单独请一次模型（JSON 模式），不带聊天记录。额度用完、没填 Key 时报错。 */
+    internal suspend fun ask(ctx: Context, system: String, user: String, maxTokens: Int): String {
+        val store = Store(ctx)
+        val s = store.loadSettings()
+        com.jack.ai.data.Quota.blocked(ctx, s)?.let { error(com.jack.ai.data.Quota.message(it)) }
+        val ep = s.endpoint(s.model)?.takeIf { it.apiKey.isNotBlank() } ?: s.backgroundEndpoint()
+            ?: error("要用模型：先到设置里填好 DeepSeek Key")
+        return DeepSeekClient(store::addUsage).complete(
             ep,
             listOf(
-                buildJsonObject { put("role", "system"); put("content", Persona.fill(RULES, s)) },
-                buildJsonObject { put("role", "user"); put("content", input) },
+                buildJsonObject { put("role", "system"); put("content", system) },
+                buildJsonObject { put("role", "user"); put("content", user) },
             ),
-            maxTokens = if (target.scope == "page") 16_000 else 4_000,
+            maxTokens = maxTokens,
             jsonMode = true,
         )
-        return parse(raw) ?: error("Kavi 这次没改成，再说一遍试试")
     }
 
     /** 点评的一条：贴在哪一块（path 为空是整张）、毛病、怎么改（直接当「让 Kavi 改」的话发）。 */
@@ -82,11 +88,6 @@ Each item targets one numbered piece, or 0 for the whole canvas. Don't list thin
 Output only one JSON object: {"items": [{"n": piece number or 0, "problem": "what's wrong, one short sentence in Chinese", "fix": "an instruction in Chinese for an editor who will change only that piece, e.g. 标题字号加大到 120px、加粗"}]}"""
 
     suspend fun review(ctx: Context, reviewJson: String, target: Target): List<Advice> {
-        val store = Store(ctx)
-        val s = store.loadSettings()
-        com.jack.ai.data.Quota.blocked(ctx, s)?.let { error(com.jack.ai.data.Quota.message(it)) }
-        val ep = s.endpoint(s.model)?.takeIf { it.apiKey.isNotBlank() } ?: s.backgroundEndpoint()
-            ?: error("要用模型：先到设置里填好 DeepSeek Key")
         val o = Json.parseToJsonElement(reviewJson).jsonObject
         val pieces = (o["pieces"] as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { runCatching { it.jsonObject }.getOrNull() }
         fun JsonObject.str(k: String) = (this[k] as? JsonPrimitive)?.content.orEmpty()
@@ -103,15 +104,7 @@ Output only one JSON object: {"items": [{"n": piece number or 0, "problem": "wha
             append("\n【Page CSS】\n").append(target.css.take(10_000))
             append("\n\n【Canvas HTML】\n").append(target.html.take(24_000))
         }
-        val raw = DeepSeekClient(store::addUsage).complete(
-            ep,
-            listOf(
-                buildJsonObject { put("role", "system"); put("content", REVIEW_RULES) },
-                buildJsonObject { put("role", "user"); put("content", input) },
-            ),
-            maxTokens = 2_000,
-            jsonMode = true,
-        )
+        val raw = ask(ctx, REVIEW_RULES, input, 2_000)
         val paths = pieces.associate { p -> p.str("n").toIntOrNull() to (p["path"] as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.content?.toIntOrNull() } }
         return parseReview(raw, paths).ifEmpty { error("Kavi 这次没看出问题，再试一次") }
     }
