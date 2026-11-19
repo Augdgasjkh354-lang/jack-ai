@@ -61,6 +61,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -212,6 +213,9 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
     var editingText by remember { mutableStateOf(false) }
     // 代替工具栏的面板：style 文字样式、arrange 排列（对齐、分布、微调、数值）
     var panel by remember { mutableStateOf<String?>(null) }
+    // 抠图：正在抠（显示在工具栏上方）
+    var cutting by remember { mutableStateOf(false) }
+    val modelState by com.jack.ai.data.LocalModels.state.collectAsState()
     // 换配色后等着问「整组都换吗」的那套
     var pendingVars by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     LaunchedEffect(picked.kind) {
@@ -257,10 +261,33 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
     fun cmd(o: JsonObject) { webView?.evaluateJavascript("kvEd.cmd($o)", null); dirty = true }
     fun cmd(op: String, vararg kv: Pair<String, Any>) = cmd(buildJsonObject {
         put("op", op)
-        kv.forEach { (k, v) -> when (v) { is Number -> put(k, v); is JsonObject -> put(k, v); else -> put(k, v.toString()) } }
+        kv.forEach { (k, v) -> when (v) { is Number -> put(k, v); is Boolean -> put(k, v); is JsonObject -> put(k, v); else -> put(k, v.toString()) } }
     })
     suspend fun js(code: String): String = suspendCancellableCoroutine { c -> webView?.evaluateJavascript(code) { if (c.isActive) c.resume(it ?: "null") } ?: c.resume("null") }
     fun jsString(raw: String) = runCatching { (Json.parseToJsonElement(raw) as? JsonPrimitive)?.content }.getOrNull().orEmpty()
+
+    /** 抠选中的照片：存成「原名-抠图.png」放进对话文件夹，换进这个图片位（透明底，露出框的底色）。模型没下载就先问下哪个。 */
+    fun cutout() {
+        if (com.jack.ai.data.LocalModels.cutoutReady(ctx) == null) { sheet = "cutoutModel"; return }
+        scope.launch {
+            val url = jsString(js("kvEd.photo()"))
+            val rel = android.net.Uri.decode(url.substringAfter("/files/", "")).takeIf { url.contains("/files/") && it.isNotBlank() }
+            val src = rel?.let { PageCheck.resolve(root, it) }
+            if (src == null || !src.isFile) { Toast.makeText(ctx, "这张图不在对话文件夹里，先换图再抠", Toast.LENGTH_SHORT).show(); return@launch }
+            val m = com.jack.ai.data.LocalModels.cutoutReady(ctx) ?: return@launch
+            cutting = true
+            val out = runCatching {
+                withContext(Dispatchers.IO) {
+                    val o = com.jack.ai.data.Workspace.uniqueFile(root, src.nameWithoutExtension.removeSuffix("-抠图") + "-抠图.png")
+                    com.jack.ai.api.LocalCutout.cut(File(com.jack.ai.data.LocalModels.dir(ctx, m), m.files.first().path), src, o)
+                    o
+                }
+            }
+            cutting = false
+            out.onSuccess { o -> cmd("image", "src" to DesignRender.fileUrl(o.canonicalFile.relativeTo(root).path)) }
+                .onFailure { e -> Toast.makeText(ctx, "抠图失败：${e.message}", Toast.LENGTH_LONG).show() }
+        }
+    }
 
     // 当前页改过的话，把页面里的内容收回到内存里那份
     suspend fun capture() {
@@ -454,6 +481,7 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
             Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(vertical = 6.dp)) {
                 val many = picked.count > 1
                 val label = when {
+                    cutting -> "正在抠图，十几秒…"
                     editingText -> "正在改字：选中几个字，可以单独换颜色、加粗、划重点"
                     panel == "style" && picked.kind != "none" -> "文字样式 · ${picked.fontSize}px"
                     panel == "arrange" && picked.kind != "none" -> if (many) "排列：已选 ${picked.count} 个，按它们的外框对齐" else "排列：对齐画布（左右上下留安全边距）"
@@ -530,6 +558,7 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
                             if (picked.kind == "image") {
                                 Tool("换图") { sheet = "image" }
                                 if (picked.photo) Tool("裁剪") { cmd("crop", "on" to true) }
+                                if (picked.photo && !cutting) Tool("抠图") { cutout() }
                                 Tool("滤镜调色") { panel = "image" }
                             }
                             if (picked.kind == "text" || picked.kind == "group") Tool("样式") { panel = "style" }
@@ -613,6 +642,36 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
                     }
                 }
             }
+        }
+        "cutoutModel" -> {
+            val ms = com.jack.ai.data.LocalModels
+            val running = ms.CUTOUTS.firstOrNull { modelState[it.id]?.running == true }
+            // 下好了就自动抠
+            LaunchedEffect(modelState) { if (running == null && ms.cutoutReady(ctx) != null) { sheet = null; cutout() } }
+            AlertDialog(
+                onDismissRequest = { sheet = null },
+                title = { Text("下载抠图模型") },
+                text = {
+                    Column {
+                        if (running != null) {
+                            val st = modelState[running.id]
+                            Text("正在下载${running.name}：${ms.mb(st?.done ?: 0)} / ${ms.mb(running.bytes)}，可以先关掉，下好后再点「抠图」。")
+                        } else {
+                            Text("抠图在手机上做，不联网、不花钱，只要下载一次。选一个：")
+                            ms.CUTOUTS.mapNotNull { m -> modelState[m.id]?.error?.takeIf { it.isNotEmpty() }?.let { m.name + "：" + it } }.forEach {
+                                Text("上次失败：$it", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                            }
+                            listOf(ms.CUTOUT_SMALL, ms.CUTOUT_HD).forEach { m ->
+                                Column(Modifier.fillMaxWidth().clickable { ms.start(ctx, m) }.padding(vertical = 10.dp)) {
+                                    Text(m.name, fontWeight = FontWeight.Bold)
+                                    Text(m.blurb, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = { TextButton(onClick = { sheet = null }) { Text(if (running != null) "后台下载" else "先不用") } },
+            )
         }
         "image" -> ModalBottomSheet(onDismissRequest = { sheet = null }) {
             ImageSheet(root) { file ->

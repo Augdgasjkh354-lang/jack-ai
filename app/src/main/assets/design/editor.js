@@ -886,6 +886,8 @@
       });
       return JSON.stringify(o);
     },
+    // 选中的照片地址（抠图用）
+    photo: function () { return sel && kind(sel) === "image" ? photoUrl(sel) : ""; },
     // 当前配色（六个变量）
     vars: function () {
       var cs = getComputedStyle(canvas), o = {};

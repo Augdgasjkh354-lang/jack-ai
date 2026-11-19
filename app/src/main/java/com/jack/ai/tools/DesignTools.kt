@@ -20,7 +20,8 @@ import java.io.File
  * - fonts：能用的字体；
  * - make：套模板（填文字、列表、图片、换配色），或者用 html 从头设计；出 PNG（可再出 PDF），旁边存一份底稿 .html；
  * - series：一组图（小红书一篇拆成几张），每页一个模板或 html，配色统一，文件名按 01、02… 编号，页码自动填；
- * - render：用 edit_file 改过底稿以后重新出图（同名覆盖，聊天里的图跟着变）。
+ * - render：用 edit_file 改过底稿以后重新出图（同名覆盖，聊天里的图跟着变）；
+ * - cutout：抠图（去背景，出透明 PNG），用手机上的抠图模型，没下载时让 Kavi 先问用户下哪个。
  * 每次都检查文字有没有装不下、审美上有没有常见毛病，能看图的模型还会收到小图自己看一眼。
  */
 internal suspend fun ToolSession.design(args: JsonObject): String = when (args["action"].text().ifBlank { "make" }) {
@@ -42,7 +43,8 @@ internal suspend fun ToolSession.design(args: JsonObject): String = when (args["
     "render" -> renderDesign(args)
     "make" -> makeDesign(args)
     "series" -> makeSeries(args)
-    else -> "action 只能是 templates、styles、fonts、make、series、render"
+    "cutout" -> cutout(args)
+    else -> "action 只能是 templates、styles、fonts、make、series、render、cutout"
 }
 
 private suspend fun ToolSession.makeDesign(args: JsonObject): String {
@@ -186,3 +188,55 @@ private suspend fun ToolSession.draw(
 private fun JsonObject.str(k: String) = (this[k] as? JsonPrimitive)?.content.orEmpty()
 
 private fun looksLikeImage(v: String) = Regex("""\.(png|jpe?g|webp|gif|bmp|heic)$""", RegexOption.IGNORE_CASE).containsMatchIn(v.trim()) && '\n' !in v
+
+/**
+ * 抠图：去掉照片背景，存成「原名-抠图.png」（透明背景，裁到主体）。
+ * 抠图模型不随 App 带：没下载、也没说下哪个时，告诉 Kavi 用 ask_user 问用户（小巧版 82MB / 高清版 92MB）；
+ * 用户选了再带 model 调一次，这次先下载（通知栏显示进度）再抠。
+ */
+private suspend fun ToolSession.cutout(args: JsonObject): String {
+    val path = args["path"].text().trim()
+    if (path.isEmpty()) return "要写 path：对话文件夹里的图片文件名"
+    val src = withContext(Dispatchers.IO) { Workspace.find(wsDir, path) } ?: return "对话文件夹里没有「$path」"
+    if (!looksLikeImage(src.name)) return "「${src.name}」不是图片"
+    var model = com.jack.ai.data.LocalModels.cutoutReady(app)
+    if (model == null) {
+        val want = when (args["model"].text().trim().lowercase()) {
+            "small", "int4", "小巧版" -> com.jack.ai.data.LocalModels.CUTOUT_SMALL
+            "hd", "full", "int8", "高清版" -> com.jack.ai.data.LocalModels.CUTOUT_HD
+            else -> return "抠图要用手机上的抠图模型，还没下载。先用 ask_user 问用户要不要下载、下哪个，选项写：" +
+                "「小巧版（82MB，抠得快）」「高清版（92MB，头发丝更准，慢一点）」「先不用」。只下一次，以后抠图不用再问，不联网、不花钱；手机上抠一张要十几秒。" +
+                "用户选了再调 design action=cutout path=${src.name} model=small（小巧版）或 model=hd（高清版）；选「先不用」就别再提。"
+        }
+        val ok = runTool("下载抠图模型：${want.name}") {
+            val ms = com.jack.ai.data.LocalModels
+            ms.start(app, want)
+            try {
+                while (true) {
+                    kotlinx.coroutines.delay(1000)
+                    val st = ms.state.value[want.id] ?: break
+                    if (st.total > 0) ui.progress("下载抠图模型 ${st.done * 100 / st.total}%（${ms.mb(st.done)} / ${ms.mb(st.total)}）")
+                    if (!st.running) break
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) { ms.pause(want); throw e }
+            val err = ms.state.value[want.id]?.error.orEmpty()
+            if (!ms.ready(app, want)) error(err.ifBlank { "没下完" })
+            "下好了" to SearchRecord("下载抠图模型：${want.name}（${ms.mb(want.bytes)}）")
+        }
+        if (!com.jack.ai.data.LocalModels.ready(app, want)) return "$ok\n抠图模型没下载成功，告诉用户原因；网络好了可以再试（会接着下）。"
+        model = want
+    }
+    val m = model
+    return runTool("抠图：${src.name}") {
+        val out = withContext(Dispatchers.IO) { Workspace.uniqueFile(wsDir, src.nameWithoutExtension + "-抠图.png") }
+        val t0 = System.currentTimeMillis()
+        val r = kotlinx.coroutines.runInterruptible(Dispatchers.Default) {
+            com.jack.ai.api.LocalCutout.cut(java.io.File(com.jack.ai.data.LocalModels.dir(app, m), m.files.first().path), src, out)
+        }
+        ui.attach(out)
+        val secs = (System.currentTimeMillis() - t0) / 100 / 10.0
+        ("抠好了：「${out.name}」（${r.width}×${r.height}，透明背景，已裁到主体，用了 $secs 秒）。已经显示在聊天里。" +
+            "要放进设计图就把它填进图片位，或者从头设计时用 <img> 摆在画布上（透明背景适合压在色块上、当贴纸）。") to
+            SearchRecord("抠图：${out.name}")
+    }
+}

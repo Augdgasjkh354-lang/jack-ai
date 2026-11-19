@@ -126,6 +126,25 @@ object LocalModels {
         ramMb = 900,
     )
 
+    /**
+     * 抠图模型 BiRefNet-lite（MIT，Moonbox 转的 ONNX，输入输出都是 fp32，输出已经过 sigmoid）。
+     * 不随 App 带，第一次要抠图时 Kavi 问用户下哪个：小巧版（int4，快）或高清版（int8，边缘更准）。
+     */
+    private fun cutout(id: String, name: String, blurb: String, path: String, size: Long, sha: String) = LocalModel(
+        id = id, name = name, blurb = blurb,
+        repo = "moonbox-dev/BiRefNet_lite-ONNX", hfRevision = "7f53ea0ad257516a11ced217898120eaf60b6e24",
+        files = listOf(ModelFile(path, size, sha)), ramMb = 700,
+    )
+    val CUTOUT_SMALL = cutout("birefnet-lite-int4", "抠图·小巧版", "82MB，快，边缘稍糙一点",
+        "int4/model.onnx", 81_683_371, "f1569d7629559f3a4045cdc7189d1b6f0f170b070ff566596075c339e4178101")
+    // 高清版用 int8 不用 fp16：ONNX Runtime 的 CPU 几乎没有 fp16 算子，fp16 版在手机上慢得没法用（实测十分钟出不来）
+    val CUTOUT_HD = cutout("birefnet-lite-int8", "抠图·高清版", "92MB，头发丝、细边更准，慢一点",
+        "int8/model.onnx", 91_738_399, "97dd832a68fe8e637ce679bf2e66f6e0e04e66338da62b2894659a18c1040d9d")
+    val CUTOUTS = listOf(CUTOUT_HD, CUTOUT_SMALL)
+
+    /** 已经下好的抠图模型（两个都有用高清版）。 */
+    fun cutoutReady(ctx: Context): LocalModel? = CUTOUTS.firstOrNull { ready(ctx, it) }
+
     /** 向量模型（设置里选一个）。 */
     val ALL = listOf(GEMMA, BGE_SMALL)
     /** 生成模型。 */
