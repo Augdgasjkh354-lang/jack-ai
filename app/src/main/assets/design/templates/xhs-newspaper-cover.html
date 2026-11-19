@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-newspaper-cover","name":"报纸·封面","category":"xhs","size":[1080,1440],"style":"报纸","look":"newspaper","set":"newspaper-a","role":"cover","description":"报纸头版：报名大字加日期期号、粗细双线、主标题和黑白照片位，适合年度盘点、观点类笔记的封面","slots":[{"name":"name","label":"报纸名","max":6},{"name":"date","label":"日期","max":12},{"name":"issue","label":"期号","max":10},{"name":"tag","label":"栏目","max":8},{"name":"title","label":"主标题（可用\n分两行）","max":12},{"name":"subtitle","label":"副标题","max":24},{"name":"body","label":"导语","max":60},{"name":"caption","label":"图说","max":20},{"name":"author","label":"账号名","max":12},{"name":"page","label":"页码","max":5}],"lists":[],"images":[{"name":"photo","label":"头版照片","optional":true}],"colors":{"bg":"#F1ECE1","fg":"#161412","primary":"#161412","secondary":"#E0D8C8","accent":"#C4302B","muted":"#5E5850"}}'>
+<title>报纸·封面</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#F1ECE1;--fg:#161412;--primary:#161412;--secondary:#E0D8C8;--accent:#C4302B;--muted:#5E5850;
+  --font-title:"Noto Serif SC","Noto Serif CJK SC",serif;--font-sans:"Noto Serif SC","Noto Serif CJK SC",serif;--font-num:"Playfair Display","Noto Serif SC",serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:72px 76px;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+/* 颗粒：让纯色底不那么「电脑味」 */
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.10;mix-blend-mode:multiply}
+.masthead{position:relative;text-align:center}
+.mast-en{font-family:var(--font-num);font-size:26px;font-weight:700;letter-spacing:.35em;color:var(--muted)}
+.name{display:block;margin-top:10px;font-family:var(--font-title);font-weight:900;font-size:118px;line-height:1.05;letter-spacing:.06em;color:var(--fg)}
+.dateline{position:relative;display:flex;justify-content:space-between;align-items:baseline;margin-top:22px;padding:14px 0;border-top:2px solid var(--fg);border-bottom:2px solid var(--fg)}
+.dateline span{font-size:26px;font-weight:700}
+.rule-double{position:relative;height:16px;margin-top:18px;border-top:6px solid var(--fg);border-bottom:2px solid var(--fg)}
+.tagrow{position:relative;display:flex;align-items:center;gap:16px;margin-top:26px}
+.sq{width:16px;height:16px;background:var(--accent);flex:none}
+.tag{font-size:28px;font-weight:700;letter-spacing:.22em;color:var(--accent)}
+.title{position:relative;margin:18px 0 0;font-family:var(--font-title);font-weight:900;font-size:100px;line-height:1.12;color:var(--fg)}
+.subtitle{position:relative;margin-top:20px;font-size:28px;line-height:1.5;color:var(--muted)}
+.photo{position:relative;margin-top:26px;height:320px;border:2px solid var(--fg);background-color:var(--secondary);background-image:radial-gradient(color-mix(in srgb, var(--fg) 22%, transparent) 1.6px, transparent 2.4px);background-size:14px 14px}
+.caption{position:relative;margin-top:14px;font-size:24px;line-height:1.4;color:var(--muted)}
+.body{position:relative;margin-top:20px;font-size:28px;line-height:1.7;color:var(--fg)}
+.body::first-letter{font-size:66px;font-weight:900;line-height:1;float:left;padding:8px 14px 0 0}
+.bottom{position:relative;margin-top:auto;display:flex;justify-content:space-between;align-items:baseline;padding-top:20px;border-top:2px solid var(--fg)}
+.author{font-size:28px;font-weight:700}
+.page{font-family:var(--font-num);font-size:30px;font-weight:700}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="masthead">
+    <div class="mast-en">CONSUMPTION DAILY · 2026</div>
+    <span class="name" data-slot="name" data-max="6">消费日报</span>
+  </div>
+  <div class="dateline">
+    <span data-slot="date" data-max="12">2026年12月31日</span>
+    <span data-slot="issue" data-max="10">2026年第365期</span>
+  </div>
+  <div class="rule-double"></div>
+  <div class="tagrow">
+    <span class="sq"></span>
+    <span class="tag" data-slot="tag" data-max="8">年度盘点</span>
+  </div>
+  <h1 class="title" data-slot="title" data-max="12">2026年，<br>钱都花哪了</h1>
+  <div class="subtitle" data-slot="subtitle" data-max="24">一整年的账单摊开看，答案和想的不太一样</div>
+  <div class="photo" data-slot="photo" data-kind="image"></div>
+  <div class="caption" data-slot="caption" data-max="20">图：今年花钱最多的三个地方</div>
+  <div class="body" data-slot="body" data-max="60">翻完十二个月的账单才发现，钱不是花掉的，是漏掉的。今年最大的开销不是房子，是那些当时觉得没多少钱的小钱。</div>
+  <div class="bottom">
+    <span class="author" data-slot="author" data-max="12">@你的账号</span>
+    <span class="page" data-slot="page" data-max="5">01/04</span>
+  </div>
+</div>
+</body>
+</html>

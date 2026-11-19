@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1050,initial-scale=1">
+<meta name="kavi-template" content='{"id":"card-minimal-simple","name":"名片·极简简洁","category":"card","size":[1050,600],"style":"极简白","look":"minimal","set":"card-minimal","role":"content","description":"左对齐的简洁名片：姓名、职位在上，三行联系方式在下，一个蓝色小方块点缀，留白多","slots":[{"name":"name","label":"姓名","max":4},{"name":"role","label":"职位","max":12},{"name":"phone","label":"电话","max":11},{"name":"wechat","label":"微信","max":20},{"name":"address","label":"地址","max":20}],"lists":[],"images":[],"colors":{"bg":"#FFFFFF","fg":"#111111","primary":"#111111","secondary":"#F1F1F1","accent":"#2457F5","muted":"#6B6B6B"}}'>
+<title>名片·极简简洁</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1050px;height:600px;overflow:hidden}
+.canvas{--bg:#FFFFFF;--fg:#111111;--primary:#111111;--secondary:#F1F1F1;--accent:#2457F5;--muted:#6B6B6B;
+  --font-title:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-sans:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-num:"Montserrat","Noto Sans CJK SC",sans-serif;
+  position:relative;width:1050px;height:600px;overflow:hidden;padding:60px;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.08;mix-blend-mode:multiply}
+.cube{position:absolute;right:60px;top:66px;width:20px;height:20px;background:var(--accent)}
+.name{margin:0;font-family:var(--font-title);font-weight:900;font-size:64px;line-height:1.1;letter-spacing:.02em;color:var(--primary)}
+.role{margin-top:12px;font-size:28px;line-height:1.4;font-weight:500;color:var(--muted)}
+.contacts{margin-top:34px;display:flex;flex-direction:column;gap:18px}
+.row{display:flex;align-items:baseline;gap:16px}
+.lab{flex:none;width:56px;font-size:20px;font-weight:700;letter-spacing:.08em;color:var(--muted)}
+.val{font-size:26px;line-height:1.4;font-weight:400;color:var(--fg)}
+.foot{margin-top:auto;display:flex;justify-content:space-between;align-items:center;font-family:var(--font-num);font-size:22px;font-weight:700;letter-spacing:.16em;color:var(--muted)}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1050" height="600" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="cube"></div>
+  <div class="name" data-slot="name" data-max="4">黄斌</div>
+  <div class="role" data-slot="role" data-max="12">品牌设计师</div>
+  <div class="contacts">
+    <div class="row"><span class="lab">电话</span><span class="val" data-slot="phone" data-max="11">13800000000</span></div>
+    <div class="row"><span class="lab">微信</span><span class="val" data-slot="wechat" data-max="20">kavi-design</span></div>
+    <div class="row"><span class="lab">地址</span><span class="val" data-slot="address" data-max="20">河南省商丘市睢阳区</span></div>
+  </div>
+  <div class="foot"><span>MINIMAL STUDIO</span><span>EST. 2026</span></div>
+</div>
+</body>
+</html>

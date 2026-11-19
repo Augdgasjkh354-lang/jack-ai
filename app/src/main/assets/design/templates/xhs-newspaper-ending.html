@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-newspaper-ending","name":"报纸·结尾","category":"xhs","size":[1080,1440],"style":"报纸","look":"newspaper","set":"newspaper-a","role":"ending","description":"观点收尾：编后大标题加首字下沉的收尾段，粗细双线分隔后是本期话题提问和下期预告，放在一组图的最后一张","slots":[{"name":"tag","label":"小标签","max":8},{"name":"title","label":"观点大字","max":14},{"name":"body","label":"收尾段","max":60},{"name":"question","label":"互动问题","max":20},{"name":"teaser","label":"下期预告","max":24},{"name":"author","label":"账号名","max":12},{"name":"follow","label":"关注贴纸","max":10},{"name":"page","label":"页码","max":5}],"lists":[],"images":[],"colors":{"bg":"#F1ECE1","fg":"#161412","primary":"#161412","secondary":"#E0D8C8","accent":"#C4302B","muted":"#5E5850"}}'>
+<title>报纸·结尾</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#F1ECE1;--fg:#161412;--primary:#161412;--secondary:#E0D8C8;--accent:#C4302B;--muted:#5E5850;
+  --font-title:"Noto Serif SC","Noto Serif CJK SC",serif;--font-sans:"Noto Serif SC","Noto Serif CJK SC",serif;--font-num:"Playfair Display","Noto Serif SC",serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:72px 76px;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+/* 颗粒：让纯色底不那么「电脑味」 */
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.10;mix-blend-mode:multiply}
+.top{position:relative;display:flex;align-items:center;justify-content:space-between;height:56px}
+.tagrow{display:flex;align-items:center;gap:16px}
+.sq{width:16px;height:16px;background:var(--accent);flex:none}
+.tag{font-size:28px;font-weight:700;letter-spacing:.14em}
+.page{font-family:var(--font-num);font-size:30px;font-weight:700}
+.title{position:relative;margin:88px 0 0;font-family:var(--font-title);font-weight:900;font-size:128px;line-height:1.15;color:var(--fg)}
+.body{position:relative;margin-top:48px;font-size:28px;line-height:1.7;color:var(--fg)}
+.body::first-letter{font-size:66px;font-weight:900;line-height:1;float:left;padding:8px 14px 0 0}
+.rule-double{position:relative;height:16px;margin-top:60px;border-top:6px solid var(--fg);border-bottom:2px solid var(--fg)}
+.ask{position:relative;margin-top:60px}
+.ask-label{display:flex;align-items:center;gap:14px;font-size:24px;font-weight:700;letter-spacing:.24em;color:var(--fg)}
+.ask-label .sq{width:14px;height:14px}
+.question{display:block;margin-top:18px;font-family:var(--font-title);font-weight:900;font-size:52px;line-height:1.3;color:var(--fg)}
+.next{position:relative;margin-top:64px;padding-top:26px;border-top:2px solid var(--fg)}
+.next-label{display:flex;align-items:center;gap:14px;font-size:24px;font-weight:700;letter-spacing:.24em;color:var(--fg)}
+.next-label .sq{width:14px;height:14px}
+.teaser{display:block;margin-top:16px;font-size:28px;line-height:1.55;color:var(--muted)}
+.bottom{position:relative;margin-top:auto;display:flex;justify-content:space-between;align-items:center;padding-top:22px;border-top:2px solid var(--fg)}
+.author{font-size:28px;font-weight:700}
+.follow{display:inline-block;padding:12px 28px;background:var(--fg);color:var(--bg);font-family:var(--font-title);font-size:30px;line-height:1}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="top">
+    <div class="tagrow"><span class="sq"></span><span class="tag" data-slot="tag" data-max="8">编后</span></div>
+    <span class="page" data-slot="page" data-max="5">04/04</span>
+  </div>
+  <h2 class="title" data-slot="title" data-max="14">不是钱不够花，是花得没章法</h2>
+  <div class="body" data-slot="body" data-max="60">盘完账才明白，省钱不是抠门，是把钱留给真正想要的东西。明年先定预算，再花钱。</div>
+  <div class="rule-double"></div>
+  <div class="ask">
+    <div class="ask-label"><span class="sq"></span>本期话题</div>
+    <span class="question" data-slot="question" data-max="20">今年你最后悔的一笔花销是什么？</span>
+  </div>
+  <div class="next">
+    <div class="next-label"><span class="sq"></span>下期预告</div>
+    <span class="teaser" data-slot="teaser" data-max="24">明年预算怎么做？下期手把手教你分钱</span>
+  </div>
+  <div class="bottom">
+    <span class="author" data-slot="author" data-max="12">@你的账号</span>
+    <span class="follow" data-slot="follow" data-max="10">关注不迷路</span>
+  </div>
+</div>
+</body>
+</html>

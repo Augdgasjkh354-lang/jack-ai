@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1050,initial-scale=1">
+<meta name="kavi-template" content='{"id":"card-black-gold-luxe","name":"名片·黑金设计感","category":"card","size":[1050,600],"style":"高级黑金","look":"black-gold","set":"card-black-gold","role":"content","description":"黑底金框的居中名片：双线金框、姓名居中、菱形分隔符，上下大留白，适合高端品牌和工作室","slots":[{"name":"name","label":"姓名","max":4},{"name":"role","label":"职位","max":12},{"name":"phone","label":"电话","max":11},{"name":"wechat","label":"微信","max":20},{"name":"address","label":"地址","max":20}],"lists":[],"images":[],"colors":{"bg":"#111111","fg":"#F2EBDD","primary":"#C8A464","secondary":"#1F1D1A","accent":"#E6D3A8","muted":"#ADA594"}}'>
+<title>名片·黑金设计感</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1050px;height:600px;overflow:hidden}
+.canvas{--bg:#111111;--fg:#F2EBDD;--primary:#C8A464;--secondary:#1F1D1A;--accent:#E6D3A8;--muted:#ADA594;
+  --font-title:"Noto Serif SC","Noto Serif CJK SC",serif;--font-sans:"Noto Serif SC","Noto Serif CJK SC",serif;--font-num:"DM Serif Display","Noto Serif CJK SC",serif;
+  position:relative;width:1050px;height:600px;overflow:hidden;padding:60px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.08;mix-blend-mode:multiply}
+.frame{position:absolute;inset:26px;border:1px solid var(--primary);pointer-events:none}
+.frame2{position:absolute;inset:34px;border:1px solid color-mix(in srgb,var(--primary) 55%,transparent);pointer-events:none}
+.en-top{position:relative;font-family:var(--font-num);font-size:24px;line-height:1.3;font-weight:400;letter-spacing:.34em;color:var(--muted)}
+.name{position:relative;margin:20px 0 0;font-family:var(--font-title);font-weight:900;font-size:64px;line-height:1.1;letter-spacing:.06em;color:var(--fg)}
+.role-row{position:relative;margin-top:16px;display:flex;align-items:center;gap:18px}
+.dia{flex:none;width:10px;height:10px;background:var(--primary);transform:rotate(45deg)}
+.role{font-size:26px;line-height:1.4;font-weight:400;color:var(--primary)}
+.rule{position:relative;margin-top:22px;width:120px;height:1px;background:var(--primary)}
+.contacts{position:relative;margin-top:22px;display:flex;flex-direction:column;align-items:center;gap:12px}
+.contact{font-size:26px;line-height:1.4;font-weight:400;color:var(--fg)}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1050" height="600" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="frame"></div>
+  <div class="frame2"></div>
+  <div class="en-top">PRIVATE ATELIER</div>
+  <div class="name" data-slot="name" data-max="4">黄斌</div>
+  <div class="role-row"><span class="dia"></span><span class="role" data-slot="role" data-max="12">品牌设计师</span><span class="dia"></span></div>
+  <div class="rule"></div>
+  <div class="contacts">
+    <div class="contact" data-slot="phone" data-max="11">13800000000</div>
+    <div class="contact" data-slot="wechat" data-max="20">kavi-design</div>
+    <div class="contact" data-slot="address" data-max="20">河南省商丘市睢阳区</div>
+  </div>
+</div>
+</body>
+</html>

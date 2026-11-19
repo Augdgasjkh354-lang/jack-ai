@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-japanese-cover","name":"日系清新·封面","category":"xhs","size":[1080,1440],"style":"日系清新","look":"japanese","set":"japanese-a","role":"cover","description":"小标题在左上、大照片占下部三分之二、右缘一条竖排日期，海边小城三天两夜的封面","slots":[{"name":"tag","label":"英文小标题","max":16},{"name":"title","label":"标题（可用\\n分两行）","max":12},{"name":"subtitle","label":"副标题","max":22},{"name":"date","label":"竖排日期","max":8},{"name":"page","label":"页码","max":5}],"lists":[],"images":[{"name":"photo","label":"封面照片","optional":true}],"colors":{"bg":"#F4F8FA","fg":"#26323A","primary":"#4F7E9C","secondary":"#E3EDF2","accent":"#E7A65B","muted":"#5E6B74"}}'>
+<title>日系清新·封面</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#F4F8FA;--fg:#26323A;--primary:#4F7E9C;--secondary:#E3EDF2;--accent:#E7A65B;--muted:#5E6B74;
+  --font-title:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-sans:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-num:"Montserrat","Noto Sans CJK SC",sans-serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:72px 80px 0;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+/* 颗粒：让纯色底不那么「电脑味」 */
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.10;mix-blend-mode:multiply}
+.top{position:relative;display:flex;align-items:baseline;justify-content:space-between}
+.kicker{font-family:var(--font-num);font-size:24px;font-weight:700;letter-spacing:.28em;color:var(--fg)}
+.page{font-family:var(--font-num);font-size:28px;font-weight:700;letter-spacing:.08em;color:var(--fg)}
+.rule{position:relative;height:1px;margin-top:26px;background:var(--primary)}
+.title{position:relative;max-width:860px;margin:40px 0 0;font-family:var(--font-title);font-weight:500;font-size:80px;line-height:1.28;letter-spacing:.1em;color:var(--fg)}
+.subtitle{position:relative;margin-top:22px;font-size:26px;line-height:1.6;font-weight:300;color:var(--muted)}
+.vdate{position:absolute;right:64px;top:196px;writing-mode:vertical-rl;font-size:22px;font-weight:700;letter-spacing:.35em;color:var(--fg)}
+/* 照片区：占位层在下（没照片时是浅蓝底加细点阵和一个圆环），真照片盖在上面 */
+.phwrap{position:relative;flex:none;height:880px;margin:auto -80px 0}
+.ph-holder{position:absolute;inset:0;background-color:var(--secondary);background-image:radial-gradient(color-mix(in srgb, var(--primary) 18%, transparent) 1.5px, transparent 1.6px);background-size:26px 26px}
+.ring{position:absolute;left:50%;top:50%;width:280px;height:280px;margin:-140px 0 0 -140px;border:2px solid var(--primary);border-radius:50%}
+.photo{position:absolute;inset:0;background-color:var(--secondary);background-image:radial-gradient(color-mix(in srgb, var(--primary) 18%, transparent) 1.5px, transparent 1.6px);background-size:26px 26px}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="top">
+    <span class="kicker" data-slot="tag" data-max="16">SEASIDE TOWN</span>
+    <span class="page" data-slot="page" data-max="5">01/04</span>
+  </div>
+  <div class="rule"></div>
+  <h1 class="title" data-slot="title" data-max="12">海边小城<br>三天两夜</h1>
+  <div class="subtitle" data-slot="subtitle" data-max="22">三天两夜，慢慢走</div>
+  <span class="vdate" data-slot="date" data-max="8">11月 · 初冬</span>
+  <div class="phwrap">
+    <div class="ph-holder"><span class="ring"></span></div>
+    <div class="photo" data-slot="photo" data-kind="image"></div>
+  </div>
+</div>
+</body>
+</html>

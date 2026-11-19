@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-black-gold-data","name":"高级黑金·大数字","category":"xhs","size":[1080,1440],"style":"高级黑金","look":"black-gold","set":"black-gold-a","role":"data","description":"一个居中巨大金色数字是主角，上下各一条金色细线，下面两个小字辅助数字，适合开业数字、席位和人均的内页","slots":[{"name":"tag","label":"小标签","max":6},{"name":"title","label":"本页标题","max":12},{"name":"value","label":"大数字","max":3},{"name":"unit","label":"大数字单位","max":3},{"name":"label","label":"大数字说明","max":14},{"name":"stat1num","label":"数据一数字","max":4},{"name":"stat1label","label":"数据一说明","max":4},{"name":"stat2label","label":"数据二说明","max":4},{"name":"stat2num","label":"数据二数字","max":4},{"name":"stat2unit","label":"数据二单位","max":2},{"name":"note","label":"底部备注","max":24},{"name":"page","label":"页码","max":5}],"lists":[],"images":[],"colors":{"bg":"#111111","fg":"#F2EBDD","primary":"#C8A464","secondary":"#1F1D1A","accent":"#E6D3A8","muted":"#ADA594"}}'>
+<title>高级黑金·大数字</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#111111;--fg:#F2EBDD;--primary:#C8A464;--secondary:#1F1D1A;--accent:#E6D3A8;--muted:#ADA594;
+  --font-title:"Noto Serif SC","Noto Serif CJK SC",serif;--font-sans:"Noto Serif SC","Noto Serif CJK SC",serif;--font-num:"DM Serif Display","Noto Serif CJK SC",serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:76px 80px 72px;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+/* 颗粒：深色底用 screen，让纯色底不那么「电脑味」 */
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.05;mix-blend-mode:screen}
+.top{position:relative;display:flex;align-items:center;justify-content:space-between;height:60px}
+.tag{font-size:28px;font-weight:700;letter-spacing:.2em;color:var(--primary)}
+.page{font-family:var(--font-num);font-size:28px;font-weight:400;letter-spacing:.08em}
+.mid{position:relative;margin:auto 0;display:flex;flex-direction:column;align-items:center;text-align:center}
+.title{margin:0;font-family:var(--font-title);font-weight:900;font-size:76px;line-height:1.15;letter-spacing:.04em;color:var(--fg)}
+.rule{width:120px;height:1px;margin-top:52px;background:var(--primary)}
+.hero{display:flex;align-items:baseline;justify-content:center;margin-top:48px}
+.value{font-family:var(--font-num);font-weight:400;font-size:230px;line-height:1;color:var(--primary)}
+.unit{margin-left:22px;font-size:44px;font-weight:700;color:var(--fg)}
+.label{display:block;margin-top:28px;font-size:28px;line-height:1.5;font-weight:400;color:var(--muted)}
+.aux{display:flex;align-items:baseline;justify-content:center;gap:28px;margin-top:52px}
+.aux .dia{width:12px;height:12px;background:var(--primary);transform:rotate(45deg);flex:none;align-self:center}
+.grp{display:flex;align-items:baseline;gap:10px}
+.grp .num{font-family:var(--font-num);font-size:44px;font-weight:400;line-height:1;color:var(--primary)}
+.grp .cap{font-size:26px;font-weight:400;color:var(--fg)}
+.note{position:relative;width:100%;text-align:center;padding-top:26px;border-top:1px solid var(--primary);font-size:26px;line-height:1.5;font-weight:400;color:var(--muted)}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .5 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="top">
+    <span class="tag" data-slot="tag" data-max="6">开业数字</span>
+    <span class="page" data-slot="page" data-max="5">02/04</span>
+  </div>
+  <div class="mid">
+    <h2 class="title" data-slot="title" data-max="12">小酒馆的开业账</h2>
+    <div class="rule" aria-hidden="true"></div>
+    <div class="hero"><span class="value" data-slot="value" data-max="3">12</span><span class="unit" data-slot="unit" data-max="3">款特调</span></div>
+    <span class="label" data-slot="label" data-max="14">首发特调，款款都是招牌</span>
+    <div class="rule" aria-hidden="true"></div>
+    <div class="aux">
+      <span class="grp"><span class="num" data-slot="stat1num" data-max="4">28</span><span class="cap" data-slot="stat1label" data-max="4">席位</span></span>
+      <span class="dia" aria-hidden="true"></span>
+      <span class="grp"><span class="cap" data-slot="stat2label" data-max="4">人均</span><span class="num" data-slot="stat2num" data-max="4">88</span><span class="cap" data-slot="stat2unit" data-max="2">元</span></span>
+    </div>
+  </div>
+  <div class="note" data-slot="note" data-max="24">28 个座位，先到先得</div>
+</div>
+</body>
+</html>

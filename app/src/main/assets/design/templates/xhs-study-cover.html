@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-study-cover","name":"学习笔记·封面","category":"xhs","size":[1080,1440],"style":"学习笔记","look":"study","set":"study-a","role":"cover","description":"方格纸加左侧装订线，蓝笔大标题配红笔批注和黄色荧光划线，下方一张照片位，适合考研、考公类经验帖的封面","slots":[{"name":"tag","label":"贴纸标签","max":6},{"name":"date","label":"日期","max":12},{"name":"title","label":"标题（可用\\n分行）","max":6},{"name":"score","label":"荧光笔分数","max":6},{"name":"scribble","label":"红笔批注","max":12},{"name":"subtitle","label":"副标题","max":20},{"name":"note","label":"照片说明","max":16},{"name":"author","label":"账号名","max":12},{"name":"page","label":"页码","max":5}],"lists":[],"images":[{"name":"photo","label":"封面照片","optional":true}],"colors":{"bg":"#FDFDF8","fg":"#1E2B55","primary":"#1E2B55","secondary":"#FFF27A","accent":"#D63A32","muted":"#5B6380"}}'>
+<title>学习笔记·封面</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#FDFDF8;--fg:#1E2B55;--primary:#1E2B55;--secondary:#FFF27A;--accent:#D63A32;--muted:#5B6380;
+  --font-title:"LXGW WenKai","Noto Serif CJK SC",serif;--font-sans:"LXGW WenKai","Noto Sans CJK SC",sans-serif;--font-num:"Caveat","LXGW WenKai",serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:76px 80px 72px;display:flex;flex-direction:column;
+  background-color:var(--bg);
+  background-image:repeating-linear-gradient(transparent 0 47px,color-mix(in srgb,var(--fg) 7%,transparent) 47px 48px),repeating-linear-gradient(90deg,transparent 0 47px,color-mix(in srgb,var(--fg) 7%,transparent) 47px 48px);
+  color:var(--fg);font-family:var(--font-sans)}
+/* 颗粒：让纯色底不那么「电脑味」 */
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.10;mix-blend-mode:multiply}
+/* 本子左侧的装订线 */
+.margin-line{position:absolute;left:44px;top:0;bottom:0;width:3px;background:color-mix(in srgb,var(--accent) 45%,transparent)}
+.top{position:relative;display:flex;align-items:center;justify-content:space-between;height:60px}
+.tag{display:inline-block;padding:12px 24px 14px;border:3px solid var(--accent);color:var(--accent);font-family:var(--font-title);font-weight:700;font-size:34px;line-height:1;transform:rotate(-2deg)}
+.top-right{display:flex;align-items:baseline;gap:28px}
+.date{font-size:28px;font-weight:700;color:var(--fg)}
+.page{font-family:var(--font-num);font-weight:700;font-size:44px;color:var(--fg)}
+.hero{position:relative;margin-top:72px}
+.title{margin:0;font-family:var(--font-title);font-weight:700;font-size:88px;line-height:1.15;color:var(--fg)}
+.title .keyword{padding:0 12px;background:linear-gradient(transparent 52%,color-mix(in srgb,var(--secondary) 85%,transparent) 52%)}
+.scribble{align-self:flex-end;margin-top:20px;font-family:var(--font-num);font-weight:700;font-size:46px;line-height:1;color:var(--accent);transform:rotate(-4deg)}
+.subtitle{position:relative;margin-top:28px;max-width:800px;font-size:32px;line-height:1.5;font-weight:400;color:var(--fg)}
+.photo{position:relative;margin-top:36px;height:460px;border:4px solid var(--fg);background-color:color-mix(in srgb,var(--secondary) 30%,transparent);background-image:repeating-linear-gradient(45deg,transparent 0 26px,color-mix(in srgb,var(--fg) 6%,transparent) 26px 28px);background-size:cover;background-position:center;background-repeat:no-repeat}
+.note{position:relative;margin-top:20px;font-size:26px;font-weight:700;color:var(--muted)}
+.bottom{position:relative;margin-top:auto;display:flex;align-items:center;justify-content:space-between;padding-top:26px;border-top:3px solid color-mix(in srgb,var(--fg) 35%,transparent)}
+.author{font-size:30px;font-weight:700}
+.next{display:flex;align-items:center;gap:14px;font-family:var(--font-title);font-weight:700;font-size:36px;color:var(--primary)}
+.next svg{width:58px;height:28px}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="margin-line"></div>
+  <div class="top">
+    <span class="tag" data-slot="tag" data-max="6">考研经验</span>
+    <div class="top-right">
+      <span class="date" data-slot="date" data-max="12">2025年12月</span>
+      <span class="page" data-slot="page" data-max="5">01/04</span>
+    </div>
+  </div>
+  <div class="hero">
+    <h1 class="title"><span data-slot="title" data-max="6">考研英语</span><br><span class="keyword" data-slot="score" data-max="6">80 分</span></h1>
+  </div>
+  <div class="scribble" data-slot="scribble" data-max="12">got 80!</div>
+  <div class="subtitle" data-slot="subtitle" data-max="20">我是这样复习的，四步走完不走弯路</div>
+  <div class="photo" data-slot="photo" data-kind="image"></div>
+  <div class="note" data-slot="note" data-max="16">我的书桌：真题摞了半米高</div>
+  <div class="bottom">
+    <span class="author" data-slot="author" data-max="12">@英语上岸日记</span>
+    <span class="next">往后翻<svg viewBox="0 0 58 28" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14h48M40 3l12 11-12 11"/></svg></span>
+  </div>
+</div>
+</body>
+</html>

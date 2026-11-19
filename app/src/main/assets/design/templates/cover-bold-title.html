@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=900,initial-scale=1">
+<meta name="kavi-template" content='{"id":"cover-bold-title","name":"公众号封面·大字报大标题","category":"cover","size":[900,383],"style":"大字报","look":"bold-poster","set":"cover-bold","role":"content","description":"黄底巨大黑标题在左、红色小标签在上的横版公众号封面，一眼读完，适合促销、活动和干货推送","slots":[{"name":"title","label":"标题（可用\\n分两行）","max":8},{"name":"subtitle","label":"副标题","max":20}],"lists":[],"images":[],"colors":{"bg":"#FFE24A","fg":"#141414","primary":"#141414","secondary":"#FFFFFF","accent":"#D92B22","muted":"#4A4220"}}'>
+<title>公众号封面·大字报大标题</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:900px;height:383px;overflow:hidden}
+.canvas{--bg:#FFE24A;--fg:#141414;--primary:#141414;--secondary:#FFFFFF;--accent:#D92B22;--muted:#4A4220;
+  --font-title:"Smiley Sans","Noto Sans CJK SC",sans-serif;--font-sans:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-num:"Bebas Neue","Smiley Sans",sans-serif;
+  position:relative;width:900px;height:383px;overflow:hidden;padding:36px;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.10;mix-blend-mode:multiply}
+.top{position:relative;display:flex;align-items:center;justify-content:space-between}
+.tag{display:inline-block;padding:5px 14px 7px;background:var(--accent);color:var(--secondary);font-family:var(--font-title);font-size:24px;line-height:1;transform:rotate(-2deg);box-shadow:4px 4px 0 var(--fg)}
+.en{font-family:var(--font-num);font-size:30px;line-height:1;letter-spacing:.14em;color:var(--fg)}
+.title{position:relative;margin:6px 0 0;font-family:var(--font-title);font-weight:400;font-size:104px;line-height:1.04;letter-spacing:-.01em;color:var(--primary)}
+.subtitle{position:relative;margin-top:6px;font-size:28px;line-height:1.4;font-weight:500;color:var(--muted)}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="900" height="383" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="top">
+    <span class="tag">限时优惠</span>
+    <span class="en">YEAR-END SALE</span>
+  </div>
+  <h1 class="title" data-slot="title" data-max="8">年终大促<br>全场五折</h1>
+  <div class="subtitle" data-slot="subtitle" data-max="20">全场五折起，先到先得</div>
+</div>
+</body>
+</html>

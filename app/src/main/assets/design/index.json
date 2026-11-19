@@ -1,5 +1,931 @@
 [
   {
+    "id": "card-black-gold-luxe",
+    "name": "名片·黑金设计感",
+    "category": "card",
+    "size": [
+      1050,
+      600
+    ],
+    "style": "高级黑金",
+    "look": "black-gold",
+    "set": "card-black-gold",
+    "role": "content",
+    "description": "黑底金框的居中名片：双线金框、姓名居中、菱形分隔符，上下大留白，适合高端品牌和工作室",
+    "slots": [
+      {
+        "name": "name",
+        "label": "姓名",
+        "max": 4
+      },
+      {
+        "name": "role",
+        "label": "职位",
+        "max": 12
+      },
+      {
+        "name": "phone",
+        "label": "电话",
+        "max": 11
+      },
+      {
+        "name": "wechat",
+        "label": "微信",
+        "max": 20
+      },
+      {
+        "name": "address",
+        "label": "地址",
+        "max": 20
+      }
+    ],
+    "lists": [],
+    "images": [],
+    "colors": {
+      "bg": "#111111",
+      "fg": "#F2EBDD",
+      "primary": "#C8A464",
+      "secondary": "#1F1D1A",
+      "accent": "#E6D3A8",
+      "muted": "#ADA594"
+    }
+  },
+  {
+    "id": "card-minimal-simple",
+    "name": "名片·极简简洁",
+    "category": "card",
+    "size": [
+      1050,
+      600
+    ],
+    "style": "极简白",
+    "look": "minimal",
+    "set": "card-minimal",
+    "role": "content",
+    "description": "左对齐的简洁名片：姓名、职位在上，三行联系方式在下，一个蓝色小方块点缀，留白多",
+    "slots": [
+      {
+        "name": "name",
+        "label": "姓名",
+        "max": 4
+      },
+      {
+        "name": "role",
+        "label": "职位",
+        "max": 12
+      },
+      {
+        "name": "phone",
+        "label": "电话",
+        "max": 11
+      },
+      {
+        "name": "wechat",
+        "label": "微信",
+        "max": 20
+      },
+      {
+        "name": "address",
+        "label": "地址",
+        "max": 20
+      }
+    ],
+    "lists": [],
+    "images": [],
+    "colors": {
+      "bg": "#FFFFFF",
+      "fg": "#111111",
+      "primary": "#111111",
+      "secondary": "#F1F1F1",
+      "accent": "#2457F5",
+      "muted": "#6B6B6B"
+    }
+  },
+  {
+    "id": "cover-bold-title",
+    "name": "公众号封面·大字报大标题",
+    "category": "cover",
+    "size": [
+      900,
+      383
+    ],
+    "style": "大字报",
+    "look": "bold-poster",
+    "set": "cover-bold",
+    "role": "content",
+    "description": "黄底巨大黑标题在左、红色小标签在上的横版公众号封面，一眼读完，适合促销、活动和干货推送",
+    "slots": [
+      {
+        "name": "title",
+        "label": "标题（可用\\n分两行）",
+        "max": 8
+      },
+      {
+        "name": "subtitle",
+        "label": "副标题",
+        "max": 20
+      }
+    ],
+    "lists": [],
+    "images": [],
+    "colors": {
+      "bg": "#FFE24A",
+      "fg": "#141414",
+      "primary": "#141414",
+      "secondary": "#FFFFFF",
+      "accent": "#D92B22",
+      "muted": "#4A4220"
+    }
+  },
+  {
+    "id": "cover-magazine-split",
+    "name": "公众号封面·杂志左字右图",
+    "category": "cover",
+    "size": [
+      900,
+      383
+    ],
+    "style": "杂志编辑",
+    "look": "magazine",
+    "set": "cover-magazine",
+    "role": "content",
+    "description": "左侧宋体大标题加期号和副标题、右侧大幅照片的横版公众号封面，杂志内页感，适合城市、旅行和生活方式推送",
+    "slots": [
+      {
+        "name": "title",
+        "label": "标题",
+        "max": 10
+      },
+      {
+        "name": "subtitle",
+        "label": "副标题",
+        "max": 16
+      }
+    ],
+    "lists": [],
+    "images": [
+      {
+        "name": "photo",
+        "label": "右侧照片",
+        "optional": true
+      }
+    ],
+    "colors": {
+      "bg": "#F4EFE6",
+      "fg": "#1B1A17",
+      "primary": "#1B1A17",
+      "secondary": "#E4DCCD",
+      "accent": "#B4532A",
+      "muted": "#6E675C"
+    }
+  },
+  {
+    "id": "invite-black-gold-opening",
+    "name": "邀请函·黑金开业",
+    "category": "invite",
+    "size": [
+      1080,
+      1620
+    ],
+    "style": "高级黑金",
+    "look": "black-gold",
+    "set": "invite-black-gold",
+    "role": "content",
+    "description": "黑金开业邀请函：金色细线双框加菱形分隔，居中对称内容极少，适合新店开业、品牌品鉴会",
+    "slots": [
+      {
+        "name": "title",
+        "label": "店名",
+        "max": 8
+      },
+      {
+        "name": "subtitle",
+        "label": "副标题",
+        "max": 12
+      },
+      {
+        "name": "date",
+        "label": "日期",
+        "max": 12
+      },
+      {
+        "name": "time",
+        "label": "时间",
+        "max": 8
+      },
+      {
+        "name": "place",
+        "label": "地点",
+        "max": 16
+      },
+      {
+        "name": "contact",
+        "label": "预约电话",
+        "max": 20
+      },
+      {
+        "name": "footer",
+        "label": "落款",
+        "max": 8
+      }
+    ],
+    "lists": [],
+    "images": [],
+    "colors": {
+      "bg": "#111111",
+      "fg": "#F2EBDD",
+      "primary": "#C8A464",
+      "secondary": "#1F1D1A",
+      "accent": "#E6D3A8",
+      "muted": "#ADA594"
+    }
+  },
+  {
+    "id": "invite-cream-holiday",
+    "name": "邀请函·奶油节日贺卡",
+    "category": "invite",
+    "size": [
+      1080,
+      1620
+    ],
+    "style": "奶油温柔",
+    "look": "cream",
+    "set": "invite-cream",
+    "role": "content",
+    "description": "奶油节日贺卡：圆角奶油面板加月亮和手写英文，适合中秋、节日祝福",
+    "slots": [
+      {
+        "name": "title",
+        "label": "标题",
+        "max": 10
+      },
+      {
+        "name": "body",
+        "label": "祝福正文",
+        "max": 40
+      },
+      {
+        "name": "author",
+        "label": "落款",
+        "max": 10
+      },
+      {
+        "name": "footer",
+        "label": "页脚",
+        "max": 12
+      }
+    ],
+    "lists": [],
+    "images": [],
+    "colors": {
+      "bg": "#FBF3E6",
+      "fg": "#4A3426",
+      "primary": "#B0703C",
+      "secondary": "#F2DFC4",
+      "accent": "#E9A6A0",
+      "muted": "#7E6656"
+    }
+  },
+  {
+    "id": "invite-guofeng-wedding",
+    "name": "邀请函·国风婚礼",
+    "category": "invite",
+    "size": [
+      1080,
+      1620
+    ],
+    "style": "国风",
+    "look": "guofeng",
+    "set": "invite-guofeng",
+    "role": "content",
+    "description": "国风婚礼邀请函：宣纸底加朱红方印，居中对称大留白，适合中式婚礼请柬",
+    "slots": [
+      {
+        "name": "title",
+        "label": "新人姓名（可用\\n分两行）",
+        "max": 10
+      },
+      {
+        "name": "subtitle",
+        "label": "副标题",
+        "max": 8
+      },
+      {
+        "name": "date",
+        "label": "日期",
+        "max": 14
+      },
+      {
+        "name": "time",
+        "label": "时间",
+        "max": 8
+      },
+      {
+        "name": "place",
+        "label": "地点",
+        "max": 16
+      },
+      {
+        "name": "contact",
+        "label": "联系人",
+        "max": 20
+      },
+      {
+        "name": "footer",
+        "label": "落款",
+        "max": 10
+      }
+    ],
+    "lists": [],
+    "images": [],
+    "colors": {
+      "bg": "#F3ECDD",
+      "fg": "#231C16",
+      "primary": "#B83A2B",
+      "secondary": "#E4D8C0",
+      "accent": "#2E4F4A",
+      "muted": "#6D6253"
+    }
+  },
+  {
+    "id": "poster-bold-event",
+    "name": "竖版海报·大字报活动",
+    "category": "poster",
+    "size": [
+      1080,
+      1920
+    ],
+    "style": "大字报",
+    "look": "bold-poster",
+    "set": "poster-bold",
+    "role": "content",
+    "description": "大字报活动海报：超大标题加白色大日期块，底部时间地点信息，适合音乐会、演出、市集活动",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "贴纸标签",
+        "max": 6
+      },
+      {
+        "name": "title",
+        "label": "主标题（可用\\n分两行）",
+        "max": 10
+      },
+      {
+        "name": "subtitle",
+        "label": "副标题",
+        "max": 22
+      },
+      {
+        "name": "date",
+        "label": "日期",
+        "max": 14
+      },
+      {
+        "name": "time",
+        "label": "时间",
+        "max": 8
+      },
+      {
+        "name": "place",
+        "label": "地点",
+        "max": 16
+      },
+      {
+        "name": "contact",
+        "label": "咨询电话",
+        "max": 20
+      },
+      {
+        "name": "footer",
+        "label": "落款",
+        "max": 20
+      }
+    ],
+    "lists": [],
+    "images": [],
+    "colors": {
+      "bg": "#FFE24A",
+      "fg": "#141414",
+      "primary": "#141414",
+      "secondary": "#FFFFFF",
+      "accent": "#D92B22",
+      "muted": "#4A4220"
+    }
+  },
+  {
+    "id": "poster-dopamine-sale",
+    "name": "竖版海报·多巴胺促销",
+    "category": "poster",
+    "size": [
+      1080,
+      1920
+    ],
+    "style": "多巴胺",
+    "look": "dopamine",
+    "set": "poster-dopamine",
+    "role": "content",
+    "description": "多巴胺促销海报：撞色大色块加巨大价格块，适合清仓、打折、快闪店活动",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "贴纸标签",
+        "max": 6
+      },
+      {
+        "name": "title",
+        "label": "主标题（可用\\n分两行）",
+        "max": 10
+      },
+      {
+        "name": "price",
+        "label": "价格",
+        "max": 6
+      },
+      {
+        "name": "subtitle",
+        "label": "副标题",
+        "max": 22
+      },
+      {
+        "name": "date",
+        "label": "日期",
+        "max": 18
+      },
+      {
+        "name": "place",
+        "label": "地点",
+        "max": 16
+      },
+      {
+        "name": "contact",
+        "label": "联系电话",
+        "max": 20
+      },
+      {
+        "name": "footer",
+        "label": "落款",
+        "max": 16
+      }
+    ],
+    "lists": [],
+    "images": [],
+    "colors": {
+      "bg": "#FFF5FA",
+      "fg": "#1E1A1D",
+      "primary": "#E8338A",
+      "secondary": "#B8F26B",
+      "accent": "#3A7BFF",
+      "muted": "#5E4E58"
+    }
+  },
+  {
+    "id": "poster-study-recruit",
+    "name": "竖版海报·学习笔记招生",
+    "category": "poster",
+    "size": [
+      1080,
+      1920
+    ],
+    "style": "学习笔记",
+    "look": "study",
+    "set": "poster-study",
+    "role": "content",
+    "description": "学习笔记招生海报：方格纸加红笔批注，3～5 条亮点加开营信息，适合考研、考公集训营招生",
+    "slots": [
+      {
+        "name": "title",
+        "label": "主标题（可用\\n分两行）",
+        "max": 10
+      },
+      {
+        "name": "subtitle",
+        "label": "副标题",
+        "max": 16
+      },
+      {
+        "name": "date",
+        "label": "开营日期",
+        "max": 12
+      },
+      {
+        "name": "time",
+        "label": "时间",
+        "max": 14
+      },
+      {
+        "name": "place",
+        "label": "地点",
+        "max": 16
+      },
+      {
+        "name": "contact",
+        "label": "报名方式",
+        "max": 20
+      }
+    ],
+    "lists": [
+      {
+        "name": "points",
+        "label": "亮点",
+        "min": 3,
+        "max": 5,
+        "slots": [
+          {
+            "name": "head",
+            "label": "短标题",
+            "max": 12
+          },
+          {
+            "name": "text",
+            "label": "说明",
+            "max": 30
+          }
+        ]
+      }
+    ],
+    "images": [],
+    "colors": {
+      "bg": "#FDFDF8",
+      "fg": "#1E2B55",
+      "primary": "#1E2B55",
+      "secondary": "#FFF27A",
+      "accent": "#D63A32",
+      "muted": "#5B6380"
+    }
+  },
+  {
+    "id": "square-cream-quote",
+    "name": "方图·奶油金句",
+    "category": "square",
+    "size": [
+      1080,
+      1080
+    ],
+    "style": "奶油温柔",
+    "look": "cream",
+    "set": "square-cream",
+    "role": "content",
+    "description": "一句楷体金句居中，配柔和色斑、手写英文和出处小字，适合治愈、日常类朋友圈方图",
+    "slots": [
+      {
+        "name": "title",
+        "label": "金句",
+        "max": 24
+      },
+      {
+        "name": "author",
+        "label": "出处",
+        "max": 12
+      },
+      {
+        "name": "tag",
+        "label": "标签",
+        "max": 6
+      }
+    ],
+    "lists": [],
+    "images": [],
+    "colors": {
+      "bg": "#FBF3E6",
+      "fg": "#4A3426",
+      "primary": "#B0703C",
+      "secondary": "#F2DFC4",
+      "accent": "#E9A6A0",
+      "muted": "#7E6656"
+    }
+  },
+  {
+    "id": "square-minimal-product",
+    "name": "方图·极简产品",
+    "category": "square",
+    "size": [
+      1080,
+      1080
+    ],
+    "style": "极简白",
+    "look": "minimal",
+    "set": "square-minimal",
+    "role": "content",
+    "description": "大图在上、产品名和价格在下的朋友圈产品图，严格网格、大量留白，适合上新和好物分享",
+    "slots": [
+      {
+        "name": "title",
+        "label": "产品名",
+        "max": 12
+      },
+      {
+        "name": "price",
+        "label": "价格",
+        "max": 8
+      },
+      {
+        "name": "body",
+        "label": "卖点一",
+        "max": 16
+      },
+      {
+        "name": "note",
+        "label": "卖点二",
+        "max": 16
+      },
+      {
+        "name": "tag",
+        "label": "标签",
+        "max": 6
+      }
+    ],
+    "lists": [],
+    "images": [
+      {
+        "name": "photo",
+        "label": "产品照片",
+        "optional": true
+      }
+    ],
+    "colors": {
+      "bg": "#FFFFFF",
+      "fg": "#111111",
+      "primary": "#111111",
+      "secondary": "#F1F1F1",
+      "accent": "#2457F5",
+      "muted": "#6B6B6B"
+    }
+  },
+  {
+    "id": "xhs-black-gold-cover",
+    "name": "高级黑金·封面",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "高级黑金",
+    "look": "black-gold",
+    "set": "black-gold-a",
+    "role": "cover",
+    "description": "双金线框里的居中大标题，配开业日期和英文小字，适合黑金风小酒馆开业预告的封面",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "小标签",
+        "max": 6
+      },
+      {
+        "name": "title",
+        "label": "标题（可用\\n分两行）",
+        "max": 12
+      },
+      {
+        "name": "subtitle",
+        "label": "副标题",
+        "max": 16
+      },
+      {
+        "name": "date",
+        "label": "开业日期",
+        "max": 12
+      },
+      {
+        "name": "note",
+        "label": "开业优惠",
+        "max": 16
+      },
+      {
+        "name": "author",
+        "label": "账号名",
+        "max": 12
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [],
+    "images": [],
+    "colors": {
+      "bg": "#111111",
+      "fg": "#F2EBDD",
+      "primary": "#C8A464",
+      "secondary": "#1F1D1A",
+      "accent": "#E6D3A8",
+      "muted": "#ADA594"
+    }
+  },
+  {
+    "id": "xhs-black-gold-data",
+    "name": "高级黑金·大数字",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "高级黑金",
+    "look": "black-gold",
+    "set": "black-gold-a",
+    "role": "data",
+    "description": "一个居中巨大金色数字是主角，上下各一条金色细线，下面两个小字辅助数字，适合开业数字、席位和人均的内页",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "小标签",
+        "max": 6
+      },
+      {
+        "name": "title",
+        "label": "本页标题",
+        "max": 12
+      },
+      {
+        "name": "value",
+        "label": "大数字",
+        "max": 3
+      },
+      {
+        "name": "unit",
+        "label": "大数字单位",
+        "max": 3
+      },
+      {
+        "name": "label",
+        "label": "大数字说明",
+        "max": 14
+      },
+      {
+        "name": "stat1num",
+        "label": "数据一数字",
+        "max": 4
+      },
+      {
+        "name": "stat1label",
+        "label": "数据一说明",
+        "max": 4
+      },
+      {
+        "name": "stat2label",
+        "label": "数据二说明",
+        "max": 4
+      },
+      {
+        "name": "stat2num",
+        "label": "数据二数字",
+        "max": 4
+      },
+      {
+        "name": "stat2unit",
+        "label": "数据二单位",
+        "max": 2
+      },
+      {
+        "name": "note",
+        "label": "底部备注",
+        "max": 24
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [],
+    "images": [],
+    "colors": {
+      "bg": "#111111",
+      "fg": "#F2EBDD",
+      "primary": "#C8A464",
+      "secondary": "#1F1D1A",
+      "accent": "#E6D3A8",
+      "muted": "#ADA594"
+    }
+  },
+  {
+    "id": "xhs-black-gold-ending",
+    "name": "高级黑金·结尾",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "高级黑金",
+    "look": "black-gold",
+    "set": "black-gold-a",
+    "role": "ending",
+    "description": "双金线框里的金框居中提问，配一行小写英文和关注贴纸，放在一组图的最后一张",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "小标签",
+        "max": 6
+      },
+      {
+        "name": "title",
+        "label": "总结大字",
+        "max": 10
+      },
+      {
+        "name": "subtitle",
+        "label": "副标题",
+        "max": 16
+      },
+      {
+        "name": "question",
+        "label": "互动问题",
+        "max": 18
+      },
+      {
+        "name": "follow",
+        "label": "关注贴纸",
+        "max": 6
+      },
+      {
+        "name": "author",
+        "label": "账号名",
+        "max": 12
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [],
+    "images": [],
+    "colors": {
+      "bg": "#111111",
+      "fg": "#F2EBDD",
+      "primary": "#C8A464",
+      "secondary": "#1F1D1A",
+      "accent": "#E6D3A8",
+      "muted": "#ADA594"
+    }
+  },
+  {
+    "id": "xhs-black-gold-list",
+    "name": "高级黑金·清单",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "高级黑金",
+    "look": "black-gold",
+    "set": "black-gold-a",
+    "role": "list",
+    "description": "每项居中排布的必点清单，衬线编号加金色小菱形分隔，适合小酒馆必点酒单、招牌推荐的内页",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "小标签",
+        "max": 6
+      },
+      {
+        "name": "title",
+        "label": "本页标题",
+        "max": 10
+      },
+      {
+        "name": "note",
+        "label": "底部提醒",
+        "max": 24
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [
+      {
+        "name": "items",
+        "label": "必点",
+        "min": 3,
+        "max": 5,
+        "slots": [
+          {
+            "name": "head",
+            "label": "酒名",
+            "max": 12
+          },
+          {
+            "name": "text",
+            "label": "一句话介绍",
+            "max": 30
+          }
+        ]
+      }
+    ],
+    "images": [],
+    "colors": {
+      "bg": "#111111",
+      "fg": "#F2EBDD",
+      "primary": "#C8A464",
+      "secondary": "#1F1D1A",
+      "accent": "#E6D3A8",
+      "muted": "#ADA594"
+    }
+  },
+  {
     "id": "xhs-bold-cover",
     "name": "大字报·封面",
     "category": "xhs",
@@ -665,6 +1591,278 @@
     }
   },
   {
+    "id": "xhs-film-cover",
+    "name": "胶片复古·封面",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "胶片复古",
+    "look": "film",
+    "set": "film-a",
+    "role": "cover",
+    "description": "胶片相机质感的封面：上部是带白色相纸边的照片，左缘一条胶片齿孔，标题在照片下方配橙色日期戳，适合秋日漫步、老街、旅行",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "贴纸标签",
+        "max": 6
+      },
+      {
+        "name": "title",
+        "label": "标题（可用\\n分两行）",
+        "max": 12
+      },
+      {
+        "name": "subtitle",
+        "label": "副标题",
+        "max": 22
+      },
+      {
+        "name": "date",
+        "label": "日期戳",
+        "max": 10
+      },
+      {
+        "name": "caption",
+        "label": "照片下标注",
+        "max": 12
+      },
+      {
+        "name": "author",
+        "label": "账号名",
+        "max": 12
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [],
+    "images": [
+      {
+        "name": "photo",
+        "label": "封面照片",
+        "optional": true
+      }
+    ],
+    "colors": {
+      "bg": "#EFE6D2",
+      "fg": "#2B241B",
+      "primary": "#A8432A",
+      "secondary": "#DCCCA9",
+      "accent": "#E88A2E",
+      "muted": "#6F6250"
+    }
+  },
+  {
+    "id": "xhs-film-ending",
+    "name": "胶片复古·结尾",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "胶片复古",
+    "look": "film",
+    "set": "film-a",
+    "role": "ending",
+    "description": "一排三张带齿孔的小胶片框，下方是互动提问和下期预告，放在一组图的最后一张",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "小标签",
+        "max": 6
+      },
+      {
+        "name": "question",
+        "label": "互动问题",
+        "max": 18
+      },
+      {
+        "name": "summary",
+        "label": "一句话总结",
+        "max": 20
+      },
+      {
+        "name": "next",
+        "label": "下期预告",
+        "max": 14
+      },
+      {
+        "name": "author",
+        "label": "账号名",
+        "max": 12
+      },
+      {
+        "name": "follow",
+        "label": "关注贴纸",
+        "max": 6
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      },
+      {
+        "name": "cap1",
+        "label": "第一张小图说明",
+        "max": 8
+      },
+      {
+        "name": "cap2",
+        "label": "第二张小图说明",
+        "max": 8
+      },
+      {
+        "name": "cap3",
+        "label": "第三张小图说明",
+        "max": 8
+      }
+    ],
+    "lists": [],
+    "images": [
+      {
+        "name": "photo1",
+        "label": "第一张小图",
+        "optional": true
+      },
+      {
+        "name": "photo2",
+        "label": "第二张小图",
+        "optional": true
+      },
+      {
+        "name": "photo3",
+        "label": "第三张小图",
+        "optional": true
+      }
+    ],
+    "colors": {
+      "bg": "#EFE6D2",
+      "fg": "#2B241B",
+      "primary": "#A8432A",
+      "secondary": "#DCCCA9",
+      "accent": "#E88A2E",
+      "muted": "#6F6250"
+    }
+  },
+  {
+    "id": "xhs-film-photo",
+    "name": "胶片复古·大图",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "胶片复古",
+    "look": "film",
+    "set": "film-a",
+    "role": "photo",
+    "description": "满幅出血的街景大图，底部一条白色冲洗边框放图说和地点，右上角是胶片日期戳，适合实拍、探店、旅行",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "小标签",
+        "max": 6
+      },
+      {
+        "name": "date",
+        "label": "日期戳",
+        "max": 10
+      },
+      {
+        "name": "caption",
+        "label": "图说",
+        "max": 16
+      },
+      {
+        "name": "place",
+        "label": "地点",
+        "max": 12
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [],
+    "images": [
+      {
+        "name": "photo",
+        "label": "主图照片",
+        "optional": true
+      }
+    ],
+    "colors": {
+      "bg": "#EFE6D2",
+      "fg": "#2B241B",
+      "primary": "#A8432A",
+      "secondary": "#DCCCA9",
+      "accent": "#E88A2E",
+      "muted": "#6F6250"
+    }
+  },
+  {
+    "id": "xhs-film-quote",
+    "name": "胶片复古·金句",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "胶片复古",
+    "look": "film",
+    "set": "film-a",
+    "role": "quote",
+    "description": "一侧是胶片齿孔条，中间一句宋体金句居中大字，下方是出处和英文小字，适合语录、书摘、心情",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "小标签",
+        "max": 6
+      },
+      {
+        "name": "quote",
+        "label": "金句",
+        "max": 26
+      },
+      {
+        "name": "source",
+        "label": "出处",
+        "max": 16
+      },
+      {
+        "name": "author",
+        "label": "账号名",
+        "max": 12
+      },
+      {
+        "name": "date",
+        "label": "日期戳",
+        "max": 10
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [],
+    "images": [],
+    "colors": {
+      "bg": "#EFE6D2",
+      "fg": "#2B241B",
+      "primary": "#A8432A",
+      "secondary": "#DCCCA9",
+      "accent": "#E88A2E",
+      "muted": "#6F6250"
+    }
+  },
+  {
     "id": "xhs-guofeng-cover",
     "name": "国风·封面",
     "category": "xhs",
@@ -916,6 +2114,246 @@
       "secondary": "#E4D8C0",
       "accent": "#2E4F4A",
       "muted": "#6D6253"
+    }
+  },
+  {
+    "id": "xhs-japanese-cover",
+    "name": "日系清新·封面",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "日系清新",
+    "look": "japanese",
+    "set": "japanese-a",
+    "role": "cover",
+    "description": "小标题在左上、大照片占下部三分之二、右缘一条竖排日期，海边小城三天两夜的封面",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "英文小标题",
+        "max": 16
+      },
+      {
+        "name": "title",
+        "label": "标题（可用\\n分两行）",
+        "max": 12
+      },
+      {
+        "name": "subtitle",
+        "label": "副标题",
+        "max": 22
+      },
+      {
+        "name": "date",
+        "label": "竖排日期",
+        "max": 8
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [],
+    "images": [
+      {
+        "name": "photo",
+        "label": "封面照片",
+        "optional": true
+      }
+    ],
+    "colors": {
+      "bg": "#F4F8FA",
+      "fg": "#26323A",
+      "primary": "#4F7E9C",
+      "secondary": "#E3EDF2",
+      "accent": "#E7A65B",
+      "muted": "#5E6B74"
+    }
+  },
+  {
+    "id": "xhs-japanese-ending",
+    "name": "日系清新·结尾",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "日系清新",
+    "look": "japanese",
+    "set": "japanese-a",
+    "role": "ending",
+    "description": "近乎空白的一页：一行提问、日期和一个小圆点，放在一组图的最后一张",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "英文小标题",
+        "max": 16
+      },
+      {
+        "name": "question",
+        "label": "互动提问",
+        "max": 16
+      },
+      {
+        "name": "follow",
+        "label": "关注引导",
+        "max": 24
+      },
+      {
+        "name": "date",
+        "label": "日期",
+        "max": 8
+      },
+      {
+        "name": "author",
+        "label": "账号名",
+        "max": 12
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [],
+    "images": [],
+    "colors": {
+      "bg": "#F4F8FA",
+      "fg": "#26323A",
+      "primary": "#4F7E9C",
+      "secondary": "#E3EDF2",
+      "accent": "#E7A65B",
+      "muted": "#5E6B74"
+    }
+  },
+  {
+    "id": "xhs-japanese-list",
+    "name": "日系清新·清单",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "日系清新",
+    "look": "japanese",
+    "set": "japanese-a",
+    "role": "list",
+    "description": "透气清单：细线分隔、小圆点、Montserrat 编号，三天行程一天一项",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "英文小标题",
+        "max": 16
+      },
+      {
+        "name": "title",
+        "label": "本页标题",
+        "max": 10
+      },
+      {
+        "name": "subtitle",
+        "label": "副标题",
+        "max": 24
+      },
+      {
+        "name": "author",
+        "label": "账号名",
+        "max": 12
+      },
+      {
+        "name": "note",
+        "label": "底部小字",
+        "max": 12
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [
+      {
+        "name": "days",
+        "label": "行程",
+        "min": 3,
+        "max": 5,
+        "slots": [
+          {
+            "name": "head",
+            "label": "短标题",
+            "max": 12
+          },
+          {
+            "name": "text",
+            "label": "说明",
+            "max": 30
+          }
+        ]
+      }
+    ],
+    "images": [],
+    "colors": {
+      "bg": "#F4F8FA",
+      "fg": "#26323A",
+      "primary": "#4F7E9C",
+      "secondary": "#E3EDF2",
+      "accent": "#E7A65B",
+      "muted": "#5E6B74"
+    }
+  },
+  {
+    "id": "xhs-japanese-photo",
+    "name": "日系清新·大图",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "日系清新",
+    "look": "japanese",
+    "set": "japanese-a",
+    "role": "photo",
+    "description": "满幅照片加底部一条细线图说，右上角一个描边大数字，适合旅行实拍",
+    "slots": [
+      {
+        "name": "day",
+        "label": "天数",
+        "max": 2
+      },
+      {
+        "name": "caption",
+        "label": "图说",
+        "max": 20
+      },
+      {
+        "name": "note",
+        "label": "小字标注",
+        "max": 16
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [],
+    "images": [
+      {
+        "name": "photo",
+        "label": "主图照片",
+        "optional": true
+      }
+    ],
+    "colors": {
+      "bg": "#F4F8FA",
+      "fg": "#26323A",
+      "primary": "#4F7E9C",
+      "secondary": "#E3EDF2",
+      "accent": "#E7A65B",
+      "muted": "#5E6B74"
     }
   },
   {
@@ -1714,6 +3152,309 @@
     }
   },
   {
+    "id": "xhs-newspaper-compare",
+    "name": "报纸·对比",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "报纸",
+    "look": "newspaper",
+    "set": "newspaper-a",
+    "role": "compare",
+    "description": "左右两栏文字对照：左边花得值打黑勾、右边花冤枉了打红叉，栏间竖线分隔，每组一个小标题，适合年度盘点、花钱复盘的对照页",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "小标签",
+        "max": 8
+      },
+      {
+        "name": "title",
+        "label": "本页标题",
+        "max": 12
+      },
+      {
+        "name": "intro",
+        "label": "开头一段",
+        "max": 40
+      },
+      {
+        "name": "note",
+        "label": "底部提醒",
+        "max": 24
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [
+      {
+        "name": "rows",
+        "label": "对照组",
+        "min": 3,
+        "max": 4,
+        "slots": [
+          {
+            "name": "dim",
+            "label": "维度",
+            "max": 6
+          },
+          {
+            "name": "good",
+            "label": "花得值",
+            "max": 20
+          },
+          {
+            "name": "bad",
+            "label": "花冤枉了",
+            "max": 20
+          }
+        ]
+      }
+    ],
+    "images": [],
+    "colors": {
+      "bg": "#F1ECE1",
+      "fg": "#161412",
+      "primary": "#161412",
+      "secondary": "#E0D8C8",
+      "accent": "#C4302B",
+      "muted": "#5E5850"
+    }
+  },
+  {
+    "id": "xhs-newspaper-cover",
+    "name": "报纸·封面",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "报纸",
+    "look": "newspaper",
+    "set": "newspaper-a",
+    "role": "cover",
+    "description": "报纸头版：报名大字加日期期号、粗细双线、主标题和黑白照片位，适合年度盘点、观点类笔记的封面",
+    "slots": [
+      {
+        "name": "name",
+        "label": "报纸名",
+        "max": 6
+      },
+      {
+        "name": "date",
+        "label": "日期",
+        "max": 12
+      },
+      {
+        "name": "issue",
+        "label": "期号",
+        "max": 10
+      },
+      {
+        "name": "tag",
+        "label": "栏目",
+        "max": 8
+      },
+      {
+        "name": "title",
+        "label": "主标题（可用\n分两行）",
+        "max": 12
+      },
+      {
+        "name": "subtitle",
+        "label": "副标题",
+        "max": 24
+      },
+      {
+        "name": "body",
+        "label": "导语",
+        "max": 60
+      },
+      {
+        "name": "caption",
+        "label": "图说",
+        "max": 20
+      },
+      {
+        "name": "author",
+        "label": "账号名",
+        "max": 12
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [],
+    "images": [
+      {
+        "name": "photo",
+        "label": "头版照片",
+        "optional": true
+      }
+    ],
+    "colors": {
+      "bg": "#F1ECE1",
+      "fg": "#161412",
+      "primary": "#161412",
+      "secondary": "#E0D8C8",
+      "accent": "#C4302B",
+      "muted": "#5E5850"
+    }
+  },
+  {
+    "id": "xhs-newspaper-ending",
+    "name": "报纸·结尾",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "报纸",
+    "look": "newspaper",
+    "set": "newspaper-a",
+    "role": "ending",
+    "description": "观点收尾：编后大标题加首字下沉的收尾段，粗细双线分隔后是本期话题提问和下期预告，放在一组图的最后一张",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "小标签",
+        "max": 8
+      },
+      {
+        "name": "title",
+        "label": "观点大字",
+        "max": 14
+      },
+      {
+        "name": "body",
+        "label": "收尾段",
+        "max": 60
+      },
+      {
+        "name": "question",
+        "label": "互动问题",
+        "max": 20
+      },
+      {
+        "name": "teaser",
+        "label": "下期预告",
+        "max": 24
+      },
+      {
+        "name": "author",
+        "label": "账号名",
+        "max": 12
+      },
+      {
+        "name": "follow",
+        "label": "关注贴纸",
+        "max": 10
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [],
+    "images": [],
+    "colors": {
+      "bg": "#F1ECE1",
+      "fg": "#161412",
+      "primary": "#161412",
+      "secondary": "#E0D8C8",
+      "accent": "#C4302B",
+      "muted": "#5E5850"
+    }
+  },
+  {
+    "id": "xhs-newspaper-list",
+    "name": "报纸·清单",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "报纸",
+    "look": "newspaper",
+    "set": "newspaper-a",
+    "role": "list",
+    "description": "双栏账单清单：左右两栏加栏间竖线，每栏一个编号、一类开销和一年金额，底部是全年总支出，适合年度盘点、花销拆解的内页",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "小标签",
+        "max": 8
+      },
+      {
+        "name": "title",
+        "label": "本页标题",
+        "max": 14
+      },
+      {
+        "name": "subtitle",
+        "label": "开头一句",
+        "max": 22
+      },
+      {
+        "name": "total",
+        "label": "合计标签",
+        "max": 8
+      },
+      {
+        "name": "amount",
+        "label": "合计金额",
+        "max": 10
+      },
+      {
+        "name": "note",
+        "label": "底部提醒",
+        "max": 24
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [
+      {
+        "name": "items",
+        "label": "开销",
+        "min": 2,
+        "max": 5,
+        "slots": [
+          {
+            "name": "head",
+            "label": "类别",
+            "max": 8
+          },
+          {
+            "name": "text",
+            "label": "明细",
+            "max": 30
+          }
+        ]
+      }
+    ],
+    "images": [],
+    "colors": {
+      "bg": "#F1ECE1",
+      "fg": "#161412",
+      "primary": "#161412",
+      "secondary": "#E0D8C8",
+      "accent": "#C4302B",
+      "muted": "#5E5850"
+    }
+  },
+  {
     "id": "xhs-notebook-cover",
     "name": "手账拼贴·封面",
     "category": "xhs",
@@ -1980,6 +3721,318 @@
       "secondary": "#FFE98A",
       "accent": "#5B8DD6",
       "muted": "#6E6556"
+    }
+  },
+  {
+    "id": "xhs-study-cover",
+    "name": "学习笔记·封面",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "学习笔记",
+    "look": "study",
+    "set": "study-a",
+    "role": "cover",
+    "description": "方格纸加左侧装订线，蓝笔大标题配红笔批注和黄色荧光划线，下方一张照片位，适合考研、考公类经验帖的封面",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "贴纸标签",
+        "max": 6
+      },
+      {
+        "name": "date",
+        "label": "日期",
+        "max": 12
+      },
+      {
+        "name": "title",
+        "label": "标题（可用\\n分行）",
+        "max": 6
+      },
+      {
+        "name": "score",
+        "label": "荧光笔分数",
+        "max": 6
+      },
+      {
+        "name": "scribble",
+        "label": "红笔批注",
+        "max": 12
+      },
+      {
+        "name": "subtitle",
+        "label": "副标题",
+        "max": 20
+      },
+      {
+        "name": "note",
+        "label": "照片说明",
+        "max": 16
+      },
+      {
+        "name": "author",
+        "label": "账号名",
+        "max": 12
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [],
+    "images": [
+      {
+        "name": "photo",
+        "label": "封面照片",
+        "optional": true
+      }
+    ],
+    "colors": {
+      "bg": "#FDFDF8",
+      "fg": "#1E2B55",
+      "primary": "#1E2B55",
+      "secondary": "#FFF27A",
+      "accent": "#D63A32",
+      "muted": "#5B6380"
+    }
+  },
+  {
+    "id": "xhs-study-ending",
+    "name": "学习笔记·结尾",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "学习笔记",
+    "look": "study",
+    "set": "study-a",
+    "role": "ending",
+    "description": "蓝笔大标题配荧光笔重点，下面是带复选框的今日打卡框和评论区提问，放在一组图的最后一张",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "贴纸标签",
+        "max": 6
+      },
+      {
+        "name": "title",
+        "label": "标题",
+        "max": 6
+      },
+      {
+        "name": "keyword",
+        "label": "荧光笔关键词",
+        "max": 5
+      },
+      {
+        "name": "summary",
+        "label": "一句话总结",
+        "max": 24
+      },
+      {
+        "name": "checktitle",
+        "label": "打卡框标题",
+        "max": 8
+      },
+      {
+        "name": "day",
+        "label": "打卡天数",
+        "max": 8
+      },
+      {
+        "name": "question",
+        "label": "互动问题",
+        "max": 16
+      },
+      {
+        "name": "follow",
+        "label": "关注贴纸",
+        "max": 8
+      },
+      {
+        "name": "author",
+        "label": "账号名",
+        "max": 12
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [
+      {
+        "name": "checks",
+        "label": "打卡项",
+        "min": 3,
+        "max": 5,
+        "slots": [
+          {
+            "name": "task",
+            "label": "打卡任务",
+            "max": 12
+          }
+        ]
+      }
+    ],
+    "images": [],
+    "colors": {
+      "bg": "#FDFDF8",
+      "fg": "#1E2B55",
+      "primary": "#1E2B55",
+      "secondary": "#FFF27A",
+      "accent": "#D63A32",
+      "muted": "#5B6380"
+    }
+  },
+  {
+    "id": "xhs-study-qa",
+    "name": "学习笔记·问答",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "学习笔记",
+    "look": "study",
+    "set": "study-a",
+    "role": "qa",
+    "description": "红笔问、蓝笔答的问答页，问题短、回答两三句，适合考研、考公类经验帖的答疑内页",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "贴纸标签",
+        "max": 6
+      },
+      {
+        "name": "title",
+        "label": "本页标题",
+        "max": 10
+      },
+      {
+        "name": "note",
+        "label": "底部提醒",
+        "max": 14
+      },
+      {
+        "name": "author",
+        "label": "账号名",
+        "max": 12
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [
+      {
+        "name": "qa",
+        "label": "问答",
+        "min": 3,
+        "max": 5,
+        "slots": [
+          {
+            "name": "question",
+            "label": "问题",
+            "max": 12
+          },
+          {
+            "name": "answer",
+            "label": "回答",
+            "max": 36
+          }
+        ]
+      }
+    ],
+    "images": [],
+    "colors": {
+      "bg": "#FDFDF8",
+      "fg": "#1E2B55",
+      "primary": "#1E2B55",
+      "secondary": "#FFF27A",
+      "accent": "#D63A32",
+      "muted": "#5B6380"
+    }
+  },
+  {
+    "id": "xhs-study-steps",
+    "name": "学习笔记·步骤",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "学习笔记",
+    "look": "study",
+    "set": "study-a",
+    "role": "steps",
+    "description": "方格纸上的竖向时间线，红笔圈住步骤编号、手绘连接线，适合复习方法、备考流程的内页",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "贴纸标签",
+        "max": 6
+      },
+      {
+        "name": "title",
+        "label": "本页标题",
+        "max": 10
+      },
+      {
+        "name": "subtitle",
+        "label": "副标题",
+        "max": 20
+      },
+      {
+        "name": "note",
+        "label": "底部提醒",
+        "max": 20
+      },
+      {
+        "name": "author",
+        "label": "账号名",
+        "max": 12
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [
+      {
+        "name": "steps",
+        "label": "步骤",
+        "min": 3,
+        "max": 5,
+        "slots": [
+          {
+            "name": "head",
+            "label": "步骤标题",
+            "max": 10
+          },
+          {
+            "name": "text",
+            "label": "步骤说明",
+            "max": 30
+          }
+        ]
+      }
+    ],
+    "images": [],
+    "colors": {
+      "bg": "#FDFDF8",
+      "fg": "#1E2B55",
+      "primary": "#1E2B55",
+      "secondary": "#FFF27A",
+      "accent": "#D63A32",
+      "muted": "#5B6380"
     }
   },
   {

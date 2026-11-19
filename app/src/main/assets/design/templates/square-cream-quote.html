@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"square-cream-quote","name":"方图·奶油金句","category":"square","size":[1080,1080],"style":"奶油温柔","look":"cream","set":"square-cream","role":"content","description":"一句楷体金句居中，配柔和色斑、手写英文和出处小字，适合治愈、日常类朋友圈方图","slots":[{"name":"title","label":"金句","max":24},{"name":"author","label":"出处","max":12},{"name":"tag","label":"标签","max":6}],"lists":[],"images":[],"colors":{"bg":"#FBF3E6","fg":"#4A3426","primary":"#B0703C","secondary":"#F2DFC4","accent":"#E9A6A0","muted":"#7E6656"}}'>
+<title>方图·奶油金句</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1080px;overflow:hidden}
+.canvas{--bg:#FBF3E6;--fg:#4A3426;--primary:#B0703C;--secondary:#F2DFC4;--accent:#E9A6A0;--muted:#7E6656;
+  --font-title:"LXGW WenKai","Noto Serif CJK SC",serif;--font-sans:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-num:"Caveat","Noto Sans CJK SC",sans-serif;
+  position:relative;width:1080px;height:1080px;overflow:hidden;padding:80px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.08;mix-blend-mode:multiply}
+.blob-a{position:absolute;left:-140px;top:-120px;width:520px;height:520px;border-radius:50%;background:radial-gradient(circle,color-mix(in srgb,var(--accent) 60%,transparent) 0%,transparent 70%)}
+.blob-b{position:absolute;right:-160px;bottom:0;width:560px;height:560px;border-radius:50%;background:radial-gradient(circle,color-mix(in srgb,var(--primary) 38%,transparent) 0%,transparent 70%)}
+.star{position:absolute;color:var(--accent)}
+.star svg{display:block;width:100%;height:100%}
+.s1{left:120px;top:150px;width:34px;height:34px;transform:rotate(12deg)}
+.s2{right:150px;bottom:180px;width:26px;height:26px;transform:rotate(-16deg)}
+.tag{position:relative;display:inline-block;padding:10px 22px;border-radius:999px;background:var(--secondary);color:var(--fg);font-size:24px;font-weight:700;line-height:1}
+.title{position:relative;margin:36px 0 0;max-width:880px;font-family:var(--font-title);font-weight:700;font-size:88px;line-height:1.5;color:var(--fg)}
+.en{position:relative;margin-top:28px;font-family:var(--font-num);font-weight:700;font-size:44px;line-height:1.2;color:var(--primary);transform:rotate(-3deg)}
+.author{position:relative;margin-top:24px;font-size:28px;line-height:1.4;font-weight:400;color:var(--fg)}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1080" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="blob-a"></div>
+  <div class="blob-b"></div>
+  <span class="star s1"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l2.2 7.8L22 12l-7.8 2.2L12 22l-2.2-7.8L2 12l7.8-2.2z"/></svg></span>
+  <span class="star s2"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l2.2 7.8L22 12l-7.8 2.2L12 22l-2.2-7.8L2 12l7.8-2.2z"/></svg></span>
+  <span class="tag" data-slot="tag" data-max="6">慢下来</span>
+  <div class="title" data-slot="title" data-max="24">把日子过成<br>喜欢的样子</div>
+  <div class="en">take it slow</div>
+  <div class="author" data-slot="author" data-max="12">村上春树 · 且听风吟</div>
+</div>
+</body>
+</html>

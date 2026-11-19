@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-study-ending","name":"学习笔记·结尾","category":"xhs","size":[1080,1440],"style":"学习笔记","look":"study","set":"study-a","role":"ending","description":"蓝笔大标题配荧光笔重点，下面是带复选框的今日打卡框和评论区提问，放在一组图的最后一张","slots":[{"name":"tag","label":"贴纸标签","max":6},{"name":"title","label":"标题","max":6},{"name":"keyword","label":"荧光笔关键词","max":5},{"name":"summary","label":"一句话总结","max":24},{"name":"checktitle","label":"打卡框标题","max":8},{"name":"day","label":"打卡天数","max":8},{"name":"question","label":"互动问题","max":16},{"name":"follow","label":"关注贴纸","max":8},{"name":"author","label":"账号名","max":12},{"name":"page","label":"页码","max":5}],"lists":[{"name":"checks","label":"打卡项","min":3,"max":5,"slots":[{"name":"task","label":"打卡任务","max":12}]}],"images":[],"colors":{"bg":"#FDFDF8","fg":"#1E2B55","primary":"#1E2B55","secondary":"#FFF27A","accent":"#D63A32","muted":"#5B6380"}}'>
+<title>学习笔记·结尾</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#FDFDF8;--fg:#1E2B55;--primary:#1E2B55;--secondary:#FFF27A;--accent:#D63A32;--muted:#5B6380;
+  --font-title:"LXGW WenKai","Noto Serif CJK SC",serif;--font-sans:"LXGW WenKai","Noto Sans CJK SC",sans-serif;--font-num:"Caveat","LXGW WenKai",serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:76px 80px 72px;display:flex;flex-direction:column;
+  background-color:var(--bg);
+  background-image:repeating-linear-gradient(transparent 0 47px,color-mix(in srgb,var(--fg) 7%,transparent) 47px 48px),repeating-linear-gradient(90deg,transparent 0 47px,color-mix(in srgb,var(--fg) 7%,transparent) 47px 48px);
+  color:var(--fg);font-family:var(--font-sans)}
+/* 颗粒：让纯色底不那么「电脑味」 */
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.10;mix-blend-mode:multiply}
+/* 本子左侧的装订线 */
+.margin-line{position:absolute;left:44px;top:0;bottom:0;width:3px;background:color-mix(in srgb,var(--accent) 45%,transparent)}
+.top{position:relative;display:flex;align-items:center;justify-content:space-between;height:60px}
+.tag{display:inline-block;padding:12px 24px 14px;border:3px solid var(--accent);color:var(--accent);font-family:var(--font-title);font-weight:700;font-size:34px;line-height:1;transform:rotate(-2deg)}
+.page{font-family:var(--font-num);font-weight:700;font-size:44px;color:var(--fg)}
+.title{position:relative;margin:20px 0 0;font-family:var(--font-title);font-weight:700;font-size:96px;line-height:1.15;color:var(--fg)}
+.title .keyword{padding:0 12px;background:linear-gradient(transparent 52%,color-mix(in srgb,var(--secondary) 85%,transparent) 52%)}
+.summary{position:relative;margin-top:24px;max-width:820px;font-size:32px;line-height:1.5;font-weight:400;color:var(--fg)}
+/* 今日打卡框：方框加横线，像笔记本里的一页清单 */
+.checkin{position:relative;margin-top:32px;padding:28px 36px;border:3px solid var(--fg);background:color-mix(in srgb,var(--secondary) 14%,transparent)}
+.checkin-head{display:flex;align-items:baseline;justify-content:space-between}
+.checktitle{font-size:30px;font-weight:700;color:var(--fg)}
+.day{font-family:var(--font-num);font-weight:700;font-size:36px;line-height:1;color:var(--accent);transform:rotate(-3deg)}
+.checks{position:relative;display:flex;flex-direction:column;margin-top:8px}
+.check{display:flex;align-items:center;gap:18px;padding:16px 0;border-top:2px solid color-mix(in srgb,var(--fg) 18%,transparent)}
+.box{flex:none;display:flex;align-items:center;justify-content:center;width:44px;height:44px;border:3px solid var(--fg);border-radius:8px;background:var(--bg)}
+.box i{width:30px;height:30px;flex:none;color:var(--accent)}
+.task{font-size:28px;line-height:1.4;font-weight:400;color:var(--fg)}
+.ask{position:relative;margin-top:36px;padding:32px 40px;border:3px solid var(--fg);background:color-mix(in srgb,var(--secondary) 22%,transparent)}
+.ask-label{display:block;font-size:26px;font-weight:700;letter-spacing:.12em;color:var(--accent)}
+.question{display:block;margin-top:12px;font-family:var(--font-title);font-weight:700;font-size:56px;line-height:1.18;color:var(--fg)}
+.bottom{position:relative;margin-top:auto;display:flex;align-items:center;justify-content:space-between;padding-top:26px;border-top:3px solid color-mix(in srgb,var(--fg) 35%,transparent)}
+.author{font-size:30px;font-weight:700}
+.follow{display:inline-block;padding:12px 26px 14px;border:3px solid var(--accent);color:var(--accent);font-family:var(--font-title);font-weight:700;font-size:32px;line-height:1;transform:rotate(-2deg)}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="margin-line"></div>
+  <div class="top">
+    <span class="tag" data-slot="tag" data-max="6">最后一步</span>
+    <span class="page" data-slot="page" data-max="5">04/04</span>
+  </div>
+  <h2 class="title"><span data-slot="title" data-max="6">坚持</span><br><span class="keyword" data-slot="keyword" data-max="5">100 天</span></h2>
+  <div class="summary" data-slot="summary" data-max="24">方法都在上面了，剩下的就是每天做</div>
+  <div class="checkin">
+    <div class="checkin-head">
+      <span class="checktitle" data-slot="checktitle" data-max="8">今日打卡</span>
+      <span class="day" data-slot="day" data-max="8">Day 1</span>
+    </div>
+    <div class="checks" data-list="checks" data-max="5">
+      <div class="check" data-item>
+        <span class="box"><i data-icon="check"></i></span>
+        <span class="task" data-slot="task" data-max="12">背 100 个单词</span>
+      </div>
+      <div class="check" data-item>
+        <span class="box"></span>
+        <span class="task" data-slot="task" data-max="12">精读 1 篇真题</span>
+      </div>
+      <div class="check" data-item>
+        <span class="box"></span>
+        <span class="task" data-slot="task" data-max="12">默写 1 篇作文</span>
+      </div>
+    </div>
+  </div>
+  <div class="ask">
+    <span class="ask-label">评论区聊聊</span>
+    <span class="question" data-slot="question" data-max="16">你今天背了多少单词？</span>
+  </div>
+  <div class="bottom">
+    <span class="author" data-slot="author" data-max="12">@英语上岸日记</span>
+    <span class="follow" data-slot="follow" data-max="8">关注我</span>
+  </div>
+</div>
+</body>
+</html>

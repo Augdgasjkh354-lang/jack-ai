@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-film-photo","name":"胶片复古·大图","category":"xhs","size":[1080,1440],"style":"胶片复古","look":"film","set":"film-a","role":"photo","description":"满幅出血的街景大图，底部一条白色冲洗边框放图说和地点，右上角是胶片日期戳，适合实拍、探店、旅行","slots":[{"name":"tag","label":"小标签","max":6},{"name":"date","label":"日期戳","max":10},{"name":"caption","label":"图说","max":16},{"name":"place","label":"地点","max":12},{"name":"page","label":"页码","max":5}],"lists":[],"images":[{"name":"photo","label":"主图照片","optional":true}],"colors":{"bg":"#EFE6D2","fg":"#2B241B","primary":"#A8432A","secondary":"#DCCCA9","accent":"#E88A2E","muted":"#6F6250"}}'>
+<title>胶片复古·大图</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#EFE6D2;--fg:#2B241B;--primary:#A8432A;--secondary:#DCCCA9;--accent:#E88A2E;--muted:#6F6250;
+  --font-title:"Noto Serif SC","Noto Serif CJK SC",serif;--font-sans:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-num:"Bebas Neue","Noto Sans CJK SC",sans-serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:0;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+/* 颗粒：让纯色底不那么「电脑味」 */
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.10;mix-blend-mode:multiply}
+/* 轻微暗角 */
+.vignette{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 58%,rgba(0,0,0,.12) 100%)}
+/* 满幅出血的照片区 */
+.phwrap{position:relative;flex:1;min-height:0}
+.photo{position:absolute;inset:0;background-color:var(--secondary);background-image:repeating-linear-gradient(45deg,color-mix(in srgb,var(--primary) 4%,transparent) 0 1px,transparent 1px 26px)}
+.tag{position:absolute;left:80px;top:64px;padding:12px 26px 14px;background:var(--fg);color:var(--bg);font-size:28px;font-weight:700;line-height:1}
+.date{position:absolute;right:80px;top:56px;font-family:var(--font-num);font-size:64px;line-height:1;letter-spacing:.06em;color:var(--accent);background:var(--fg);padding:10px 22px 14px}
+/* 底部白色冲洗边框：图说 + 地点 + 页码 */
+.capbar{position:relative;flex:none;height:176px;background:rgba(255,255,255,.92);padding:26px 80px 0;display:flex;align-items:flex-start;justify-content:space-between}
+.captext{display:flex;flex-direction:column;min-width:0}
+.caption{font-size:30px;font-weight:700;line-height:1.4;color:rgba(0,0,0,.85)}
+.place{display:flex;align-items:center;gap:10px;margin-top:8px;font-size:24px;line-height:1.4;color:rgba(0,0,0,.6)}
+.place i{width:26px;height:26px;flex:none}
+.place i svg{width:26px;height:26px}
+.page{font-family:var(--font-num);font-size:40px;line-height:1;letter-spacing:.06em;color:rgba(0,0,0,.85);padding-top:4px}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="vignette" aria-hidden="true"></div>
+  <div class="phwrap" data-bleed>
+    <div class="photo" data-slot="photo" data-kind="image"></div>
+    <span class="tag" data-slot="tag" data-max="6">老城漫步</span>
+    <span class="date" data-slot="date" data-max="10">2026.11.19</span>
+  </div>
+  <div class="capbar">
+    <div class="captext">
+      <span class="caption" data-slot="caption" data-max="16">梧桐叶落了一地</span>
+      <span class="place"><i data-icon="map-pin"></i><span data-slot="place" data-max="12">中山路 · 老街口</span></span>
+    </div>
+    <span class="page" data-slot="page" data-max="5">02/04</span>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-black-gold-list","name":"高级黑金·清单","category":"xhs","size":[1080,1440],"style":"高级黑金","look":"black-gold","set":"black-gold-a","role":"list","description":"每项居中排布的必点清单，衬线编号加金色小菱形分隔，适合小酒馆必点酒单、招牌推荐的内页","slots":[{"name":"tag","label":"小标签","max":6},{"name":"title","label":"本页标题","max":10},{"name":"note","label":"底部提醒","max":24},{"name":"page","label":"页码","max":5}],"lists":[{"name":"items","label":"必点","min":3,"max":5,"slots":[{"name":"head","label":"酒名","max":12},{"name":"text","label":"一句话介绍","max":30}]}],"images":[],"colors":{"bg":"#111111","fg":"#F2EBDD","primary":"#C8A464","secondary":"#1F1D1A","accent":"#E6D3A8","muted":"#ADA594"}}'>
+<title>高级黑金·清单</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#111111;--fg:#F2EBDD;--primary:#C8A464;--secondary:#1F1D1A;--accent:#E6D3A8;--muted:#ADA594;
+  --font-title:"Noto Serif SC","Noto Serif CJK SC",serif;--font-sans:"Noto Serif SC","Noto Serif CJK SC",serif;--font-num:"DM Serif Display","Noto Serif CJK SC",serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:76px 80px 72px;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+/* 颗粒：深色底用 screen，让纯色底不那么「电脑味」 */
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.05;mix-blend-mode:screen}
+.top{position:relative;display:flex;align-items:center;justify-content:space-between;height:60px}
+.tag{font-size:28px;font-weight:700;letter-spacing:.2em;color:var(--primary)}
+.page{font-family:var(--font-num);font-size:28px;font-weight:400;letter-spacing:.08em}
+.title{position:relative;margin:40px 0 0;text-align:center;font-family:var(--font-title);font-weight:900;font-size:80px;line-height:1.15;letter-spacing:.04em;color:var(--fg)}
+.items{position:relative;margin:auto 0;display:flex;flex-direction:column;align-items:center;text-align:center}
+.item{display:flex;flex-direction:column;align-items:center;padding:14px 0 16px}
+.num{font-family:var(--font-num);font-size:38px;font-weight:400;line-height:1;color:var(--primary)}
+.head{display:block;margin-top:8px;font-family:var(--font-title);font-size:38px;font-weight:900;line-height:1.2;color:var(--fg)}
+.text{display:block;margin-top:8px;font-size:26px;line-height:1.6;font-weight:400;color:var(--muted)}
+.dia{width:11px;height:11px;margin-top:18px;background:var(--primary);transform:rotate(45deg)}
+.note{position:relative;width:100%;text-align:center;padding-top:26px;border-top:1px solid var(--primary);font-size:26px;line-height:1.5;font-weight:400;color:var(--muted)}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .5 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="top">
+    <span class="tag" data-slot="tag" data-max="6">必点清单</span>
+    <span class="page" data-slot="page" data-max="5">03/04</span>
+  </div>
+  <h2 class="title" data-slot="title" data-max="10">来了就点这几样</h2>
+  <div class="items" data-list="items" data-max="5">
+    <div class="item" data-item>
+      <span class="num" data-slot="num">01</span>
+      <span class="head" data-slot="head" data-max="12">鎏金马天尼</span>
+      <span class="text" data-slot="text" data-max="30">金箔点缀，柑橘清香，一杯就上头</span>
+      <span class="dia" aria-hidden="true"></span>
+    </div>
+    <div class="item" data-item>
+      <span class="num" data-slot="num">02</span>
+      <span class="head" data-slot="head" data-max="12">烟熏威士忌</span>
+      <span class="text" data-slot="text" data-max="30">橡木烟气慢慢绕上来，适合慢慢喝</span>
+      <span class="dia" aria-hidden="true"></span>
+    </div>
+    <div class="item" data-item>
+      <span class="num" data-slot="num">03</span>
+      <span class="head" data-slot="head" data-max="12">黑金巧克力塔</span>
+      <span class="text" data-slot="text" data-max="30">七成黑巧配海盐，配酒正好</span>
+      <span class="dia" aria-hidden="true"></span>
+    </div>
+    <div class="item" data-item>
+      <span class="num" data-slot="num">04</span>
+      <span class="head" data-slot="head" data-max="12">蜜汁烤鸡翅</span>
+      <span class="text" data-slot="text" data-max="30">现烤现上，蘸着特调吃最香</span>
+      <span class="dia" aria-hidden="true"></span>
+    </div>
+  </div>
+  <div class="note" data-slot="note" data-max="24">特调每天只做 30 杯，卖完就没了</div>
+</div>
+</body>
+</html>

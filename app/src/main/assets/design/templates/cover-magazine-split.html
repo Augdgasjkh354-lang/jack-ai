@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=900,initial-scale=1">
+<meta name="kavi-template" content='{"id":"cover-magazine-split","name":"公众号封面·杂志左字右图","category":"cover","size":[900,383],"style":"杂志编辑","look":"magazine","set":"cover-magazine","role":"content","description":"左侧宋体大标题加期号和副标题、右侧大幅照片的横版公众号封面，杂志内页感，适合城市、旅行和生活方式推送","slots":[{"name":"title","label":"标题","max":10},{"name":"subtitle","label":"副标题","max":16}],"lists":[],"images":[{"name":"photo","label":"右侧照片","optional":true}],"colors":{"bg":"#F4EFE6","fg":"#1B1A17","primary":"#1B1A17","secondary":"#E4DCCD","accent":"#B4532A","muted":"#6E675C"}}'>
+<title>公众号封面·杂志左字右图</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:900px;height:383px;overflow:hidden}
+.canvas{--bg:#F4EFE6;--fg:#1B1A17;--primary:#1B1A17;--secondary:#E4DCCD;--accent:#B4532A;--muted:#6E675C;
+  --font-title:"Noto Serif SC","Noto Serif CJK SC",serif;--font-sans:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-num:"Playfair Display","Noto Serif CJK SC",serif;
+  position:relative;width:900px;height:383px;overflow:hidden;padding:36px;display:flex;flex-direction:row;gap:24px;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.08;mix-blend-mode:multiply}
+.left{position:relative;flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center}
+.vol{font-family:var(--font-num);font-style:italic;font-weight:700;font-size:26px;line-height:1.3;letter-spacing:.08em;color:var(--primary)}
+.title{margin:14px 0 0;font-family:var(--font-title);font-weight:900;font-size:64px;line-height:1.25;letter-spacing:.01em;color:var(--primary)}
+.rule{margin-top:16px;width:64px;height:2px;background:var(--accent)}
+.subtitle{margin-top:14px;font-size:24px;line-height:1.6;font-weight:400;color:var(--fg)}
+.photo{position:relative;flex:none;width:336px;height:311px;background-color:var(--secondary);background-image:radial-gradient(rgba(0,0,0,.07) 1.5px,transparent 1.6px);background-size:32px 32px}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="900" height="383" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="left">
+    <div class="vol">VOL.07 · 2026.11</div>
+    <h1 class="title" data-slot="title" data-max="10">城市漫步指南</h1>
+    <div class="rule"></div>
+    <div class="subtitle" data-slot="subtitle" data-max="16">逛吃、拍照与发呆的一天</div>
+  </div>
+  <div class="photo" data-slot="photo" data-kind="image"></div>
+</div>
+</body>
+</html>

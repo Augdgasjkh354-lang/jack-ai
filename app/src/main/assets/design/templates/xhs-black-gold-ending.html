@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-black-gold-ending","name":"高级黑金·结尾","category":"xhs","size":[1080,1440],"style":"高级黑金","look":"black-gold","set":"black-gold-a","role":"ending","description":"双金线框里的金框居中提问，配一行小写英文和关注贴纸，放在一组图的最后一张","slots":[{"name":"tag","label":"小标签","max":6},{"name":"title","label":"总结大字","max":10},{"name":"subtitle","label":"副标题","max":16},{"name":"question","label":"互动问题","max":18},{"name":"follow","label":"关注贴纸","max":6},{"name":"author","label":"账号名","max":12},{"name":"page","label":"页码","max":5}],"lists":[],"images":[],"colors":{"bg":"#111111","fg":"#F2EBDD","primary":"#C8A464","secondary":"#1F1D1A","accent":"#E6D3A8","muted":"#ADA594"}}'>
+<title>高级黑金·结尾</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#111111;--fg:#F2EBDD;--primary:#C8A464;--secondary:#1F1D1A;--accent:#E6D3A8;--muted:#ADA594;
+  --font-title:"Noto Serif SC","Noto Serif CJK SC",serif;--font-sans:"Noto Serif SC","Noto Serif CJK SC",serif;--font-num:"DM Serif Display","Noto Serif CJK SC",serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:88px 96px 76px;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+/* 颗粒：深色底用 screen，让纯色底不那么「电脑味」 */
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.05;mix-blend-mode:screen}
+/* 双金线框：外粗内细，两道独立的框 */
+.frame-outer{position:absolute;left:44px;right:44px;top:44px;bottom:44px;border:2px solid var(--primary);pointer-events:none}
+.frame-inner{position:absolute;left:60px;right:60px;top:60px;bottom:60px;border:1px solid var(--primary);pointer-events:none}
+.top{position:relative;display:flex;align-items:center;justify-content:space-between;height:60px}
+.tag{font-size:28px;font-weight:700;letter-spacing:.2em;color:var(--primary)}
+.page{font-family:var(--font-num);font-size:28px;font-weight:400;letter-spacing:.08em}
+.mid{position:relative;margin:auto 0;display:flex;flex-direction:column;align-items:center;text-align:center}
+.title{margin:0;font-family:var(--font-title);font-weight:900;font-size:96px;line-height:1.18;letter-spacing:.04em;color:var(--fg)}
+.subtitle{margin-top:36px;font-size:28px;line-height:1.6;font-weight:400;color:var(--muted)}
+.qframe{margin-top:56px;border:2px solid var(--primary)}
+.qframe-in{margin:10px;padding:36px 44px 40px;border:1px solid var(--primary);display:flex;flex-direction:column;align-items:center}
+.qlabel{font-size:22px;font-weight:700;letter-spacing:.24em;color:var(--accent)}
+.question{display:block;margin-top:18px;font-family:var(--font-title);font-size:38px;font-weight:900;line-height:1.35;color:var(--fg)}
+.en{margin-top:44px;font-family:var(--font-num);font-size:26px;font-weight:400;letter-spacing:.3em;color:var(--muted)}
+.foot{position:relative;display:flex;flex-direction:column;align-items:center;gap:18px}
+.follow{display:inline-block;padding:16px 36px 18px;background:var(--primary);color:var(--bg);font-family:var(--font-title);font-size:34px;font-weight:900;line-height:1}
+.author{font-size:26px;font-weight:700}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .5 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="frame-outer" aria-hidden="true"></div>
+  <div class="frame-inner" aria-hidden="true"></div>
+  <div class="top">
+    <span class="tag" data-slot="tag" data-max="6">开业邀请</span>
+    <span class="page" data-slot="page" data-max="5">04/04</span>
+  </div>
+  <div class="mid">
+    <h2 class="title" data-slot="title" data-max="10">今晚，留个座给你</h2>
+    <span class="subtitle" data-slot="subtitle" data-max="16">推门进来，今晚的位置留给你</span>
+    <div class="qframe">
+      <div class="qframe-in">
+        <span class="qlabel">问你一句</span>
+        <span class="question" data-slot="question" data-max="18">你最想和谁来喝一杯？</span>
+      </div>
+    </div>
+    <span class="en">see you at the bar</span>
+  </div>
+  <div class="foot">
+    <span class="follow" data-slot="follow" data-max="6">关注不迷路</span>
+    <span class="author" data-slot="author" data-max="12">@鎏金小酒馆</span>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-black-gold-cover","name":"高级黑金·封面","category":"xhs","size":[1080,1440],"style":"高级黑金","look":"black-gold","set":"black-gold-a","role":"cover","description":"双金线框里的居中大标题，配开业日期和英文小字，适合黑金风小酒馆开业预告的封面","slots":[{"name":"tag","label":"小标签","max":6},{"name":"title","label":"标题（可用\\n分两行）","max":12},{"name":"subtitle","label":"副标题","max":16},{"name":"date","label":"开业日期","max":12},{"name":"note","label":"开业优惠","max":16},{"name":"author","label":"账号名","max":12},{"name":"page","label":"页码","max":5}],"lists":[],"images":[],"colors":{"bg":"#111111","fg":"#F2EBDD","primary":"#C8A464","secondary":"#1F1D1A","accent":"#E6D3A8","muted":"#ADA594"}}'>
+<title>高级黑金·封面</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#111111;--fg:#F2EBDD;--primary:#C8A464;--secondary:#1F1D1A;--accent:#E6D3A8;--muted:#ADA594;
+  --font-title:"Noto Serif SC","Noto Serif CJK SC",serif;--font-sans:"Noto Serif SC","Noto Serif CJK SC",serif;--font-num:"DM Serif Display","Noto Serif CJK SC",serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:88px 96px 76px;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+/* 颗粒：深色底用 screen，让纯色底不那么「电脑味」 */
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.05;mix-blend-mode:screen}
+/* 双金线框：外粗内细，两道独立的框 */
+.frame-outer{position:absolute;left:44px;right:44px;top:44px;bottom:44px;border:2px solid var(--primary);pointer-events:none}
+.frame-inner{position:absolute;left:60px;right:60px;top:60px;bottom:60px;border:1px solid var(--primary);pointer-events:none}
+.mid{position:relative;margin:auto 0;display:flex;flex-direction:column;align-items:center;text-align:center}
+.en{font-family:var(--font-num);font-size:26px;font-weight:400;letter-spacing:.42em;color:var(--primary)}
+.tag{margin-top:40px;padding:12px 28px 14px;border:1px solid var(--primary);color:var(--accent);font-size:28px;font-weight:700;letter-spacing:.24em}
+.title{margin:48px 0 0;font-family:var(--font-title);font-weight:900;font-size:100px;line-height:1.18;letter-spacing:.06em;color:var(--fg)}
+.divider{display:flex;align-items:center;gap:18px;margin-top:52px}
+.divider .line{width:120px;height:1px;background:var(--primary)}
+.divider .dia{width:12px;height:12px;background:var(--primary);transform:rotate(45deg)}
+.subtitle{margin-top:44px;font-size:28px;line-height:1.6;font-weight:400;color:var(--muted)}
+.date{margin-top:30px;font-size:30px;line-height:1.4;font-weight:700;color:var(--primary)}
+.note{margin-top:20px;font-size:26px;line-height:1.5;font-weight:400;color:var(--muted)}
+.foot{position:relative;width:100%;display:flex;align-items:center;justify-content:space-between;padding-top:24px;border-top:1px solid var(--primary)}
+.author{font-size:26px;font-weight:700}
+.page{font-family:var(--font-num);font-size:28px;font-weight:400;letter-spacing:.08em}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .5 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="frame-outer" aria-hidden="true"></div>
+  <div class="frame-inner" aria-hidden="true"></div>
+  <div class="mid">
+    <span class="en">GRAND OPENING</span>
+    <span class="tag" data-slot="tag" data-max="6">开业预告</span>
+    <h1 class="title" data-slot="title" data-max="12">城里第一家<br>黑金小酒馆</h1>
+    <div class="divider" aria-hidden="true"><span class="line"></span><span class="dia"></span><span class="line"></span></div>
+    <span class="subtitle" data-slot="subtitle" data-max="16">鎏金灯下，等你来坐一坐</span>
+    <span class="date" data-slot="date" data-max="12">11月28日正式开业</span>
+    <span class="note" data-slot="note" data-max="16">开业首周，特调第二杯半价</span>
+  </div>
+  <div class="foot">
+    <span class="author" data-slot="author" data-max="12">@鎏金小酒馆</span>
+    <span class="page" data-slot="page" data-max="5">01/04</span>
+  </div>
+</div>
+</body>
+</html>

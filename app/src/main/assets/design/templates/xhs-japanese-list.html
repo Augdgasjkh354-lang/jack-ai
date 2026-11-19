@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-japanese-list","name":"日系清新·清单","category":"xhs","size":[1080,1440],"style":"日系清新","look":"japanese","set":"japanese-a","role":"list","description":"透气清单：细线分隔、小圆点、Montserrat 编号，三天行程一天一项","slots":[{"name":"tag","label":"英文小标题","max":16},{"name":"title","label":"本页标题","max":10},{"name":"subtitle","label":"副标题","max":24},{"name":"author","label":"账号名","max":12},{"name":"note","label":"底部小字","max":12},{"name":"page","label":"页码","max":5}],"lists":[{"name":"days","label":"行程","min":3,"max":5,"slots":[{"name":"head","label":"短标题","max":12},{"name":"text","label":"说明","max":30}]}],"images":[],"colors":{"bg":"#F4F8FA","fg":"#26323A","primary":"#4F7E9C","secondary":"#E3EDF2","accent":"#E7A65B","muted":"#5E6B74"}}'>
+<title>日系清新·清单</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#F4F8FA;--fg:#26323A;--primary:#4F7E9C;--secondary:#E3EDF2;--accent:#E7A65B;--muted:#5E6B74;
+  --font-title:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-sans:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-num:"Montserrat","Noto Sans CJK SC",sans-serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:72px 80px;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+/* 颗粒：让纯色底不那么「电脑味」 */
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.10;mix-blend-mode:multiply}
+.top{position:relative;display:flex;align-items:baseline;justify-content:space-between}
+.kicker{font-family:var(--font-num);font-size:24px;font-weight:700;letter-spacing:.28em;color:var(--fg)}
+.page{font-family:var(--font-num);font-size:28px;font-weight:700;letter-spacing:.08em;color:var(--fg)}
+.rule{position:relative;height:1px;margin-top:26px;background:var(--primary)}
+.title{position:relative;margin:36px 0 0;font-family:var(--font-title);font-weight:500;font-size:80px;line-height:1.28;letter-spacing:.1em;color:var(--fg)}
+.subtitle{position:relative;margin-top:18px;font-size:26px;line-height:1.6;font-weight:300;color:var(--muted)}
+.items{position:relative;margin-top:40px}
+.item{display:flex;align-items:flex-start;gap:20px;padding:24px 0;border-bottom:1px solid color-mix(in srgb, var(--primary) 35%, transparent)}
+.item .num{flex:none;width:60px;font-family:var(--font-num);font-size:44px;font-weight:700;line-height:1;color:var(--primary)}
+.item .dot{flex:none;width:10px;height:10px;margin-top:16px;border-radius:50%;background:var(--accent)}
+.item .body{flex:1;min-width:0}
+.item .head{display:block;font-size:30px;line-height:1.4;font-weight:700;color:var(--fg)}
+.item .text{display:block;margin-top:8px;font-size:26px;line-height:1.55;font-weight:300;color:var(--muted)}
+.foot{position:relative;display:flex;align-items:baseline;justify-content:space-between;margin-top:auto;padding-top:20px;border-top:1px solid color-mix(in srgb, var(--primary) 35%, transparent)}
+.author{font-size:24px;font-weight:700;color:var(--fg)}
+.note{font-size:22px;font-weight:700;color:var(--fg)}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="top">
+    <span class="kicker" data-slot="tag" data-max="16">DAY BY DAY</span>
+    <span class="page" data-slot="page" data-max="5">03/04</span>
+  </div>
+  <div class="rule"></div>
+  <h2 class="title" data-slot="title" data-max="10">三天这样走</h2>
+  <div class="subtitle" data-slot="subtitle" data-max="24">每天只安排两件事，剩下的交给海风</div>
+  <div class="items" data-list="days" data-max="5">
+    <div class="item" data-item>
+      <span class="num" data-slot="num">01</span>
+      <span class="dot"></span>
+      <div class="body"><span class="head" data-slot="head" data-max="12">第一天 · 到达海边</span><span class="text" data-slot="text" data-max="30">下午到站，先去海边走一圈</span></div>
+    </div>
+    <div class="item" data-item>
+      <span class="num" data-slot="num">02</span>
+      <span class="dot"></span>
+      <div class="body"><span class="head" data-slot="head" data-max="12">第二天 · 骑行看海</span><span class="text" data-slot="text" data-max="30">租一辆单车，沿着海岸线慢慢骑</span></div>
+    </div>
+    <div class="item" data-item>
+      <span class="num" data-slot="num">03</span>
+      <span class="dot"></span>
+      <div class="body"><span class="head" data-slot="head" data-max="12">第三天 · 慢慢告别</span><span class="text" data-slot="text" data-max="30">睡到自然醒，吃完早茶再回家</span></div>
+    </div>
+  </div>
+  <div class="foot">
+    <span class="author" data-slot="author" data-max="12">@你的账号</span>
+    <span class="note" data-slot="note" data-max="12">慢慢走，别赶路</span>
+  </div>
+</div>
+</body>
+</html>
