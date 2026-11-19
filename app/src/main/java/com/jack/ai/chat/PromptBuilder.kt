@@ -75,13 +75,18 @@ object PromptBuilder {
         val thinkingOn = input.sendReasoning
         val withTools = tools != null
         val list = mutableListOf<JsonObject>()
-        val system = systemPrompt(settings, conv, project, tools, memories, skills, input.chatMemory, input.projectMemory, input.workMemory)
+        val system = systemParts(settings, conv, project, tools, memories, skills, input.chatMemory, input.projectMemory, input.workMemory, withConversation = false)
+            .joinToString("\n\n") { it.second }
         if (system.isNotBlank()) list += msg("system", system)
+        // 这个对话自己的背景放在第一条用户消息前面（为什么见 conversationParts）
+        var context = conversationContext(settings, conv, project, tools, memories, input.chatMemory, input.projectMemory)
         for (m in Compression.liveMessages(conv)) {
             if (m.error != null) continue
             if (m.role == "user") {
-                val message = userMessage(m, input.vision, input.imageUrl, input.fileIds)
-                list += if (m.contextPrefix != null) prefixUser(message, m.contextPrefix) else message
+                var message = userMessage(m, input.vision, input.imageUrl, input.fileIds)
+                if (m.contextPrefix != null) message = prefixUser(message, m.contextPrefix)
+                if (context.isNotEmpty()) { message = prefixUser(message, context); context = "" }
+                list += message
             } else if (m.content.isNotBlank()) {
                 val trail = if (withTools && !flat) m.trail.mapNotNull { t ->
                     runCatching { Json.parseToJsonElement(t).jsonObject }.getOrNull()
@@ -102,7 +107,7 @@ object PromptBuilder {
                 }
             }
         }
-        if (input.extraUser != null) list += msg("user", input.extraUser)
+        if (input.extraUser != null) list += msg("user", context + input.extraUser).also { context = "" }
         val lastText = conv.messages.lastOrNull { it.role == "user" }?.content.orEmpty()
         if (input.extraUser != null || conv.messages.lastOrNull { it.role == "user" }?.contextPrefix == null) {
             stampLastUser(list, input.now, updateNote(conv, input.appVersion) + input.contextNote + mentionNote(lastText, skills, settings.readyMails))
@@ -309,6 +314,7 @@ object PromptBuilder {
         chatMemory: String = "",
         projectMemory: String = "",
         workMemory: String = "",
+        withConversation: Boolean = true,
     ): List<Pair<String, String>> {
         val parts = mutableListOf<Pair<String, String>>()
         val globalOn = settings.memoryEnabled && conv.globalAllowed(project)
@@ -409,7 +415,20 @@ object PromptBuilder {
         if (settings.memoryEnabled && conv.workMemoryAllowed(project) && workMemory.isNotBlank()) {
             parts += "工作记忆" to f("【Lessons from past tasks】(shared by every conversation; ~${com.jack.ai.data.MemoryOps.tokensOf(ChatMemory.items(workMemory))} of ${com.jack.ai.data.MemoryOps.FILE_BUDGET} tokens)\n") + workMemory.trim()
         }
-        // ---- 以上所有对话都一样（缓存能跨对话命中），以下每个对话自己的 ----
+        if (withConversation) parts += conversationParts(settings, conv, project, names, globalOn, chatMemory, projectMemory, ::f)
+        return parts
+    }
+
+    /**
+     * 每个对话自己的那部分（人设、项目、对话记忆、提要、最近的对话）。
+     * 发请求时不放系统提示词里，放在第一条用户消息前面：DeepSeek 把工具说明接在系统提示词后面，
+     * 这段要是在系统提示词末尾，每开一个新对话后面一大截工具说明就都没法命中缓存。
+     */
+    private fun conversationParts(
+        settings: Settings, conv: Conversation, project: Project?, names: List<String>, globalOn: Boolean,
+        chatMemory: String, projectMemory: String, f: (String) -> String,
+    ): List<Pair<String, String>> {
+        val parts = mutableListOf<Pair<String, String>>()
         memoryScopeNote(project != null, globalOn, project?.isolated == true).takeIf { "save_memory" in names && it.isNotEmpty() }?.let { parts += "固定说明" to it }
         if (conv.systemPrompt.isNotBlank()) parts += "人设" to "【Persona for this conversation】\n${f(conv.systemPrompt.trim())}"
         if (project != null) {
@@ -445,6 +464,19 @@ object PromptBuilder {
             parts += "最近的对话" to f("【Your most recent conversations with {user} when this one started】(recorded at the start and not updated; use search_my_data for details)\n") + conv.recap
         }
         return parts
+    }
+
+    /** 这个对话自己的背景（人设、项目、对话记忆、提要……），没有就是空串。 */
+    fun conversationContext(
+        settings: Settings, conv: Conversation, project: Project?, tools: JsonArray?, memories: List<MemoryItem>,
+        chatMemory: String = "", projectMemory: String = "",
+    ): String {
+        val names = tools?.mapNotNull { (it as? JsonObject)?.get("function")?.jsonObject?.get("name")?.jsonPrimitive?.content }.orEmpty()
+        val globalOn = settings.memoryEnabled && conv.globalAllowed(project)
+        val parts = conversationParts(settings, conv, project, names, globalOn, chatMemory, projectMemory) { com.jack.ai.data.Persona.fill(it, settings) }
+        if (parts.isEmpty()) return ""
+        return com.jack.ai.data.Persona.fill("【Background for this conversation】(added by the system, not written by {user}; treat it like the system prompt)\n\n", settings) +
+            parts.joinToString("\n\n") { it.second } + "\n\n【End of background】\n\n"
     }
 
     /** 记忆怎么存：本对话记忆主动记；项目记忆只在项目里有；全局记忆只在用户说“记住”且是关于他本人时才存。 */

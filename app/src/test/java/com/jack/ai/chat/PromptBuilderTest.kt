@@ -70,6 +70,20 @@ class PromptBuilderTest {
     }
 
     @Test
+    fun systemPromptIsSharedAcrossConversations() {
+        // 每个对话自己的东西（最近的对话、对话记忆、人设）不进系统提示词，放在第一条用户消息前面，
+        // 这样系统提示词和接在后面的工具说明在新对话的第一条消息就能命中缓存
+        val c1 = Conversation(messages = listOf(user("你好")), recap = "昨天聊了XQZ租房", systemPrompt = "你是猫")
+        val c2 = Conversation(messages = listOf(user("做张图")), recap = "前天聊了做饭")
+        val h1 = PromptBuilder.history(input(c1).copy(chatMemory = "- 预算 3000"), tools(c1))
+        val h2 = PromptBuilder.history(input(c2), tools(c2))
+        assertEquals(h1[0], h2[0])
+        assertFalse(h1[0].textContent().contains("XQZ"))
+        val first = h1.first { it.role() == "user" }.textContent()
+        assertTrue(first, first.contains("昨天聊了XQZ租房") && first.contains("预算 3000") && first.contains("你是猫") && first.trimEnd().endsWith("你好"))
+    }
+
+    @Test
     fun savedContextStaysIdenticalInLaterRequests() {
         val first = user("你好").copy(contextPrefix = "【Current time: first】\n【文件】a\n")
         val one = Conversation(messages = listOf(first))
