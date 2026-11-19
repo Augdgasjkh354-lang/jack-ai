@@ -333,6 +333,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             return false
         }
         if (tooMany(here)) return false
+        com.jack.ai.data.Quota.blocked(getApplication(), _state.value.settings)?.let { w ->
+            _state.update { it.copy(toast = com.jack.ai.data.Quota.message(w) + "。在「设置 → 统计」里能看用量、改额度") }
+            return false
+        }
         if (atts.any { it.kind == "image" } && _state.value.settings.endpoint()?.vision == false) {
             _state.update { it.copy(toast = "当前模型看不了图片，请点顶部的模型名换一个能看图的") }
             return false
@@ -872,6 +876,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     maxRounds = { session.maxRounds },
                     maxToolCalls = { session.maxRounds },
                     execute = { name, args ->
+                        // 额度用完：做完这一步就停，等额度恢复
+                        if (session.maxRounds != 0) com.jack.ai.data.Quota.blocked(getApplication(), settings)?.let { w ->
+                            session.maxRounds = 0
+                            session.stopNote = com.jack.ai.data.Quota.message(w) + "。不要再调用工具，直接说明目前做到哪一步、还差什么，额度恢复后可以接着做。"
+                        }
                         // 用户已经点了“先停下”就不再问：同一轮里剩下的工具调用直接拦掉
                         if (work && limit > 0 && spent >= nextLimit && session.maxRounds != 0) {
                             if (!MainActivity.visible) com.jack.ai.data.Routines.notify(getApplication(), "work-ask-$convId",

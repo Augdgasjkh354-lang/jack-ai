@@ -81,6 +81,7 @@ private fun hitRate(l: List<UsageDay>): String {
 fun UsageScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
     val usage by produceState<List<UsageDay>?>(null) { value = vm.loadUsage() }
     var editBudget by remember { mutableStateOf(false) }
+    var editQuota by remember { mutableStateOf(false) }
     var editWorkLimit by remember { mutableStateOf(false) }
     Scaffold(
         topBar = {
@@ -133,6 +134,9 @@ fun UsageScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                     }
                 }
             }
+
+            // ---- 用量额度：5 小时、每周（token） ----
+            QuotaCard(state.settings) { editQuota = true }
 
             // ---- 预算 ----
             Card(Modifier.fillMaxWidth()) {
@@ -298,6 +302,31 @@ fun UsageScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
             dismissButton = { TextButton(onClick = { editBudget = false }) { Text("取消") } },
         )
     }
+    if (editQuota) {
+        var five by remember { mutableStateOf(mText(state.settings.quotaFiveHours)) }
+        var week by remember { mutableStateOf(mText(state.settings.quotaWeek)) }
+        AlertDialog(
+            onDismissRequest = { editQuota = false },
+            title = { Text("用量额度") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("单位是百万 token（M），输入加输出都算。留空表示不限。", style = MaterialTheme.typography.bodySmall)
+                    OutlinedTextField(five, { five = it.filter { ch -> ch.isDigit() || ch == '.' } }, label = { Text("5 小时额度（M）") }, singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+                    OutlinedTextField(week, { week = it.filter { ch -> ch.isDigit() || ch == '.' } }, label = { Text("每周额度（M）") }, singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    fun parse(t: String) = ((t.toDoubleOrNull() ?: 0.0) * 1_000_000).toLong().coerceAtLeast(0)
+                    vm.updateSettings { it.copy(quotaFiveHours = parse(five), quotaWeek = parse(week)) }
+                    editQuota = false
+                }) { Text("保存") }
+            },
+            dismissButton = { TextButton(onClick = { editQuota = false }) { Text("取消") } },
+        )
+    }
     if (editWorkLimit) {
         var text by remember { mutableStateOf(state.settings.workCostLimit.takeIf { it > 0 }?.toString().orEmpty()) }
         AlertDialog(
@@ -318,6 +347,53 @@ fun UsageScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
             },
             dismissButton = { TextButton(onClick = { editWorkLimit = false }) { Text("取消") } },
         )
+    }
+}
+
+private fun mText(n: Long): String = if (n <= 0) "" else (n / 1_000_000.0).toString().removeSuffix(".0")
+
+/** 5 小时额度和每周额度：进度条、用了多少、几点恢复。 */
+@Composable
+private fun QuotaCard(settings: com.jack.ai.data.Settings, onEdit: () -> Unit) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val colors = MaterialTheme.colorScheme
+    // 每 30 秒刷新一次，恢复时间到了进度条跟着清零
+    val now by androidx.compose.runtime.produceState(System.currentTimeMillis()) {
+        while (true) { kotlinx.coroutines.delay(30_000); value = System.currentTimeMillis() }
+    }
+    val windows = remember(settings, now) { com.jack.ai.data.Quota.windows(ctx, settings, now) }
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("用量额度", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                TextButton(onClick = onEdit) { Text("修改") }
+            }
+            windows.forEach { w ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(w.label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    Text(
+                        if (w.limit <= 0) "不限 · 已用 ${com.jack.ai.data.Quota.short(w.used)}"
+                        else "${com.jack.ai.data.Quota.short(w.used)} / ${com.jack.ai.data.Quota.short(w.limit)}",
+                        style = MaterialTheme.typography.bodySmall.tabular, color = colors.onSurfaceVariant,
+                    )
+                }
+                if (w.limit > 0) LinearProgressIndicator(
+                    progress = { w.fraction },
+                    color = if (w.over) colors.error else if (w.fraction >= 0.8f) colors.tertiary else colors.primary,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    when {
+                        w.start <= 0 -> "还没开始计时，下次用时开始算"
+                        w.over -> "已用完，${com.jack.ai.data.Quota.resetText(w.resetAt, now)}恢复"
+                        else -> "${com.jack.ai.data.Quota.resetText(w.resetAt, now)}恢复"
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (w.over) colors.error else colors.outline,
+                )
+            }
+            Text("用完后新消息发不出去，正在做的事做完这一步就停；定时任务也会跳过。", style = MaterialTheme.typography.bodySmall, color = colors.outline)
+        }
     }
 }
 

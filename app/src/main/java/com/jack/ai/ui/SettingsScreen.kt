@@ -637,6 +637,11 @@ private fun SettingsHome(
         val month = java.text.SimpleDateFormat("yyyy-MM", Locale.US).format(java.util.Date())
         value = vm.loadUsage().filter { it.date.startsWith(month) }.sumOf { it.costYuan() ?: 0.0 }
     }
+    val quotaCtx = androidx.compose.ui.platform.LocalContext.current
+    val quota = remember(settings) {
+        com.jack.ai.data.Quota.windows(quotaCtx, settings).filter { it.limit > 0 }
+            .joinToString(" · ") { (if (it.length == com.jack.ai.data.Quota.WEEK) "本周 " else "5 小时 ") + "${(it.fraction * 100).toInt()}%" }
+    }
     fun go(p: SettingsPage, icon: androidx.compose.ui.graphics.vector.ImageVector, value: String? = null, warn: Boolean = false) =
         SettingsEntry(icon, p.title, value, warn) { onPick(p) }
     val noKey = !settings.hasAnyKey()
@@ -665,7 +670,7 @@ private fun SettingsHome(
     ))
     SettingsGroup("应用", listOf(
         go(SettingsPage.LOOK, AppIcons.Moon, settings.themeMode.label),
-        SettingsEntry(Icons.Default.Info, "统计", monthSpent?.let { "本月 " + yuan(it) }, onClick = onOpenUsage),
+        SettingsEntry(Icons.Default.Info, "统计", listOfNotNull(monthSpent?.let { "本月 " + yuan(it) }, quota.ifEmpty { null }).joinToString(" · ").ifEmpty { null }, onClick = onOpenUsage),
         go(SettingsPage.PRIVACY, Icons.Default.Lock, when {
             settings.fullAuth -> "完全授权开着"
             settings.appLock -> "应用锁开着"

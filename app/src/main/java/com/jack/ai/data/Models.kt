@@ -264,6 +264,9 @@ data class Settings(
     val workTemplates: List<Preset> = DEFAULT_WORK_TEMPLATES,
     /** Work 一次任务花到多少元先停下问用户，0 表示不限。 */
     val workCostLimit: Double = 5.0,
+    /** 用量额度（token，输入加输出）：5 小时额度和每周额度，0 表示不限。见 Quota。 */
+    val quotaFiveHours: Long = 2_000_000,
+    val quotaWeek: Long = 20_000_000,
     /** Work 交付前另起一次请求、不看过程只看结果，按验收标准复核一遍（多花一次请求的钱）。 */
     val workReview: Boolean = true,
     /** 思考时把一段段思考压成小标题显示出来（另请后台模型，每段花一点点钱）。 */

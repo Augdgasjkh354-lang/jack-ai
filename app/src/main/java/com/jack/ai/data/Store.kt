@@ -388,6 +388,7 @@ class Store(context: Context) {
         atomicWrite("usage_recent.json", json.encodeToString(ListSerializer(UsageRecord.serializer()),
             (recent + UsageRecord(now, ep.key, label, prompt, cacheHit, completion, cost)).takeLast(RECENT_REQUESTS)))
         checkBudget(list, date.take(7))
+        Quota.add(app, (prompt + completion).toLong(), now)
         cost
     }
 
@@ -544,6 +545,8 @@ class Store(context: Context) {
             workThinking = prefs.getString("workThinking", null)?.let { runCatching { ThinkLevel.valueOf(it) }.getOrNull() } ?: ThinkLevel.HIGH,
             // 默认值从 1 元改成了 5 元，换个键名，旧的默认值不沿用
             workCostLimit = prefs.getFloat("workCostLimit5", 5f).toDouble(),
+            quotaFiveHours = prefs.getLong("quotaFiveHours", 2_000_000),
+            quotaWeek = prefs.getLong("quotaWeek", 20_000_000),
             workReview = prefs.getBoolean("workReview", true),
             thinkSummary = prefs.getBoolean("thinkSummary", true),
             summaryCollapsed = prefs.getBoolean("summaryCollapsed", false),
@@ -640,6 +643,8 @@ class Store(context: Context) {
             .putString("workModel", s.workModel)
             .putString("workThinking", s.workThinking.name)
             .putFloat("workCostLimit5", s.workCostLimit.toFloat())
+            .putLong("quotaFiveHours", s.quotaFiveHours)
+            .putLong("quotaWeek", s.quotaWeek)
             .putBoolean("workReview", s.workReview)
             .putBoolean("thinkSummary", s.thinkSummary)
             .putBoolean("summaryCollapsed", s.summaryCollapsed)

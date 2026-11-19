@@ -106,6 +106,7 @@ suspend fun runBackgroundWork(
     // 用当前选的模型；第三方的（c: 开头）多半是聊天时临时换的、没标价格，定时任务不跟着它跑
     val ep = s.endpoint(model ?: s.model.takeIf { !it.startsWith("c:") } ?: com.jack.ai.data.MODEL_FLASH)?.takeIf { it.apiKey.isNotBlank() } ?: s.backgroundEndpoint()
         ?: return TaskResult(NO_KEY, status = TaskStatus.NEEDS_SETUP)
+    com.jack.ai.data.Quota.blocked(ctx, s)?.let { return TaskResult(com.jack.ai.data.Quota.message(it) + "，这次没跑。", status = TaskStatus.FAILED) }
     val stored = store.loadConversations().firstOrNull { it.id == r.convId }
     val conv = (stored ?: Conversation(id = r.convId, title = "⏰ " + r.title)).copy(work = true, ownLife = true)
     val skills = s.activeSkills()
@@ -206,7 +207,11 @@ suspend fun runBackgroundWork(
             maxToolCalls = { session.maxRounds },
             execute = { name, args ->
                 val limit = s.workCostLimit
-                if (limit > 0 && spent >= limit) {
+                val quota = com.jack.ai.data.Quota.blocked(ctx, s)
+                if (quota != null) {
+                    session.maxRounds = 0
+                    com.jack.ai.data.Quota.message(quota) + "。不要再调用工具，直接写出目前的结果，并说明还差什么。"
+                } else if (limit > 0 && spent >= limit) {
                     session.maxRounds = 0
                     "花费到了上限，不要再调用工具，直接写出目前的结果，并说明还差什么。"
                 } else if (goalId != null && (com.jack.ai.data.Goals.current(ctx, conv.id)?.let { it.id != goalId || it.status != "active" } != false ||
