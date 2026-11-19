@@ -731,6 +731,15 @@
       sels = keep; drawBox();
       return html;
     },
+    // 这页的风格：六个配色变量加上字体变量（同步到整组用）
+    theme: function () {
+      var cs = getComputedStyle(canvas), o = {};
+      VARS.concat(["font-title", "font-sans", "font-serif", "font-num"]).forEach(function (key) {
+        var v = cs.getPropertyValue("--" + key).trim();
+        if (v) o[key] = v;
+      });
+      return JSON.stringify(o);
+    },
     // 当前配色（六个变量）
     vars: function () {
       var cs = getComputedStyle(canvas), o = {};

@@ -77,6 +77,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.ui.draw.clip
+import com.jack.ai.data.DesignSeries
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -145,6 +157,9 @@ class DesignEditorActivity : ComponentActivity() {
     }
 }
 
+/** 一组里的一页：底稿内容放在内存里，翻页、加页、调顺序都先改这里，保存时一起写盘。 */
+private data class PageDoc(val key: Long, val origin: File?, val html: String, val dirty: Boolean = false, val hadPdf: Boolean = false)
+
 /** 选中的东西（editor.js 发来的）。 */
 private data class Picked(
     val kind: String = "none", val slot: String = "", val text: String = "", val color: String = "", val fontSize: Int = 0,
@@ -192,21 +207,46 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
     var editingText by remember { mutableStateOf(false) }
     // 代替工具栏的面板：style 文字样式、arrange 排列（对齐、分布、微调、数值）
     var panel by remember { mutableStateOf<String?>(null) }
+    // 换配色后等着问「整组都换吗」的那套
+    var pendingVars by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     LaunchedEffect(picked.kind) {
         if (picked.kind == "none") panel = null
         if (picked.kind == "image" && panel == "style") panel = null
     }
 
-    // 页面：底稿 + 填内容的脚本（画图标）+ 编辑器脚本 + 字体
-    val loaded by produceState<Triple<ByteArray, Int, Int>?>(null, src) {
-        value = withContext(Dispatchers.IO) {
-            val html = src.readText()
+    // 一组的所有页（design action=series 出的「名字-01、名字-02……」）；单张就一页
+    val base = remember { DesignSeries.baseOf(src) }
+    val pages = remember { mutableStateListOf<PageDoc>() }
+    var cur by remember { mutableIntStateOf(0) }
+    // 加过页、删过页、调过顺序（保存时要重排文件名、改页码）
+    var reshaped by remember { mutableStateOf(false) }
+    var nextKey by remember { mutableLongStateOf(1L) }
+    LaunchedEffect(src) {
+        val files = withContext(Dispatchers.IO) { DesignSeries.pagesOf(src) }
+        val docs = withContext(Dispatchers.IO) {
+            files.map { f -> PageDoc(nextKey++, f, f.readText(), hadPdf = File(f.parentFile, f.nameWithoutExtension + ".pdf").exists()) }
+        }
+        pages.clear(); pages.addAll(docs)
+        cur = files.indexOfFirst { it.canonicalPath == src.canonicalPath }.coerceAtLeast(0)
+    }
+    val group = base != null && pages.size > 1 || reshaped
+    val page = pages.getOrNull(cur)
+    val anyDirty = dirty || reshaped || pages.any { it.dirty }
+
+    // 当前页：底稿 + 填内容的脚本（画图标）+ 编辑器脚本 + 字体
+    val loadedPage by produceState<Pair<Long, Triple<ByteArray, Int, Int>>?>(null, page?.key) {
+        value = null
+        val doc = page ?: return@produceState
+        value = doc.key to withContext(Dispatchers.IO) {
+            val html = doc.html
             val (w, h) = DesignTemplates.savedSize(html) ?: (1080 to 1440)
             val (fontCss, _) = DesignRender.fontCss(ctx, html)
             val js = DesignTemplates.fillJs(ctx) + "\n" + ctx.assets.open("design/editor.js").use { it.readBytes().toString(Charsets.UTF_8) }
             Triple(DesignTemplates.prepare(html, w, h, js, fontCss).toByteArray(), w, h)
         }
     }
+    // 翻页的那一下，上一页的内容不拿来建页面
+    val loaded = loadedPage?.takeIf { it.first == page?.key }?.second
 
     fun cmd(o: JsonObject) { webView?.evaluateJavascript("kvEd.cmd($o)", null); dirty = true }
     fun cmd(op: String, vararg kv: Pair<String, Any>) = cmd(buildJsonObject {
@@ -216,45 +256,119 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
     suspend fun js(code: String): String = suspendCancellableCoroutine { c -> webView?.evaluateJavascript(code) { if (c.isActive) c.resume(it ?: "null") } ?: c.resume("null") }
     fun jsString(raw: String) = runCatching { (Json.parseToJsonElement(raw) as? JsonPrimitive)?.content }.getOrNull().orEmpty()
 
-    fun save(thenClose: Boolean) {
-        val (_, w, h) = loaded ?: return
+    // 当前页改过的话，把页面里的内容收回到内存里那份
+    suspend fun capture() {
+        if (!dirty || page == null) return
+        val html = jsString(js("kvEd.source()"))
+        if (html.isNotBlank()) pages[cur] = pages[cur].copy(html = html, dirty = true)
+        dirty = false
+    }
+    fun goTo(i: Int) = scope.launch {
+        if (i == cur || i !in pages.indices) return@launch
+        capture()
+        ready = false; picked = Picked(); panel = null; canUndo = false; canRedo = false
+        cur = i
+    }
+    // 加页、删页、调顺序：当前显示的页换了才重新加载（没换的话页面和撤销历史都留着）
+    fun reshape(change: () -> Unit) = scope.launch {
+        capture()
+        val before = pages.getOrNull(cur)?.key
+        change()
+        reshaped = true
+        if (pages.getOrNull(cur)?.key != before) { ready = false; picked = Picked(); panel = null; canUndo = false; canRedo = false }
+    }
+
+    /**
+     * 保存：一组的话按现在的顺序写成 名字-01、-02……（页码位置跟着改），多出来的旧文件删掉；
+     * 内容变了的页重新出图（同名覆盖，聊天里的图跟着变）。单张就是写回底稿、重新出图。
+     */
+    fun save(thenClose: Boolean, after: (suspend () -> Unit)? = null) {
+        if (pages.isEmpty()) return
         saving = true
         scope.launch {
-            val html = jsString(js("kvEd.source()"))
-            if (html.isBlank()) { saving = false; Toast.makeText(ctx, "没拿到页面内容，没保存", Toast.LENGTH_LONG).show(); return@launch }
-            withContext(Dispatchers.IO) { src.writeText(html) }
-            val png = File(src.parentFile, src.nameWithoutExtension + ".png")
-            val pdf = File(src.parentFile, src.nameWithoutExtension + ".pdf").takeIf { it.exists() }
-            val data = DesignTemplates.data(emptyMap(), null, null, emptyMap(), DesignTemplates.icons(html))
-            val r = runCatching { DesignRender.render(ctx, root, html, w, h, data, png, pdf) }.getOrNull()
-            // 出图存下来的底稿去掉了临时的东西，以它为准
-            if (r != null && r.source.isNotBlank()) withContext(Dispatchers.IO) { src.writeText(r.source) }
-            DesignEditorActivity.edits[png.absolutePath] = (DesignEditorActivity.edits[png.absolutePath] ?: 0) + 1
+            capture()
+            val n = pages.size
+            val problems = mutableListOf<String>()
+            var failed = 0
+            for (i in 0 until n) {
+                val doc = pages[i]
+                val target = if (base != null && group) File(root, DesignSeries.pageName(base, i) + ".html") else doc.origin ?: src
+                val html = if (base != null && group) DesignSeries.withPageNumber(doc.html, i, n) else doc.html
+                val old = withContext(Dispatchers.IO) { target.takeIf { it.isFile }?.readText() }
+                if (old == html && !doc.dirty) { pages[i] = doc.copy(origin = target); continue }
+                withContext(Dispatchers.IO) { target.writeText(html) }
+                val (w, h) = DesignTemplates.savedSize(html) ?: (1080 to 1440)
+                val png = File(target.parentFile, target.nameWithoutExtension + ".png")
+                val pdf = File(target.parentFile, target.nameWithoutExtension + ".pdf").takeIf { it.exists() || doc.hadPdf }
+                val data = DesignTemplates.data(emptyMap(), null, null, emptyMap(), DesignTemplates.icons(html))
+                val r = runCatching { DesignRender.render(ctx, root, html, w, h, data, png, pdf) }.getOrNull()
+                // 出图存下来的底稿去掉了临时的东西，以它为准
+                val saved = r?.source?.takeIf { it.isNotBlank() } ?: html
+                if (r != null) withContext(Dispatchers.IO) { target.writeText(saved) } else failed++
+                r?.problems?.firstOrNull()?.let { problems += "第 ${i + 1} 页：$it" }
+                pages[i] = doc.copy(origin = target, html = saved, dirty = false, hadPdf = pdf != null)
+                DesignEditorActivity.edits[png.absolutePath] = (DesignEditorActivity.edits[png.absolutePath] ?: 0) + 1
+            }
+            // 删过页：后面多出来的旧文件删掉
+            if (base != null && group) withContext(Dispatchers.IO) {
+                var j = n
+                while (true) {
+                    val stem = DesignSeries.pageName(base, j)
+                    val fs = listOf("html", "png", "pdf").map { File(root, "$stem.$it") }.filter { it.exists() }
+                    if (fs.isEmpty()) break
+                    fs.forEach { it.delete() }
+                    j++
+                }
+            }
+            val added = reshaped
+            reshaped = false
             saving = false
             dirty = false
-            val warn = r?.problems.orEmpty()
-            Toast.makeText(ctx, if (r == null) "出图失败，底稿已经存好了" else if (warn.isNotEmpty()) "已保存。注意：" + warn.first() else "已保存，聊天里的图也更新了", Toast.LENGTH_LONG).show()
+            Toast.makeText(ctx, when {
+                failed > 0 -> "有 $failed 页出图失败，底稿已经存好了"
+                problems.isNotEmpty() -> "已保存。注意：" + problems.first()
+                added -> "已保存。加的页在对话文件夹里，聊天里原来的图也更新了"
+                else -> "已保存，聊天里的图也更新了"
+            }, Toast.LENGTH_LONG).show()
+            after?.invoke()
             if (thenClose) onClose()
         }
     }
 
-    BackHandler { if (dirty) askLeave = true else onClose() }
+    // 整组（或这一张）存进相册：先保存，再按顺序存
+    fun exportAll() = save(false) {
+        val pngs = pages.mapNotNull { it.origin?.let { f -> File(f.parentFile, f.nameWithoutExtension + ".png") } }
+        val n = withContext(Dispatchers.IO) { DesignSeries.exportToGallery(ctx, pngs, base ?: src.nameWithoutExtension) }
+        Toast.makeText(ctx, if (n > 0) "已存 $n 张到相册（Pictures/Kavi）" else "没存成，看看是不是没给存储权限", Toast.LENGTH_LONG).show()
+    }
+
+    // 把这页的配色和字体用到整组别的页
+    fun syncTheme(theme: Map<String, String>) {
+        for (i in pages.indices) if (i != cur) pages[i] = pages[i].copy(html = DesignSeries.withCanvasVars(pages[i].html, theme), dirty = true)
+        Toast.makeText(ctx, "整组 ${pages.size} 页都换好了，保存后生效", Toast.LENGTH_SHORT).show()
+    }
+    suspend fun currentTheme(): Map<String, String> = runCatching {
+        val raw = jsString(js("kvEd.theme()"))
+        (Json.parseToJsonElement(raw) as JsonObject).mapValues { (it.value as JsonPrimitive).content }
+    }.getOrDefault(emptyMap())
+
+    BackHandler { if (anyDirty) askLeave = true else onClose() }
 
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
-            title = { Text(src.nameWithoutExtension, maxLines = 1) },
-            navigationIcon = { IconButton(onClick = { if (dirty) askLeave = true else onClose() }) { Icon(Icons.Default.Close, "关闭") } },
+            title = { Text(if (group) "${base ?: src.nameWithoutExtension} · ${cur + 1}/${pages.size}" else src.nameWithoutExtension, maxLines = 1) },
+            navigationIcon = { IconButton(onClick = { if (anyDirty) askLeave = true else onClose() }) { Icon(Icons.Default.Close, "关闭") } },
             actions = {
                 TextButton(onClick = { cmd("undo") }, enabled = canUndo) { Text("撤销") }
                 TextButton(onClick = { cmd("redo") }, enabled = canRedo) { Text("重做") }
-                TextButton(onClick = { save(false) }, enabled = ready && !saving) { Text(if (saving) "保存中…" else "保存", fontWeight = FontWeight.Bold) }
+                TextButton(onClick = { save(false) }, enabled = pages.isNotEmpty() && !saving) { Text(if (saving) "保存中…" else "保存", fontWeight = FontWeight.Bold) }
             },
         )
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHighest), contentAlignment = Alignment.Center) {
-            val page = loaded
-            if (page == null) CircularProgressIndicator()
-            else {
-                val (bytes, w, h) = page
+            val shown = loaded
+            if (shown == null) CircularProgressIndicator()
+            else key(page?.key) {
+                val (bytes, w, h) = shown
                 // 固定大小的图：整张放进屏幕；长图：铺满宽，上下滑
                 val pad = 12.dp
                 val boxW = maxWidth - pad * 2
@@ -301,7 +415,7 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
                             webView = this
                             scope.launch {
                                 withTimeoutOrNull(20_000) { done.await() }
-                                val html = withContext(Dispatchers.IO) { src.readText() }
+                                val html = page?.html.orEmpty()
                                 val data = DesignTemplates.data(emptyMap(), null, null, emptyMap(), DesignTemplates.icons(html))
                                 evaluateJavascript("kaviFill($data)", null)
                                 withTimeoutOrNull(20_000) { while (jsString(js("window.__kaviDone||''")).isEmpty()) delay(100) }
@@ -315,6 +429,20 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
                 if (!ready) CircularProgressIndicator()
             }
         }
+        // 一组的话：缩略图条，点一下翻到那页，长按复制、移动、删除；最后的「＋」复制当前页加在后面
+        if (group || base != null) PageStrip(
+            pages = pages, cur = cur, root = root,
+            onPick = { goTo(it) },
+            onDuplicate = { i -> reshape { pages.add(i + 1, pages[i].copy(key = nextKey++, origin = null, dirty = true, hadPdf = false)); cur = i + 1 } },
+            onMove = { i, d -> reshape { val j = i + d; if (j in pages.indices) { val t = pages[i]; pages[i] = pages[j]; pages[j] = t; if (cur == i) cur = j else if (cur == j) cur = i } } },
+            onDelete = { i ->
+                if (pages.size > 1) reshape {
+                    pages.removeAt(i)
+                    // 删的是前面的页，当前页往前挪一位；删的就是当前页，停在原位置（最后一页就退一位）
+                    cur = if (i < cur) cur - 1 else cur.coerceAtMost(pages.size - 1)
+                }
+            },
+        )
         // 工具栏：没选中时是整张图的；选中了按种类给；正在打字时是局部样式；样式面板开着时换成面板
         Surface(tonalElevation = 2.dp) {
             Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(vertical = 6.dp)) {
@@ -365,6 +493,8 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
                             Tool("加文字") { webView?.requestFocus(); cmd("addText") }
                             Tool("换配色") { sheet = "palette" }
                             Tool(if (picked.multi) "退出多选" else "多选", bold = picked.multi) { multiMode(!picked.multi) }
+                            if (group) Tool("同步到整组") { sheet = "syncTheme" }
+                            Tool(if (group) "整组存到相册" else "存到相册") { exportAll() }
                         }
                         many || picked.multi -> {
                             if (picked.multi) Tool("选好了", bold = true) { multiMode(false) }
@@ -449,7 +579,8 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
                     items(palettes) { p ->
                         val vars = listOf("bg", "fg", "primary", "secondary", "accent", "muted").associateWith { (p[it] as? JsonPrimitive)?.content.orEmpty() }
                         Row(Modifier.fillMaxWidth().clickable {
-                            cmd("vars", "value" to JsonObject(vars.mapValues { JsonPrimitive(it.value) })); sheet = null
+                            cmd("vars", "value" to JsonObject(vars.mapValues { JsonPrimitive(it.value) }))
+                            if (group) { pendingVars = vars; sheet = "syncPalette" } else sheet = null
                         }.padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                             Row(Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape).padding(3.dp)) {
                                 vars.values.forEach { v -> Box(Modifier.size(22.dp).background(cssColor(v) ?: Color.Gray, CircleShape)) }
@@ -467,6 +598,23 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
                 cmd("image", "src" to DesignRender.fileUrl(rel)); sheet = null
             }
         }
+    }
+
+    when (sheet) {
+        "syncPalette" -> AlertDialog(
+            onDismissRequest = { sheet = null },
+            title = { Text("整组都换成这套配色？") },
+            text = { Text("这一组有 ${pages.size} 页，换成一样的配色才像一套。") },
+            confirmButton = { TextButton(onClick = { syncTheme(pendingVars); sheet = null }) { Text("整组都换") } },
+            dismissButton = { TextButton(onClick = { sheet = null }) { Text("只改这页") } },
+        )
+        "syncTheme" -> AlertDialog(
+            onDismissRequest = { sheet = null },
+            title = { Text("同步到整组") },
+            text = { Text("把这一页的配色和字体用到整组 ${pages.size} 页。各页的文字和排版不变。") },
+            confirmButton = { TextButton(onClick = { sheet = null; scope.launch { syncTheme(currentTheme()) } }) { Text("同步") } },
+            dismissButton = { TextButton(onClick = { sheet = null }) { Text("取消") } },
+        )
     }
 
     if (askLeave) AlertDialog(
@@ -540,6 +688,57 @@ private fun StylePanel(picked: Picked, vars: () -> WebView?, onCmd: (String, Arr
                 listOf("title" to "大标题", "sub" to "小标题", "body" to "正文", "label" to "标签").forEach { (id, name) -> Chip(name, false) { cmd("preset", "name" to id) } }
             }
             TextButton(onClick = onClose) { Text("收起", fontWeight = FontWeight.Bold) }
+        }
+    }
+}
+
+/** 一组的缩略图条：当前页描边，没保存的改动打个点；长按出菜单（复制、前移、后移、删除）；最后是「＋」。 */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun PageStrip(
+    pages: List<PageDoc>, cur: Int, root: File,
+    onPick: (Int) -> Unit, onDuplicate: (Int) -> Unit, onMove: (Int, Int) -> Unit, onDelete: (Int) -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+    LazyRow(
+        Modifier.fillMaxWidth().background(colors.surfaceContainer).padding(vertical = 8.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        itemsIndexed(pages, key = { _, p -> p.key }) { i, p ->
+            var menu by remember { mutableStateOf(false) }
+            val png = p.origin?.let { File(it.parentFile, it.nameWithoutExtension + ".png") }
+            val version = png?.let { DesignEditorActivity.edits[it.absolutePath] } ?: 0
+            val bmp by produceState<android.graphics.Bitmap?>(null, png?.path, version) {
+                value = png?.takeIf { it.isFile }?.let { withContext(Dispatchers.IO) { Attachments.thumbnail(it.path, 200) } }
+            }
+            Box {
+                Box(
+                    Modifier.size(54.dp, 72.dp).clip(Radii.s).background(colors.surfaceVariant)
+                        .border(if (i == cur) 3.dp else 1.dp, if (i == cur) colors.primary else colors.outlineVariant, Radii.s)
+                        .combinedClickable(onClick = { onPick(i) }, onLongClick = { menu = true }),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    // 新加的页还没出过图：显示页码
+                    bmp?.let { Image(it.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
+                        ?: Text("${i + 1}", style = MaterialTheme.typography.titleMedium, color = colors.onSurfaceVariant)
+                    if (p.dirty) Box(Modifier.align(Alignment.TopEnd).padding(4.dp).size(8.dp).background(colors.primary, CircleShape))
+                    Text("${i + 1}", style = MaterialTheme.typography.labelSmall, color = Color.White,
+                        modifier = Modifier.align(Alignment.BottomStart).background(Color(0x99000000), Radii.s).padding(horizontal = 4.dp))
+                }
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(text = { Text("复制这页") }, onClick = { menu = false; onDuplicate(i) })
+                    if (i > 0) DropdownMenuItem(text = { Text("往前移") }, onClick = { menu = false; onMove(i, -1) })
+                    if (i < pages.size - 1) DropdownMenuItem(text = { Text("往后移") }, onClick = { menu = false; onMove(i, 1) })
+                    if (pages.size > 1) DropdownMenuItem(text = { Text("删除这页", color = colors.error) }, onClick = { menu = false; onDelete(i) })
+                }
+            }
+        }
+        item {
+            Box(
+                Modifier.size(54.dp, 72.dp).clip(Radii.s).border(1.dp, colors.outlineVariant, Radii.s).clickable { onDuplicate(cur) },
+                contentAlignment = Alignment.Center,
+            ) { Text("＋", style = MaterialTheme.typography.titleLarge, color = colors.primary) }
         }
     }
 }
