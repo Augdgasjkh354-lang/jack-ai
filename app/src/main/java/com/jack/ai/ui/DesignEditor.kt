@@ -295,6 +295,37 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
         }
     }
 
+    // Kavi 在聊天里改了某一页的底稿：开着的是这页就当场换成新版（一步可撤销），别的页换掉内存里那份
+    var kaviConflict by remember { mutableStateOf<Pair<Int, String>?>(null) }
+    suspend fun applyExternal(i: Int, html: String) {
+        if (i == cur) {
+            val (css, _) = DesignRender.fontCss(ctx, html)
+            if (css.isNotEmpty()) js("kvEd.cmd(${buildJsonObject { put("op", "fontCss"); put("css", css) }})")
+            js("kvEd.cmd(${buildJsonObject { put("op", "external"); put("html", html) }})")
+            dirty = false
+            Toast.makeText(ctx, "Kavi 刚改了这一页，改动闪了一下；不想要点「撤销」", Toast.LENGTH_LONG).show()
+        }
+        pages[i] = pages[i].copy(html = html, dirty = false)
+    }
+    LaunchedEffect(Unit) {
+        com.jack.ai.data.DesignEvents.sourceChanged.collect { path ->
+            val i = pages.indexOfFirst { p -> p.origin?.let { runCatching { it.canonicalPath }.getOrNull() } == path }
+            if (i < 0 || saving) return@collect
+            val html = withContext(Dispatchers.IO) { runCatching { File(path).readText() }.getOrNull() } ?: return@collect
+            if (html == pages[i].html) return@collect
+            // 这边也有没保存的改动：问一句用哪个
+            if ((i == cur && dirty) || pages[i].dirty) kaviConflict = i to html else applyExternal(i, html)
+        }
+    }
+    kaviConflict?.let { (i, html) ->
+        AlertDialog(
+            onDismissRequest = { kaviConflict = null },
+            title = { Text("Kavi 改了第 ${i + 1} 页") },
+            text = { Text("你这边也有没保存的改动。用 Kavi 的新版，你没保存的改动会丢掉；保留你的，保存时会盖掉 Kavi 的修改。") },
+            confirmButton = { TextButton(onClick = { kaviConflict = null; scope.launch { applyExternal(i, html) } }) { Text("用 Kavi 的") } },
+            dismissButton = { TextButton(onClick = { kaviConflict = null }) { Text("保留我的") } },
+        )
+    }
     // 让 Kavi 改：选中的一块（或整张）+ 一句话，单独请一次模型，换进画布（一步可撤销）。path 不为空时改那一块（空列表是整张）
     suspend fun kaviEdit(ask: String, path: List<Int>? = null): Boolean {
         val r = runCatching {

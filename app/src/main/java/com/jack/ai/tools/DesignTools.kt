@@ -123,6 +123,9 @@ internal suspend fun ToolSession.renderDesign(args: JsonObject): String {
     val label = "重新出图：${file.nameWithoutExtension}"
     return runTool(label) {
         val d = draw(file.nameWithoutExtension, Page(null, html, w, h), args, args, fresh = false, previewWidth = 720)
+        // 聊天里的图跟着刷新；编辑器开着这页的话载入新版
+        com.jack.ai.ui.DesignEditorActivity.bump(d.png)
+        com.jack.ai.data.DesignEvents.changed(file)
         d.text to SearchRecord("$label：${d.png.name}" + if (d.problems > 0) "（${d.problems} 处要改）" else "")
     }
 }

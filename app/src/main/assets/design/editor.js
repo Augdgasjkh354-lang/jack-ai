@@ -15,12 +15,15 @@
   function k() { return canvas.getBoundingClientRect().width / 1080 || 1; }
 
   // —— 历史：每次改动前存一份画布 ——
-  function snapshot() { return canvas.innerHTML + "\u0000" + (canvas.getAttribute("style") || ""); }
+  // 页面自己的 <style>（Kavi 在聊天里改底稿时可能改了 CSS，撤销要能退回）
+  function pageStyles() { return Array.prototype.slice.call(document.querySelectorAll("style:not([data-kavi-temp])")); }
+  function snapshot() { return canvas.innerHTML + "\u0000" + (canvas.getAttribute("style") || "") + "\u0000" + pageStyles().map(function (x) { return x.textContent; }).join("\u0001"); }
   function restore(s) {
-    var i = s.indexOf("\u0000");
+    var parts = s.split("\u0000");
     var paths = sels.map(pathOf), main = sel ? pathOf(sel) : null;
-    canvas.innerHTML = s.slice(0, i);
-    if (s.slice(i + 1)) canvas.setAttribute("style", s.slice(i + 1)); else canvas.removeAttribute("style");
+    canvas.innerHTML = parts[0];
+    if (parts[1]) canvas.setAttribute("style", parts[1]); else canvas.removeAttribute("style");
+    if (parts.length > 2) { var css = parts[2].split("\u0001"), st = pageStyles(); if (css.length === st.length) st.forEach(function (x, i) { if (x.textContent !== css[i]) x.textContent = css[i]; }); }
     sels = paths.map(byPath).filter(Boolean);
     sel = main ? byPath(main) : null;
     if (sel && sels.indexOf(sel) < 0) sels.push(sel);
@@ -861,10 +864,41 @@
       }
       Array.prototype.forEach.call(canvas.querySelectorAll("[data-slot]"), function (x) { if (kind(x) === "text") fit(x); });
     },
+    // Kavi 在聊天里改了这份底稿：换成新版（一步可撤销），改过的地方闪一下
+    external: function (c) {
+      var doc = new DOMParser().parseFromString(String(c.html || ""), "text/html");
+      var fresh = doc.querySelector(".canvas");
+      if (!fresh) return;
+      var before = {};
+      Array.prototype.forEach.call(canvas.querySelectorAll("[data-slot],[data-item]"), function (x) { before[pathOf(x).join(".")] = x.outerHTML; });
+      cleanNode(fresh);
+      canvas.innerHTML = fresh.innerHTML;
+      if (fresh.getAttribute("style")) canvas.setAttribute("style", fresh.getAttribute("style")); else canvas.removeAttribute("style");
+      var css = Array.prototype.filter.call(doc.querySelectorAll("style"), function (x) { return !x.hasAttribute("data-kavi-temp"); }), st = pageStyles();
+      if (css.length === st.length) st.forEach(function (x, i) { if (x.textContent !== css[i].textContent) x.textContent = css[i].textContent; });
+      select(null);
+      var changed = [];
+      Array.prototype.forEach.call(canvas.querySelectorAll("[data-slot],[data-item]"), function (x) { if (before[pathOf(x).join(".")] !== x.outerHTML) changed.push(x); });
+      // 外层变了就只闪外层，不连里面的一起闪
+      changed = changed.filter(function (x) { return !changed.some(function (y) { return y !== x && y.contains(x); }); });
+      requestAnimationFrame(function () { flash(changed.length ? changed : [canvas]); });
+    },
     fontCss: function (c) {
       var s = document.createElement("style"); s.setAttribute("data-kavi-temp", ""); s.textContent = c.css; document.head.appendChild(s);
     },
   };
+  // 改过的地方闪一下：粉色框，一秒半后淡出
+  function flash(list) {
+    drawBox();
+    list.slice(0, 12).forEach(function (el) {
+      var r = el.getBoundingClientRect(), d = document.createElement("div");
+      d.style.cssText = "position:absolute;border:8px solid #FF3B7F;border-radius:8px;transition:opacity .6s;left:" + px(r.left + window.scrollX - 8) + ";top:" + px(r.top + window.scrollY - 8) +
+        ";width:" + px(r.width) + ";height:" + px(r.height);
+      overlay.appendChild(d);
+      setTimeout(function () { d.style.opacity = "0"; }, 1500);
+      setTimeout(function () { d.remove(); }, 2200);
+    });
+  }
   // 模型给的 HTML 不许带脚本、事件、外链
   function cleanNode(root) {
     Array.prototype.forEach.call(root.querySelectorAll("script,iframe,object,embed,link,meta"), function (x) { x.remove(); });
