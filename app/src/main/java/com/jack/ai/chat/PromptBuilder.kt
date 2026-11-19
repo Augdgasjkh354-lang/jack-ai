@@ -79,7 +79,7 @@ object PromptBuilder {
             .joinToString("\n\n") { it.second }
         if (system.isNotBlank()) list += msg("system", system)
         // 这个对话自己的背景放在第一条用户消息前面（为什么见 conversationParts）
-        var context = conversationContext(settings, conv, project, tools, memories, input.chatMemory, input.projectMemory)
+        var context = conversationContext(settings, conv, project, tools, memories, input.chatMemory, input.projectMemory, input.workMemory)
         for (m in Compression.liveMessages(conv)) {
             if (m.error != null) continue
             if (m.role == "user") {
@@ -186,7 +186,7 @@ object PromptBuilder {
             SkillTools.GOAL_TOOLS.forEach { add(it) } // 思路来自 deepseek-ai/deepseek-harness packages/goal/tool-goal/，MIT。
             add(SkillTools.RUN_CODE) // 思路来自 deepseek-ai/deepseek-harness packages/ptc-runtime/，MIT。
             add(SkillTools.UPDATE_PLAN); add(SkillTools.DELEGATE_TASKS)
-            if (web) { add(SkillTools.WEB_SEARCH); add(SkillTools.READ_WEBPAGE); add(SkillTools.DOWNLOAD_FILE) }
+            if (web) { add(SkillTools.WEB_SEARCH); add(SkillTools.READ_WEBPAGE) }
             val word = SkillIds.WORD in skillIds
             val pdf = SkillIds.PDF in skillIds
             if (word || pdf) add(SkillTools.createDocument(word, pdf))
@@ -195,17 +195,14 @@ object PromptBuilder {
             if (word || SkillIds.PPT in skillIds || SkillIds.EXCEL in skillIds) { add(SkillTools.REVISE_FILE); add(SkillTools.MY_TEMPLATES) }
             // 一直带着、选项写全：工具说明不随对话变，缓存才能跨对话命中；眼下搜不了的地方由工具自己回话
             add(SkillTools.SEARCH_MY_DATA)
-            if (SkillIds.LIBRARY in skillIds) add(SkillTools.KNOWLEDGE_BASE)
             add(SkillTools.FACTS)
             // 和人聊的对话里才有：极端辱骂时结束对话（收件箱里没人对话）
             if (conv.id != com.jack.ai.data.Retired.FREE_TIME_CONV && conv.id != com.jack.ai.data.INBOX_ID) add(SkillTools.END_CONVERSATION)
             // 问题卡片：所有和人聊的对话都带着（后台没人点时工具自己回话让它改用文字）
             if (conv.id != com.jack.ai.data.Retired.FREE_TIME_CONV && conv.id != com.jack.ai.data.INBOX_ID) add(SkillTools.ASK_USER)
-            add(SkillTools.CONVERT_FILE)
             add(SkillTools.SELF_CHECK)
             if (settings.phoneFolders.isNotEmpty()) add(SkillTools.PHONE_FILES)
             // 操作其他 App：勾了 App 才有（无障碍没开时工具自己会告诉 Kavi 让用户去开）
-            if (settings.phoneApps.isNotEmpty()) add(SkillTools.PHONE) // 一直给完整的：中途换成完整版会让工具说明变、缓存断
             if (settings.phoneDataOn) add(SkillTools.PHONE_DATA)
             // 开着 Python 就只留 run_python，两个都给模型会犹豫用哪个；算数一直能用，画图要先读「计算与图表」
             if (SkillIds.CALC in all && SkillIds.PYTHON !in all) add(SkillTools.RUN_JS)
@@ -224,14 +221,21 @@ object PromptBuilder {
             if (SkillIds.TRAIN in skillIds) add(SkillTools.QUERY_TRAINS)
             if (SkillIds.TONE in skillIds) add(SkillTools.CHECK_AI_TONE)
             if (SkillIds.APP in skillIds) add(SkillTools.CREATE_APP)
-            if (SkillIds.DESIGN in skillIds) add(SkillTools.DESIGN)
             if (SkillIds.GITHUB in skillIds) add(SkillTools.GITHUB)
-            if (SkillIds.BROWSER in skillIds) add(SkillTools.BROWSER)
             if (SkillIds.NOTION in skillIds) { add(SkillTools.NOTION_SEARCH); add(SkillTools.NOTION_READ); add(SkillTools.NOTION_WRITE) }
             // 本对话记忆随时能存，所以记忆工具一直带着
             add(SkillTools.SAVE_MEMORY)
             add(SkillTools.SAVE_SKILL)
             if (conv.id == com.jack.ai.data.INBOX_ID) add(SkillTools.SAVE_NOTE)
+            // —— 常改的工具放在后面 ——
+            // DeepSeek 的缓存从开头逐字比，改了哪个工具，从它往后才算新的。新版本改工具时只丢最后一截，前面照样命中：
+            // 越常改的越往后排（按以往的改动次数），新加的工具也一律加在这一段的末尾，别插到前面去。
+            if (SkillIds.LIBRARY in skillIds) add(SkillTools.KNOWLEDGE_BASE)
+            if (settings.phoneApps.isNotEmpty()) add(SkillTools.PHONE) // 一直给完整的：中途换成完整版会让工具说明变、缓存断
+            if (SkillIds.BROWSER in skillIds) add(SkillTools.BROWSER)
+            if (web) add(SkillTools.DOWNLOAD_FILE)
+            if (SkillIds.DESIGN in skillIds) add(SkillTools.DESIGN)
+            add(SkillTools.CONVERT_FILE)
             // 连接器的工具放最后：增删连接器时前面那一大段工具说明不变，缓存照样命中
             com.jack.ai.data.Mcp.toolDefs(com.jack.ai.data.Mcp.active(settings)).forEach { add(it) }
         }.takeIf { it.isNotEmpty() }
@@ -325,20 +329,6 @@ object PromptBuilder {
         val names = tools?.mapNotNull { (it as? JsonObject)?.get("function")?.jsonObject?.get("name")?.jsonPrimitive?.content }.orEmpty()
         val plugins = skills.filter { it.id in SkillIds.PLUGINS }
         val playbooks = skills.filter { it.id !in SkillIds.PLUGINS }
-        if ("use_skill" in names && plugins.isNotEmpty()) {
-            // 插件：带工具的能力。一直带着的直接调，用法第一次调时附上；工具要先打开的标出来
-            parts += "固定说明" to "【Plugins】\nYour tools, grouped by plugin. Just call their tools; the plugin's usage notes come back with its first tool call in a conversation, follow them. " +
-                (if (plugins.any { it.id in SkillIds.ON_DEMAND }) "Plugins marked (open first) have their tools added only after use_skill with the plugin name (usable from the next step); don't say you can't do something just because you don't see the tool yet. " else "") +
-                "You can also read any plugin's notes with use_skill.\n" +
-                plugins.joinToString("\n") { "- ${it.name}" + (if (it.id in SkillIds.ON_DEMAND) " (open first)" else "") + ": ${it.description}" }
-        }
-        if ("use_skill" in names && playbooks.isNotEmpty()) {
-            parts += "固定说明" to "【Skills】\nSkills are worked-out methods for a kind of job (not tools). You have these:\n" + playbooks.joinToString("\n") { "- ${it.name}: ${it.description}" } +
-                f("\n\nWhen a request from {user} is this kind of job, first read the skill's instructions with use_skill, then follow them (no need to re-read one already read in this conversation). A message may carry a 【Matching skills】 hint picked by meaning; use it if it fits.") +
-                onDemandNote(playbooks) +
-                f(" If no skill fits, just answer. Only produce files when {user} wants a file; don't generate them unprompted.") +
-                f(" When you finish something that took several steps and will likely come up again (a procedure you worked out, a fix found by trial and error, a way {user} corrected you), save the method with save_skill so next time you can just follow it; improve your own skill rather than adding a near-duplicate.")
-        }
         parts += "固定说明" to f(Capabilities.text(settings, skills, names))
         if (names.isNotEmpty()) {
             // 像 GPT 的工具前说明：调工具那几轮说的短话会显示成回答上面的进度，不算进回答
@@ -409,6 +399,37 @@ object PromptBuilder {
             if (settings.replyStyle.isNotBlank()) append(f("How {user} wants you to reply: ") + settings.replyStyle.trim() + "\n")
         }.trim()
         if (profile.isNotEmpty()) parts += "个人设定" to f("【{User}'s personal settings】\n") + profile
+        // 插件、技能清单放在固定说明的最后（个人设定后面，它几乎不变）：加技能、改描述是常事，改了只丢这之后的缓存
+        if ("use_skill" in names && plugins.isNotEmpty()) {
+            // 插件：带工具的能力。一直带着的直接调，用法第一次调时附上；工具要先打开的标出来
+            parts += "固定说明" to "【Plugins】\nYour tools, grouped by plugin. Just call their tools; the plugin's usage notes come back with its first tool call in a conversation, follow them. " +
+                (if (plugins.any { it.id in SkillIds.ON_DEMAND }) "Plugins marked (open first) have their tools added only after use_skill with the plugin name (usable from the next step); don't say you can't do something just because you don't see the tool yet. " else "") +
+                "You can also read any plugin's notes with use_skill.\n" +
+                plugins.joinToString("\n") { "- ${it.name}" + (if (it.id in SkillIds.ON_DEMAND) " (open first)" else "") + ": ${it.description}" }
+        }
+        if ("use_skill" in names && playbooks.isNotEmpty()) {
+            parts += "固定说明" to "【Skills】\nSkills are worked-out methods for a kind of job (not tools). You have these:\n" + playbooks.joinToString("\n") { "- ${it.name}: ${it.description}" } +
+                f("\n\nWhen a request from {user} is this kind of job, first read the skill's instructions with use_skill, then follow them (no need to re-read one already read in this conversation). A message may carry a 【Matching skills】 hint picked by meaning; use it if it fits.") +
+                onDemandNote(playbooks) +
+                f(" If no skill fits, just answer. Only produce files when {user} wants a file; don't generate them unprompted.") +
+                f(" When you finish something that took several steps and will likely come up again (a procedure you worked out, a fix found by trial and error, a way {user} corrected you), save the method with save_skill so next time you can just follow it; improve your own skill rather than adding a near-duplicate.")
+        }
+        if (withConversation) {
+            parts += memoryParts(settings, conv, project, memories, workMemory, globalOn, ::f)
+            parts += conversationParts(settings, conv, project, names, globalOn, chatMemory, projectMemory, ::f)
+        }
+        return parts
+    }
+
+    /**
+     * 长期记忆和工作记忆。发请求时也不放系统提示词里，放进第一条用户消息前面的背景：
+     * 记忆按对话拍快照，Kavi 存一条新记忆，下一个对话的快照就不一样了；放在系统提示词里的话，
+     * 后面接着的整套工具说明（几万 token）在新对话里全都命中不了缓存。
+     */
+    private fun memoryParts(
+        settings: Settings, conv: Conversation, project: Project?, memories: List<MemoryItem>, workMemory: String, globalOn: Boolean, f: (String) -> String,
+    ): List<Pair<String, String>> {
+        val parts = mutableListOf<Pair<String, String>>()
         if (globalOn && memories.isNotEmpty()) {
             parts += "长期记忆" to f("【Long-term memories about {user}】(~${com.jack.ai.data.MemoryOps.hotTokens(memories)} of ${com.jack.ai.data.MemoryOps.HOT_BUDGET} tokens)\nThings you remembered about {user} earlier. Use them naturally; don't make a point of saying \"I remember\".\n") +
                 memories.joinToString("\n") { "- ${it.text}" }
@@ -416,7 +437,6 @@ object PromptBuilder {
         if (settings.memoryEnabled && conv.workMemoryAllowed(project) && workMemory.isNotBlank()) {
             parts += "工作记忆" to f("【Lessons from past tasks】(shared by every conversation; ~${com.jack.ai.data.MemoryOps.tokensOf(ChatMemory.items(workMemory))} of ${com.jack.ai.data.MemoryOps.FILE_BUDGET} tokens)\n") + workMemory.trim()
         }
-        if (withConversation) parts += conversationParts(settings, conv, project, names, globalOn, chatMemory, projectMemory, ::f)
         return parts
     }
 
@@ -470,11 +490,13 @@ object PromptBuilder {
     /** 这个对话自己的背景（人设、项目、对话记忆、提要……），没有就是空串。 */
     fun conversationContext(
         settings: Settings, conv: Conversation, project: Project?, tools: JsonArray?, memories: List<MemoryItem>,
-        chatMemory: String = "", projectMemory: String = "",
+        chatMemory: String = "", projectMemory: String = "", workMemory: String = "",
     ): String {
         val names = tools?.mapNotNull { (it as? JsonObject)?.get("function")?.jsonObject?.get("name")?.jsonPrimitive?.content }.orEmpty()
         val globalOn = settings.memoryEnabled && conv.globalAllowed(project)
-        val parts = conversationParts(settings, conv, project, names, globalOn, chatMemory, projectMemory) { com.jack.ai.data.Persona.fill(it, settings) }
+        val f = { t: String -> com.jack.ai.data.Persona.fill(t, settings) }
+        val parts = memoryParts(settings, conv, project, memories, workMemory, globalOn, f) +
+            conversationParts(settings, conv, project, names, globalOn, chatMemory, projectMemory, f)
         if (parts.isEmpty()) return ""
         return com.jack.ai.data.Persona.fill("【Background for this conversation】(added by the system, not written by {user}; treat it like the system prompt)\n\n", settings) +
             parts.joinToString("\n\n") { it.second } + "\n\n【End of background】\n\n"

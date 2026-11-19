@@ -84,6 +84,18 @@ class PromptBuilderTest {
     }
 
     @Test
+    fun newMemoriesDontChangeTheSystemPrompt() {
+        // 存了新的长期记忆、工作记忆以后开的新对话：系统提示词（和后面的工具说明）一字不差，记忆在第一条消息前面的背景里
+        val c = Conversation(messages = listOf(user("你好")))
+        val before = PromptBuilder.history(input(c), tools(c))
+        val after = PromptBuilder.history(input(c).copy(memories = memories + MemoryItem(text = "养了一只叫 QZX 的猫"), workMemory = "- 做 PPT 先问页数 WKM"), tools(c))
+        assertEquals(before[0], after[0])
+        assertFalse(after[0].textContent().contains("QZX"))
+        val first = after.first { it.role() == "user" }.textContent()
+        assertTrue(first, first.contains("QZX") && first.contains("WKM") && first.contains("喜欢简短的回答"))
+    }
+
+    @Test
     fun savedContextStaysIdenticalInLaterRequests() {
         val first = user("你好").copy(contextPrefix = "【Current time: first】\n【文件】a\n")
         val one = Conversation(messages = listOf(first))
@@ -99,7 +111,7 @@ class PromptBuilderTest {
         val conv = Conversation(summary = "之前聊了旅行计划", summaryUntilId = "x")
         val project = Project(name = "小说", instructions = "主角叫阿明")
         val sys = PromptBuilder.systemPrompt(settings, conv, project, tools(conv, project), memories, settings.activeSkills())
-        val order = listOf("【Developer instructions", "【Skills】", "personal settings】", "【Long-term memories about", "【Current project: 小说】", "【Summary of the earlier conversation】")
+        val order = listOf("【Developer instructions", "personal settings】", "【Skills】", "【Long-term memories about", "【Current project: 小说】", "【Summary of the earlier conversation】")
             .map { sys.indexOf(it) }
         order.forEach { assertTrue("缺少某个段落：$order", it >= 0) }
         assertEquals(order.sorted(), order)
