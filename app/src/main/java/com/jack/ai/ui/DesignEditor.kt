@@ -326,6 +326,17 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
             dismissButton = { TextButton(onClick = { kaviConflict = null }) { Text("保留我的") } },
         )
     }
+    // 修图：选中的照片拿去修，修好的新图换进图片位
+    val photoEdit = androidx.activity.compose.rememberLauncherForActivityResult(com.jack.ai.ui.photo.PhotoEditorActivity.Edit) { out ->
+        if (out != null) runCatching { cmd("image", "src" to DesignRender.fileUrl(out.canonicalFile.relativeTo(root).path)) }
+    }
+    fun editPhoto() = scope.launch {
+        val url = jsString(js("kvEd.photo()"))
+        val rel = android.net.Uri.decode(url.substringAfter("/files/", "")).takeIf { url.contains("/files/") && it.isNotBlank() }
+        val f = rel?.let { PageCheck.resolve(root, it) }
+        if (f == null || !f.isFile) Toast.makeText(ctx, "这张图不在对话文件夹里，先换图再修", Toast.LENGTH_SHORT).show() else photoEdit.launch(f)
+    }
+
     // 让 Kavi 改：选中的一块（或整张）+ 一句话，单独请一次模型，换进画布（一步可撤销）。path 不为空时改那一块（空列表是整张）
     suspend fun kaviEdit(ask: String, path: List<Int>? = null): Boolean {
         val r = runCatching {
@@ -669,6 +680,7 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
                             if (picked.kind == "image") {
                                 Tool("换图") { sheet = "image" }
                                 if (picked.photo) Tool("裁剪") { cmd("crop", "on" to true) }
+                                if (picked.photo) Tool("修图") { editPhoto() }
                                 if (picked.photo && !cutting) Tool("抠图") { cutout() }
                                 Tool("滤镜调色") { panel = "image" }
                             }

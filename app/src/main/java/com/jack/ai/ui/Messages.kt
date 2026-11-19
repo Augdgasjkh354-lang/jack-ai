@@ -144,6 +144,8 @@ internal fun ImageViewer(path: String, onDismiss: () -> Unit) {
             Row(Modifier.align(Alignment.TopCenter).fillMaxWidth().statusBarsPadding().padding(12.dp)) {
                 ViewerButton({ onDismiss() }) { Icon(Icons.Default.Close, "关闭", tint = Color.White) }
                 Spacer(Modifier.weight(1f))
+                ViewerButton({ com.jack.ai.ui.photo.PhotoEditorActivity.open(ctx, File(path)) }) { Icon(Icons.Default.Edit, "修图", tint = Color.White) }
+                Spacer(Modifier.width(12.dp))
                 Box {
                     ViewerButton({ if (group.size > 1) menu = true else save(listOf(File(path))) }) { Icon(AppIcons.Download, "存到相册", tint = Color.White) }
                     DropdownMenu(menu, { menu = false }) {
