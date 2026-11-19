@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-notebook-cover","name":"手账拼贴·封面","category":"xhs","size":[1080,1440],"style":"手账拼贴","look":"notebook","set":"notebook-a","role":"cover","description":"牛皮纸横线底，一句手写感大标题加黄色荧光笔重点，角落贴着便利贴和红笔批注，像真的单词手账第一页","slots":[{"name":"tag","label":"贴纸标签","max":6},{"name":"date","label":"日期","max":12},{"name":"title","label":"标题（可用\\n分两行）","max":9},{"name":"keyword","label":"荧光笔关键词","max":6},{"name":"subtitle","label":"副标题","max":22},{"name":"number","label":"大数字（没有就留空）","max":2},{"name":"note","label":"便利贴","max":20},{"name":"author","label":"账号名","max":12},{"name":"page","label":"页码","max":5}],"lists":[],"images":[],"colors":{"bg":"#F6EFDF","fg":"#2E2A24","primary":"#C2412D","secondary":"#FFE98A","accent":"#5B8DD6","muted":"#6E6556"}}'>
+<title>手账拼贴·封面</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#F6EFDF;--fg:#2E2A24;--primary:#C2412D;--secondary:#FFE98A;--accent:#5B8DD6;--muted:#6E6556;
+  --font-title:"LXGW WenKai","Noto Serif CJK SC",serif;--font-sans:"LXGW WenKai","Noto Serif CJK SC",serif;--font-num:"Caveat","LXGW WenKai",serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:76px 80px 72px;display:flex;flex-direction:column;
+  background-color:var(--bg);
+  background-image:repeating-linear-gradient(transparent 0 46px,color-mix(in srgb,var(--fg) 10%,transparent) 46px 48px);
+  color:var(--fg);font-family:var(--font-sans)}
+/* 颗粒：让纯色底不那么「电脑味」 */
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.10;mix-blend-mode:multiply}
+/* 本子左侧的红装订线 */
+.margin-line{position:absolute;left:44px;top:0;bottom:0;width:3px;background:color-mix(in srgb,var(--primary) 35%,transparent)}
+.top{position:relative;display:flex;align-items:center;justify-content:space-between;height:60px}
+.tag{display:inline-block;padding:12px 26px 14px;background:var(--primary);color:var(--secondary);font-family:var(--font-title);font-weight:700;font-size:36px;line-height:1;transform:rotate(-3deg);box-shadow:5px 5px 0 color-mix(in srgb,var(--fg) 18%,transparent)}
+.top-right{display:flex;align-items:baseline;gap:28px}
+.date{font-size:28px;font-weight:700;color:var(--muted)}
+.page{font-family:var(--font-num);font-weight:700;font-size:44px;color:var(--fg)}
+.hero{position:relative;margin-top:110px}
+.title{margin:0;font-family:var(--font-title);font-weight:700;font-size:96px;line-height:1.15;letter-spacing:.01em;color:var(--fg)}
+.keyword{display:inline-block;padding:0 8px;background:linear-gradient(transparent 55%,color-mix(in srgb,var(--secondary) 75%,transparent) 55%)}
+.subtitle{position:relative;margin-top:44px;max-width:780px;font-size:32px;line-height:1.5;font-weight:400;color:var(--muted)}
+/* 便利贴：斜着贴，上面压一条半透明胶带 */
+.sticky{position:relative;width:560px;margin-top:64px;padding:52px 40px 40px;background:var(--secondary);transform:rotate(2deg);box-shadow:6px 8px 0 color-mix(in srgb,var(--fg) 14%,transparent)}
+.sticky:before{content:"";position:absolute;left:50%;top:-22px;width:180px;height:44px;margin-left:-90px;background:color-mix(in srgb,var(--accent) 32%,transparent);transform:rotate(-2deg)}
+.sticky .note{display:block;font-family:var(--font-title);font-weight:700;font-size:38px;line-height:1.4;color:var(--fg)}
+.sticky .scribble{display:block;margin-top:14px;font-family:var(--font-num);font-weight:700;font-size:40px;color:var(--primary);transform:rotate(-2deg)}
+/* 描边大数字：只留红笔描边，填色透明，像随手写上去的 */
+.number{position:absolute;z-index:1;right:-24px;bottom:150px;font-family:var(--font-num);font-weight:700;font-size:420px;line-height:.8;color:transparent;-webkit-text-stroke:5px color-mix(in srgb,var(--primary) 55%,transparent)}
+.bottom{position:relative;margin-top:auto;display:flex;align-items:center;justify-content:space-between;padding-top:26px;border-top:3px solid color-mix(in srgb,var(--fg) 35%,transparent)}
+.author{font-size:30px;font-weight:700}
+.next{display:flex;align-items:center;gap:14px;font-family:var(--font-title);font-weight:700;font-size:36px;color:var(--primary)}
+.next svg{width:58px;height:28px}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="margin-line"></div>
+  <div class="top">
+    <span class="tag" data-slot="tag" data-max="6">背单词手账</span>
+    <div class="top-right">
+      <span class="date" data-slot="date" data-max="12">2026年11月</span>
+      <span class="page" data-slot="page" data-max="5">01/04</span>
+    </div>
+  </div>
+  <div class="hero">
+    <h1 class="title"><span data-slot="title" data-max="9">30天，我把<br>单词本</span><span class="keyword" data-slot="keyword" data-max="6">翻烂了</span></h1>
+  </div>
+  <div class="subtitle" data-slot="subtitle" data-max="22">每天 20 分钟，600 个词从生到熟</div>
+  <div class="sticky">
+    <span class="note" data-slot="note" data-max="20">今天默写全对，奖励自己一杯奶茶</span>
+    <span class="scribble">day 30, I did it!</span>
+  </div>
+  <div class="number" data-slot="number" data-max="2" data-bleed>30</div>
+  <div class="bottom">
+    <span class="author" data-slot="author" data-max="12">@你的账号</span>
+    <span class="next">往后翻<svg viewBox="0 0 58 28" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14h48M40 3l12 11-12 11"/></svg></span>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-cream-ending","name":"奶油温柔·结尾","category":"xhs","size":[1080,1440],"style":"奶油温柔","look":"cream","set":"cream-a","role":"ending","description":"一句总结加评论区互动问题和关注贴纸，放在一组图的最后一张","slots":[{"name":"tag","label":"小标签","max":6},{"name":"title","label":"总结大字（可用\n分行）","max":10},{"name":"summary","label":"一句话总结","max":26},{"name":"question","label":"互动问题","max":18},{"name":"follow","label":"关注贴纸","max":6},{"name":"author","label":"账号名","max":12},{"name":"page","label":"页码","max":5}],"lists":[],"images":[],"colors":{"bg":"#FBF3E6","fg":"#4A3426","primary":"#B0703C","secondary":"#F2DFC4","accent":"#E9A6A0","muted":"#7E6656"}}'>
+<title>奶油温柔·结尾</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#FBF3E6;--fg:#4A3426;--primary:#B0703C;--secondary:#F2DFC4;--accent:#E9A6A0;--muted:#7E6656;
+  --font-title:"LXGW WenKai","Noto Serif CJK SC",serif;--font-sans:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-hand:"Caveat","Noto Sans CJK SC",sans-serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:72px 80px;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+/* 颗粒：让纯色底不那么「电脑味」 */
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.08;mix-blend-mode:multiply}
+/* 模糊的暖色圆斑，只用暖色、低透明度 */
+.blob{position:absolute;border-radius:50%;pointer-events:none}
+.blob-a{width:520px;height:520px;left:-180px;top:-160px;background:radial-gradient(closest-side,color-mix(in srgb,var(--accent) 50%,transparent),transparent)}
+.blob-b{width:560px;height:560px;right:-200px;bottom:-160px;background:radial-gradient(closest-side,color-mix(in srgb,var(--primary) 26%,transparent),transparent)}
+.star{position:absolute;pointer-events:none}
+.star-a{left:100px;top:520px}
+.star-b{right:110px;top:640px}
+.top{position:relative;z-index:2;display:flex;align-items:center;justify-content:space-between}
+.tag{display:inline-block;padding:12px 28px 14px;background:var(--secondary);color:var(--fg);font-size:28px;font-weight:700;line-height:1;border-radius:999px}
+.page{font-family:var(--font-hand);font-weight:700;font-size:44px;line-height:1;color:var(--muted)}
+.title{position:relative;z-index:2;margin:104px 0 0;text-align:center;font-family:var(--font-title);font-weight:700;font-size:88px;line-height:1.2;color:var(--fg)}
+.summary{position:relative;z-index:2;margin-top:36px;text-align:center;font-size:30px;line-height:1.75;color:var(--muted)}
+.hand{position:relative;z-index:2;margin-top:32px;text-align:center;font-family:var(--font-hand);font-weight:700;font-size:52px;line-height:1;color:var(--primary);transform:rotate(-3deg)}
+.ask{position:relative;z-index:2;margin-top:auto;padding:40px 44px;background:var(--secondary);border-radius:36px;box-shadow:0 16px 40px color-mix(in srgb, var(--fg) 14%, transparent)}
+.ask-label{display:flex;align-items:center;gap:12px;font-size:26px;font-weight:700;color:var(--fg)}
+.ask .question{display:block;margin-top:14px;font-family:var(--font-title);font-weight:700;font-size:60px;line-height:1.3;color:var(--fg)}
+.bottom{position:relative;z-index:2;display:flex;align-items:center;justify-content:space-between;margin-top:56px}
+.author{font-size:28px;font-weight:700}
+.follow{display:inline-block;padding:14px 30px 18px;background:var(--primary);color:var(--bg);font-family:var(--font-title);font-weight:700;font-size:40px;line-height:1;border-radius:999px;transform:rotate(-3deg);box-shadow:0 10px 24px color-mix(in srgb, var(--fg) 20%, transparent)}
+i[data-icon]{display:inline-block;vertical-align:-4px;font-size:30px;color:var(--accent)}
+i[data-icon] svg{width:1em;height:1em}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="blob blob-a" data-bleed aria-hidden="true"></div>
+  <div class="blob blob-b" data-bleed aria-hidden="true"></div>
+  <svg class="star star-a" width="28" height="28" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1l2.4 7.6L22 11l-7.6 2.4L12 21l-2.4-7.6L2 11l7.6-2.4z" fill="#E9A6A0"/></svg>
+  <svg class="star star-b" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1l2.4 7.6L22 11l-7.6 2.4L12 21l-2.4-7.6L2 11l7.6-2.4z" fill="#B0703C"/></svg>
+  <div class="top">
+    <span class="tag" data-slot="tag" data-max="6">写在最后</span>
+    <span class="page" data-slot="page" data-max="5">04/04</span>
+  </div>
+  <h2 class="title" data-slot="title" data-max="10">慢一点，也没关系</h2>
+  <div class="summary" data-slot="summary" data-max="26">这个周末，把时间留给喜欢的事</div>
+  <div class="hand">take your time</div>
+  <div class="ask">
+    <span class="ask-label"><i data-icon="heart"></i>评论区聊聊</span>
+    <span class="question" data-slot="question" data-max="18">你周末最想慢下来做的事是什么？</span>
+  </div>
+  <div class="bottom">
+    <span class="author" data-slot="author" data-max="12">@慢生活手记</span>
+    <span class="follow" data-slot="follow" data-max="6">一起慢下来</span>
+  </div>
+</div>
+</body>
+</html>

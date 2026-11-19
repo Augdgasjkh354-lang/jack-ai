@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-cream-quote","name":"奶油温柔·金句","category":"xhs","size":[1080,1440],"style":"奶油温柔","look":"cream","set":"cream-a","role":"quote","description":"一句慢生活金句居中大字，留白很多，适合语录、书摘、心情","slots":[{"name":"tag","label":"小标签","max":6},{"name":"quote","label":"金句","max":26},{"name":"source","label":"出处","max":12},{"name":"author","label":"账号名","max":12},{"name":"date","label":"日期","max":10},{"name":"page","label":"页码","max":5}],"lists":[],"images":[],"colors":{"bg":"#FBF3E6","fg":"#4A3426","primary":"#B0703C","secondary":"#F2DFC4","accent":"#E9A6A0","muted":"#7E6656"}}'>
+<title>奶油温柔·金句</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#FBF3E6;--fg:#4A3426;--primary:#B0703C;--secondary:#F2DFC4;--accent:#E9A6A0;--muted:#7E6656;
+  --font-title:"LXGW WenKai","Noto Serif CJK SC",serif;--font-sans:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-hand:"Caveat","Noto Sans CJK SC",sans-serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:72px 80px;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+/* 颗粒：让纯色底不那么「电脑味」 */
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.08;mix-blend-mode:multiply}
+/* 模糊的暖色圆斑，只用暖色、低透明度 */
+.blob{position:absolute;border-radius:50%;pointer-events:none}
+.blob-a{width:520px;height:520px;left:-180px;top:-160px;background:radial-gradient(closest-side,color-mix(in srgb,var(--accent) 50%,transparent),transparent)}
+.blob-b{width:560px;height:560px;right:-200px;bottom:-140px;background:radial-gradient(closest-side,color-mix(in srgb,var(--primary) 26%,transparent),transparent)}
+.star{position:absolute;pointer-events:none}
+.star-a{left:120px;top:330px}
+.star-b{right:130px;top:900px}
+.top{position:relative;z-index:2;display:flex;align-items:center;justify-content:space-between}
+.tag{display:inline-block;padding:12px 28px 14px;background:var(--secondary);color:var(--fg);font-size:28px;font-weight:700;line-height:1;border-radius:999px}
+.page{font-family:var(--font-hand);font-weight:700;font-size:44px;line-height:1;color:var(--muted)}
+.quote-wrap{position:relative;z-index:2;margin-top:auto;margin-bottom:auto;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0 40px}
+.mark{font-family:var(--font-title);font-weight:700;font-size:170px;line-height:.55;color:var(--primary)}
+.quote{margin-top:64px;font-family:var(--font-title);font-weight:700;font-size:72px;line-height:1.5;color:var(--fg)}
+.rule{width:72px;height:6px;border-radius:3px;background:var(--accent);margin-top:60px}
+.source{display:flex;align-items:center;gap:12px;margin-top:30px;font-size:28px;color:var(--muted)}
+.hand{margin-top:52px;font-family:var(--font-hand);font-weight:700;font-size:56px;line-height:1;color:var(--primary);transform:rotate(-3deg)}
+.bottom{position:relative;z-index:2;display:flex;align-items:center;justify-content:space-between}
+.author{font-size:28px;font-weight:700}
+.date{font-size:26px;color:var(--muted)}
+i[data-icon]{display:inline-block;vertical-align:-4px;font-size:30px;color:var(--primary)}
+i[data-icon] svg{width:1em;height:1em}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="blob blob-a" data-bleed aria-hidden="true"></div>
+  <div class="blob blob-b" data-bleed aria-hidden="true"></div>
+  <svg class="star star-a" width="30" height="30" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1l2.4 7.6L22 11l-7.6 2.4L12 21l-2.4-7.6L2 11l7.6-2.4z" fill="#E9A6A0"/></svg>
+  <svg class="star star-b" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1l2.4 7.6L22 11l-7.6 2.4L12 21l-2.4-7.6L2 11l7.6-2.4z" fill="#B0703C"/></svg>
+  <div class="top">
+    <span class="tag" data-slot="tag" data-max="6">一句喜欢的话</span>
+    <span class="page" data-slot="page" data-max="5">02/04</span>
+  </div>
+  <div class="quote-wrap">
+    <span class="mark" aria-hidden="true">“</span>
+    <div class="quote" data-slot="quote" data-max="26">把时间还给自己，日子就慢了下来</div>
+    <div class="rule" aria-hidden="true"></div>
+    <span class="source"><i data-icon="sparkles"></i><span data-slot="source" data-max="12">梭罗《瓦尔登湖》</span></span>
+    <span class="hand">take it slow</span>
+  </div>
+  <div class="bottom">
+    <span class="author" data-slot="author" data-max="12">@慢生活手记</span>
+    <span class="date" data-slot="date" data-max="10">11月15日 周六</span>
+  </div>
+</div>
+</body>
+</html>

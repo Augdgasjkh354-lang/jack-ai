@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-guofeng-quote","name":"国风·金句","category":"xhs","size":[1080,1440],"style":"国风","look":"guofeng","set":"guofeng-a","role":"quote","description":"一句节气古诗大字居中，云纹细线点缀，出处小字在下，适合诗句、金句、书摘","slots":[{"name":"tag","label":"小标签","max":6},{"name":"quote","label":"金句（可用\\n分两行）","max":16},{"name":"source","label":"出处","max":12},{"name":"note","label":"一句点评","max":20},{"name":"author","label":"账号名","max":12},{"name":"page","label":"页码","max":5}],"lists":[],"images":[],"colors":{"bg":"#F3ECDD","fg":"#231C16","primary":"#B83A2B","secondary":"#E4D8C0","accent":"#2E4F4A","muted":"#6D6253"}}'>
+<title>国风·金句</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#F3ECDD;--fg:#231C16;--primary:#B83A2B;--secondary:#E4D8C0;--accent:#2E4F4A;--muted:#6D6253;
+  --font-title:"Ma Shan Zheng","Noto Serif SC","Noto Serif CJK SC",serif;--font-xing:"Zhi Mang Xing","Ma Shan Zheng","Noto Serif SC",serif;--font-sans:"Noto Serif SC","Noto Serif CJK SC",serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:76px 84px 72px;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+/* 颗粒：让纯色底不那么「电脑味」 */
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.10;mix-blend-mode:multiply}
+.frame{position:absolute;inset:34px;border:2px solid var(--muted);opacity:.5;pointer-events:none}
+.frame-in{inset:44px;border-width:1px;opacity:.3}
+.top{position:relative;display:flex;align-items:center;justify-content:space-between;height:56px}
+.tag{font-size:32px;font-weight:700;letter-spacing:.14em;color:var(--primary);padding-bottom:10px;border-bottom:3px solid var(--primary)}
+.page{font-size:32px;font-weight:700;letter-spacing:.1em}
+.cloud{position:relative;display:block;width:210px;height:40px;margin:150px auto 0;stroke:var(--accent);fill:none;opacity:.5}
+.quote{position:relative;margin:64px 0 0;text-align:center;font-family:var(--font-title);font-weight:400;font-size:96px;line-height:1.5;color:var(--fg)}
+.source{position:relative;margin-top:44px;text-align:center;font-family:var(--font-xing);font-weight:400;font-size:36px;color:var(--muted)}
+.note{position:relative;margin-top:30px;text-align:center;font-size:30px;color:var(--fg)}
+.bottom{position:relative;margin-top:auto;display:flex;align-items:center;justify-content:space-between;padding-top:24px;border-top:2px solid var(--fg)}
+.author{font-size:28px;font-weight:700}
+.cang{font-family:var(--font-title);font-weight:400;font-size:34px;color:var(--primary)}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="frame"></div>
+  <div class="frame frame-in"></div>
+  <div class="top">
+    <span class="tag" data-slot="tag" data-max="6">节气诗</span>
+    <span class="page" data-slot="page" data-max="5">02/04</span>
+  </div>
+  <svg class="cloud" viewBox="0 0 210 40" aria-hidden="true"><path d="M8 26 Q28 8 48 26 T88 26 T128 26 T168 26 T208 26" stroke-width="2.5"/><path d="M8 36 Q28 18 48 36 T88 36 T128 36 T168 36 T208 36" stroke-width="2.5"/></svg>
+  <h2 class="quote" data-slot="quote" data-max="16">冻笔新诗懒写，<br>寒炉美酒时温。</h2>
+  <div class="source" data-slot="source" data-max="12">—— 李白《立冬》</div>
+  <div class="note" data-slot="note" data-max="20">天寒宜静养，酒暖慰风尘</div>
+  <div class="bottom">
+    <span class="author" data-slot="author" data-max="12">@你的账号</span>
+    <span class="cang">冬藏</span>
+  </div>
+</div>
+</body>
+</html>

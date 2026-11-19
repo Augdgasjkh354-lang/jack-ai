@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-cream-list","name":"奶油温柔·清单","category":"xhs","size":[1080,1440],"style":"奶油温柔","look":"cream","set":"cream-a","role":"list","description":"手写编号加 3～5 件慢生活小事，圆角奶油卡片，适合周末清单、治愈日常","slots":[{"name":"tag","label":"小标签","max":8},{"name":"title","label":"本页标题","max":10},{"name":"page","label":"页码","max":5}],"lists":[{"name":"items","label":"慢生活小事","min":3,"max":5,"slots":[{"name":"head","label":"短标题","max":12},{"name":"text","label":"说明","max":30}]}],"images":[],"colors":{"bg":"#FBF3E6","fg":"#4A3426","primary":"#B0703C","secondary":"#F2DFC4","accent":"#E9A6A0","muted":"#7E6656"}}'>
+<title>奶油温柔·清单</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#FBF3E6;--fg:#4A3426;--primary:#B0703C;--secondary:#F2DFC4;--accent:#E9A6A0;--muted:#7E6656;
+  --font-title:"LXGW WenKai","Noto Serif CJK SC",serif;--font-sans:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-hand:"Caveat","Noto Sans CJK SC",sans-serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:72px 80px;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+/* 颗粒：让纯色底不那么「电脑味」 */
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.08;mix-blend-mode:multiply}
+/* 模糊的暖色圆斑，只用暖色、低透明度 */
+.blob{position:absolute;border-radius:50%;pointer-events:none}
+.blob-a{width:480px;height:480px;right:-160px;top:-140px;background:radial-gradient(closest-side,color-mix(in srgb,var(--accent) 50%,transparent),transparent)}
+.star{position:absolute;pointer-events:none}
+.star-a{right:110px;top:300px}
+.top{position:relative;z-index:2;display:flex;align-items:center;justify-content:space-between}
+.tag{display:inline-block;padding:12px 28px 14px;background:var(--secondary);color:var(--fg);font-size:28px;font-weight:700;line-height:1;border-radius:999px}
+.page{font-family:var(--font-hand);font-weight:700;font-size:44px;line-height:1;color:var(--muted)}
+.title{position:relative;z-index:2;margin:40px 0 0;font-family:var(--font-title);font-weight:700;font-size:84px;line-height:1.2;color:var(--fg)}
+.items{position:relative;z-index:2;display:flex;flex-direction:column;gap:18px;margin-top:36px}
+.item{display:grid;grid-template-columns:88px 1fr;column-gap:28px;align-items:start;padding:24px 32px;background:var(--secondary);border-radius:32px}
+.item .num{font-family:var(--font-hand);font-weight:700;font-size:64px;line-height:1;padding-top:8px;color:var(--primary)}
+.body{min-width:0}
+.body .head{display:block;font-size:36px;line-height:1.25;font-weight:700;color:var(--fg)}
+.body .text{display:block;margin-top:6px;font-size:28px;line-height:1.55;color:var(--fg)}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="blob blob-a" data-bleed aria-hidden="true"></div>
+  <svg class="star star-a" width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1l2.4 7.6L22 11l-7.6 2.4L12 21l-2.4-7.6L2 11l7.6-2.4z" fill="#E9A6A0"/></svg>
+  <div class="top">
+    <span class="tag" data-slot="tag" data-max="8">慢生活小事</span>
+    <span class="page" data-slot="page" data-max="5">03/04</span>
+  </div>
+  <h2 class="title" data-slot="title" data-max="10">只做这几件小事</h2>
+  <div class="items" data-list="items" data-max="5">
+    <div class="item" data-item>
+      <span class="num" data-slot="num">01</span>
+      <div class="body"><span class="head" data-slot="head" data-max="12">睡到自然醒</span><span class="text" data-slot="text" data-max="30">不设闹钟，让身体自己决定几点起床</span></div>
+    </div>
+    <div class="item" data-item>
+      <span class="num" data-slot="num">02</span>
+      <div class="body"><span class="head" data-slot="head" data-max="12">煮一壶热茶</span><span class="text" data-slot="text" data-max="30">慢慢等水开，闻一闻茶叶香</span></div>
+    </div>
+    <div class="item" data-item>
+      <span class="num" data-slot="num">03</span>
+      <div class="body"><span class="head" data-slot="head" data-max="12">去菜市场逛逛</span><span class="text" data-slot="text" data-max="30">不买什么也行，看看当季的菜和花</span></div>
+    </div>
+    <div class="item" data-item>
+      <span class="num" data-slot="num">04</span>
+      <div class="body"><span class="head" data-slot="head" data-max="12">晒一会儿太阳</span><span class="text" data-slot="text" data-max="30">阳台上发会儿呆，什么都不想</span></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

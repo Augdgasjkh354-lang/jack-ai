@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-minimal-data","name":"极简白·大数字","category":"xhs","size":[1080,1440],"style":"极简白","look":"minimal","set":"minimal-a","role":"data","description":"一个 320px 大数字是主角，下面两个小数据并排对照，适合成绩、时间、收益类数据的内页","slots":[{"name":"tag","label":"小标签","max":8},{"name":"title","label":"本页标题","max":12},{"name":"value","label":"大数字","max":4},{"name":"unit","label":"单位","max":2},{"name":"label","label":"大数字说明","max":14},{"name":"stat1num","label":"数据一数字","max":5},{"name":"stat1label","label":"数据一说明","max":8},{"name":"stat2num","label":"数据二数字","max":5},{"name":"stat2label","label":"数据二说明","max":8},{"name":"note","label":"底部备注","max":24},{"name":"page","label":"页码","max":5}],"lists":[],"images":[],"colors":{"bg":"#FFFFFF","fg":"#111111","primary":"#111111","secondary":"#F1F1F1","accent":"#2457F5","muted":"#6B6B6B"}}'>
+<title>极简白·大数字</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#FFFFFF;--fg:#111111;--primary:#111111;--secondary:#F1F1F1;--accent:#2457F5;--muted:#6B6B6B;
+  --font-title:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-sans:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-num:"Montserrat","Noto Sans SC",sans-serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:76px 80px 72px;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.05;mix-blend-mode:multiply}
+.gridlines{position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(rgba(0,0,0,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(0,0,0,.04) 1px,transparent 1px);background-size:120px 120px}
+.top{position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between;height:60px}
+.tag{display:flex;align-items:center;gap:14px;font-size:22px;font-weight:700;letter-spacing:.2em;color:var(--muted)}
+.tag .sq{width:14px;height:14px;background:var(--accent)}
+.page{font-family:var(--font-num);font-size:26px;font-weight:700;letter-spacing:.08em}
+.rule{position:relative;z-index:1;height:1px;margin-top:28px;background:rgba(0,0,0,.16)}
+.title{position:relative;z-index:1;margin:56px 0 0;font-family:var(--font-title);font-weight:900;font-size:72px;line-height:1.15;color:var(--primary)}
+.hero{position:relative;z-index:1;margin-top:96px}
+.bignum{display:flex;align-items:baseline;gap:18px}
+.value{font-family:var(--font-num);font-weight:900;font-size:200px;line-height:1;letter-spacing:-.02em;color:var(--primary)}
+.unit{font-size:40px;font-weight:700;color:var(--fg)}
+.label{margin-top:28px;font-size:30px;line-height:1.5;font-weight:300;color:var(--muted)}
+.stats{position:relative;z-index:1;display:grid;grid-template-columns:1fr 1fr;margin-top:96px;padding-top:32px;border-top:1px solid rgba(0,0,0,.16)}
+.stat .num{display:block;font-family:var(--font-num);font-weight:700;font-size:72px;line-height:1}
+.stat .cap{display:block;margin-top:14px;font-size:24px;font-weight:500;color:var(--muted)}
+.stat + .stat{padding-left:44px;border-left:1px solid rgba(0,0,0,.12)}
+.note{position:relative;z-index:1;display:flex;align-items:center;gap:14px;margin-top:auto;padding-top:28px;border-top:1px solid rgba(0,0,0,.16);font-size:28px;line-height:1.5;font-weight:300;color:var(--muted)}
+.note .sq{flex:none;width:12px;height:12px;background:var(--accent)}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="gridlines" aria-hidden="true"></div>
+  <div class="top">
+    <span class="tag"><span class="sq"></span><span data-slot="tag" data-max="8">早起的账</span></span>
+    <span class="page" data-slot="page" data-max="5">02/04</span>
+  </div>
+  <div class="rule"></div>
+  <h2 class="title" data-slot="title" data-max="12">早起之后，时间去哪了</h2>
+  <div class="hero">
+    <div class="bignum"><span class="value" data-slot="value" data-max="4">90</span><span class="unit" data-slot="unit" data-max="2">分钟</span></div>
+    <div class="label" data-slot="label" data-max="14">每天多出的自由时间</div>
+  </div>
+  <div class="stats">
+    <div class="stat"><span class="num" data-slot="stat1num" data-max="5">6:00</span><span class="cap" data-slot="stat1label" data-max="8">起床时间</span></div>
+    <div class="stat"><span class="num" data-slot="stat2num" data-max="5">21:30</span><span class="cap" data-slot="stat2label" data-max="8">入睡时间</span></div>
+  </div>
+  <div class="note"><span class="sq"></span><span data-slot="note" data-max="24">早睡一小时，比早起一小时更难</span></div>
+</div>
+</body>
+</html>

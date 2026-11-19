@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-tech-data","name":"科技暗色·数据","category":"xhs","size":[1080,1440],"style":"科技暗色","look":"tech","set":"tech-a","role":"data","description":"一个 220px 的酸绿大数字当主角，配刻度条和最多三行关键数据，适合实测结果、提效前后数字对比","slots":[{"name":"tag","label":"小标签","max":8},{"name":"title","label":"本页标题","max":10},{"name":"big","label":"大数字","max":4},{"name":"biglabel","label":"大数字说明","max":12},{"name":"note","label":"底部备注","max":24},{"name":"page","label":"页码","max":5}],"lists":[{"name":"stats","label":"关键数据","min":2,"max":3,"slots":[{"name":"value","label":"数值","max":5},{"name":"label","label":"数据名","max":12},{"name":"text","label":"数据说明","max":20}]}],"images":[],"colors":{"bg":"#0E0F0C","fg":"#EDEEE8","primary":"#B6F23D","secondary":"#1C1E19","accent":"#5AD1FF","muted":"#A3A69C"}}'>
+<title>科技暗色·数据</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#0E0F0C;--fg:#EDEEE8;--primary:#B6F23D;--secondary:#1C1E19;--accent:#5AD1FF;--muted:#A3A69C;
+  --font-title:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-sans:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-num:"Space Grotesk","Noto Sans SC",sans-serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:76px 80px 72px;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+.grid{position:absolute;inset:0;pointer-events:none}
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.05;mix-blend-mode:screen}
+.top{position:relative;display:flex;align-items:center;justify-content:space-between;height:60px}
+.topleft{display:flex;align-items:center;gap:16px}
+.code{font-family:var(--font-num);font-size:20px;font-weight:700;letter-spacing:.3em;color:var(--primary)}
+.dot{width:12px;height:12px;border-radius:50%;background:var(--accent)}
+.tag{display:inline-block;padding:10px 22px 12px;border:1px solid var(--primary);color:var(--primary);font-size:30px;font-weight:700;letter-spacing:.08em}
+.page{font-family:var(--font-num);font-size:32px;font-weight:700;letter-spacing:.12em;color:var(--fg)}
+.title{position:relative;margin:44px 0 0;font-family:var(--font-title);font-weight:900;font-size:84px;line-height:1.05;color:var(--fg)}
+.hero{position:relative;margin-top:40px}
+.big{display:block;font-family:var(--font-num);font-weight:700;font-size:220px;line-height:1;color:var(--primary)}
+.biglabel{display:block;margin-top:18px;font-size:32px;font-weight:700;color:var(--fg)}
+.meter{position:relative;margin-top:28px;height:10px;background:rgba(255,255,255,.12)}
+.fill{width:89%;height:100%;background:var(--primary)}
+.ticks{position:relative;display:flex;justify-content:space-between;margin-top:8px;font-family:var(--font-num);font-size:20px;font-weight:700;letter-spacing:.06em;color:var(--muted)}
+.stats{position:relative;margin-top:36px;border-top:1px solid rgba(255,255,255,.18)}
+.stat{display:grid;grid-template-columns:300px 1fr;column-gap:28px;align-items:center;padding:26px 0;border-bottom:1px solid rgba(255,255,255,.18)}
+.value{font-family:var(--font-num);font-weight:700;font-size:56px;line-height:1;color:var(--primary)}
+.statbody{min-width:0}
+.statlabel{display:block;font-size:30px;line-height:1.3;font-weight:700;color:var(--fg)}
+.stattext{display:block;margin-top:8px;font-size:26px;line-height:1.5;font-weight:400;color:var(--muted)}
+.foot{position:relative;margin-top:auto;display:flex;align-items:center;gap:16px;padding-top:24px;border-top:1px solid rgba(255,255,255,.25);font-size:26px;font-weight:500;color:var(--fg)}
+.foot i{width:30px;height:30px;flex:none}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grid" width="1080" height="1440" aria-hidden="true"><defs><pattern id="gd" width="60" height="60" patternUnits="userSpaceOnUse"><path d="M60 0H0V60" fill="none" stroke="rgba(255,255,255,.06)" stroke-width="1"/></pattern></defs><rect width="100%" height="100%" fill="url(#gd)"/></svg>
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .5 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="top">
+    <div class="topleft"><span class="dot"></span><span class="code">DATA //</span><span class="tag" data-slot="tag" data-max="8">实测数据</span></div>
+    <span class="page" data-slot="page" data-max="5">02/04</span>
+  </div>
+  <h2 class="title" data-slot="title" data-max="10">数字不会骗人</h2>
+  <div class="hero">
+    <span class="big" data-slot="big" data-max="4">89%</span>
+    <span class="biglabel" data-slot="biglabel" data-max="12">平均省下的时间</span>
+  </div>
+  <div class="meter"><div class="fill"></div></div>
+  <div class="ticks"><span>0</span><span>25</span><span>50</span><span>75</span><span>100</span></div>
+  <div class="stats" data-list="stats" data-max="3">
+    <div class="stat" data-item>
+      <span class="value" data-slot="value" data-max="5">20分</span>
+      <div class="statbody"><span class="statlabel" data-slot="label" data-max="12">一次周报耗时</span><span class="stattext" data-slot="text" data-max="20">从 3 小时压到 20 分钟</span></div>
+    </div>
+    <div class="stat" data-item>
+      <span class="value" data-slot="value" data-max="5">5个</span>
+      <div class="statbody"><span class="statlabel" data-slot="label" data-max="12">实测 AI 工具</span><span class="stattext" data-slot="text" data-max="20">写作、检索、整理各挑一个</span></div>
+    </div>
+    <div class="stat" data-item>
+      <span class="value" data-slot="value" data-max="5">7天</span>
+      <div class="statbody"><span class="statlabel" data-slot="label" data-max="12">养成新习惯</span><span class="stattext" data-slot="text" data-max="20">每天省 1 小时，一周多出 1 天</span></div>
+    </div>
+  </div>
+  <div class="foot"><i data-icon="chart-bar"></i><span data-slot="note" data-max="24">5 个工具各测 3 次，取平均值</span></div>
+</div>
+</body>
+</html>

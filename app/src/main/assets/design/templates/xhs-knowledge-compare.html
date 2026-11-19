@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-knowledge-compare","name":"知识卡片·对比","category":"xhs","size":[1080,1440],"style":"知识卡片","look":"knowledge","set":"knowledge-a","role":"compare","description":"左右两栏一一对照：左边拍对了用深绿，右边拍错了用灰，同一维度光线、构图、背景各三条，适合手机摄影这类对错对比","slots":[{"name":"tag","label":"小标签","max":8},{"name":"title","label":"本页标题","max":10},{"name":"subtitle","label":"开头一句","max":22},{"name":"note","label":"底部提醒","max":24},{"name":"page","label":"页码","max":5}],"lists":[{"name":"rows","label":"对比维度","min":3,"max":3,"slots":[{"name":"dim","label":"维度","max":6},{"name":"good","label":"拍对了","max":26},{"name":"bad","label":"拍错了","max":26}]}],"images":[],"colors":{"bg":"#F3F8F2","fg":"#17271F","primary":"#2E7A55","secondary":"#DCEBDD","accent":"#E3A23B","muted":"#566A5E"}}'>
+<title>知识卡片·对比</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#F3F8F2;--fg:#17271F;--primary:#2E7A55;--secondary:#DCEBDD;--accent:#E3A23B;--muted:#566A5E;
+  --font-title:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-sans:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-num:"Space Grotesk","Noto Sans SC",sans-serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:68px 72px 64px;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+/* 颗粒：让纯色底不那么「电脑味」 */
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.10;mix-blend-mode:multiply}
+.top{position:relative;display:flex;align-items:center;justify-content:space-between;height:56px}
+.tag{display:inline-block;padding:12px 22px;background:var(--primary);color:var(--bg);font-size:28px;font-weight:700;letter-spacing:.08em}
+.page{font-family:var(--font-num);font-weight:700;font-size:34px;color:var(--muted)}
+.title{position:relative;margin:36px 0 0;font-family:var(--font-title);font-weight:900;font-size:84px;line-height:1.15;color:var(--fg)}
+.subtitle{position:relative;margin-top:16px;font-size:30px;line-height:1.5;font-weight:400;color:var(--muted)}
+.cols{position:relative;margin-top:28px;display:grid;grid-template-columns:120px 1fr 1fr}
+.col-head{display:flex;align-items:center;gap:12px;padding:20px 24px;font-size:36px;font-weight:700;line-height:1.3}
+.col-head i{width:40px;height:40px;flex:none}
+.col-head.pros{background:var(--primary);color:var(--bg)}
+.col-head.cons{background:color-mix(in srgb, var(--fg) 12%, transparent);color:var(--fg)}
+.rows{position:relative}
+.row{display:grid;grid-template-columns:120px 1fr 1fr;margin-top:14px;border:2px solid color-mix(in srgb, var(--fg) 12%, transparent)}
+.dim{display:flex;align-items:center;justify-content:center;padding:20px 8px;font-size:32px;line-height:1.3;font-weight:700;color:var(--primary);border-right:2px solid color-mix(in srgb, var(--fg) 12%, transparent)}
+.cell{display:block;padding:18px 24px;font-size:28px;line-height:1.6;font-weight:400;color:var(--fg)}
+.cell.good{background:color-mix(in srgb, var(--primary) 8%, transparent);border-right:2px solid color-mix(in srgb, var(--fg) 12%, transparent)}
+.cell.bad{background:color-mix(in srgb, var(--fg) 5%, transparent)}
+.foot{position:relative;margin-top:auto;padding:22px 28px;background:var(--primary);color:var(--bg);font-size:30px;line-height:1.4;font-weight:700}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="top">
+    <span class="tag" data-slot="tag" data-max="8">一看就懂</span>
+    <span class="page" data-slot="page" data-max="5">03/04</span>
+  </div>
+  <h2 class="title" data-slot="title" data-max="10">拍对了 vs 拍错了</h2>
+  <div class="subtitle" data-slot="subtitle" data-max="22">同一个场景，换个拍法就差很多</div>
+  <div class="cols">
+    <span></span>
+    <div class="col-head pros"><i data-icon="check"></i><span>拍对了</span></div>
+    <div class="col-head cons"><i data-icon="x"></i><span>拍错了</span></div>
+  </div>
+  <div class="rows" data-list="rows" data-max="3">
+    <div class="row" data-item>
+      <span class="dim" data-slot="dim" data-max="6">光线</span>
+      <span class="cell good" data-slot="good" data-max="26">顺光侧光拍，皮肤通透不死白</span>
+      <span class="cell bad" data-slot="bad" data-max="26">顶光直射，脸上全是硬阴影</span>
+    </div>
+    <div class="row" data-item>
+      <span class="dim" data-slot="dim" data-max="6">构图</span>
+      <span class="cell good" data-slot="good" data-max="26">主体放三分点，留白才有呼吸感</span>
+      <span class="cell bad" data-slot="bad" data-max="26">主体贴边居中，画面挤又乱</span>
+    </div>
+    <div class="row" data-item>
+      <span class="dim" data-slot="dim" data-max="6">背景</span>
+      <span class="cell good" data-slot="good" data-max="26">背景干净，主体一眼就能找到</span>
+      <span class="cell bad" data-slot="bad" data-max="26">背景杂乱，主体被路人抢走</span>
+    </div>
+  </div>
+  <div class="foot"><span data-slot="note" data-max="24">对照右边改一张，差距马上看出来</span></div>
+</div>
+</body>
+</html>

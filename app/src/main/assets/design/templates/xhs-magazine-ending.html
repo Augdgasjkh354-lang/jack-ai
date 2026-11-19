@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-magazine-ending","name":"杂志编辑·结尾","category":"xhs","size":[1080,1440],"style":"杂志编辑","look":"magazine","set":"magazine-a","role":"ending","description":"杂志结尾页：总结大字加评论区互动问题，右下角斜体英文出血，风格与封面呼应，适合放在一组图的最后一张","slots":[{"name":"tag","label":"栏目","max":6},{"name":"title","label":"总结大字（可用\\n分行）","max":10},{"name":"summary","label":"一句话总结","max":28},{"name":"question","label":"互动问题","max":18},{"name":"follow","label":"关注贴纸","max":6},{"name":"author","label":"账号名","max":12},{"name":"page","label":"页码","max":5}],"lists":[],"images":[],"colors":{"bg":"#F4EFE6","fg":"#1B1A17","primary":"#1B1A17","secondary":"#E4DCCD","accent":"#B4532A","muted":"#6E675C"}}'>
+<title>杂志编辑·结尾</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#F4EFE6;--fg:#1B1A17;--primary:#1B1A17;--secondary:#E4DCCD;--accent:#B4532A;--muted:#6E675C;
+  --font-title:"Noto Serif SC","Noto Serif CJK SC",serif;--font-sans:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-num:"Playfair Display","Noto Serif CJK SC",serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:76px 80px 72px;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+/* 颗粒：让纯色底不那么「电脑味」 */
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.10;mix-blend-mode:multiply}
+/* 故意出血的斜体英文描边字，压在右下角当装饰 */
+.bleed-word{position:absolute;right:-30px;top:560px;font-family:var(--font-num);font-style:italic;font-weight:700;font-size:190px;line-height:1;color:transparent;-webkit-text-stroke:2px var(--secondary);pointer-events:none}
+.top{position:relative;display:flex;align-items:baseline;justify-content:space-between;padding-bottom:18px;border-bottom:1px solid var(--fg)}
+.tag{font-size:22px;font-weight:700;letter-spacing:.18em}
+.page{font-family:var(--font-num);font-size:28px;font-weight:700;line-height:1;letter-spacing:.08em}
+.title{position:relative;margin:88px 0 0;font-family:var(--font-title);font-weight:900;font-size:96px;line-height:1.15;color:var(--primary)}
+.summary{position:relative;margin:32px 0 0;max-width:860px;font-size:28px;line-height:1.7;font-weight:400;color:var(--muted)}
+.ask{position:relative;margin-top:auto;padding:36px 0;border-top:1px solid var(--fg);border-bottom:1px solid var(--fg)}
+.ask-label{display:block;font-size:20px;font-weight:700;letter-spacing:.14em;color:var(--fg)}
+.question{display:block;margin-top:14px;font-family:var(--font-title);font-weight:700;font-size:56px;line-height:1.25;color:var(--fg)}
+.bottom{position:relative;display:flex;align-items:center;justify-content:space-between;margin-top:44px}
+.author{font-size:24px;font-weight:700}
+.follow{display:inline-flex;align-items:center;gap:10px;padding:14px 26px;background:var(--fg);color:var(--bg)}
+.follow i{width:28px;height:28px;flex:none}
+.follow i svg{width:28px;height:28px}
+.follow span{font-family:var(--font-title);font-weight:900;font-size:32px;line-height:1}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="bleed-word" data-bleed>Autumn</div>
+  <div class="top">
+    <span class="tag" data-slot="tag" data-max="6">写在最后</span>
+    <span class="page" data-slot="page" data-max="5">04/04</span>
+  </div>
+  <h2 class="title" data-slot="title" data-max="10">穿得舒服，<br>走得更远</h2>
+  <p class="summary" data-slot="summary" data-max="28">秋天的衣服不用多，合身、舒服、能走路，就是最好的三件。</p>
+  <div class="ask">
+    <span class="ask-label">评论区聊聊</span>
+    <span class="question" data-slot="question" data-max="18">你秋天最常穿的一件是什么？</span>
+  </div>
+  <div class="bottom">
+    <span class="author" data-slot="author" data-max="12">@漫步城市</span>
+    <span class="follow"><i data-icon="bookmark"></i><span data-slot="follow" data-max="6">关注不迷路</span></span>
+  </div>
+</div>
+</body>
+</html>

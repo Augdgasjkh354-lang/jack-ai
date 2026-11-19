@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-minimal-ending","name":"极简白·结尾","category":"xhs","size":[1080,1440],"style":"极简白","look":"minimal","set":"minimal-a","role":"ending","description":"一句总结大字加评论区互动问题和关注引导，留白多、跟封面同款细线和页码，放在一组图的最后一张","slots":[{"name":"title","label":"总结大字","max":10},{"name":"summary","label":"一句话总结","max":26},{"name":"question","label":"互动问题","max":18},{"name":"follow","label":"关注引导","max":6},{"name":"author","label":"账号名","max":12},{"name":"page","label":"页码","max":5}],"lists":[],"images":[],"colors":{"bg":"#FFFFFF","fg":"#111111","primary":"#111111","secondary":"#F1F1F1","accent":"#2457F5","muted":"#6B6B6B"}}'>
+<title>极简白·结尾</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#FFFFFF;--fg:#111111;--primary:#111111;--secondary:#F1F1F1;--accent:#2457F5;--muted:#6B6B6B;
+  --font-title:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-sans:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-num:"Montserrat","Noto Sans SC",sans-serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:76px 80px 72px;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.05;mix-blend-mode:multiply}
+.gridlines{position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(rgba(0,0,0,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(0,0,0,.04) 1px,transparent 1px);background-size:120px 120px}
+.top{position:relative;z-index:1;display:flex;align-items:center;justify-content:flex-end;height:60px}
+.page{font-family:var(--font-num);font-size:26px;font-weight:700;letter-spacing:.08em}
+.kicker{position:relative;z-index:1;display:flex;align-items:center;gap:14px;margin-top:140px;font-size:22px;font-weight:700;letter-spacing:.2em;color:var(--muted)}
+.kicker .sq{width:14px;height:14px;background:var(--accent)}
+.title{position:relative;z-index:1;margin:36px 0 0;font-family:var(--font-title);font-weight:900;font-size:96px;line-height:1.1;color:var(--primary)}
+.summary{position:relative;z-index:1;margin-top:36px;max-width:720px;font-size:30px;line-height:1.6;font-weight:300;color:var(--muted)}
+.ask{position:relative;z-index:1;margin-top:auto;padding-top:36px;border-top:1px solid rgba(0,0,0,.16)}
+.ask-label{display:block;font-size:20px;font-weight:700;letter-spacing:.2em;color:var(--accent)}
+.question{display:block;margin-top:16px;font-size:56px;line-height:1.25;font-weight:700}
+.bottom{position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between;margin-top:64px}
+.author{font-size:28px;font-weight:700}
+.follow{padding-bottom:6px;border-bottom:3px solid var(--accent);font-size:28px;font-weight:700}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="gridlines" aria-hidden="true"></div>
+  <div class="top"><span class="page" data-slot="page" data-max="5">04/04</span></div>
+  <div class="kicker"><span class="sq"></span>写在最后</div>
+  <h2 class="title" data-slot="title" data-max="10">明天六点见</h2>
+  <div class="summary" data-slot="summary" data-max="26">早起不是自律表演，是把时间还给自己</div>
+  <div class="ask">
+    <span class="ask-label">评论区聊聊</span>
+    <span class="question" data-slot="question" data-max="18">你明天几点起床？</span>
+  </div>
+  <div class="bottom">
+    <span class="author" data-slot="author" data-max="12">@你的账号</span>
+    <span class="follow" data-slot="follow" data-max="6">关注我</span>
+  </div>
+</div>
+</body>
+</html>

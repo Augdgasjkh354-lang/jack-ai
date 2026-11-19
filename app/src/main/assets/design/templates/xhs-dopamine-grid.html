@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-dopamine-grid","name":"多巴胺·宫格","category":"xhs","size":[1080,1440],"style":"多巴胺","look":"dopamine","set":"dopamine-a","role":"grid","description":"2×2 贴纸宫格，每格一张单品加一句短评，色块轮换粉、绿、蓝，适合穿搭单品、好物合集的内页","slots":[{"name":"tag","label":"小标签","max":6},{"name":"title","label":"本页标题","max":10},{"name":"page","label":"页码","max":5}],"lists":[{"name":"items","label":"单品","min":4,"max":4,"slots":[{"name":"name","label":"单品名","max":8},{"name":"text","label":"短评","max":18}]}],"images":[{"name":"photo","label":"单品照片","optional":true}],"colors":{"bg":"#FFF5FA","fg":"#1E1A1D","primary":"#E8338A","secondary":"#B8F26B","accent":"#3A7BFF","muted":"#5E4E58"}}'>
+<title>多巴胺·宫格</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#FFF5FA;--fg:#1E1A1D;--primary:#E8338A;--secondary:#B8F26B;--accent:#3A7BFF;--muted:#5E4E58;
+  --font-title:"ZCOOL KuaiLe","Noto Sans CJK SC",sans-serif;--font-sans:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-num:"Archivo Black","Noto Sans CJK SC",sans-serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:72px 80px 68px;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.08;mix-blend-mode:multiply}
+.top{position:relative;display:flex;align-items:center;justify-content:space-between;height:64px}
+.tag{display:inline-block;padding:12px 28px 14px;background:var(--secondary);color:var(--fg);font-family:var(--font-title);font-size:40px;line-height:1;transform:rotate(2deg);border:4px solid var(--fg)}
+.page{font-family:var(--font-num);font-size:40px;letter-spacing:.06em;color:var(--fg)}
+.title{position:relative;margin:36px 0 0;font-family:var(--font-title);font-weight:400;font-size:96px;line-height:1.08;color:var(--primary)}
+.grid{position:relative;display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:40px}
+.cell{position:relative;height:420px;padding:20px;background:color-mix(in srgb,var(--primary) 12%,var(--bg));border:5px solid var(--fg);box-shadow:8px 8px 0 var(--fg)}
+.cell:nth-child(2){background:color-mix(in srgb,var(--secondary) 45%,var(--bg));transform:rotate(1.2deg)}
+.cell:nth-child(3){background:color-mix(in srgb,var(--accent) 14%,var(--bg));transform:rotate(-1.2deg)}
+.cell:nth-child(4){background:color-mix(in srgb,var(--primary) 12%,var(--bg));transform:rotate(1deg)}
+.pic{position:relative;height:216px;overflow:hidden;background:color-mix(in srgb,var(--secondary) 55%,var(--bg));border:4px solid var(--fg);background-image:radial-gradient(circle,var(--bg) 6px,transparent 7px);background-size:44px 44px}
+.cell:nth-child(2) .pic{background-color:color-mix(in srgb,var(--primary) 22%,var(--bg))}
+.cell:nth-child(3) .pic{background-color:color-mix(in srgb,var(--accent) 22%,var(--bg))}
+.cell:nth-child(4) .pic{background-color:color-mix(in srgb,var(--secondary) 55%,var(--bg))}
+.pic .shade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 60%,rgba(0,0,0,.22))}
+.num{position:absolute;z-index:2;left:32px;top:32px;padding:6px 14px 8px;background:var(--fg);color:var(--bg);font-family:var(--font-num);font-size:32px;line-height:1}
+.name{display:block;margin-top:16px;font-size:36px;line-height:1.25;font-weight:700}
+.text{display:block;margin-top:8px;font-size:30px;line-height:1.5;font-weight:500;color:var(--muted)}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="top">
+    <span class="tag" data-slot="tag" data-max="6">单品清单</span>
+    <span class="page" data-slot="page" data-max="5">02/04</span>
+  </div>
+  <h2 class="title" data-slot="title" data-max="10">这 4 件，快乐加倍</h2>
+  <div class="grid" data-list="items" data-max="4">
+    <div class="cell" data-item>
+      <div class="pic" data-slot="photo" data-kind="image"><div class="shade"></div></div>
+      <span class="num" data-slot="num">01</span>
+      <span class="name" data-slot="name" data-max="8">粉色毛衣</span>
+      <span class="text" data-slot="text" data-max="18">软乎乎的，穿上就想笑</span>
+    </div>
+    <div class="cell" data-item>
+      <div class="pic" data-slot="photo" data-kind="image"><div class="shade"></div></div>
+      <span class="num" data-slot="num">02</span>
+      <span class="name" data-slot="name" data-max="8">绿色半裙</span>
+      <span class="text" data-slot="text" data-max="18">和粉色一撞，整个人亮了</span>
+    </div>
+    <div class="cell" data-item>
+      <div class="pic" data-slot="photo" data-kind="image"><div class="shade"></div></div>
+      <span class="num" data-slot="num">03</span>
+      <span class="name" data-slot="name" data-max="8">黄色帆布包</span>
+      <span class="text" data-slot="text" data-max="18">小小一只，是全身的亮点</span>
+    </div>
+    <div class="cell" data-item>
+      <div class="pic" data-slot="photo" data-kind="image"><div class="shade"></div></div>
+      <span class="num" data-slot="num">04</span>
+      <span class="name" data-slot="name" data-max="8">蓝色牛仔裤</span>
+      <span class="text" data-slot="text" data-max="18">百搭打底，怎么穿都不错</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

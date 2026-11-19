@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-tech-ending","name":"科技暗色·结尾","category":"xhs","size":[1080,1440],"style":"科技暗色","look":"tech","set":"tech-a","role":"ending","description":"一句总结大字加截图占位框和评论区互动问题，放在一组图的最后一张","slots":[{"name":"tag","label":"小标签","max":8},{"name":"title","label":"总结大字（可用\\n分行）","max":10},{"name":"summary","label":"一句话总结","max":26},{"name":"question","label":"互动问题","max":18},{"name":"follow","label":"关注贴纸","max":6},{"name":"author","label":"账号名","max":12},{"name":"page","label":"页码","max":5}],"lists":[],"images":[{"name":"photo","label":"前后对比截图","optional":true}],"colors":{"bg":"#0E0F0C","fg":"#EDEEE8","primary":"#B6F23D","secondary":"#1C1E19","accent":"#5AD1FF","muted":"#A3A69C"}}'>
+<title>科技暗色·结尾</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#0E0F0C;--fg:#EDEEE8;--primary:#B6F23D;--secondary:#1C1E19;--accent:#5AD1FF;--muted:#A3A69C;
+  --font-title:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-sans:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-num:"Space Grotesk","Noto Sans SC",sans-serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:76px 80px 72px;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+.grid{position:absolute;inset:0;pointer-events:none}
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.05;mix-blend-mode:screen}
+.top{position:relative;display:flex;align-items:center;justify-content:space-between;height:60px}
+.topleft{display:flex;align-items:center;gap:16px}
+.dot{width:12px;height:12px;border-radius:50%;background:var(--accent)}
+.tag{display:inline-block;padding:10px 22px 12px;border:1px solid var(--primary);color:var(--primary);font-size:30px;font-weight:700;letter-spacing:.08em}
+.page{font-family:var(--font-num);font-size:32px;font-weight:700;letter-spacing:.12em;color:var(--fg)}
+.title{position:relative;margin:96px 0 0;font-family:var(--font-title);font-weight:900;font-size:132px;line-height:1.05;color:var(--fg)}
+.summary{position:relative;margin-top:40px;font-size:36px;line-height:1.5;font-weight:400;color:var(--muted)}
+.shot{position:relative;margin-top:36px;background:var(--secondary);border:1px solid rgba(255,255,255,.25);overflow:hidden}
+.photo{position:relative;height:196px;overflow:hidden;background:var(--secondary);background-image:radial-gradient(circle,rgba(255,255,255,.14) 2px,transparent 3px);background-size:28px 28px}
+.photobar{display:flex;align-items:center;gap:12px;height:44px;padding:0 20px;border-bottom:1px solid rgba(255,255,255,.18)}
+.pdot{width:12px;height:12px;border-radius:50%;background:rgba(255,255,255,.35)}
+.pdot.accent{background:var(--accent)}
+.pname{margin-left:8px;font-family:var(--font-num);font-size:20px;font-weight:700;letter-spacing:.25em;color:var(--muted)}
+.ask{position:relative;margin-top:36px;padding:36px 40px;background:var(--secondary);border:1px solid var(--primary)}
+.ask-label{display:flex;align-items:center;gap:12px;font-family:var(--font-num);font-size:20px;font-weight:700;letter-spacing:.3em;color:var(--accent)}
+.ask-label i{width:24px;height:24px;flex:none}
+.ask .question{display:block;margin-top:16px;font-family:var(--font-title);font-size:56px;line-height:1.2;font-weight:900;color:var(--fg)}
+.bottom{position:relative;margin-top:auto;display:flex;align-items:center;justify-content:space-between;padding-top:26px;border-top:1px solid rgba(255,255,255,.25)}
+.author{font-size:28px;font-weight:700}
+.follow{display:inline-block;padding:14px 30px 18px;background:var(--primary);color:var(--bg);font-family:var(--font-title);font-size:40px;font-weight:900;line-height:1}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grid" width="1080" height="1440" aria-hidden="true"><defs><pattern id="gd" width="60" height="60" patternUnits="userSpaceOnUse"><path d="M60 0H0V60" fill="none" stroke="rgba(255,255,255,.06)" stroke-width="1"/></pattern></defs><rect width="100%" height="100%" fill="url(#gd)"/></svg>
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .5 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="top">
+    <div class="topleft"><span class="dot"></span><span class="tag" data-slot="tag" data-max="8">写在最后</span></div>
+    <span class="page" data-slot="page" data-max="5">04/04</span>
+  </div>
+  <h2 class="title" data-slot="title" data-max="10">省下的时间<br>才是自己的</h2>
+  <div class="summary" data-slot="summary" data-max="26">工具会换，省时间的方法不会</div>
+  <div class="shot">
+    <div class="photobar"><span class="pdot"></span><span class="pdot"></span><span class="pdot accent"></span><span class="pname">SCREENSHOT.PNG</span></div>
+    <div class="photo" data-slot="photo" data-kind="image"></div>
+  </div>
+  <div class="ask">
+    <span class="ask-label"><i data-icon="sparkles"></i>COMMENT · 评论区</span>
+    <span class="question" data-slot="question" data-max="18">你最想省掉哪件重复活？</span>
+  </div>
+  <div class="bottom">
+    <span class="author" data-slot="author" data-max="12">@你的账号</span>
+    <span class="follow" data-slot="follow" data-max="6">关注我</span>
+  </div>
+</div>
+</body>
+</html>
