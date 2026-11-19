@@ -30,7 +30,7 @@ import java.io.File
  */
 
 private val ACTIONS = listOf("images_to_pdf", "merge_pdf", "split_pdf", "pdf_to_images", "compress_image", "convert_image",
-    "cut_video", "compress_video", "edit_video", "extract_audio", "transcribe", "ocr", "watch_video")
+    "cut_video", "compress_video", "edit_video", "extract_audio", "transcribe", "ocr", "watch_video", "make_video", "beats")
 
 /** ocr 收哪些文件（DeepSeek OCR 认文件内容，不看扩展名，这里先挡掉明显不对的）。 */
 private val OCR_EXT = setOf("pdf", "doc", "docx", "ppt", "pptx", "png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff")
@@ -60,6 +60,7 @@ private fun ToolSession.outFile(out: String, from: File, suffix: String, ext: St
 internal suspend fun ToolSession.convertFile(args: JsonObject): String {
     val action = args["action"].text().trim()
     if (action !in ACTIONS) return "action 要填 ${ACTIONS.joinToString("、")} 之一"
+    if (action == "make_video") return makeVideo(args)
     val names = (args["files"] as? JsonArray)?.map { it.text() }?.filter { it.isNotBlank() }
         ?: listOfNotNull(args["file"].text().takeIf { it.isNotBlank() })
     if (names.isEmpty()) return "$action 要填 file（对话文件夹里的文件名）" + if (action in setOf("images_to_pdf", "merge_pdf")) "，或者 files（几个文件，按顺序；也能填一个文件夹）" else ""
@@ -76,6 +77,7 @@ internal suspend fun ToolSession.convertFile(args: JsonObject): String {
         "extract_audio" -> "取出声音"
         "ocr" -> "认字"
         "watch_video" -> "看视频"
+        "beats" -> "找节拍"
         else -> "转文字"
     } + "：" + names.first().take(40) + if (names.size > 1) " 等 ${names.size} 个" else ""
     return runTool(label) {
@@ -195,6 +197,7 @@ internal suspend fun ToolSession.convertFile(args: JsonObject): String {
             }
             "ocr" -> return@runTool ocr(files, out, args["layout"].text() == "true")
             "watch_video" -> return@runTool watchVideo(files.first(), args)
+            "beats" -> return@runTool beats(files.first())
             else -> return@runTool if (args["timestamps"].text() == "true") transcribeTimed(files.first(), out) else transcribe(files.first(), out)
         }
         made.take(10).forEach { ui.attach(it) }
@@ -245,6 +248,54 @@ internal fun pageList(spec: String, n: Int): List<Int> {
             else (p.toIntOrNull() ?: return@flatMap emptyList()).let { it to it }
         (maxOf(1, a)..minOf(n, b)).map { it - 1 }
     }.distinct()
+}
+
+/** 找音乐的节拍（卡点）：BPM、每一拍和重拍的时间。 */
+private suspend fun ToolSession.beats(f: File): Pair<String, SearchRecord> {
+    val on = com.jack.ai.data.Beats.Onsets()
+    withContext(Dispatchers.IO) {
+        MediaMux.decode16k(f, 20 * 60L, { at, total -> if (total > 0) ui.progress("找节拍：${at * 100 / total}%") }) { on.push(it) }
+    }
+    val r = withContext(Dispatchers.Default) { com.jack.ai.data.Beats.detect(on.flux(), on.samples) }
+        ?: return "「${f.name}」太短或者听不出节奏（要 4 秒以上、有鼓点的音乐）。" to SearchRecord("找节拍：${f.name}")
+    return com.jack.ai.data.Beats.describe(r, f.name) + "\n卡点：让每段的长度等于两个重拍（或拍子）之间的间隔，段落切换就落在拍子上。" to
+        SearchRecord("找节拍：${f.name}（${r.bpm.toInt()} BPM）")
+}
+
+/** 照剪辑方案出片：素材都在对话文件夹里，方案的写法见 VideoPlan。 */
+private suspend fun ToolSession.makeVideo(args: JsonObject): String {
+    val raw = args["plan"]
+    val o = (raw as? JsonObject) ?: runCatching { Json.parseToJsonElement(raw.text()).jsonObject }.getOrNull()
+        ?: return "make_video 要写 plan：剪辑方案（clips、texts、subtitles、music……），格式见工具说明"
+    val (plan, err) = com.jack.ai.data.VideoPlan.parse(o) { it.substringAfterLast('.', "").lowercase() in IMAGE_EXT }
+    if (plan == null) return "剪辑方案有问题：$err。改好再调。"
+    val names = (plan.clips.map { it.file } + listOfNotNull(plan.subtitles, plan.music)).distinct()
+    val files = mutableMapOf<String, File>()
+    for (n in names) files[n] = runCatching { withContext(Dispatchers.IO) { inputs(listOf(n)).first() } }.getOrElse { return it.message ?: "对话文件夹里没有「$n」" }
+    val first = files.getValue(plan.clips.first().file)
+    return runTool("剪辑出片：${plan.clips.size} 段" + (plan.music?.let { "，配乐「$it」" } ?: "")) {
+        val subs = plan.subtitles?.let { name ->
+            val cues = withContext(Dispatchers.IO) { Subtitles.parseSrt(files.getValue(name).readText()) }
+            if (cues.isEmpty()) throw IllegalStateException("「$name」里没读出字幕，要 .srt（transcribe 加 timestamps=true 会做一份）")
+            val source = plan.subtitleSource ?: plan.clips.first { !it.image }.file
+            cues to source
+        }
+        val dst = outFile(args["out"].text(), first, "成片", "mp4")
+        val work = File(wsCache, "compose-${System.currentTimeMillis()}")
+        try {
+            val d = com.jack.ai.data.VideoCompose.make(app, plan, { files.getValue(it) }, subs, plan.music?.let { files.getValue(it) }, work, dst) { ui.progress(it) }
+            ui.attach(dst)
+            val text = buildString {
+                append("出好了：「${dst.name}」（${Subtitles.stamp(d.durationMs).substringBefore('.')}，${d.width}×${d.height}，${ToolSizes.text(dst.length())}），已经显示在聊天里。")
+                if (d.subtitleCount > 0) append("字幕 ${d.subtitleCount} 句。")
+                d.notes.forEach { append(it).append("。") }
+                append("\n交给用户前可以用 watch_video 看一眼成片（字幕、花字的位置，卡点准不准）；要改就改方案再出一次，原素材都没动。")
+            }
+            text to SearchRecord("剪辑出片：${dst.name}")
+        } finally {
+            work.deleteRecursively()
+        }
+    }
 }
 
 /** 自动转文字只做这么长以内的视频（再长的花得多，让 Kavi 先问）。 */

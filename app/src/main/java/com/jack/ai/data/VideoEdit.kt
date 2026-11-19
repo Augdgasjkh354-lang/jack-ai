@@ -132,7 +132,7 @@ object VideoEdit {
     }
 
     /** 交给 Transformer 导出成 H.264 + AAC 的 mp4，等它做完（取消时停掉、删掉半成品）。 */
-    private suspend fun export(ctx: Context, composition: Composition, out: File, bitrate: Int?, progress: (Int) -> Unit): Unit = withContext(Dispatchers.Main) {
+    internal suspend fun export(ctx: Context, composition: Composition, out: File, bitrate: Int?, progress: (Int) -> Unit): Unit = withContext(Dispatchers.Main) {
         out.delete()
         suspendCancellableCoroutine { cont ->
             val builder = Transformer.Builder(ctx).setVideoMimeType(MimeTypes.VIDEO_H264).setAudioMimeType(MimeTypes.AUDIO_AAC)
