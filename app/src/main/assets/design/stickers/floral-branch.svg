@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240">
+<metadata>{"name":"枝叶","tags":["枝叶","植物","手绘","装饰","清新"],"style":"hand","recolor":"stroke","ratio":"square"}</metadata>
+<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+<path d="M30,216 C58,192 74,166 88,134 C100,106 116,82 142,60 C164,42 190,30 214,26" stroke-width="5"/>
+<path d="M88,134 C70,124 58,108 56,90 C74,94 86,110 88,134 Z" stroke-width="4.5"/>
+<path d="M100,106 C118,96 130,80 132,62 C114,66 102,82 100,106 Z" stroke-width="4.5"/>
+<path d="M130,72 C114,60 104,46 102,30 C118,34 128,50 130,72 Z" stroke-width="4.5"/>
+<path d="M160,48 C176,38 186,24 188,10 C172,14 162,28 160,48 Z" stroke-width="4.5"/>
+<path d="M214,26 C206,16 206,8 214,4 C222,8 222,16 214,26 Z" stroke-width="4.5"/>
+<path d="M84,128 C76,116 68,104 64,94" stroke-width="3"/>
+<path d="M104,100 C112,88 120,76 126,68" stroke-width="3"/>
+<path d="M126,66 C118,54 112,42 108,34" stroke-width="3"/>
+<path d="M164,42 C172,32 178,22 182,14" stroke-width="3"/>
+</g>
+<circle cx="118" cy="120" r="4.5" fill="currentColor"/>
+<circle cx="148" cy="88" r="4" fill="currentColor"/>
+</svg>

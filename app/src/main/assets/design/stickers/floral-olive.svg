@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 320">
+<metadata>{"name":"橄榄枝","tags":["橄榄枝","植物","手绘","清新"],"style":"hand","recolor":"stroke","ratio":"tall"}</metadata>
+<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+<path d="M96,308 C104,260 92,210 100,160 C106,118 94,80 102,36" stroke-width="5"/>
+<path d="M0,-17 C7,-8 7,8 0,17 C-7,8 -7,-8 0,-17 Z" transform="translate(76 76) rotate(-38)" stroke-width="4"/>
+<path d="M0,-17 C7,-8 7,8 0,17 C-7,8 -7,-8 0,-17 Z" transform="translate(124 76) rotate(38)" stroke-width="4"/>
+<path d="M0,-17 C7,-8 7,8 0,17 C-7,8 -7,-8 0,-17 Z" transform="translate(74 116) rotate(-38)" stroke-width="4"/>
+<path d="M0,-17 C7,-8 7,8 0,17 C-7,8 -7,-8 0,-17 Z" transform="translate(126 116) rotate(38)" stroke-width="4"/>
+<path d="M0,-17 C7,-8 7,8 0,17 C-7,8 -7,-8 0,-17 Z" transform="translate(76 156) rotate(-38)" stroke-width="4"/>
+<path d="M0,-17 C7,-8 7,8 0,17 C-7,8 -7,-8 0,-17 Z" transform="translate(124 156) rotate(38)" stroke-width="4"/>
+<path d="M0,-17 C7,-8 7,8 0,17 C-7,8 -7,-8 0,-17 Z" transform="translate(74 196) rotate(-38)" stroke-width="4"/>
+<path d="M0,-17 C7,-8 7,8 0,17 C-7,8 -7,-8 0,-17 Z" transform="translate(126 196) rotate(38)" stroke-width="4"/>
+<path d="M0,-17 C7,-8 7,8 0,17 C-7,8 -7,-8 0,-17 Z" transform="translate(78 236) rotate(-38)" stroke-width="4"/>
+<path d="M0,-17 C7,-8 7,8 0,17 C-7,8 -7,-8 0,-17 Z" transform="translate(122 236) rotate(38)" stroke-width="4"/>
+<path d="M104,140 L126,142" stroke-width="3"/>
+<path d="M96,182 L74,184" stroke-width="3"/>
+<path d="M100,222 L122,224" stroke-width="3"/>
+</g>
+<g fill="currentColor">
+<circle cx="130" cy="146" r="6"/><circle cx="70" cy="188" r="6"/><circle cx="126" cy="228" r="6"/>
+</g>
+</svg>

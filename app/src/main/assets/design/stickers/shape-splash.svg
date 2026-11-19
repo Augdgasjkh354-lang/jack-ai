@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240">
+<metadata>{"name":"颜料飞溅","tags":["色块","飞溅","水彩","动感"],"style":"hand","recolor":"fill","ratio":"square"}</metadata>
+<g fill="var(--secondary, #F6C453)"><path d="M118 44 C 156 40, 190 66, 196 104 C 202 142, 182 178, 146 194 C 110 210, 66 200, 44 168 C 24 138, 32 92, 62 66 C 82 48, 88 48, 118 44 Z"/><circle cx="198" cy="50" r="10"/><circle cx="214" cy="88" r="7"/><circle cx="36" cy="112" r="8"/><ellipse cx="152" cy="212" rx="6" ry="12" transform="rotate(18 152 212)"/><ellipse cx="60" cy="200" rx="5" ry="9" transform="rotate(-14 60 200)"/></g>
+</svg>

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240">
+<metadata>{"name":"福字印章","tags":["福字","春节","印章","节日","喜庆"],"style":"clean","recolor":"fill","ratio":"square"}</metadata>
+<rect x="26" y="26" width="188" height="188" rx="6" fill="none" stroke="var(--primary, #E8483B)" stroke-width="7"/>
+<rect x="40" y="40" width="160" height="160" rx="4" fill="none" stroke="var(--primary, #E8483B)" stroke-width="2.5"/>
+<g fill="none" stroke="var(--primary, #E8483B)" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
+<path d="M74,64 L84,76"/>
+<path d="M60,86 Q79,82 98,86"/>
+<path d="M80,88 C72,104 66,120 62,134"/>
+<path d="M94,88 L94,124 Q94,132 102,130"/>
+<path d="M108,66 Q138,62 168,66"/>
+<path d="M118,82 H156 V106 H118 Z"/>
+<path d="M112,120 H164 V164 H112 Z"/>
+<path d="M138,120 V164"/>
+<path d="M112,142 H164"/>
+</g>
+</svg>

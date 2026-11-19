@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240">
+<metadata>{"name":"圆月","tags":["月亮","中秋","节日","夜晚"],"style":"clean","recolor":"fill","ratio":"square"}</metadata>
+<circle cx="120" cy="118" r="78" fill="var(--secondary, #F6C453)"/>
+<g fill="rgba(0,0,0,.12)">
+<circle cx="92" cy="92" r="12"/><circle cx="140" cy="140" r="16"/>
+<circle cx="150" cy="84" r="9"/><circle cx="96" cy="142" r="7"/>
+</g>
+<circle cx="120" cy="118" r="92" fill="none" stroke="var(--secondary, #F6C453)" stroke-width="2" opacity=".5"/>
+<path d="M196,44 L199,51 L206,54 L199,57 L196,64 L193,57 L186,54 L193,51 Z" fill="var(--accent, #E07856)"/>
+<path d="M44,172 L46,178 L52,180 L46,182 L44,188 L42,182 L36,180 L42,178 Z" fill="var(--accent, #E07856)"/>
+</svg>

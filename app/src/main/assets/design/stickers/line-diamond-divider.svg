@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 60">
+<metadata>{"name":"菱形分割线","tags":["分割线","菱形","中间图形","简洁"],"style":"clean","recolor":"stroke","ratio":"wide"}</metadata>
+<g fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"><line x1="10" y1="30" x2="176" y2="30"/><line x1="224" y1="30" x2="390" y2="30"/></g>
+<path d="M200 16 L212 30 L200 44 L188 30 Z" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linejoin="round"/>
+</svg>

@@ -24,6 +24,30 @@
     {
       "id": "frame",
       "name": "边框相框"
+    },
+    {
+      "id": "line",
+      "name": "分割线"
+    },
+    {
+      "id": "shape",
+      "name": "色块"
+    },
+    {
+      "id": "doodle",
+      "name": "涂鸦小图"
+    },
+    {
+      "id": "floral",
+      "name": "植物花草"
+    },
+    {
+      "id": "festival",
+      "name": "节日"
+    },
+    {
+      "id": "texture",
+      "name": "纹理"
     }
   ],
   "stickers": [
@@ -1005,10 +1029,10 @@
         240
       ],
       "textArea": [
-        172,
+        182,
         10,
-        56,
-        42
+        44,
+        34
       ]
     },
     {
@@ -1842,6 +1866,1419 @@
         280,
         188
       ]
+    },
+    {
+      "id": "line-brush",
+      "category": "line",
+      "name": "笔刷线",
+      "tags": [
+        "分割线",
+        "笔刷",
+        "粗线",
+        "手绘"
+      ],
+      "style": "hand",
+      "recolor": "stroke",
+      "ratio": "wide",
+      "viewBox": [
+        0,
+        0,
+        400,
+        60
+      ]
+    },
+    {
+      "id": "line-dashed",
+      "category": "line",
+      "name": "虚线",
+      "tags": [
+        "分割线",
+        "虚线",
+        "手绘",
+        "装饰"
+      ],
+      "style": "hand",
+      "recolor": "stroke",
+      "ratio": "wide",
+      "viewBox": [
+        0,
+        0,
+        400,
+        60
+      ]
+    },
+    {
+      "id": "line-diamond-divider",
+      "category": "line",
+      "name": "菱形分割线",
+      "tags": [
+        "分割线",
+        "菱形",
+        "中间图形",
+        "简洁"
+      ],
+      "style": "clean",
+      "recolor": "stroke",
+      "ratio": "wide",
+      "viewBox": [
+        0,
+        0,
+        400,
+        60
+      ]
+    },
+    {
+      "id": "line-dotdash",
+      "category": "line",
+      "name": "点划线",
+      "tags": [
+        "分割线",
+        "点划线",
+        "简洁",
+        "排版"
+      ],
+      "style": "clean",
+      "recolor": "stroke",
+      "ratio": "wide",
+      "viewBox": [
+        0,
+        0,
+        400,
+        60
+      ]
+    },
+    {
+      "id": "line-dots",
+      "category": "line",
+      "name": "圆点线",
+      "tags": [
+        "分割线",
+        "圆点",
+        "可爱",
+        "装饰"
+      ],
+      "style": "hand",
+      "recolor": "stroke",
+      "ratio": "wide",
+      "viewBox": [
+        0,
+        0,
+        400,
+        60
+      ]
+    },
+    {
+      "id": "line-double",
+      "category": "line",
+      "name": "双线",
+      "tags": [
+        "分割线",
+        "双线",
+        "简洁",
+        "排版"
+      ],
+      "style": "clean",
+      "recolor": "stroke",
+      "ratio": "wide",
+      "viewBox": [
+        0,
+        0,
+        400,
+        60
+      ]
+    },
+    {
+      "id": "line-heart-divider",
+      "category": "line",
+      "name": "爱心分割线",
+      "tags": [
+        "分割线",
+        "爱心",
+        "中间图形",
+        "浪漫"
+      ],
+      "style": "clean",
+      "recolor": "stroke",
+      "ratio": "wide",
+      "viewBox": [
+        0,
+        0,
+        400,
+        60
+      ]
+    },
+    {
+      "id": "line-scribble",
+      "category": "line",
+      "name": "涂鸦折线",
+      "tags": [
+        "分割线",
+        "折线",
+        "涂鸦",
+        "手绘"
+      ],
+      "style": "hand",
+      "recolor": "stroke",
+      "ratio": "wide",
+      "viewBox": [
+        0,
+        0,
+        400,
+        60
+      ]
+    },
+    {
+      "id": "line-star-divider",
+      "category": "line",
+      "name": "星星分割线",
+      "tags": [
+        "分割线",
+        "星星",
+        "中间图形",
+        "装饰"
+      ],
+      "style": "clean",
+      "recolor": "stroke",
+      "ratio": "wide",
+      "viewBox": [
+        0,
+        0,
+        400,
+        60
+      ]
+    },
+    {
+      "id": "line-wavy",
+      "category": "line",
+      "name": "波浪线",
+      "tags": [
+        "分割线",
+        "波浪",
+        "手绘",
+        "装饰"
+      ],
+      "style": "hand",
+      "recolor": "stroke",
+      "ratio": "wide",
+      "viewBox": [
+        0,
+        0,
+        400,
+        60
+      ]
+    },
+    {
+      "id": "shape-arch",
+      "category": "shape",
+      "name": "拱形",
+      "tags": [
+        "色块",
+        "拱形",
+        "门洞",
+        "几何"
+      ],
+      "style": "clean",
+      "recolor": "fill",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        240,
+        240
+      ]
+    },
+    {
+      "id": "shape-blob-1",
+      "category": "shape",
+      "name": "有机色块",
+      "tags": [
+        "色块",
+        "有机",
+        "水彩",
+        "背景"
+      ],
+      "style": "hand",
+      "recolor": "fill",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        240,
+        240
+      ]
+    },
+    {
+      "id": "shape-blob-2",
+      "category": "shape",
+      "name": "晕染色块",
+      "tags": [
+        "色块",
+        "有机",
+        "晕染",
+        "背景"
+      ],
+      "style": "hand",
+      "recolor": "fill",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        240,
+        240
+      ]
+    },
+    {
+      "id": "shape-blob-3",
+      "category": "shape",
+      "name": "水彩色块",
+      "tags": [
+        "色块",
+        "水彩",
+        "有机",
+        "柔和"
+      ],
+      "style": "hand",
+      "recolor": "fill",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        240,
+        240
+      ]
+    },
+    {
+      "id": "shape-cloud",
+      "category": "shape",
+      "name": "云朵色块",
+      "tags": [
+        "色块",
+        "云朵",
+        "柔和",
+        "背景"
+      ],
+      "style": "hand",
+      "recolor": "fill",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        240,
+        240
+      ]
+    },
+    {
+      "id": "shape-crescent",
+      "category": "shape",
+      "name": "月牙",
+      "tags": [
+        "色块",
+        "月亮",
+        "月牙",
+        "夜晚"
+      ],
+      "style": "clean",
+      "recolor": "fill",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        240,
+        240
+      ]
+    },
+    {
+      "id": "shape-flower",
+      "category": "shape",
+      "name": "六瓣花",
+      "tags": [
+        "色块",
+        "花",
+        "几何",
+        "可爱"
+      ],
+      "style": "clean",
+      "recolor": "fill",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        240,
+        240
+      ]
+    },
+    {
+      "id": "shape-half-circle",
+      "category": "shape",
+      "name": "半圆",
+      "tags": [
+        "色块",
+        "半圆",
+        "几何",
+        "背景"
+      ],
+      "style": "clean",
+      "recolor": "fill",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        240,
+        240
+      ]
+    },
+    {
+      "id": "shape-leaf",
+      "category": "shape",
+      "name": "叶子色块",
+      "tags": [
+        "色块",
+        "叶子",
+        "植物",
+        "有机"
+      ],
+      "style": "hand",
+      "recolor": "fill",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        240,
+        240
+      ]
+    },
+    {
+      "id": "shape-pebble",
+      "category": "shape",
+      "name": "鹅卵石",
+      "tags": [
+        "色块",
+        "鹅卵石",
+        "圆润",
+        "背景"
+      ],
+      "style": "hand",
+      "recolor": "fill",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        240,
+        240
+      ]
+    },
+    {
+      "id": "shape-rounded-rect",
+      "category": "shape",
+      "name": "圆角矩形",
+      "tags": [
+        "色块",
+        "圆角矩形",
+        "几何",
+        "背景"
+      ],
+      "style": "clean",
+      "recolor": "fill",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        240,
+        240
+      ]
+    },
+    {
+      "id": "shape-scallop",
+      "category": "shape",
+      "name": "花边圆",
+      "tags": [
+        "色块",
+        "花边",
+        "圆",
+        "复古"
+      ],
+      "style": "clean",
+      "recolor": "fill",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        240,
+        240
+      ]
+    },
+    {
+      "id": "shape-splash",
+      "category": "shape",
+      "name": "颜料飞溅",
+      "tags": [
+        "色块",
+        "飞溅",
+        "水彩",
+        "动感"
+      ],
+      "style": "hand",
+      "recolor": "fill",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        240,
+        240
+      ]
+    },
+    {
+      "id": "shape-star",
+      "category": "shape",
+      "name": "五角星",
+      "tags": [
+        "色块",
+        "星星",
+        "几何",
+        "强调"
+      ],
+      "style": "clean",
+      "recolor": "fill",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        240,
+        240
+      ]
+    },
+    {
+      "id": "doodle-balloon",
+      "category": "doodle",
+      "name": "气球",
+      "tags": [
+        "涂鸦",
+        "气球",
+        "生日",
+        "派对"
+      ],
+      "style": "hand",
+      "recolor": "stroke",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        200,
+        200
+      ]
+    },
+    {
+      "id": "doodle-butterfly",
+      "category": "doodle",
+      "name": "蝴蝶",
+      "tags": [
+        "涂鸦",
+        "蝴蝶",
+        "昆虫",
+        "春天"
+      ],
+      "style": "hand",
+      "recolor": "stroke",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        200,
+        200
+      ]
+    },
+    {
+      "id": "doodle-cloud",
+      "category": "doodle",
+      "name": "云朵",
+      "tags": [
+        "涂鸦",
+        "云",
+        "天气",
+        "柔软"
+      ],
+      "style": "hand",
+      "recolor": "stroke",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        200,
+        200
+      ]
+    },
+    {
+      "id": "doodle-coffee",
+      "category": "doodle",
+      "name": "咖啡杯",
+      "tags": [
+        "涂鸦",
+        "咖啡",
+        "杯子",
+        "热气"
+      ],
+      "style": "hand",
+      "recolor": "stroke",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        200,
+        200
+      ]
+    },
+    {
+      "id": "doodle-crown",
+      "category": "doodle",
+      "name": "皇冠",
+      "tags": [
+        "涂鸦",
+        "皇冠",
+        "加冕",
+        "可爱"
+      ],
+      "style": "clean",
+      "recolor": "stroke",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        200,
+        200
+      ]
+    },
+    {
+      "id": "doodle-dots",
+      "category": "doodle",
+      "name": "对话点点",
+      "tags": [
+        "涂鸦",
+        "省略号",
+        "对话",
+        "等待"
+      ],
+      "style": "clean",
+      "recolor": "stroke",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        200,
+        200
+      ]
+    },
+    {
+      "id": "doodle-flower",
+      "category": "doodle",
+      "name": "小雏菊",
+      "tags": [
+        "涂鸦",
+        "花",
+        "雏菊",
+        "春天"
+      ],
+      "style": "hand",
+      "recolor": "stroke",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        200,
+        200
+      ]
+    },
+    {
+      "id": "doodle-heart",
+      "category": "doodle",
+      "name": "手绘爱心",
+      "tags": [
+        "涂鸦",
+        "爱心",
+        "手绘",
+        "喜欢"
+      ],
+      "style": "hand",
+      "recolor": "stroke",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        200,
+        200
+      ]
+    },
+    {
+      "id": "doodle-leaf",
+      "category": "doodle",
+      "name": "叶子",
+      "tags": [
+        "涂鸦",
+        "叶子",
+        "植物",
+        "自然"
+      ],
+      "style": "hand",
+      "recolor": "stroke",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        200,
+        200
+      ]
+    },
+    {
+      "id": "doodle-lightbulb",
+      "category": "doodle",
+      "name": "灯泡",
+      "tags": [
+        "涂鸦",
+        "灯泡",
+        "想法",
+        "灵感"
+      ],
+      "style": "hand",
+      "recolor": "stroke",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        200,
+        200
+      ]
+    },
+    {
+      "id": "doodle-moon",
+      "category": "doodle",
+      "name": "月亮",
+      "tags": [
+        "涂鸦",
+        "月亮",
+        "夜晚",
+        "梦幻"
+      ],
+      "style": "hand",
+      "recolor": "stroke",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        200,
+        200
+      ]
+    },
+    {
+      "id": "doodle-music-note",
+      "category": "doodle",
+      "name": "音符",
+      "tags": [
+        "涂鸦",
+        "音符",
+        "音乐",
+        "旋律"
+      ],
+      "style": "clean",
+      "recolor": "stroke",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        200,
+        200
+      ]
+    },
+    {
+      "id": "doodle-rainbow",
+      "category": "doodle",
+      "name": "彩虹",
+      "tags": [
+        "涂鸦",
+        "彩虹",
+        "天气",
+        "希望"
+      ],
+      "style": "clean",
+      "recolor": "stroke",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        200,
+        200
+      ]
+    },
+    {
+      "id": "doodle-raindrop",
+      "category": "doodle",
+      "name": "雨滴",
+      "tags": [
+        "涂鸦",
+        "雨滴",
+        "水",
+        "天气"
+      ],
+      "style": "clean",
+      "recolor": "stroke",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        200,
+        200
+      ]
+    },
+    {
+      "id": "doodle-spark",
+      "category": "doodle",
+      "name": "火花",
+      "tags": [
+        "涂鸦",
+        "火花",
+        "迸发",
+        "强调"
+      ],
+      "style": "hand",
+      "recolor": "stroke",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        200,
+        200
+      ]
+    },
+    {
+      "id": "doodle-sparkle",
+      "category": "doodle",
+      "name": "闪光",
+      "tags": [
+        "涂鸦",
+        "闪光",
+        "星星",
+        "亮晶晶"
+      ],
+      "style": "clean",
+      "recolor": "stroke",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        200,
+        200
+      ]
+    },
+    {
+      "id": "doodle-star",
+      "category": "doodle",
+      "name": "手绘星星",
+      "tags": [
+        "涂鸦",
+        "星星",
+        "手绘",
+        "可爱"
+      ],
+      "style": "hand",
+      "recolor": "stroke",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        200,
+        200
+      ]
+    },
+    {
+      "id": "doodle-sun",
+      "category": "doodle",
+      "name": "太阳",
+      "tags": [
+        "涂鸦",
+        "太阳",
+        "天气",
+        "明亮"
+      ],
+      "style": "hand",
+      "recolor": "stroke",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        200,
+        200
+      ]
+    },
+    {
+      "id": "floral-bloom",
+      "category": "floral",
+      "name": "花朵剪影",
+      "tags": [
+        "花",
+        "植物",
+        "剪影",
+        "装饰"
+      ],
+      "style": "clean",
+      "recolor": "fill",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        240,
+        240
+      ]
+    },
+    {
+      "id": "floral-branch",
+      "category": "floral",
+      "name": "枝叶",
+      "tags": [
+        "枝叶",
+        "植物",
+        "手绘",
+        "装饰",
+        "清新"
+      ],
+      "style": "hand",
+      "recolor": "stroke",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        240,
+        240
+      ]
+    },
+    {
+      "id": "floral-branch-solid",
+      "category": "floral",
+      "name": "枝叶剪影",
+      "tags": [
+        "枝叶",
+        "植物",
+        "剪影",
+        "装饰"
+      ],
+      "style": "clean",
+      "recolor": "fill",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        240,
+        240
+      ]
+    },
+    {
+      "id": "floral-eucalyptus",
+      "category": "floral",
+      "name": "桉树枝",
+      "tags": [
+        "桉树",
+        "植物",
+        "叶子",
+        "清新"
+      ],
+      "style": "clean",
+      "recolor": "stroke",
+      "ratio": "tall",
+      "viewBox": [
+        0,
+        0,
+        200,
+        320
+      ]
+    },
+    {
+      "id": "floral-flower",
+      "category": "floral",
+      "name": "单朵花",
+      "tags": [
+        "花",
+        "植物",
+        "手绘",
+        "单朵花"
+      ],
+      "style": "hand",
+      "recolor": "stroke",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        240,
+        240
+      ]
+    },
+    {
+      "id": "floral-olive",
+      "category": "floral",
+      "name": "橄榄枝",
+      "tags": [
+        "橄榄枝",
+        "植物",
+        "手绘",
+        "清新"
+      ],
+      "style": "hand",
+      "recolor": "stroke",
+      "ratio": "tall",
+      "viewBox": [
+        0,
+        0,
+        200,
+        320
+      ]
+    },
+    {
+      "id": "floral-sprig",
+      "category": "floral",
+      "name": "小叶枝",
+      "tags": [
+        "枝叶",
+        "植物",
+        "剪影",
+        "装饰"
+      ],
+      "style": "clean",
+      "recolor": "fill",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        240,
+        240
+      ]
+    },
+    {
+      "id": "floral-wheat",
+      "category": "floral",
+      "name": "麦穗",
+      "tags": [
+        "麦穗",
+        "植物",
+        "手绘",
+        "丰收",
+        "秋天"
+      ],
+      "style": "hand",
+      "recolor": "stroke",
+      "ratio": "tall",
+      "viewBox": [
+        0,
+        0,
+        200,
+        320
+      ]
+    },
+    {
+      "id": "floral-wreath",
+      "category": "floral",
+      "name": "花环",
+      "tags": [
+        "花环",
+        "植物",
+        "手绘",
+        "装饰",
+        "边框"
+      ],
+      "style": "hand",
+      "recolor": "stroke",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        240,
+        240
+      ]
+    },
+    {
+      "id": "floral-wreath-solid",
+      "category": "floral",
+      "name": "花环剪影",
+      "tags": [
+        "花环",
+        "植物",
+        "剪影",
+        "装饰"
+      ],
+      "style": "clean",
+      "recolor": "fill",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        240,
+        240
+      ]
+    },
+    {
+      "id": "festival-balloon",
+      "category": "festival",
+      "name": "气球",
+      "tags": [
+        "气球",
+        "生日",
+        "庆祝",
+        "派对"
+      ],
+      "style": "clean",
+      "recolor": "fill",
+      "ratio": "tall",
+      "viewBox": [
+        0,
+        0,
+        200,
+        320
+      ]
+    },
+    {
+      "id": "festival-cake",
+      "category": "festival",
+      "name": "生日蛋糕",
+      "tags": [
+        "蛋糕",
+        "生日",
+        "庆祝",
+        "甜点"
+      ],
+      "style": "clean",
+      "recolor": "fill",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        240,
+        240
+      ]
+    },
+    {
+      "id": "festival-cloud",
+      "category": "festival",
+      "name": "祥云",
+      "tags": [
+        "祥云",
+        "春节",
+        "中式",
+        "手绘",
+        "装饰"
+      ],
+      "style": "hand",
+      "recolor": "stroke",
+      "ratio": "wide",
+      "viewBox": [
+        0,
+        0,
+        320,
+        200
+      ]
+    },
+    {
+      "id": "festival-firecracker",
+      "category": "festival",
+      "name": "鞭炮",
+      "tags": [
+        "鞭炮",
+        "春节",
+        "节日",
+        "喜庆"
+      ],
+      "style": "clean",
+      "recolor": "fill",
+      "ratio": "tall",
+      "viewBox": [
+        0,
+        0,
+        200,
+        320
+      ]
+    },
+    {
+      "id": "festival-fu",
+      "category": "festival",
+      "name": "福字印章",
+      "tags": [
+        "福字",
+        "春节",
+        "印章",
+        "节日",
+        "喜庆"
+      ],
+      "style": "clean",
+      "recolor": "fill",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        240,
+        240
+      ]
+    },
+    {
+      "id": "festival-lantern",
+      "category": "festival",
+      "name": "灯笼",
+      "tags": [
+        "灯笼",
+        "春节",
+        "节日",
+        "红色",
+        "喜庆"
+      ],
+      "style": "clean",
+      "recolor": "fill",
+      "ratio": "tall",
+      "viewBox": [
+        0,
+        0,
+        200,
+        320
+      ]
+    },
+    {
+      "id": "festival-moon",
+      "category": "festival",
+      "name": "圆月",
+      "tags": [
+        "月亮",
+        "中秋",
+        "节日",
+        "夜晚"
+      ],
+      "style": "clean",
+      "recolor": "fill",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        240,
+        240
+      ]
+    },
+    {
+      "id": "festival-osmanthus",
+      "category": "festival",
+      "name": "桂花枝",
+      "tags": [
+        "桂花",
+        "中秋",
+        "植物",
+        "手绘"
+      ],
+      "style": "hand",
+      "recolor": "stroke",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        240,
+        240
+      ]
+    },
+    {
+      "id": "festival-rabbit",
+      "category": "festival",
+      "name": "玉兔",
+      "tags": [
+        "兔子",
+        "中秋",
+        "玉兔",
+        "节日"
+      ],
+      "style": "clean",
+      "recolor": "fill",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        240,
+        240
+      ]
+    },
+    {
+      "id": "festival-snowflake",
+      "category": "festival",
+      "name": "雪花",
+      "tags": [
+        "雪花",
+        "圣诞",
+        "冬天",
+        "手绘"
+      ],
+      "style": "hand",
+      "recolor": "stroke",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        240,
+        240
+      ]
+    },
+    {
+      "id": "festival-streamer",
+      "category": "festival",
+      "name": "彩带",
+      "tags": [
+        "彩带",
+        "生日",
+        "庆祝",
+        "派对",
+        "手绘"
+      ],
+      "style": "hand",
+      "recolor": "stroke",
+      "ratio": "wide",
+      "viewBox": [
+        0,
+        0,
+        320,
+        200
+      ]
+    },
+    {
+      "id": "festival-tree",
+      "category": "festival",
+      "name": "圣诞树",
+      "tags": [
+        "圣诞树",
+        "圣诞",
+        "节日",
+        "冬天"
+      ],
+      "style": "clean",
+      "recolor": "fill",
+      "ratio": "tall",
+      "viewBox": [
+        0,
+        0,
+        200,
+        320
+      ]
+    },
+    {
+      "id": "texture-diagonal",
+      "category": "texture",
+      "name": "斜线",
+      "tags": [
+        "斜线",
+        "纹理",
+        "背景",
+        "条纹"
+      ],
+      "style": "hand",
+      "recolor": "fill",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        200,
+        200
+      ],
+      "tile": true
+    },
+    {
+      "id": "texture-grain",
+      "category": "texture",
+      "name": "颗粒",
+      "tags": [
+        "颗粒",
+        "纹理",
+        "背景",
+        "噪点"
+      ],
+      "style": "clean",
+      "recolor": "fill",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        200,
+        200
+      ],
+      "tile": true
+    },
+    {
+      "id": "texture-grid",
+      "category": "texture",
+      "name": "格子纸",
+      "tags": [
+        "格子纸",
+        "纹理",
+        "背景",
+        "笔记本"
+      ],
+      "style": "clean",
+      "recolor": "fill",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        200,
+        200
+      ],
+      "tile": true
+    },
+    {
+      "id": "texture-halftone",
+      "category": "texture",
+      "name": "网点",
+      "tags": [
+        "网点",
+        "波普",
+        "纹理",
+        "背景"
+      ],
+      "style": "clean",
+      "recolor": "fill",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        200,
+        200
+      ],
+      "tile": true
+    },
+    {
+      "id": "texture-paper",
+      "category": "texture",
+      "name": "纸纹",
+      "tags": [
+        "纸纹",
+        "纹理",
+        "背景",
+        "复古"
+      ],
+      "style": "clean",
+      "recolor": "fill",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        200,
+        200
+      ],
+      "tile": true
+    },
+    {
+      "id": "texture-ruled",
+      "category": "texture",
+      "name": "横线本",
+      "tags": [
+        "横线本",
+        "纹理",
+        "背景",
+        "笔记本"
+      ],
+      "style": "hand",
+      "recolor": "fill",
+      "ratio": "square",
+      "viewBox": [
+        0,
+        0,
+        200,
+        200
+      ],
+      "tile": true
     }
   ]
 }

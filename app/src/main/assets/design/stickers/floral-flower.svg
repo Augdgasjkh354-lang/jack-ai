@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240">
+<metadata>{"name":"单朵花","tags":["花","植物","手绘","单朵花"],"style":"hand","recolor":"stroke","ratio":"square"}</metadata>
+<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+<path d="M120,108 C104,84 102,58 120,44 C138,58 136,84 120,108 Z" transform="rotate(0 120 108)" stroke-width="4.5"/>
+<path d="M120,108 C104,84 102,58 120,44 C138,58 136,84 120,108 Z" transform="rotate(72 120 108)" stroke-width="4.5"/>
+<path d="M120,108 C104,84 102,58 120,44 C138,58 136,84 120,108 Z" transform="rotate(144 120 108)" stroke-width="4.5"/>
+<path d="M120,108 C104,84 102,58 120,44 C138,58 136,84 120,108 Z" transform="rotate(216 120 108)" stroke-width="4.5"/>
+<path d="M120,108 C104,84 102,58 120,44 C138,58 136,84 120,108 Z" transform="rotate(288 120 108)" stroke-width="4.5"/>
+<circle cx="120" cy="108" r="12" stroke-width="4.5"/>
+<path d="M120,122 C118,150 122,180 120,210" stroke-width="5"/>
+<path d="M120,168 C102,158 92,144 90,128 C108,132 118,148 120,168 Z" stroke-width="4.5"/>
+<path d="M116,164 C108,152 100,142 96,134" stroke-width="3"/>
+</g>
+<g fill="currentColor">
+<circle cx="120" cy="108" r="3"/>
+<circle cx="104" cy="94" r="2.5"/><circle cx="136" cy="94" r="2.5"/>
+<circle cx="108" cy="122" r="2.5"/><circle cx="132" cy="122" r="2.5"/>
+</g>
+</svg>

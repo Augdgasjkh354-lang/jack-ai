@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+<metadata>{"name":"网点","tags":["网点","波普","纹理","背景"],"style":"clean","recolor":"fill","ratio":"square","tile":true}</metadata>
+<defs>
+<pattern id="texture-halftone-p1" width="36" height="36" patternUnits="userSpaceOnUse">
+<circle cx="9" cy="9" r="6.5" fill="var(--primary, #E8483B)"/>
+<circle cx="27" cy="9" r="3.5" fill="var(--primary, #E8483B)"/>
+<circle cx="9" cy="27" r="3.5" fill="var(--primary, #E8483B)"/>
+<circle cx="27" cy="27" r="6.5" fill="var(--primary, #E8483B)"/>
+</pattern>
+</defs>
+<rect width="200" height="200" fill="var(--bg, #FFF8F0)"/>
+<rect width="200" height="200" fill="url(#texture-halftone-p1)" opacity=".85"/>
+</svg>

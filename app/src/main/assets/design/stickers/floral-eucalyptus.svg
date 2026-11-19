@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 320">
+<metadata>{"name":"桉树枝","tags":["桉树","植物","叶子","清新"],"style":"clean","recolor":"stroke","ratio":"tall"}</metadata>
+<g fill="none" stroke="currentColor" stroke-linecap="round">
+<path d="M100,310 L100,30" stroke-width="5"/>
+<path d="M100,64 L92,64" stroke-width="3.5"/>
+<circle cx="76" cy="64" r="16" stroke-width="4"/>
+<path d="M100,64 L108,64" stroke-width="3.5"/>
+<circle cx="124" cy="64" r="16" stroke-width="4"/>
+<path d="M100,104 L92,104" stroke-width="3.5"/>
+<circle cx="76" cy="104" r="16" stroke-width="4"/>
+<path d="M100,104 L108,104" stroke-width="3.5"/>
+<circle cx="124" cy="104" r="16" stroke-width="4"/>
+<path d="M100,144 L92,144" stroke-width="3.5"/>
+<circle cx="76" cy="144" r="16" stroke-width="4"/>
+<path d="M100,144 L108,144" stroke-width="3.5"/>
+<circle cx="124" cy="144" r="16" stroke-width="4"/>
+<path d="M100,184 L92,184" stroke-width="3.5"/>
+<circle cx="76" cy="184" r="16" stroke-width="4"/>
+<path d="M100,184 L108,184" stroke-width="3.5"/>
+<circle cx="124" cy="184" r="16" stroke-width="4"/>
+<path d="M100,224 L92,224" stroke-width="3.5"/>
+<circle cx="76" cy="224" r="16" stroke-width="4"/>
+<path d="M100,224 L108,224" stroke-width="3.5"/>
+<circle cx="124" cy="224" r="16" stroke-width="4"/>
+<path d="M100,264 L92,264" stroke-width="3.5"/>
+<circle cx="76" cy="264" r="16" stroke-width="4"/>
+<path d="M100,264 L108,264" stroke-width="3.5"/>
+<circle cx="124" cy="264" r="16" stroke-width="4"/>
+<circle cx="100" cy="42" r="13" stroke-width="4"/>
+</g>
+</svg>

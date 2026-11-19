@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240">
+<metadata>{"name":"玉兔","tags":["兔子","中秋","玉兔","节日"],"style":"clean","recolor":"fill","ratio":"square"}</metadata>
+<circle cx="178" cy="52" r="26" fill="var(--secondary, #F6C453)"/>
+<g fill="var(--fg, #2B2620)">
+<path d="M104,82 C96,52 98,30 108,18 C118,28 118,56 112,82 Z"/>
+<path d="M132,82 C140,52 138,30 128,18 C118,28 118,56 124,82 Z"/>
+<circle cx="118" cy="104" r="30"/>
+<path d="M118,236 C84,236 66,208 70,176 C73,150 90,132 112,128 L124,128 C146,132 160,152 162,180 C164,208 150,236 118,236 Z"/>
+<circle cx="164" cy="198" r="13"/>
+</g>
+</svg>

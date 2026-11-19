@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 320">
+<metadata>{"name":"圣诞树","tags":["圣诞树","圣诞","节日","冬天"],"style":"clean","recolor":"fill","ratio":"tall"}</metadata>
+<path d="M100,164 C124,196 142,220 154,248 L46,248 C58,220 76,196 100,164 Z" fill="var(--primary, #E8483B)"/>
+<path d="M100,120 C120,148 136,170 146,194 L54,194 C64,170 80,148 100,120 Z" fill="var(--primary, #E8483B)"/>
+<path d="M100,76 C116,100 130,120 138,140 L62,140 C70,120 84,100 100,76 Z" fill="var(--primary, #E8483B)"/>
+<path d="M100,38 L106,50 L118,54 L106,60 L100,72 L94,60 L82,54 L94,50 Z" fill="var(--secondary, #F6C453)"/>
+<g fill="var(--secondary, #F6C453)">
+<circle cx="88" cy="124" r="5"/><circle cx="116" cy="128" r="5"/>
+<circle cx="78" cy="174" r="5"/><circle cx="122" cy="176" r="5"/>
+<circle cx="96" cy="214" r="5"/><circle cx="134" cy="220" r="5"/><circle cx="66" cy="224" r="5"/>
+</g>
+<rect x="90" y="248" width="20" height="34" rx="4" fill="var(--fg, #2B2620)"/>
+</svg>

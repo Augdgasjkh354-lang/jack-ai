@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240">
+<metadata>{"name":"花环","tags":["花环","植物","手绘","装饰","边框"],"style":"hand","recolor":"stroke","ratio":"square"}</metadata>
+<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+<path d="M120,34 C168,36 200,70 202,118 C204,166 170,202 122,204 C74,206 38,172 36,124 C34,76 72,32 120,34 Z" stroke-width="4.5"/>
+<path d="M120,52 C110,40 110,26 120,18 C130,26 130,40 120,52 Z" transform="rotate(0 120 120)" stroke-width="4"/>
+<path d="M120,52 C110,40 110,26 120,18 C130,26 130,40 120,52 Z" transform="rotate(45 120 120)" stroke-width="4"/>
+<path d="M120,52 C110,40 110,26 120,18 C130,26 130,40 120,52 Z" transform="rotate(90 120 120)" stroke-width="4"/>
+<path d="M120,52 C110,40 110,26 120,18 C130,26 130,40 120,52 Z" transform="rotate(135 120 120)" stroke-width="4"/>
+<path d="M120,52 C110,40 110,26 120,18 C130,26 130,40 120,52 Z" transform="rotate(180 120 120)" stroke-width="4"/>
+<path d="M120,52 C110,40 110,26 120,18 C130,26 130,40 120,52 Z" transform="rotate(225 120 120)" stroke-width="4"/>
+<path d="M120,52 C110,40 110,26 120,18 C130,26 130,40 120,52 Z" transform="rotate(270 120 120)" stroke-width="4"/>
+<path d="M120,52 C110,40 110,26 120,18 C130,26 130,40 120,52 Z" transform="rotate(315 120 120)" stroke-width="4"/>
+</g>
+<circle cx="192.1" cy="149.8" r="3.5" fill="currentColor"/>
+<circle cx="149.8" cy="192.1" r="3.5" fill="currentColor"/>
+<circle cx="90.2" cy="192.1" r="3.5" fill="currentColor"/>
+<circle cx="47.9" cy="149.8" r="3.5" fill="currentColor"/>
+<circle cx="47.9" cy="90.2" r="3.5" fill="currentColor"/>
+<circle cx="90.2" cy="47.9" r="3.5" fill="currentColor"/>
+<circle cx="149.8" cy="47.9" r="3.5" fill="currentColor"/>
+<circle cx="192.1" cy="90.2" r="3.5" fill="currentColor"/>
+</svg>
