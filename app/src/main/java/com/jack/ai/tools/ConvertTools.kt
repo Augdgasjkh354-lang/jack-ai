@@ -30,7 +30,7 @@ import java.io.File
  */
 
 private val ACTIONS = listOf("images_to_pdf", "merge_pdf", "split_pdf", "pdf_to_images", "compress_image", "convert_image",
-    "cut_video", "compress_video", "edit_video", "extract_audio", "transcribe", "ocr", "watch_video", "make_video", "beats")
+    "cut_video", "compress_video", "edit_video", "extract_audio", "transcribe", "ocr", "watch_video", "make_video", "beats", "voiceover", "grab_frame")
 
 /** ocr 收哪些文件（DeepSeek OCR 认文件内容，不看扩展名，这里先挡掉明显不对的）。 */
 private val OCR_EXT = setOf("pdf", "doc", "docx", "ppt", "pptx", "png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff")
@@ -61,6 +61,7 @@ internal suspend fun ToolSession.convertFile(args: JsonObject): String {
     val action = args["action"].text().trim()
     if (action !in ACTIONS) return "action 要填 ${ACTIONS.joinToString("、")} 之一"
     if (action == "make_video") return makeVideo(args)
+    if (action == "voiceover") return voiceover(args)
     val names = (args["files"] as? JsonArray)?.map { it.text() }?.filter { it.isNotBlank() }
         ?: listOfNotNull(args["file"].text().takeIf { it.isNotBlank() })
     if (names.isEmpty()) return "$action 要填 file（对话文件夹里的文件名）" + if (action in setOf("images_to_pdf", "merge_pdf")) "，或者 files（几个文件，按顺序；也能填一个文件夹）" else ""
@@ -78,6 +79,7 @@ internal suspend fun ToolSession.convertFile(args: JsonObject): String {
         "ocr" -> "认字"
         "watch_video" -> "看视频"
         "beats" -> "找节拍"
+        "grab_frame" -> "截图"
         else -> "转文字"
     } + "：" + names.first().take(40) + if (names.size > 1) " 等 ${names.size} 个" else ""
     return runTool(label) {
@@ -198,6 +200,7 @@ internal suspend fun ToolSession.convertFile(args: JsonObject): String {
             "ocr" -> return@runTool ocr(files, out, args["layout"].text() == "true")
             "watch_video" -> return@runTool watchVideo(files.first(), args)
             "beats" -> return@runTool beats(files.first())
+            "grab_frame" -> return@runTool grabFrames(files.first(), args)
             else -> return@runTool if (args["timestamps"].text() == "true") transcribeTimed(files.first(), out) else transcribe(files.first(), out)
         }
         made.take(10).forEach { ui.attach(it) }
@@ -262,6 +265,77 @@ private suspend fun ToolSession.beats(f: File): Pair<String, SearchRecord> {
         SearchRecord("找节拍：${f.name}（${r.bpm.toInt()} BPM）")
 }
 
+/**
+ * 配音：几句文案用 DeepSeek 语音读出来，接成一条 wav（句子之间停一下），同时出一份按这条配音时间的 .srt。
+ * 每句单独合成，所以每句从几秒到几秒是准的，Kavi 照着安排画面。
+ */
+private suspend fun ToolSession.voiceover(args: JsonObject): String {
+    val lines = ((args["lines"] as? JsonArray)?.map { it.text() } ?: args["text"].text().split('\n'))
+        .map { it.trim() }.filter { it.isNotEmpty() }
+    if (lines.isEmpty()) return "voiceover 要写 lines：配音文案，一句一项（一句就是一屏字幕，10～20 个字）"
+    if (lines.size > 80) return "一次最多 80 句，现在 ${lines.size} 句：分两段配"
+    val chars = lines.sumOf { com.jack.ai.api.DeepSeekTools.ttsChars(it) }
+    if (chars > 6000) return "文案太长（$chars 计费字符，上限 6000）：短视频配音一般几百字，精简一下"
+    val key = settings.apiKey.takeIf { it.isNotBlank() } ?: return "配音要用 DeepSeek Key（设置里填的那个），现在没填"
+    val voice = args["voice"].text().ifBlank { settings.dsVoiceId }.let { if (it == "tide") "tide" else "stella" }
+    val pauseMs = ((args["pause"].text().toDoubleOrNull() ?: 0.25) * 1000).toLong().coerceIn(0, 2000)
+    val name = args["out"].text().trim().substringBeforeLast('.').ifBlank { "配音" }
+    return runTool("配音：${lines.size} 句") {
+        val rate = com.jack.ai.api.DeepSeekTools.TTS_RATE
+        val pcm = arrayOfNulls<ByteArray>(lines.size)
+        var done = 0
+        coroutineScope {
+            val gate = Semaphore(3)
+            lines.mapIndexed { i, line ->
+                async(Dispatchers.IO) {
+                    gate.withPermit {
+                        val raw = com.jack.ai.api.DeepSeekTools.ttsStream(key, line, voice).use { it.readBytes() }
+                        host.store.addPaidCall(com.jack.ai.api.DeepSeekTools.TTS_KEY, com.jack.ai.api.DeepSeekTools.ttsChars(line) * com.jack.ai.api.DeepSeekTools.TTS_PRICE_PER_CHAR)
+                        pcm[i] = com.jack.ai.data.VoiceTrack.trim(raw, rate)
+                        ui.progress("配音：${synchronized(pcm) { ++done }}/${lines.size} 句")
+                    }
+                }
+            }.awaitAll()
+        }
+        val (audio, cues) = com.jack.ai.data.VoiceTrack.join(lines, pcm.map { it!! }, rate, pauseMs)
+        val wav = Workspace.uniqueFile(wsDir, "$name.wav")
+        val srt = File(wsDir, wav.nameWithoutExtension + ".srt")
+        withContext(Dispatchers.IO) {
+            com.jack.ai.data.VideoCompose.Wav.write(wav, audio, rate)
+            srt.writeText(Subtitles.toSrt(cues))
+        }
+        ui.attach(wav)
+        val total = audio.size * 1000L / (rate * 2)
+        ("配好了：「${wav.name}」（${Subtitles.stamp(total)}，${if (voice == "tide") "男声" else "女声"}），字幕「${srt.name}」，每句的时间：\n" +
+            Subtitles.timed(cues) +
+            "\n\n出片时 plan 里写 voiceover=「${wav.name}」、subtitles=「${srt.name}」、subtitles_source=\"output\"；按每句的时间安排画面（这句在说什么就放什么镜头），画面总长不短于 ${Subtitles.stamp(total)}；" +
+            "素材原声一般关掉（volume 0）或压低（0.2），背景音乐 music_volume 0.15～0.25。") to SearchRecord("配音：${wav.name}")
+    }
+}
+
+/** 从视频里截几张图（做封面、填设计的图片位用），存成 PNG。 */
+private suspend fun ToolSession.grabFrames(f: File, args: JsonObject): Pair<String, SearchRecord> {
+    val times = (args["times"] as? JsonArray)?.map { it.text() } ?: args["times"].text().ifBlank { args["start"].text() }.split(',', '，', ' ').filter { it.isNotBlank() }
+    if (times.isEmpty()) return "grab_frame 要写 times：截哪几个时间点，比如 \"1.5, 8, 0:12\"（先 watch_video 看哪一帧好看）" to SearchRecord("截图")
+    val ms = times.take(12).map { VideoEdit.parseTime(it) ?: return "「$it」认不出，写成 1:23 或秒数" to SearchRecord("截图") }
+    val made = withContext(Dispatchers.IO) {
+        val r = android.media.MediaMetadataRetriever()
+        try {
+            r.setDataSource(f.absolutePath)
+            ms.mapNotNull { t ->
+                val b = r.getFrameAtTime(t * 1000, android.media.MediaMetadataRetriever.OPTION_CLOSEST) ?: return@mapNotNull null
+                val out = Workspace.uniqueFile(wsDir, "${f.nameWithoutExtension}-${Subtitles.stamp(t).replace(':', '-').replace('.', '_')}.png")
+                out.outputStream().use { b.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+                b.recycle()
+                out
+            }
+        } finally { r.release() }
+    }
+    if (made.isEmpty()) return "一张都没截出来（时间超出了视频长度，或者这个格式手机解不了）" to SearchRecord("截图：${f.name}")
+    made.forEach { ui.attach(it) }
+    return ("截好了：" + made.joinToString("、") { "「${it.name}」" } + "。做封面：design 套一个模板（或从头设计），图片位填这张，标题写钩子；出片时 plan 里写 cover=封面 PNG。") to SearchRecord("截图：${f.name}")
+}
+
 /** 照剪辑方案出片：素材都在对话文件夹里，方案的写法见 VideoPlan。 */
 private suspend fun ToolSession.makeVideo(args: JsonObject): String {
     val raw = args["plan"]
@@ -269,7 +343,7 @@ private suspend fun ToolSession.makeVideo(args: JsonObject): String {
         ?: return "make_video 要写 plan：剪辑方案（clips、texts、subtitles、music……），格式见工具说明"
     val (plan, err) = com.jack.ai.data.VideoPlan.parse(o) { it.substringAfterLast('.', "").lowercase() in IMAGE_EXT }
     if (plan == null) return "剪辑方案有问题：$err。改好再调。"
-    val names = (plan.clips.map { it.file } + listOfNotNull(plan.subtitles, plan.music)).distinct()
+    val names = (plan.clips.map { it.file } + listOfNotNull(plan.subtitles, plan.music, plan.voiceover)).distinct()
     val files = mutableMapOf<String, File>()
     for (n in names) files[n] = runCatching { withContext(Dispatchers.IO) { inputs(listOf(n)).first() } }.getOrElse { return it.message ?: "对话文件夹里没有「$n」" }
     val first = files.getValue(plan.clips.first().file)
@@ -277,13 +351,13 @@ private suspend fun ToolSession.makeVideo(args: JsonObject): String {
         val subs = plan.subtitles?.let { name ->
             val cues = withContext(Dispatchers.IO) { Subtitles.parseSrt(files.getValue(name).readText()) }
             if (cues.isEmpty()) throw IllegalStateException("「$name」里没读出字幕，要 .srt（transcribe 加 timestamps=true 会做一份）")
-            val source = plan.subtitleSource ?: plan.clips.first { !it.image }.file
+            val source = plan.subtitleSource ?: plan.clips.firstOrNull { !it.image }?.file ?: com.jack.ai.data.VideoPlan.OUTPUT
             cues to source
         }
         val dst = outFile(args["out"].text(), first, "成片", "mp4")
         val work = File(wsCache, "compose-${System.currentTimeMillis()}")
         try {
-            val d = com.jack.ai.data.VideoCompose.make(app, plan, { files.getValue(it) }, subs, plan.music?.let { files.getValue(it) }, work, dst) { ui.progress(it) }
+            val d = com.jack.ai.data.VideoCompose.make(app, plan, { files.getValue(it) }, subs, plan.music?.let { files.getValue(it) }, plan.voiceover?.let { files.getValue(it) }, work, dst) { ui.progress(it) }
             ui.attach(dst)
             val text = buildString {
                 append("出好了：「${dst.name}」（${Subtitles.stamp(d.durationMs).substringBefore('.')}，${d.width}×${d.height}，${ToolSizes.text(dst.length())}），已经显示在聊天里。")

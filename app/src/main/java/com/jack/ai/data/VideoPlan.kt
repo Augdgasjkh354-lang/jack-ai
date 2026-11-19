@@ -28,7 +28,17 @@ object VideoPlan {
     data class Plan(
         val size: Pair<Int, Int>?, val clips: List<Clip>, val fade: Boolean, val texts: List<Text>,
         val subtitles: String?, val subtitleSource: String?, val music: String?, val musicVolume: Float, val duck: Boolean,
-    )
+        /** 配音（voiceover 做的 wav），从正片开头放；voiceVolume 0..2。 */
+        val voiceover: String? = null, val voiceVolume: Float = 1f,
+        /** 封面图：放在最前面 coverMs 毫秒（已经插进 clips 第一段）。texts、按成片时间的字幕和配音都从封面之后算，引擎自动往后挪。 */
+        val cover: String? = null, val coverMs: Long = 0,
+    ) {
+        /** 字幕的时间是成片上的（配音的字幕），不用按片段对。 */
+        val subtitlesOnOutput get() = subtitleSource == OUTPUT
+    }
+
+    /** subtitles_source 填这个：字幕时间就是成片时间（比如配音做出来的字幕）。 */
+    const val OUTPUT = "output"
 
     val SIZES = linkedMapOf("9:16" to (1080 to 1920), "16:9" to (1920 to 1080), "1:1" to (1080 to 1080), "3:4" to (1080 to 1440), "4:3" to (1440 to 1080))
     val STYLES = listOf("title", "highlight", "caption", "label", "price")
@@ -86,12 +96,18 @@ object VideoPlan {
             Text(text, s, e, style, pos)
         }
         val mv = o.s("music_volume").ifEmpty { "0.3" }.toFloatOrNull()?.coerceIn(0f, 1f) ?: 0.3f
+        val vv = o.s("voiceover_volume").ifEmpty { "1" }.toFloatOrNull()?.coerceIn(0f, 2f) ?: 1f
+        val cover = o.s("cover").ifEmpty { null }
+        if (cover != null && !isImage(cover)) return null to "cover 要填一张图片（用 design 做的封面 PNG）"
+        val coverMs = if (cover == null) 0L else (time(o.s("cover_duration").ifEmpty { "0.8" }) ?: return null to "cover_duration 写成秒数").coerceIn(100, 3000)
         val transition = o.s("transition").ifEmpty { "cut" }
         if (transition !in setOf("cut", "fade")) return null to "transition 只能是 cut（直接切）或 fade（过黑场）"
+        val all = if (cover == null) clips else listOf(Clip(cover, true, durationMs = coverMs)) + clips
         return Plan(
-            size, clips, transition == "fade", texts,
+            size, all, transition == "fade", texts,
             o.s("subtitles").ifEmpty { null }, o.s("subtitles_source").ifEmpty { null },
             o.s("music").ifEmpty { null }, mv, o.s("duck") != "false",
+            o.s("voiceover").ifEmpty { null }, vv, cover, coverMs,
         ) to ""
     }
 

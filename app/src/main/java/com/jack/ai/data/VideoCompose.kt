@@ -45,7 +45,7 @@ object VideoCompose {
     private const val FADE_US = 250_000L
 
     suspend fun make(
-        ctx: Context, plan: VideoPlan.Plan, fileOf: (String) -> File, subtitles: Pair<List<Subtitles.Cue>, String>?, music: File?,
+        ctx: Context, plan: VideoPlan.Plan, fileOf: (String) -> File, subtitles: Pair<List<Subtitles.Cue>, String>?, music: File?, voice: File?,
         work: File, out: File, progress: (String) -> Unit,
     ): Done {
         work.mkdirs()
@@ -68,10 +68,21 @@ object VideoCompose {
         }
         val lengths = VideoPlan.lengths(plan.clips) { c -> infos[plan.clips.indexOf(c)]?.durationMs ?: 0L }
         val total = lengths.sum()
-        // 字幕按原视频的时间写的，对到成片上
-        val cues = subtitles?.let { (list, source) -> VideoPlan.remapSubtitles(list, plan.clips, lengths, source) }.orEmpty()
+        // 字幕：按原视频时间写的对到成片上；按成片时间写的（配音字幕）只往后挪封面的长度
+        val cues = subtitles?.let { (list, source) ->
+            if (plan.subtitlesOnOutput) list.map { it.copy(startMs = it.startMs + plan.coverMs, endMs = it.endMs + plan.coverMs) }
+            else VideoPlan.remapSubtitles(list, plan.clips, lengths, source)
+        }.orEmpty()
+        val texts = plan.texts.map { it.copy(startMs = it.startMs + plan.coverMs, endMs = it.endMs + plan.coverMs) }
+        // 配音：前面补上封面那么长的静音；配音比画面长就说清楚让 Kavi 补画面
+        val voiceFile = voice?.let { v ->
+            val ms = withContext(Dispatchers.IO) { Wav.durationMs(v) } ?: throw IllegalStateException("「${v.name}」读不出来：配音要用 voiceover 做出来的 wav")
+            if (ms + plan.coverMs > total + 300) throw IllegalStateException(
+                "配音有 ${Subtitles.stamp(ms)}，画面只有 ${Subtitles.stamp(total - plan.coverMs)}：加几段画面、或者让片段长一点，画面要不短于配音")
+            if (plan.coverMs > 0) File(work, "voice.wav").also { withContext(Dispatchers.IO) { Wav.padStart(v, it, plan.coverMs) } } else v
+        }
         if (subtitles != null && cues.isEmpty()) notes += "字幕和选的片段对不上（字幕是「${subtitles.second}」的吗？），没加字幕"
-        val late = plan.texts.count { it.startMs >= total }
+        val late = texts.count { it.startMs >= total }
         if (late > 0) notes += "有 $late 条花字的时间超出了成片长度（${Subtitles.stamp(total)}），没显示"
 
         // 1. 图片 → 一小段视频
@@ -93,7 +104,7 @@ object VideoCompose {
         }
 
         // 2. 拼起来
-        val decorate = plan.texts.isNotEmpty() || cues.isNotEmpty() || music != null
+        val decorate = texts.isNotEmpty() || cues.isNotEmpty() || music != null || voiceFile != null
         val joined = if (decorate) File(work, "joined.mp4") else out
         val items = clips.mapIndexed { i, c ->
             val endMs = c.endMs ?: infos[i]?.durationMs
@@ -120,15 +131,20 @@ object VideoCompose {
 
         // 3. 花字、字幕、背景音乐
         val overlays = mutableListOf<TextureOverlay>()
-        plan.texts.forEach { t -> overlays += TimedText(TextArt.render(t.text, t.style, w), t.startMs * 1000, t.endMs * 1000, TextArt.anchorY(t.position)) }
+        texts.forEach { t -> overlays += TimedText(TextArt.render(t.text, t.style, w), t.startMs * 1000, t.endMs * 1000, TextArt.anchorY(t.position)) }
         if (cues.isNotEmpty()) overlays += SubtitleTrack(Subtitles.forScreen(cues, 14), w)
         val videoEffects = if (overlays.isEmpty()) emptyList() else listOf(OverlayEffect(ImmutableList.copyOf(overlays)))
         val main = EditedMediaItem.Builder(MediaItem.fromUri(Uri.fromFile(joined))).setEffects(Effects(emptyList(), videoEffects)).build()
         val sequences = mutableListOf(EditedMediaItemSequence(main))
+        if (voiceFile != null) {
+            val fx = if (plan.voiceVolume != 1f) Effects(listOf(volume(plan.voiceVolume)), emptyList()) else Effects.EMPTY
+            sequences += EditedMediaItemSequence(EditedMediaItem.Builder(MediaItem.fromUri(Uri.fromFile(voiceFile))).setEffects(fx).build())
+            notes += "配了音"
+        }
         if (music != null) {
             val speech = if (!plan.duck) emptyList() else if (cues.isNotEmpty()) cues.map { it.startMs to it.endMs } else {
                 progress("出片：找有人说话的地方（背景音乐要让开）")
-                withContext(Dispatchers.IO) { speechIn(joined) }
+                withContext(Dispatchers.IO) { speechIn(joined) + (voiceFile?.let { speechIn(it) }.orEmpty()) }
             }
             if (plan.duck && speech.isNotEmpty()) notes += "背景音乐在有人说话时自动压低了"
             val duck = VideoPlan.duckGain(speech)
@@ -140,6 +156,48 @@ object VideoCompose {
         progress("出片：加花字、字幕和音乐")
         VideoEdit.export(ctx, Composition.Builder(sequences).experimentalSetForceAudioTrack(true).build(), out, bitrate(w, h, 1f)) { p -> progress("出片：加花字、字幕和音乐 $p%") }
         return Done(total, w, h, notes, cues.size)
+    }
+
+    /** 配音用的 wav（16 位 PCM）：读时长、在前面补静音。 */
+    internal object Wav {
+        class Fmt(val rate: Int, val channels: Int, val dataOffset: Long, val dataBytes: Long)
+
+        fun fmt(f: File): Fmt? = runCatching {
+            java.io.RandomAccessFile(f, "r").use { r ->
+                val h = ByteArray(12); r.readFully(h)
+                if (String(h, 0, 4) != "RIFF" || String(h, 8, 4) != "WAVE") return null
+                var rate = 0; var ch = 0; var bits = 0
+                while (r.filePointer < r.length()) {
+                    val id = ByteArray(4); r.readFully(id)
+                    val size = Integer.reverseBytes(r.readInt()).toLong() and 0xffffffffL
+                    when (String(id)) {
+                        "fmt " -> { val b = ByteArray(size.toInt()); r.readFully(b)
+                            val bb = ByteBuffer.wrap(b).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+                            bb.short; ch = bb.short.toInt(); rate = bb.int; bb.int; bb.short; bits = bb.short.toInt() }
+                        "data" -> return if (bits == 16 && rate > 0 && ch > 0) Fmt(rate, ch, r.filePointer, minOf(size, r.length() - r.filePointer)) else null
+                        else -> r.seek(r.filePointer + size + (size and 1))
+                    }
+                }
+                null
+            }
+        }.getOrNull()
+
+        fun durationMs(f: File): Long? = fmt(f)?.let { it.dataBytes * 1000 / (it.rate.toLong() * it.channels * 2) }
+
+        fun write(f: File, pcm: ByteArray, rate: Int, channels: Int = 1) {
+            val h = ByteBuffer.allocate(44).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            h.put("RIFF".toByteArray()).putInt(36 + pcm.size).put("WAVE".toByteArray())
+            h.put("fmt ".toByteArray()).putInt(16).putShort(1).putShort(channels.toShort()).putInt(rate).putInt(rate * channels * 2).putShort((channels * 2).toShort()).putShort(16)
+            h.put("data".toByteArray()).putInt(pcm.size)
+            f.outputStream().use { it.write(h.array()); it.write(pcm) }
+        }
+
+        fun padStart(src: File, dst: File, ms: Long) {
+            val fm = fmt(src) ?: throw IllegalStateException("「${src.name}」不是 16 位 wav")
+            val pad = (fm.rate.toLong() * ms / 1000).toInt() * fm.channels * 2
+            val data = java.io.RandomAccessFile(src, "r").use { r -> r.seek(fm.dataOffset); ByteArray(fm.dataBytes.toInt()).also { r.readFully(it) } }
+            write(dst, ByteArray(pad) + data, fm.rate, fm.channels)
+        }
     }
 
     /** 码率：1080×1920 约 10Mbps（抖音、视频号上传不会被压得太糊）；中间文件高一点，第二遍再压。 */
