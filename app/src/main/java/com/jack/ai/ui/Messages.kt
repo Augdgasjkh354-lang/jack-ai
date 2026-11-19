@@ -85,6 +85,7 @@ import com.jack.ai.data.Deliverables
 import com.jack.ai.data.GeneratedFile
 import androidx.core.content.FileProvider
 import java.io.File
+import androidx.compose.runtime.key
 import com.jack.ai.data.SearchRecord
 import com.jack.ai.data.modelLabel
 import kotlinx.coroutines.Dispatchers
@@ -439,9 +440,13 @@ fun AssistantMessage(
 private fun ChartImage(f: GeneratedFile) {
     val ctx = LocalContext.current
     var viewing by remember { mutableStateOf(false) }
-    val bmp by produceState<Bitmap?>(null, f.path) {
+    // 在编辑器里保存过就重新读（同名覆盖，路径不变）
+    val version = DesignEditorActivity.edits[File(f.path).absolutePath] ?: 0
+    val bmp by produceState<Bitmap?>(null, f.path, version) {
         value = withContext(Dispatchers.IO) { Attachments.thumbnail(f.path, 1400) }
     }
+    // 设计图（旁边有底稿）可以点「编辑」自己动手改
+    val editable by produceState(false, f.path) { value = withContext(Dispatchers.IO) { DesignEditorActivity.sourceOf(ctx, f.path) != null } }
     Column(Modifier.widthIn(max = 420.dp)) {
         bmp?.let {
             Image(
@@ -455,10 +460,11 @@ private fun ChartImage(f: GeneratedFile) {
         } ?: Text("图表文件已被删除", color = MaterialTheme.colorScheme.outline)
         Row {
             TextButton(onClick = { viewing = true }) { Text("查看大图") }
+            if (editable) TextButton(onClick = { DesignEditorActivity.open(ctx, File(f.path)) }) { Text("编辑") }
             TextButton(onClick = { shareFile(ctx, f) }) { Text("分享") }
         }
     }
-    if (viewing) ImageViewer(f.path) { viewing = false }
+    if (viewing) key(version) { ImageViewer(f.path) { viewing = false } }
 }
 
 @Composable

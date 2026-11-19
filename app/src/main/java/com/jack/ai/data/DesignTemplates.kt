@@ -10,7 +10,7 @@ import kotlinx.serialization.json.put
 
 /**
  * 设计模板（海报、小红书配图、邀请函、名片……）：一份模板就是一张固定大小的网页，放在 assets/design/templates/，
- * 目录在 assets/design/index.json。规则见 建议/设计模板_给GPT的提示词.md：data-slot 文字和图片位、data-list/data-item 列表、
+ * 目录在 assets/design/index.json。规则见 建议/设计模板_给Muse的提示词.md：data-slot 文字和图片位、data-list/data-item 列表、
  * data-icon 图标、.canvas 画布、配色全用 --bg/--fg/--primary/--secondary/--accent/--muted 六个变量。
  */
 object DesignTemplates {
@@ -30,6 +30,10 @@ object DesignTemplates {
 
     /** 模板分类 → 看哪几个尺寸（poster 里有 9:16 和 A4 两种）。 */
     val CATEGORIES = mapOf("xhs" to "小红书", "square" to "方图", "poster" to "海报", "invite" to "邀请函、贺卡", "card" to "名片", "cover" to "公众号封面", "long" to "长图")
+
+    /** 套组里每张的角色（和风格库的版式 id 一致）。 */
+    val ROLES = mapOf("cover" to "封面", "list" to "清单", "steps" to "步骤", "compare" to "对比", "grid" to "宫格", "quote" to "金句",
+        "photo" to "大图", "data" to "大数字", "qa" to "问答", "ending" to "结尾", "content" to "内页")
 
     const val VARS_NOTE = "bg 背景、fg 正文字、primary 主色、secondary 辅色、accent 点缀、muted 次要文字和线条"
     private val VAR_NAMES = setOf("bg", "fg", "primary", "secondary", "accent", "muted")
@@ -71,7 +75,8 @@ object DesignTemplates {
             }
             val images = arr("images").joinToString("、") { i -> i.str("name") + "（" + i.str("label") + if (i.str("optional") == "true") "，可不填）" else "）" }
             val colors = (m["colors"] as? JsonObject)?.entries?.joinToString(" ") { (k, v) -> "$k=${(v as? JsonPrimitive)?.content}" }.orEmpty()
-            "- ${t.id}｜${t.name}｜${m.str("style")}｜${if (t.h == 0) "${t.w}×长" else "${t.w}×${t.h}"}｜${m.str("description")}" +
+            val set = m.str("set").takeIf { it.isNotBlank() }?.let { "｜套组 $it·" + (ROLES[m.str("role")] ?: m.str("role")) }.orEmpty()
+            "- ${t.id}｜${t.name}｜${m.str("style")}$set｜${if (t.h == 0) "${t.w}×长" else "${t.w}×${t.h}"}｜${m.str("description")}" +
                 (if (slots.isNotEmpty()) "\n  文字和图片：$slots" else "") + (if (images.isNotEmpty()) "；图片：$images" else "") +
                 (if (lists.isNotEmpty()) "\n  列表：$lists" else "") + (if (colors.isNotEmpty()) "\n  默认配色：$colors" else "")
         }
@@ -112,13 +117,14 @@ object DesignTemplates {
      * 出图前把页面准备好：记下尺寸；去掉原来的 viewport，换成画布宽（WebView 按这个宽把一个 CSS 像素对上一个像素）；
      * 关掉手机的字号自动放大；放进填内容的脚本。临时加的都带 data-kavi-temp，存底稿时去掉。
      */
-    fun prepare(html: String, w: Int, h: Int, fillJs: String): String {
+    fun prepare(html: String, w: Int, h: Int, fillJs: String, fontCss: String = ""): String {
         var s = html.replace(Regex("""<meta[^>]+name\s*=\s*["']viewport["'][^>]*>""", RegexOption.IGNORE_CASE), "")
         s = s.replace(Regex("""\sdata-kavi-size\s*=\s*["'][^"']*["']"""), "")
         s = if (Regex("<html", RegexOption.IGNORE_CASE).containsMatchIn(s)) s.replaceFirst(Regex("<html", RegexOption.IGNORE_CASE), """<html data-kavi-size="${w}x$h"""")
             else """<!doctype html><html data-kavi-size="${w}x$h"><head></head><body>$s</body></html>"""
         val head = """<meta data-kavi-temp name="viewport" content="width=$w">""" +
             """<style data-kavi-temp>html{-webkit-text-size-adjust:100%;text-size-adjust:100%}body{margin:0}${if (h > 0) ".canvas{width:${w}px;height:${h}px;overflow:hidden}" else ".canvas{width:${w}px}"}</style>""" +
+            (if (fontCss.isNotBlank()) "<style data-kavi-temp>\n$fontCss</style>" else "") +
             "<script data-kavi-temp>\n$fillJs\n</script>"
         val m = Regex("<head[^>]*>", RegexOption.IGNORE_CASE).find(s)
         return if (m != null) s.substring(0, m.range.last + 1) + head + s.substring(m.range.last + 1)

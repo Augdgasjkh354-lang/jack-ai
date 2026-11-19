@@ -14,7 +14,7 @@ html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
 .canvas>*{position:relative;z-index:1}
 .top{display:flex;align-items:center;justify-content:space-between;height:48px}
 .tag{display:inline-flex;align-items:center;padding:11px 18px;border:1px solid color-mix(in srgb,var(--primary) 42%,var(--bg));border-radius:20px;color:var(--primary);font-size:22px;font-weight:700}
-.season{color:var(--muted);font-size:18px;font-weight:700;letter-spacing:.15em}
+.season{color:var(--muted);font-size:22px;font-weight:700;letter-spacing:.15em}
 .hero{margin-top:40px}
 .title{max-width:900px;margin:0;font-size:82px;line-height:1.14;font-weight:700;letter-spacing:.02em}
 .subtitle{margin:15px 0 0;color:var(--muted);font-size:29px;line-height:1.4}
@@ -26,9 +26,9 @@ html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
 .step:before{content:counter(step);display:flex;align-items:center;justify-content:center;width:64px;height:64px;border-radius:22px 22px 22px 8px;background:var(--primary);color:var(--bg);font-size:28px;font-weight:700;transform:rotate(-3deg)}
 .step:after{content:"";width:24px;height:24px;border:2px solid color-mix(in srgb,var(--primary) 55%,var(--bg));border-radius:50%}
 .step-text{display:block;font-size:29px;line-height:1.38;font-weight:400}
-.bottom{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:20px;color:var(--muted);font-size:20px}
+.bottom{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:20px;color:var(--muted);font-size:22px}
 .star{width:14px;height:14px;background:var(--accent);transform:rotate(45deg)}
-span[data-slot]{display:inline-block}
+:where(span[data-slot]){display:inline-block}
 
 /* 项少的时候不把每一项撑成大空框：每项最高 240px，整组在中间；只有 3 项时字放大一档 */
 .steps{justify-content:center}

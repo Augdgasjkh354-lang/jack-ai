@@ -79,6 +79,7 @@ object SkillIds {
     const val DOUYIN = "builtin-douyin"
     const val CONTRACT = "builtin-contract"
     const val XIANYU = "builtin-xianyu"
+    const val AESTHETIC = "builtin-aesthetic"
 
     /**
      * 这些技能的工具不在开场就给，等模型用 use_skill 读了做法才加进来（本对话之后一直带着）：
@@ -286,26 +287,87 @@ val BUILTIN_SKILLS = listOf(
     ),
     Skill(
         id = SkillIds.DESIGN, builtin = true, name = "设计",
-        description = "做单张设计图：小红书配图、朋友圈方图、海报、活动宣传、邀请函、贺卡、名片、公众号封面、长图。用户说“做张海报/封面/邀请函/配图”时使用。",
-        instructions = """做设计图的做法（像 Canva：套模板改字换色，或者从头排版）：
+        description = "做设计图：小红书配图和成组卡片、朋友圈方图、海报、活动宣传、邀请函、贺卡、名片、公众号封面、长图。用户说“做张海报/封面/邀请函/配图/小红书图文”时使用。",
+        instructions = """做设计图的做法（像 Canva：套模板改字换色，或者从头排版）。好不好看按「审美」技能来：动手前先 use_skill 读「审美」（这个对话读过就不用再读）。
 1. 弄清用途和内容：发哪（小红书、朋友圈、打印……）、要放哪些字（标题、时间、地点、联系方式……）、想要什么风格、有没有照片（用户发来的图在对话文件夹里）。够用就直接做；邀请函缺时间地点这类关键信息才问。
-2. 先 design action=templates（可以按 category 筛）看模板，按用途和风格挑最贴的一个；实在没有合适的，再用 html 从头设计。
-3. 套模板（action=make, template=模板 id）：
+2. 定风格：design action=styles 看风格库，按内容挑（「审美」第 2 步），再用 action=styles style=风格id 看它的字体、配色、版式和禁忌，照着做。
+3. 找模板：action=templates（可以按 category、style 筛）。有这个风格、这个用途的模板就套；没有就按风格的做法用 html 从头设计。
+4. 套模板（action=make, template=模板 id）：
    - slots 填文字：照每个位置的字数上限写，宁短勿长。标题要抓眼，6～14 字最好；不需要的位置填空字符串，它就不显示。
    - lists 填列表（要点、步骤、日程），项数在模板写的范围里。
    - 照片填进图片位，值写对话文件夹里的文件名。
-   - 想换颜色用 colors，六个变量是 bg、fg、primary、secondary、accent、muted。字和底色的对比要够；一张图里的彩色（主色、辅色、点缀）不超过三种。
-4. 从头设计（action=make, html=…, size=xhs/square/poster/a4/invite/card/cover/long 或「宽x高」）：
+   - 换颜色用 colors（bg、fg、primary、secondary、accent、muted 六个），整组照抄风格库里的一套配色，不要自己拼。
+5. 从头设计（action=make, html=…, size=xhs/square/poster/a4/invite/card/cover/long 或「宽x高」）：
    - 页面里放一个 <div class="canvas">，所有东西都在它里面。CSS 写在 <style> 里，不能用 JS，不能引外部网址。
-   - 配色写成上面六个变量；字体用 "Noto Sans CJK SC",sans-serif，要宋体用 "Noto Serif CJK SC",serif；字重只用 400 和 700。
-   - 每段文字加 data-slot="名字" 和 data-max="字数"，这样出图时能帮你查有没有装不下。
-   - 图标写 <i data-icon="calendar"></i>（用线框图标名：calendar、map-pin、phone、mail、heart、star、gift、clock……），用 CSS 定大小和颜色。照片写成 <div data-slot="photo" data-kind="image">，在 slots 里填文件名。
-   - 排版：一个最大的视觉焦点；标题字号是正文的 2.5～4 倍；对齐方式统一；四边至少留 64px（名片、封面 40px）；留白比堆东西更高级；装饰用几何形状、色块、细线，少而准。
-5. 出图后看工具给的检查结果；能看图的话再看一眼缩略图。有装不下的、对不齐的、太挤的、颜色发闷的，先改好再交给用户。
-6. 用户要改：用 edit_file 改底稿 .html 里那一处，再用 design action=render path=底稿名 重新出图，不要从头再做；只有换模板才重新 make。
-7. 要打印的（名片、海报、邀请函）加 format=pdf，同时出一份 PDF。
-8. 交付时用一两句话说用了什么风格，哪些地方能换（颜色、照片、文字）；不要把代码贴进聊天。
-9. 成组的图（小红书一篇拆成几张卡片、一套海报）：先列每页放什么给用户确认；第一张从头设计定下风格，后面每张沿用同一套 CSS、配色、字体和页码位置，只换内容，文件名按 01、02… 编号。""",
+   - 配色写成上面六个 CSS 变量（--bg、--fg……），所有颜色从它们来，用户一句「换个颜色」才能整体换。
+   - 字体照风格库写，font-family 后面跟一个系统字体兜底，比如 "Smiley Sans","Noto Sans CJK SC",sans-serif。全部字体见 action=fonts。
+   - 每段文字加 data-slot="名字" 和 data-max="字数"，这样出图时能帮你查有没有装不下；页码位置用 data-slot="page"。
+   - 图标写 <i data-icon="calendar"></i>（线框图标名：calendar、map-pin、phone、mail、heart、star、gift、clock……），用 CSS 定大小和颜色。照片写成 <div data-slot="photo" data-kind="image">，在 slots 里填文件名。
+   - 装饰（胶带、贴纸、手绘箭头、纸纹、颗粒）用内联 SVG 或 CSS 画，做法见「审美」第 4 步。
+6. 出图后看工具给的「检查」（必须改）和「审美检查」（大多数该改），再看大图和缩略图，按「审美」第 5 步自评；不及格先改好再交给用户。
+7. 用户要改：用 edit_file 改底稿 .html 里那一处，再用 design action=render path=底稿名 重新出图，不要从头再做；只有换模板才重新 make。用户也可以在聊天里点图下面的「编辑」自己动手改。
+8. 要打印的（名片、海报、邀请函）加 format=pdf，同时出一份 PDF。
+9. 成组的图（小红书一篇拆成几张卡片、一套海报）用 action=series：
+   - 先列每张放什么给用户确认（第 1 张封面、中间内页、最后一张结尾），一组 4～9 张。
+   - 有同一套组（set 相同）的模板就整组用它们：封面用 role=cover 的，内页按内容挑 list/steps/compare…，结尾用 role=ending 的。
+   - 没有就先 make 第一张从头设计定下风格，满意后后面每张沿用同一套 CSS、配色、字体和页码位置，只换内容，再用 series 一次出完。
+   - colors 写在外面整组共用；每张的 slots 里不用填 page，会自动填「01/06」。
+10. 交付时用一两句话说用了什么风格，哪些地方能换（颜色、照片、文字），可以点「编辑」自己改；不要把代码贴进聊天。""",
+    ),
+    Skill(
+        id = SkillIds.AESTHETIC, builtin = true, name = "审美",
+        description = "让设计图、海报、小红书封面和卡片、PPT 配色排版更好看、更高级、不带 AI 味：挑风格、配色、字体、排版，出图后按清单自评和改。用户说“好看点”“高级点”“太丑了”“没质感”“有点土”时也用。",
+        instructions = """审美的做法（借鉴了 GitHub 上几个做得好的设计技能：baoyu-xhs-images 的风格×版式×配色、impeccable 的改法动词和反 AI 味规则、qiaomu-design 的风格试衣间和偏好记账、paper-signal 的缩略图验收，做法是自己写的）。
+核心：好看不是堆东西，是做减法、定规矩、拉开对比。
+
+1. 先读需求，再动手：
+   - 发在哪（小红书封面要在信息流里一眼抓人；朋友圈、海报、邀请函各不一样）、给谁看、想让人看完做什么（收藏、点进来、到店）。
+   - 用户的偏好先看记忆（喜欢的颜色、讨厌的风格、店铺品牌色）；有品牌色就以它为主色。
+
+2. 选风格：design action=styles 看风格库，按内容关键词挑最贴的一个（干货避坑→大字报或知识卡片；穿搭家居探店→杂志编辑或日系清新；国风节日→国风；数码 AI→科技暗色……）。
+   - 风格试衣间：用户没说风格、而且是封面或一组图时，先按 2～3 个差别大的风格各做一张封面小样（同样的标题），用 ask_user 卡片让用户挑（选项写风格名和一句感觉）。用户说「直接做」「你定」就跳过，自己挑最合适的那个，交付时说一句为什么。
+   - 风格定了就照风格库做：字体、字号、配色、装饰、禁忌都照抄，不临场发挥换色换字体。
+
+3. 排版的硬规矩：
+   - 一个焦点：每张图只有一个最大、最先看到的东西（大标题、大数字、或照片）。标题字号至少是正文的 2.5 倍；层级只分三档（标题、小标题、正文），再多就乱。
+   - 对齐：选定左对齐或居中，整张统一；长段落永远左对齐。元素靠同一条边线对齐，间距用同一套数（8 的倍数：16、24、32、48、64）。
+   - 留白：四边至少 64px；宁可少放内容，也别塞满。一张小红书卡片正文不超过 150 字，多了就拆页。
+   - 颜色：60% 底色、30% 辅色、10% 强调色。彩色最多三种，强调色只用在最该看的一两处。字和底的对比度：正文 4.5 以上，大标题 3 以上。
+   - 字体：一张图最多两种中文字体（标题一种、正文一种），英文数字可以再加一种。粗细对比要拉开（标题 900、正文 300～400），比换字体更有效。
+   - 小红书封面：标题 10 字以内最好，占画面三分之一以上；缩到手机信息流那么小（宽 300 左右）还能一眼读出来。
+
+4. 让图有质感（选一两样，别全上）：
+   - 纸纹、颗粒：SVG <filter><feTurbulence type="fractalNoise" baseFrequency="0.8"/></filter> 铺一层，透明度 0.06～0.12。
+   - 荧光笔：关键词加 background: linear-gradient(transparent 55%, 半透明黄 55%)。
+   - 胶带、便利贴：半透明色条斜放 3～6 度；便利贴加一点点硬投影。
+   - 手绘箭头、圈：SVG path，线条两端圆头，稍微不规则。
+   - 硬投影：box-shadow: 8px 8px 0 var(--fg)（偏移、不模糊），比模糊阴影更有设计感。
+   - 照片上压字：加渐变蒙层（从透明到 60% 黑）或纯色条，保证看得清。
+
+5. 出图后自评（工具会给「检查」和「审美检查」，再看大图和缩略图），逐条过：
+   - 焦点：一眼先看到的是不是最重要的那句？
+   - 缩略图：缩到最小还认得出标题、还想点吗？
+   - 对齐和间距：有没有差几像素没对齐的、间距忽大忽小的？
+   - 颜色：有没有超过三种彩色？有没有发灰发闷的？
+   - 留白：有没有贴边、塞满？
+   - AI 味：有没有下面「别做」里的东西？
+   每条 1～5 分，有一条低于 3 分就改，改完再出图。最多改两轮；两轮还不满意就把问题如实告诉用户，给两个改法让他选。
+
+6. 别做（AI 味，一看就是机器做的）：
+   - 蓝紫渐变、霓虹发光字、金属质感渐变、彩虹渐变。
+   - 卡片套卡片、每个元素都有圆角加阴影、每个小标题前都放一个圆角方块图标。
+   - 所有东西都居中、对称得像 PPT 模板；每段字都一样大。
+   - 满屏 emoji、星星火花当装饰；装饰比内容还抢眼。
+   - 文案空话：「探索无限可能」「开启美好生活」「赋能」「极致体验」。用户的真实内容永远比漂亮话好。
+
+7. 听懂用户的改法，按固定动作改（不要整张推翻重来）：
+   - 「高级点」「太花了」→ 收：减颜色、减装饰、加留白、字重拉开对比、换宋体或细黑。
+   - 「活泼点」「太素了」→ 放：加一个高饱和强调色、加贴纸或手绘元素、标题放大、元素略微倾斜。
+   - 「字太多」「太挤」→ 删：删次要信息、拆页、加大间距。
+   - 「看不清」→ 提对比度、加大字号、照片上加蒙层。
+   - 「没重点」→ 只留一个最大的东西，其他都缩小变淡。
+   - 「换个颜色」→ 换风格库里同风格的另一套配色，或者整套换色相，六个变量一起换。
+8. 记偏好：用户明确说喜欢或不喜欢什么（「不要粉色」「喜欢大字」「我们品牌色是墨绿」），用 save_memory 记下来，下次直接照做，不用再问。""",
     ),
     Skill(
         id = SkillIds.TRAIN, builtin = true, name = "火车票",
@@ -654,8 +716,8 @@ val BUILTIN_SKILLS = listOf(
    - 写完用「去 AI 味」的 check_ai_tone 自己过一遍，把命中的改掉再给用户（这一步是你自己的稿子，不用先问）。
    - 不写夸大效果、绝对化的词（最、第一、100%、根治），不承诺收益，医疗、减肥、理财这类说法要格外小心；正文、评论、图片里都不放微信号、二维码、外链这类站外导流。
 5. 做图：
-   - 封面用「设计」技能（design，size=xhs 竖图 3:4）：大字标题占画面三分之一以上，一眼能读完，和同类笔记比要跳出来。
-   - 一篇拆成一组卡片（干货、教程、清单类）：先列分页大纲（封面 + 每页一个要点，通常 4～9 页，最后一页总结或引互动），用户点头再做。第一张用 html 从头设计定下风格，后面每页沿用同一套 CSS、配色、字体和页码位置，只换内容，文件名按 01、02… 编号，整组看起来是一套。
+   - 做图用「设计」插件（design，小红书 3:4），好不好看按「审美」技能：封面大字标题占画面三分之一以上，一眼能读完，缩成信息流里的小图也认得出，和同类笔记比要跳出来。
+   - 一篇拆成一组卡片（干货、教程、清单类）：先列分页大纲（封面 + 每页一个要点，通常 4～9 页，最后一页总结或引互动），用户点头再做；用 design action=series 一次出完，整组一个风格、一套配色、页码统一。
    - 要用真人照片、实拍的，请用户提供；不用别人的图。
 6. 发布：
    - 默认把标题、正文、话题、图片都交给用户自己发。用户要 Kavi 帮着发：phone 打开小红书 App，选图（图要先存到手机：用 phone_files 存进用户授权的文件夹；没授权就请用户在对话里点开图片存到相册）、填标题正文和话题，停在「发布」按钮前，把要发的内容给用户看，用户说发才点。
@@ -1008,7 +1070,7 @@ object SkillTools {
 
     val MANAGE_EMAILS = schema("""{"type":"function","function":{"name":"manage_emails","description":"处理邮件：read/unread 标成已读或未读；trash 删除（移到「已删除」，能找回）；delete_forever 彻底删除；move 移到 target_folder；empty_trash 清空「已删除」（不用填 uids）。删除和移动前一般会弹窗让用户确认。","parameters":{"type":"object","properties":{"action":{"type":"string","enum":["read","unread","trash","delete_forever","move","empty_trash"]},"uids":{"type":"array","items":{"type":"integer"},"description":"list_emails 给出的编号，可以多个，一次最多 200"},"folder":{"type":"string","description":"邮件所在的文件夹；不填就按列表里这几封信所在的文件夹（拿不准会报错让你写明）"},"target_folder":{"type":"string","description":"只有 move 用：移到哪个文件夹"},"account":{"type":"string","description":"用哪个邮箱（邮箱地址），不填用默认邮箱"}},"required":["action"]}}}""")
 
-    val DESIGN = schema("""{"type":"function","function":{"name":"design","description":"做单张设计图（小红书配图、方图、海报、邀请函、贺卡、名片、公众号封面、长图），出 PNG，要打印可再出 PDF。templates 看模板；make 套模板或用 html 从头设计；render 改完底稿 .html 后重新出图。","parameters":{"type":"object","properties":{"action":{"type":"string","enum":["templates","make","render"]},"category":{"type":"string","enum":["xhs","square","poster","invite","card","cover","long"],"description":"templates 时按分类筛：xhs 小红书、square 方图、poster 海报、invite 邀请函贺卡、card 名片、cover 公众号封面、long 长图"},"template":{"type":"string","description":"make：模板 id；不填就用 html 从头设计"},"html":{"type":"string","description":"make 不用模板时：完整 HTML，内容都在 <div class=\"canvas\"> 里，规则见「设计」技能"},"size":{"type":"string","description":"不用模板时的尺寸：xhs、square、poster、a4、invite、card、cover、long，或「宽x高」像素"},"slots":{"type":"object","description":"位置名 → 内容。文字里用 \\n 换行，空字符串表示去掉这个元素；图片位填对话文件夹里的图片文件名"},"lists":{"type":"object","description":"列表名 → 数组，每项是 {位置名: 文字}；每项只有一段字时可以直接写字符串"},"colors":{"type":"object","description":"换配色：bg、fg、primary、secondary、accent、muted → #RRGGBB"},"filename":{"type":"string","description":"文件名（不带扩展名）"},"format":{"type":"string","enum":["png","pdf"],"description":"pdf：除了 PNG 再出一份 PDF（打印用）"},"path":{"type":"string","description":"render：底稿 .html 的文件名"}},"required":["action"]}}}""")
+    val DESIGN = schema("""{"type":"function","function":{"name":"design","description":"做设计图（小红书配图和成组卡片、方图、海报、邀请函、贺卡、名片、公众号封面、长图），出 PNG，要打印可再出 PDF。styles 看风格库；fonts 看字体；templates 看模板；make 做一张（套模板或用 html 从头设计）；series 做一组（小红书一篇拆成几张）；render 改完底稿 .html 后重新出图。","parameters":{"type":"object","properties":{"action":{"type":"string","enum":["styles","fonts","templates","make","series","render"]},"style":{"type":"string","description":"styles：风格 id，看这个风格的字体、配色、版式和禁忌（不填列出全部风格和版式）；templates：只看这个风格的模板"},"category":{"type":"string","enum":["xhs","square","poster","invite","card","cover","long"],"description":"templates 时按分类筛：xhs 小红书、square 方图、poster 海报、invite 邀请函贺卡、card 名片、cover 公众号封面、long 长图"},"template":{"type":"string","description":"make：模板 id；不填就用 html 从头设计"},"html":{"type":"string","description":"make 不用模板时：完整 HTML，内容都在 <div class=\"canvas\"> 里，规则见「设计」的做法"},"size":{"type":"string","description":"不用模板时的尺寸：xhs、square、poster、a4、invite、card、cover、long，或「宽x高」像素"},"slots":{"type":"object","description":"位置名 → 内容。文字里用 \\n 换行，空字符串表示去掉这个元素；图片位填对话文件夹里的图片文件名"},"lists":{"type":"object","description":"列表名 → 数组，每项是 {位置名: 文字}；每项只有一段字时可以直接写字符串"},"colors":{"type":"object","description":"换配色：bg、fg、primary、secondary、accent、muted → #RRGGBB。series 时写在外面，整组共用"},"pages":{"type":"array","description":"series：每张一项，按顺序；每项写 template（或 html + size）、slots、lists，和 make 一样。模板里有 page 位置的会自动填页码","items":{"type":"object","properties":{"template":{"type":"string"},"html":{"type":"string"},"size":{"type":"string"},"slots":{"type":"object"},"lists":{"type":"object"}}}},"filename":{"type":"string","description":"文件名（不带扩展名）；series 时是整组的名字，每张后面自动加 -01、-02"},"format":{"type":"string","enum":["png","pdf"],"description":"pdf：除了 PNG 再出一份 PDF（打印用）"},"path":{"type":"string","description":"render：底稿 .html 的文件名"}},"required":["action"]}}}""")
     val CREATE_APP = schema("""{"type":"function","function":{"name":"create_app","description":"做一个小工具：一个完整的 HTML 网页，直接显示在聊天里，用户能点击、输入、计算，也能全屏打开、下次接着用。","parameters":{"type":"object","properties":{"title":{"type":"string","description":"小工具的名字，比如 贷款计算器"},"html":{"type":"string","description":"完整的 HTML，CSS 和 JS 都写在里面"}},"required":["title","html"]}}}""")
     val CHECK_AI_TONE = schema("""{"type":"function","function":{"name":"check_ai_tone","description":"检测一篇中文稿子的 AI 味，只检测不改：给出整体问题（句子长短太均匀、段首过渡词、小标题太密、破折号）和逐条命中（编号、第几段、原句、改法）。带上原稿时多一张前后对比。","parameters":{"type":"object","properties":{"file":{"type":"string","description":"对话文件夹里的文件名（txt、md、Word、PDF）"},"text":{"type":"string","description":"直接给稿子的文字（没有文件时用）"},"compare_file":{"type":"string","description":"改完复测时填原稿的文件名，出前后对比"},"compare_text":{"type":"string","description":"改完复测时填原稿的文字（原稿不是文件时）"}}}}}""")
     val QUERY_TRAINS = schema("""{"type":"function","function":{"name":"query_trains","description":"查 12306 某天两地之间的高铁、动车、火车车次和余票。只查不买。","parameters":{"type":"object","properties":{"from":{"type":"string","description":"出发站或城市，比如 北京、上海虹桥"},"to":{"type":"string","description":"到达站或城市"},"date":{"type":"string","description":"出发日期 yyyy-MM-dd"},"types":{"type":"string","description":"只看哪些车型，比如 GD（高铁和动车）；不填就全部"},"depart_after":{"type":"string","description":"最早出发时间 HH:mm"},"depart_before":{"type":"string","description":"最晚出发时间 HH:mm"}},"required":["from","to","date"]}}}""")

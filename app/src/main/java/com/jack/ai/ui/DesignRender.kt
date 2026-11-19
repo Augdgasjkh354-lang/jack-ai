@@ -14,6 +14,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import com.jack.ai.data.DesignFonts
 import com.jack.ai.data.DesignTemplates
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -32,7 +33,7 @@ import kotlin.coroutines.resume
 /**
  * 设计出图：在看不见的 WebView 里打开模板（或 Kavi 写的页面），用 fill.js 填好文字、列表、图片、配色、图标，
  * 检查有没有装不下的，再按画布大小一像素对一像素截成 PNG（要的话再出一份 PDF）。
- * 页面从 https://design.jack.local/ 打开；/files/ 下面是对话文件夹里的文件（用户的照片）；不联网。
+ * 页面从 https://design.jack.local/ 打开；/files/ 下面是对话文件夹里的文件（用户的照片），/fonts/ 是字体；页面自己不联网。
  */
 object DesignRender {
     const val HOST = "design.jack.local"
@@ -47,14 +48,19 @@ object DesignRender {
         val blank: Boolean,
         /** 给模型看一眼的小图（JPEG data URL）。 */
         val preview: String?,
+        /** 审美检查的建议（对比度、字号、颜色太多、贴边、AI 味……），见 fill.js 的 lint。 */
+        val advice: List<String> = emptyList(),
+        /** 缩到小红书信息流那么大的缩略图（宽 300），看封面在小图里还认不认得出；长图没有。 */
+        val thumb: String? = null,
     )
 
     /** 对话文件夹里的图片在页面里的地址。 */
     fun fileUrl(name: String) = "/files/" + name.split('/').joinToString("/") { android.net.Uri.encode(it) }
 
     @SuppressLint("SetJavaScriptEnabled")
-    suspend fun render(ctx: Context, dir: File, html: String, w: Int, h: Int, data: JsonObject, png: File, pdf: File?): Result = withContext(Dispatchers.Main) {
-        val page = DesignTemplates.prepare(html, w, h, DesignTemplates.fillJs(ctx)).toByteArray()
+    suspend fun render(ctx: Context, dir: File, html: String, w: Int, h: Int, data: JsonObject, png: File, pdf: File?, previewWidth: Int = 720): Result = withContext(Dispatchers.Main) {
+        val (fontCss, fontsMissing) = fontCss(ctx, html)
+        val page = DesignTemplates.prepare(html, w, h, DesignTemplates.fillJs(ctx), fontCss).toByteArray()
         val loaded = CompletableDeferred<Unit>()
         val view = WebView(ctx.applicationContext)
         suspend fun js(code: String): String = suspendCancellableCoroutine { c -> view.evaluateJavascript(code) { if (c.isActive) c.resume(it ?: "null") } }
@@ -78,20 +84,8 @@ object DesignRender {
             view.webViewClient = object : WebViewClient() {
                 // 网页进程没了（崩溃或内存紧被收回，和 Kavi 浏览器共用一个进程）：丢掉这个网页窗口，不接住的话整个 App 会被系统关掉
                 override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean = view.dropAfterRendererGone()
-                override fun shouldInterceptRequest(v: WebView, request: WebResourceRequest): WebResourceResponse {
-                    val url = request.url
-                    val path = url.path.orEmpty()
-                    fun notFound() = WebResourceResponse("text/plain", "utf-8", 404, "Not Found", null, "".byteInputStream())
-                    // 模板不联网：外面的网址一律不给（字体、图片都只用本地的）
-                    if (url.scheme != "https" || url.host != HOST) return notFound()
-                    if (path == "/" || path.isEmpty()) return WebResourceResponse("text/html", "utf-8", page.inputStream())
-                    if (path.startsWith("/files/")) {
-                        val f = PageCheck.resolve(root, android.net.Uri.decode(path.removePrefix("/files/"))) ?: return notFound()
-                        val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(f.extension.lowercase()) ?: "application/octet-stream"
-                        return WebResourceResponse(mime, null, f.inputStream())
-                    }
-                    return notFound()
-                }
+                override fun shouldInterceptRequest(v: WebView, request: WebResourceRequest): WebResourceResponse =
+                    serve(ctx, root, page, request)
                 override fun onPageFinished(v: WebView, url: String) { loaded.complete(Unit) }
                 override fun shouldOverrideUrlLoading(v: WebView, request: WebResourceRequest) = true
             }
@@ -108,6 +102,7 @@ object DesignRender {
             fun list(k: String) = (o?.get(k) as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.content }
             val problems = list("problems").toMutableList()
             if (o == null) problems += "页面 20 秒没准备好，按现在的样子出图"
+            if (fontsMissing.isNotEmpty()) problems += "字体没下载下来（可能没联网）：${fontsMissing.joinToString("、")}，这次用系统黑体代替了；联网后重新出图，或者换成得意黑、系统黑体"
             val height = if (h > 0) h else ((o?.get("height") as? JsonPrimitive)?.content?.toIntOrNull() ?: 1920).coerceIn(200, MAX_H).also {
                 layout(it); delay(300)
             }
@@ -121,13 +116,42 @@ object DesignRender {
                 png.outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
                 if (pdf != null) writePdf(bmp, pdf)
             }
-            val preview = previewOf(bmp)
+            val preview = previewOf(bmp, previewWidth)
+            val thumb = if (h > 0) previewOf(bmp, 300) else null
             bmp.recycle()
-            Result(w, height, problems, list("unknown"), source, blank, preview)
+            Result(w, height, problems, list("unknown"), source, blank, preview, list("advice"), thumb)
         } finally {
             view.stopLoading()
             view.destroy()
         }
+    }
+
+    /**
+     * 设计页面的请求：/ 是页面本身，/files/ 是对话文件夹里的文件（用户的照片），/fonts/ 是字体（见 DesignFonts）。
+     * 别的网址一律不给：模板不联网（字体由 App 代下，页面自己连不出去）。出图和编辑器共用。
+     */
+    fun serve(ctx: Context, root: File, page: ByteArray, request: WebResourceRequest): WebResourceResponse {
+        val url = request.url
+        val path = url.path.orEmpty()
+        fun notFound() = WebResourceResponse("text/plain", "utf-8", 404, "Not Found", null, "".byteInputStream())
+        if (url.scheme != "https" || url.host != HOST) return notFound()
+        if (path == "/" || path.isEmpty()) return WebResourceResponse("text/html", "utf-8", page.inputStream())
+        if (path.startsWith("/files/")) {
+            val f = PageCheck.resolve(root, android.net.Uri.decode(path.removePrefix("/files/"))) ?: return notFound()
+            val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(f.extension.lowercase()) ?: "application/octet-stream"
+            return WebResourceResponse(mime, null, f.inputStream())
+        }
+        if (path.startsWith("/fonts/")) {
+            val stream = DesignFonts.open(ctx, path) ?: return notFound()
+            return WebResourceResponse("font/woff2", null, 200, "OK", mapOf("Access-Control-Allow-Origin" to "*", "Cache-Control" to "max-age=31536000"), stream)
+        }
+        return notFound()
+    }
+
+    /** 页面用到的字体的 @font-face；下不下来的字体名放在第二个里。要联网，在 IO 线程调。 */
+    suspend fun fontCss(ctx: Context, html: String): Pair<String, List<String>> = withContext(Dispatchers.IO) {
+        val fonts = DesignFonts.used(DesignFonts.all(ctx), html)
+        if (fonts.isEmpty()) "" to emptyList() else DesignFonts.css(ctx, fonts)
     }
 
     /** PDF：一页，按 150dpi 算纸张大小，整张图铺满（打印、发给印刷店用）。 */
@@ -143,9 +167,9 @@ object DesignRender {
         } finally { doc.close() }
     }
 
-    /** 给模型看的小图：最宽 720、最高 2400（长图太长就只看上面一段），JPEG。 */
-    private fun previewOf(bmp: Bitmap): String {
-        val k = minOf(1f, 720f / bmp.width)
+    /** 给模型看的小图：最宽 720（或给定的宽）、最高 2400（长图太长就只看上面一段），JPEG。 */
+    private fun previewOf(bmp: Bitmap, maxW: Int = 720): String {
+        val k = minOf(1f, maxW.toFloat() / bmp.width)
         val pw = (bmp.width * k).toInt().coerceAtLeast(1)
         val ph = (bmp.height * k).toInt().coerceIn(1, 2400)
         val small = Bitmap.createBitmap(pw, ph, Bitmap.Config.ARGB_8888)

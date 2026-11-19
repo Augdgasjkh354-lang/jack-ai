@@ -1,5 +1,187 @@
 [
   {
+    "id": "xhs-bold-cover",
+    "name": "大字报·封面",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "大字报",
+    "look": "bold-poster",
+    "set": "bold-poster-a",
+    "role": "cover",
+    "description": "超大标题加一个反白关键词，右下角巨型描边数字，适合避坑、干货、清单类笔记的封面",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "贴纸标签",
+        "max": 6
+      },
+      {
+        "name": "title",
+        "label": "标题（可用\\n分两三行）",
+        "max": 12
+      },
+      {
+        "name": "keyword",
+        "label": "反白关键词",
+        "max": 6
+      },
+      {
+        "name": "subtitle",
+        "label": "副标题",
+        "max": 22
+      },
+      {
+        "name": "number",
+        "label": "大数字（没有就留空）",
+        "max": 2
+      },
+      {
+        "name": "author",
+        "label": "账号名",
+        "max": 12
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [],
+    "images": [],
+    "colors": {
+      "bg": "#FFE24A",
+      "fg": "#141414",
+      "primary": "#141414",
+      "secondary": "#FFFFFF",
+      "accent": "#D92B22",
+      "muted": "#4A4220"
+    }
+  },
+  {
+    "id": "xhs-bold-ending",
+    "name": "大字报·结尾",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "大字报",
+    "look": "bold-poster",
+    "set": "bold-poster-a",
+    "role": "ending",
+    "description": "一句总结大字加评论区互动问题和关注贴纸，放在一组图的最后一张",
+    "slots": [
+      {
+        "name": "title",
+        "label": "总结大字（可用\\n分行）",
+        "max": 10
+      },
+      {
+        "name": "summary",
+        "label": "一句话总结",
+        "max": 26
+      },
+      {
+        "name": "question",
+        "label": "互动问题",
+        "max": 18
+      },
+      {
+        "name": "follow",
+        "label": "关注贴纸",
+        "max": 6
+      },
+      {
+        "name": "author",
+        "label": "账号名",
+        "max": 12
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [],
+    "images": [],
+    "colors": {
+      "bg": "#FFE24A",
+      "fg": "#141414",
+      "primary": "#141414",
+      "secondary": "#FFFFFF",
+      "accent": "#D92B22",
+      "muted": "#4A4220"
+    }
+  },
+  {
+    "id": "xhs-bold-list",
+    "name": "大字报·清单",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "大字报",
+    "look": "bold-poster",
+    "set": "bold-poster-a",
+    "role": "list",
+    "description": "大字小标题加 3～5 条编号要点，每条一个粗体短标题和一句说明，重点条可以标红，适合干货、避坑、清单的内页",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "小标签",
+        "max": 8
+      },
+      {
+        "name": "title",
+        "label": "本页标题",
+        "max": 10
+      },
+      {
+        "name": "note",
+        "label": "底部提醒",
+        "max": 24
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [
+      {
+        "name": "items",
+        "label": "要点",
+        "min": 3,
+        "max": 5,
+        "slots": [
+          {
+            "name": "head",
+            "label": "短标题",
+            "max": 12
+          },
+          {
+            "name": "text",
+            "label": "说明",
+            "max": 30
+          }
+        ]
+      }
+    ],
+    "images": [],
+    "colors": {
+      "bg": "#FFE24A",
+      "fg": "#141414",
+      "primary": "#141414",
+      "secondary": "#FFFFFF",
+      "accent": "#D92B22",
+      "muted": "#4A4220"
+    }
+  },
+  {
     "id": "xhs-checklist-coral",
     "name": "轻松打卡清单",
     "category": "xhs",

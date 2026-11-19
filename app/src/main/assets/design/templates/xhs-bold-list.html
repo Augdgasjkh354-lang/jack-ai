@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-bold-list","name":"大字报·清单","category":"xhs","size":[1080,1440],"style":"大字报","look":"bold-poster","set":"bold-poster-a","role":"list","description":"大字小标题加 3～5 条编号要点，每条一个粗体短标题和一句说明，重点条可以标红，适合干货、避坑、清单的内页","slots":[{"name":"tag","label":"小标签","max":8},{"name":"title","label":"本页标题","max":10},{"name":"note","label":"底部提醒","max":24},{"name":"page","label":"页码","max":5}],"lists":[{"name":"items","label":"要点","min":3,"max":5,"slots":[{"name":"head","label":"短标题","max":12},{"name":"text","label":"说明","max":30}]}],"images":[],"colors":{"bg":"#FFE24A","fg":"#141414","primary":"#141414","secondary":"#FFFFFF","accent":"#D92B22","muted":"#4A4220"}}'>
+<title>大字报·清单</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#FFE24A;--fg:#141414;--primary:#141414;--secondary:#FFFFFF;--accent:#D92B22;--muted:#4A4220;
+  --font-title:"Smiley Sans","Noto Sans CJK SC",sans-serif;--font-sans:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-num:"Bebas Neue","Smiley Sans",sans-serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:76px 80px 72px;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.10;mix-blend-mode:multiply}
+.top{position:relative;display:flex;align-items:center;justify-content:space-between;height:60px}
+.tag{font-family:var(--font-title);font-size:36px;line-height:1;padding-bottom:6px;border-bottom:6px solid var(--accent)}
+.page{font-family:var(--font-num);font-size:40px;letter-spacing:.06em}
+.title{position:relative;margin:44px 0 0;font-family:var(--font-title);font-weight:400;font-size:120px;line-height:1.04;color:var(--primary)}
+.items{position:relative;display:flex;flex-direction:column;flex:1;min-height:0;margin-top:48px;border-top:6px solid var(--fg)}
+.item{display:grid;grid-template-columns:132px 1fr;align-items:center;column-gap:32px;flex:1;min-height:0;padding:22px 0;border-bottom:3px solid var(--fg)}
+.item .num{display:flex;align-items:center;justify-content:center;width:132px;height:132px;background:var(--fg);color:var(--bg);font-family:var(--font-num);font-size:104px;line-height:1;padding-top:10px}
+.item:nth-child(even) .num{background:transparent;color:var(--fg);-webkit-text-stroke:0;border:6px solid var(--fg)}
+.body{min-width:0}
+.body .head{display:block;font-size:46px;line-height:1.25;font-weight:900;letter-spacing:.01em}
+.body .text{display:block;margin-top:10px;font-size:30px;line-height:1.5;font-weight:500;color:var(--muted)}
+.note{position:relative;display:flex;align-items:center;gap:18px;margin-top:34px;font-size:32px;font-weight:700}
+.note .bang{flex:none;display:flex;align-items:center;justify-content:center;width:52px;height:52px;border-radius:50%;background:var(--accent);color:var(--secondary);font-family:var(--font-title);font-size:40px;line-height:1}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="top">
+    <span class="tag" data-slot="tag" data-max="8">看房时</span>
+    <span class="page" data-slot="page" data-max="5">02/06</span>
+  </div>
+  <h2 class="title" data-slot="title" data-max="10">这几样<br>当场就要查</h2>
+  <div class="items" data-list="items" data-max="5">
+    <div class="item" data-item>
+      <span class="num" data-slot="num">01</span>
+      <div class="body"><span class="head" data-slot="head" data-max="12">打开所有水龙头</span><span class="text" data-slot="text" data-max="30">看水压、看出热水要多久，顺便闻闻下水道有没有味</span></div>
+    </div>
+    <div class="item" data-item>
+      <span class="num" data-slot="num">02</span>
+      <div class="body"><span class="head" data-slot="head" data-max="12">摸墙角和柜子背面</span><span class="text" data-slot="text" data-max="30">有霉斑、起皮的，雨季只会更严重</span></div>
+    </div>
+    <div class="item" data-item>
+      <span class="num" data-slot="num">03</span>
+      <div class="body"><span class="head" data-slot="head" data-max="12">晚上再来一次</span><span class="text" data-slot="text" data-max="30">隔音、楼下烧烤摊、路灯亮不亮，白天都看不出来</span></div>
+    </div>
+  </div>
+  <div class="note"><span class="bang">!</span><span data-slot="note" data-max="24">拍照留底，退租时能省一大笔押金</span></div>
+</div>
+</body>
+</html>

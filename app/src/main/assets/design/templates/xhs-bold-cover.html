@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-bold-cover","name":"大字报·封面","category":"xhs","size":[1080,1440],"style":"大字报","look":"bold-poster","set":"bold-poster-a","role":"cover","description":"超大标题加一个反白关键词，右下角巨型描边数字，适合避坑、干货、清单类笔记的封面","slots":[{"name":"tag","label":"贴纸标签","max":6},{"name":"title","label":"标题（可用\\n分两三行）","max":12},{"name":"keyword","label":"反白关键词","max":6},{"name":"subtitle","label":"副标题","max":22},{"name":"number","label":"大数字（没有就留空）","max":2},{"name":"author","label":"账号名","max":12},{"name":"page","label":"页码","max":5}],"lists":[],"images":[],"colors":{"bg":"#FFE24A","fg":"#141414","primary":"#141414","secondary":"#FFFFFF","accent":"#D92B22","muted":"#4A4220"}}'>
+<title>大字报·封面</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#FFE24A;--fg:#141414;--primary:#141414;--secondary:#FFFFFF;--accent:#D92B22;--muted:#4A4220;
+  --font-title:"Smiley Sans","Noto Sans CJK SC",sans-serif;--font-sans:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-num:"Bebas Neue","Smiley Sans",sans-serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:76px 80px 72px;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+/* 颗粒：让纯色底不那么「电脑味」 */
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.10;mix-blend-mode:multiply}
+.top{position:relative;display:flex;align-items:center;justify-content:space-between;height:72px}
+.tag{display:inline-block;padding:10px 26px 12px;background:var(--fg);color:var(--bg);font-family:var(--font-title);font-size:40px;line-height:1;transform:rotate(-3deg);box-shadow:6px 6px 0 var(--accent)}
+.page{font-family:var(--font-num);font-size:40px;letter-spacing:.06em;color:var(--fg)}
+.hero{position:relative;z-index:2;margin-top:96px}
+.title{margin:0;font-family:var(--font-title);font-weight:400;font-size:178px;line-height:1.02;letter-spacing:-.01em;color:var(--primary)}
+.keyword{display:inline-block;margin-top:26px;padding:6px 30px 14px;background:var(--fg);color:var(--bg);font-family:var(--font-title);font-size:150px;line-height:1.02;transform:rotate(-2deg);box-shadow:12px 12px 0 var(--accent)}
+.subtitle{position:relative;z-index:2;margin-top:58px;max-width:760px;font-size:40px;line-height:1.45;font-weight:500;color:var(--muted)}
+.number{position:absolute;z-index:1;right:-30px;bottom:190px;font-family:var(--font-num);font-size:600px;line-height:.8;color:transparent;-webkit-text-stroke:6px var(--fg);opacity:.9}
+.bottom{position:relative;z-index:2;margin-top:auto;display:flex;align-items:center;justify-content:space-between;padding-top:28px;border-top:5px solid var(--fg)}
+.author{font-size:30px;font-weight:700;letter-spacing:.02em}
+.next{display:flex;align-items:center;gap:14px;font-family:var(--font-title);font-size:38px}
+.next svg{width:64px;height:30px}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="top">
+    <span class="tag" data-slot="tag" data-max="6">避坑指南</span>
+    <span class="page" data-slot="page" data-max="5">01/06</span>
+  </div>
+  <div class="hero">
+    <h1 class="title" data-slot="title" data-max="12">租房之前<br>一定要看的</h1>
+    <span class="keyword" data-slot="keyword" data-max="6">7件小事</span>
+  </div>
+  <div class="subtitle" data-slot="subtitle" data-max="22">第 4 条，九成的人签完合同才发现</div>
+  <div class="number" data-slot="number" data-max="2" data-bleed>7</div>
+  <div class="bottom">
+    <span class="author" data-slot="author" data-max="12">@你的账号</span>
+    <span class="next">往后翻<svg viewBox="0 0 64 30" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 15h54M44 3l13 12-13 12"/></svg></span>
+  </div>
+</div>
+</body>
+</html>

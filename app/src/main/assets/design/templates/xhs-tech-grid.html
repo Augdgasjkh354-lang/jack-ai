@@ -13,10 +13,10 @@ html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
 .canvas:after{content:"";position:absolute;right:-140px;top:210px;width:450px;height:450px;border:1px solid color-mix(in srgb,var(--primary) 30%,transparent);border-radius:50%;box-shadow:0 0 0 36px color-mix(in srgb,var(--primary) 6%,transparent),0 0 0 72px color-mix(in srgb,var(--primary) 4%,transparent)}
 .canvas>*{position:relative;z-index:1}
 .top{display:flex;align-items:center;justify-content:space-between;height:46px}
-.tag{display:inline-flex;align-items:center;padding:10px 17px;border:1px solid color-mix(in srgb,var(--primary) 60%,transparent);border-radius:8px;color:var(--primary);font-size:19px;font-weight:700;letter-spacing:.12em}
-.edition{color:var(--muted);font-size:17px;letter-spacing:.16em}
+.tag{display:inline-flex;align-items:center;padding:10px 17px;border:1px solid color-mix(in srgb,var(--primary) 60%,transparent);border-radius:8px;color:var(--primary);font-size:22px;font-weight:700;letter-spacing:.12em}
+.edition{color:var(--muted);font-size:22px;letter-spacing:.16em}
 .hero{margin-top:42px}
-.eyebrow{display:flex;align-items:center;gap:12px;margin-bottom:14px;color:var(--accent);font-size:18px;font-weight:700;letter-spacing:.18em}
+.eyebrow{display:flex;align-items:center;gap:12px;margin-bottom:14px;color:var(--accent);font-size:22px;font-weight:700;letter-spacing:.18em}
 .eyebrow:before{content:"";width:28px;height:2px;background:var(--accent)}
 .title{max-width:900px;margin:0;font-size:76px;line-height:1.2;font-weight:700;letter-spacing:.015em}
 .subtitle{margin:14px 0 0;color:var(--muted);font-size:28px;line-height:1.45}
@@ -24,11 +24,11 @@ html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
 .metric{display:grid;flex:1;grid-template-columns:174px 1fr 34px;align-items:center;gap:20px;min-height:116px;padding:18px 23px;border:1px solid color-mix(in srgb,var(--primary) 28%,transparent);border-radius:13px;background:color-mix(in srgb,var(--secondary) 82%,var(--bg));counter-increment:metric}
 .metric-label{display:flex;align-items:center;min-height:50px;padding-left:16px;border-left:3px solid var(--primary);color:var(--primary);font-size:23px;line-height:1.25;font-weight:700}
 .metric-text{display:block;color:var(--fg);font-size:26px;line-height:1.42}
-.metric:after{content:counter(metric,decimal-leading-zero);color:var(--accent);font-size:16px;font-weight:700;letter-spacing:.08em}
-.bottom{display:flex;align-items:center;justify-content:space-between;margin-top:19px;padding-top:18px;border-top:1px solid color-mix(in srgb,var(--primary) 32%,transparent);color:var(--muted);font-size:18px}
+.metric:after{content:counter(metric,decimal-leading-zero);color:var(--accent);font-size:22px;font-weight:700;letter-spacing:.08em}
+.bottom{display:flex;align-items:center;justify-content:space-between;margin-top:19px;padding-top:18px;border-top:1px solid color-mix(in srgb,var(--primary) 32%,transparent);color:var(--muted);font-size:22px}
 .bottom-mark{display:flex;align-items:center;gap:10px;color:var(--primary);font-weight:700;letter-spacing:.12em}
 .signal{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 6px color-mix(in srgb,var(--accent) 18%,transparent)}
-span[data-slot]{display:inline-block}
+:where(span[data-slot]){display:inline-block}
 
 /* 项少的时候不把每一项撑成大空框：每项最高 240px，整组在中间；只有 3 项时字放大一档 */
 .metrics{justify-content:center}

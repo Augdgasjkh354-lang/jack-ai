@@ -13,19 +13,19 @@ html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
 .canvas:after{content:"";position:absolute;right:76px;top:165px;width:142px;height:142px;border:2px solid color-mix(in srgb,var(--accent) 66%,transparent);border-radius:50%;box-shadow:inset 0 0 0 9px color-mix(in srgb,var(--bg) 92%,transparent),inset 0 0 0 10px color-mix(in srgb,var(--accent) 46%,transparent)}
 .canvas>*{position:relative;z-index:1}
 .top{display:flex;align-items:center;justify-content:space-between;height:48px}
-.tag{display:inline-flex;align-items:center;padding:9px 16px;border:1px solid color-mix(in srgb,var(--primary) 52%,var(--bg));border-radius:3px;color:var(--primary);font-size:20px;font-weight:700;letter-spacing:.09em}
-.date{color:var(--muted);font-family:var(--font-serif);font-size:19px}
+.tag{display:inline-flex;align-items:center;padding:9px 16px;border:1px solid color-mix(in srgb,var(--primary) 52%,var(--bg));border-radius:3px;color:var(--primary);font-size:22px;font-weight:700;letter-spacing:.09em}
+.date{color:var(--muted);font-family:var(--font-serif);font-size:22px}
 .hero{margin-top:38px}
-.overline{margin-bottom:10px;color:var(--accent);font-size:19px;font-weight:700;letter-spacing:.2em}
+.overline{margin-bottom:10px;color:color-mix(in srgb,var(--accent) 80%,var(--fg));font-size:22px;font-weight:700;letter-spacing:.2em}
 .title{max-width:840px;margin:0;font-family:var(--font-serif);font-size:78px;line-height:1.2;font-weight:700;letter-spacing:.025em}
 .subtitle{max-width:790px;margin:16px 0 0;color:var(--muted);font-size:28px;line-height:1.45}
 .notes{display:flex;flex:1;flex-direction:column;gap:14px;min-height:0;margin-top:28px;counter-reset:note}
 .note{display:grid;flex:1;grid-template-columns:63px 1fr;align-items:center;gap:18px;min-height:108px;padding:16px 20px;border-top:1px solid color-mix(in srgb,var(--primary) 42%,var(--bg));border-bottom:1px solid color-mix(in srgb,var(--primary) 25%,var(--bg));background:color-mix(in srgb,var(--secondary) 60%,var(--bg));counter-increment:note}
 .note:before{content:"0" counter(note);color:var(--accent);font-family:var(--font-serif);font-size:25px;font-weight:700}
 .note-text{display:block;color:var(--fg);font-size:28px;line-height:1.4}
-.bottom{display:flex;align-items:center;justify-content:space-between;margin-top:18px;padding-top:16px;border-top:2px solid color-mix(in srgb,var(--primary) 48%,var(--bg));color:var(--muted);font-family:var(--font-serif);font-size:20px}
-.bottom-stamp{color:var(--accent);font-size:17px;font-weight:700;letter-spacing:.14em}
-span[data-slot]{display:inline-block}
+.bottom{display:flex;align-items:center;justify-content:space-between;margin-top:18px;padding-top:16px;border-top:2px solid color-mix(in srgb,var(--primary) 48%,var(--bg));color:var(--muted);font-family:var(--font-serif);font-size:22px}
+.bottom-stamp{color:color-mix(in srgb,var(--accent) 80%,var(--fg));font-size:22px;font-weight:700;letter-spacing:.14em}
+:where(span[data-slot]){display:inline-block}
 
 /* 项少的时候不把每一项撑成大空框：每项最高 240px，整组在中间；只有 3 项时字放大一档 */
 .notes{justify-content:center}

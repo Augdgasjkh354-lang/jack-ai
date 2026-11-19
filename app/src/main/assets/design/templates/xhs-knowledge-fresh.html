@@ -14,9 +14,9 @@ html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
 .canvas>*{position:relative;z-index:1}
 .topline{display:flex;align-items:center;justify-content:space-between;height:50px}
 .tag{display:inline-flex;align-items:center;min-height:44px;padding:0 20px;border-radius:24px;background:color-mix(in srgb,var(--primary) 12%,var(--bg));color:var(--primary);font-size:23px;font-weight:700;letter-spacing:.04em}
-.series{color:var(--muted);font-size:20px;letter-spacing:.14em;font-weight:700}
+.series{color:var(--muted);font-size:22px;letter-spacing:.14em;font-weight:700}
 .hero{margin-top:40px}
-.eyebrow{margin-bottom:13px;color:var(--primary);font-size:21px;font-weight:700;letter-spacing:.18em}
+.eyebrow{margin-bottom:13px;color:var(--primary);font-size:22px;font-weight:700;letter-spacing:.18em}
 .title{margin:0;font-size:82px;line-height:1.18;font-weight:700;letter-spacing:.01em}
 .subtitle{margin:14px 0 0;color:var(--muted);font-size:31px;line-height:1.4}
 .rule{height:2px;margin-top:27px;background:color-mix(in srgb,var(--primary) 28%,var(--bg))}
@@ -24,10 +24,10 @@ html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
 .point{display:grid;flex:1;grid-template-columns:72px 1fr;align-items:center;gap:19px;min-height:112px;padding:18px 24px;border:1px solid color-mix(in srgb,var(--primary) 12%,var(--bg));border-radius:26px;background:color-mix(in srgb,var(--secondary) 62%,var(--bg));counter-increment:point}
 .point:before{content:counter(point,decimal-leading-zero);display:flex;align-items:center;justify-content:center;width:64px;height:64px;border-radius:50%;background:var(--primary);color:var(--bg);font-size:23px;font-weight:700}
 .point-text{display:block;font-size:28px;line-height:1.42;font-weight:400}
-.bottom{display:flex;align-items:center;justify-content:space-between;margin-top:22px;padding-top:18px;border-top:1px solid color-mix(in srgb,var(--muted) 35%,var(--bg));color:var(--muted);font-size:21px}
+.bottom{display:flex;align-items:center;justify-content:space-between;margin-top:22px;padding-top:18px;border-top:1px solid color-mix(in srgb,var(--muted) 35%,var(--bg));color:var(--muted);font-size:22px}
 .bottom-mark{display:flex;align-items:center;gap:12px;color:var(--primary);font-weight:700}
 .dot{width:13px;height:13px;border-radius:50%;background:var(--accent)}
-span[data-slot]{display:inline-block}
+:where(span[data-slot]){display:inline-block}
 
 /* 项少的时候不把每一项撑成大空框：每项最高 240px，整组在中间；只有 3 项时字放大一档 */
 .points{justify-content:center}

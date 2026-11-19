@@ -1,0 +1,251 @@
+{
+  "styles": [
+    {
+      "id": "bold-poster",
+      "name": "大字报",
+      "mood": "冲击力强、直给、一眼读完",
+      "fits": ["干货", "避坑", "警告", "测评结论", "观点", "必看", "千万别", "促销", "清单"],
+      "fonts": { "title": "Smiley Sans", "body": "Noto Sans SC", "latin": "Bebas Neue" },
+      "type": "标题 140～220px 占画面三分之一以上，最多三行，可以一行一个色块；正文 30～36px 字重 500；关键词用主色底块反白",
+      "layout": "上下分区或大色块切分；标题顶格左对齐；元素少，一张图只说一件事",
+      "decor": "粗黑线框、实心色块、歪 2～4 度的贴纸标签（「必看」「避坑」）、大号编号；可以给标题加 6～10px 的描边或错位色块投影（硬投影，不模糊）",
+      "palettes": [
+        { "name": "黑黄警示", "bg": "#FFE24A", "fg": "#141414", "primary": "#141414", "secondary": "#FFFFFF", "accent": "#D92B22", "muted": "#4A4220" },
+        { "name": "红白", "bg": "#FFF8F0", "fg": "#1C1210", "primary": "#E23B2E", "secondary": "#FFD9CF", "accent": "#1C1210", "muted": "#6B4B45" },
+        { "name": "荧光绿", "bg": "#111111", "fg": "#F5F5F0", "primary": "#C6F432", "secondary": "#2A2A2A", "accent": "#FF5C39", "muted": "#B5B5AC" }
+      ],
+      "avoid": "不要细字、不要渐变、不要留大片空白却只放小字；颜色最多三种",
+      "templates": []
+    },
+    {
+      "id": "magazine",
+      "name": "杂志编辑",
+      "mood": "高级、有品味、像生活方式杂志内页",
+      "fits": ["穿搭", "家居", "旅行", "生活方式", "好物", "探店", "城市", "读书"],
+      "fonts": { "title": "Noto Serif SC", "body": "Noto Sans SC", "latin": "Playfair Display" },
+      "type": "宋体标题 900 字重 88～120px，英文期号、栏目名用 Playfair 斜体；正文 28px 字重 400、行高 1.7；大小字号反差拉满",
+      "layout": "大留白（至少四分之一）；照片大幅出血或占半版；文字靠一侧对齐，用细线和页码、期号营造秩序；可以不对称",
+      "decor": "1px 细线、小号大写英文、期号「VOL.07」、页码、图片说明文字；不用圆角卡片",
+      "palettes": [
+        { "name": "米白黑", "bg": "#F4EFE6", "fg": "#1B1A17", "primary": "#1B1A17", "secondary": "#E4DCCD", "accent": "#B4532A", "muted": "#6E675C" },
+        { "name": "墨绿", "bg": "#EEF0EA", "fg": "#18241D", "primary": "#2F4A3A", "secondary": "#D6DDD2", "accent": "#C08A3E", "muted": "#5B665E" },
+        { "name": "酒红", "bg": "#F6F0EC", "fg": "#221416", "primary": "#7A1F2B", "secondary": "#EADBD4", "accent": "#C99A5B", "muted": "#6F5A5C" }
+      ],
+      "avoid": "不要可爱贴纸、不要满版文字、不要多于两种颜色；不要居中排一切",
+      "templates": []
+    },
+    {
+      "id": "cream",
+      "name": "奶油温柔",
+      "mood": "温柔、治愈、舒服",
+      "fits": ["日常", "vlog", "治愈", "情绪", "自我成长", "下午茶", "宝宝", "宠物"],
+      "fonts": { "title": "LXGW WenKai", "body": "Noto Sans SC", "latin": "Caveat" },
+      "type": "标题 72～96px 楷体 700 或黑体 500；正文 28～30px、行高 1.75；颜色都偏暖，不用纯黑",
+      "layout": "圆角大卡片、柔和的色块，内容居中或左对齐都行；留白多，节奏慢",
+      "decor": "大圆角（32px 以上）、模糊的圆形色斑（用 radial-gradient，透明度低）、小星星、手写英文点缀",
+      "palettes": [
+        { "name": "奶油焦糖", "bg": "#FBF3E6", "fg": "#4A3426", "primary": "#B0703C", "secondary": "#F2DFC4", "accent": "#E9A6A0", "muted": "#7E6656" },
+        { "name": "奶咖", "bg": "#F5EEE6", "fg": "#3D2E25", "primary": "#8B5E3C", "secondary": "#E6D6C3", "accent": "#C9A27E", "muted": "#776455" },
+        { "name": "樱花奶", "bg": "#FFF3F1", "fg": "#4A2C2F", "primary": "#C8606A", "secondary": "#FADCD8", "accent": "#F1B36B", "muted": "#7D5F62" }
+      ],
+      "avoid": "不要高饱和、不要硬朗的黑线框、不要纯黑字",
+      "templates": []
+    },
+    {
+      "id": "dopamine",
+      "name": "多巴胺",
+      "mood": "快乐、活泼、色彩炸裂但不乱",
+      "fits": ["穿搭", "零食", "夏天", "派对", "好物分享", "开心", "旅行", "美甲"],
+      "fonts": { "title": "ZCOOL KuaiLe", "body": "Noto Sans SC", "latin": "Archivo Black" },
+      "type": "标题 110～160px，可以每个字换一个色；正文 30px 字重 500",
+      "layout": "撞色大色块拼接、贴纸式卡片，元素可以略微旋转；一个视觉主角",
+      "decor": "4～6px 粗黑描边、硬投影（偏移不模糊）、星星、波浪线、圆点、笑脸",
+      "palettes": [
+        { "name": "粉绿", "bg": "#FFF5FA", "fg": "#1E1A1D", "primary": "#E8338A", "secondary": "#B8F26B", "accent": "#3A7BFF", "muted": "#5E4E58" },
+        { "name": "橙紫", "bg": "#FFF7EC", "fg": "#1F1720", "primary": "#E06000", "secondary": "#C9B6FF", "accent": "#18B89A", "muted": "#5F5160" },
+        { "name": "柠檬蓝", "bg": "#F4FBFF", "fg": "#0F1C2A", "primary": "#1F6BFF", "secondary": "#FFE85C", "accent": "#FF5F6D", "muted": "#4C5B6B" }
+      ],
+      "avoid": "不要灰调、不要细线、不要超过三个高饱和色同时大面积出现（另外的只做点缀）",
+      "templates": []
+    },
+    {
+      "id": "minimal",
+      "name": "极简白",
+      "mood": "干净、克制、专业",
+      "fits": ["职场", "效率", "数码", "理财", "自律", "学习方法", "极简生活"],
+      "fonts": { "title": "Noto Sans SC", "body": "Noto Sans SC", "latin": "Montserrat" },
+      "type": "靠字重对比：标题 900、正文 300；标题 90～130px；一个强调色只用在一两个关键词上",
+      "layout": "严格网格、大量留白（至少三分之一空着）、左对齐；信息按层级分三档，不再多",
+      "decor": "几乎没有：细线、序号、一个小色块；可以用很淡的网格线",
+      "palettes": [
+        { "name": "白黑蓝", "bg": "#FFFFFF", "fg": "#111111", "primary": "#111111", "secondary": "#F1F1F1", "accent": "#2457F5", "muted": "#6B6B6B" },
+        { "name": "暖白橙", "bg": "#FAF9F6", "fg": "#151412", "primary": "#151412", "secondary": "#EDEBE5", "accent": "#F05A1A", "muted": "#6E6B64" },
+        { "name": "浅灰绿", "bg": "#F3F4F2", "fg": "#121513", "primary": "#121513", "secondary": "#E2E5E1", "accent": "#1E8A5A", "muted": "#626862" }
+      ],
+      "avoid": "不要装饰图形堆砌、不要多种强调色、不要阴影和圆角卡片套卡片",
+      "templates": []
+    },
+    {
+      "id": "notebook",
+      "name": "手账拼贴",
+      "mood": "真实、有温度、像手写笔记本",
+      "fits": ["学习笔记", "读书笔记", "计划", "日记", "复盘", "备考", "手帐"],
+      "fonts": { "title": "LXGW WenKai", "body": "LXGW WenKai", "latin": "Caveat" },
+      "type": "标题 80～100px 楷体 700；正文 30px 楷体；重点用荧光笔底色（半透明的黄、粉、绿，高度只盖住字的下半截）",
+      "layout": "纸张底（横线、方格或点阵），便利贴、胶带、拍立得照片斜着贴，略微不整齐才像真的",
+      "decor": "胶带（半透明色条，两端锯齿）、便利贴、回形针、手绘箭头和圈（SVG 路径，线条有点抖）、红笔批注",
+      "palettes": [
+        { "name": "牛皮纸", "bg": "#F6EFDF", "fg": "#2E2A24", "primary": "#C2412D", "secondary": "#FFE98A", "accent": "#5B8DD6", "muted": "#6E6556" },
+        { "name": "白纸蓝笔", "bg": "#FBFBF7", "fg": "#1F2A44", "primary": "#2E5BBA", "secondary": "#FFF08A", "accent": "#E0483E", "muted": "#5D6475" },
+        { "name": "粉色手帐", "bg": "#FFF6F2", "fg": "#3A2A2C", "primary": "#D9566B", "secondary": "#FFE2A8", "accent": "#6CB59B", "muted": "#7A6366" }
+      ],
+      "avoid": "不要整整齐齐的网格卡片、不要科技感元素、不要渐变",
+      "templates": []
+    },
+    {
+      "id": "knowledge",
+      "name": "知识卡片",
+      "mood": "清楚、好收藏、一看就懂",
+      "fits": ["干货", "教程", "知识点", "科普", "步骤", "方法论", "合集", "工具推荐"],
+      "fonts": { "title": "Noto Sans SC", "body": "Noto Sans SC", "latin": "Space Grotesk" },
+      "type": "标题 900 字重 84～110px；小标题 700 字重 36～40px；正文 28～30px 字重 400、行高 1.6；编号用英文数字字体",
+      "layout": "编号块、两栏或纵向列表；每块一个小标题加一两句说明；信息多时用浅色块分组",
+      "decor": "大号编号、荧光笔划重点、小图标（data-icon）、浅色分组底",
+      "palettes": [
+        { "name": "薄荷绿", "bg": "#F3F8F2", "fg": "#17271F", "primary": "#2E7A55", "secondary": "#DCEBDD", "accent": "#E3A23B", "muted": "#566A5E" },
+        { "name": "雾蓝", "bg": "#F2F6FB", "fg": "#142033", "primary": "#2F5DA8", "secondary": "#DCE6F4", "accent": "#F2A33A", "muted": "#56627A" },
+        { "name": "暖橙", "bg": "#FFF7EF", "fg": "#2A1C12", "primary": "#D3602A", "secondary": "#FBE3CF", "accent": "#2F7D6D", "muted": "#715E50" }
+      ],
+      "avoid": "不要每块都加阴影、不要每个小标题前都放图标、不要一页超过 7 块",
+      "templates": []
+    },
+    {
+      "id": "film",
+      "name": "胶片复古",
+      "mood": "怀旧、有故事感、松弛",
+      "fits": ["旅行", "城市漫步", "回忆", "摄影", "老店", "秋天", "日落", "复古穿搭"],
+      "fonts": { "title": "Noto Serif SC", "body": "Noto Sans SC", "latin": "Bebas Neue" },
+      "type": "标题宋体 700 72～100px；日期、编号用 Bebas 橙色数字，像胶片相机打的日期；正文 28px",
+      "layout": "照片占主体（加白边像冲洗出来的照片），文字放在照片下方或一角",
+      "decor": "颗粒噪点（SVG feTurbulence 做的半透明颗粒）、褪色暖调、胶片齿孔、日期戳、轻微暗角",
+      "palettes": [
+        { "name": "柯达暖黄", "bg": "#EFE6D2", "fg": "#2B241B", "primary": "#A8432A", "secondary": "#DCCCA9", "accent": "#E88A2E", "muted": "#6F6250" },
+        { "name": "褪色青", "bg": "#E6EAE3", "fg": "#1F2724", "primary": "#2F5F5A", "secondary": "#CFD7CC", "accent": "#D97B3C", "muted": "#5C6862" },
+        { "name": "夜晚", "bg": "#1D1B18", "fg": "#EFE7D8", "primary": "#E9B86A", "secondary": "#2E2A24", "accent": "#D9643A", "muted": "#B2A894" }
+      ],
+      "avoid": "不要纯白底、不要鲜艳的数码色、不要圆角大卡片",
+      "templates": []
+    },
+    {
+      "id": "guofeng",
+      "name": "国风",
+      "mood": "雅致、有文化感",
+      "fits": ["节气", "传统节日", "诗词", "茶", "汉服", "非遗", "古镇", "中医养生"],
+      "fonts": { "title": "Ma Shan Zheng", "body": "Noto Serif SC", "latin": "" },
+      "type": "毛笔或行书标题 120～180px（Ma Shan Zheng 或 Zhi Mang Xing）；正文宋体 28～30px；可以竖排（writing-mode: vertical-rl）",
+      "layout": "大留白、对称或竖排；标题和印章构成视觉中心；内容少而精",
+      "decor": "朱红方印（方框里两三个字）、细框线、宣纸纹理、远山水墨（低透明度的渐变色块）、云纹",
+      "palettes": [
+        { "name": "宣纸朱砂", "bg": "#F3ECDD", "fg": "#231C16", "primary": "#B83A2B", "secondary": "#E4D8C0", "accent": "#2E4F4A", "muted": "#6D6253" },
+        { "name": "黛青", "bg": "#E9EDE8", "fg": "#1A2423", "primary": "#2D5651", "secondary": "#D3DCD6", "accent": "#B2483A", "muted": "#566461" },
+        { "name": "玄色金", "bg": "#1C1A17", "fg": "#EDE3CF", "primary": "#C9A35C", "secondary": "#2C2823", "accent": "#B83A2B", "muted": "#ADA18A" }
+      ],
+      "avoid": "不要卡通、不要英文装饰、不要高饱和亮色；毛笔字不要用在正文",
+      "templates": []
+    },
+    {
+      "id": "tech",
+      "name": "科技暗色",
+      "mood": "酷、专业、未来感",
+      "fits": ["AI", "数码", "编程", "工具", "效率软件", "评测", "数据"],
+      "fonts": { "title": "Noto Sans SC", "body": "Noto Sans SC", "latin": "Space Grotesk" },
+      "type": "标题 900 字重 90～120px；数字和英文用 Space Grotesk；小标签用全大写英文 20px 字距拉开",
+      "layout": "深色底、网格线、模块化卡片（1px 亮线描边而不是阴影）；一个亮色做强调",
+      "decor": "细网格、坐标刻度、「01 / 05」编号、代码风格的小标签、一个强调色的光块",
+      "palettes": [
+        { "name": "黑底酸绿", "bg": "#0E0F0C", "fg": "#EDEEE8", "primary": "#B6F23D", "secondary": "#1C1E19", "accent": "#5AD1FF", "muted": "#A3A69C" },
+        { "name": "深海蓝", "bg": "#0B1220", "fg": "#E8EEF8", "primary": "#4C8DFF", "secondary": "#16213A", "accent": "#FFB547", "muted": "#9AA6BD" },
+        { "name": "石墨橙", "bg": "#151515", "fg": "#F0EEEA", "primary": "#FF6B2C", "secondary": "#232323", "accent": "#E8E8E8", "muted": "#A9A6A0" }
+      ],
+      "avoid": "绝对不要蓝紫渐变、发光字、满屏霓虹；强调色只用一个",
+      "templates": []
+    },
+    {
+      "id": "black-gold",
+      "name": "高级黑金",
+      "mood": "奢华、隆重、有仪式感",
+      "fits": ["高端", "品牌", "年会", "邀请", "珠宝", "酒", "颁奖", "开业"],
+      "fonts": { "title": "Noto Serif SC", "body": "Noto Serif SC", "latin": "DM Serif Display" },
+      "type": "宋体 900 标题 80～110px，字距略拉开（0.06em）；英文用 DM Serif；正文 26～28px",
+      "layout": "居中对称、上下大留白；内容极少；用细框和分隔线建立秩序",
+      "decor": "金色细线框、双线、小菱形分隔符、编号；金色用一个纯色，不要做金属渐变",
+      "palettes": [
+        { "name": "黑金", "bg": "#111111", "fg": "#F2EBDD", "primary": "#C8A464", "secondary": "#1F1D1A", "accent": "#E6D3A8", "muted": "#ADA594" },
+        { "name": "墨绿金", "bg": "#0F1F1A", "fg": "#EFE8D8", "primary": "#C9A766", "secondary": "#1B2E27", "accent": "#E4D2A6", "muted": "#A6AA9C" },
+        { "name": "酒红金", "bg": "#2A0F14", "fg": "#F4E9DF", "primary": "#D4AE6E", "secondary": "#3B1A20", "accent": "#EED9B0", "muted": "#B9A39C" }
+      ],
+      "avoid": "不要可爱元素、不要多种颜色、不要金属质感渐变和发光",
+      "templates": []
+    },
+    {
+      "id": "study",
+      "name": "学习笔记",
+      "mood": "认真、真实、学霸感",
+      "fits": ["考研", "考公", "英语", "错题", "笔记", "背诵", "考试", "公式"],
+      "fonts": { "title": "LXGW WenKai", "body": "LXGW WenKai", "latin": "Caveat" },
+      "type": "标题楷体 700 72～90px；正文 28～30px；蓝笔正文、红笔批注、黄色荧光笔划重点",
+      "layout": "方格纸或横线纸背景、左侧留装订线；条目编号；重点框起来",
+      "decor": "方格背景（repeating-linear-gradient 画）、红笔圈和下划线、荧光笔、便利贴",
+      "palettes": [
+        { "name": "方格蓝红", "bg": "#FDFDF8", "fg": "#1E2B55", "primary": "#1E2B55", "secondary": "#FFF27A", "accent": "#D63A32", "muted": "#5B6380" },
+        { "name": "护眼绿", "bg": "#F2F7EC", "fg": "#1D2B22", "primary": "#2B5E45", "secondary": "#FFE98C", "accent": "#C94C3C", "muted": "#58675C" }
+      ],
+      "avoid": "不要花哨配色、不要贴纸太多盖过内容",
+      "templates": []
+    },
+    {
+      "id": "japanese",
+      "name": "日系清新",
+      "mood": "通透、安静、空气感",
+      "fits": ["日常", "咖啡", "植物", "海边", "夏天", "独处", "摄影", "极简生活"],
+      "fonts": { "title": "Noto Sans SC", "body": "Noto Sans SC", "latin": "Montserrat" },
+      "type": "标题反而不大：56～80px，字重 300 或 500，字距 0.1em；正文 26～28px 字重 300；英文小字点缀",
+      "layout": "照片为主、大面积留白；文字小而精，放在角落或竖排；整体偏冷、偏亮",
+      "decor": "细线、小圆点、竖排小字、日期；几乎不用色块",
+      "palettes": [
+        { "name": "天空蓝", "bg": "#F4F8FA", "fg": "#26323A", "primary": "#4F7E9C", "secondary": "#E3EDF2", "accent": "#E7A65B", "muted": "#5E6B74" },
+        { "name": "抹茶", "bg": "#F5F7F0", "fg": "#2A3127", "primary": "#6A8A55", "secondary": "#E6ECDD", "accent": "#D79A7A", "muted": "#626A5C" }
+      ],
+      "avoid": "不要粗大标题、不要高饱和、不要塞满",
+      "templates": []
+    },
+    {
+      "id": "newspaper",
+      "name": "报纸",
+      "mood": "有观点、有信息量、复古权威",
+      "fits": ["观点", "热点", "盘点", "新闻", "行业分析", "年度总结", "吐槽"],
+      "fonts": { "title": "Noto Serif SC", "body": "Noto Serif SC", "latin": "Playfair Display" },
+      "type": "报头宋体 900 大字；标题 80～110px；正文 26～28px 两到三栏；首字下沉",
+      "layout": "多栏、粗细线分隔、报头加日期期号；黑白为主加一个红",
+      "decor": "粗细双线、栏间竖线、网点（radial-gradient 小圆点）、黑白照片",
+      "palettes": [
+        { "name": "旧报纸", "bg": "#F1ECE1", "fg": "#161412", "primary": "#161412", "secondary": "#E0D8C8", "accent": "#C4302B", "muted": "#5E5850" },
+        { "name": "白报蓝", "bg": "#FAFAF7", "fg": "#141820", "primary": "#141820", "secondary": "#E6E6E0", "accent": "#1F4FA8", "muted": "#5D616B" }
+      ],
+      "avoid": "不要圆角、不要可爱元素、不要多色",
+      "templates": []
+    }
+  ],
+  "layouts": [
+    { "id": "cover", "name": "大标题封面", "use": "一组图的第 1 张、单张封面", "how": "标题占画面三分之一以上，一眼能读完（10 字以内最好）；副标题一行；一个视觉主角（大字、照片或图形）；页面上别的东西越少越好" },
+    { "id": "list", "name": "清单", "use": "N 个推荐、N 条建议、避坑清单", "how": "3～7 项，每项一个短标题加一句说明；大号编号；项与项间距一致" },
+    { "id": "steps", "name": "步骤流程", "use": "教程、操作步骤、时间线", "how": "3～6 步，用编号和连接线体现顺序；每步一个动词开头的短句" },
+    { "id": "compare", "name": "对比", "use": "A vs B、改前改后、对与错", "how": "左右或上下两栏，同样的维度一一对应；错的用灰或叉，对的用主色或勾" },
+    { "id": "grid", "name": "宫格", "use": "多个好物、多张照片、四象限", "how": "2×2 或 3×3，格子大小一致、间距一致；每格的文字长度差不多" },
+    { "id": "quote", "name": "金句", "use": "一句话观点、语录、书摘", "how": "只放一句话，字很大、留白很多；出处小字放在下方" },
+    { "id": "photo", "name": "大图配字", "use": "探店、穿搭、旅行、实拍", "how": "照片占 60% 以上；文字压在照片上要加渐变蒙层或纯色条，保证看得清" },
+    { "id": "data", "name": "大数字", "use": "成绩、收益、对比数据、倒计时", "how": "一个大数字是主角（200px 以上），单位和说明小字；最多三个数" },
+    { "id": "qa", "name": "问答", "use": "常见问题、答疑、采访", "how": "Q 和 A 用颜色或字重区分；3～5 组；问题短、回答两三句" },
+    { "id": "ending", "name": "结尾页", "use": "一组图的最后一张", "how": "总结一句话或互动问题（「你踩过哪个坑？」）加关注引导；风格跟封面呼应" }
+  ]
+}

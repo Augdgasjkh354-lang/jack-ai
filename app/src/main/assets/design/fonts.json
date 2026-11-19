@@ -1,0 +1,241 @@
+[
+ {
+  "id": "smiley",
+  "family": "Smiley Sans",
+  "label": "得意黑",
+  "use": "窄长、带斜度的潮流黑体：大字报、封面大标题、数字。只有一档字重，不要再加粗",
+  "weights": "400",
+  "bundled": "design/fonts/SmileySans-Oblique.woff2",
+  "cjk": true
+ },
+ {
+  "id": "noto-sans",
+  "family": "Noto Sans SC",
+  "label": "思源黑体（多字重）",
+  "use": "最稳的黑体，正文和标题都行；比手机自带的多了细体 300 和特粗 900，粗细对比拉开就有设计感",
+  "weights": "300/400/500/700/900",
+  "pkg": "@fontsource/noto-sans-sc@5.3.1",
+  "css": [
+   "300.css",
+   "400.css",
+   "500.css",
+   "700.css",
+   "900.css"
+  ],
+  "cjk": true
+ },
+ {
+  "id": "noto-serif",
+  "family": "Noto Serif SC",
+  "label": "思源宋体",
+  "use": "杂志、文艺、高级感：标题用 900，正文用 400；有的手机没有宋体，用它最保险",
+  "weights": "400/700/900",
+  "pkg": "@fontsource/noto-serif-sc@5.3.1",
+  "css": [
+   "400.css",
+   "700.css",
+   "900.css"
+  ],
+  "cjk": true
+ },
+ {
+  "id": "wenkai",
+  "family": "LXGW WenKai",
+  "label": "霞鹜文楷",
+  "use": "清秀的楷体：读书笔记、温柔文艺、手账、引语",
+  "weights": "400/700",
+  "pkg": "lxgw-wenkai-webfont@1.7.0",
+  "css": [
+   "lxgwwenkai-regular.css",
+   "lxgwwenkai-bold.css"
+  ],
+  "cjk": true
+ },
+ {
+  "id": "kuaile",
+  "family": "ZCOOL KuaiLe",
+  "label": "站酷快乐体",
+  "use": "圆润可爱：萌系、童趣、生活分享的标题",
+  "weights": "400",
+  "pkg": "@fontsource/zcool-kuaile@5.3.0",
+  "css": [
+   "400.css"
+  ],
+  "cjk": true
+ },
+ {
+  "id": "huangyou",
+  "family": "ZCOOL QingKe HuangYou",
+  "label": "站酷庆科黄油体",
+  "use": "粗壮方正、冲击力强：促销、大字报、警示",
+  "weights": "400",
+  "pkg": "@fontsource/zcool-qingke-huangyou@5.3.0",
+  "css": [
+   "400.css"
+  ],
+  "cjk": true
+ },
+ {
+  "id": "xiaowei",
+  "family": "ZCOOL XiaoWei",
+  "label": "站酷小薇",
+  "use": "清秀的细宋：文艺、诗句、慢生活",
+  "weights": "400",
+  "pkg": "@fontsource/zcool-xiaowei@5.3.0",
+  "css": [
+   "400.css"
+  ],
+  "cjk": true
+ },
+ {
+  "id": "mashanzheng",
+  "family": "Ma Shan Zheng",
+  "label": "马善政毛笔楷书",
+  "use": "毛笔楷书：国风、节日、书法感标题",
+  "weights": "400",
+  "pkg": "@fontsource/ma-shan-zheng@5.3.1",
+  "css": [
+   "400.css"
+  ],
+  "cjk": true
+ },
+ {
+  "id": "zhimang",
+  "family": "Zhi Mang Xing",
+  "label": "志莽行书",
+  "use": "行书：国风、诗意标题，两到八个字最好看",
+  "weights": "400",
+  "pkg": "@fontsource/zhi-mang-xing@5.3.0",
+  "css": [
+   "400.css"
+  ],
+  "cjk": true
+ },
+ {
+  "id": "liujian",
+  "family": "Liu Jian Mao Cao",
+  "label": "刘建毛草",
+  "use": "狂草：只适合两三个字的大标题，正文别用",
+  "weights": "400",
+  "pkg": "@fontsource/liu-jian-mao-cao@5.3.0",
+  "css": [
+   "400.css"
+  ],
+  "cjk": true
+ },
+ {
+  "id": "longcang",
+  "family": "Long Cang",
+  "label": "龙藏体",
+  "use": "手写钢笔字：手账、日记、批注、签名",
+  "weights": "400",
+  "pkg": "@fontsource/long-cang@5.3.0",
+  "css": [
+   "400.css"
+  ],
+  "cjk": true
+ },
+ {
+  "id": "playfair",
+  "family": "Playfair Display",
+  "label": "Playfair（英文衬线）",
+  "use": "杂志感英文标题、大号数字，配宋体",
+  "weights": "400/700/900",
+  "pkg": "@fontsource/playfair-display@5.3.0",
+  "css": [
+   "400.css",
+   "700.css",
+   "900.css"
+  ],
+  "cjk": false
+ },
+ {
+  "id": "dm-serif",
+  "family": "DM Serif Display",
+  "label": "DM Serif（英文衬线）",
+  "use": "优雅的英文大标题，配宋体、黑金风",
+  "weights": "400",
+  "pkg": "@fontsource/dm-serif-display@5.3.0",
+  "css": [
+   "400.css"
+  ],
+  "cjk": false
+ },
+ {
+  "id": "bebas",
+  "family": "Bebas Neue",
+  "label": "Bebas（英文窄体）",
+  "use": "窄长的大写英文和数字：日期、价格、编号、大数字",
+  "weights": "400",
+  "pkg": "@fontsource/bebas-neue@5.3.0",
+  "css": [
+   "400.css"
+  ],
+  "cjk": false
+ },
+ {
+  "id": "oswald",
+  "family": "Oswald",
+  "label": "Oswald（英文窄体）",
+  "use": "窄体英文和数字，比 Bebas 多几档粗细",
+  "weights": "400/700",
+  "pkg": "@fontsource/oswald@5.3.0",
+  "css": [
+   "400.css",
+   "700.css"
+  ],
+  "cjk": false
+ },
+ {
+  "id": "montserrat",
+  "family": "Montserrat",
+  "label": "Montserrat（英文几何）",
+  "use": "现代几何无衬线：英文标签、品牌名",
+  "weights": "400/700/900",
+  "pkg": "@fontsource/montserrat@5.3.0",
+  "css": [
+   "400.css",
+   "700.css",
+   "900.css"
+  ],
+  "cjk": false
+ },
+ {
+  "id": "space-grotesk",
+  "family": "Space Grotesk",
+  "label": "Space Grotesk（英文科技）",
+  "use": "科技感英文和数字",
+  "weights": "400/700",
+  "pkg": "@fontsource/space-grotesk@5.3.0",
+  "css": [
+   "400.css",
+   "700.css"
+  ],
+  "cjk": false
+ },
+ {
+  "id": "archivo-black",
+  "family": "Archivo Black",
+  "label": "Archivo Black（英文粗黑）",
+  "use": "又粗又黑的英文大字：多巴胺、大字报里的英文",
+  "weights": "400",
+  "pkg": "@fontsource/archivo-black@5.3.0",
+  "css": [
+   "400.css"
+  ],
+  "cjk": false
+ },
+ {
+  "id": "caveat",
+  "family": "Caveat",
+  "label": "Caveat（英文手写）",
+  "use": "手写英文：批注、签名、小装饰字",
+  "weights": "400/700",
+  "pkg": "@fontsource/caveat@5.3.0",
+  "css": [
+   "400.css",
+   "700.css"
+  ],
+  "cjk": false
+ }
+]
