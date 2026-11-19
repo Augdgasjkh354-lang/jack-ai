@@ -3,7 +3,8 @@
 // 改动都写成元素自己的 style（translate、scale、rotate、color、font-size……），存底稿时一起存下，之后出图、Kavi 再改都认。
 // 编辑器自己加的东西都带 data-kavi-temp，存底稿时 kaviSource() 会去掉。
 (function () {
-  var canvas, overlay, box, guides = {}, sel = null, history = [], future = [], dragging = null;
+  // sel 是主选中（工具栏、改字跟着它）；sels 是全部选中的（多选时一起挪、一起对齐）
+  var canvas, overlay, boxes = [], handles = {}, guides = {}, sel = null, sels = [], multi = false, history = [], future = [], dragging = null;
   var editing = null, editBefore = null, lastRange = null, lastTap = { t: 0, el: null };
   var bridge = window.KaviEditor || { select: function () {}, state: function () {} };
   var VARS = ["bg", "fg", "primary", "secondary", "accent", "muted"];
@@ -16,11 +17,16 @@
   function snapshot() { return canvas.innerHTML + "\u0000" + (canvas.getAttribute("style") || ""); }
   function restore(s) {
     var i = s.indexOf("\u0000");
-    var path = sel ? pathOf(sel) : null;
+    var paths = sels.map(pathOf), main = sel ? pathOf(sel) : null;
     canvas.innerHTML = s.slice(0, i);
     if (s.slice(i + 1)) canvas.setAttribute("style", s.slice(i + 1)); else canvas.removeAttribute("style");
-    select(path ? byPath(path) : null);
+    sels = paths.map(byPath).filter(Boolean);
+    sel = main ? byPath(main) : null;
+    if (sel && sels.indexOf(sel) < 0) sels.push(sel);
+    drawBox(); report();
   }
+  // 撤销历史里的一步：连着的同一种小操作（微调、数值加减）合成一步
+  var lastOp = { op: "", t: 0 };
   function push(s) { history.push(s); if (history.length > 60) history.shift(); future = []; state(); }
   function remember() { push(snapshot()); }
   function state() { bridge.state(JSON.stringify({ undo: history.length > 0, redo: future.length > 0, editing: !!editing })); }
@@ -69,7 +75,7 @@
     return out;
   }
   function info(el) {
-    if (!el) return { kind: "none", editing: false };
+    if (!el) return { kind: "none", editing: false, count: 0, multi: multi };
     var cs = getComputedStyle(el), size = parseFloat(cs.fontSize) || 16;
     var lh = parseFloat(cs.lineHeight);
     return {
@@ -81,45 +87,116 @@
       letterSpacing: Math.round((parseFloat(cs.letterSpacing) || 0) / size * 100) / 100,
       fx: el.getAttribute("data-kv-fx") || "", added: el.hasAttribute("data-kv-added"), editing: editing === el,
       styled: !!el.querySelector("span[style]"),
+      opacity: Math.round((parseFloat(cs.opacity) || 1) * 100), locked: el.hasAttribute("data-kv-lock"),
+      count: sels.length, multi: multi, width: Math.round(el.offsetWidth),
     };
   }
 
-  // —— 选中框和对齐线 ——
+  // —— 选中框、手柄和对齐线 ——
+  // 手柄（只在选中一个、没锁住时有）：四角缩放、顶上旋转、文字框右边拖宽。手柄是框的子元素，框转了它们跟着转
+  var HANDLE = 44, HIT = 60, ROT_GAP = 90;
   function makeOverlay() {
     overlay = document.createElement("div");
     overlay.setAttribute("data-kavi-temp", "");
     overlay.style.cssText = "position:absolute;left:0;top:0;width:0;height:0;pointer-events:none;z-index:2147483647";
-    box = document.createElement("div");
-    box.style.cssText = "position:absolute;border:6px solid #2F7CF6;box-shadow:0 0 0 2px rgba(255,255,255,.9);border-radius:4px;display:none;transform-origin:center";
-    overlay.appendChild(box);
     ["v", "h"].forEach(function (key) {
       var g = document.createElement("div");
       g.style.cssText = "position:absolute;background:#FF3B7F;display:none;" + (key === "v" ? "top:0;width:4px;" : "left:0;height:4px;");
       overlay.appendChild(g); guides[key] = g;
     });
+    // 参考线可能有好几条（对齐别的元素时）：再备几条
+    guides.extra = [];
+    for (var i = 0; i < 4; i++) {
+      var g = document.createElement("div");
+      g.style.cssText = "position:absolute;background:#FF3B7F;display:none";
+      overlay.appendChild(g); guides.extra.push(g);
+    }
     document.body.appendChild(overlay);
   }
+  function makeBox() {
+    var b = document.createElement("div");
+    b.style.cssText = "position:absolute;border:6px solid #2F7CF6;box-shadow:0 0 0 2px rgba(255,255,255,.9);border-radius:4px;display:none;transform-origin:center";
+    overlay.appendChild(b);
+    return b;
+  }
+  function makeHandles(b) {
+    function dot(kind, css) {
+      var d = document.createElement("div");
+      d.style.cssText = "position:absolute;width:" + HANDLE + "px;height:" + HANDLE + "px;margin:-" + (HANDLE / 2 + 3) + "px 0 0 -" + (HANDLE / 2 + 3) + "px;background:#fff;border:6px solid #2F7CF6;border-radius:50%;box-sizing:border-box;" + css;
+      b.appendChild(d); handles[kind] = d;
+      return d;
+    }
+    dot("nw", "left:0;top:0"); dot("ne", "left:100%;top:0"); dot("sw", "left:0;top:100%"); dot("se", "left:100%;top:100%");
+    dot("e", "left:100%;top:50%;width:24px;height:" + (HANDLE + 20) + "px;margin:-" + (HANDLE / 2 + 13) + "px 0 0 -15px;border-radius:12px");
+    var stem = document.createElement("div");
+    stem.style.cssText = "position:absolute;left:50%;top:-" + ROT_GAP + "px;width:4px;height:" + ROT_GAP + "px;margin-left:-5px;background:#2F7CF6";
+    b.appendChild(stem); handles.stem = stem;
+    dot("rot", "left:50%;top:-" + ROT_GAP + "px;background:#2F7CF6;border-color:#fff");
+  }
+  // 元素没变换时的大小和中心（中心不受旋转影响）
+  function geom(el) {
+    var t = tf(el), r = el.getBoundingClientRect();
+    var w = el.offsetWidth || r.width, h = el.offsetHeight || r.height;
+    return { t: t, w: w * t.s + 16, h: h * t.s + 16, cx: r.left + r.width / 2, cy: r.top + r.height / 2 };
+  }
   function drawBox() {
-    if (!sel || !document.contains(sel)) { box.style.display = "none"; return; }
-    // 框画在没变换时的位置，再套上同样的变换，旋转了也贴合
-    var t = tf(sel);
-    var r = sel.getBoundingClientRect(), cr = canvas.getBoundingClientRect();
-    var w = sel.offsetWidth || r.width, h = sel.offsetHeight || r.height;
-    var cx = r.left + r.width / 2 + window.scrollX, cy = r.top + r.height / 2 + window.scrollY;
-    box.style.display = "block";
-    // 正在改字时框变成虚线，看得出是在打字
-    box.style.borderStyle = editing ? "dashed" : "solid";
-    box.style.width = px(w * t.s + 16); box.style.height = px(h * t.s + 16);
-    box.style.left = px(cx - (w * t.s + 16) / 2); box.style.top = px(cy - (h * t.s + 16) / 2);
-    box.style.transform = t.r ? "rotate(" + t.r + "deg)" : "";
+    sels = sels.filter(function (x) { return document.contains(x); });
+    if (sel && !document.contains(sel)) sel = null;
+    while (boxes.length < sels.length) boxes.push(makeBox());
+    if (!handles.rot && boxes.length) makeHandles(boxes[0]);
+    var cr = canvas.getBoundingClientRect();
+    boxes.forEach(function (b, i) {
+      var el = sels[i];
+      if (!el) { b.style.display = "none"; return; }
+      var g = geom(el), locked = el.hasAttribute("data-kv-lock");
+      b.style.display = "block";
+      // 正在改字是虚线；锁住的是灰色；多选里不是主选中的浅一点
+      b.style.borderStyle = editing === el || locked ? "dashed" : "solid";
+      b.style.borderColor = locked ? "#8A8F98" : el === sel ? "#2F7CF6" : "#7FB0FA";
+      b.style.width = px(g.w); b.style.height = px(g.h);
+      b.style.left = px(g.cx + window.scrollX - g.w / 2); b.style.top = px(g.cy + window.scrollY - g.h / 2);
+      b.style.transform = g.t.r ? "rotate(" + g.t.r + "deg)" : "";
+    });
+    // 手柄在第一个框上：只选了一个、没锁、没在打字时显示
+    var show = sels.length === 1 && sel && !sel.hasAttribute("data-kv-lock") && !editing;
+    if (handles.rot && sels[0] !== sel) show = false;
+    ["nw", "ne", "sw", "se", "rot", "stem"].forEach(function (key) { if (handles[key]) handles[key].style.display = show ? "block" : "none"; });
+    if (handles.e) handles.e.style.display = show && kind(sel) === "text" ? "block" : "none";
     guides.v.style.height = px(cr.height); guides.h.style.width = px(cr.width);
+  }
+  // 手指按在哪个手柄上（按旋转后的真实位置算）
+  function handleAt(x, y) {
+    if (sels.length !== 1 || !sel || sel.hasAttribute("data-kv-lock") || editing) return null;
+    var g = geom(sel), a = g.t.r * Math.PI / 180, cos = Math.cos(a), sin = Math.sin(a);
+    var spots = { nw: [-g.w / 2, -g.h / 2], ne: [g.w / 2, -g.h / 2], sw: [-g.w / 2, g.h / 2], se: [g.w / 2, g.h / 2], rot: [0, -g.h / 2 - ROT_GAP] };
+    if (kind(sel) === "text") spots.e = [g.w / 2, 0];
+    // 手指在元素里面：多半是想拖动它，离手柄很近才算抓手柄；在外面才用宽的感应范围
+    var lx0 = (x - g.cx) * cos + (y - g.cy) * sin, ly0 = -(x - g.cx) * sin + (y - g.cy) * cos;
+    var inside = Math.abs(lx0) < g.w / 2 && Math.abs(ly0) < g.h / 2;
+    var best = null, bd = inside ? HIT / 2.2 : HIT;
+    Object.keys(spots).forEach(function (key) {
+      var lx = spots[key][0], ly = spots[key][1];
+      var d = Math.hypot(x - (g.cx + lx * cos - ly * sin), y - (g.cy + lx * sin + ly * cos));
+      if (d < bd) { bd = d; best = key; }
+    });
+    return best;
   }
   function report() { bridge.select(JSON.stringify(info(sel))); }
   function select(el) {
     if (editing && el !== editing) endEdit();
     sel = el;
+    sels = el ? [el] : [];
     drawBox();
     report();
+  }
+  // 多选：点一下加进来，再点一下拿掉
+  function toggle(el) {
+    if (!el) return;
+    if (editing) endEdit();
+    var i = sels.indexOf(el);
+    if (i >= 0) { sels.splice(i, 1); sel = sels[sels.length - 1] || null; }
+    else { sels.push(el); sel = el; }
+    drawBox(); report();
   }
 
   // —— 直接在图上改字 ——
@@ -320,84 +397,220 @@
     return el;
   }
 
-  // —— 手势：点一下选中；双击文字直接改字；按住选中的东西拖动；两指缩放加旋转。没选中的地方照常滚动（长图） ——
-  var pointers = {};
+  // —— 手势：点一下选中；双击文字直接改字；按住选中的东西拖动（多选时一起动）；拖手柄缩放、旋转、改宽；两指缩放加旋转；
+  //    长按一个东西把它加进多选。没选中的地方照常滚动（长图） ——
+  var pointers = {}, pressTimer = null;
   function center() { var ks = Object.keys(pointers), a = pointers[ks[0]], b = pointers[ks[1]]; return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, d: Math.hypot(a.x - b.x, a.y - b.y), ang: Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI }; }
+  function movable() { return sels.filter(function (x) { return !x.hasAttribute("data-kv-lock"); }); }
   function onDown(e) {
     // 正在改字：在这段字里点、拖，是挪光标、选字，交给浏览器
     if (editing && editing.contains(e.target)) return;
     // 新的第一根手指：清掉没收到抬起的旧手指（系统吞掉了抬起事件时，不然会一直当成两指）
     if (e.isPrimary) { pointers = {}; if (dragging && dragging.moved && dragging.before) push(dragging.before); dragging = null; }
+    clearTimeout(pressTimer);
     pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
     var n = Object.keys(pointers).length;
     if (n === 1) {
-      var target = pickable(document.elementFromPoint(e.clientX, e.clientY));
-      if (sel && target && (target === sel || sel.contains(target))) {
-        dragging = { mode: "move", x: e.clientX, y: e.clientY, start: tf(sel), moved: false, before: snapshot(), target: target };
+      var h = handleAt(e.clientX, e.clientY);
+      if (h) {
+        var g = geom(sel);
+        dragging = { mode: "handle", handle: h, x: e.clientX, y: e.clientY, start: g.t, g: g, width: sel.offsetWidth, before: snapshot(), moved: false };
         e.preventDefault();
+        return;
+      }
+      var target = pickable(document.elementFromPoint(e.clientX, e.clientY));
+      var hit = target && sels.filter(function (x) { return x === target || x.contains(target); })[0];
+      if (hit && !multi) {
+        dragging = { mode: "move", x: e.clientX, y: e.clientY, starts: movable().map(function (x) { return [x, tf(x)]; }), moved: false, before: snapshot(), target: target };
+        if (!dragging.starts.length) dragging.mode = "tap";
+        else e.preventDefault();
       } else dragging = { mode: "tap", x: e.clientX, y: e.clientY, target: target };
-    } else if (n === 2 && sel) {
-      var c = center();
-      dragging = { mode: "pinch", c: c, start: tf(sel), moved: false, before: dragging && dragging.before || snapshot() };
+      // 长按：把它加进多选（或者拿掉）
+      if (target) pressTimer = setTimeout(function () {
+        if (dragging && !dragging.moved && (dragging.mode === "tap" || dragging.mode === "move") && Object.keys(pointers).length === 1) {
+          if (sels.length === 1 && sels[0] === target) return;
+          toggle(target); dragging = { mode: "done" };
+          if (navigator.vibrate) navigator.vibrate(20);
+        }
+      }, 520);
+    } else if (n === 2 && sel && !sel.hasAttribute("data-kv-lock") && sels.length === 1) {
+      clearTimeout(pressTimer);
+      dragging = { mode: "pinch", c: center(), start: tf(sel), moved: false, before: dragging && dragging.before || snapshot() };
       e.preventDefault();
     }
   }
   function onMove(e) {
     if (!pointers[e.pointerId]) return;
     pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
-    if (!dragging || !sel) return;
+    if (!dragging || dragging.mode === "tap" || dragging.mode === "done") {
+      if (dragging && dragging.mode === "tap" && Math.hypot(e.clientX - dragging.x, e.clientY - dragging.y) > 10) clearTimeout(pressTimer);
+      return;
+    }
     if (dragging.mode === "move") {
       var dx = e.clientX - dragging.x, dy = e.clientY - dragging.y;
       if (!dragging.moved && Math.hypot(dx, dy) < 6) return;
+      clearTimeout(pressTimer);
       dragging.moved = true;
-      var t = dragging.start;
-      setTf(sel, { x: t.x + dx, y: t.y + dy, s: t.s, r: t.r });
-      snap();
+      dragging.starts.forEach(function (p) { var t = p[1]; setTf(p[0], { x: t.x + dx, y: t.y + dy, s: t.s, r: t.r }); });
+      // 吸附：整组的外框去对齐画布和别的元素，差多少大家一起补
+      var fix = snapTo(dragging.starts.map(function (p) { return p[0]; }));
+      if (fix.dx || fix.dy) dragging.starts.forEach(function (p) { var t = tf(p[0]); t.x += fix.dx; t.y += fix.dy; setTf(p[0], t); });
+      drawBox();
+      e.preventDefault();
+    } else if (dragging.mode === "handle") {
+      var g = dragging.g, s0 = dragging.start, h = dragging.handle;
+      dragging.moved = true;
+      if (h === "rot") {
+        var a0 = Math.atan2(dragging.y - g.cy, dragging.x - g.cx), a1 = Math.atan2(e.clientY - g.cy, e.clientX - g.cx);
+        var r = s0.r + (a1 - a0) * 180 / Math.PI;
+        r = ((r % 360) + 540) % 360 - 180;
+        if (Math.abs(r - Math.round(r / 45) * 45) < 4) r = Math.round(r / 45) * 45; // 0°、45°、90° 附近吸住
+        setTf(sel, { x: s0.x, y: s0.y, s: s0.s, r: r });
+      } else if (h === "e") {
+        // 拖右边改宽：沿着元素自己的横轴量（转过也对），宽度变了文字自动换行
+        var a = s0.r * Math.PI / 180, ddx = e.clientX - dragging.x, ddy = e.clientY - dragging.y;
+        var along = (ddx * Math.cos(a) + ddy * Math.sin(a)) / s0.s;
+        var w = Math.max(60, dragging.width + along);
+        sel.style.width = px(w); sel.style.maxWidth = "none";
+        // 左边不动：排版里框往右长了 dw，中心右移 dw/2；缩放、旋转后左边要不动，中心应该沿元素横轴移 s·dw/2，差的用位移补上
+        var dw = w - dragging.width;
+        setTf(sel, { x: s0.x + s0.s * dw / 2 * Math.cos(a) - dw / 2, y: s0.y + s0.s * dw / 2 * Math.sin(a), s: s0.s, r: s0.r });
+      } else {
+        // 四角：按到中心的距离等比缩放
+        var d0 = Math.hypot(dragging.x - g.cx, dragging.y - g.cy), d1 = Math.hypot(e.clientX - g.cx, e.clientY - g.cy);
+        setTf(sel, { x: s0.x, y: s0.y, s: Math.max(0.15, Math.min(8, s0.s * d1 / Math.max(1, d0))), r: s0.r });
+      }
       drawBox();
       e.preventDefault();
     } else if (dragging.mode === "pinch" && Object.keys(pointers).length >= 2) {
-      var c = center(), s0 = dragging.start;
-      var s = Math.max(0.2, Math.min(6, s0.s * c.d / dragging.c.d));
-      var r = s0.r + (c.ang - dragging.c.ang);
-      if (Math.abs(r % 90) < 4) r = Math.round(r / 90) * 90; // 接近水平、竖直时吸住
+      var c = center(), p0 = dragging.start;
+      var sc = Math.max(0.15, Math.min(8, p0.s * c.d / dragging.c.d));
+      var rr = p0.r + (c.ang - dragging.c.ang);
+      if (Math.abs(rr % 90) < 4) rr = Math.round(rr / 90) * 90; // 接近水平、竖直时吸住
       dragging.moved = true;
-      setTf(sel, { x: s0.x + (c.x - dragging.c.x), y: s0.y + (c.y - dragging.c.y), s: s, r: r });
+      setTf(sel, { x: p0.x + (c.x - dragging.c.x), y: p0.y + (c.y - dragging.c.y), s: sc, r: rr });
       drawBox();
       e.preventDefault();
     }
   }
   function onUp(e) {
+    clearTimeout(pressTimer);
     if (!pointers[e.pointerId]) return;
     delete pointers[e.pointerId];
     if (!dragging) return;
+    if (dragging.mode === "done") { dragging = null; return; }
     var tapped = (dragging.mode === "tap" || (dragging.mode === "move" && !dragging.moved)) && Math.hypot(e.clientX - dragging.x, e.clientY - dragging.y) < 10;
     if (tapped) {
       var target = dragging.target, now = Date.now();
+      if (multi) { if (target) toggle(target); }
       // 同一段字连点两下：直接改字
-      if (target && target === lastTap.el && now - lastTap.t < 380 && kind(target) === "text") { select(target); startEdit(target); lastTap = { t: 0, el: null }; }
-      else { if (target !== sel) select(target); lastTap = { t: now, el: target }; }
+      else if (target && target === lastTap.el && now - lastTap.t < 380 && kind(target) === "text") { select(target); startEdit(target); lastTap = { t: 0, el: null }; }
+      else { if (target !== sel || sels.length > 1) select(target); lastTap = { t: now, el: target }; }
       dragging = null;
       return;
     }
     if (dragging.mode === "tap") { dragging = null; return; }
     if (Object.keys(pointers).length === 0) {
-      if (dragging.moved) { push(dragging.before); report(); }
-      guides.v.style.display = guides.h.style.display = "none";
+      if (dragging.moved) { push(dragging.before); if (dragging.mode === "handle" && dragging.handle === "e") fit(sel); report(); }
+      hideGuides();
       dragging = null;
+      drawBox();
     }
   }
-  // 拖到画布正中（横、竖）附近时吸过去，显示一条粉线
-  function snap() {
-    var cr = canvas.getBoundingClientRect(), r = sel.getBoundingClientRect(), t = tf(sel), th = 10;
-    var dx = (cr.left + cr.width / 2) - (r.left + r.width / 2), dy = (cr.top + cr.height / 2) - (r.top + r.height / 2);
-    var showV = Math.abs(dx) < th, showH = Math.abs(dy) < th && cr.height < 4000;
-    if (showV) t.x += dx;
-    if (showH) t.y += dy;
-    if (showV || showH) setTf(sel, t);
-    guides.v.style.display = showV ? "block" : "none";
-    guides.h.style.display = showH ? "block" : "none";
-    guides.v.style.left = px(cr.left + cr.width / 2 + window.scrollX - 2); guides.v.style.top = px(cr.top + window.scrollY);
-    guides.h.style.top = px(cr.top + cr.height / 2 + window.scrollY - 2); guides.h.style.left = px(cr.left + window.scrollX);
+
+  // —— 智能参考线：拖动时，外框的左中右、上中下去对齐画布边、中线、安全边距（64px），和别的元素的边、中线 ——
+  function hideGuides() {
+    guides.v.style.display = guides.h.style.display = "none";
+    guides.extra.forEach(function (g) { g.style.display = "none"; });
+  }
+  function union(els) {
+    var u = null;
+    els.forEach(function (el) {
+      var r = el.getBoundingClientRect();
+      if (!u) u = { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+      else { u.left = Math.min(u.left, r.left); u.top = Math.min(u.top, r.top); u.right = Math.max(u.right, r.right); u.bottom = Math.max(u.bottom, r.bottom); }
+    });
+    return u;
+  }
+  // 能拿来对齐的别的元素：文字位、图片位、图标、列表项、画布的直接子元素（不含正在拖的、看不见的、铺满的）
+  function others(moving) {
+    var cr = canvas.getBoundingClientRect(), out = [];
+    Array.prototype.forEach.call(canvas.querySelectorAll("[data-slot],[data-icon],[data-item],.canvas > *"), function (el) {
+      if (el.closest("[data-kavi-temp]") || moving.some(function (m) { return m === el || m.contains(el) || el.contains(m); })) return;
+      var r = el.getBoundingClientRect();
+      if (r.width < 4 || r.height < 4 || r.width > cr.width * 0.95 && r.height > cr.height * 0.6) return;
+      if (getComputedStyle(el).visibility === "hidden") return;
+      out.push(r);
+    });
+    return out;
+  }
+  function snapTo(moving) {
+    hideGuides();
+    var cr = canvas.getBoundingClientRect(), u = union(moving), th = 12 * k(), m = 64 * k();
+    var fixed = cr.height < 4000;
+    var xs = [[cr.left, "c"], [cr.left + m, "m"], [cr.left + cr.width / 2, "c"], [cr.right - m, "m"], [cr.right, "c"]];
+    var ys = fixed ? [[cr.top, "c"], [cr.top + m, "m"], [cr.top + cr.height / 2, "c"], [cr.bottom - m, "m"], [cr.bottom, "c"]] : [];
+    others(moving).forEach(function (r) {
+      xs.push([r.left, r], [r.left + r.width / 2, r], [r.right, r]);
+      ys.push([r.top, r], [r.top + r.height / 2, r], [r.bottom, r]);
+    });
+    function best(edges, lines) {
+      var b = null;
+      edges.forEach(function (v) { lines.forEach(function (l) { var d = l[0] - v; if (Math.abs(d) < th && (!b || Math.abs(d) < Math.abs(b.d))) b = { d: d, at: l[0], ref: l[1] }; }); });
+      return b;
+    }
+    var bx = best([u.left, (u.left + u.right) / 2, u.right], xs), by = best([u.top, (u.top + u.bottom) / 2, u.bottom], ys);
+    var used = 0;
+    function line(vertical, at, ref) {
+      var g = used === 0 ? (vertical ? guides.v : guides.h) : guides.extra[used - 1];
+      used++;
+      if (!g) return;
+      // 对齐画布的线贯穿整张图；对齐别的元素的线只连到那个元素
+      var a, b;
+      if (ref === "c" || ref === "m") { a = vertical ? cr.top : cr.left; b = vertical ? cr.bottom : cr.right; }
+      else { a = Math.min(vertical ? ref.top : ref.left, vertical ? u.top : u.left) - 20; b = Math.max(vertical ? ref.bottom : ref.right, vertical ? u.bottom : u.right) + 20; }
+      g.style.display = "block";
+      g.style.background = ref === "m" ? "#14B8A6" : "#FF3B7F";
+      if (vertical) { g.style.left = px(at + window.scrollX - 2); g.style.top = px(a + window.scrollY); g.style.width = "4px"; g.style.height = px(b - a); }
+      else { g.style.top = px(at + window.scrollY - 2); g.style.left = px(a + window.scrollX); g.style.height = "4px"; g.style.width = px(b - a); }
+    }
+    if (bx) line(true, bx.at, bx.ref);
+    if (by) line(false, by.at, by.ref);
+    return { dx: bx ? bx.d : 0, dy: by ? by.d : 0 };
+  }
+
+  // —— 对齐、分布：一个时对齐画布（左右上下留 64px 安全边距），几个时对齐它们的外框 ——
+  function shift(el, dx, dy) { var t = tf(el); t.x += dx; t.y += dy; setTf(el, t); }
+  function alignTo(how) {
+    var els = movable();
+    if (!els.length) return;
+    var cr = canvas.getBoundingClientRect(), m = 64 * k();
+    var ref = els.length > 1 ? union(els) : { left: cr.left + m, right: cr.right - m, top: cr.top + m, bottom: cr.bottom - m };
+    if (els.length === 1 && (how === "hcenter" || how === "vcenter")) ref = { left: cr.left, right: cr.right, top: cr.top, bottom: cr.bottom };
+    els.forEach(function (el) {
+      var r = el.getBoundingClientRect();
+      if (how === "left") shift(el, ref.left - r.left, 0);
+      else if (how === "right") shift(el, ref.right - r.right, 0);
+      else if (how === "hcenter") shift(el, (ref.left + ref.right) / 2 - (r.left + r.right) / 2, 0);
+      else if (how === "top") shift(el, 0, ref.top - r.top);
+      else if (how === "bottom") shift(el, 0, ref.bottom - r.bottom);
+      else if (how === "vcenter") shift(el, 0, (ref.top + ref.bottom) / 2 - (r.top + r.bottom) / 2);
+    });
+  }
+  // 等距分布：首尾不动，中间的按间距相等排开
+  function distribute(axis) {
+    var els = movable();
+    if (els.length < 3) return;
+    var a = axis === "x" ? ["left", "right", "width"] : ["top", "bottom", "height"];
+    var items = els.map(function (el) { return [el, el.getBoundingClientRect()]; }).sort(function (p, q) { return p[1][a[0]] + p[1][a[2]] / 2 - (q[1][a[0]] + q[1][a[2]] / 2); });
+    var span = items[items.length - 1][1][a[1]] - items[0][1][a[0]];
+    var sum = items.reduce(function (n, p) { return n + p[1][a[2]]; }, 0);
+    var gap = (span - sum) / (items.length - 1), pos = items[0][1][a[1]] + gap;
+    for (var i = 1; i < items.length - 1; i++) {
+      var d = pos - items[i][1][a[0]];
+      shift(items[i][0], axis === "x" ? d : 0, axis === "x" ? 0 : d);
+      pos += items[i][1][a[2]] + gap;
+    }
   }
 
   // —— App 发来的命令 ——
@@ -437,22 +650,42 @@
     font: function (c) { if (sel) sel.style.fontFamily = c.value; },
     weight: function (c) { if (sel) sel.style.fontWeight = String(c.value); },
     align: function (c) { if (sel) sel.style.textAlign = c.value; },
-    color: function (c) { if (sel) sel.style.color = c.value; },
-    background: function (c) { if (sel) sel.style.backgroundColor = c.value; },
+    color: function (c) { sels.forEach(function (x) { x.style.color = c.value; }); },
+    background: function (c) { sels.forEach(function (x) { x.style.backgroundColor = c.value; }); },
     // 局部样式：改字时选中的那几个字（没选中就整段）
     span: function (c) { wrapSelection(c.style); },
     spanClear: function () { var el = editing || sel; if (el) clearSpans(el); },
     vars: function (c) { Object.keys(c.value).forEach(function (key) { canvas.style.setProperty("--" + key, c.value[key]); }); },
-    hide: function () { if (sel) { sel.style.visibility = sel.style.visibility === "hidden" ? "" : "hidden"; } },
-    remove: function () { if (sel && sel.hasAttribute("data-kv-added")) { var el = sel; select(null); el.remove(); } },
+    hide: function () { var h = sel && sel.style.visibility !== "hidden"; sels.forEach(function (x) { x.style.visibility = h ? "hidden" : ""; }); },
+    remove: function () { var gone = sels.filter(function (x) { return x.hasAttribute("data-kv-added"); }); if (gone.length) { select(null); gone.forEach(function (x) { x.remove(); }); } },
     addText: function () { var el = addText(); select(el); startEdit(el); selectAllIn(el); },
-    reset: function () { if (sel) setTf(sel, { x: 0, y: 0, s: 1, r: 0 }); },
+    reset: function () { movable().forEach(function (x) { setTf(x, { x: 0, y: 0, s: 1, r: 0 }); x.style.width = ""; x.style.maxWidth = ""; }); },
     z: function (c) {
-      if (!sel) return;
-      var z = parseInt(getComputedStyle(sel).zIndex, 10) || 0;
-      if (getComputedStyle(sel).position === "static") sel.style.position = "relative";
-      sel.style.zIndex = String(c.dir > 0 ? z + 1 : z - 1);
+      sels.forEach(function (x) {
+        var z = parseInt(getComputedStyle(x).zIndex, 10) || 0;
+        if (getComputedStyle(x).position === "static") x.style.position = "relative";
+        x.style.zIndex = String(c.dir > 0 ? z + 1 : z - 1);
+      });
     },
+    // 排列：对齐、分布、微调、精确数值、透明度、锁定
+    arrange: function (c) { alignTo(c.how); },
+    distribute: function (c) { distribute(c.axis); },
+    nudge: function (c) { movable().forEach(function (x) { shift(x, c.dx * k(), c.dy * k()); }); },
+    tf: function (c) {
+      movable().forEach(function (x) {
+        var t = tf(x);
+        if (c.ds) t.s = Math.max(0.15, Math.min(8, Math.round((t.s + c.ds) * 100) / 100));
+        if (c.dr) { t.r = Math.round(t.r + c.dr); t.r = ((t.r % 360) + 540) % 360 - 180; }
+        setTf(x, t);
+      });
+    },
+    opacity: function (c) {
+      sels.forEach(function (x) {
+        var o = Math.max(0.1, Math.min(1, Math.round(((parseFloat(getComputedStyle(x).opacity) || 1) + c.delta) * 10) / 10));
+        x.style.opacity = o >= 1 ? "" : String(o);
+      });
+    },
+    lock: function () { var on = sel && !sel.hasAttribute("data-kv-lock"); sels.forEach(function (x) { if (on) x.setAttribute("data-kv-lock", ""); else x.removeAttribute("data-kv-lock"); }); },
     image: function (c) {
       if (!sel || kind(sel) !== "image") return;
       if (sel.tagName === "IMG") sel.src = c.src;
@@ -476,11 +709,15 @@
         return;
       }
       if (c.op === "deselect") { select(null); return; }
+      if (c.op === "multi") { multi = !!c.on; if (!multi && sels.length > 1) select(sel); else report(); return; }
       if (c.op === "edit") { startEdit(sel); return; }
       if (c.op === "done") { endEdit(); return; }
       if (!ops[c.op]) return;
       // 改字的过程中加的样式算在这次改字里（结束改字时一起进历史）
-      if (!NO_HISTORY[c.op] && !editing) remember();
+      // 连着按的微调、数值加减（一秒内同一种）合成一步撤销
+      var now = Date.now(), coalesce = (c.op === "nudge" || c.op === "tf" || c.op === "opacity") && lastOp.op === c.op && now - lastOp.t < 1000;
+      lastOp = { op: c.op, t: now };
+      if (!NO_HISTORY[c.op] && !editing && !coalesce) remember();
       ops[c.op](c);
       if (editing && c.op !== "addText") editing.focus();
       // 字体换了、字号改了，等排好版再画框
@@ -489,9 +726,9 @@
     // 存底稿：先结束改字，去掉选中框这些临时的东西
     source: function () {
       endEdit();
-      var keep = sel; sel = null; drawBox();
+      var keep = sels; sels = []; drawBox(); hideGuides();
       var html = window.kaviSource();
-      sel = keep; drawBox();
+      sels = keep; drawBox();
       return html;
     },
     // 当前配色（六个变量）

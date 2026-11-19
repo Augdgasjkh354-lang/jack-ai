@@ -77,6 +77,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import com.jack.ai.data.Attachments
 import com.jack.ai.data.DesignFonts
 import com.jack.ai.data.DesignStyles
@@ -147,6 +151,7 @@ private data class Picked(
     val fontFamily: String = "", val weight: Int = 400, val align: String = "", val hidden: Boolean = false,
     val lineHeight: Float = 1.4f, val letterSpacing: Float = 0f, val fx: String = "", val added: Boolean = false,
     val editing: Boolean = false, val styled: Boolean = false,
+    val opacity: Int = 100, val locked: Boolean = false, val count: Int = 0, val multi: Boolean = false,
 )
 
 private val lenient = Json { ignoreUnknownKeys = true }
@@ -155,7 +160,8 @@ private fun parsePicked(raw: String): Picked = runCatching {
     val o = lenient.parseToJsonElement(raw).jsonObject
     fun s(k: String) = (o[k] as? JsonPrimitive)?.content.orEmpty()
     Picked(s("kind"), s("slot"), s("text"), s("color"), s("fontSize").toIntOrNull() ?: 0, s("fontFamily"), s("weight").toIntOrNull() ?: 400, s("align"), s("hidden") == "true",
-        s("lineHeight").toFloatOrNull() ?: 1.4f, s("letterSpacing").toFloatOrNull() ?: 0f, s("fx"), s("added") == "true", s("editing") == "true", s("styled") == "true")
+        s("lineHeight").toFloatOrNull() ?: 1.4f, s("letterSpacing").toFloatOrNull() ?: 0f, s("fx"), s("added") == "true", s("editing") == "true", s("styled") == "true",
+        s("opacity").toIntOrNull() ?: 100, s("locked") == "true", s("count").toIntOrNull() ?: 0, s("multi") == "true")
 }.getOrDefault(Picked())
 
 /** 页面里的 rgb()/rgba() → Compose 颜色（画色块用）。 */
@@ -184,8 +190,12 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
     var webView by remember { mutableStateOf<WebView?>(null) }
     // 正在图上打字（editor.js 报上来的）；样式面板开着没有（开着时代替工具栏，不挡画布）
     var editingText by remember { mutableStateOf(false) }
-    var stylePanel by remember { mutableStateOf(false) }
-    LaunchedEffect(picked.kind) { if (picked.kind == "none" || picked.kind == "image") stylePanel = false }
+    // 代替工具栏的面板：style 文字样式、arrange 排列（对齐、分布、微调、数值）
+    var panel by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(picked.kind) {
+        if (picked.kind == "none") panel = null
+        if (picked.kind == "image" && panel == "style") panel = null
+    }
 
     // 页面：底稿 + 填内容的脚本（画图标）+ 编辑器脚本 + 字体
     val loaded by produceState<Triple<ByteArray, Int, Int>?>(null, src) {
@@ -308,25 +318,38 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
         // 工具栏：没选中时是整张图的；选中了按种类给；正在打字时是局部样式；样式面板开着时换成面板
         Surface(tonalElevation = 2.dp) {
             Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(vertical = 6.dp)) {
+                val many = picked.count > 1
                 val label = when {
                     editingText -> "正在改字：选中几个字，可以单独换颜色、加粗、划重点"
-                    stylePanel && picked.kind != "none" -> "文字样式 · ${picked.fontSize}px"
+                    panel == "style" && picked.kind != "none" -> "文字样式 · ${picked.fontSize}px"
+                    panel == "arrange" && picked.kind != "none" -> if (many) "排列：已选 ${picked.count} 个，按它们的外框对齐" else "排列：对齐画布（左右上下留安全边距）"
+                    picked.multi -> "多选：点一下加进来，再点一下拿掉" + if (picked.count > 0) "（已选 ${picked.count} 个）" else ""
+                    many -> "已选 ${picked.count} 个：拖动一起挪；长按别的再加"
+                    picked.locked -> "已锁定：拖不动，点「解锁」再改位置"
                     picked.kind == "text" -> "文字" + (picked.slot.takeIf { it.isNotEmpty() }?.let { "（$it）" } ?: "") + " · ${picked.fontSize}px · 双击直接改字"
                     picked.kind == "image" -> "图片"
                     picked.kind == "group" -> "一组（列表的一项）"
                     picked.kind == "box" -> "图形"
-                    else -> "点一下选中，双击文字直接改；按住选中的拖动，两指缩放、旋转"
+                    else -> "点一下选中，双击改字，长按多选；拖四角缩放，拖顶上圆点旋转"
                 }
                 Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp), maxLines = 1)
-                if (stylePanel && picked.kind in setOf("text", "group") && !editingText) {
-                    StylePanel(picked, vars = { webView }, onCmd = { op, kv -> cmd(op, *kv) }, onClose = { stylePanel = false })
-                    return@Column
+                if (!editingText && picked.kind != "none") {
+                    if (panel == "style" && picked.kind in setOf("text", "group")) {
+                        StylePanel(picked, vars = { webView }, onCmd = { op, kv -> cmd(op, *kv) }, onClose = { panel = null })
+                        return@Column
+                    }
+                    if (panel == "arrange") {
+                        ArrangePanel(picked, onCmd = { op, kv -> cmd(op, *kv) }, onClose = { panel = null })
+                        return@Column
+                    }
                 }
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     @Composable fun Tool(text: String, bold: Boolean = false, onClick: () -> Unit) =
                         TextButton(onClick = onClick, enabled = ready) { Text(text, fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal) }
                     fun span(vararg kv: Pair<String, String>) = cmd("span", "style" to JsonObject(kv.associate { it.first to JsonPrimitive(it.second) }))
+                    fun multiMode(on: Boolean) = webView?.evaluateJavascript("kvEd.cmd({op:'multi',on:$on})", null)
+                    fun deselect() = webView?.evaluateJavascript("kvEd.cmd({op:'deselect'})", null)
                     when {
                         editingText -> {
                             Tool("完成", bold = true) { cmd("done") }
@@ -341,24 +364,38 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
                         picked.kind == "none" -> {
                             Tool("加文字") { webView?.requestFocus(); cmd("addText") }
                             Tool("换配色") { sheet = "palette" }
+                            Tool(if (picked.multi) "退出多选" else "多选", bold = picked.multi) { multiMode(!picked.multi) }
+                        }
+                        many || picked.multi -> {
+                            if (picked.multi) Tool("选好了", bold = true) { multiMode(false) }
+                            Tool("排列") { panel = "arrange" }
+                            Tool("颜色") { sheet = "color" }
+                            Tool("上移一层") { cmd("z", "dir" to 1) }
+                            Tool("下移一层") { cmd("z", "dir" to -1) }
+                            Tool(if (picked.locked) "解锁" else "锁定") { cmd("lock") }
+                            Tool("复位") { cmd("reset") }
+                            Tool(if (picked.hidden) "显示" else "隐藏") { cmd("hide") }
+                            Tool("取消选中") { multiMode(false); deselect() }
                         }
                         else -> {
                             if (picked.kind == "text") Tool("改字", bold = true) { webView?.let { keyboard(it, true) }; cmd("edit") }
                             if (picked.kind == "image") Tool("换图") { sheet = "image" }
-                            if (picked.kind == "text" || picked.kind == "group") Tool("样式") { stylePanel = true }
+                            if (picked.kind == "text" || picked.kind == "group") Tool("样式") { panel = "style" }
+                            Tool("排列") { panel = "arrange" }
                             if (picked.kind != "image") Tool("颜色") { sheet = "color" }
                             if (picked.kind == "text") {
                                 Tool("字体") { sheet = "font" }
                                 Tool(if (picked.weight >= 600) "变细" else "加粗") { cmd("weight", "value" to if (picked.weight >= 600) 400 else 700) }
-                                Tool("对齐") { cmd("align", "value" to when (picked.align) { "left", "start" -> "center"; "center" -> "right"; else -> "left" }) }
+                                Tool("文字对齐") { cmd("align", "value" to when (picked.align) { "left", "start" -> "center"; "center" -> "right"; else -> "left" }) }
                             }
                             if (picked.kind == "box" || picked.kind == "group") Tool("底色") { sheet = "background" }
                             Tool("上移一层") { cmd("z", "dir" to 1) }
                             Tool("下移一层") { cmd("z", "dir" to -1) }
+                            Tool(if (picked.locked) "解锁" else "锁定") { cmd("lock") }
                             Tool("复位") { cmd("reset") }
                             if (picked.added) Tool("删除") { cmd("remove") }
                             else Tool(if (picked.hidden) "显示" else "隐藏") { cmd("hide") }
-                            Tool("取消选中") { webView?.evaluateJavascript("kvEd.cmd({op:'deselect'})", null) }
+                            Tool("取消选中") { deselect() }
                         }
                     }
                 }
@@ -502,6 +539,75 @@ private fun StylePanel(picked: Picked, vars: () -> WebView?, onCmd: (String, Arr
             Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf("title" to "大标题", "sub" to "小标题", "body" to "正文", "label" to "标签").forEach { (id, name) -> Chip(name, false) { cmd("preset", "name" to id) } }
             }
+            TextButton(onClick = onClose) { Text("收起", fontWeight = FontWeight.Bold) }
+        }
+    }
+}
+
+/** 按住连续触发的按钮（微调用：点一下挪一下，按住先停一会儿再连续挪）。 */
+@Composable
+private fun RepeatButton(text: String, onStep: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    Surface(shape = Radii.s, color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = Modifier.size(48.dp).pointerInput(Unit) {
+            awaitEachGesture {
+                awaitFirstDown()
+                val job = scope.launch { onStep(); delay(380); while (true) { onStep(); delay(55) } }
+                waitForUpOrCancellation()
+                job.cancel()
+            }
+        }) {
+        Box(contentAlignment = Alignment.Center) { Text(text, style = MaterialTheme.typography.titleMedium) }
+    }
+}
+
+/**
+ * 排列面板：对齐（一个时对齐画布，几个时对齐它们的外框）、等距分布（三个以上）、
+ * 微调方向键（一次 1px，按住连续挪）、缩放和角度、透明度。代替工具栏放在画布下面。
+ */
+@Composable
+private fun ArrangePanel(picked: Picked, onCmd: (String, Array<Pair<String, Any>>) -> Unit, onClose: () -> Unit) {
+    fun cmd(op: String, vararg kv: Pair<String, Any>) = onCmd(op, arrayOf(*kv))
+    @Composable fun Btn(text: String, onClick: () -> Unit) = TextButton(onClick = onClick) { Text(text) }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+        Row(Modifier.horizontalScroll(rememberScrollState())) {
+            listOf("left" to "左对齐", "hcenter" to "水平居中", "right" to "右对齐", "top" to "顶对齐", "vcenter" to "垂直居中", "bottom" to "底对齐")
+                .forEach { (how, name) -> Btn(name) { cmd("arrange", "how" to how) } }
+            if (picked.count >= 3) {
+                Btn("横向等距") { cmd("distribute", "axis" to "x") }
+                Btn("纵向等距") { cmd("distribute", "axis" to "y") }
+            }
+        }
+        Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            // 方向键排成一个小十字
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                RepeatButton("↑") { cmd("nudge", "dx" to 0, "dy" to -1) }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    RepeatButton("←") { cmd("nudge", "dx" to -1, "dy" to 0) }
+                    RepeatButton("↓") { cmd("nudge", "dx" to 0, "dy" to 1) }
+                    RepeatButton("→") { cmd("nudge", "dx" to 1, "dy" to 0) }
+                }
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                @Composable fun Row2(name: String, minus: () -> Unit, plus: () -> Unit, extra: (@Composable () -> Unit)? = null) =
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(name, style = MaterialTheme.typography.labelLarge, modifier = Modifier.width(48.dp))
+                        TextButton(onClick = minus) { Text("－") }
+                        TextButton(onClick = plus) { Text("＋") }
+                        extra?.invoke()
+                    }
+                if (picked.count <= 1) {
+                    Row2("缩放", { cmd("tf", "ds" to -0.05) }, { cmd("tf", "ds" to 0.05) })
+                    Row2("角度", { cmd("tf", "dr" to -1) }, { cmd("tf", "dr" to 1) }) { TextButton(onClick = { cmd("tf", "dr" to 90) }) { Text("转90°") } }
+                }
+                Row2("透明", { cmd("opacity", "delta" to -0.1) }, { cmd("opacity", "delta" to 0.1) }) {
+                    Text("${picked.opacity}%", style = MaterialTheme.typography.labelLarge)
+                }
+            }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = { cmd("lock") }) { Text(if (picked.locked) "解锁" else "锁定") }
             TextButton(onClick = onClose) { Text("收起", fontWeight = FontWeight.Bold) }
         }
     }
