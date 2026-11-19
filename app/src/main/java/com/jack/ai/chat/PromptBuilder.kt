@@ -204,7 +204,7 @@ object PromptBuilder {
             add(SkillTools.SELF_CHECK)
             if (settings.phoneFolders.isNotEmpty()) add(SkillTools.PHONE_FILES)
             // 操作其他 App：勾了 App 才有（无障碍没开时工具自己会告诉 Kavi 让用户去开）
-            if (settings.phoneApps.isNotEmpty()) add(if (SkillIds.PHONE_FULL in unlocked) SkillTools.PHONE else SkillTools.PHONE_ENTRY)
+            if (settings.phoneApps.isNotEmpty()) add(SkillTools.PHONE) // 一直给完整的：中途换成完整版会让工具说明变、缓存断
             if (settings.phoneDataOn) add(SkillTools.PHONE_DATA)
             // 开着 Python 就只留 run_python，两个都给模型会犹豫用哪个；算数一直能用，画图要先读「计算与图表」
             if (SkillIds.CALC in all && SkillIds.PYTHON !in all) add(SkillTools.RUN_JS)
@@ -327,7 +327,7 @@ object PromptBuilder {
         if ("use_skill" in names && plugins.isNotEmpty()) {
             // 插件：带工具的能力。一直带着的直接调，用法第一次调时附上；工具要先打开的标出来
             parts += "固定说明" to "【Plugins】\nYour tools, grouped by plugin. Just call their tools; the plugin's usage notes come back with its first tool call in a conversation, follow them. " +
-                "Plugins marked (open first) have their tools added only after use_skill with the plugin name (usable from the next step); don't say you can't do something just because you don't see the tool yet. " +
+                (if (plugins.any { it.id in SkillIds.ON_DEMAND }) "Plugins marked (open first) have their tools added only after use_skill with the plugin name (usable from the next step); don't say you can't do something just because you don't see the tool yet. " else "") +
                 "You can also read any plugin's notes with use_skill.\n" +
                 plugins.joinToString("\n") { "- ${it.name}" + (if (it.id in SkillIds.ON_DEMAND) " (open first)" else "") + ": ${it.description}" }
         }

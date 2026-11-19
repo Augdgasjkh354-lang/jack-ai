@@ -112,7 +112,7 @@ class PromptBuilderTest {
         val plugins = sys.substring(sys.indexOf("【Plugins】"), sys.indexOf("【Skills】"))
         val skills = sys.substring(sys.indexOf("【Skills】")).substringBefore("【What you can do】")
         // 带工具的在插件里，做法在技能里，各在各的清单
-        assertTrue(plugins, "- Word 文档 (open first)" in plugins && "- 表格:" in plugins)
+        assertTrue(plugins, "- Word 文档:" in plugins && "- 表格:" in plugins)
         assertFalse(skills, "Word 文档" in skills || "- 表格" in skills)
         assertTrue(skills, "- 合同挑坑" in skills && "- 销售:" in skills && "- 小红书运营" in skills)
         // 合并掉的不再单独出现
@@ -404,25 +404,15 @@ class PromptBuilderTest {
     }
 
     @Test
-    fun rarelyUsedSkillToolsComeOnlyAfterUseSkill() {
-        val fresh = toolNames(Conversation())
-        // 开场只带常用的：文件、联网、记忆、提醒、表格、算数、use_skill
-        listOf("read_file", "edit_file", "web_search", "save_memory", "schedule", "add_rows", "query_table", "run_python", "use_skill")
-            .forEach { assertTrue(it, it in fresh) }
-        listOf("github", "browser", "notion_write", "add_calendar_event", "create_ppt", "create_excel", "create_document",
-            "create_chart", "create_diagram", "query_trains", "create_app", "save_flashcards").forEach { assertFalse(it, it in fresh) }
-        // 打开了 GitHub 只多它一个，别的还是不带
-        val withGit = toolNames(Conversation(skillTools = setOf(SkillIds.GITHUB)))
-        assertTrue("github" in withGit)
-        assertFalse("browser" in withGit)
-        assertEquals(fresh.size + 1, withGit.size)
-        // 系统提示词告诉模型这些技能要先 use_skill，免得它以为做不到
-        val sys = PromptBuilder.systemPrompt(settings, Conversation(), null, tools(Conversation()), memories, settings.activeSkills())
-        assertTrue(sys.contains("only appear after you read the skill with use_skill"))
-        // 不常用技能的工具按需出现：开场比全部打开时少
-        val small = tools(Conversation()).toString().length
-        val big = tools(Conversation(skillTools = SkillIds.ON_DEMAND)).toString().length
-        assertTrue("$small vs $big", small < big)
+    fun toolListNeverChangesWithinOrAcrossConversations() {
+        // 工具说明一变，DeepSeek 的缓存就从开头附近断掉；所以开着的技能的工具一开始就全带着，用过什么都不变
+        val fresh = tools(Conversation())
+        listOf("read_file", "web_search", "save_memory", "github", "browser", "create_ppt", "design", "create_chart").forEach { n ->
+            assertTrue(n, fresh!!.any { it.jsonObject["function"]!!.jsonObject["name"]!!.jsonPrimitive.content == n })
+        }
+        assertEquals(fresh, tools(Conversation(skillTools = setOf(SkillIds.GITHUB, SkillIds.DESIGN, SkillIds.PHONE_FULL))))
+        val sys = PromptBuilder.systemPrompt(settings, Conversation(), null, fresh, memories, settings.activeSkills())
+        assertFalse(sys.contains("(open first)"))
     }
 
     @Test
@@ -500,12 +490,9 @@ class PromptBuilderTest {
     }
 
     @Test
-    fun phoneStartsWithShortEntryAndExpandsAfterFirstUse() {
+    fun phoneToolIsAlwaysTheFullOne() {
         val s = settings.copy(phoneApps = listOf("com.tencent.mm"))
-        val entry = tool(Conversation(), "phone", s)!!
-        val full = tool(Conversation(skillTools = setOf(com.jack.ai.data.SkillIds.PHONE_FULL)), "phone", s)!!
-        assertTrue(entry.toString().length * 3 < full.toString().length)
-        assertTrue(full.toString().contains("\"collect\""))
+        assertTrue(tool(Conversation(), "phone", s)!!.toString().contains("\"collect\""))
     }
 
     @Test

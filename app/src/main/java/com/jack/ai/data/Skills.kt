@@ -103,7 +103,12 @@ object SkillIds {
         "knowledge_base" to LIBRARY,
     )
 
-    val ON_DEMAND = setOf(WORD, PDF, PPT, EXCEL, CALENDAR, MAIL, TRAIN, APP, GITHUB, BROWSER, NOTION, LEARN, CALC, FLOWS, CODE, DESIGN, TONE)
+    /**
+     * 以前这些技能的工具要 use_skill 打开后才带上，可一加工具，工具说明就变了，DeepSeek 的缓存从开头附近就断：
+     * 实测同一个对话中途打开「设计」后命中掉到 4%，新对话第一条也只有 3%。现在全部一直带着，工具说明在所有对话、
+     * 整个对话里都一样；多出来的几千 token 几乎全命中缓存。机制留着，以后真要按需加再填回来。
+     */
+    val ON_DEMAND: Set<String> = emptySet()
 }
 
 private fun schema(s: String): JsonObject = Json.parseToJsonElement(s).jsonObject
