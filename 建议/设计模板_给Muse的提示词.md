@@ -6,7 +6,7 @@
 
 `app/src/main/assets/design/templates/` 里的 `xhs-bold-cover.html`、`xhs-bold-list.html`、`xhs-bold-ending.html` 是 Claude 做的一套样板（大字报风格：封面、清单、结尾）。**质量以它们为准，写法照它们来。** 预览图在 `design-previews/`。
 
-另外 6 个旧模板（`xhs-checklist-coral` 等）是第 1 版做的，风格太素、像 PPT，**不要模仿它们**。
+第 1 版的 6 个旧模板风格太素、像 PPT，已经删掉了。第 2 版（你做的 8 套）是现在的基准，新做的不要和它们撞风格。
 
 ## 一、这批做什么
 
