@@ -9,6 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -142,6 +143,9 @@ internal suspend fun ToolSession.writeFile(args: JsonObject): String {
             // 覆盖了生成过的文件（比如小工具的 html）：旧底稿作废，免得 edit_file 拿旧底稿重新生成、把这次写的冲掉
             Workspace.dropSource(file)
         }
+        // 设计图的底稿只在后台用：不挂进聊天，自动重新出图（挂出来的是图）
+        if (withContext(Dispatchers.IO) { DesignTemplates.isSource(file) })
+            return@runTool "已写入底稿「${file.name}」。" + renderDesign(JsonObject(mapOf("path" to JsonPrimitive(file.canonicalFile.relativeTo(wsDir.canonicalFile).path)))) to SearchRecord("写入 ${file.name}")
         ui.attach(file)
         "已写入「${file.name}」（${file.length()} 字节）。" + verifyText(file) to SearchRecord("写入 ${file.name}")
     }
@@ -180,6 +184,8 @@ internal suspend fun ToolSession.editFile(args: JsonObject): String {
                 else -> throw TextEdit.EditException("「${file.name}」这种文件没法直接修改")
             }
         }
+        if (src == null && withContext(Dispatchers.IO) { DesignTemplates.isSource(file) })
+            return@runTool "已修改底稿「${file.name}」，替换了 $n 处。" + renderDesign(JsonObject(mapOf("path" to JsonPrimitive(file.canonicalFile.relativeTo(wsDir.canonicalFile).path)))) to SearchRecord("修改 ${file.name}")
         ui.attach(file)
         val verified = check ?: if (Workspace.isText(file)) verifyText(file)
             else Verify.note(listOfNotNull(withContext(Dispatchers.IO) { Verify.fileOpens(file) }), "文件能正常打开")

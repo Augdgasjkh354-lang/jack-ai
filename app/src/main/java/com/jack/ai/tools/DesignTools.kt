@@ -105,12 +105,12 @@ private suspend fun ToolSession.makeSeries(args: JsonObject): String {
             texts += "第 ${i + 1} 张 " + d.text
         }
         val head = "一组 $n 张都出好了，按顺序显示在聊天里，文件名 $base-01 … $base-${n.toString().padStart(2, '0')}。" +
-            "检查每张的结果；要改哪张就 edit_file 改那张的底稿再 render，其他张不用动。整组风格要统一：改了一张的配色、字体，别的张也要跟着改。\n\n"
+            "检查每张的结果；要改哪张就 edit_file 改那张的底稿（改完自动重新出图），其他张不用动。整组风格要统一：改了一张的配色、字体，别的张也要跟着改。\n\n"
         (head + texts.joinToString("\n\n")) to SearchRecord("做一组设计：$base（$n 张）" + if (problems > 0) "，$problems 处要改" else "")
     }
 }
 
-private suspend fun ToolSession.renderDesign(args: JsonObject): String {
+internal suspend fun ToolSession.renderDesign(args: JsonObject): String {
     val path = args["path"].text().trim()
     if (path.isEmpty()) return "要写 path：底稿 .html 的文件名"
     val file = withContext(Dispatchers.IO) { Workspace.find(wsDir, path) }
@@ -164,7 +164,7 @@ private suspend fun ToolSession.draw(
     val text = buildString {
         append("「${png.name}」（${r.width}×${r.height}）")
         if (pdf != null) append("，PDF「${pdf.name}」")
-        append("。底稿是「${src.name}」：要改就用 edit_file 改它（文字、颜色、位置、大小都在里面），再用 design action=render path=${src.name} 重新出图，不要从头再做。\n")
+        append("。底稿是「${src.name}」：要改就用 edit_file 改它（文字、颜色、位置、大小都在里面），改完会自动重新出图，不用再 render，不要从头再做。\n")
         if (unknown.isNotEmpty()) append("这些位置模板里没有，没填进去：${unknown.joinToString("、")}。对照模板目录里的名字再填。\n")
         if (r.problems.isEmpty()) append("检查：文字都装得下，没有跑出画布。\n")
         else append("检查发现（必须改）：\n").append(r.problems.joinToString("\n") { "- $it" }).append("\n先改掉这些（缩短文字、拆成两行、调小字号或换个模板），再交给用户。\n")

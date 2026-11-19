@@ -109,6 +109,17 @@ object DesignTemplates {
                 paths.joinToString("") { """<path d="$it"/>""" } + "</svg>"
         }.toMap()
 
+    /**
+     * 这个 .html 是不是设计图的底稿（出过图的会带 data-kavi-size，或者旁边有同名的 .png）。
+     * 底稿只在后台用：不当成小工具挂进聊天，改完自动重新出图。
+     */
+    fun isSource(file: java.io.File): Boolean {
+        if (file.extension.lowercase() !in setOf("html", "htm") || !file.isFile) return false
+        if (java.io.File(file.parentFile, file.nameWithoutExtension + ".png").isFile) return true
+        val head = runCatching { file.bufferedReader().use { r -> CharArray(4096).let { b -> String(b, 0, maxOf(0, r.read(b))) } } }.getOrDefault("")
+        return "data-kavi-size" in head
+    }
+
     /** 底稿里记下的画布尺寸（出图时写在 <html data-kavi-size="宽x高">）。 */
     fun savedSize(html: String): Pair<Int, Int>? =
         Regex("""data-kavi-size\s*=\s*["'](\d+)x(\d+)["']""").find(html)?.let { it.groupValues[1].toInt() to it.groupValues[2].toInt() }

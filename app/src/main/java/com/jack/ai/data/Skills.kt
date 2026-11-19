@@ -305,7 +305,7 @@ val BUILTIN_SKILLS = listOf(
    - 图标写 <i data-icon="calendar"></i>（线框图标名：calendar、map-pin、phone、mail、heart、star、gift、clock……），用 CSS 定大小和颜色。照片写成 <div data-slot="photo" data-kind="image">，在 slots 里填文件名。
    - 装饰（胶带、贴纸、手绘箭头、纸纹、颗粒）用内联 SVG 或 CSS 画，做法见「审美」第 4 步。
 6. 出图后看工具给的「检查」（必须改）和「审美检查」（大多数该改），再看大图和缩略图，按「审美」第 5 步自评；不及格先改好再交给用户。
-7. 用户要改：用 edit_file 改底稿 .html 里那一处，再用 design action=render path=底稿名 重新出图，不要从头再做；只有换模板才重新 make。用户也可以在聊天里点图下面的「编辑」自己动手改。
+7. 用户要改：用 edit_file 改底稿 .html 里那一处（改完自动重新出图，结果里有检查和预览），不要从头再做；只有换模板才重新 make。用户也可以在聊天里点图下面的「编辑」自己动手改。
 8. 要打印的（名片、海报、邀请函）加 format=pdf，同时出一份 PDF。
 9. 成组的图（小红书一篇拆成几张卡片、一套海报）用 action=series：
    - 先列每张放什么给用户确认（第 1 张封面、中间内页、最后一张结尾），一组 4～9 张。

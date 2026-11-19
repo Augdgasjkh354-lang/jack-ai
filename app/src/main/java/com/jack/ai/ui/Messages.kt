@@ -359,7 +359,9 @@ fun AssistantMessage(
             Spacer(Modifier.height(8.dp))
             DeliveredBox(msg.delivered)
         }
-        msg.files.forEach { f ->
+        // 设计图的底稿（.html）只在后台用，聊天里只显示出好的图
+        val shownFiles = remember(msg.files) { msg.files.filterNot { f -> f.name.endsWith(".html", true) && com.jack.ai.data.DesignTemplates.isSource(java.io.File(f.path)) } }
+        shownFiles.forEach { f ->
             Spacer(Modifier.height(8.dp))
             when {
                 f.mime.startsWith("image/") -> ChartImage(f)
