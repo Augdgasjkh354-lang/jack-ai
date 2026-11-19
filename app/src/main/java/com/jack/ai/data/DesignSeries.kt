@@ -61,10 +61,11 @@ object DesignSeries {
         val stamp = System.currentTimeMillis()
         pngs.forEachIndexed { i, f ->
             if (!f.isFile) return@forEachIndexed
-            val name = "${base}_${stamp}_${(i + 1).toString().padStart(2, '0')}.png"
+            val ext = f.extension.lowercase().ifEmpty { "png" }
+            val name = "${base}_${stamp}_${(i + 1).toString().padStart(2, '0')}.$ext"
             val values = ContentValues().apply {
                 put(MediaStore.Images.Media.DISPLAY_NAME, name)
-                put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+                put(MediaStore.Images.Media.MIME_TYPE, android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "image/png")
                 if (Build.VERSION.SDK_INT >= 29) {
                     put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/Kavi")
                     put(MediaStore.Images.Media.IS_PENDING, 1)

@@ -141,7 +141,11 @@ class DesignEditorActivity : ComponentActivity() {
         private const val EXTRA_PATH = "path"
 
         /** 保存过的图：路径 → 次数。聊天里的图按它刷新（同名覆盖，路径不变，不然看不出变化）。 */
-        val edits = mutableStateMapOf<String, Int>()
+        private val edits = mutableStateMapOf<String, Int>()
+        /** /data/user/0 和 /data/data 是同一个文件夹，统一成真实路径再对，不然聊天里认不出改过。 */
+        private fun keyOf(path: String) = runCatching { File(path).canonicalPath }.getOrDefault(path)
+        fun version(path: String): Int = edits[keyOf(path)] ?: 0
+        fun bump(file: File) { val k = keyOf(file.path); edits[k] = (edits[k] ?: 0) + 1 }
 
         fun open(ctx: Context, png: File) {
             ctx.startActivity(Intent(ctx, DesignEditorActivity::class.java).putExtra(EXTRA_PATH, png.absolutePath))
@@ -340,7 +344,7 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
                 if (r != null) withContext(Dispatchers.IO) { target.writeText(saved) } else failed++
                 r?.problems?.firstOrNull()?.let { problems += "第 ${i + 1} 页：$it" }
                 pages[i] = doc.copy(origin = target, html = saved, dirty = false, hadPdf = pdf != null)
-                DesignEditorActivity.edits[png.absolutePath] = (DesignEditorActivity.edits[png.absolutePath] ?: 0) + 1
+                DesignEditorActivity.bump(png)
             }
             // 删过页：后面多出来的旧文件删掉
             if (base != null && group) withContext(Dispatchers.IO) {
@@ -868,7 +872,7 @@ private fun PageStrip(
         itemsIndexed(pages, key = { _, p -> p.key }) { i, p ->
             var menu by remember { mutableStateOf(false) }
             val png = p.origin?.let { File(it.parentFile, it.nameWithoutExtension + ".png") }
-            val version = png?.let { DesignEditorActivity.edits[it.absolutePath] } ?: 0
+            val version = png?.let { DesignEditorActivity.version(it.path) } ?: 0
             val bmp by produceState<android.graphics.Bitmap?>(null, png?.path, version) {
                 value = png?.takeIf { it.isFile }?.let { withContext(Dispatchers.IO) { Attachments.thumbnail(it.path, 200) } }
             }

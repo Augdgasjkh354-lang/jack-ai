@@ -26,6 +26,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -116,14 +119,55 @@ internal fun ImageViewer(path: String, onDismiss: () -> Unit) {
     val bmp by produceState<Bitmap?>(null, path) {
         value = withContext(Dispatchers.IO) { Attachments.thumbnail(path, 2000) }
     }
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    // 成组的设计图（名字-01、-02……）可以整组存
+    val group by produceState(emptyList<File>(), path) {
+        value = withContext(Dispatchers.IO) { groupOf(File(path)) }
+    }
+    var menu by remember { mutableStateOf(false) }
+    fun save(files: List<File>) {
+        menu = false
+        scope.launch {
+            val n = withContext(Dispatchers.IO) {
+                com.jack.ai.data.DesignSeries.exportToGallery(ctx, files, com.jack.ai.data.DesignSeries.baseOf(files.first()) ?: files.first().nameWithoutExtension)
+            }
+            Toast.makeText(ctx, if (n > 0) "已存 $n 张到相册（Pictures/Kavi）" else "没存成，看看是不是没给存储权限", Toast.LENGTH_LONG).show()
+        }
+    }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(
             Modifier.fillMaxSize().background(Color.Black).clickable(onClick = onDismiss),
             contentAlignment = Alignment.Center,
         ) {
             bmp?.let { Image(it.asImageBitmap(), null, Modifier.fillMaxWidth(), contentScale = ContentScale.Fit) }
+            Row(Modifier.align(Alignment.TopCenter).fillMaxWidth().statusBarsPadding().padding(12.dp)) {
+                ViewerButton({ onDismiss() }) { Icon(Icons.Default.Close, "关闭", tint = Color.White) }
+                Spacer(Modifier.weight(1f))
+                Box {
+                    ViewerButton({ if (group.size > 1) menu = true else save(listOf(File(path))) }) { Icon(AppIcons.Download, "存到相册", tint = Color.White) }
+                    DropdownMenu(menu, { menu = false }) {
+                        DropdownMenuItem(text = { Text("存这一张") }, onClick = { save(listOf(File(path))) })
+                        DropdownMenuItem(text = { Text("整组存（${group.size} 张）") }, onClick = { save(group) })
+                    }
+                }
+            }
         }
     }
+}
+
+@Composable
+private fun ViewerButton(onClick: () -> Unit, content: @Composable () -> Unit) {
+    Surface(onClick = onClick, shape = androidx.compose.foundation.shape.CircleShape, color = Color.White.copy(alpha = 0.14f), modifier = Modifier.size(48.dp)) {
+        Box(contentAlignment = Alignment.Center) { content() }
+    }
+}
+
+/** 这张图所在的一组设计图（按页码顺序的 PNG）；不是成组的设计图就只有它自己。 */
+internal fun groupOf(png: File): List<File> {
+    val html = File(png.parentFile, png.nameWithoutExtension + ".html")
+    if (!html.isFile) return listOf(png)
+    return com.jack.ai.data.DesignSeries.pagesOf(html).map { File(it.parentFile, it.nameWithoutExtension + ".png") }.filter { it.isFile }.ifEmpty { listOf(png) }
 }
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
@@ -443,7 +487,7 @@ private fun ChartImage(f: GeneratedFile) {
     val ctx = LocalContext.current
     var viewing by remember { mutableStateOf(false) }
     // 在编辑器里保存过就重新读（同名覆盖，路径不变）
-    val version = DesignEditorActivity.edits[File(f.path).absolutePath] ?: 0
+    val version = DesignEditorActivity.version(f.path)
     val bmp by produceState<Bitmap?>(null, f.path, version) {
         value = withContext(Dispatchers.IO) { Attachments.thumbnail(f.path, 1400) }
     }
