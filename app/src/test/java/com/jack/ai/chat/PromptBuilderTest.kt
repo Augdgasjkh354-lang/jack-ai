@@ -482,6 +482,15 @@ class PromptBuilderTest {
     }
 
     @Test
+    fun videoAttachmentPointsToWatchVideo() {
+        val m = com.jack.ai.data.ChatMessage(role = "user", content = "这个视频拍得怎么样",
+            attachments = listOf(com.jack.ai.data.Attachment(kind = "file", name = "VID_01.mp4", path = "/ws/VID_01.mp4")))
+        val out = PromptBuilder.userMessage(m, imagesOk = true, imageUrl = { null }).toString()
+        assertTrue(out, out.contains("【Video: VID_01.mp4】") && out.contains("watch_video"))
+        assertTrue("watch_video" in tool(Conversation(), "convert_file", settings)!!.toString())
+    }
+
+    @Test
     fun compressedPartSaysWhatIsMissing() {
         val msgs = (1..6).map { com.jack.ai.data.ChatMessage(id = "m$it", role = if (it % 2 == 1) "user" else "assistant", content = "第 $it 条", createdAt = 1_700_000_000_000L + it * 60_000L) }
         val conv = Conversation(messages = msgs, summary = "聊了报价", summaryUntilId = "m4")

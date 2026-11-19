@@ -19,7 +19,11 @@ import java.io.IOException
 
 /** 附件（待发的图片和文件）和对话文件夹。 */
 class FilesFeature(core: AppCore) : Feature(core) {
-    fun addImages(uris: List<Uri>) = importAll(uris) { Attachments.importImage(app, it) }
+    /** 相册里选的：图片当图片，视频当文件（原文件放进对话文件夹，Kavi 要看时再抽帧）。 */
+    fun addImages(uris: List<Uri>) = importAll(uris) { uri ->
+        if (app.contentResolver.getType(uri).orEmpty().startsWith("video/")) Attachments.importFile(app, uri, keepOriginal = true)
+        else Attachments.importImage(app, uri)
+    }
     fun addFiles(uris: List<Uri>) = importAll(uris) { Attachments.importFile(app, it, keepOriginal = true) }
 
     internal fun importAll(uris: List<Uri>, import: suspend (Uri) -> Attachment) {

@@ -30,7 +30,7 @@ import java.io.File
  */
 
 private val ACTIONS = listOf("images_to_pdf", "merge_pdf", "split_pdf", "pdf_to_images", "compress_image", "convert_image",
-    "cut_video", "compress_video", "edit_video", "extract_audio", "transcribe", "ocr")
+    "cut_video", "compress_video", "edit_video", "extract_audio", "transcribe", "ocr", "watch_video")
 
 /** ocr 收哪些文件（DeepSeek OCR 认文件内容，不看扩展名，这里先挡掉明显不对的）。 */
 private val OCR_EXT = setOf("pdf", "doc", "docx", "ppt", "pptx", "png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff")
@@ -75,6 +75,7 @@ internal suspend fun ToolSession.convertFile(args: JsonObject): String {
         "edit_video" -> "剪辑视频"
         "extract_audio" -> "取出声音"
         "ocr" -> "认字"
+        "watch_video" -> "看视频"
         else -> "转文字"
     } + "：" + names.first().take(40) + if (names.size > 1) " 等 ${names.size} 个" else ""
     return runTool(label) {
@@ -193,6 +194,7 @@ internal suspend fun ToolSession.convertFile(args: JsonObject): String {
                 made = listOf(dst)
             }
             "ocr" -> return@runTool ocr(files, out, args["layout"].text() == "true")
+            "watch_video" -> return@runTool watchVideo(files.first(), args)
             else -> return@runTool if (args["timestamps"].text() == "true") transcribeTimed(files.first(), out) else transcribe(files.first(), out)
         }
         made.take(10).forEach { ui.attach(it) }
@@ -243,6 +245,75 @@ internal fun pageList(spec: String, n: Int): List<Int> {
             else (p.toIntOrNull() ?: return@flatMap emptyList()).let { it to it }
         (maxOf(1, a)..minOf(n, b)).map { it - 1 }
     }.distinct()
+}
+
+/** 自动转文字只做这么长以内的视频（再长的花得多，让 Kavi 先问）。 */
+private const val WATCH_LISTEN_MAX_MS = 30 * 60_000L
+
+/**
+ * 看视频：抽帧拼成带时间的宫格图交给能看图的模型；有声音的附上带时间的文字稿（对话文件夹里有就直接用，没有就先转，30 分钟以内）。
+ * start、end 只看那一段，帧抽得更密。
+ */
+private suspend fun ToolSession.watchVideo(f: File, args: JsonObject): Pair<String, SearchRecord> {
+    val info = withContext(Dispatchers.IO) { com.jack.ai.data.VideoFrames.info(f) }
+        ?: throw IllegalStateException("「${f.name}」读不出来：可能不是视频，或者是手机不支持的格式")
+    val stampOf = com.jack.ai.data.VideoFrames::stamp
+    if (!info.hasVideo && info.width == 0) return ("「${f.name}」没有画面（是纯音频），用 transcribe 转文字。") to SearchRecord("看视频：${f.name}（没有画面）")
+    val dur = info.durationMs
+    val start = args["start"].text().takeIf { it.isNotBlank() }?.let { VideoEdit.parseTime(it) ?: throw IllegalStateException("start 看不懂：写成 1:23 或秒数") } ?: 0L
+    val end = args["end"].text().takeIf { it.isNotBlank() }?.let { VideoEdit.parseTime(it) ?: throw IllegalStateException("end 看不懂：写成 1:23 或秒数") }?.coerceAtMost(dur) ?: dur
+    if (start >= end) throw IllegalStateException("视频只有 ${stampOf(dur)} 长，${stampOf(start)} 到 ${stampOf(end)} 这段不对")
+    val part = start > 0 || end < dur
+    val text = StringBuilder("「${f.name}」${stampOf(dur)}，${info.width}×${info.height}" + (if (!info.hasAudio) "，没有声音" else "") +
+        (if (part) "。这次只看 ${stampOf(start)}–${stampOf(end)}" else "") + "。\n")
+    if (canSee) {
+        val keep = com.jack.ai.data.VideoFrames.keepFor(end - start)
+        val frames = withContext(Dispatchers.IO) {
+            com.jack.ai.data.VideoFrames.extract(f, start, end, keep) { i, n -> ui.progress("看视频：抽帧 $i/$n") }
+        }
+        if (frames.isEmpty()) text.append("画面抽不出来（这个格式手机解不了），只能听声音。\n")
+        else {
+            val grids = withContext(Dispatchers.Default) {
+                frames.chunked(com.jack.ai.data.VideoFrames.PER_GRID).map { g ->
+                    val b = com.jack.ai.data.VideoFrames.grid(g)
+                    com.jack.ai.data.VideoFrames.dataUrl(b).also { b.recycle() }
+                }
+            }
+            frames.forEach { it.bmp.recycle() }
+            images += grids
+            text.append("抽了 ${frames.size} 帧（均匀取一半，画面变化大的地方取一半），拼成 ${grids.size} 张宫格图，在下一条消息里：" +
+                "每格左上角是时间，从左到右、从上到下按时间排。\n")
+        }
+    } else text.append("现在用的模型不能看图，只能听声音。要看画面，请用户把模型换成能看图的（比如 V4.1 Flash）。\n")
+    if (info.hasAudio && args["listen"].text() != "false") {
+        fun findTimed() = wsDir.listFiles().orEmpty().filter { it.isFile && it.name.startsWith(f.nameWithoutExtension + "-文字稿") && it.extension == "txt" }
+            .filter { runCatching { it.bufferedReader().use { r -> r.readLine().orEmpty() } }.getOrDefault("").contains("带时间") }
+            .maxByOrNull { it.lastModified() }
+        var timed = withContext(Dispatchers.IO) { findTimed() }
+        var note = ""
+        if (timed == null) when {
+            dur > WATCH_LISTEN_MAX_MS -> note = "视频比较长，没有自动转文字。要听内容，先问用户，再用 transcribe timestamps=true。"
+            Transcriber.engine(settings) == null -> note = "没有能转文字的服务，只看了画面。" + Transcriber.NO_ENGINE
+            else -> {
+                val (msg, _) = transcribeTimed(f, "")
+                timed = withContext(Dispatchers.IO) { findTimed() }
+                if (timed == null) note = msg.substringBefore("。") + "。"
+            }
+        }
+        val body = timed?.let { t ->
+            val all = withContext(Dispatchers.IO) { t.readText() }.substringAfter("\n\n").trim()
+            if (part) com.jack.ai.data.VideoFrames.transcriptBetween(all, start, end) else all
+        }.orEmpty()
+        when {
+            body.isNotBlank() -> text.append("\n声音的文字稿（「${timed!!.name}」，机器转写可能有错字、同音字）：\n")
+                .append(if (body.length > 15_000) body.take(15_000) + "\n…（后面还有，完整的用 read_file 读「${timed.name}」）" else body).append("\n")
+            timed != null -> text.append("\n这段里没听出有人说话。\n")
+            note.isNotEmpty() -> text.append("\n").append(note).append("\n")
+        }
+    }
+    text.append("\n要细看某一段（动作、画面里的字、细节），再调 watch_video 填 start、end（比如 1:20 到 1:40），那段会抽得更密。" +
+        "帧是抽出来的，两帧之间发生的事看不到：没看到的别编，说清楚是按画面推测的。")
+    return text.toString() to SearchRecord("看视频：${f.name}" + if (part) "（${stampOf(start)}–${stampOf(end)}）" else "")
 }
 
 /** 录音、视频转文字：解出声音 → 5 分钟一段 → 交给语音识别 → 存成 txt。文字也交给模型（太长的截前面）。 */

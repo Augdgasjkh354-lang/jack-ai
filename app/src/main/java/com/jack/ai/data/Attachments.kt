@@ -21,11 +21,14 @@ private const val MAX_FILE_CHARS = 200_000
 private const val MAX_ORIGINAL_BYTES = 30L * 1024 * 1024
 /** 录音、视频原文件最大多少（转文字最长 3 小时，够用）。 */
 private const val MAX_MEDIA_BYTES = 1024L * 1024 * 1024
-private val MEDIA_EXT = setOf("mp3", "m4a", "aac", "wav", "amr", "ogg", "opus", "flac", "mp4", "mov", "3gp", "mkv", "webm")
+private val MEDIA_EXT = setOf("mp3", "m4a", "aac", "wav", "amr", "ogg", "opus", "flac", "mp4", "mov", "3gp", "mkv", "webm", "m4v")
+private val VIDEO_EXT = setOf("mp4", "mov", "3gp", "mkv", "webm", "m4v", "avi")
 /** 当文字读的文件最多这么大；再大的只放进对话文件夹，不读内容。 */
 private const val MAX_TEXT_BYTES = 8 * 1024 * 1024
 
 object Attachments {
+    /** 按文件名看是不是视频（发给模型时换个说法、聊天里显示封面）。 */
+    fun isVideo(name: String): Boolean = name.substringAfterLast('.', "").lowercase() in VIDEO_EXT
 
     private fun displayName(ctx: Context, uri: Uri): String {
         ctx.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
@@ -79,9 +82,10 @@ object Attachments {
      * keepOriginal=true 时把原文件也存一份（发送后放进对话文件夹），读不出文字的文件也能收。
      */
     suspend fun importFile(ctx: Context, uri: Uri, keepOriginal: Boolean = false): Attachment = withContext(Dispatchers.IO) {
-        val name = displayName(ctx, uri)
-        val lower = name.lowercase()
         val mime = ctx.contentResolver.getType(uri).orEmpty()
+        // 相册里选的视频有的名字不带扩展名：补上，后面才认得出是视频
+        val name = displayName(ctx, uri).let { n -> if (mime.startsWith("video/") && !isVideo(n)) "$n.${if (mime.contains("quicktime")) "mov" else "mp4"}" else n }
+        val lower = name.lowercase()
         // 录音、视频：不读文字，原文件放进对话文件夹，之后转文字用（可以比别的文件大很多）
         val media = mime.startsWith("audio/") || mime.startsWith("video/") || lower.substringAfterLast('.', "") in MEDIA_EXT
         val read = runCatching {

@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.List
@@ -114,6 +115,55 @@ fun Thumbnail(path: String, size: Dp, onClick: (() -> Unit)? = null) {
     }
 }
 
+/**
+ * 视频封面：第一秒的画面按视频比例缩进 maxW×maxH 里，中间一个播放键，右下角是时长。点一下用手机的播放器放。
+ */
+@Composable
+internal fun VideoThumb(path: String, maxW: Dp, maxH: Dp, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null) {
+    val px = with(androidx.compose.ui.platform.LocalDensity.current) { maxOf(maxW, maxH).roundToPx() }
+    val loaded by produceState<Pair<Bitmap?, Long>?>(null, path) {
+        value = withContext(Dispatchers.IO) {
+            val f = File(path)
+            val info = com.jack.ai.data.VideoFrames.info(f)
+            val b = runCatching {
+                val r = android.media.MediaMetadataRetriever()
+                try {
+                    r.setDataSource(path)
+                    val at = minOf(1_000_000L, (info?.durationMs ?: 0) * 500)
+                    if (android.os.Build.VERSION.SDK_INT >= 27) r.getScaledFrameAtTime(at, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC, px, px)
+                    else r.getFrameAtTime(at)
+                } finally { r.release() }
+            }.getOrNull()
+            b to (info?.durationMs ?: -1L)
+        }
+    }
+    val bmp = loaded?.first
+    val ratio = bmp?.let { it.width.toFloat() / it.height.coerceAtLeast(1) } ?: (maxW / maxH)
+    val (w, h) = if (ratio >= maxW / maxH) maxW to (maxW / ratio) else (maxH * ratio) to maxH
+    Box(
+        modifier.size(w, h).clip(Radii.s).background(Color.Black)
+            .let { if (onClick != null) it.clickable(onClick = onClick) else it },
+        contentAlignment = Alignment.Center,
+    ) {
+        bmp?.let { Image(it.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
+        Box(Modifier.size(if (maxW < 80.dp) 22.dp else 44.dp).background(Color.Black.copy(alpha = 0.45f), androidx.compose.foundation.shape.CircleShape), contentAlignment = Alignment.Center) {
+            Icon(Icons.Default.PlayArrow, "播放", tint = Color.White, modifier = Modifier.size(if (maxW < 80.dp) 16.dp else 30.dp))
+        }
+        val dur = loaded?.second ?: -1L
+        if (dur > 0 && maxW >= 80.dp) Text(com.jack.ai.data.VideoFrames.stamp(dur), color = Color.White, style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp).background(Color.Black.copy(alpha = 0.5f), Radii.s).padding(horizontal = 5.dp, vertical = 1.dp))
+    }
+}
+
+/** 用手机的播放器放对话文件夹里的视频。 */
+internal fun playVideo(ctx: android.content.Context, f: File) {
+    runCatching {
+        val uri = androidx.core.content.FileProvider.getUriForFile(ctx, ctx.packageName + ".files", f)
+        ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW).setDataAndType(uri, "video/*")
+            .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION))
+    }.onFailure { android.widget.Toast.makeText(ctx, "手机上没有能放视频的 App", android.widget.Toast.LENGTH_SHORT).show() }
+}
+
 @Composable
 internal fun ImageViewer(path: String, onDismiss: () -> Unit) {
     val bmp by produceState<Bitmap?>(null, path) {
@@ -180,6 +230,7 @@ fun UserBubble(msg: ChatMessage, onDelete: () -> Unit, onEdit: (() -> Unit)? = n
     var menu by remember { mutableStateOf(false) }
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     var viewing by remember { mutableStateOf<String?>(null) }
+    val ctxOuter = LocalContext.current
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
         val images = msg.attachments.filter { it.kind == "image" }
         val files = msg.attachments.filter { it.kind == "file" }
@@ -202,6 +253,10 @@ fun UserBubble(msg: ChatMessage, onDelete: () -> Unit, onEdit: (() -> Unit)? = n
                 onDismiss = { reading = null }, subtitle = if (raw) null else "提取出的文字")
         }
         files.forEach { f ->
+            if (com.jack.ai.data.Attachments.isVideo(f.name) && f.path.isNotEmpty() && File(f.path).exists()) {
+                VideoThumb(f.path, 200.dp, 260.dp, Modifier.padding(bottom = 6.dp)) { playVideo(ctxOuter, File(f.path)) }
+                return@forEach
+            }
             Surface(
                 shape = Radii.s,
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,

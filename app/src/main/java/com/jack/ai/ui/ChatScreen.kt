@@ -980,9 +980,9 @@ private fun InputBar(
                         }
                         RoundMenu(expanded = attachMenu, onDismiss = { attachMenu = false }) {
                             MenuRow("拍照", icon = AppIcons.Camera) { attachMenu = false; startCamera() }
-                            MenuRow("图片", icon = AppIcons.Image) {
+                            MenuRow("图片、视频", icon = AppIcons.Image) {
                                 attachMenu = false
-                                try { pickImages.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) } catch (e: Exception) { Toast.makeText(ctx, "打不开：${e.message}", Toast.LENGTH_LONG).show() }
+                                try { pickImages.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) } catch (e: Exception) { Toast.makeText(ctx, "打不开：${e.message}", Toast.LENGTH_LONG).show() }
                             }
                             MenuRow("文件", icon = AppIcons.File) {
                                 attachMenu = false
@@ -1112,6 +1112,16 @@ private fun PendingChip(att: Attachment, onRemove: () -> Unit) {
     if (att.kind == "image") {
         Box {
             Thumbnail(att.path, 56.dp)
+            IconButton(onClick = onRemove, modifier = Modifier.size(22.dp).align(Alignment.TopEnd)) {
+                Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.inverseSurface) {
+                    Icon(Icons.Default.Close, "移除", Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.inverseOnSurface)
+                }
+            }
+        }
+    } else if (com.jack.ai.data.Attachments.isVideo(att.name) && att.path.isNotEmpty()) {
+        Box {
+            VideoThumb(att.path, 56.dp, 56.dp)
             IconButton(onClick = onRemove, modifier = Modifier.size(22.dp).align(Alignment.TopEnd)) {
                 Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.inverseSurface) {
                     Icon(Icons.Default.Close, "移除", Modifier.size(16.dp),
