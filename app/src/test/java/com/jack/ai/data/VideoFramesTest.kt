@@ -15,10 +15,17 @@ import org.robolectric.annotation.GraphicsMode
 class VideoFramesTest {
     private fun solid(c: Int, w: Int = 160, h: Int = 90) = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).apply { eraseColor(c) }
 
-    @Test fun longerVideosGetMoreFramesUpToFourGrids() {
-        assertEquals(9, VideoFrames.keepFor(15_000))
-        assertTrue(VideoFrames.keepFor(600_000) > VideoFrames.keepFor(60_000))
-        assertEquals(36, VideoFrames.keepFor(3 * 3600_000L))
+    @Test fun shortVideosGetAFrameASecond() {
+        assertEquals(9, VideoFrames.keepFor(5_000))
+        assertEquals(30, VideoFrames.keepFor(30_000))
+        assertEquals(60, VideoFrames.keepFor(60_000))
+        // 过了 1 分钟不会突然变少，每 3 秒 1 帧，封顶 72 帧
+        assertEquals(60, VideoFrames.keepFor(61_000))
+        assertEquals(70, VideoFrames.keepFor(210_000))
+        assertEquals(72, VideoFrames.keepFor(3 * 3600_000L))
+        val all = (1..7200).map { VideoFrames.keepFor(it * 1000L) }
+        assertTrue(all.zipWithNext().all { (a, b) -> b >= a })
+        assertEquals(60, VideoFrames.candidatesFor(30)); assertEquals(96, VideoFrames.candidatesFor(60)); assertEquals(96, VideoFrames.candidatesFor(72))
     }
 
     @Test fun candidatesSpreadInsideTheRange() {

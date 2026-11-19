@@ -18,14 +18,19 @@ object VideoFrames {
 
     class Frame(val ms: Long, val bmp: Bitmap)
 
-    /** 这一段（毫秒）留几帧：越长留得越多，最多 36 帧（4 张宫格图）。 */
-    fun keepFor(spanMs: Long): Int = when {
-        spanMs <= 30_000 -> 9
-        spanMs <= 90_000 -> 12
-        spanMs <= 300_000 -> 18
-        spanMs <= 1_200_000 -> 27
-        else -> 36
+    /**
+     * 这一段（毫秒）留几帧。短视频（抖音、小红书）看细：1 分钟以内每秒 1 帧（至少 9 帧）；
+     * 再长的每 3 秒 1 帧，最多 72 帧（8 张宫格图），长视频先看个大概，要细看的段落再单独看。
+     */
+    fun keepFor(spanMs: Long): Int {
+        val sec = ((spanMs + 999) / 1000).toInt()
+        return if (sec <= 60) maxOf(9, sec) else (sec / 3).coerceIn(60, MAX_FRAMES)
     }
+
+    const val MAX_FRAMES = 72
+
+    /** 候选帧多少个：留的帧的两倍（好挑出画面变化大的），最多 96 个（抽帧太多太慢）。 */
+    fun candidatesFor(keep: Int): Int = minOf(keep * 2, maxOf(keep, 96))
 
     /** n 个候选帧的时间：均匀分布在 [start, end) 里，避开开头和结尾的黑帧（各让半格）。 */
     fun candidateTimes(startMs: Long, endMs: Long, n: Int): List<Long> {
@@ -84,7 +89,7 @@ object VideoFrames {
         val r = MediaMetadataRetriever()
         try {
             r.setDataSource(f.absolutePath)
-            val n = (keep * 2).coerceAtMost(72)
+            val n = candidatesFor(keep)
             val times = candidateTimes(startMs, endMs, n)
             val option = if (endMs - startMs <= 120_000) MediaMetadataRetriever.OPTION_CLOSEST else MediaMetadataRetriever.OPTION_CLOSEST_SYNC
             val frames = mutableListOf<Frame>()
