@@ -149,7 +149,8 @@ object DesignRender {
     }
 
     /** 页面用到的字体的 @font-face；下不下来的字体名放在第二个里。要联网，在 IO 线程调。 */
-    suspend fun fontCss(ctx: Context, html: String): Pair<String, List<String>> = withContext(Dispatchers.IO) {
+    suspend fun fontCss(ctx: Context, html: String): Pair<String, List<String>> = kotlinx.coroutines.runInterruptible(Dispatchers.IO) {
+        // 下载字体是阻塞的网络请求：可打断，点停止时不用等它下完
         val fonts = DesignFonts.used(DesignFonts.all(ctx), html)
         if (fonts.isEmpty()) "" to emptyList() else DesignFonts.css(ctx, fonts)
     }

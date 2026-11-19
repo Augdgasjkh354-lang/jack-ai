@@ -582,7 +582,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
      * 会先等它收尾完（撤掉「正在回答」、保存），这样点了停止马上再发也不会乱。
      */
     fun stop(convId: String? = _state.value.currentId) {
-        convId?.let { id -> jobs[id]?.takeIf { it.isActive }?.let { stopping.add(id); it.cancel() } }
+        convId?.let { id -> jobs[id]?.takeIf { it.isActive }?.let {
+            stopping.add(id); it.cancel()
+            // 通知栏马上撤掉「正在回答」：卡在下载、出图这类一时停不下的步骤里时，收尾要等好一会儿
+            WorkService.finish(getApplication(), id, "", "", false, notifyResult = false)
+        } }
     }
 
     /** 用户按了停止的对话：回答收尾时补一段做到哪了（见 StopReport）。 */
