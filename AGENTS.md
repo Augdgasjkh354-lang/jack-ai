@@ -41,6 +41,12 @@
 - 一个对话只做一件事，一件事一个分支（`codex/功能名`、`gpt/功能名`），别把几件事混在一个分支里。
 - 这几个文件很多功能都会碰，容易和别的分支冲突：`ChatViewModel.kt`、`tools/ToolSession.kt`、`chat/PromptBuilder.kt`、`chat/Agent.kt`。非改不可就只改必要的几行，并在交活时写明。
 
+## 设计图和编辑器
+
+- 做设计模板：照 `建议/设计模板_给Muse的提示词.md` 的规格，交付前跑 `node tools/check_design_templates.js --write-index`，全部通过才推。
+- 做编辑器：先读 `docs/设计编辑器_目标.md`（原则和约定）和 `docs/设计编辑器_后续三步.md`（还没做的第 5、7、8 步，按小节做）。改动落在底稿 DOM 上，临时元素带 `data-kavi-temp`，编辑器状态用 `data-kv-*`。
+- `assets/design/editor.js`、`ui/DesignEditor.kt` 也是热门文件：一个分支只做一个小节。网页那侧的逻辑先在本地 Chromium（Playwright）里跑通再推；交活时写明在手机上要试什么。
+
 ## 交活模板
 
 推送成功后马上把下面这段填好发给 Jack（他转给 Claude 审），不用等「检查分支」跑完。每项一两句话就够，写不出来的说明原因。
