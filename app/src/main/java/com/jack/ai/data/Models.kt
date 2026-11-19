@@ -673,7 +673,7 @@ const val WORK_RULES = """Work mode: you are completing a task on {user}'s behal
  * Chat 和 Work 合并后，对话里的做事原则：平常照常聊，碰到要好几步才能做完的事，Kavi 自己转成 Work 的做法
  * （列清单和验收标准、做完核对、收尾交代清楚），语气跟着收一收。
  */
-const val TASK_RULES = """Tasks: most messages are questions or conversation; just answer them. When {user} asks you to get something done that takes several steps (producing or editing files, research across several sources, a multi-step job likely to need more than three or four tool calls), switch into task mode:
+const val TASK_RULES = """Tasks: most messages are questions or conversation; just answer them. When {user} asks for a big job with many separate steps (research across several sources, a report built from several files, a long batch of edits, likely more than five or six tool calls), switch into task mode. A job one tool does in one or two calls (a design or a series of designs, one document, one file edit) isn't one: just do it, the tool checks its own output. Task mode:
 
 1. Start with update_plan: break the goal into steps (usually 3 to 8) and write 2 to 6 checkable acceptance criteria (e.g. "5 suppliers found", "every row has a price and a source link", "the Excel opens with no empty rows"). Update it each time you start or finish a step; {user} sees each finished step crossed off. Mark a criterion met only after checking it against the actual results. Once you have a plan you can't finish while steps are open or criteria are unchecked: if something truly can't be done, mark the step skipped or the criterion failed and explain why.
 2. Do the work yourself with tools rather than leaving it to {user}. Stop to ask only when key information is missing and you can't reasonably assume it; otherwise state the assumption and carry on.

@@ -363,7 +363,7 @@ object PromptBuilder {
         }
         if ("ask_user" in names) {
             parts += "固定说明" to f("【Business help】When {user} wants marketing or sales help (a WeChat Moments post, a Xiaohongshu note, a Douyin script, a reply to a customer, a product introduction, a quote), " +
-                "first look at what memory already says about their business. Ask with cards only for what's still missing and changes the result: what they sell, price or offer, the selling point, who buys it, the tone; for a customer reply, ask them to paste the customer's message; for a quote, the items and prices. " +
+                "first look at what memory already says about their business. This is only for promoting {user}'s own products or services: when the topic is already given (\"a Xiaohongshu cover about three quick home dishes\", tips, a guide, a recipe), it's content, not sales; just make it, and don't bring up past business topics from memory. Ask with cards only for what's still missing and changes the result: what they sell, price or offer, the selling point, who buys it, the tone; for a customer reply, ask them to paste the customer's message; for a quote, the items and prices. " +
                 "Once they've told you lasting facts about their business (shop name, products, prices, usual customers, where they sell, how they like to sound), save them with save_memory so next time you don't ask again; " +
                 "a one-off detail like this week's discount isn't worth saving. Write copy that sounds like a real small-business owner talking, not an ad agency.")
         }
@@ -374,7 +374,9 @@ object PromptBuilder {
         }
         if ("update_plan" in names) {
             parts += "固定说明" to (if (conv.work) "【Task list】Start every task with update_plan: the steps and the acceptance criteria. "
-                else "【Task list】For a task with several steps, start with update_plan: the steps and the acceptance criteria; questions, quick lookups and casual talk don't need one. ") +
+                else "【Task list】Only a big job with many separate steps (research across many sources, a multi-file report, a long batch of edits) starts with update_plan: the steps and the acceptance criteria. " +
+                    "Questions, quick lookups, casual talk, and a job done with one or two tool calls (a design or a series of designs, one document, one file edit) don't need one: the tools already check their own output. ") +
+                "Check criteria with what you already have (tool results, checks, previews); don't OCR or re-read files you just made only to verify them. " +
                 "Mark a step doing when you start it and done when it's finished; mark a criterion met only after checking the actual results."
         }
         if ("delegate_tasks" in names) {

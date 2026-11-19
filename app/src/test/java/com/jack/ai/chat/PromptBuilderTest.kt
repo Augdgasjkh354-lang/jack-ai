@@ -285,7 +285,7 @@ class PromptBuilderTest {
         assertTrue("update_plan" in toolNames(chat))
         assertTrue("delegate_tasks" in toolNames(chat))
         // 要不要列清单 Kavi 自己判断：对话里是「好几步的任务才列」，带着做任务的原则
-        assertTrue(c.contains("For a task with several steps, start with update_plan"))
+        assertTrue(c.contains("Only a big job with many separate steps"))
         assertTrue(c.contains("switch into task mode"))
         // 隐私项目里不用做事经验
         val sealed = Project(name = "日记本", isolated = true)
