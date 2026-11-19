@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-guofeng-list","name":"国风·清单","category":"xhs","size":[1080,1440],"style":"国风","look":"guofeng","set":"guofeng-a","role":"list","description":"毛笔小标题加朱红编号，3～5 条习俗或养生要点，每条一个短标题加一句说明","slots":[{"name":"tag","label":"小标签","max":6},{"name":"title","label":"本页标题","max":6},{"name":"intro","label":"一句导语","max":24},{"name":"note","label":"底部提醒","max":24},{"name":"page","label":"页码","max":5}],"lists":[{"name":"items","label":"要点","min":3,"max":5,"slots":[{"name":"head","label":"短标题","max":12},{"name":"text","label":"说明","max":24}]}],"images":[],"colors":{"bg":"#F3ECDD","fg":"#231C16","primary":"#B83A2B","secondary":"#E4D8C0","accent":"#2E4F4A","muted":"#6D6253"}}'>
+<title>国风·清单</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#F3ECDD;--fg:#231C16;--primary:#B83A2B;--secondary:#E4D8C0;--accent:#2E4F4A;--muted:#6D6253;
+  --font-title:"Ma Shan Zheng","Noto Serif SC","Noto Serif CJK SC",serif;--font-sans:"Noto Serif SC","Noto Serif CJK SC",serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:76px 84px 72px;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+/* 颗粒：让纯色底不那么「电脑味」 */
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.10;mix-blend-mode:multiply}
+.frame{position:absolute;inset:34px;border:2px solid var(--muted);opacity:.5;pointer-events:none}
+.frame-in{inset:44px;border-width:1px;opacity:.3}
+.top{position:relative;display:flex;align-items:center;justify-content:space-between;height:56px}
+.tag{font-size:32px;font-weight:700;letter-spacing:.14em;color:var(--primary);padding-bottom:10px;border-bottom:3px solid var(--primary)}
+.page{font-size:32px;font-weight:700;letter-spacing:.1em}
+.title-row{position:relative;display:flex;align-items:center;gap:22px;margin-top:36px}
+.title{margin:0;font-family:var(--font-title);font-weight:400;font-size:88px;line-height:1.1;color:var(--fg)}
+.seal-sm{flex:none;display:grid;grid-template-columns:1fr 1fr;width:76px;height:76px;padding:9px;background:var(--primary);color:var(--bg);font-family:var(--font-title);font-weight:400;font-size:28px;line-height:1;text-align:center}
+.intro{position:relative;margin-top:18px;font-size:30px;color:var(--muted)}
+.items{position:relative;margin-top:34px;border-top:2px solid var(--fg)}
+.item{display:grid;grid-template-columns:96px 1fr;column-gap:28px;padding:18px 0;border-bottom:1px solid var(--muted)}
+.num{font-size:48px;font-weight:700;line-height:1;color:var(--primary);padding-top:4px}
+.head{display:block;font-size:38px;font-weight:700;line-height:1.26}
+.text{display:block;margin-top:8px;font-size:28px;line-height:1.45;color:var(--muted)}
+.note{position:relative;margin-top:auto;display:flex;align-items:center;gap:16px;padding-top:28px}
+.sq{flex:none;width:16px;height:16px;background:var(--primary)}
+.note-text{font-size:30px;font-weight:700}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="frame"></div>
+  <div class="frame frame-in"></div>
+  <div class="top">
+    <span class="tag" data-slot="tag" data-max="6">立冬习俗</span>
+    <span class="page" data-slot="page" data-max="5">03/04</span>
+  </div>
+  <div class="title-row">
+    <h2 class="title" data-slot="title" data-max="6">立冬三件事</h2>
+    <div class="seal-sm"><span>冬</span><span>藏</span><span>养</span><span>生</span></div>
+  </div>
+  <div class="intro" data-slot="intro" data-max="24">过好立冬，记住这几件小事</div>
+  <div class="items" data-list="items" data-max="5">
+    <div class="item" data-item>
+      <span class="num" data-slot="num">01</span>
+      <div class="body"><span class="head" data-slot="head" data-max="12">吃饺子</span><span class="text" data-slot="text" data-max="24">立冬吃饺子，补嘴空、暖身子</span></div>
+    </div>
+    <div class="item" data-item>
+      <span class="num" data-slot="num">02</span>
+      <div class="body"><span class="head" data-slot="head" data-max="12">早睡晚起</span><span class="text" data-slot="text" data-max="24">顺应冬藏，子时之前入睡</span></div>
+    </div>
+    <div class="item" data-item>
+      <span class="num" data-slot="num">03</span>
+      <div class="body"><span class="head" data-slot="head" data-max="12">温补进补</span><span class="text" data-slot="text" data-max="24">羊肉萝卜汤，暖胃又不燥</span></div>
+    </div>
+    <div class="item" data-item>
+      <span class="num" data-slot="num">04</span>
+      <div class="body"><span class="head" data-slot="head" data-max="12">晒晒太阳</span><span class="text" data-slot="text" data-max="24">中午晒背半小时，补阳气</span></div>
+    </div>
+  </div>
+  <div class="note"><span class="sq"></span><span class="note-text" data-slot="note" data-max="24">立冬养生，记住一个字：藏</span></div>
+</div>
+</body>
+</html>

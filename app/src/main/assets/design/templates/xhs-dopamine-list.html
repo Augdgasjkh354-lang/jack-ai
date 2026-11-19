@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-dopamine-list","name":"多巴胺·清单","category":"xhs","size":[1080,1440],"style":"多巴胺","look":"dopamine","set":"dopamine-a","role":"list","description":"粗黑描边编号加 3～5 条搭配要点，单数条粉底、双数条绿底轮换，底部一条波浪线加收藏提醒","slots":[{"name":"tag","label":"小标签","max":8},{"name":"title","label":"本页标题","max":8},{"name":"note","label":"底部提醒","max":24},{"name":"page","label":"页码","max":5}],"lists":[{"name":"items","label":"要点","min":3,"max":5,"slots":[{"name":"head","label":"短标题","max":12},{"name":"text","label":"说明","max":24}]}],"images":[],"colors":{"bg":"#FFF5FA","fg":"#1E1A1D","primary":"#E8338A","secondary":"#B8F26B","accent":"#3A7BFF","muted":"#5E4E58"}}'>
+<title>多巴胺·清单</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#FFF5FA;--fg:#1E1A1D;--primary:#E8338A;--secondary:#B8F26B;--accent:#3A7BFF;--muted:#5E4E58;
+  --font-title:"ZCOOL KuaiLe","Noto Sans CJK SC",sans-serif;--font-sans:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-num:"Archivo Black","Noto Sans CJK SC",sans-serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:72px 80px 68px;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.08;mix-blend-mode:multiply}
+.top{position:relative;display:flex;align-items:center;justify-content:space-between;height:64px}
+.tag{font-family:var(--font-title);font-size:38px;line-height:1;padding-bottom:8px;border-bottom:6px solid var(--primary)}
+.page{font-family:var(--font-num);font-size:40px;letter-spacing:.06em}
+.title{position:relative;margin:32px 0 0;font-family:var(--font-title);font-weight:400;font-size:104px;line-height:1.06;color:var(--primary)}
+.items{position:relative;display:flex;flex-direction:column;gap:18px;margin-top:40px}
+.item{display:grid;grid-template-columns:112px 1fr;align-items:start;column-gap:28px;padding:20px 24px;background:color-mix(in srgb,var(--primary) 10%,var(--bg));border:4px solid var(--fg)}
+.item:nth-child(even){background:color-mix(in srgb,var(--secondary) 38%,var(--bg))}
+.item .num{display:flex;align-items:center;justify-content:center;width:112px;height:112px;background:var(--fg);color:var(--bg);font-family:var(--font-num);font-size:64px;line-height:1}
+.item:nth-child(even) .num{background:var(--accent)}
+.body{min-width:0}
+.body .head{display:block;font-size:40px;line-height:1.25;font-weight:900;letter-spacing:.01em}
+.body .text{display:block;margin-top:8px;font-size:30px;line-height:1.5;font-weight:500;color:var(--muted)}
+.wave{margin-top:36px;color:var(--accent)}
+.wave svg{display:block}
+.note{position:relative;display:flex;align-items:center;gap:18px;margin-top:22px;font-size:32px;font-weight:700}
+.note .star{flex:none;color:var(--primary)}
+.note .star svg{display:block}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="top">
+    <span class="tag" data-slot="tag" data-max="8">搭配要点</span>
+    <span class="page" data-slot="page" data-max="5">03/04</span>
+  </div>
+  <h2 class="title" data-slot="title" data-max="8">记住这 5 条</h2>
+  <div class="items" data-list="items" data-max="5">
+    <div class="item" data-item>
+      <span class="num" data-slot="num">01</span>
+      <div class="body"><span class="head" data-slot="head" data-max="12">一亮一暗</span><span class="text" data-slot="text" data-max="24">亮色只穿一件，其余用黑白灰压住</span></div>
+    </div>
+    <div class="item" data-item>
+      <span class="num" data-slot="num">02</span>
+      <div class="body"><span class="head" data-slot="head" data-max="12">上宽下窄</span><span class="text" data-slot="text" data-max="24">宽松上衣配修身下装，比例不翻车</span></div>
+    </div>
+    <div class="item" data-item>
+      <span class="num" data-slot="num">03</span>
+      <div class="body"><span class="head" data-slot="head" data-max="12">同色呼应</span><span class="text" data-slot="text" data-max="24">包包和鞋子同色，全身立刻有重点</span></div>
+    </div>
+    <div class="item" data-item>
+      <span class="num" data-slot="num">04</span>
+      <div class="body"><span class="head" data-slot="head" data-max="12">配饰点睛</span><span class="text" data-slot="text" data-max="24">一对耳环或一条丝巾，快乐值拉满</span></div>
+    </div>
+    <div class="item" data-item>
+      <span class="num" data-slot="num">05</span>
+      <div class="body"><span class="head" data-slot="head" data-max="12">照镜子三秒</span><span class="text" data-slot="text" data-max="24">出门前退后三步看整体，顺眼再走</span></div>
+    </div>
+  </div>
+  <div class="wave"><svg width="920" height="26" viewBox="0 0 920 26" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round"><path d="M4 13c22-12 44-12 66 0s44 12 66 0 44-12 66 0 44 12 66 0 44-12 66 0 44 12 66 0 44-12 66 0 44 12 66 0 44-12 66 0 44 12 62 0"/></svg></div>
+  <div class="note"><span class="star"><svg width="52" height="52" viewBox="0 0 120 120" fill="currentColor"><path d="M60 6l14 36 38 4-28 26 8 38-32-20-32 20 8-38-28-26 38-4z"/></svg></span><span data-slot="note" data-max="24">先收藏，照着搭一次就知道</span></div>
+</div>
+</body>
+</html>

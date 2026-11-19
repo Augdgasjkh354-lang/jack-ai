@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-guofeng-ending","name":"国风·结尾","category":"xhs","size":[1080,1440],"style":"国风","look":"guofeng","set":"guofeng-a","role":"ending","description":"一句总结大字加评论区互动问题，朱红关注印，放在一组图的最后一张","slots":[{"name":"tag","label":"小标签","max":6},{"name":"title","label":"总结大字","max":6},{"name":"summary","label":"一句话总结","max":26},{"name":"question","label":"互动问题","max":18},{"name":"follow","label":"关注贴纸","max":6},{"name":"author","label":"账号名","max":12},{"name":"page","label":"页码","max":5}],"lists":[],"images":[],"colors":{"bg":"#F3ECDD","fg":"#231C16","primary":"#B83A2B","secondary":"#E4D8C0","accent":"#2E4F4A","muted":"#6D6253"}}'>
+<title>国风·结尾</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#F3ECDD;--fg:#231C16;--primary:#B83A2B;--secondary:#E4D8C0;--accent:#2E4F4A;--muted:#6D6253;
+  --font-title:"Ma Shan Zheng","Noto Serif SC","Noto Serif CJK SC",serif;--font-sans:"Noto Serif SC","Noto Serif CJK SC",serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:76px 84px 72px;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+/* 颗粒：让纯色底不那么「电脑味」 */
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.10;mix-blend-mode:multiply}
+.frame{position:absolute;inset:34px;border:2px solid var(--muted);opacity:.5;pointer-events:none}
+.frame-in{inset:44px;border-width:1px;opacity:.3}
+.top{position:relative;display:flex;align-items:center;justify-content:space-between;height:56px}
+.tag{font-size:32px;font-weight:700;letter-spacing:.14em;color:var(--primary);padding-bottom:10px;border-bottom:3px solid var(--primary)}
+.page{font-size:32px;font-weight:700;letter-spacing:.1em}
+.title{position:relative;margin:110px 0 0;text-align:center;font-family:var(--font-title);font-weight:400;font-size:140px;line-height:1.1;color:var(--fg)}
+.summary{position:relative;margin-top:36px;text-align:center;font-size:32px;line-height:1.6;color:var(--muted)}
+.rule{position:relative;margin:56px 120px 0;border-top:1px solid var(--muted)}
+.rule .dot{position:absolute;left:50%;top:-7px;width:12px;height:12px;margin-left:-6px;background:var(--primary);transform:rotate(45deg)}
+.ask{position:relative;margin-top:56px;padding:38px 44px 42px;border:2px solid var(--fg);background:color-mix(in srgb,var(--secondary) 45%,transparent)}
+.ask-label{display:block;font-size:26px;font-weight:700;letter-spacing:.14em;color:var(--primary)}
+.question{display:block;margin-top:14px;font-size:44px;font-weight:700;line-height:1.3}
+.bottom{position:relative;margin-top:auto;display:flex;align-items:center;justify-content:space-between;padding-top:24px;border-top:2px solid var(--fg)}
+.author{font-size:28px;font-weight:700}
+.follow{display:inline-block;padding:14px 30px 18px;background:var(--primary);color:var(--bg);font-family:var(--font-title);font-weight:400;font-size:40px;line-height:1;transform:rotate(-2deg)}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="frame"></div>
+  <div class="frame frame-in"></div>
+  <div class="top">
+    <span class="tag" data-slot="tag" data-max="6">冬日安好</span>
+    <span class="page" data-slot="page" data-max="5">04/04</span>
+  </div>
+  <h2 class="title" data-slot="title" data-max="6">藏好秋天</h2>
+  <div class="summary" data-slot="summary" data-max="26">冬天是用来养的，不是用来熬的</div>
+  <div class="rule"><span class="dot"></span></div>
+  <div class="ask">
+    <span class="ask-label">评论区聊聊</span>
+    <span class="question" data-slot="question" data-max="18">你家立冬吃什么？</span>
+  </div>
+  <div class="bottom">
+    <span class="author" data-slot="author" data-max="12">@你的账号</span>
+    <span class="follow" data-slot="follow" data-max="6">关注不迷路</span>
+  </div>
+</div>
+</body>
+</html>

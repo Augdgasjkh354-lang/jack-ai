@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-minimal-cover","name":"极简白·封面","category":"xhs","size":[1080,1440],"style":"极简白","look":"minimal","set":"minimal-a","role":"cover","description":"大面积留白加 110px 特粗标题，右下角一个很淡的巨型 06，适合效率、自律、学习方法类笔记的封面","slots":[{"name":"tag","label":"小标签","max":6},{"name":"title","label":"标题（可用\n分两行）","max":12},{"name":"subtitle","label":"副标题","max":22},{"name":"date","label":"日期","max":10},{"name":"author","label":"账号名","max":12},{"name":"page","label":"页码","max":5}],"lists":[],"images":[],"colors":{"bg":"#FFFFFF","fg":"#111111","primary":"#111111","secondary":"#F1F1F1","accent":"#2457F5","muted":"#6B6B6B"}}'>
+<title>极简白·封面</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#FFFFFF;--fg:#111111;--primary:#111111;--secondary:#F1F1F1;--accent:#2457F5;--muted:#6B6B6B;
+  --font-title:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-sans:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-num:"Montserrat","Noto Sans SC",sans-serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:76px 80px 72px;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.05;mix-blend-mode:multiply}
+.gridlines{position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(rgba(0,0,0,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(0,0,0,.04) 1px,transparent 1px);background-size:120px 120px}
+.top{position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between;height:60px}
+.tag{display:flex;align-items:center;gap:14px;font-size:22px;font-weight:700;letter-spacing:.2em;color:var(--muted)}
+.tag .sq{width:14px;height:14px;background:var(--accent)}
+.page{font-family:var(--font-num);font-size:26px;font-weight:700;letter-spacing:.08em}
+.rule{position:relative;z-index:1;height:1px;margin-top:28px;background:rgba(0,0,0,.16)}
+.hero{position:relative;z-index:1;margin-top:170px}
+.title{margin:0;font-family:var(--font-title);font-weight:900;font-size:110px;line-height:1.08;letter-spacing:-.01em;color:var(--primary)}
+.subtitle{position:relative;z-index:1;margin-top:44px;max-width:660px;font-size:30px;line-height:1.6;font-weight:300;color:var(--muted)}
+.meta{position:relative;z-index:1;display:flex;align-items:center;gap:28px;margin-top:52px;font-family:var(--font-num);font-size:22px;font-weight:700;letter-spacing:.22em;color:var(--muted)}
+.bignum{position:absolute;z-index:0;right:-36px;bottom:150px;font-family:var(--font-num);font-weight:900;font-size:460px;line-height:.8;color:transparent;-webkit-text-stroke:4px color-mix(in srgb, var(--fg) 30%, transparent)}
+.bottom{position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between;margin-top:auto;padding-top:28px;border-top:1px solid rgba(0,0,0,.16)}
+.author{font-size:28px;font-weight:700}
+.more{font-family:var(--font-num);font-size:22px;font-weight:700;letter-spacing:.18em;color:var(--muted)}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="gridlines" aria-hidden="true"></div>
+  <div class="top">
+    <span class="tag"><span class="sq"></span><span data-slot="tag" data-max="6">早起打卡</span></span>
+    <span class="page" data-slot="page" data-max="5">01/04</span>
+  </div>
+  <div class="rule"></div>
+  <div class="hero">
+    <h1 class="title" data-slot="title" data-max="12">6 点起床的<br>高效早晨</h1>
+  </div>
+  <div class="subtitle" data-slot="subtitle" data-max="22">不起床气，不赶时间，把一天赢在开头</div>
+  <div class="meta"><span>MORNING ROUTINE</span><span data-slot="date" data-max="10">2026.11.19</span></div>
+  <div class="bignum" data-bleed>06</div>
+  <div class="bottom">
+    <span class="author" data-slot="author" data-max="12">@你的账号</span>
+    <span class="more">SCROLL →</span>
+  </div>
+</div>
+</body>
+</html>

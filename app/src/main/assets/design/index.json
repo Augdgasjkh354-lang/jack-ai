@@ -239,6 +239,489 @@
     }
   },
   {
+    "id": "xhs-cream-cover",
+    "name": "奶油温柔·封面",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "奶油温柔",
+    "look": "cream",
+    "set": "cream-a",
+    "role": "cover",
+    "description": "暖奶油底配焦糖大标题，下方一张周末照片，适合慢生活、治愈日常的封面",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "贴纸标签",
+        "max": 6
+      },
+      {
+        "name": "title",
+        "label": "标题（可用\n分两行）",
+        "max": 12
+      },
+      {
+        "name": "subtitle",
+        "label": "副标题",
+        "max": 22
+      },
+      {
+        "name": "author",
+        "label": "账号名",
+        "max": 12
+      },
+      {
+        "name": "date",
+        "label": "日期",
+        "max": 10
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [],
+    "images": [
+      {
+        "name": "photo",
+        "label": "封面照片",
+        "optional": true
+      }
+    ],
+    "colors": {
+      "bg": "#FBF3E6",
+      "fg": "#4A3426",
+      "primary": "#B0703C",
+      "secondary": "#F2DFC4",
+      "accent": "#E9A6A0",
+      "muted": "#7E6656"
+    }
+  },
+  {
+    "id": "xhs-cream-ending",
+    "name": "奶油温柔·结尾",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "奶油温柔",
+    "look": "cream",
+    "set": "cream-a",
+    "role": "ending",
+    "description": "一句总结加评论区互动问题和关注贴纸，放在一组图的最后一张",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "小标签",
+        "max": 6
+      },
+      {
+        "name": "title",
+        "label": "总结大字（可用\n分行）",
+        "max": 10
+      },
+      {
+        "name": "summary",
+        "label": "一句话总结",
+        "max": 26
+      },
+      {
+        "name": "question",
+        "label": "互动问题",
+        "max": 18
+      },
+      {
+        "name": "follow",
+        "label": "关注贴纸",
+        "max": 6
+      },
+      {
+        "name": "author",
+        "label": "账号名",
+        "max": 12
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [],
+    "images": [],
+    "colors": {
+      "bg": "#FBF3E6",
+      "fg": "#4A3426",
+      "primary": "#B0703C",
+      "secondary": "#F2DFC4",
+      "accent": "#E9A6A0",
+      "muted": "#7E6656"
+    }
+  },
+  {
+    "id": "xhs-cream-list",
+    "name": "奶油温柔·清单",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "奶油温柔",
+    "look": "cream",
+    "set": "cream-a",
+    "role": "list",
+    "description": "手写编号加 3～5 件慢生活小事，圆角奶油卡片，适合周末清单、治愈日常",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "小标签",
+        "max": 8
+      },
+      {
+        "name": "title",
+        "label": "本页标题",
+        "max": 10
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [
+      {
+        "name": "items",
+        "label": "慢生活小事",
+        "min": 3,
+        "max": 5,
+        "slots": [
+          {
+            "name": "head",
+            "label": "短标题",
+            "max": 12
+          },
+          {
+            "name": "text",
+            "label": "说明",
+            "max": 30
+          }
+        ]
+      }
+    ],
+    "images": [],
+    "colors": {
+      "bg": "#FBF3E6",
+      "fg": "#4A3426",
+      "primary": "#B0703C",
+      "secondary": "#F2DFC4",
+      "accent": "#E9A6A0",
+      "muted": "#7E6656"
+    }
+  },
+  {
+    "id": "xhs-cream-quote",
+    "name": "奶油温柔·金句",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "奶油温柔",
+    "look": "cream",
+    "set": "cream-a",
+    "role": "quote",
+    "description": "一句慢生活金句居中大字，留白很多，适合语录、书摘、心情",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "小标签",
+        "max": 6
+      },
+      {
+        "name": "quote",
+        "label": "金句",
+        "max": 26
+      },
+      {
+        "name": "source",
+        "label": "出处",
+        "max": 12
+      },
+      {
+        "name": "author",
+        "label": "账号名",
+        "max": 12
+      },
+      {
+        "name": "date",
+        "label": "日期",
+        "max": 10
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [],
+    "images": [],
+    "colors": {
+      "bg": "#FBF3E6",
+      "fg": "#4A3426",
+      "primary": "#B0703C",
+      "secondary": "#F2DFC4",
+      "accent": "#E9A6A0",
+      "muted": "#7E6656"
+    }
+  },
+  {
+    "id": "xhs-dopamine-cover",
+    "name": "多巴胺·封面",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "多巴胺",
+    "look": "dopamine",
+    "set": "dopamine-a",
+    "role": "cover",
+    "description": "站酷快乐体超大标题加波浪线和笑脸贴纸，底部一条撞色照片条，适合穿搭、好物、夏日快乐主题的封面",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "贴纸标签",
+        "max": 6
+      },
+      {
+        "name": "title",
+        "label": "标题（可用\\n分两行）",
+        "max": 12
+      },
+      {
+        "name": "subtitle",
+        "label": "副标题",
+        "max": 22
+      },
+      {
+        "name": "author",
+        "label": "账号名",
+        "max": 12
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [],
+    "images": [
+      {
+        "name": "photo",
+        "label": "封面照片",
+        "optional": true
+      }
+    ],
+    "colors": {
+      "bg": "#FFF5FA",
+      "fg": "#1E1A1D",
+      "primary": "#E8338A",
+      "secondary": "#B8F26B",
+      "accent": "#3A7BFF",
+      "muted": "#5E4E58"
+    }
+  },
+  {
+    "id": "xhs-dopamine-ending",
+    "name": "多巴胺·结尾",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "多巴胺",
+    "look": "dopamine",
+    "set": "dopamine-a",
+    "role": "ending",
+    "description": "笑脸加一句总结大字，绿色对话框装互动问题，粉色关注贴纸收尾，和封面同一套撞色语言",
+    "slots": [
+      {
+        "name": "title",
+        "label": "总结大字（可用\\n分行）",
+        "max": 10
+      },
+      {
+        "name": "summary",
+        "label": "一句话总结",
+        "max": 26
+      },
+      {
+        "name": "question",
+        "label": "互动问题",
+        "max": 18
+      },
+      {
+        "name": "follow",
+        "label": "关注贴纸",
+        "max": 6
+      },
+      {
+        "name": "author",
+        "label": "账号名",
+        "max": 12
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [],
+    "images": [],
+    "colors": {
+      "bg": "#FFF5FA",
+      "fg": "#1E1A1D",
+      "primary": "#E8338A",
+      "secondary": "#B8F26B",
+      "accent": "#3A7BFF",
+      "muted": "#5E4E58"
+    }
+  },
+  {
+    "id": "xhs-dopamine-grid",
+    "name": "多巴胺·宫格",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "多巴胺",
+    "look": "dopamine",
+    "set": "dopamine-a",
+    "role": "grid",
+    "description": "2×2 贴纸宫格，每格一张单品加一句短评，色块轮换粉、绿、蓝，适合穿搭单品、好物合集的内页",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "小标签",
+        "max": 6
+      },
+      {
+        "name": "title",
+        "label": "本页标题",
+        "max": 10
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [
+      {
+        "name": "items",
+        "label": "单品",
+        "min": 4,
+        "max": 4,
+        "slots": [
+          {
+            "name": "name",
+            "label": "单品名",
+            "max": 8
+          },
+          {
+            "name": "text",
+            "label": "短评",
+            "max": 18
+          }
+        ]
+      }
+    ],
+    "images": [
+      {
+        "name": "photo",
+        "label": "单品照片",
+        "optional": true
+      }
+    ],
+    "colors": {
+      "bg": "#FFF5FA",
+      "fg": "#1E1A1D",
+      "primary": "#E8338A",
+      "secondary": "#B8F26B",
+      "accent": "#3A7BFF",
+      "muted": "#5E4E58"
+    }
+  },
+  {
+    "id": "xhs-dopamine-list",
+    "name": "多巴胺·清单",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "多巴胺",
+    "look": "dopamine",
+    "set": "dopamine-a",
+    "role": "list",
+    "description": "粗黑描边编号加 3～5 条搭配要点，单数条粉底、双数条绿底轮换，底部一条波浪线加收藏提醒",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "小标签",
+        "max": 8
+      },
+      {
+        "name": "title",
+        "label": "本页标题",
+        "max": 8
+      },
+      {
+        "name": "note",
+        "label": "底部提醒",
+        "max": 24
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [
+      {
+        "name": "items",
+        "label": "要点",
+        "min": 3,
+        "max": 5,
+        "slots": [
+          {
+            "name": "head",
+            "label": "短标题",
+            "max": 12
+          },
+          {
+            "name": "text",
+            "label": "说明",
+            "max": 24
+          }
+        ]
+      }
+    ],
+    "images": [],
+    "colors": {
+      "bg": "#FFF5FA",
+      "fg": "#1E1A1D",
+      "primary": "#E8338A",
+      "secondary": "#B8F26B",
+      "accent": "#3A7BFF",
+      "muted": "#5E4E58"
+    }
+  },
+  {
     "id": "xhs-editorial-moment",
     "name": "午后编辑部",
     "category": "xhs",
@@ -298,6 +781,472 @@
     }
   },
   {
+    "id": "xhs-guofeng-cover",
+    "name": "国风·封面",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "国风",
+    "look": "guofeng",
+    "set": "guofeng-a",
+    "role": "cover",
+    "description": "毛笔竖排大标题配朱红印章，底部是远山水墨画带，可放一张照片，适合节气、传统节日笔记的封面",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "小标签",
+        "max": 6
+      },
+      {
+        "name": "title",
+        "label": "标题（竖排，最多 3 字）",
+        "max": 3
+      },
+      {
+        "name": "subtitle",
+        "label": "副标题",
+        "max": 12
+      },
+      {
+        "name": "body",
+        "label": "一句话说明",
+        "max": 30
+      },
+      {
+        "name": "date",
+        "label": "日期",
+        "max": 8
+      },
+      {
+        "name": "author",
+        "label": "账号名",
+        "max": 12
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [],
+    "images": [
+      {
+        "name": "photo",
+        "label": "封面照片",
+        "optional": true
+      }
+    ],
+    "colors": {
+      "bg": "#F3ECDD",
+      "fg": "#231C16",
+      "primary": "#B83A2B",
+      "secondary": "#E4D8C0",
+      "accent": "#2E4F4A",
+      "muted": "#6D6253"
+    }
+  },
+  {
+    "id": "xhs-guofeng-ending",
+    "name": "国风·结尾",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "国风",
+    "look": "guofeng",
+    "set": "guofeng-a",
+    "role": "ending",
+    "description": "一句总结大字加评论区互动问题，朱红关注印，放在一组图的最后一张",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "小标签",
+        "max": 6
+      },
+      {
+        "name": "title",
+        "label": "总结大字",
+        "max": 6
+      },
+      {
+        "name": "summary",
+        "label": "一句话总结",
+        "max": 26
+      },
+      {
+        "name": "question",
+        "label": "互动问题",
+        "max": 18
+      },
+      {
+        "name": "follow",
+        "label": "关注贴纸",
+        "max": 6
+      },
+      {
+        "name": "author",
+        "label": "账号名",
+        "max": 12
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [],
+    "images": [],
+    "colors": {
+      "bg": "#F3ECDD",
+      "fg": "#231C16",
+      "primary": "#B83A2B",
+      "secondary": "#E4D8C0",
+      "accent": "#2E4F4A",
+      "muted": "#6D6253"
+    }
+  },
+  {
+    "id": "xhs-guofeng-list",
+    "name": "国风·清单",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "国风",
+    "look": "guofeng",
+    "set": "guofeng-a",
+    "role": "list",
+    "description": "毛笔小标题加朱红编号，3～5 条习俗或养生要点，每条一个短标题加一句说明",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "小标签",
+        "max": 6
+      },
+      {
+        "name": "title",
+        "label": "本页标题",
+        "max": 6
+      },
+      {
+        "name": "intro",
+        "label": "一句导语",
+        "max": 24
+      },
+      {
+        "name": "note",
+        "label": "底部提醒",
+        "max": 24
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [
+      {
+        "name": "items",
+        "label": "要点",
+        "min": 3,
+        "max": 5,
+        "slots": [
+          {
+            "name": "head",
+            "label": "短标题",
+            "max": 12
+          },
+          {
+            "name": "text",
+            "label": "说明",
+            "max": 24
+          }
+        ]
+      }
+    ],
+    "images": [],
+    "colors": {
+      "bg": "#F3ECDD",
+      "fg": "#231C16",
+      "primary": "#B83A2B",
+      "secondary": "#E4D8C0",
+      "accent": "#2E4F4A",
+      "muted": "#6D6253"
+    }
+  },
+  {
+    "id": "xhs-guofeng-quote",
+    "name": "国风·金句",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "国风",
+    "look": "guofeng",
+    "set": "guofeng-a",
+    "role": "quote",
+    "description": "一句节气古诗大字居中，云纹细线点缀，出处小字在下，适合诗句、金句、书摘",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "小标签",
+        "max": 6
+      },
+      {
+        "name": "quote",
+        "label": "金句（可用\\n分两行）",
+        "max": 16
+      },
+      {
+        "name": "source",
+        "label": "出处",
+        "max": 12
+      },
+      {
+        "name": "note",
+        "label": "一句点评",
+        "max": 20
+      },
+      {
+        "name": "author",
+        "label": "账号名",
+        "max": 12
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [],
+    "images": [],
+    "colors": {
+      "bg": "#F3ECDD",
+      "fg": "#231C16",
+      "primary": "#B83A2B",
+      "secondary": "#E4D8C0",
+      "accent": "#2E4F4A",
+      "muted": "#6D6253"
+    }
+  },
+  {
+    "id": "xhs-knowledge-compare",
+    "name": "知识卡片·对比",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "知识卡片",
+    "look": "knowledge",
+    "set": "knowledge-a",
+    "role": "compare",
+    "description": "左右两栏一一对照：左边拍对了用深绿，右边拍错了用灰，同一维度光线、构图、背景各三条，适合手机摄影这类对错对比",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "小标签",
+        "max": 8
+      },
+      {
+        "name": "title",
+        "label": "本页标题",
+        "max": 10
+      },
+      {
+        "name": "subtitle",
+        "label": "开头一句",
+        "max": 22
+      },
+      {
+        "name": "note",
+        "label": "底部提醒",
+        "max": 24
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [
+      {
+        "name": "rows",
+        "label": "对比维度",
+        "min": 3,
+        "max": 3,
+        "slots": [
+          {
+            "name": "dim",
+            "label": "维度",
+            "max": 6
+          },
+          {
+            "name": "good",
+            "label": "拍对了",
+            "max": 26
+          },
+          {
+            "name": "bad",
+            "label": "拍错了",
+            "max": 26
+          }
+        ]
+      }
+    ],
+    "images": [],
+    "colors": {
+      "bg": "#F3F8F2",
+      "fg": "#17271F",
+      "primary": "#2E7A55",
+      "secondary": "#DCEBDD",
+      "accent": "#E3A23B",
+      "muted": "#566A5E"
+    }
+  },
+  {
+    "id": "xhs-knowledge-cover",
+    "name": "知识卡片·封面",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "知识卡片",
+    "look": "knowledge",
+    "set": "knowledge-a",
+    "role": "cover",
+    "description": "薄荷绿底加荧光笔划出的大标题，下方一张照片位，适合手机摄影这类干货笔记的封面",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "贴纸标签",
+        "max": 6
+      },
+      {
+        "name": "title",
+        "label": "标题（可用\\n分两行）",
+        "max": 12
+      },
+      {
+        "name": "subtitle",
+        "label": "副标题",
+        "max": 22
+      },
+      {
+        "name": "caption",
+        "label": "照片说明",
+        "max": 14
+      },
+      {
+        "name": "author",
+        "label": "账号名",
+        "max": 12
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [],
+    "images": [
+      {
+        "name": "photo",
+        "label": "封面照片",
+        "optional": true
+      }
+    ],
+    "colors": {
+      "bg": "#F3F8F2",
+      "fg": "#17271F",
+      "primary": "#2E7A55",
+      "secondary": "#DCEBDD",
+      "accent": "#E3A23B",
+      "muted": "#566A5E"
+    }
+  },
+  {
+    "id": "xhs-knowledge-ending",
+    "name": "知识卡片·结尾",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "知识卡片",
+    "look": "knowledge",
+    "set": "knowledge-a",
+    "role": "ending",
+    "description": "一句总结大字加三条回顾要点，再加一个带金色竖条的互动问题框，放在一组图的最后一张",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "小标签",
+        "max": 6
+      },
+      {
+        "name": "title",
+        "label": "总结大字（可用\\n分行）",
+        "max": 10
+      },
+      {
+        "name": "summary",
+        "label": "一句话总结",
+        "max": 26
+      },
+      {
+        "name": "question",
+        "label": "互动问题",
+        "max": 18
+      },
+      {
+        "name": "follow",
+        "label": "关注贴纸",
+        "max": 6
+      },
+      {
+        "name": "author",
+        "label": "账号名",
+        "max": 12
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [
+      {
+        "name": "takeaways",
+        "label": "回顾要点",
+        "min": 2,
+        "max": 4,
+        "slots": [
+          {
+            "name": "head",
+            "label": "要点",
+            "max": 12
+          }
+        ]
+      }
+    ],
+    "images": [],
+    "colors": {
+      "bg": "#F3F8F2",
+      "fg": "#17271F",
+      "primary": "#2E7A55",
+      "secondary": "#DCEBDD",
+      "accent": "#E3A23B",
+      "muted": "#566A5E"
+    }
+  },
+  {
     "id": "xhs-knowledge-fresh",
     "name": "清新知识卡",
     "category": "xhs",
@@ -352,6 +1301,858 @@
       "secondary": "#DCEBDD",
       "accent": "#D29B3E",
       "muted": "#596B60"
+    }
+  },
+  {
+    "id": "xhs-knowledge-steps",
+    "name": "知识卡片·步骤",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "知识卡片",
+    "look": "knowledge",
+    "set": "knowledge-a",
+    "role": "steps",
+    "description": "大号编号加竖线连接的 3～6 步流程，每步一个动词短标题加一句说明，底部一条深绿要点条，适合手机摄影这类操作教程",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "小标签",
+        "max": 8
+      },
+      {
+        "name": "title",
+        "label": "本页标题",
+        "max": 10
+      },
+      {
+        "name": "note",
+        "label": "开头一句",
+        "max": 24
+      },
+      {
+        "name": "tip",
+        "label": "底部要点",
+        "max": 20
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [
+      {
+        "name": "steps",
+        "label": "步骤",
+        "min": 3,
+        "max": 6,
+        "slots": [
+          {
+            "name": "head",
+            "label": "步骤短标题",
+            "max": 10
+          },
+          {
+            "name": "text",
+            "label": "说明",
+            "max": 24
+          }
+        ]
+      }
+    ],
+    "images": [],
+    "colors": {
+      "bg": "#F3F8F2",
+      "fg": "#17271F",
+      "primary": "#2E7A55",
+      "secondary": "#DCEBDD",
+      "accent": "#E3A23B",
+      "muted": "#566A5E"
+    }
+  },
+  {
+    "id": "xhs-magazine-cover",
+    "name": "杂志编辑·封面",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "杂志编辑",
+    "look": "magazine",
+    "set": "magazine-a",
+    "role": "cover",
+    "description": "杂志封面：大留白配宋体大标题，下方大幅照片出血，期号与页码收尾，适合穿搭、城市漫步类笔记",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "栏目",
+        "max": 6
+      },
+      {
+        "name": "title",
+        "label": "标题（可用\\n分两行）",
+        "max": 12
+      },
+      {
+        "name": "subtitle",
+        "label": "副标题",
+        "max": 22
+      },
+      {
+        "name": "caption",
+        "label": "图片说明",
+        "max": 16
+      },
+      {
+        "name": "author",
+        "label": "账号名",
+        "max": 12
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [],
+    "images": [
+      {
+        "name": "photo",
+        "label": "封面照片",
+        "optional": true
+      }
+    ],
+    "colors": {
+      "bg": "#F4EFE6",
+      "fg": "#1B1A17",
+      "primary": "#1B1A17",
+      "secondary": "#E4DCCD",
+      "accent": "#B4532A",
+      "muted": "#6E675C"
+    }
+  },
+  {
+    "id": "xhs-magazine-ending",
+    "name": "杂志编辑·结尾",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "杂志编辑",
+    "look": "magazine",
+    "set": "magazine-a",
+    "role": "ending",
+    "description": "杂志结尾页：总结大字加评论区互动问题，右下角斜体英文出血，风格与封面呼应，适合放在一组图的最后一张",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "栏目",
+        "max": 6
+      },
+      {
+        "name": "title",
+        "label": "总结大字（可用\\n分行）",
+        "max": 10
+      },
+      {
+        "name": "summary",
+        "label": "一句话总结",
+        "max": 28
+      },
+      {
+        "name": "question",
+        "label": "互动问题",
+        "max": 18
+      },
+      {
+        "name": "follow",
+        "label": "关注贴纸",
+        "max": 6
+      },
+      {
+        "name": "author",
+        "label": "账号名",
+        "max": 12
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [],
+    "images": [],
+    "colors": {
+      "bg": "#F4EFE6",
+      "fg": "#1B1A17",
+      "primary": "#1B1A17",
+      "secondary": "#E4DCCD",
+      "accent": "#B4532A",
+      "muted": "#6E675C"
+    }
+  },
+  {
+    "id": "xhs-magazine-list",
+    "name": "杂志编辑·清单",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "杂志编辑",
+    "look": "magazine",
+    "set": "magazine-a",
+    "role": "list",
+    "description": "杂志清单页：大号斜体期号数字配细线分隔的要点，适合穿搭公式、要点清单",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "栏目",
+        "max": 8
+      },
+      {
+        "name": "title",
+        "label": "本页标题",
+        "max": 10
+      },
+      {
+        "name": "note",
+        "label": "底部提醒",
+        "max": 24
+      },
+      {
+        "name": "author",
+        "label": "账号名",
+        "max": 12
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [
+      {
+        "name": "items",
+        "label": "要点",
+        "min": 3,
+        "max": 5,
+        "slots": [
+          {
+            "name": "head",
+            "label": "短标题",
+            "max": 12
+          },
+          {
+            "name": "text",
+            "label": "说明",
+            "max": 24
+          }
+        ]
+      }
+    ],
+    "images": [],
+    "colors": {
+      "bg": "#F4EFE6",
+      "fg": "#1B1A17",
+      "primary": "#1B1A17",
+      "secondary": "#E4DCCD",
+      "accent": "#B4532A",
+      "muted": "#6E675C"
+    }
+  },
+  {
+    "id": "xhs-magazine-photo",
+    "name": "杂志编辑·大图",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "杂志编辑",
+    "look": "magazine",
+    "set": "magazine-a",
+    "role": "photo",
+    "description": "杂志大图页：照片占上半版大幅出血，图说压在照片下方，正文留在照片下的留白处，适合穿搭实拍、街景",
+    "slots": [
+      {
+        "name": "caption",
+        "label": "图片说明",
+        "max": 16
+      },
+      {
+        "name": "title",
+        "label": "标题",
+        "max": 12
+      },
+      {
+        "name": "body",
+        "label": "正文",
+        "max": 40
+      },
+      {
+        "name": "author",
+        "label": "账号名",
+        "max": 12
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [],
+    "images": [
+      {
+        "name": "photo",
+        "label": "主图照片",
+        "optional": true
+      }
+    ],
+    "colors": {
+      "bg": "#F4EFE6",
+      "fg": "#1B1A17",
+      "primary": "#1B1A17",
+      "secondary": "#E4DCCD",
+      "accent": "#B4532A",
+      "muted": "#6E675C"
+    }
+  },
+  {
+    "id": "xhs-minimal-cover",
+    "name": "极简白·封面",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "极简白",
+    "look": "minimal",
+    "set": "minimal-a",
+    "role": "cover",
+    "description": "大面积留白加 110px 特粗标题，右下角一个很淡的巨型 06，适合效率、自律、学习方法类笔记的封面",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "小标签",
+        "max": 6
+      },
+      {
+        "name": "title",
+        "label": "标题（可用\n分两行）",
+        "max": 12
+      },
+      {
+        "name": "subtitle",
+        "label": "副标题",
+        "max": 22
+      },
+      {
+        "name": "date",
+        "label": "日期",
+        "max": 10
+      },
+      {
+        "name": "author",
+        "label": "账号名",
+        "max": 12
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [],
+    "images": [],
+    "colors": {
+      "bg": "#FFFFFF",
+      "fg": "#111111",
+      "primary": "#111111",
+      "secondary": "#F1F1F1",
+      "accent": "#2457F5",
+      "muted": "#6B6B6B"
+    }
+  },
+  {
+    "id": "xhs-minimal-data",
+    "name": "极简白·大数字",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "极简白",
+    "look": "minimal",
+    "set": "minimal-a",
+    "role": "data",
+    "description": "一个 320px 大数字是主角，下面两个小数据并排对照，适合成绩、时间、收益类数据的内页",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "小标签",
+        "max": 8
+      },
+      {
+        "name": "title",
+        "label": "本页标题",
+        "max": 12
+      },
+      {
+        "name": "value",
+        "label": "大数字",
+        "max": 4
+      },
+      {
+        "name": "unit",
+        "label": "单位",
+        "max": 2
+      },
+      {
+        "name": "label",
+        "label": "大数字说明",
+        "max": 14
+      },
+      {
+        "name": "stat1num",
+        "label": "数据一数字",
+        "max": 5
+      },
+      {
+        "name": "stat1label",
+        "label": "数据一说明",
+        "max": 8
+      },
+      {
+        "name": "stat2num",
+        "label": "数据二数字",
+        "max": 5
+      },
+      {
+        "name": "stat2label",
+        "label": "数据二说明",
+        "max": 8
+      },
+      {
+        "name": "note",
+        "label": "底部备注",
+        "max": 24
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [],
+    "images": [],
+    "colors": {
+      "bg": "#FFFFFF",
+      "fg": "#111111",
+      "primary": "#111111",
+      "secondary": "#F1F1F1",
+      "accent": "#2457F5",
+      "muted": "#6B6B6B"
+    }
+  },
+  {
+    "id": "xhs-minimal-ending",
+    "name": "极简白·结尾",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "极简白",
+    "look": "minimal",
+    "set": "minimal-a",
+    "role": "ending",
+    "description": "一句总结大字加评论区互动问题和关注引导，留白多、跟封面同款细线和页码，放在一组图的最后一张",
+    "slots": [
+      {
+        "name": "title",
+        "label": "总结大字",
+        "max": 10
+      },
+      {
+        "name": "summary",
+        "label": "一句话总结",
+        "max": 26
+      },
+      {
+        "name": "question",
+        "label": "互动问题",
+        "max": 18
+      },
+      {
+        "name": "follow",
+        "label": "关注引导",
+        "max": 6
+      },
+      {
+        "name": "author",
+        "label": "账号名",
+        "max": 12
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [],
+    "images": [],
+    "colors": {
+      "bg": "#FFFFFF",
+      "fg": "#111111",
+      "primary": "#111111",
+      "secondary": "#F1F1F1",
+      "accent": "#2457F5",
+      "muted": "#6B6B6B"
+    }
+  },
+  {
+    "id": "xhs-minimal-steps",
+    "name": "极简白·步骤",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "极简白",
+    "look": "minimal",
+    "set": "minimal-a",
+    "role": "steps",
+    "description": "细线分隔的 3～6 步流程，每步一个时间点加一句说明，第一步的序号是唯一的蓝色，适合教程、晨间流程、时间线",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "小标签",
+        "max": 8
+      },
+      {
+        "name": "title",
+        "label": "本页标题",
+        "max": 12
+      },
+      {
+        "name": "note",
+        "label": "底部提醒",
+        "max": 24
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [
+      {
+        "name": "steps",
+        "label": "步骤",
+        "min": 3,
+        "max": 6,
+        "slots": [
+          {
+            "name": "time",
+            "label": "时间点",
+            "max": 5
+          },
+          {
+            "name": "head",
+            "label": "短标题",
+            "max": 10
+          },
+          {
+            "name": "text",
+            "label": "说明",
+            "max": 22
+          }
+        ]
+      }
+    ],
+    "images": [],
+    "colors": {
+      "bg": "#FFFFFF",
+      "fg": "#111111",
+      "primary": "#111111",
+      "secondary": "#F1F1F1",
+      "accent": "#2457F5",
+      "muted": "#6B6B6B"
+    }
+  },
+  {
+    "id": "xhs-notebook-cover",
+    "name": "手账拼贴·封面",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "手账拼贴",
+    "look": "notebook",
+    "set": "notebook-a",
+    "role": "cover",
+    "description": "牛皮纸横线底，一句手写感大标题加黄色荧光笔重点，角落贴着便利贴和红笔批注，像真的单词手账第一页",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "贴纸标签",
+        "max": 6
+      },
+      {
+        "name": "date",
+        "label": "日期",
+        "max": 12
+      },
+      {
+        "name": "title",
+        "label": "标题（可用\\n分两行）",
+        "max": 9
+      },
+      {
+        "name": "keyword",
+        "label": "荧光笔关键词",
+        "max": 6
+      },
+      {
+        "name": "subtitle",
+        "label": "副标题",
+        "max": 22
+      },
+      {
+        "name": "number",
+        "label": "大数字（没有就留空）",
+        "max": 2
+      },
+      {
+        "name": "note",
+        "label": "便利贴",
+        "max": 20
+      },
+      {
+        "name": "author",
+        "label": "账号名",
+        "max": 12
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [],
+    "images": [],
+    "colors": {
+      "bg": "#F6EFDF",
+      "fg": "#2E2A24",
+      "primary": "#C2412D",
+      "secondary": "#FFE98A",
+      "accent": "#5B8DD6",
+      "muted": "#6E6556"
+    }
+  },
+  {
+    "id": "xhs-notebook-ending",
+    "name": "手账拼贴·结尾",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "手账拼贴",
+    "look": "notebook",
+    "set": "notebook-a",
+    "role": "ending",
+    "description": "一句荧光笔总结大字，下面贴一张手绘边框的便利贴问互动问题，红笔批注收尾，跟封面呼应",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "小标签",
+        "max": 6
+      },
+      {
+        "name": "title",
+        "label": "总结大字",
+        "max": 10
+      },
+      {
+        "name": "keyword",
+        "label": "荧光笔关键词",
+        "max": 6
+      },
+      {
+        "name": "summary",
+        "label": "一句话总结",
+        "max": 36
+      },
+      {
+        "name": "question",
+        "label": "互动问题",
+        "max": 18
+      },
+      {
+        "name": "follow",
+        "label": "关注贴纸",
+        "max": 8
+      },
+      {
+        "name": "author",
+        "label": "账号名",
+        "max": 12
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [],
+    "images": [],
+    "colors": {
+      "bg": "#F6EFDF",
+      "fg": "#2E2A24",
+      "primary": "#C2412D",
+      "secondary": "#FFE98A",
+      "accent": "#5B8DD6",
+      "muted": "#6E6556"
+    }
+  },
+  {
+    "id": "xhs-notebook-list",
+    "name": "手账拼贴·清单",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "手账拼贴",
+    "look": "notebook",
+    "set": "notebook-a",
+    "role": "list",
+    "description": "横线纸上 5 条背单词方法，手写编号加荧光笔划重点，像从单词本上撕下来的一页",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "小标签",
+        "max": 8
+      },
+      {
+        "name": "title",
+        "label": "本页标题",
+        "max": 10
+      },
+      {
+        "name": "note",
+        "label": "底部提醒",
+        "max": 24
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [
+      {
+        "name": "items",
+        "label": "方法",
+        "min": 3,
+        "max": 5,
+        "slots": [
+          {
+            "name": "head",
+            "label": "短标题",
+            "max": 12
+          },
+          {
+            "name": "text",
+            "label": "说明",
+            "max": 28
+          }
+        ]
+      }
+    ],
+    "images": [],
+    "colors": {
+      "bg": "#F6EFDF",
+      "fg": "#2E2A24",
+      "primary": "#C2412D",
+      "secondary": "#FFE98A",
+      "accent": "#5B8DD6",
+      "muted": "#6E6556"
+    }
+  },
+  {
+    "id": "xhs-notebook-photo",
+    "name": "手账拼贴·照片",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "手账拼贴",
+    "look": "notebook",
+    "set": "notebook-a",
+    "role": "photo",
+    "description": "一张斜贴的拍立得：没照片时是横线纸加相机小图标，有照片时盖住占位；下面是手写体批注和第一天的样子",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "小标签",
+        "max": 6
+      },
+      {
+        "name": "title",
+        "label": "本页标题",
+        "max": 8
+      },
+      {
+        "name": "caption",
+        "label": "拍立得下方手写",
+        "max": 20
+      },
+      {
+        "name": "body",
+        "label": "正文",
+        "max": 44
+      },
+      {
+        "name": "author",
+        "label": "账号名",
+        "max": 12
+      },
+      {
+        "name": "date",
+        "label": "日期",
+        "max": 12
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [],
+    "images": [
+      {
+        "name": "photo",
+        "label": "拍立得照片",
+        "optional": true
+      }
+    ],
+    "colors": {
+      "bg": "#F6EFDF",
+      "fg": "#2E2A24",
+      "primary": "#C2412D",
+      "secondary": "#FFE98A",
+      "accent": "#5B8DD6",
+      "muted": "#6E6556"
     }
   },
   {
@@ -467,6 +2268,309 @@
       "secondary": "#E2D0AA",
       "accent": "#B55335",
       "muted": "#61563F"
+    }
+  },
+  {
+    "id": "xhs-tech-compare",
+    "name": "科技暗色·对比",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "科技暗色",
+    "look": "tech",
+    "set": "tech-a",
+    "role": "compare",
+    "description": "左右两栏一一对应：左边用 AI 前、右边用 AI 后，同一件事两种活法，适合提效前后、换工具前后的对比",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "小标签",
+        "max": 8
+      },
+      {
+        "name": "title",
+        "label": "本页标题",
+        "max": 10
+      },
+      {
+        "name": "subtitle",
+        "label": "副标题",
+        "max": 20
+      },
+      {
+        "name": "beforetag",
+        "label": "左栏小标题",
+        "max": 8
+      },
+      {
+        "name": "aftertag",
+        "label": "右栏小标题",
+        "max": 8
+      },
+      {
+        "name": "note",
+        "label": "底部总结",
+        "max": 24
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [
+      {
+        "name": "rows",
+        "label": "对比项",
+        "min": 3,
+        "max": 3,
+        "slots": [
+          {
+            "name": "bhead",
+            "label": "用 AI 前事项",
+            "max": 10
+          },
+          {
+            "name": "btext",
+            "label": "原来怎么做",
+            "max": 16
+          },
+          {
+            "name": "ahead",
+            "label": "用 AI 后事项",
+            "max": 10
+          },
+          {
+            "name": "atext",
+            "label": "现在怎么做",
+            "max": 16
+          }
+        ]
+      }
+    ],
+    "images": [],
+    "colors": {
+      "bg": "#0E0F0C",
+      "fg": "#EDEEE8",
+      "primary": "#B6F23D",
+      "secondary": "#1C1E19",
+      "accent": "#5AD1FF",
+      "muted": "#A3A69C"
+    }
+  },
+  {
+    "id": "xhs-tech-cover",
+    "name": "科技暗色·封面",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "科技暗色",
+    "look": "tech",
+    "set": "tech-a",
+    "role": "cover",
+    "description": "黑底酸绿大标题加一块酸绿关键词，右下角巨型描边数字 20，适合 AI 提效、工具实测类笔记的封面",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "小标签",
+        "max": 8
+      },
+      {
+        "name": "title",
+        "label": "标题第一行",
+        "max": 12
+      },
+      {
+        "name": "keyword",
+        "label": "关键词大字",
+        "max": 8
+      },
+      {
+        "name": "subtitle",
+        "label": "副标题",
+        "max": 24
+      },
+      {
+        "name": "number",
+        "label": "右下大数字",
+        "max": 2
+      },
+      {
+        "name": "author",
+        "label": "账号名",
+        "max": 12
+      },
+      {
+        "name": "date",
+        "label": "日期",
+        "max": 10
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [],
+    "images": [],
+    "colors": {
+      "bg": "#0E0F0C",
+      "fg": "#EDEEE8",
+      "primary": "#B6F23D",
+      "secondary": "#1C1E19",
+      "accent": "#5AD1FF",
+      "muted": "#A3A69C"
+    }
+  },
+  {
+    "id": "xhs-tech-data",
+    "name": "科技暗色·数据",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "科技暗色",
+    "look": "tech",
+    "set": "tech-a",
+    "role": "data",
+    "description": "一个 220px 的酸绿大数字当主角，配刻度条和最多三行关键数据，适合实测结果、提效前后数字对比",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "小标签",
+        "max": 8
+      },
+      {
+        "name": "title",
+        "label": "本页标题",
+        "max": 10
+      },
+      {
+        "name": "big",
+        "label": "大数字",
+        "max": 4
+      },
+      {
+        "name": "biglabel",
+        "label": "大数字说明",
+        "max": 12
+      },
+      {
+        "name": "note",
+        "label": "底部备注",
+        "max": 24
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [
+      {
+        "name": "stats",
+        "label": "关键数据",
+        "min": 2,
+        "max": 3,
+        "slots": [
+          {
+            "name": "value",
+            "label": "数值",
+            "max": 5
+          },
+          {
+            "name": "label",
+            "label": "数据名",
+            "max": 12
+          },
+          {
+            "name": "text",
+            "label": "数据说明",
+            "max": 20
+          }
+        ]
+      }
+    ],
+    "images": [],
+    "colors": {
+      "bg": "#0E0F0C",
+      "fg": "#EDEEE8",
+      "primary": "#B6F23D",
+      "secondary": "#1C1E19",
+      "accent": "#5AD1FF",
+      "muted": "#A3A69C"
+    }
+  },
+  {
+    "id": "xhs-tech-ending",
+    "name": "科技暗色·结尾",
+    "category": "xhs",
+    "size": [
+      1080,
+      1440
+    ],
+    "style": "科技暗色",
+    "look": "tech",
+    "set": "tech-a",
+    "role": "ending",
+    "description": "一句总结大字加截图占位框和评论区互动问题，放在一组图的最后一张",
+    "slots": [
+      {
+        "name": "tag",
+        "label": "小标签",
+        "max": 8
+      },
+      {
+        "name": "title",
+        "label": "总结大字（可用\\n分行）",
+        "max": 10
+      },
+      {
+        "name": "summary",
+        "label": "一句话总结",
+        "max": 26
+      },
+      {
+        "name": "question",
+        "label": "互动问题",
+        "max": 18
+      },
+      {
+        "name": "follow",
+        "label": "关注贴纸",
+        "max": 6
+      },
+      {
+        "name": "author",
+        "label": "账号名",
+        "max": 12
+      },
+      {
+        "name": "page",
+        "label": "页码",
+        "max": 5
+      }
+    ],
+    "lists": [],
+    "images": [
+      {
+        "name": "photo",
+        "label": "前后对比截图",
+        "optional": true
+      }
+    ],
+    "colors": {
+      "bg": "#0E0F0C",
+      "fg": "#EDEEE8",
+      "primary": "#B6F23D",
+      "secondary": "#1C1E19",
+      "accent": "#5AD1FF",
+      "muted": "#A3A69C"
     }
   },
   {

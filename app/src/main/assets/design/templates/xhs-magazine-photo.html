@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-magazine-photo","name":"杂志编辑·大图","category":"xhs","size":[1080,1440],"style":"杂志编辑","look":"magazine","set":"magazine-a","role":"photo","description":"杂志大图页：照片占上半版大幅出血，图说压在照片下方，正文留在照片下的留白处，适合穿搭实拍、街景","slots":[{"name":"caption","label":"图片说明","max":16},{"name":"title","label":"标题","max":12},{"name":"body","label":"正文","max":40},{"name":"author","label":"账号名","max":12},{"name":"page","label":"页码","max":5}],"lists":[],"images":[{"name":"photo","label":"主图照片","optional":true}],"colors":{"bg":"#F4EFE6","fg":"#1B1A17","primary":"#1B1A17","secondary":"#E4DCCD","accent":"#B4532A","muted":"#6E675C"}}'>
+<title>杂志编辑·大图</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#F4EFE6;--fg:#1B1A17;--primary:#1B1A17;--secondary:#E4DCCD;--accent:#B4532A;--muted:#6E675C;
+  --font-title:"Noto Serif SC","Noto Serif CJK SC",serif;--font-sans:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-num:"Playfair Display","Noto Serif CJK SC",serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:0;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+/* 颗粒：让纯色底不那么「电脑味」 */
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.10;mix-blend-mode:multiply}
+/* 照片区：占位层在下（没照片时是米色底加英文大字），真照片盖在上面；图说压在蒙层上 */
+.phwrap{position:relative;flex:none;height:820px}
+.ph-holder{position:absolute;inset:0;background:var(--secondary)}
+.ph-fig{position:absolute;left:80px;top:56px;font-size:20px;font-weight:700;letter-spacing:.22em;color:var(--fg)}
+.ph-word{position:absolute;left:76px;top:280px;font-family:var(--font-num);font-style:italic;font-weight:700;font-size:160px;line-height:1;color:var(--accent);opacity:.32}
+.photo{position:absolute;inset:0}
+.photo:after{content:"";position:absolute;inset:16px;border:1px solid rgba(255,255,255,.65);pointer-events:none}
+.scrim{position:absolute;left:0;right:0;bottom:0;height:220px;background:linear-gradient(rgba(0,0,0,0),rgba(0,0,0,.55))}
+.capbar{position:absolute;left:80px;right:80px;bottom:36px;display:flex;align-items:center;gap:14px}
+.capbar i{width:28px;height:28px;flex:none;color:rgba(255,255,255,.95)}
+.capbar i svg{width:28px;height:28px}
+.caption{font-size:22px;font-weight:700;line-height:1.4;color:rgba(255,255,255,.95)}
+.content{position:relative;flex:none;height:620px;padding:44px 80px 72px;display:flex;flex-direction:column}
+.kicker{position:relative;display:flex;align-items:baseline;justify-content:space-between;padding-bottom:16px;border-bottom:1px solid var(--fg)}
+.look{font-family:var(--font-num);font-style:italic;font-size:24px;font-weight:400;line-height:1.2;color:var(--muted);letter-spacing:.06em}
+.page{font-family:var(--font-num);font-size:28px;font-weight:700;line-height:1;letter-spacing:.08em}
+.title{position:relative;margin:30px 0 0;font-family:var(--font-title);font-weight:900;font-size:88px;line-height:1.15;color:var(--primary)}
+.body{position:relative;margin:24px 0 0;max-width:880px;font-size:28px;line-height:1.7;font-weight:400;color:var(--muted)}
+.foot{position:relative;display:flex;align-items:baseline;justify-content:space-between;margin-top:auto;padding-top:18px;border-top:1px solid var(--fg)}
+.author{font-size:24px;font-weight:700}
+.vol{font-size:20px;font-weight:700;letter-spacing:.2em;color:var(--muted)}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="phwrap" data-bleed>
+    <div class="ph-holder"><span class="ph-fig">FIG. 02</span><span class="ph-word">Autumn</span></div>
+    <div class="photo" data-slot="photo" data-kind="image"></div>
+    <div class="scrim">
+      <div class="capbar"><i data-icon="camera"></i><span class="caption" data-slot="caption" data-max="16">图 02 · 午后四点的风</span></div>
+    </div>
+  </div>
+  <div class="content">
+    <div class="kicker"><span class="look">Look 01 — 风衣</span><span class="page" data-slot="page" data-max="5">02/04</span></div>
+    <h2 class="title" data-slot="title" data-max="12">风衣一穿，气场就来了</h2>
+    <p class="body" data-slot="body" data-max="40">及膝的长度刚好挡风，走路时下摆轻轻摆动，里面搭一件米白针织衫就够了。</p>
+    <div class="foot">
+      <span class="author" data-slot="author" data-max="12">@漫步城市</span>
+      <span class="vol">VOL.07</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

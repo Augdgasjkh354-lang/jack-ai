@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-knowledge-cover","name":"知识卡片·封面","category":"xhs","size":[1080,1440],"style":"知识卡片","look":"knowledge","set":"knowledge-a","role":"cover","description":"薄荷绿底加荧光笔划出的大标题，下方一张照片位，适合手机摄影这类干货笔记的封面","slots":[{"name":"tag","label":"贴纸标签","max":6},{"name":"title","label":"标题（可用\\n分两行）","max":12},{"name":"subtitle","label":"副标题","max":22},{"name":"caption","label":"照片说明","max":14},{"name":"author","label":"账号名","max":12},{"name":"page","label":"页码","max":5}],"lists":[],"images":[{"name":"photo","label":"封面照片","optional":true}],"colors":{"bg":"#F3F8F2","fg":"#17271F","primary":"#2E7A55","secondary":"#DCEBDD","accent":"#E3A23B","muted":"#566A5E"}}'>
+<title>知识卡片·封面</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#F3F8F2;--fg:#17271F;--primary:#2E7A55;--secondary:#DCEBDD;--accent:#E3A23B;--muted:#566A5E;
+  --font-title:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-sans:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-num:"Space Grotesk","Noto Sans SC",sans-serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:68px 72px 64px;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+/* 颗粒：让纯色底不那么「电脑味」 */
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.10;mix-blend-mode:multiply}
+.ring{position:absolute;top:-110px;right:-110px;width:300px;height:300px;border:3px solid var(--primary);border-radius:50%;opacity:.35}
+.top{position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between;height:56px}
+.tag{display:inline-block;padding:12px 22px;background:var(--primary);color:var(--bg);font-size:28px;font-weight:700;letter-spacing:.08em}
+.page{font-family:var(--font-num);font-weight:700;font-size:34px;color:var(--muted)}
+.kicker{position:relative;z-index:1;margin-top:64px;font-family:var(--font-num);font-weight:700;font-size:26px;letter-spacing:.34em;color:var(--primary)}
+.title{position:relative;z-index:1;margin:18px 0 0;font-family:var(--font-title);font-weight:900;font-size:104px;line-height:1.12;letter-spacing:-.01em;color:var(--fg)}
+.hl{background:color-mix(in srgb, var(--accent) 45%, transparent);padding:0 14px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.subtitle{position:relative;z-index:1;margin-top:30px;max-width:820px;font-size:30px;line-height:1.6;font-weight:400;color:var(--muted)}
+.photo-wrap{position:relative;z-index:1;margin-top:44px}
+.photo{position:relative;height:440px;background:var(--secondary);background-image:radial-gradient(circle,color-mix(in srgb,var(--primary) 30%,transparent) 5px,transparent 6px);background-size:48px 48px;overflow:hidden}
+.caption{position:absolute;left:0;right:0;bottom:0;padding:18px 28px;background:rgba(0,0,0,.65);color:rgba(255,255,255,.92);font-size:26px;font-weight:700;line-height:1.4}
+.bottom{position:relative;z-index:1;margin-top:36px;display:flex;align-items:center;justify-content:space-between}
+.author{font-size:28px;font-weight:700}
+.meta{font-size:24px;font-weight:700;color:var(--muted)}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="ring" data-bleed aria-hidden="true"></div>
+  <div class="top">
+    <span class="tag" data-slot="tag" data-max="6">手机摄影</span>
+    <span class="page" data-slot="page" data-max="5">01/04</span>
+  </div>
+  <div class="kicker">MOBILE PHOTO GUIDE</div>
+  <h1 class="title" data-slot="title" data-max="12">手机也能拍出<br><span class="hl">好照片</span></h1>
+  <div class="subtitle" data-slot="subtitle" data-max="22">不用单反，三招拍出大片感</div>
+  <div class="photo-wrap">
+    <div class="photo" data-slot="photo" data-kind="image"></div>
+    <div class="caption"><span data-slot="caption" data-max="14">傍晚逆光，随手一拍</span></div>
+  </div>
+  <div class="bottom">
+    <span class="author" data-slot="author" data-max="12">@阿斌的镜头</span>
+    <span class="meta">4 页干货 · 建议收藏</span>
+  </div>
+</div>
+</body>
+</html>

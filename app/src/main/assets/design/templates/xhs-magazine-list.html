@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-magazine-list","name":"杂志编辑·清单","category":"xhs","size":[1080,1440],"style":"杂志编辑","look":"magazine","set":"magazine-a","role":"list","description":"杂志清单页：大号斜体期号数字配细线分隔的要点，适合穿搭公式、要点清单","slots":[{"name":"tag","label":"栏目","max":8},{"name":"title","label":"本页标题","max":10},{"name":"note","label":"底部提醒","max":24},{"name":"author","label":"账号名","max":12},{"name":"page","label":"页码","max":5}],"lists":[{"name":"items","label":"要点","min":3,"max":5,"slots":[{"name":"head","label":"短标题","max":12},{"name":"text","label":"说明","max":24}]}],"images":[],"colors":{"bg":"#F4EFE6","fg":"#1B1A17","primary":"#1B1A17","secondary":"#E4DCCD","accent":"#B4532A","muted":"#6E675C"}}'>
+<title>杂志编辑·清单</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#F4EFE6;--fg:#1B1A17;--primary:#1B1A17;--secondary:#E4DCCD;--accent:#B4532A;--muted:#6E675C;
+  --font-title:"Noto Serif SC","Noto Serif CJK SC",serif;--font-sans:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-num:"Playfair Display","Noto Serif CJK SC",serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:72px 80px 64px;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+/* 颗粒：让纯色底不那么「电脑味」 */
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.10;mix-blend-mode:multiply}
+.top{position:relative;display:flex;align-items:baseline;justify-content:space-between;padding-bottom:18px;border-bottom:1px solid var(--fg)}
+.tag{font-size:22px;font-weight:700;letter-spacing:.18em}
+.page{font-family:var(--font-num);font-size:28px;font-weight:700;line-height:1;letter-spacing:.08em}
+.title{position:relative;margin:40px 0 0;font-family:var(--font-title);font-weight:900;font-size:88px;line-height:1.12;color:var(--primary)}
+.items{position:relative;margin-top:36px;border-top:1px solid var(--fg)}
+.item{display:grid;grid-template-columns:96px 1fr;column-gap:28px;align-items:start;padding:24px 0;border-bottom:1px solid color-mix(in srgb,var(--muted) 40%,transparent)}
+.num{font-family:var(--font-num);font-weight:700;font-size:54px;line-height:1;color:var(--accent)}
+.body{min-width:0}
+.body .head{display:block;font-family:var(--font-title);font-weight:700;font-size:38px;line-height:1.25;color:var(--fg)}
+.body .text{display:block;margin-top:8px;font-size:28px;line-height:1.6;font-weight:400;color:var(--muted)}
+.note{position:relative;display:flex;align-items:flex-start;gap:14px;margin-top:auto;font-size:28px;line-height:1.5;font-weight:700;color:var(--fg)}
+.note .sq{flex:none;width:14px;height:14px;margin-top:13px;background:var(--accent)}
+.foot{position:relative;display:flex;align-items:baseline;justify-content:space-between;margin-top:auto;padding-top:18px;border-top:1px solid var(--fg)}
+.author{font-size:24px;font-weight:700}
+.vol{font-size:20px;font-weight:700;letter-spacing:.2em;color:var(--muted)}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="top">
+    <span class="tag" data-slot="tag" data-max="8">穿搭公式</span>
+    <span class="page" data-slot="page" data-max="5">03/04</span>
+  </div>
+  <h2 class="title" data-slot="title" data-max="10">这样搭，秋天不费力</h2>
+  <div class="items" data-list="items" data-max="5">
+    <div class="item" data-item>
+      <span class="num" data-slot="num">01</span>
+      <div class="body"><span class="head" data-slot="head" data-max="12">风衣选及膝款</span><span class="text" data-slot="text" data-max="24">长度过膝显拖沓，及膝刚好挡风又利落</span></div>
+    </div>
+    <div class="item" data-item>
+      <span class="num" data-slot="num">02</span>
+      <div class="body"><span class="head" data-slot="head" data-max="12">内搭选浅色</span><span class="text" data-slot="text" data-max="24">米白或浅灰提亮脸色，秋天不显沉闷</span></div>
+    </div>
+    <div class="item" data-item>
+      <span class="num" data-slot="num">03</span>
+      <div class="body"><span class="head" data-slot="head" data-max="12">鞋子换乐福鞋</span><span class="text" data-slot="text" data-max="24">一脚蹬出门就走，配白袜更有学院气</span></div>
+    </div>
+    <div class="item" data-item>
+      <span class="num" data-slot="num">04</span>
+      <div class="body"><span class="head" data-slot="head" data-max="12">一条丝巾点睛</span><span class="text" data-slot="text" data-max="24">系在脖颈或包上，小面积撞色最出彩</span></div>
+    </div>
+  </div>
+  <div class="note"><span class="sq"></span><span data-slot="note" data-max="24">颜色别超过三种，全身留一处亮色</span></div>
+  <div class="foot">
+    <span class="author" data-slot="author" data-max="12">@漫步城市</span>
+    <span class="vol">VOL.07</span>
+  </div>
+</div>
+</body>
+</html>

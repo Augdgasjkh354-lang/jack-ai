@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-tech-compare","name":"科技暗色·对比","category":"xhs","size":[1080,1440],"style":"科技暗色","look":"tech","set":"tech-a","role":"compare","description":"左右两栏一一对应：左边用 AI 前、右边用 AI 后，同一件事两种活法，适合提效前后、换工具前后的对比","slots":[{"name":"tag","label":"小标签","max":8},{"name":"title","label":"本页标题","max":10},{"name":"subtitle","label":"副标题","max":20},{"name":"beforetag","label":"左栏小标题","max":8},{"name":"aftertag","label":"右栏小标题","max":8},{"name":"note","label":"底部总结","max":24},{"name":"page","label":"页码","max":5}],"lists":[{"name":"rows","label":"对比项","min":3,"max":3,"slots":[{"name":"bhead","label":"用 AI 前事项","max":10},{"name":"btext","label":"原来怎么做","max":16},{"name":"ahead","label":"用 AI 后事项","max":10},{"name":"atext","label":"现在怎么做","max":16}]}],"images":[],"colors":{"bg":"#0E0F0C","fg":"#EDEEE8","primary":"#B6F23D","secondary":"#1C1E19","accent":"#5AD1FF","muted":"#A3A69C"}}'>
+<title>科技暗色·对比</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#0E0F0C;--fg:#EDEEE8;--primary:#B6F23D;--secondary:#1C1E19;--accent:#5AD1FF;--muted:#A3A69C;
+  --font-title:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-sans:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-num:"Space Grotesk","Noto Sans SC",sans-serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:76px 80px 72px;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+.grid{position:absolute;inset:0;pointer-events:none}
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.05;mix-blend-mode:screen}
+.top{position:relative;display:flex;align-items:center;justify-content:space-between;height:60px}
+.topleft{display:flex;align-items:center;gap:16px}
+.dot{width:12px;height:12px;border-radius:50%;background:var(--accent)}
+.code{font-family:var(--font-num);font-size:20px;font-weight:700;letter-spacing:.3em;color:var(--primary)}
+.tag{display:inline-block;padding:10px 22px 12px;border:1px solid var(--primary);color:var(--primary);font-size:30px;font-weight:700;letter-spacing:.08em}
+.page{font-family:var(--font-num);font-size:32px;font-weight:700;letter-spacing:.12em;color:var(--fg)}
+.title{position:relative;margin:40px 0 0;font-family:var(--font-title);font-weight:900;font-size:96px;line-height:1.05;color:var(--fg)}
+.subtitle{position:relative;margin-top:24px;font-size:30px;line-height:1.5;font-weight:400;color:var(--muted)}
+.chead-row{position:relative;display:grid;grid-template-columns:64px 1fr 1fr;margin-top:36px}
+.colhead{display:flex;align-items:center;gap:12px;padding-bottom:16px;border-bottom:1px solid rgba(255,255,255,.18)}
+.colhead i{width:36px;height:36px;flex:none}
+.colhead .coltitle{font-family:var(--font-num);font-size:28px;font-weight:700;letter-spacing:.2em;color:var(--muted)}
+.colhead.after .coltitle{color:var(--primary)}
+.colhead .colsub{font-size:26px;font-weight:700;color:var(--fg)}
+.rows{position:relative}
+.vrow{display:grid;grid-template-columns:64px 1fr 1fr;margin-top:16px;background:var(--secondary);border:1px solid rgba(255,255,255,.18)}
+.num{display:flex;align-items:flex-start;justify-content:center;padding-top:28px;font-family:var(--font-num);font-size:26px;font-weight:700;line-height:1.4;color:var(--muted)}
+.cell{padding:24px 24px}
+.cell.after{border-left:1px solid var(--primary);background:color-mix(in srgb, var(--primary) 6%, transparent)}
+.chead{display:block;font-size:32px;line-height:1.25;font-weight:900;color:var(--fg)}
+.ctext{display:block;margin-top:8px;font-size:26px;line-height:1.5;font-weight:400;color:var(--muted)}
+.foot{position:relative;margin-top:auto;display:flex;align-items:center;gap:16px;padding-top:24px;border-top:1px solid rgba(255,255,255,.25);font-size:28px;font-weight:700;color:var(--fg)}
+.sq{flex:none;width:14px;height:14px;background:var(--primary)}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grid" width="1080" height="1440" aria-hidden="true"><defs><pattern id="gd" width="60" height="60" patternUnits="userSpaceOnUse"><path d="M60 0H0V60" fill="none" stroke="rgba(255,255,255,.06)" stroke-width="1"/></pattern></defs><rect width="100%" height="100%" fill="url(#gd)"/></svg>
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .5 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="top">
+    <div class="topleft"><span class="dot"></span><span class="code">VS //</span><span class="tag" data-slot="tag" data-max="8">前后对比</span></div>
+    <span class="page" data-slot="page" data-max="5">03/04</span>
+  </div>
+  <h2 class="title" data-slot="title" data-max="10">同一件事，两种活法</h2>
+  <div class="subtitle" data-slot="subtitle" data-max="20">维度一一对应，只换工具不换事</div>
+  <div class="chead-row">
+    <span></span>
+    <div class="colhead"><i data-icon="x"></i><span class="coltitle">BEFORE</span><span class="colsub" data-slot="beforetag" data-max="8">用 AI 前</span></div>
+    <div class="colhead after"><i data-icon="check"></i><span class="coltitle">AFTER</span><span class="colsub" data-slot="aftertag" data-max="8">用 AI 后</span></div>
+  </div>
+  <div class="rows" data-list="rows" data-max="3">
+    <div class="vrow" data-item>
+      <span class="num" data-slot="num">01</span>
+      <div class="cell"><span class="chead" data-slot="bhead" data-max="10">写周报 3 小时</span><span class="ctext" data-slot="btext" data-max="16">翻聊天记录拼数据</span></div>
+      <div class="cell after"><span class="chead" data-slot="ahead" data-max="10">写周报 20 分钟</span><span class="ctext" data-slot="atext" data-max="16">AI 出初稿，人只改结论</span></div>
+    </div>
+    <div class="vrow" data-item>
+      <span class="num" data-slot="num">02</span>
+      <div class="cell"><span class="chead" data-slot="bhead" data-max="10">找资料半小时</span><span class="ctext" data-slot="btext" data-max="16">十几个网页来回切</span></div>
+      <div class="cell after"><span class="chead" data-slot="ahead" data-max="10">找资料 5 分钟</span><span class="ctext" data-slot="atext" data-max="16">一次提问给齐出处</span></div>
+    </div>
+    <div class="vrow" data-item>
+      <span class="num" data-slot="num">03</span>
+      <div class="cell"><span class="chead" data-slot="bhead" data-max="10">回邮件 1 小时</span><span class="ctext" data-slot="btext" data-max="16">每封都要从头想词</span></div>
+      <div class="cell after"><span class="chead" data-slot="ahead" data-max="10">回邮件 10 分钟</span><span class="ctext" data-slot="atext" data-max="16">套模板改三句话</span></div>
+    </div>
+  </div>
+  <div class="foot"><span class="sq"></span><span data-slot="note" data-max="24">省下的 2 小时 40 分，够读 30 页书</span></div>
+</div>
+</body>
+</html>

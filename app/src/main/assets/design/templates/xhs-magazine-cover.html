@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-magazine-cover","name":"杂志编辑·封面","category":"xhs","size":[1080,1440],"style":"杂志编辑","look":"magazine","set":"magazine-a","role":"cover","description":"杂志封面：大留白配宋体大标题，下方大幅照片出血，期号与页码收尾，适合穿搭、城市漫步类笔记","slots":[{"name":"tag","label":"栏目","max":6},{"name":"title","label":"标题（可用\\n分两行）","max":12},{"name":"subtitle","label":"副标题","max":22},{"name":"caption","label":"图片说明","max":16},{"name":"author","label":"账号名","max":12},{"name":"page","label":"页码","max":5}],"lists":[],"images":[{"name":"photo","label":"封面照片","optional":true}],"colors":{"bg":"#F4EFE6","fg":"#1B1A17","primary":"#1B1A17","secondary":"#E4DCCD","accent":"#B4532A","muted":"#6E675C"}}'>
+<title>杂志编辑·封面</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#F4EFE6;--fg:#1B1A17;--primary:#1B1A17;--secondary:#E4DCCD;--accent:#B4532A;--muted:#6E675C;
+  --font-title:"Noto Serif SC","Noto Serif CJK SC",serif;--font-sans:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-num:"Playfair Display","Noto Serif CJK SC",serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:76px 80px 72px;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+/* 颗粒：让纯色底不那么「电脑味」 */
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.10;mix-blend-mode:multiply}
+.top{position:relative;display:flex;align-items:baseline;justify-content:space-between;padding-bottom:18px;border-bottom:1px solid var(--fg)}
+.tag{font-size:22px;font-weight:700;letter-spacing:.18em}
+.page{font-family:var(--font-num);font-size:28px;font-weight:700;line-height:1;letter-spacing:.08em}
+.kicker{position:relative;display:flex;align-items:baseline;justify-content:space-between;margin-top:34px}
+.kicker .en{font-family:var(--font-num);font-style:italic;font-size:26px;font-weight:400;line-height:1.2;color:var(--muted);letter-spacing:.06em}
+.kicker .vol{font-family:var(--font-num);font-size:26px;font-weight:700;line-height:1.2;letter-spacing:.14em}
+.title{position:relative;margin:48px 0 0;font-family:var(--font-title);font-weight:900;font-size:104px;line-height:1.12;letter-spacing:.01em;color:var(--primary)}
+.subtitle{position:relative;margin:28px 0 0;max-width:780px;font-size:28px;line-height:1.7;font-weight:400;color:var(--muted)}
+/* 照片区：占位层在下（没照片时是米色底加英文大字），真照片盖在上面 */
+.phwrap{position:relative;flex:none;height:500px;margin:auto -80px 0}
+.ph-holder{position:absolute;inset:0;background:var(--secondary)}
+.ph-fig{position:absolute;left:80px;top:28px;font-size:20px;font-weight:700;letter-spacing:.22em;color:var(--fg)}
+.ph-word{position:absolute;left:76px;bottom:28px;font-family:var(--font-num);font-style:italic;font-weight:700;font-size:150px;line-height:1;color:var(--accent);opacity:.32}
+.photo{position:absolute;inset:0}
+.photo:after{content:"";position:absolute;inset:16px;border:1px solid rgba(255,255,255,.65);pointer-events:none}
+.caption{position:relative;display:block;margin-top:16px;font-size:22px;font-weight:700;line-height:1.4;color:var(--fg)}
+.foot{position:relative;display:flex;align-items:baseline;justify-content:space-between;margin-top:22px;padding-top:18px;border-top:1px solid var(--fg)}
+.author{font-size:24px;font-weight:700}
+.vol{font-size:20px;font-weight:700;letter-spacing:.2em;color:var(--muted)}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="top">
+    <span class="tag" data-slot="tag" data-max="6">穿搭手记</span>
+    <span class="page" data-slot="page" data-max="5">01/04</span>
+  </div>
+  <div class="kicker"><span class="en">Autumn Walk</span><span class="vol">VOL.07</span></div>
+  <h1 class="title" data-slot="title" data-max="12">秋天这样穿，<br>走路都带风</h1>
+  <p class="subtitle" data-slot="subtitle" data-max="22">三件单品，搭出松弛的秋日氛围</p>
+  <div class="phwrap" data-bleed>
+    <div class="ph-holder"><span class="ph-fig">FIG. 01</span><span class="ph-word">Autumn</span></div>
+    <div class="photo" data-slot="photo" data-kind="image"></div>
+  </div>
+  <span class="caption" data-slot="caption" data-max="16">图 01 · 梧桐大道</span>
+  <div class="foot">
+    <span class="author" data-slot="author" data-max="12">@漫步城市</span>
+    <span class="vol">VOL.07</span>
+  </div>
+</div>
+</body>
+</html>
