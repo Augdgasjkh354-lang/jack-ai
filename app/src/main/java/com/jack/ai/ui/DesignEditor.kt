@@ -219,11 +219,12 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
     var panel by remember { mutableStateOf<String?>(null) }
     // 抠图：正在抠（显示在工具栏上方）
     var cutting by remember { mutableStateOf(false) }
+    var kaviBusy by remember { mutableStateOf(false) }
     val modelState by com.jack.ai.data.LocalModels.state.collectAsState()
     // 换配色后等着问「整组都换吗」的那套
     var pendingVars by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     LaunchedEffect(picked.kind) {
-        if (picked.kind == "none") panel = null
+        if (picked.kind == "none" && panel != "kavi") panel = null
         if (picked.kind == "image" && panel == "style") panel = null
         if (picked.kind != "image" && panel == "image") panel = null
     }
@@ -290,6 +291,29 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
             cutting = false
             out.onSuccess { o -> cmd("image", "src" to DesignRender.fileUrl(o.canonicalFile.relativeTo(root).path)) }
                 .onFailure { e -> Toast.makeText(ctx, "抠图失败：${e.message}", Toast.LENGTH_LONG).show() }
+        }
+    }
+
+    // 让 Kavi 改：选中的一块（或整张）+ 一句话，单独请一次模型，换进画布（一步可撤销）
+    fun askKavi(ask: String) {
+        if (ask.isBlank() || kaviBusy) return
+        scope.launch {
+            kaviBusy = true
+            val r = runCatching {
+                val t = DesignKavi.parseTarget(jsString(js("kvEd.target()"))) ?: error("没拿到要改的内容")
+                val res = withContext(Dispatchers.IO) { DesignKavi.edit(ctx, t, ask) }
+                // 换了字体的先把字体下好、装进页面
+                val (css, _) = DesignRender.fontCss(ctx, res.html)
+                if (css.isNotEmpty()) webView?.evaluateJavascript("kvEd.cmd(${buildJsonObject { put("op", "fontCss"); put("css", css) }})", null)
+                cmd(buildJsonObject {
+                    put("op", "kavi"); put("scope", t.scope); put("html", res.html)
+                    put("path", kotlinx.serialization.json.JsonArray(t.path.map { JsonPrimitive(it) }))
+                })
+                res.note
+            }
+            kaviBusy = false
+            r.onSuccess { Toast.makeText(ctx, it.ifEmpty { "改好了" } + "（不满意点撤销）", Toast.LENGTH_LONG).show() }
+                .onFailure { e -> Toast.makeText(ctx, e.message ?: "没改成", Toast.LENGTH_LONG).show() }
         }
     }
 
@@ -486,6 +510,8 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
                 val many = picked.count > 1
                 val label = when {
                     cutting -> "正在抠图，十几秒…"
+                    kaviBusy -> "Kavi 在改" + (if (picked.kind == "none") "整张" else "这一块") + "，几秒到十几秒…"
+                    panel == "kavi" -> if (picked.kind == "none") "让 Kavi 改整张图：说说想怎么改" else if (picked.count > 1) "选了好几个：Kavi 改整张图" else "让 Kavi 改选中的这一块"
                     editingText -> "正在改字：选中几个字，可以单独换颜色、加粗、划重点"
                     panel == "style" && picked.kind != "none" -> "文字样式 · ${picked.fontSize}px"
                     panel == "arrange" && picked.kind != "none" -> if (many) "排列：已选 ${picked.count} 个，按它们的外框对齐" else "排列：对齐画布（左右上下留安全边距）"
@@ -502,6 +528,13 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
                 }
                 Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp), maxLines = 1)
+                if (!editingText && panel == "kavi") {
+                    KaviPanel(
+                        quick = when { picked.kind == "none" || picked.count > 1 -> DesignKavi.QUICK_PAGE; picked.kind == "text" -> DesignKavi.QUICK_TEXT; else -> DesignKavi.QUICK_BOX },
+                        busy = kaviBusy, onAsk = { askKavi(it) }, onClose = { panel = null },
+                    )
+                    return@Column
+                }
                 if (!editingText && picked.kind != "none") {
                     if (panel == "style" && picked.kind in setOf("text", "group")) {
                         StylePanel(picked, vars = { webView }, onCmd = { op, kv -> cmd(op, *kv) }, onClose = { panel = null })
@@ -534,6 +567,7 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
                             Tool("大框编辑") { cmd("done"); sheet = "text" }
                         }
                         picked.kind == "none" -> {
+                            Tool("让 Kavi 改", bold = true) { panel = "kavi" }
                             Tool("加文字") { webView?.requestFocus(); cmd("addText") }
                             Tool("换配色") { sheet = "palette" }
                             Tool(if (picked.multi) "退出多选" else "多选", bold = picked.multi) { multiMode(!picked.multi) }
@@ -559,6 +593,7 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
                         }
                         else -> {
                             if (picked.kind == "text") Tool("改字", bold = true) { webView?.let { keyboard(it, true) }; cmd("edit") }
+                            if (picked.kind != "image") Tool("让 Kavi 改") { panel = "kavi" }
                             if (picked.kind == "image") {
                                 Tool("换图") { sheet = "image" }
                                 if (picked.photo) Tool("裁剪") { cmd("crop", "on" to true) }
@@ -1055,5 +1090,26 @@ private fun ImageSheet(root: File, onPick: (File) -> Unit) {
                 }
             }
         }
+    }
+}
+
+/** 让 Kavi 改：几个常用说法一点就发，或者自己写一句。 */
+@Composable
+private fun KaviPanel(quick: List<String>, busy: Boolean, onAsk: (String) -> Unit, onClose: () -> Unit) {
+    var text by remember { mutableStateOf("") }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            quick.forEach { q ->
+                androidx.compose.material3.AssistChip(onClick = { onAsk(q) }, enabled = !busy, label = { Text(q) })
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                text, { text = it }, Modifier.weight(1f), enabled = !busy, maxLines = 3,
+                placeholder = { Text("比如：标题换成手写体、颜色暖一点") },
+            )
+            TextButton(onClick = { onAsk(text); text = "" }, enabled = !busy && text.isNotBlank()) { Text("发送", fontWeight = FontWeight.Bold) }
+        }
+        TextButton(onClick = onClose, enabled = !busy) { Text("收起") }
     }
 }

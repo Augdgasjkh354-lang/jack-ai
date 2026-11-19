@@ -839,10 +839,40 @@
     crop: function (c) { startCrop(c.on ? sel : null); },
     cropZoom: function (c) { if (cropping) loadSize(cropping, function () { cropZoom(cropping, imgOf(cropping).z + c.delta); report(); }); },
     cropReset: function () { if (cropping) { var o = imgOf(cropping); o.z = 1; o.px = 50; o.py = 50; applyImg(cropping, o); } },
+    // Kavi 改好的一块（或整张）：换进画布，一步可撤销
+    kavi: function (c) {
+      var tpl = document.createElement("template");
+      tpl.innerHTML = String(c.html || "").trim();
+      var fresh = tpl.content.firstElementChild;
+      if (!fresh) return;
+      cleanNode(fresh);
+      if (c.scope === "page") {
+        if (fresh.classList.contains("canvas")) {
+          canvas.innerHTML = fresh.innerHTML;
+          if (fresh.getAttribute("style")) canvas.setAttribute("style", fresh.getAttribute("style"));
+        } else canvas.innerHTML = fresh.outerHTML;
+        select(null);
+      } else {
+        var old = byPath(c.path || []);
+        if (!old) return;
+        old.parentNode.replaceChild(fresh, old);
+        select(fresh);
+      }
+      Array.prototype.forEach.call(canvas.querySelectorAll("[data-slot]"), function (x) { if (kind(x) === "text") fit(x); });
+    },
     fontCss: function (c) {
       var s = document.createElement("style"); s.setAttribute("data-kavi-temp", ""); s.textContent = c.css; document.head.appendChild(s);
     },
   };
+  // 模型给的 HTML 不许带脚本、事件、外链
+  function cleanNode(root) {
+    Array.prototype.forEach.call(root.querySelectorAll("script,iframe,object,embed,link,meta"), function (x) { x.remove(); });
+    [root].concat(Array.prototype.slice.call(root.querySelectorAll("*"))).forEach(function (x) {
+      Array.prototype.slice.call(x.attributes).forEach(function (a) {
+        if (/^on/i.test(a.name) || /^\s*javascript:/i.test(a.value) || (/^(src|href)$/i.test(a.name) && /^\s*https?:/i.test(a.value))) x.removeAttribute(a.name);
+      });
+    });
+  }
   // 新加的文字框：一进去就全选，直接打字就替换掉「双击改字」
   function selectAllIn(el) { var r = document.createRange(); r.selectNodeContents(el); var s = window.getSelection(); s.removeAllRanges(); s.addRange(r); }
   // 这些命令不进撤销历史（本身不改画布，或者自己管历史）
@@ -887,6 +917,17 @@
         if (v) o[key] = v;
       });
       return JSON.stringify(o);
+    },
+    // 让 Kavi 改：选中的那一块（只选一个时）或整张，连同页面的 CSS
+    target: function () {
+      endEdit();
+      var el = sels.length === 1 && sel ? sel : null;
+      var css = Array.prototype.map.call(document.querySelectorAll("style:not([data-kavi-temp])"), function (x) { return x.textContent; }).join("\n");
+      return JSON.stringify({
+        scope: el ? "element" : "page", path: el ? pathOf(el) : [], html: (el || canvas).outerHTML, css: css,
+        slot: el ? el.getAttribute("data-slot") || "" : "", kind: el ? kind(el) : "", text: el ? (el.innerText || "").trim() : "",
+        w: canvas.offsetWidth, h: canvas.offsetHeight,
+      });
     },
     // 选中的照片地址（抠图用）
     photo: function () { return sel && kind(sel) === "image" ? photoUrl(sel) : ""; },
