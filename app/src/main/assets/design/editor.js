@@ -99,7 +99,8 @@
   function makeOverlay() {
     overlay = document.createElement("div");
     overlay.setAttribute("data-kavi-temp", "");
-    overlay.style.cssText = "position:absolute;left:0;top:0;width:0;height:0;pointer-events:none;z-index:2147483647";
+    // 剪到画布大小：选中框、手柄、参考线伸出画布时不能把网页撑宽，否则 WebView 会把整页缩小
+    overlay.style.cssText = "position:absolute;left:0;top:0;width:0;height:0;overflow:hidden;pointer-events:none;z-index:2147483647";
     ["v", "h"].forEach(function (key) {
       var g = document.createElement("div");
       g.style.cssText = "position:absolute;background:#FF3B7F;display:none;" + (key === "v" ? "top:0;width:4px;" : "left:0;height:4px;");
@@ -146,6 +147,7 @@
     while (boxes.length < sels.length) boxes.push(makeBox());
     if (!handles.rot && boxes.length) makeHandles(boxes[0]);
     var cr = canvas.getBoundingClientRect();
+    overlay.style.width = px(cr.right + window.scrollX); overlay.style.height = px(cr.bottom + window.scrollY);
     boxes.forEach(function (b, i) {
       var el = sels[i];
       if (!el) { b.style.display = "none"; return; }
