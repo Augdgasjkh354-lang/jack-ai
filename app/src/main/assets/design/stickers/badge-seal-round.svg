@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240">
+<metadata>{"name":"圆章","tags":["印章","圆章","单线","空白"],"style":"clean","recolor":"stroke","ratio":"square","textArea":[62,88,116,64]}</metadata>
+<circle cx="120" cy="120" r="102" fill="var(--bg, #FFF8F0)" stroke="currentColor" stroke-width="3.5"/>
+<circle cx="120" cy="120" r="80" fill="none" stroke="currentColor" stroke-width="1.5"/>
+</svg>

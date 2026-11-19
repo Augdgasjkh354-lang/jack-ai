@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200">
+<metadata>{"name":"优惠券","tags":["优惠券","票券","空白","促销"],"style":"clean","recolor":"fill","ratio":"wide","textArea":[52,82,216,36]}</metadata>
+<rect x="26" y="62" width="268" height="76" rx="10" fill="var(--primary, #E8483B)"/>
+<circle cx="26" cy="100" r="12" fill="var(--bg, #FFF8F0)"/>
+<circle cx="294" cy="100" r="12" fill="var(--bg, #FFF8F0)"/>
+<rect x="40" y="74" width="240" height="52" rx="6" fill="none" stroke="rgba(255,255,255,.6)" stroke-width="2" stroke-dasharray="6 4"/>
+</svg>

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200">
+<metadata>{"name":"票根","tags":["票根","票据","空白","打孔"],"style":"clean","recolor":"fill","ratio":"wide","textArea":[62,76,150,48]}</metadata>
+<path d="M24 62 H296 Q304 62 304 70 V130 Q304 138 296 138 H24 Q16 138 16 130 V70 Q16 62 24 62 Z" fill="var(--secondary, #F6C453)"/>
+<circle cx="230" cy="62" r="9" fill="var(--bg, #FFF8F0)"/>
+<circle cx="230" cy="138" r="9" fill="var(--bg, #FFF8F0)"/>
+<line x1="230" y1="70" x2="230" y2="130" stroke="rgba(0,0,0,.3)" stroke-width="2" stroke-dasharray="5 5"/>
+<circle cx="44" cy="100" r="7" fill="var(--bg, #FFF8F0)"/>
+</svg>

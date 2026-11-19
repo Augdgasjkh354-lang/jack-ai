@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200">
+<metadata>{"name":"丝带横幅","tags":["横幅","丝带","标题","空白"],"style":"clean","recolor":"fill","ratio":"wide","textArea":[72,78,176,44]}</metadata>
+<path d="M18 80 L58 70 V130 L18 120 L34 100 Z" fill="var(--accent, #E07856)"/>
+<path d="M302 80 L262 70 V130 L302 120 L286 100 Z" fill="var(--accent, #E07856)"/>
+<path d="M58 70 L74 82 V118 L58 130 Z" fill="rgba(0,0,0,.15)"/>
+<path d="M262 70 L246 82 V118 L262 130 Z" fill="rgba(0,0,0,.15)"/>
+<rect x="58" y="66" width="204" height="68" fill="var(--primary, #E8483B)"/>
+</svg>

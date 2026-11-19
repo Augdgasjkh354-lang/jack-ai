@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240">
+<metadata>{"name":"丝带奖章","tags":["奖章","丝带","花边","空白"],"style":"hand","recolor":"fill","ratio":"square","textArea":[82,70,76,56]}</metadata>
+<path d="M96 158 L78 216 L104 204 L120 220 L136 204 L162 216 L144 158 Z" fill="var(--primary, #E8483B)"/>
+<path d="M178 98 Q182 118.1 166.9 132.1 Q158.3 150.7 137.9 153.2 Q120 163.2 102.1 153.2 Q81.7 150.7 73.1 132.1 Q58 118.1 62 98 Q58 77.9 73.1 63.9 Q81.7 45.3 102.1 42.8 Q120 32.8 137.9 42.8 Q158.3 45.3 166.9 63.9 Q182 77.9 178 98 Z" fill="var(--accent, #E07856)"/>
+<circle cx="120" cy="98" r="46" fill="var(--bg, #FFF8F0)"/>
+<circle cx="120" cy="98" r="46" fill="none" stroke="rgba(0,0,0,.12)" stroke-width="1.5"/>
+</svg>

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 400">
+<metadata>{"name":"拍立得","tags":["拍立得","相框","照片","空白"],"style":"clean","recolor":"fill","ratio":"tall","textArea":[42,306,216,62]}</metadata>
+<rect x="18" y="14" width="264" height="372" rx="6" fill="var(--bg, #FFF8F0)" stroke="rgba(0,0,0,.18)" stroke-width="1.5"/>
+<rect x="42" y="38" width="216" height="252" fill="var(--muted, #9A8A7A)" opacity=".35"/>
+</svg>

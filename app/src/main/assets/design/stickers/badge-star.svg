@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240">
+<metadata>{"name":"星形章","tags":["星形","印章","手绘","空白"],"style":"hand","recolor":"fill","ratio":"square","textArea":[86,98,68,48]}</metadata>
+<path d="M120 12.7 L145.1 83.4 L220 85.5 L160.8 131.3 L181.7 203 L120 161.1 L58.4 202.8 L78.9 131.4 L20.4 85.6 L94.5 82.9 Z" fill="var(--secondary, #F6C453)"/>
+<path d="M120 45 L137.1 94.5 L189.3 95.5 L147.8 127 L162.8 176.9 L120 147.3 L77.3 176.8 L92 127.1 L51 95.6 L102.6 94.1 Z" fill="none" stroke="rgba(0,0,0,.25)" stroke-width="2" stroke-linejoin="round"/>
+</svg>

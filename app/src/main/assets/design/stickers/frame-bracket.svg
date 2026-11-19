@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
+<metadata>{"name":"括号框","tags":["括号","边框","线框","空白"],"style":"clean","recolor":"stroke","ratio":"wide","textArea":[64,52,272,196]}</metadata>
+<path d="M28 78 V44 Q28 28 44 28 H78" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+<path d="M322 28 H356 Q372 28 372 44 V78" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+<path d="M372 222 V256 Q372 272 356 272 H322" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+<path d="M78 272 H44 Q28 272 28 256 V222" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+</svg>

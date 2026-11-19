@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
+<metadata>{"name":"手绘框","tags":["手绘框","边框","线框","空白"],"style":"hand","recolor":"stroke","ratio":"wide","textArea":[60,58,280,184]}</metadata>
+<path d="M34 30 C120 24 260 28 366 26 C372 90 368 200 370 268 C280 274 140 270 32 272 C28 190 30 100 34 30 Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/>
+<path d="M48 44 C130 40 250 42 352 40 C356 100 354 190 356 254 C270 258 150 256 46 258 C44 180 44 110 48 44 Z" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".6"/>
+</svg>

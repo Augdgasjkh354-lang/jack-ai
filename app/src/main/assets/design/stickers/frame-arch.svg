@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 400">
+<metadata>{"name":"拱门框","tags":["拱门","边框","双线","空白"],"style":"clean","recolor":"stroke","ratio":"tall","textArea":[74,120,152,236]}</metadata>
+<path d="M42 382 V172 A108 108 0 0 1 258 172 V382 Z" fill="var(--bg, #FFF8F0)" stroke="currentColor" stroke-width="3.5"/>
+<path d="M58 382 V174 A92 92 0 0 1 242 174 V382 Z" fill="none" stroke="currentColor" stroke-width="1.5"/>
+</svg>

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
+<metadata>{"name":"胶带角框","tags":["胶带","边框","手绘","固定"],"style":"hand","recolor":"stroke","ratio":"wide","textArea":[60,56,280,188]}</metadata>
+<rect x="34" y="30" width="332" height="240" fill="none" stroke="currentColor" stroke-width="2.5"/>
+<g transform="translate(40 36) rotate(-38)"><rect x="-32" y="-12" width="64" height="24" fill="var(--primary, #E8483B)" opacity=".8"/></g>
+<g transform="translate(360 36) rotate(38)"><rect x="-32" y="-12" width="64" height="24" fill="var(--primary, #E8483B)" opacity=".8"/></g>
+<g transform="translate(40 264) rotate(38)"><rect x="-32" y="-12" width="64" height="24" fill="var(--primary, #E8483B)" opacity=".8"/></g>
+<g transform="translate(360 264) rotate(-38)"><rect x="-32" y="-12" width="64" height="24" fill="var(--primary, #E8483B)" opacity=".8"/></g>
+</svg>
