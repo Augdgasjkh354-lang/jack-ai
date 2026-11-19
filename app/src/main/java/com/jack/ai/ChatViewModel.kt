@@ -421,7 +421,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 client.stream(ep, hist, ThinkLevel.OFF, settings.temperature, null).collect { ev ->
                     when (ev) {
                         is StreamEvent.Text -> if (ev.content.isNotEmpty()) patchMessage(convId, m.id) { it.copy(content = it.content + ev.content) }
-                        is StreamEvent.Usage -> core.recordSpend(convId, ev.endpoint ?: ep0, ev.promptTokens, ev.cacheHit, ev.completionTokens)
+                        is StreamEvent.Usage -> core.recordSpend(convId, ev.endpoint ?: ep0, ev.promptTokens, ev.cacheHit, ev.completionTokens, ev.prefix)
                         is StreamEvent.Finish -> cut = ev.reason == "length"
                         else -> {}
                     }
@@ -811,7 +811,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             val gate = com.jack.ai.tools.WorkGate(session, review = if (settings.workReview) {
                 val reviewEp = settings.backgroundEndpoint() ?: ep
                 val request = conv.messages.lastOrNull { it.role == "user" }?.content.orEmpty()
-                com.jack.ai.tools.WorkGate.reviewer(session, DeepSeekClient { e, p, h, c -> core.recordSpend(convId, e, p, h, c) }, reviewEp, request, reply.createdAt)
+                com.jack.ai.tools.WorkGate.reviewer(session, DeepSeekClient { e, p, h, c -> core.recordSpend(convId, e, p, h, c, tag = "交付前复核") }, reviewEp, request, reply.createdAt)
             } else null)
             // 插话队列就是这条活队列本身：上一条回答收尾时还没读到的插话，由这一条接着处理（回答结束时没用上的还会重发成新消息）。
             // 这里不能 clear()：上一条回答在收尾、新回答还没开始跑的窗口里，用户发的话会被 send() 当成插话塞进队列，clear 会把它静默丢掉
@@ -904,7 +904,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                         val total = ev.promptTokens + ev.completionTokens
                         updateConvQuiet(convId) { it.copy(lastPromptTokens = total) }
                         val used = ev.endpoint ?: ep
-                        core.recordSpend(convId, used, ev.promptTokens, ev.cacheHit, ev.completionTokens)
+                        core.recordSpend(convId, used, ev.promptTokens, ev.cacheHit, ev.completionTokens, ev.prefix)
                         if (work) {
                             val c = com.jack.ai.data.Pricing.priceAt(used, System.currentTimeMillis())
                                 ?.let { com.jack.ai.data.Pricing.cost(it, ev.promptTokens, ev.cacheHit ?: 0, ev.completionTokens) } ?: 0.0

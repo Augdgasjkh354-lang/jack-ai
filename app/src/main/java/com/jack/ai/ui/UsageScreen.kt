@@ -452,8 +452,17 @@ private fun RecentRequestsCard() {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("最近的请求", style = MaterialTheme.typography.titleSmall)
             Text("命中越高越省钱。同一个对话里接着聊，正常应该大部分命中。", style = MaterialTheme.typography.bodySmall, color = colors.outline)
-            (if (all) list else list.take(10)).forEach { r ->
+            (if (all) list else list.take(10)).forEachIndexed { idx, r ->
                 val rate = r.hit?.let { h -> if (r.prompt > 0) h * 100 / r.prompt else 0 }
+                // 命中低的：和同一个对话的上一次请求比开头，说清是哪一段变了
+                val why = if (rate == null || rate >= 60 || r.label.isBlank()) null else {
+                    val prev = list.drop(idx + 1).firstOrNull { it.label == r.label }
+                    when (val c = prev?.let { com.jack.ai.api.PrefixPrint.firstChange(it.prefix, r.prefix) }) {
+                        null -> if (prev == null) "这个对话的第一次请求" else "开头和上一次一样：DeepSeek 那边没找到缓存（缓存过期，或者被分到了别的服务器）"
+                        "" -> null
+                        else -> "$c 和上一次不一样，从那里往后都没命中"
+                    }
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(r.label.ifBlank { "后台" }, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
@@ -463,6 +472,7 @@ private fun RecentRequestsCard() {
                     Text(rate?.let { "命中 $it%" } ?: "未返回", style = MaterialTheme.typography.labelLarge,
                         color = when { rate == null -> colors.outline; rate >= 60 -> colors.primary; else -> colors.error })
                 }
+                why?.let { Text("↳ $it", style = MaterialTheme.typography.bodySmall, color = colors.error) }
             }
             if (list.size > 10) TextButton(onClick = { all = !all }) { Text(if (all) "收起" else "全部 ${list.size} 次") }
         }

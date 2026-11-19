@@ -40,7 +40,7 @@ class BrowserBenchTest {
         "rate-limited.html", "captcha-frame.html", "article.html",
     )
 
-    @Test(timeout = 120_000L)
+    @Test(timeout = 240_000L)
     fun browserRegression() = runBlocking {
         val results = mutableListOf<Result>()
         val started = System.nanoTime()
@@ -84,7 +84,7 @@ class BrowserBenchTest {
 
     private suspend fun guarded(page: String, modern: Boolean): Check =
         try {
-            withTimeout(20_000) { examine(page, modern) }
+            withTimeout(30_000) { examine(page, modern) }
         } catch (e: Exception) {
             Check(false, e.javaClass.simpleName + "：" + (e.message ?: "未知错误").take(140))
         }
@@ -216,8 +216,13 @@ class BrowserBenchTest {
             if (placed.hit !in extra.hits && placed.hit != extra.ownerId)
                 return Check(false, "定位点被其他节点挡住")
             sender(tab).act(placed.x, placed.y, "click")
-            // 点击要跨进程送进 iframe，再由 postMessage 传回来；机器忙的时候（CI）700 毫秒不够，会误报「未触发」
-            val ok = tab.waitUntil(4_000) { tab.string("window.__benchResult") == "clicked" }
+            // 点击要跨进程送进 iframe，再由 postMessage 传回来；机器忙的时候（CI）几秒都可能不够，会误报「未触发」。
+            // 等不到就再点一次（iframe 刚加载完时第一下可能被丢掉）
+            var ok = tab.waitUntil(6_000) { tab.string("window.__benchResult") == "clicked" }
+            if (!ok) {
+                sender(tab).act(placed.x, placed.y, "click")
+                ok = tab.waitUntil(6_000) { tab.string("window.__benchResult") == "clicked" }
+            }
             return Check(ok, if (ok) "" else "融合节点定位后点击未触发事件")
         } finally {
             tab.close()

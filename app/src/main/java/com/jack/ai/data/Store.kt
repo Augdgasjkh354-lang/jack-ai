@@ -363,7 +363,7 @@ class Store(context: Context) {
      * 记一笔用量（按天、按模型累加），并按请求发生的这一刻的价格算钱。
      * cacheHit 为 null 表示服务没返回缓存命中数。返回这次花了多少元，不知道价格时返回 null。
      */
-    fun addUsage(ep: Endpoint, prompt: Int, cacheHit: Int?, completion: Int, label: String = ""): Double? = synchronized(LOCK) {
+    fun addUsage(ep: Endpoint, prompt: Int, cacheHit: Int?, completion: Int, label: String = "", prefix: String = ""): Double? = synchronized(LOCK) {
         val now = System.currentTimeMillis()
         val date = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date(now))
         val price = Pricing.priceAt(ep, now)
@@ -386,7 +386,7 @@ class Store(context: Context) {
         // 最近每一次请求单独记一笔（用量页看缓存命中）
         val recent = loadUnlocked("usage_recent.json", UsageRecord.serializer())
         atomicWrite("usage_recent.json", json.encodeToString(ListSerializer(UsageRecord.serializer()),
-            (recent + UsageRecord(now, ep.key, label, prompt, cacheHit, completion, cost)).takeLast(RECENT_REQUESTS)))
+            (recent + UsageRecord(now, ep.key, label, prompt, cacheHit, completion, cost, prefix)).takeLast(RECENT_REQUESTS)))
         checkBudget(list, date.take(7))
         Quota.add(app, (prompt + completion).toLong(), now)
         cost

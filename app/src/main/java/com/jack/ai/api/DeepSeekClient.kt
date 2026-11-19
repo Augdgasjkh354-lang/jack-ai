@@ -43,7 +43,9 @@ sealed interface StreamEvent {
     /** 本次请求用掉的 token（最后一个数据块里返回）。 */
     /** cacheHit 为 null 表示服务没告诉我们缓存命中了多少。 */
     /** endpoint：换成备用模型答的时候是那个备用（记账要记到它头上）；主模型答的为 null。 */
-    data class Usage(val promptTokens: Int, val completionTokens: Int, val cacheHit: Int? = null, val endpoint: Endpoint? = null) : StreamEvent
+    data class Usage(val promptTokens: Int, val completionTokens: Int, val cacheHit: Int? = null, val endpoint: Endpoint? = null,
+        /** 请求开头的指纹（见 PrefixPrint），缓存没命中时用来判断是哪一段变了。 */
+        val prefix: String? = null) : StreamEvent
     /** 这一轮怎么结束的：length 表示写到长度上限被截断了。 */
     data class Finish(val reason: String) : StreamEvent
 }
@@ -237,7 +239,7 @@ class DeepSeekClient(
                             (obj["usage"] as? JsonObject)?.let { u ->
                                 val p = (u["prompt_tokens"] as? JsonPrimitive)?.intOrNull ?: 0
                                 val c = (u["completion_tokens"] as? JsonPrimitive)?.intOrNull ?: 0
-                                if (p > 0 && trySendBlocking(StreamEvent.Usage(p, c, cacheHitOf(u))).isFailure) return
+                                if (p > 0 && trySendBlocking(StreamEvent.Usage(p, c, cacheHitOf(u), prefix = PrefixPrint.of(ep.model, thinking.effort, messages, tools))).isFailure) return
                             }
                             // 有的服务在最后的用量块里写 "choices": null
                             val choice = (obj["choices"] as? JsonArray)?.firstOrNull() as? JsonObject ?: continue

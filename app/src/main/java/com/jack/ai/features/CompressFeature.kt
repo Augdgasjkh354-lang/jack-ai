@@ -44,7 +44,7 @@ class CompressFeature(core: AppCore) : Feature(core) {
         scope.launch {
             try {
                 // 压缩的花费也算进这个对话
-                val counted = DeepSeekClient { e, p, h, c -> core.recordSpend(id, e, p, h, c) }
+                val counted = DeepSeekClient { e, p, h, c -> core.recordSpend(id, e, p, h, c, tag = "压缩") }
                 val summary = counted.complete(
                     ep,
                     Compression.buildRequest(conv.summary, msgs, imagesOk = ep.vision, user = com.jack.ai.data.Persona.zh(settings)),

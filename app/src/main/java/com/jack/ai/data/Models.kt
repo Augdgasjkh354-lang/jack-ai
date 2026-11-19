@@ -562,6 +562,8 @@ data class UsageRecord(
     val hit: Int? = null,
     val completion: Int = 0,
     val cost: Double? = null,
+    /** 请求开头的指纹（PrefixPrint），旧记录没有。 */
+    val prefix: String = "",
 )
 
 /** 每天每个模型用了多少 token。 */
