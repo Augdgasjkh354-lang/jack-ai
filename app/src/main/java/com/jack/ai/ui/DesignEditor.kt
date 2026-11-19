@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color as AColor
 import android.os.Bundle
+import android.view.View
+import android.view.inputmethod.InputMethodManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -143,6 +145,8 @@ class DesignEditorActivity : ComponentActivity() {
 private data class Picked(
     val kind: String = "none", val slot: String = "", val text: String = "", val color: String = "", val fontSize: Int = 0,
     val fontFamily: String = "", val weight: Int = 400, val align: String = "", val hidden: Boolean = false,
+    val lineHeight: Float = 1.4f, val letterSpacing: Float = 0f, val fx: String = "", val added: Boolean = false,
+    val editing: Boolean = false, val styled: Boolean = false,
 )
 
 private val lenient = Json { ignoreUnknownKeys = true }
@@ -150,7 +154,8 @@ private val lenient = Json { ignoreUnknownKeys = true }
 private fun parsePicked(raw: String): Picked = runCatching {
     val o = lenient.parseToJsonElement(raw).jsonObject
     fun s(k: String) = (o[k] as? JsonPrimitive)?.content.orEmpty()
-    Picked(s("kind"), s("slot"), s("text"), s("color"), s("fontSize").toIntOrNull() ?: 0, s("fontFamily"), s("weight").toIntOrNull() ?: 400, s("align"), s("hidden") == "true")
+    Picked(s("kind"), s("slot"), s("text"), s("color"), s("fontSize").toIntOrNull() ?: 0, s("fontFamily"), s("weight").toIntOrNull() ?: 400, s("align"), s("hidden") == "true",
+        s("lineHeight").toFloatOrNull() ?: 1.4f, s("letterSpacing").toFloatOrNull() ?: 0f, s("fx"), s("added") == "true", s("editing") == "true", s("styled") == "true")
 }.getOrDefault(Picked())
 
 /** 页面里的 rgb()/rgba() → Compose 颜色（画色块用）。 */
@@ -177,6 +182,10 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
     var sheet by remember { mutableStateOf<String?>(null) }
     var askLeave by remember { mutableStateOf(false) }
     var webView by remember { mutableStateOf<WebView?>(null) }
+    // 正在图上打字（editor.js 报上来的）；样式面板开着没有（开着时代替工具栏，不挡画布）
+    var editingText by remember { mutableStateOf(false) }
+    var stylePanel by remember { mutableStateOf(false) }
+    LaunchedEffect(picked.kind) { if (picked.kind == "none" || picked.kind == "image") stylePanel = false }
 
     // 页面：底稿 + 填内容的脚本（画图标）+ 编辑器脚本 + 字体
     val loaded by produceState<Triple<ByteArray, Int, Int>?>(null, src) {
@@ -263,6 +272,11 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
                                     post {
                                         canUndo = "\"undo\":true" in json
                                         canRedo = "\"redo\":true" in json
+                                        val now = "\"editing\":true" in json
+                                        // 开始打字弹出键盘，打完收起
+                                        if (!editingText && now) keyboard(this@apply, true)
+                                        if (editingText && !now) keyboard(this@apply, false)
+                                        editingText = now
                                     }
                                 }
                             }, "KaviEditor")
@@ -291,32 +305,48 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
                 if (!ready) CircularProgressIndicator()
             }
         }
-        // 工具栏：没选中时是整张图的；选中了按种类给
+        // 工具栏：没选中时是整张图的；选中了按种类给；正在打字时是局部样式；样式面板开着时换成面板
         Surface(tonalElevation = 2.dp) {
             Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(vertical = 6.dp)) {
-                val label = when (picked.kind) {
-                    "text" -> "文字" + (picked.slot.takeIf { it.isNotEmpty() }?.let { "（$it）" } ?: "") + " · ${picked.fontSize}px"
-                    "image" -> "图片"
-                    "group" -> "一组（列表的一项）"
-                    "box" -> "图形"
-                    else -> "点一下选中；按住选中的拖动，两指缩放、旋转"
+                val label = when {
+                    editingText -> "正在改字：选中几个字，可以单独换颜色、加粗、划重点"
+                    stylePanel && picked.kind != "none" -> "文字样式 · ${picked.fontSize}px"
+                    picked.kind == "text" -> "文字" + (picked.slot.takeIf { it.isNotEmpty() }?.let { "（$it）" } ?: "") + " · ${picked.fontSize}px · 双击直接改字"
+                    picked.kind == "image" -> "图片"
+                    picked.kind == "group" -> "一组（列表的一项）"
+                    picked.kind == "box" -> "图形"
+                    else -> "点一下选中，双击文字直接改；按住选中的拖动，两指缩放、旋转"
                 }
                 Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp), maxLines = 1)
+                if (stylePanel && picked.kind in setOf("text", "group") && !editingText) {
+                    StylePanel(picked, vars = { webView }, onCmd = { op, kv -> cmd(op, *kv) }, onClose = { stylePanel = false })
+                    return@Column
+                }
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    @Composable fun Tool(text: String, onClick: () -> Unit) = TextButton(onClick = onClick, enabled = ready) { Text(text) }
-                    when (picked.kind) {
-                        "none" -> {
+                    @Composable fun Tool(text: String, bold: Boolean = false, onClick: () -> Unit) =
+                        TextButton(onClick = onClick, enabled = ready) { Text(text, fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal) }
+                    fun span(vararg kv: Pair<String, String>) = cmd("span", "style" to JsonObject(kv.associate { it.first to JsonPrimitive(it.second) }))
+                    when {
+                        editingText -> {
+                            Tool("完成", bold = true) { cmd("done") }
+                            Tool("颜色") { sheet = "spanColor" }
+                            Tool("加粗") { span("font-weight" to "900") }
+                            Tool("荧光笔") { span("background-image" to "linear-gradient(transparent 58%, color-mix(in srgb, var(--accent) 55%, transparent) 58%)") }
+                            Tool("下划线") { span("text-decoration" to "underline", "text-decoration-color" to "var(--accent)", "text-decoration-thickness" to ".08em", "text-underline-offset" to ".14em") }
+                            Tool("放大") { span("font-size" to "1.25em") }
+                            Tool("清除局部样式") { cmd("spanClear") }
+                            Tool("大框编辑") { cmd("done"); sheet = "text" }
+                        }
+                        picked.kind == "none" -> {
+                            Tool("加文字") { webView?.requestFocus(); cmd("addText") }
                             Tool("换配色") { sheet = "palette" }
                         }
                         else -> {
-                            if (picked.kind == "text") Tool("改字") { sheet = "text" }
+                            if (picked.kind == "text") Tool("改字", bold = true) { webView?.let { keyboard(it, true) }; cmd("edit") }
                             if (picked.kind == "image") Tool("换图") { sheet = "image" }
-                            if (picked.kind != "image") {
-                                Tool("字号－") { cmd("fontSize", "factor" to 0.9) }
-                                Tool("字号＋") { cmd("fontSize", "factor" to 1.1) }
-                                Tool("颜色") { sheet = "color" }
-                            }
+                            if (picked.kind == "text" || picked.kind == "group") Tool("样式") { stylePanel = true }
+                            if (picked.kind != "image") Tool("颜色") { sheet = "color" }
                             if (picked.kind == "text") {
                                 Tool("字体") { sheet = "font" }
                                 Tool(if (picked.weight >= 600) "变细" else "加粗") { cmd("weight", "value" to if (picked.weight >= 600) 400 else 700) }
@@ -326,7 +356,8 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
                             Tool("上移一层") { cmd("z", "dir" to 1) }
                             Tool("下移一层") { cmd("z", "dir" to -1) }
                             Tool("复位") { cmd("reset") }
-                            Tool(if (picked.hidden) "显示" else "隐藏") { cmd("hide") }
+                            if (picked.added) Tool("删除") { cmd("remove") }
+                            else Tool(if (picked.hidden) "显示" else "隐藏") { cmd("hide") }
                             Tool("取消选中") { webView?.evaluateJavascript("kvEd.cmd({op:'deselect'})", null) }
                         }
                     }
@@ -348,6 +379,10 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
         }
         "color", "background" -> ModalBottomSheet(onDismissRequest = { sheet = null }) {
             ColorSheet(webView) { css -> cmd(if (sheet == "color") "color" else "background", "value" to css); sheet = null }
+        }
+        // 正在改字时选中的那几个字换颜色（没选中字就整段）
+        "spanColor" -> ModalBottomSheet(onDismissRequest = { sheet = null }) {
+            ColorSheet(webView) { css -> cmd("span", "style" to JsonObject(mapOf("color" to JsonPrimitive(css)))); sheet = null }
         }
         "font" -> ModalBottomSheet(onDismissRequest = { sheet = null }) {
             val fonts = remember { DesignFonts.all(ctx) }
@@ -403,6 +438,73 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
         confirmButton = { TextButton(onClick = { askLeave = false; save(true) }) { Text("保存再走") } },
         dismissButton = { TextButton(onClick = { askLeave = false; onClose() }) { Text("不要了") } },
     )
+}
+
+/** 弹出或收起键盘（在图上直接改字时）。 */
+private fun keyboard(v: View, show: Boolean) {
+    val imm = v.context.getSystemService(InputMethodManager::class.java) ?: return
+    if (show) { v.requestFocus(); imm.showSoftInput(v, InputMethodManager.SHOW_IMPLICIT) } else imm.hideSoftInputFromWindow(v.windowToken, 0)
+}
+
+/**
+ * 文字样式面板：代替工具栏放在画布下面（不挡画布，边调边看）。
+ * 字号、行距、字距加减；效果（描边、硬投影、软阴影、荧光底、反白块）和效果颜色；四种样式预设。
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun StylePanel(picked: Picked, vars: () -> WebView?, onCmd: (String, Array<Pair<String, Any>>) -> Unit, onClose: () -> Unit) {
+    val palette by produceState<Map<String, String>>(emptyMap()) {
+        val raw = vars()?.let { w -> suspendCancellableCoroutine<String> { c -> w.evaluateJavascript("kvEd.vars()") { if (c.isActive) c.resume(it ?: "") } } }.orEmpty()
+        value = runCatching {
+            val s = (Json.parseToJsonElement(raw) as JsonPrimitive).content
+            (Json.parseToJsonElement(s) as JsonObject).mapValues { (it.value as JsonPrimitive).content }
+        }.getOrDefault(emptyMap())
+    }
+    var fxColor by remember { mutableStateOf("var(--accent)") }
+    fun cmd(op: String, vararg kv: Pair<String, Any>) = onCmd(op, arrayOf(*kv))
+    @Composable fun Stepper(name: String, value: String, minus: () -> Unit, plus: () -> Unit) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(name, style = MaterialTheme.typography.labelLarge)
+            TextButton(onClick = minus) { Text("－") }
+            Text(value, style = MaterialTheme.typography.labelLarge, modifier = Modifier.width(52.dp), maxLines = 1)
+            TextButton(onClick = plus) { Text("＋") }
+        }
+    }
+    @Composable fun Chip(text: String, on: Boolean, onClick: () -> Unit) {
+        Surface(onClick = onClick, shape = Radii.s,
+            color = if (on) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh) {
+            Text(text, Modifier.padding(horizontal = 14.dp, vertical = 8.dp), style = MaterialTheme.typography.labelLarge)
+        }
+    }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+        Row(Modifier.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
+            Stepper("字号", "${picked.fontSize}", { cmd("fontSize", "factor" to 0.92) }, { cmd("fontSize", "factor" to 1.08) })
+            Stepper("行距", "%.2f".format(picked.lineHeight), { cmd("lineHeight", "delta" to -0.05) }, { cmd("lineHeight", "delta" to 0.05) })
+            Stepper("字距", "%.2f".format(picked.letterSpacing), { cmd("letterSpacing", "delta" to -0.02) }, { cmd("letterSpacing", "delta" to 0.02) })
+        }
+        Text("效果", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp, bottom = 4.dp))
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("" to "无", "stroke" to "描边", "shadow" to "硬投影", "soft" to "软阴影", "highlight" to "荧光底", "block" to "反白块").forEach { (id, name) ->
+                Chip(name, picked.fx == id) { cmd("fx", "fx" to id.ifEmpty { "none" }, "color" to fxColor) }
+            }
+        }
+        Row(Modifier.padding(top = 8.dp).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("效果颜色", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            listOf("bg", "fg", "primary", "secondary", "accent", "muted").forEach { k ->
+                val css = "var(--$k)"
+                Box(Modifier.size(30.dp).background(cssColor(palette[k].orEmpty()) ?: Color.Gray, CircleShape)
+                    .border(if (fxColor == css) 3.dp else 1.dp, if (fxColor == css) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, CircleShape)
+                    .clickable { fxColor = css; if (picked.fx.isNotEmpty()) cmd("fx", "fx" to picked.fx, "color" to css) })
+            }
+        }
+        Text("预设", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp, bottom = 4.dp))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("title" to "大标题", "sub" to "小标题", "body" to "正文", "label" to "标签").forEach { (id, name) -> Chip(name, false) { cmd("preset", "name" to id) } }
+            }
+            TextButton(onClick = onClose) { Text("收起", fontWeight = FontWeight.Bold) }
+        }
+    }
 }
 
 @Composable
