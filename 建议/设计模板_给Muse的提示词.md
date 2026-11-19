@@ -1,33 +1,52 @@
-请给仓库 Augdgasjkh354-lang/jack-ai 做一批「设计模板」（第 2 版规格）。Kavi 是安卓 App 里的 AI 助手，会套这些模板做小红书图文、海报、邀请函、名片这类图片，有点像 Canva。先读 `AGENTS.md`、`CLAUDE.md`。
+请给仓库 Augdgasjkh354-lang/jack-ai 做第 3 批「设计模板」（第 2 版规格）。Kavi 是安卓 App 里的 AI 助手，会套这些模板做小红书图文、海报、邀请函、名片这类图片，有点像 Canva。先读 `AGENTS.md`、`CLAUDE.md`。
 
 **你只做模板，不改 Kotlin 代码。** 渲染引擎、工具、技能、编辑器都由 Claude 来做。
 
 ## 零、先看样板
 
-`app/src/main/assets/design/templates/` 里的 `xhs-bold-cover.html`、`xhs-bold-list.html`、`xhs-bold-ending.html` 是 Claude 做的一套样板（大字报风格：封面、清单、结尾）。**质量以它们为准，写法照它们来。** 预览图在 `design-previews/`。
+`app/src/main/assets/design/templates/` 里已经有 35 个模板：Claude 做的大字报样板（`xhs-bold-*`），和你第 2 批做的 8 套小红书套组。**质量以大字报样板和你第 2 批里最好的那几张为准，写法照它们来。** 预览图在 `design-previews/`，先把 `_all.png` 看一遍。
 
-第 1 版的 6 个旧模板风格太素、像 PPT，已经删掉了。第 2 版（你做的 8 套）是现在的基准，新做的不要和它们撞风格。
+新做的不要和已有的撞版式：同一种 role（比如 list），换风格时版式也要有变化，不是换个颜色。
 
-## 一、这批做什么
+## 一、这批做什么（第 3 批）
 
-第 1 批：小红书套组，共 32 个（8 种风格 × 每套 4 张）。
+### A. 补齐小红书套组：20 个（5 种风格 × 每套 4 张）
 
-风格从 `app/src/main/assets/design/styles.json` 里选。每种风格的字体、字号、版式、装饰、配色、禁忌都写在里面，**照着做，不要自己发挥换掉**。大字报（`bold-poster`）已经有样板了，这次做下面 8 种：
+`styles.json` 里还没有模板的 5 种风格：
 
 | 风格 id | 名字 | 这套的 4 张（role） |
 |---|---|---|
-| `magazine` | 杂志编辑 | cover、photo、list、ending |
-| `cream` | 奶油温柔 | cover、quote、list、ending |
-| `dopamine` | 多巴胺 | cover、grid、list、ending |
-| `minimal` | 极简白 | cover、data、steps、ending |
-| `notebook` | 手账拼贴 | cover、list、photo、ending |
-| `knowledge` | 知识卡片 | cover、steps、compare、ending |
-| `guofeng` | 国风 | cover、quote、list、ending |
-| `tech` | 科技暗色 | cover、data、compare、ending |
+| `film` | 胶片复古 | cover、photo、quote、ending |
+| `black-gold` | 高级黑金 | cover、data、list、ending |
+| `study` | 学习笔记 | cover、steps、qa、ending |
+| `japanese` | 日系清新 | cover、photo、list、ending |
+| `newspaper` | 报纸 | cover、list、compare、ending |
 
-role 的含义见 `styles.json` 里的 `layouts`（cover 大标题封面、list 清单、steps 步骤、compare 对比、grid 宫格、quote 金句、photo 大图配字、data 大数字、qa 问答、ending 结尾）。
+### B. 别的用途：12 个
 
-同一套的 4 张必须一眼看出是一家人：同一套配色、字体、页码位置、页边距、装饰语言。翻页时只有内容在变。
+现在除了小红书，别的分类一个模板都没有。每种做 2～3 个，风格从上面 14 种里挑最合适的，**同一分类里风格不重样**：
+
+| 分类 | 尺寸 | 做几个 | 内容建议 |
+|---|---|---|---|
+| `poster` 竖版海报 | 1080×1920 | 3 | 活动海报（时间地点大）、促销海报（价格大）、招聘/招生 |
+| `invite` 邀请函贺卡 | 1080×1620 | 3 | 婚礼/生日邀请、开业/发布会邀请、节日贺卡 |
+| `square` 方图 | 1080×1080 | 2 | 朋友圈产品图（大图+卖点）、金句方图 |
+| `card` 名片 | 1050×600 | 2 | 一个简洁、一个有设计感；姓名、职位、电话、微信、地址 |
+| `cover` 公众号封面 | 900×383 | 2 | 大标题横版；左字右图 |
+
+id 写成 `<分类>-<风格id>-<用途>`，比如 `poster-bold-event`、`invite-guofeng-wedding`。元数据的 `set` 填 `<分类>-<风格id>`，`role` 填用途（event、sale、wedding……）。
+
+邀请函、海报这类：时间、地点、联系方式这几个字段要有自己的 `data-slot`（`date`、`time`、`place`、`contact`），Kavi 会单独填。
+
+### C. 和编辑器配合（新要求）
+
+用户现在能在编辑器里改模板：拖动、换图、裁剪、滤镜、改色、换字体。写模板时照下面几条，编辑器才好用：
+
+- 图片位只用 `<div data-slot="photo" data-kind="image">`，**不要用 `<img>`**。编辑器靠 `background-image` 放照片、做裁剪和滤镜，大小和裁切写在这个 div 的 CSS 上。
+- 每块可改的字单独一个元素、带 `data-slot`。不要把两段字塞进同一个元素里，用户没法分开拖。
+- 装饰图形（色块、胶带、印章、线框）做成独立元素，不要画在文字元素的 `::before`、`::after` 上。编辑器选不中伪元素，用户就删不掉、挪不动。
+- 文字颜色、底色都写 `var(--…)`。用户换配色时整张跟着变，写死的颜色会剩下来。
+- 标题字体写 `var(--font-title)`、正文写 `var(--font-sans)`。编辑器的「大标题、正文」预设读这两个变量。
 
 ## 二、文件放哪、叫什么
 
@@ -123,4 +142,4 @@ role 的含义见 `styles.json` 里的 `layouts`（cover 大标题封面、list 
 
 1. 跑 `node tools/check_design_templates.js --write-index`。它会用 App 真正的填充脚本和真实字体（从 jsDelivr 下载，要联网），把每个模板按四种情况各跑一遍：示例、文字填满、列表最少项、列表最多项且文字填满。检查内容包括规则、溢出、边距和审美，最后出预览图。必须**全部通过**。
 2. 自己打开 `design-previews/` 里的每张预览图看一遍。脚本查不出「丑」，你要查。另外两套配色也各渲染一次看看。
-3. 推到分支 `muse/design-templates-2`，**不许推 main**。做完用中文告诉 Jack：做了哪几套、各几张、分支名，附上 `_all.png` 的总览。
+3. 推到分支 `muse/design-templates-3`，**不许推 main**。A 部分做完先推一次，再做 B。做完用中文告诉 Jack：做了哪几套、各几张、分支名，附上 `_all.png` 的总览。
