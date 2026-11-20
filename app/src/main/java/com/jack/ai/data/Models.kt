@@ -121,8 +121,6 @@ data class Conversation(
     val skillTools: Set<String> = emptySet(),
     /** 最近一次请求实际用掉的上下文 token 数（接口返回）。 */
     val lastPromptTokens: Int = 0,
-    /** 「思考·自动」上次在这个对话里用的档（low / high），换档会丢缓存，见 ThinkLevel.resolveIn。 */
-    val autoEffort: String = "",
     /** 清单里每段上次发的样子（标题 → 哈希@消息 id），一样的不再发，见 ContextNote.delta。 */
     val noteSent: Map<String, String> = emptyMap(),
     /** 这个对话累计用掉的 token。 */
@@ -222,49 +220,15 @@ enum class ThinkLevel(val label: String, val effort: String?) {
     OFF("不思考", null),
     LOW("思考·低", "low"),
     HIGH("思考·高", "high"),
-    MAX("思考·最高", "max"),
-    /** 按问题难度自动选低档或高档；发请求前一定先用 resolve 换成具体档位（漏了也按低档发）。 */
-    AUTO("思考·自动", "low");
-
-    /**
-     * 自动档：简单问题用低档（1017 版低档已经够用，耗的 token 少一半以上），
-     * 编程、计算、分析、长问题、带文件的、后台任务用高档。
-     */
-    fun resolve(text: String, work: Boolean, hasFiles: Boolean): ThinkLevel = when {
-        this != AUTO -> this
-        work || hasFiles || text.length > 400 || "```" in text -> HIGH
-        HARD.containsMatchIn(text) -> HIGH
-        else -> LOW
-    }
-
-    /**
-     * 自动档在一个对话里不来回换：DeepSeek 把思考档位写在请求最开头（系统提示词前面），
-     * 换一次档整段对话的缓存全不中（低档 ↔ 高档各存一份）。对话还短时按这条消息选；
-     * 长了就沿用上次的档：上次低档、这条像难题，最多升一次高档（只丢一次缓存，之后一直高档）——
-     * 但对话已经很长时连这一次也不升，改成在消息末尾提醒多想一步（nudge = true）。
-     */
-    fun resolveIn(text: String, work: Boolean, hasFiles: Boolean, used: ThinkLevel?, promptTokens: Int): Pair<ThinkLevel, Boolean> {
-        if (this != AUTO) return this to false
-        return stick(resolve(text, work, hasFiles), used, promptTokens)
-    }
+    MAX("思考·最高", "max");
 
     companion object {
-        /** 自动档想用 want，这个对话上次用的是 used：真正用哪档、要不要在末尾提醒多想（见 resolveIn）。 */
-        fun stick(want: ThinkLevel, used: ThinkLevel?, promptTokens: Int): Pair<ThinkLevel, Boolean> {
-            if (used == null || used !in setOf(LOW, HIGH) || promptTokens < STICKY_TOKENS) return want to false
-            if (want == used || used == HIGH) return used to false
-            // 想升高档：对话还不算太长就升（一次），很长了就不升、末尾提醒
-            return if (promptTokens < UPGRADE_LIMIT) HIGH to false else LOW to true
+        /** 存过的档位名 → 档位；以前的「思考·自动」（AUTO）删掉了，按高档算：一个对话里档位不变，缓存才不断。 */
+        fun parse(name: String?): ThinkLevel? = when (name) {
+            null -> null
+            "AUTO" -> HIGH
+            else -> runCatching { valueOf(name) }.getOrNull()
         }
-
-        /** 上下文少于这么多 token 时随便换档：丢掉的缓存也就几分钱的零头。 */
-        const val STICKY_TOKENS = 8_000
-        /** 上下文超过这么多 token 就不为一条消息换档了。 */
-        const val UPGRADE_LIMIT = 40_000
-        /** 沿用低档、但这条像难题时，附在用户消息末尾的提醒。 */
-        const val THINK_HARDER = "【Think harder】This message looks harder than usual: reason it through step by step and double-check before you answer.\n"
-        fun fromEffort(effort: String?): ThinkLevel? = when (effort) { "low" -> LOW; "high" -> HIGH; else -> null }
-        private val HARD = Regex("代码|编程|程序|bug|报错|调试|debug|code|算法|证明|推导|方程|数学|计算|算一下|统计|分析|方案|规划|策略|对比|比较|优化|设计|论文|翻译整篇|逻辑", RegexOption.IGNORE_CASE)
     }
 }
 
@@ -277,7 +241,7 @@ data class Settings(
     val webSearch: Boolean = true,
     val baseUrl: String = DEFAULT_BASE_URL,
     val model: String = MODEL_FLASH,
-    val thinking: ThinkLevel = ThinkLevel.AUTO,
+    val thinking: ThinkLevel = ThinkLevel.HIGH,
     val temperature: Float = 1.0f,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val presets: List<Preset> = DEFAULT_PRESETS,
@@ -378,8 +342,6 @@ data class Settings(
     /** 本地向量模型（设置 → 本地模型）：用哪个（LocalModels 里的 id，空 = 不用）。默认只在没配硅基流动或连不上时用；localPrefer 是优先用本地。 */
     val localModel: String = "",
     val localPrefer: Boolean = false,
-    /** 「思考·自动」用本地模型判断问题难不难（不花钱，规则没认出来的再看一眼）。 */
-    val localClassify: Boolean = true,
     /** 思考摘要用手机上的生成模型（Qwen3.5-0.8B，要先下载）写，不调后台模型、不花钱。 */
     val localLlm: Boolean = false,
     /** 操作其他 App（无障碍）：Kavi 能操作的 App（包名），只有勾过的才能碰；涉及钱的和系统设置勾不了。 */

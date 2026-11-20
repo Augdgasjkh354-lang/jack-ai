@@ -512,13 +512,12 @@ class Store(context: Context) {
             MODEL_PRO -> if (proToFlash) MODEL_FLASH else oldModel
             else -> oldModel
         }
-        val thinking = prefs.getString("thinking", null)
-            ?.let { runCatching { ThinkLevel.valueOf(it) }.getOrNull() }
-            ?: if (oldModel == "deepseek-chat") ThinkLevel.OFF else ThinkLevel.AUTO
+        val thinking = ThinkLevel.parse(prefs.getString("thinking", null))
+            ?: if (oldModel == "deepseek-chat") ThinkLevel.OFF else ThinkLevel.HIGH
         // Chat 和 Work 合并成一套模型：上次停在 Work 时，当前的是 Work 的那套，换回 Chat 的（下次存设置时 activeWork 就写成 false）
         val wasWork = prefs.getBoolean("activeWork", false)
         val chatModel = (prefs.getString("chatModel", "") ?: "").let { if (proToFlash && it == MODEL_PRO) MODEL_FLASH else it }
-        val chatThinking = prefs.getString("chatThinking", null)?.let { runCatching { ThinkLevel.valueOf(it) }.getOrNull() }
+        val chatThinking = ThinkLevel.parse(prefs.getString("chatThinking", null))
         return Settings(
             apiKey = secret("apiKey", "") ?: "",
             tavilyKey = secret("tavilyKey", "") ?: "",
@@ -542,7 +541,7 @@ class Store(context: Context) {
             chatModel = chatModel,
             chatThinking = chatThinking,
             workModel = (prefs.getString("workModel", MODEL_FLASH) ?: MODEL_FLASH).let { if (proToFlash && it == MODEL_PRO) MODEL_FLASH else it },
-            workThinking = prefs.getString("workThinking", null)?.let { runCatching { ThinkLevel.valueOf(it) }.getOrNull() } ?: ThinkLevel.HIGH,
+            workThinking = ThinkLevel.parse(prefs.getString("workThinking", null)) ?: ThinkLevel.HIGH,
             // 默认值从 1 元改成了 5 元，换个键名，旧的默认值不沿用
             workCostLimit = prefs.getFloat("workCostLimit5", 5f).toDouble(),
             quotaFiveHours = prefs.getLong("quotaFiveHours", 2_000_000),
@@ -603,7 +602,6 @@ class Store(context: Context) {
             }.orEmpty(),
             localModel = prefs.getString("localModel", "") ?: "",
             localPrefer = prefs.getBoolean("localPrefer", false),
-            localClassify = prefs.getBoolean("localClassify", true),
             localLlm = prefs.getBoolean("localLlm", false),
             floatBall = prefs.getBoolean("floatBall", false),
             phoneBackground = prefs.getBoolean("phoneBackground", false),
@@ -687,7 +685,6 @@ class Store(context: Context) {
             .putString("phoneFolders", json.encodeToString(ListSerializer(PhoneFolder.serializer()), s.phoneFolders))
             .putString("localModel", s.localModel)
             .putBoolean("localPrefer", s.localPrefer)
-            .putBoolean("localClassify", s.localClassify)
             .putBoolean("localLlm", s.localLlm)
             .putString("phoneApps", json.encodeToString(ListSerializer(String.serializer()), s.phoneApps))
             .putBoolean("floatBall", s.floatBall)

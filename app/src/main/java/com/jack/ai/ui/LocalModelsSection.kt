@@ -41,7 +41,7 @@ import kotlinx.coroutines.withContext
 
 /**
  * 设置页的「本地模型」：列出能下的模型（多大、占多少内存），下载（能暂停、断了接着下）、选用、测速、删除；
- * 下面两个开关：优先用本地、用它判断问题难不难。
+ * 下面的开关：优先用本地。
  */
 @Composable
 fun LocalModelsSection(vm: ChatViewModel, settings: Settings) {
@@ -158,14 +158,6 @@ fun LocalModelsSection(vm: ChatViewModel, settings: Settings) {
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Switch(checked = settings.localPrefer, onCheckedChange = { on -> vm.updateSettings { it.copy(localPrefer = on) } })
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("判断问题难不难")
-                Text("「思考·自动」时，看着简单的问题再让本地模型看一眼，像难题就用高档思考",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Switch(checked = settings.localClassify, onCheckedChange = { on -> vm.updateSettings { it.copy(localClassify = on) } })
         }
     }
 

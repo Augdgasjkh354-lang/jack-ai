@@ -647,10 +647,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val project = _state.value.project(conv.projectId)
         val model = modelOverride ?: settings.model
         val lastUser = conv.messages.lastOrNull { it.role == "user" }
-        val level = if (modelOverride != null && settings.thinking == ThinkLevel.OFF) ThinkLevel.HIGH else settings.thinking
-        val (thinking, thinkHarder) = level.resolveIn(lastUser?.content.orEmpty(), false, lastUser?.attachments?.isNotEmpty() == true,
-            ThinkLevel.fromEffort(conv.autoEffort), conv.lastPromptTokens)
-        if (level == ThinkLevel.AUTO && thinking.effort != conv.autoEffort) updateConv(convId) { it.copy(autoEffort = thinking.effort.orEmpty()) }
+        // 档位整个对话不变（换档会让整段缓存不中：DeepSeek 把档位写在请求最开头）
+        val thinking = if (modelOverride != null && settings.thinking == ThinkLevel.OFF) ThinkLevel.HIGH else settings.thinking
         val reply = ChatMessage(role = "assistant", model = model, appVersion = com.jack.ai.data.appVersion(getApplication()))
         updateConv(convId) { it.copy(messages = it.messages + reply) }
 
@@ -703,7 +701,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             // 清单分两块：固定的（文件、表格、任务……）只发变了的段落（见 ContextNote.delta）；每条消息现算的（经历、相关记忆、推荐技能）照发
             val persistNote = extraUser == null && lastUser != null && lastUser.contextPrefix == null
             var noteSent: Map<String, String>? = null
-            promptInput = promptInput.copy(contextNote = (if (thinkHarder) ThinkLevel.THINK_HARDER else "") + withContext(Dispatchers.IO) {
+            promptInput = promptInput.copy(contextNote = withContext(Dispatchers.IO) {
                 val stable =
                     // 能分头做：有免费模型时说一声
                     com.jack.ai.data.freeCandidates(com.jack.ai.data.FreePool.load(getApplication()), settings, 0).size.takeIf { it > 0 }
@@ -813,13 +811,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     "开始",
                 )
             }
-            // 思考·自动：规则看着不难的，再让本地模型看一眼（选了本地模型才有，最多等 1.5 秒，不花钱）
-            // 换档会丢整段缓存：一样按 stick 的规矩，长对话里不为它换档（末尾提醒已经来不及加，就照低档）
-            val level = if (settings.thinking == ThinkLevel.AUTO && modelOverride == null && thinking == ThinkLevel.LOW && !thinkHarder &&
-                com.jack.ai.chat.LocalBrain.isHard(getApplication(), settings, lastUser?.content.orEmpty()) == true)
-                ThinkLevel.stick(ThinkLevel.HIGH, ThinkLevel.fromEffort(conv.autoEffort), conv.lastPromptTokens).first
-                    .also { if (it == ThinkLevel.HIGH) updateConvQuiet(convId) { c -> c.copy(autoEffort = "high") } }
-            else thinking
+            val level = thinking
             val agent = Agent({ msgs, t -> client.stream(ep, msgs, level, settings.temperature, t) }, sendReasoning = thinkingOn, splitNotes = true)
             // Work 的收尾关卡：清单没做完不让收尾；开着「交付前复核」再另起一次请求按验收标准查一遍
             val gate = com.jack.ai.tools.WorkGate(session, review = if (settings.workReview) {

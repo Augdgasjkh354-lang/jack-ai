@@ -203,7 +203,7 @@ fun SettingsScreen(
                 FreePoolCard(settings)
             }
 
-            if (page == SettingsPage.LOCAL) Section(hint = "装在手机上的向量模型：按意思找记忆、查事实库，判断问题难不难。不联网、不花钱；默认在硅基流动没配或连不上时用。") {
+            if (page == SettingsPage.LOCAL) Section(hint = "装在手机上的向量模型：按意思找记忆、查事实库。不联网、不花钱；默认在硅基流动没配或连不上时用。") {
                 LocalModelsSection(vm, settings)
             }
 

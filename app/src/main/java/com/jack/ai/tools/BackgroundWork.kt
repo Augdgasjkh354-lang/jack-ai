@@ -180,7 +180,7 @@ suspend fun runBackgroundWork(
             if (id == com.jack.ai.data.SkillIds.FLOWS) session.unlocked.add(com.jack.ai.data.SkillIds.BROWSER)
         }
     }
-    val thinking = if (ep.reasoning && ep.deepseek) s.workThinking.resolve(r.prompt, work = true, hasFiles = false) else ThinkLevel.OFF
+    val thinking = if (ep.reasoning && ep.deepseek) s.workThinking else ThinkLevel.OFF
     val client = DeepSeekClient()
     val agent = Agent({ msgs, t -> client.stream(ep, msgs, thinking, s.temperature, t) }, sendReasoning = ep.deepseek && thinking.effort != null)
     // 定时的 Work 任务也过收尾关卡；监控、微信这类按固定格式回话的（带 brief）不过
