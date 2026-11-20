@@ -424,6 +424,10 @@ fun SettingsScreen(
             }
 
             // ---- 高级 ----
+            if (page == SettingsPage.LEGAL) Section {
+                LegalSection()
+            }
+
             if (page == SettingsPage.UPDATE) Section {
                 UpdateSection(vm, settings)
             }
@@ -612,7 +616,7 @@ private enum class SettingsPage(val title: String) {
     PROFILE("个性化"), KEY("DeepSeek API Key"), PROVIDERS("其他模型服务"), MODEL("模型和思考"), LOCAL("本地模型"),
     COMPRESS("长对话自动压缩"), CONNECT("连接"), REMOTE("远程连接"), PHONE("操作其他 App"), ASK("问这一屏"),
     PHONEDATA("手机数据"), FOLDERS("手机文件夹"), LOOK("外观"), PRIVACY("隐私和数据"), UPDATE("版本更新"), ADVANCED("高级"),
-    LINUX("Linux 沙箱"),
+    LINUX("Linux 沙箱"), LEGAL("用户协议和隐私政策"),
 }
 
 /** 首页上的一行：图标、名字、右边灰字的当前状态（warn 时标红），点了进子页或跳到别的页面。 */
@@ -679,6 +683,7 @@ private fun SettingsHome(
         }, warn = settings.fullAuth),
         if (com.jack.ai.Edition.selfUpdate) go(SettingsPage.UPDATE, AppIcons.Download) else null,
         go(SettingsPage.ADVANCED, Icons.Default.Settings),
+        go(SettingsPage.LEGAL, Icons.Default.Info),
     ))
 }
 

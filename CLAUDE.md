@@ -26,6 +26,7 @@
 
 - `dev` 开发版：全部功能，包名 `com.jack.ai`（Jack 用的，发 Release、自动更新）。
 - `store` 正式版：上应用商店，包名 `com.kavi.ai`；没有浏览器、操作其他 App、后台手机助手、专用代理（VPN）、Linux 沙箱、读通知和微信、使用时长、App 内自更新。
+- 正式版第一次打开先弹《用户协议》《隐私政策》（`ui/Legal.kt`，正文在 `app/src/main/assets/legal/`），同意前不建主界面、不联网、不申请权限。改了功能涉及数据怎么用，要同步改这两份；有重大修改把 `Legal.VERSION` 加一。
 - 同一份代码，用 `Edition`（`com.jack.ai.Edition`）判断；正式版的清单在 `app/src/store/AndroidManifest.xml` 里删组件和权限。新加这类功能时两处都要顾到。
 
 ## 代码

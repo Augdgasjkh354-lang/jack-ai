@@ -69,12 +69,16 @@ sealed interface Screen {
 class MainActivity : FragmentActivity() {
     private val vm: ChatViewModel by viewModels()
 
+    /** 正式版第一次打开、还没同意用户协议和隐私政策：只显示同意页，主界面和 ChatViewModel 都不建（见 Legal）。 */
+    private var waitingConsent = false
+
     /** 开了应用锁时，是否需要解锁。 */
     private var locked by mutableStateOf(false)
     private val stack = mutableStateListOf<Screen>()
 
     override fun onStart() {
         super.onStart()
+        if (waitingConsent) return
         // 离开超过 30 秒再回来，重新上锁
         if (vm.state.value.settings.appLock && (lastActive == 0L || SystemClock.elapsedRealtime() - lastActive > 30_000)) {
             locked = true
@@ -83,11 +87,13 @@ class MainActivity : FragmentActivity() {
 
     override fun onStop() {
         super.onStop()
+        if (waitingConsent) return
         if (!locked) lastActive = SystemClock.elapsedRealtime()
     }
 
     override fun onPause() {
         super.onPause()
+        if (waitingConsent) return
         if (!locked) lastActive = SystemClock.elapsedRealtime()
         visible = false
         Widgets.refreshAll(applicationContext)
@@ -95,6 +101,7 @@ class MainActivity : FragmentActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (waitingConsent) return
         visible = true
         Widgets.refreshAll(applicationContext)
         // 后台做梦可能更新了记忆
@@ -107,6 +114,7 @@ class MainActivity : FragmentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        if (waitingConsent) return
         handleIntent(intent)
     }
 
@@ -214,6 +222,19 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         CrashLog.install(this)
         super.onCreate(savedInstanceState)
+        if (com.jack.ai.ui.Legal.mustAsk(this)) {
+            waitingConsent = true
+            enableEdgeToEdge()
+            setContent {
+                JackTheme(com.jack.ai.data.ThemeMode.SYSTEM) {
+                    com.jack.ai.ui.ConsentScreen(
+                        onAgree = { com.jack.ai.ui.Legal.agree(this); waitingConsent = false; recreate() },
+                        onExit = { finishAndRemoveTask() },
+                    )
+                }
+            }
+            return
+        }
         val lastCrash = CrashLog.take(this)
         PDFBoxResourceLoader.init(applicationContext)
         enableEdgeToEdge()

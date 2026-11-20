@@ -19,7 +19,7 @@ object Edition {
 
     /** 正式版里没有的功能在设置里一律关着。 */
     fun limit(s: com.jack.ai.data.Settings): com.jack.ai.data.Settings = if (!STORE) s else s.copy(
-        phoneApps = emptyList(), floatBall = false, remotePhone = false,
+        phoneApps = emptyList(), floatBall = false, remotePhone = false, phoneBackground = false,
         proxyEnabled = false, proxyAppsOn = false,
         linuxSandbox = false,
         noticeWatch = false, usageOn = false, wechatWatch = false,
