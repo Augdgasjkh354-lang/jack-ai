@@ -34,3 +34,4 @@ xianyu
 xiaoheihe
 xiaohongshu
 zhihu
+jianying

@@ -30,7 +30,7 @@ import java.io.File
  */
 
 private val ACTIONS = listOf("images_to_pdf", "merge_pdf", "split_pdf", "pdf_to_images", "compress_image", "convert_image",
-    "cut_video", "compress_video", "edit_video", "extract_audio", "transcribe", "ocr", "watch_video", "make_video", "beats", "voiceover", "grab_frame")
+    "cut_video", "compress_video", "edit_video", "extract_audio", "transcribe", "ocr", "watch_video", "make_video", "beats", "voiceover", "grab_frame", "to_gallery")
 
 /** ocr 收哪些文件（DeepSeek OCR 认文件内容，不看扩展名，这里先挡掉明显不对的）。 */
 private val OCR_EXT = setOf("pdf", "doc", "docx", "ppt", "pptx", "png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff")
@@ -80,6 +80,7 @@ internal suspend fun ToolSession.convertFile(args: JsonObject): String {
         "watch_video" -> "看视频"
         "beats" -> "找节拍"
         "grab_frame" -> "截图"
+        "to_gallery" -> "存进相册"
         else -> "转文字"
     } + "：" + names.first().take(40) + if (names.size > 1) " 等 ${names.size} 个" else ""
     return runTool(label) {
@@ -201,6 +202,7 @@ internal suspend fun ToolSession.convertFile(args: JsonObject): String {
             "watch_video" -> return@runTool watchVideo(files.first(), args)
             "beats" -> return@runTool beats(files.first())
             "grab_frame" -> return@runTool grabFrames(files.first(), args)
+            "to_gallery" -> return@runTool toGallery(files) to SearchRecord(label)
             else -> return@runTool if (args["timestamps"].text() == "true") transcribeTimed(files.first(), out) else transcribe(files.first(), out)
         }
         made.take(10).forEach { ui.attach(it) }
@@ -208,6 +210,20 @@ internal suspend fun ToolSession.convertFile(args: JsonObject): String {
         ("做好了：$list" + (if (note.isNotBlank()) "（$note）" else "") + "，存在对话文件夹里" +
             (if (made.size > 10) "，聊天里只挂了前 10 个" else "") + "。原文件没动。") to SearchRecord(label)
     }
+}
+
+/** 视频、图片存进手机相册（剪映、抖音这类 App 选素材时从相册里挑）。 */
+private suspend fun ToolSession.toGallery(files: List<File>): String {
+    val use = files.filter { com.jack.ai.data.Gallery.kindOf(it) != null }
+    if (use.isEmpty()) throw IllegalStateException("只能存视频和图片")
+    if (use.size > 30) throw IllegalStateException("一次最多 30 个")
+    val saved = withContext(Dispatchers.IO) { use.map { it to com.jack.ai.data.Gallery.save(app, it) } }
+    val ok = saved.filter { it.second != null }
+    if (ok.isEmpty()) throw IllegalStateException("没存进去（相册写不进去，可能存储满了）")
+    val bad = saved.filter { it.second == null }.map { it.first.name }
+    return "存进相册了：" + ok.joinToString("、") { "「${it.second}」" } + "（视频在「Movies/${com.jack.ai.data.Gallery.FOLDER}」，图片在「Pictures/${com.jack.ai.data.Gallery.FOLDER}」）。" +
+        "别的 App 选素材时按时间排在最前面（存的顺序就是这次给的顺序，越后存的越靠前）。" +
+        (if (bad.isNotEmpty()) "这几个没存进去：" + bad.joinToString("、") + "。" else "")
 }
 
 /** 调 jack_files.py 里的函数：(做出来的文件, 说明)。 */
