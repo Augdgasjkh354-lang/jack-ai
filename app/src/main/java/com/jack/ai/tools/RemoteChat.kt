@@ -88,10 +88,11 @@ object RemoteChat {
             if (s.remotePhone) all else JsonArray(all.filter { t -> toolName(t) != "phone" })
         }
         val toolSet = tools(conv.skillTools)
-        val thinking = level.resolve(m.text, false, atts.isNotEmpty())
+        val (thinking, thinkHarder) = level.resolveIn(m.text, false, atts.isNotEmpty(), com.jack.ai.data.ThinkLevel.fromEffort(conv.autoEffort), conv.lastPromptTokens)
+        if (level == com.jack.ai.data.ThinkLevel.AUTO) conv = conv.copy(autoEffort = thinking.effort.orEmpty())
         val thinkingOn = ep.deepseek && thinking.effort != null
         val memories = if (s.memoryEnabled && conv.globalAllowed(project)) store.loadMemories() else emptyList()
-        val note = runCatching { ContextNote.build(ctx, store, conv, skills.map { it.id }.toSet()) }.getOrDefault("") +
+        val note = (if (thinkHarder) com.jack.ai.data.ThinkLevel.THINK_HARDER else "") + runCatching { ContextNote.build(ctx, store, conv, skills.map { it.id }.toSet()) }.getOrDefault("") +
             (if (s.memoryEnabled) runCatching { com.jack.ai.data.DeepRecall.note(ctx, s, m.text) }.getOrDefault("") else "") +
             "【Remote】{user} is asking from another device (iPhone or computer) through the Kavi remote site, not on this phone. " +
             "Files you create are sent to that device. Anything that needs confirmation is asked on that device." +

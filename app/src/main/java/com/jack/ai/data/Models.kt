@@ -121,6 +121,8 @@ data class Conversation(
     val skillTools: Set<String> = emptySet(),
     /** 最近一次请求实际用掉的上下文 token 数（接口返回）。 */
     val lastPromptTokens: Int = 0,
+    /** 「思考·自动」上次在这个对话里用的档（low / high），换档会丢缓存，见 ThinkLevel.resolveIn。 */
+    val autoEffort: String = "",
     /** 这个对话累计用掉的 token。 */
     val spentTokens: Long = 0,
     /** 累计明细：请求次数、输入、其中缓存命中、输出、费用（元）。 */
@@ -233,7 +235,33 @@ enum class ThinkLevel(val label: String, val effort: String?) {
         else -> LOW
     }
 
+    /**
+     * 自动档在一个对话里不来回换：DeepSeek 把思考档位写在请求最开头（系统提示词前面），
+     * 换一次档整段对话的缓存全不中（低档 ↔ 高档各存一份）。对话还短时按这条消息选；
+     * 长了就沿用上次的档：上次低档、这条像难题，最多升一次高档（只丢一次缓存，之后一直高档）——
+     * 但对话已经很长时连这一次也不升，改成在消息末尾提醒多想一步（nudge = true）。
+     */
+    fun resolveIn(text: String, work: Boolean, hasFiles: Boolean, used: ThinkLevel?, promptTokens: Int): Pair<ThinkLevel, Boolean> {
+        if (this != AUTO) return this to false
+        return stick(resolve(text, work, hasFiles), used, promptTokens)
+    }
+
     companion object {
+        /** 自动档想用 want，这个对话上次用的是 used：真正用哪档、要不要在末尾提醒多想（见 resolveIn）。 */
+        fun stick(want: ThinkLevel, used: ThinkLevel?, promptTokens: Int): Pair<ThinkLevel, Boolean> {
+            if (used == null || used !in setOf(LOW, HIGH) || promptTokens < STICKY_TOKENS) return want to false
+            if (want == used || used == HIGH) return used to false
+            // 想升高档：对话还不算太长就升（一次），很长了就不升、末尾提醒
+            return if (promptTokens < UPGRADE_LIMIT) HIGH to false else LOW to true
+        }
+
+        /** 上下文少于这么多 token 时随便换档：丢掉的缓存也就几分钱的零头。 */
+        const val STICKY_TOKENS = 8_000
+        /** 上下文超过这么多 token 就不为一条消息换档了。 */
+        const val UPGRADE_LIMIT = 40_000
+        /** 沿用低档、但这条像难题时，附在用户消息末尾的提醒。 */
+        const val THINK_HARDER = "【Think harder】This message looks harder than usual: reason it through step by step and double-check before you answer.\n"
+        fun fromEffort(effort: String?): ThinkLevel? = when (effort) { "low" -> LOW; "high" -> HIGH; else -> null }
         private val HARD = Regex("代码|编程|程序|bug|报错|调试|debug|code|算法|证明|推导|方程|数学|计算|算一下|统计|分析|方案|规划|策略|对比|比较|优化|设计|论文|翻译整篇|逻辑", RegexOption.IGNORE_CASE)
     }
 }
