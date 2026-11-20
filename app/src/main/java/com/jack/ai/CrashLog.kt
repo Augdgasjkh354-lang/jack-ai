@@ -53,7 +53,8 @@ object CrashLog {
 
     /** 把攒下的闪退报告发到 GitHub（要在后台线程调）。没填 GitHub 令牌就留着，等填了再发。 */
     fun upload(ctx: Context, token: String) {
-        if (token.isBlank()) return
+        // 正式版不往这个公开仓库发：用户自己的令牌、别人的手机，不该上报到开发者的 Issues（隐私政策里写了不上报）
+        if (token.isBlank() || Edition.STORE) return
         val files = reports(ctx).listFiles()?.filter { it.name.endsWith(".txt") }?.sortedBy { it.name }.orEmpty()
         if (files.isEmpty()) return
         val prefs = ctx.getSharedPreferences("crash_reports", Context.MODE_PRIVATE)
