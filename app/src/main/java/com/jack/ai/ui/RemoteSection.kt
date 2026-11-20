@@ -193,7 +193,7 @@ fun RemoteSection(vm: ChatViewModel, settings: Settings) {
                 TextButton(enabled = !busy, onClick = { confirmNewKey = true }) { Text("换一个") }
             }
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        if (com.jack.ai.Edition.phoneControl) Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("远程也能操作其他 App")
                 Text("开着时，在别的设备上也能让 Kavi 操作手机上勾过的 App（手机要亮屏解锁）", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)

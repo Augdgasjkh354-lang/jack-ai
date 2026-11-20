@@ -94,7 +94,7 @@ fun BrowserLive(convId: String = "") {
                 // 盖一层：这里不让点网页，点了进完整浏览器（在后台标签页里做的就先切到那一页）
                 Box(Modifier.fillMaxSize().clickable {
                     own?.let { t -> b.tabs.indexOf(t).takeIf { it >= 0 }?.let { b.switchTo(it) } }
-                    ctx.startActivity(Intent(ctx, BrowserActivity::class.java))
+                    if (com.jack.ai.Edition.browser) ctx.startActivity(Intent(ctx, BrowserActivity::class.java))
                 })
                 Text(
                     b.waitingUser?.let { "Kavi 在等你：$it · 点这里去做，做完它会自己接着来" } ?: "Kavi 正在操作网页 · 点这里接手",

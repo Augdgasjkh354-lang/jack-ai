@@ -152,11 +152,11 @@ fun HistoryDrawer(
                 item {
                     val now = System.currentTimeMillis()
                     val due = state.cards.count { it.due <= now }
-                    val main = listOf(
+                    val main = listOfNotNull(
                         Tool(Icons.Default.Notifications, "提醒和任务", badge = state.routines.count { it.enabled }.takeIf { it > 0 }?.toString(), onClick = onOpenRoutines),
                         Tool(AppIcons.Moon, "记忆", dot = state.dreams.any { !it.seen }, onClick = onOpenMemory),
                         Tool(AppIcons.Folder, "资料库", onClick = onOpenLibrary),
-                        Tool(AppIcons.Globe, "浏览器", onClick = { ctx.startActivity(android.content.Intent(ctx, BrowserActivity::class.java)) }),
+                        if (com.jack.ai.Edition.browser) Tool(AppIcons.Globe, "浏览器", onClick = { ctx.startActivity(android.content.Intent(ctx, BrowserActivity::class.java)) }) else null,
                     )
                     val more = listOf(
                         Tool(Icons.Default.List, "表格", onClick = onOpenTables),

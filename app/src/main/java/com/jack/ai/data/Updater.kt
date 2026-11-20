@@ -218,7 +218,8 @@ object Updater {
     /** 按设置排好（或取消）后台检查：每 6 小时一次，要联网；只在 Wi-Fi 下的话就等不按流量计费的网络。 */
     fun schedule(ctx: Context, s: Settings) {
         val wm = WorkManager.getInstance(ctx)
-        if (!s.autoUpdate) { wm.cancelUniqueWork(WORK); return }
+        // 正式版在应用商店里更新，不自己下安装包
+        if (!s.autoUpdate || !com.jack.ai.Edition.selfUpdate) { wm.cancelUniqueWork(WORK); return }
         val req = PeriodicWorkRequestBuilder<UpdateWorker>(6, TimeUnit.HOURS)
             .setConstraints(Constraints.Builder()
                 .setRequiredNetworkType(if (s.updateWifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED).build())

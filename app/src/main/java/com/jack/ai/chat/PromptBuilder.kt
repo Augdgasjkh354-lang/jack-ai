@@ -231,8 +231,8 @@ object PromptBuilder {
             // DeepSeek 的缓存从开头逐字比，改了哪个工具，从它往后才算新的。新版本改工具时只丢最后一截，前面照样命中：
             // 越常改的越往后排（按以往的改动次数），新加的工具也一律加在这一段的末尾，别插到前面去。
             if (SkillIds.LIBRARY in skillIds) add(SkillTools.KNOWLEDGE_BASE)
-            if (settings.phoneApps.isNotEmpty()) add(SkillTools.PHONE) // 一直给完整的：中途换成完整版会让工具说明变、缓存断
-            if (SkillIds.BROWSER in skillIds) add(SkillTools.BROWSER)
+            if (settings.phoneApps.isNotEmpty() && com.jack.ai.Edition.phoneControl) add(SkillTools.PHONE) // 一直给完整的：中途换成完整版会让工具说明变、缓存断
+            if (SkillIds.BROWSER in skillIds && com.jack.ai.Edition.browser) add(SkillTools.BROWSER)
             if (web) add(SkillTools.DOWNLOAD_FILE)
             if (SkillIds.DESIGN in skillIds) add(SkillTools.DESIGN)
             add(SkillTools.CONVERT_FILE)

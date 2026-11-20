@@ -15,7 +15,7 @@ import com.jack.ai.api.BrowserPages
  */
 object Links {
     /** 设置里「链接用 Kavi 浏览器打开」，直接读存储（点一下读一次，不用跟着设置刷新）。 */
-    fun inApp(ctx: Context) = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).getBoolean("linksInApp", true)
+    fun inApp(ctx: Context) = com.jack.ai.Edition.browser && ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).getBoolean("linksInApp", true)
 
     fun open(ctx: Context, url: String) {
         if (BrowserPages.isWeb(url) && inApp(ctx)) {

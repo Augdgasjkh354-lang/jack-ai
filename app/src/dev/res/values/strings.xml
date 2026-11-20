@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 开发版：和正式版同时装在手机上时分得清 -->
+    <string name="app_name">Kavi 开发版</string>
+</resources>

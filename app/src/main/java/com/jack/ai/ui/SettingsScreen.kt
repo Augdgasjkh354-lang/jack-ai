@@ -374,7 +374,7 @@ fun SettingsScreen(
                     valueRange = 0.85f..1.3f,
                     steps = 8,
                 )
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                if (com.jack.ai.Edition.browser) Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("链接用 Kavi 浏览器打开")
                         Text(
@@ -656,19 +656,20 @@ private fun SettingsHome(
         go(SettingsPage.LOCAL, AppIcons.Chip),
         go(SettingsPage.COMPRESS, AppIcons.Compress, "${settings.compressTokens / 1000}k"),
     ))
-    SettingsGroup("Kavi 能用的", listOf(
+    // 正式版没有的功能不显示入口（见 Edition）
+    SettingsGroup("Kavi 能用的", listOfNotNull(
         go(SettingsPage.CONNECT, AppIcons.Globe),
         SettingsEntry(Icons.Default.Build, "技能", onClick = onOpenSkills),
-        go(SettingsPage.LINUX, AppIcons.Code, if (settings.linuxSandbox) "已装" else "未装"),
+        if (com.jack.ai.Edition.linux) go(SettingsPage.LINUX, AppIcons.Code, if (settings.linuxSandbox) "已装" else "未装") else null,
         go(SettingsPage.REMOTE, AppIcons.Share),
     ))
-    SettingsGroup("手机", listOf(
-        go(SettingsPage.PHONE, AppIcons.Phone, if (settings.phoneApps.isEmpty()) "未开启" else "${settings.phoneApps.size} 个 App"),
+    SettingsGroup("手机", listOfNotNull(
+        if (com.jack.ai.Edition.phoneControl) go(SettingsPage.PHONE, AppIcons.Phone, if (settings.phoneApps.isEmpty()) "未开启" else "${settings.phoneApps.size} 个 App") else null,
         go(SettingsPage.ASK, Icons.Default.Search),
         go(SettingsPage.PHONEDATA, Icons.AutoMirrored.Filled.List, if (settings.phoneDataOn) "已开" else "全关"),
         go(SettingsPage.FOLDERS, AppIcons.Folder, if (settings.phoneFolders.isEmpty()) "未授权" else "${settings.phoneFolders.size} 个"),
     ))
-    SettingsGroup("应用", listOf(
+    SettingsGroup("应用", listOfNotNull(
         go(SettingsPage.LOOK, AppIcons.Moon, settings.themeMode.label),
         SettingsEntry(Icons.Default.Info, "统计", listOfNotNull(monthSpent?.let { "本月 " + yuan(it) }, quota.ifEmpty { null }).joinToString(" · ").ifEmpty { null }, onClick = onOpenUsage),
         go(SettingsPage.PRIVACY, Icons.Default.Lock, when {
@@ -676,7 +677,7 @@ private fun SettingsHome(
             settings.appLock -> "应用锁开着"
             else -> null
         }, warn = settings.fullAuth),
-        go(SettingsPage.UPDATE, AppIcons.Download),
+        if (com.jack.ai.Edition.selfUpdate) go(SettingsPage.UPDATE, AppIcons.Download) else null,
         go(SettingsPage.ADVANCED, Icons.Default.Settings),
     ))
 }

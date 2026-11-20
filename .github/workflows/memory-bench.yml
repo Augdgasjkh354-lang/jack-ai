@@ -35,7 +35,7 @@ jobs:
       - name: Run memory bench
         run: |
           chmod +x gradlew
-          ./gradlew :app:testDebugUnitTest --tests "com.jack.ai.bench.MemoryBenchTest"
+          ./gradlew :app:testDevDebugUnitTest --tests "com.jack.ai.bench.MemoryBenchTest"
       - name: Show report
         if: always()
         run: |

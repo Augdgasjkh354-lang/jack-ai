@@ -83,7 +83,7 @@ Jack 以后会补自己遇到的「不懂我」的例子，加题只改 `questio
 - 新建 `.github/workflows/memory-bench.yml`：**只用 `workflow_dispatch` 手动触发**，不随推送跑。读仓库 Secret `DEEPSEEK_API_KEY` 作为环境变量，只跑考场这一个测试类，最后把报告 `cat` 到日志，并用 `$GITHUB_STEP_SUMMARY` 显示在运行页面上，同时作为 artifact 上传。
 - 考场测试类在**没有 `DEEPSEEK_API_KEY` 时 `Assume` 跳过**，所以平时的「检查分支」照常是绿的、不花钱。
 - 控制花费：整次跑完 token 估算打印出来；如果超过 300 万 token 就中途停下报错（防止写错循环烧钱）。
-- 本地跑法写进报告开头：`DEEPSEEK_API_KEY=... ./gradlew :app:testDebugUnitTest --tests "com.jack.ai.bench.MemoryBenchTest"`。
+- 本地跑法写进报告开头：`DEEPSEEK_API_KEY=... ./gradlew :app:testDevDebugUnitTest --tests "com.jack.ai.bench.MemoryBenchTest"`。
 
 ## 放在哪
 

@@ -143,7 +143,8 @@ fun AskScreenSection(vm: ChatViewModel, settings: Settings) {
     val colors = MaterialTheme.colorScheme
     val a11y = KaviAccessibility.enabled(ctx)
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        // 悬浮球靠无障碍服务，正式版没有
+        if (com.jack.ai.Edition.phoneControl) Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("悬浮球")
                 Text(
@@ -165,7 +166,7 @@ fun AskScreenSection(vm: ChatViewModel, settings: Settings) {
                     .onFailure { runCatching { ctx.startActivity(Intent(SysSettings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } }
             }) { Text("去设置") }
         }
-        Text("这是你自己叫的，所以任何 App 都能读（不限于上面勾的），涉及钱的 App 不读。屏幕的字和截图只放进这个新对话。",
+        Text((if (com.jack.ai.Edition.phoneControl) "这是你自己叫的，所以任何 App 都能读（不限于上面勾的），" else "这是你自己叫的，所以任何 App 都能读，") + "涉及钱的 App 不读。屏幕的字和截图只放进这个新对话。",
             style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
     }
 }
@@ -207,7 +208,8 @@ fun PhoneDataSection(vm: ChatViewModel, settings: Settings) {
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        row("通知",
+        // 通知、使用时长正式版没有（不声明通知使用权和使用情况权限）
+        if (com.jack.ai.Edition.notices) row("通知",
             when {
                 settings.noticeWatch && !noticeOk -> "还没给「通知使用权」，点下面去授权"
                 else -> "记下各 App 最近三天的通知（快递、外卖、日程……），Kavi 能查，「主动找你」会看。验证码遮掉；涉及钱的 App、微信私聊不记"
@@ -217,7 +219,7 @@ fun PhoneDataSection(vm: ChatViewModel, settings: Settings) {
             vm.updateSettings { it.copy(noticeWatch = on) }
             if (on && noticeOk) com.jack.ai.WeChatListener.rebind(ctx)
         }
-        if (settings.noticeWatch) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (settings.noticeWatch && com.jack.ai.Edition.notices) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (!noticeOk) OutlinedButton(onClick = {
                 runCatching { ctx.startActivity(Intent(SysSettings.ACTION_NOTIFICATION_LISTENER_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
             }) { Text("去授权") }
@@ -233,7 +235,7 @@ fun PhoneDataSection(vm: ChatViewModel, settings: Settings) {
             else if (com.jack.ai.data.PhoneData.canLocate(ctx)) vm.updateSettings { it.copy(locationOn = true) }
             else askLocation.launch(android.Manifest.permission.ACCESS_COARSE_LOCATION)
         }
-        row("使用时长",
+        if (com.jack.ai.Edition.usage) row("使用时长",
             if (settings.usageOn && !usageOk) "还没给「使用情况访问权限」，点下面去授权" else "Kavi 能看今天、这几天各 App 用了多久，「主动找你」也会看",
             settings.usageOn, warn = settings.usageOn && !usageOk,
         ) { on -> vm.updateSettings { it.copy(usageOn = on) } }

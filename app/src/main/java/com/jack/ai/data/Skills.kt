@@ -1129,6 +1129,9 @@ object SkillTools {
     val SAVE_MEMORY = schema("""{"type":"function","function":{"name":"save_memory","description":"存、改、删一条记忆。","parameters":{"type":"object","properties":{"content":{"type":"string","description":"要记住的内容，一句完整、独立能看懂的话；删除时留空"},"scope":{"type":"string","enum":["chat","project","global","work"],"description":"存在哪：chat 本对话记忆，project 项目记忆，global 全局记忆，work 做事经验"},"replace":{"type":"string","description":"改或删旧记忆时填：旧记忆的原话（一段也行，能唯一认出就好）。不填就是新存一条"},"to_deep":{"type":"boolean","description":"只用于 global：配合 replace，把那条放到深处（还记得，不再每次都带着，聊到相关的会浮上来）"}},"required":["scope"]}}}""")
 }
 
+/** 正式版没有的技能：浏览器、浏览器流程、在招聘 App 上打招呼（都要操作浏览器或其他 App）。 */
+private val STORE_HIDDEN = setOf(SkillIds.BROWSER, SkillIds.FLOWS, SkillIds.JOB)
+
 /** 当前开着的 skill：内置的看开关（联网还要有 Tavily 或 DeepSeek Key），自定义的看它自己的 enabled。 */
 fun Settings.activeSkills(): List<Skill> =
     allSkills().filter {
@@ -1137,6 +1140,6 @@ fun Settings.activeSkills(): List<Skill> =
 
 /** 全部 skill（内置 + 自定义），enabled 反映当前开关状态。 */
 fun Settings.allSkills(): List<Skill> =
-    BUILTIN_SKILLS.map { s ->
+    BUILTIN_SKILLS.filter { !com.jack.ai.Edition.STORE || it.id !in STORE_HIDDEN }.map { s ->
         s.copy(enabled = if (s.id == SkillIds.WEB) webSearch else s.id !in disabledSkills)
     } + customSkills

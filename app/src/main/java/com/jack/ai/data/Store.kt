@@ -493,7 +493,10 @@ class Store(context: Context) {
     /** 加密存的那几项（Key、令牌、授权码、代理）：读出来先解开，见 [Secrets]。 */
     private fun secret(k: String, def: String?): String? = prefs.getString(k, def)?.let(Secrets::open)
 
-    fun loadSettings(): Settings {
+    /** 读设置；正式版把它没有的功能一律当成关着（从开发版的备份恢复过来也一样）。 */
+    fun loadSettings(): Settings = com.jack.ai.Edition.limit(loadSettingsRaw())
+
+    private fun loadSettingsRaw(): Settings {
         val presets = prefs.getString("presets", null)?.let {
             runCatching { json.decodeFromString(ListSerializer(Preset.serializer()), it) }.getOrNull()
         } ?: DEFAULT_PRESETS

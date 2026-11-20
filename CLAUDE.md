@@ -22,6 +22,12 @@
 - App 闪退后下次打开会自动发到本仓库 Issues（标签 `crash`，标题末尾 `[签名]` 去重），只有异常类型和代码位置，不含报错文字。修 bug 前先去看有没有新的；修好了关掉对应 issue。
 - Jack 手机上的 GitHub 令牌要有 Issues 写权限才发得出去。
 
+## 两个版本
+
+- `dev` 开发版：全部功能，包名 `com.jack.ai`（Jack 用的，发 Release、自动更新）。
+- `store` 正式版：上应用商店，包名 `com.kavi.ai`；没有浏览器、操作其他 App、后台手机助手、专用代理（VPN）、Linux 沙箱、读通知和微信、使用时长、App 内自更新。
+- 同一份代码，用 `Edition`（`com.jack.ai.Edition`）判断；正式版的清单在 `app/src/store/AndroidManifest.xml` 里删组件和权限。新加这类功能时两处都要顾到。
+
 ## 代码
 
 - 包结构：`api/`（模型和网络客户端）、`chat/`（Agent、提示词）、`tools/`（工具执行）、`data/`（存储、记忆、各种服务）、`features/`、`ui/`。
@@ -56,7 +62,7 @@ settingsEvaluated { s ->
 然后：
 
 ```bash
-./gradlew --no-daemon -q :app:compileDebugKotlin
-ROBOLECTRIC_REPO=https://maven-central.storage-download.googleapis.com/maven2/ ./gradlew --no-daemon -q :app:testDebugUnitTest --tests "com.jack.ai.*"
+./gradlew --no-daemon -q :app:compileDevDebugKotlin :app:compileStoreDebugKotlin
+ROBOLECTRIC_REPO=https://maven-central.storage-download.googleapis.com/maven2/ ./gradlew --no-daemon -q :app:testDevDebugUnitTest --tests "com.jack.ai.*"
 ```
 

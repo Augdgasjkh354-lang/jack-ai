@@ -24,6 +24,24 @@ android {
         versionName = if (buildNumber >= 100) "1.1.${buildNumber - 100}" else "1.0.$buildNumber"
         // Python 只打包 64 位 ARM，现在的安卓手机基本都是
         ndk { abiFilters += listOf("arm64-v8a") }
+        buildConfigField("boolean", "STORE", "false")
+    }
+
+    // 两个版本，同一份代码（见 Edition）：
+    // - dev 开发版：现在的全部功能，包名不变（Jack 手机上装的就是它，数据都在这个包名下）；
+    // - store 正式版：上应用商店用，去掉浏览器、操作其他 App、后台手机助手、代理（VPN）、Linux 沙箱、读通知、使用时长、
+    //   App 内自更新这些审核卡得严的东西（清单里也删掉，见 src/store/AndroidManifest.xml）。
+    flavorDimensions += "channel"
+    productFlavors {
+        create("dev") {
+            dimension = "channel"
+        }
+        create("store") {
+            dimension = "channel"
+            // 上架前可以改；一旦在商店发布就不能再改
+            applicationId = "com.kavi.ai"
+            buildConfigField("boolean", "STORE", "true")
+        }
     }
 
     // 签名密钥不在仓库里：打包时由 GitHub Actions 从 Secrets 还原成文件，路径和密码经环境变量传进来。
@@ -56,6 +74,7 @@ android {
     buildFeatures {
         compose = true
         aidl = true
+        buildConfig = true
     }
     // 界面测试（Robolectric）要用到 Android 资源
     testOptions {
@@ -72,6 +91,15 @@ android {
         jniLibs.useLegacyPackaging = true
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
         resources.excludes += listOf("/META-INF/LICENSE.md", "/META-INF/NOTICE.md", "/META-INF/LICENSE.txt", "/META-INF/NOTICE.txt")
+    }
+}
+
+// 正式版不带代理内核、转发组件和 Linux 沙箱的可执行文件
+androidComponents {
+    onVariants(selector().withFlavor("channel" to "store")) { v ->
+        v.packaging.jniLibs.excludes.addAll(listOf(
+            "**/libsingbox.so", "**/libhev-socks5-tunnel.so", "**/libproot.so", "**/libproot_loader.so", "**/libmikarun.so",
+        ))
     }
 }
 

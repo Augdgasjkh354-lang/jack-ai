@@ -38,16 +38,17 @@ fun ConnectionsSection(vm: ChatViewModel, s: Settings) {
     val mails = s.mails.count { it.ready }
     val mcp = s.mcpServers.count { it.enabled }
     val searchKeys = s.exaKeys.size + s.tavilyKeys.size
-    val rows: List<Triple<String, Pair<String, Boolean>, @Composable () -> Unit>> = listOf(
+    val rows: List<Triple<String, Pair<String, Boolean>, @Composable () -> Unit>> = listOfNotNull(
         Triple("联网搜索", (if (searchKeys > 0) listOfNotNull(
             s.exaKeys.size.takeIf { it > 0 }?.let { "Exa $it 个" }, s.tavilyKeys.size.takeIf { it > 0 }?.let { "Tavily $it 个" },
         ).joinToString(" · ") else if (s.apiKey.isNotBlank()) "只用 DeepSeek 搜索" else "未设置") to (searchKeys > 0)) { SearchKeysSection(vm, s) },
         Triple("邮箱", (if (mails > 0) "已连接 $mails 个" else "未设置") to (mails > 0)) { MailSection(vm, s.mails) },
         Triple("GitHub", (if (s.githubToken.isNotBlank()) "已连接" else "未填令牌，只能看公开项目") to s.githubToken.isNotBlank()) { GitHubSection(vm, s) },
         Triple("Notion", (if (s.notionToken.isNotBlank()) "已连接" else "未设置") to s.notionToken.isNotBlank()) { NotionSection(vm, s) },
-        Triple("微信消息", (if (s.wechatWatch) "交给 Kavi" else "关着") to s.wechatWatch) { WeChatSection(vm, s) },
+        // 微信消息、专用代理正式版没有（见 Edition）
+        if (com.jack.ai.Edition.notices) Triple("微信消息", (if (s.wechatWatch) "交给 Kavi" else "关着") to s.wechatWatch) { WeChatSection(vm, s) } else null,
         Triple("MCP 连接器", (if (mcp > 0) "$mcp 个开着" else "没有") to (mcp > 0)) { ConnectorsSection(vm, s.mcpServers) },
-        Triple("Kavi 专用代理（VPN）", (if (s.proxyEnabled) "开着" + s.proxyNode.takeIf { it.isNotBlank() }?.let { "：$it" }.orEmpty() +
+        if (!com.jack.ai.Edition.proxy) null else Triple("Kavi 专用代理（VPN）", (if (s.proxyEnabled) "开着" + s.proxyNode.takeIf { it.isNotBlank() }?.let { "：$it" }.orEmpty() +
             s.proxyEntry.takeIf { e -> e.isNotBlank() && e != s.proxyNode && s.proxyNodes.any { it.name == e } }?.let { "（双跳，先经过 $it）" }.orEmpty()
             else if (s.proxyNodes.isNotEmpty()) "关着" else "未设置") to s.proxyEnabled) { ProxySection(vm, s) },
     )

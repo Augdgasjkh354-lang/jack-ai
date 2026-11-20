@@ -21,7 +21,7 @@ import java.io.IOException
 class SettingsFeature(core: AppCore, private val client: DeepSeekClient) : Feature(core) {
     fun updateSettings(transform: (Settings) -> Settings) {
         val before = state.value.settings
-        state.update { it.copy(settings = transform(it.settings)) }
+        state.update { it.copy(settings = com.jack.ai.Edition.limit(transform(it.settings))) }
         val after = state.value.settings
         store.saveSettings(after)
         if (before.dreamEnabled != after.dreamEnabled) Dreamer.schedule(app, after.dreamEnabled)
