@@ -123,6 +123,8 @@ data class Conversation(
     val lastPromptTokens: Int = 0,
     /** 「思考·自动」上次在这个对话里用的档（low / high），换档会丢缓存，见 ThinkLevel.resolveIn。 */
     val autoEffort: String = "",
+    /** 清单里每段上次发的样子（标题 → 哈希@消息 id），一样的不再发，见 ContextNote.delta。 */
+    val noteSent: Map<String, String> = emptyMap(),
     /** 这个对话累计用掉的 token。 */
     val spentTokens: Long = 0,
     /** 累计明细：请求次数、输入、其中缓存命中、输出、费用（元）。 */

@@ -60,6 +60,60 @@ object ContextNote {
         }
     }
 
+    /**
+     * 只发变了的段落：清单每轮都附在用户消息上、存进历史，一样的内容再发一遍是白花钱（这段每次都不中缓存），还把上下文撑大。
+     * 段落按「【标题】」分；sent 记着这个对话里每段上次发的样子（标题 → 「哈希@消息 id」）。
+     * 那条消息还在（没被压缩、没被改掉）且内容一样的段落不再发，只留一行说明；上次发过、这次没了的说一声没了。
+     * 【Still you】这种隔一阵要重新提一次的，超过 [REPEAT_AFTER] 条消息就照发。
+     * 返回（这次要发的文字，新的 sent）。
+     */
+    fun delta(note: String, sent: Map<String, String>, conv: Conversation, msgId: String): Pair<String, Map<String, String>> {
+        val live = com.jack.ai.data.Compression.liveMessages(conv)
+        val pos = live.withIndex().filter { it.value.contextPrefix != null }.associate { it.value.id to it.index }
+        fun stillThere(v: String, header: String): Boolean {
+            val i = pos[v.substringAfter('@')] ?: return false
+            return header !in REPEAT || live.size - i <= REPEAT_AFTER
+        }
+        val valid = sent.filter { (h, v) -> stillThere(v, h) }
+        val sections = sections(note)
+        val out = StringBuilder()
+        val same = mutableListOf<String>()
+        val now = valid.toMutableMap()
+        for ((header, text) in sections) {
+            if (header.isEmpty()) { out.append(text); continue }
+            val hash = text.hashCode().toString(16)
+            if (valid[header]?.substringBefore('@') == hash) { same += header; continue }
+            out.append(text)
+            now[header] = "$hash@$msgId"
+        }
+        val gone = valid.keys.filter { h -> h !in REPEAT && sections.none { it.first == h } }
+        gone.forEach { now.remove(it) }
+        if (gone.isNotEmpty()) out.append(gone.joinToString("") { "$it none now.\n" })
+        if (same.isNotEmpty()) out.append("Unchanged since earlier in this conversation, so not repeated: ${same.joinToString(", ")}\n")
+        return out.toString() to now
+    }
+
+    /** 隔一阵要重新提一次的段落。 */
+    private val REPEAT = setOf("【Still you】")
+    const val REPEAT_AFTER = 30
+
+    /** 按行首的「【标题】」切段：（标题，整段文字）；第一个标题前面的文字标题为空。 */
+    internal fun sections(note: String): List<Pair<String, String>> {
+        val out = mutableListOf<Pair<String, String>>()
+        var header = ""
+        val cur = StringBuilder()
+        for (line in note.split('\n').let { if (note.endsWith('\n')) it.dropLast(1) else it }) {
+            val h = if (line.startsWith("【") && '】' in line) line.substring(0, line.indexOf('】') + 1) else null
+            if (h != null) {
+                if (cur.isNotEmpty()) out += header to cur.toString()
+                header = h; cur.clear()
+            }
+            cur.append(line).append('\n')
+        }
+        if (cur.isNotEmpty()) out += header to cur.toString()
+        return out
+    }
+
     /** 项目笔记的文件名结尾：「贪吃蛇-笔记.md」。 */
     const val PROJECT_NOTES_SUFFIX = "-笔记.md"
 

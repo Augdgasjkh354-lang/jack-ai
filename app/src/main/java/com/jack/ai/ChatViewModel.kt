@@ -700,26 +700,34 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             viewModelScope.launch(Dispatchers.IO) {
                 runCatching { com.jack.ai.data.FreePool.probe(getApplication(), settings) }
             }
+            // 清单分两块：固定的（文件、表格、任务……）只发变了的段落（见 ContextNote.delta）；每条消息现算的（经历、相关记忆、推荐技能）照发
+            val persistNote = extraUser == null && lastUser != null && lastUser.contextPrefix == null
+            var noteSent: Map<String, String>? = null
             promptInput = promptInput.copy(contextNote = (if (thinkHarder) ThinkLevel.THINK_HARDER else "") + withContext(Dispatchers.IO) {
-                // 能分头做：有免费模型时说一声
-                com.jack.ai.data.freeCandidates(com.jack.ai.data.FreePool.load(getApplication()), settings, 0).size.takeIf { it > 0 }
-                    ?.let { "【Free sub-agents】$it free models available for delegate_tasks (no cost).\n" }.orEmpty() +
-                runCatching { com.jack.ai.tools.ContextNote.build(getApplication(), store, conv, skills.map { it.id }.toSet()) }.getOrDefault("") +
+                val stable =
+                    // 能分头做：有免费模型时说一声
+                    com.jack.ai.data.freeCandidates(com.jack.ai.data.FreePool.load(getApplication()), settings, 0).size.takeIf { it > 0 }
+                        ?.let { "【Free sub-agents】$it free models available for delegate_tasks (no cost).\n" }.orEmpty() +
+                    runCatching { com.jack.ai.tools.ContextNote.build(getApplication(), store, conv, skills.map { it.id }.toSet()) }.getOrDefault("") +
+                    // 很长的对话里重新锚定一下「我是谁」：越聊越长时开头的设定会被冲淡（隔一阵提一次，见 ContextNote.REPEAT_AFTER）
+                    (if (conv.messages.size >= ANCHOR_AFTER) com.jack.ai.data.Persona.fill("【Still you】" + com.jack.ai.data.KaviSelf.text().replace("\n【", "\n[") +
+                        "\nThis conversation has run long: keep your own voice and the principles you started with.\n", settings) else "")
+                val shown = if (persistNote) com.jack.ai.tools.ContextNote.delta(stable, conv.noteSent, conv, lastUser!!.id).also { noteSent = it.second }.first
+                    else stable
+                shown +
                     // Kavi 的连续性：最近的经历、上次见用户是什么时候（每轮变，放这里不影响缓存）
                     runCatching { com.jack.ai.data.Timeline.noteFor(getApplication(), settings, _state.value.conversations, _state.value.projects, conv) }.getOrDefault("") +
                     // 深处的记忆：和这句话相关的浮上来（不常用的不再每轮都带着）
                     (if (conv.globalAllowed(project)) runCatching { com.jack.ai.data.DeepRecall.note(getApplication(), settings, lastUser?.content.orEmpty()) }.getOrDefault("") else "") +
                     // 按意思推荐一两个技能（技能多了模型容易挑错）
-                    runCatching { com.jack.ai.data.SkillMatcher.note(getApplication(), settings, lastUser?.content.orEmpty(), skills) }.getOrDefault("") +
-                    // 很长的对话里重新锚定一下「我是谁」：越聊越长时开头的设定会被冲淡
-                    (if (conv.messages.size >= ANCHOR_AFTER) com.jack.ai.data.Persona.fill("【Still you】" + com.jack.ai.data.KaviSelf.text() +
-                        "\nThis conversation has run long: keep your own voice and the principles you started with.\n", settings) else "")
+                    runCatching { com.jack.ai.data.SkillMatcher.note(getApplication(), settings, lastUser?.content.orEmpty(), skills) }.getOrDefault("")
             })
             // 历史里的附加说明必须和第一次发出时一致，才能保住后续请求的前缀缓存。
             if (extraUser == null && lastUser != null && lastUser.contextPrefix == null) {
                 val prefix = PromptBuilder.timeNote(promptInput.now) + PromptBuilder.updateNote(conv, reply.appVersion) +
                     promptInput.contextNote + PromptBuilder.mentionNote(lastUser.content, skills, settings.readyMails)
                 patchMessage(convId, lastUser.id) { it.copy(contextPrefix = prefix) }
+                noteSent?.let { sent -> updateConvQuiet(convId) { it.copy(noteSent = sent) } }
                 promptInput = promptInput.copy(conv = conv.copy(messages = conv.messages.map { if (it.id == lastUser.id) it.copy(contextPrefix = prefix) else it }))
                 persist()
             }
