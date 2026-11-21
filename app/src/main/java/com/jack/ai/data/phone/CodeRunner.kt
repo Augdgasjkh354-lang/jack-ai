@@ -1,4 +1,4 @@
-package com.jack.ai.data
+package com.jack.ai.data.phone
 
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.*

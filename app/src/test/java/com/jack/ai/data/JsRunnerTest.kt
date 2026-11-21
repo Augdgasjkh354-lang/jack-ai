@@ -2,6 +2,7 @@ package com.jack.ai.data
 
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.jack.ai.data.phone.JsRunner
 
 class JsRunnerTest {
     @Test

@@ -1,4 +1,4 @@
-package com.jack.ai.data
+package com.jack.ai.data.phone
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -21,6 +21,8 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.jack.ai.data.SafeFile
+import com.jack.ai.data.WeChat
 
 /** 记下来的一条通知：哪个 App、标题、正文（验证码已遮掉）、什么时候。 */
 @Serializable

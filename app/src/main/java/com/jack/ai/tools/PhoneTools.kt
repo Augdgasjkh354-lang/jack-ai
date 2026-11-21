@@ -224,7 +224,7 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
     /** 记一笔实测结果（隐私项目里不记）。 */
     suspend fun stat(appName: String, outcome: String) {
         if (project?.isolated == true || appName.isBlank()) return
-        withContext(Dispatchers.IO) { runCatching { com.jack.ai.data.PhoneStats.record(app, appName, action, outcome) } }
+        withContext(Dispatchers.IO) { runCatching { com.jack.ai.data.phone.PhoneStats.record(app, appName, action, outcome) } }
     }
 
     /** 现在前台的 App 名（只算用户勾过的）。 */

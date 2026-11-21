@@ -15,7 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.jack.ai.ChatViewModel
-import com.jack.ai.data.PhoneFiles
+import com.jack.ai.data.phone.PhoneFiles
 import com.jack.ai.data.PhoneFolder
 import com.jack.ai.data.Settings
 

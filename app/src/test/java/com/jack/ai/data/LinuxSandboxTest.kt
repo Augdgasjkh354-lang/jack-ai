@@ -6,6 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.ZoneId
 import java.time.ZoneOffset
+import com.jack.ai.data.phone.LinuxSandbox
 
 class LinuxSandboxTest {
     @Test fun commandLineRunsTheLauncherThenProotWithTheWorkspaceMounted() {

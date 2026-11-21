@@ -797,36 +797,36 @@ private fun AllowRulesRow(vm: ChatViewModel, settings: com.jack.ai.data.Settings
 private fun LinuxSandboxSection(vm: ChatViewModel) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
-    val status by com.jack.ai.data.LinuxSandbox.status.collectAsState()
-    LaunchedEffect(Unit) { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.jack.ai.data.LinuxSandbox.refresh(ctx) } }
+    val status by com.jack.ai.data.phone.LinuxSandbox.status.collectAsState()
+    LaunchedEffect(Unit) { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.jack.ai.data.phone.LinuxSandbox.refresh(ctx) } }
     var used by remember { mutableStateOf(0L) }
     LaunchedEffect(status) {
-        if (status is com.jack.ai.data.LinuxSandbox.Status.Ready) used = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.jack.ai.data.LinuxSandbox.usedBytes(ctx) }
+        if (status is com.jack.ai.data.phone.LinuxSandbox.Status.Ready) used = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.jack.ai.data.phone.LinuxSandbox.usedBytes(ctx) }
         // 设置里的开关跟着实际状态走（装好了才给模型 run_shell）
-        val ready = status is com.jack.ai.data.LinuxSandbox.Status.Ready
-        if (status != null && status !is com.jack.ai.data.LinuxSandbox.Status.Installing) vm.updateSettings { if (it.linuxSandbox == ready) it else it.copy(linuxSandbox = ready) }
+        val ready = status is com.jack.ai.data.phone.LinuxSandbox.Status.Ready
+        if (status != null && status !is com.jack.ai.data.phone.LinuxSandbox.Status.Installing) vm.updateSettings { if (it.linuxSandbox == ready) it else it.copy(linuxSandbox = ready) }
     }
     var confirmRemove by remember { mutableStateOf(false) }
     val s = status
     Text(when (s) {
         null -> "正在检查…"
-        is com.jack.ai.data.LinuxSandbox.Status.Unsupported -> s.why
-        com.jack.ai.data.LinuxSandbox.Status.NotInstalled -> "还没装"
-        is com.jack.ai.data.LinuxSandbox.Status.Installing -> "${s.step}（${s.percent}%）"
-        com.jack.ai.data.LinuxSandbox.Status.Ready -> "已装好，占 ${used shr 20} MB。聊天里说「用命令行……」「pip 装个……」Kavi 就会用它"
-        is com.jack.ai.data.LinuxSandbox.Status.Broken -> "没装好：${s.why}"
+        is com.jack.ai.data.phone.LinuxSandbox.Status.Unsupported -> s.why
+        com.jack.ai.data.phone.LinuxSandbox.Status.NotInstalled -> "还没装"
+        is com.jack.ai.data.phone.LinuxSandbox.Status.Installing -> "${s.step}（${s.percent}%）"
+        com.jack.ai.data.phone.LinuxSandbox.Status.Ready -> "已装好，占 ${used shr 20} MB。聊天里说「用命令行……」「pip 装个……」Kavi 就会用它"
+        is com.jack.ai.data.phone.LinuxSandbox.Status.Broken -> "没装好：${s.why}"
     })
-    if (s is com.jack.ai.data.LinuxSandbox.Status.Installing) {
+    if (s is com.jack.ai.data.phone.LinuxSandbox.Status.Installing) {
         androidx.compose.material3.LinearProgressIndicator(progress = { s.percent / 100f }, modifier = Modifier.fillMaxWidth())
     }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (s == com.jack.ai.data.LinuxSandbox.Status.NotInstalled || s is com.jack.ai.data.LinuxSandbox.Status.Broken) {
+        if (s == com.jack.ai.data.phone.LinuxSandbox.Status.NotInstalled || s is com.jack.ai.data.phone.LinuxSandbox.Status.Broken) {
             androidx.compose.material3.Button(onClick = {
                 // 装在 App 级的协程里：退出设置页也接着下
-                com.jack.ai.data.LinuxSandbox.startInstall(ctx, com.jack.ai.api.sharedHttp) { vm.updateSettings { it.copy(linuxSandbox = true) } }
-            }) { Text(if (s is com.jack.ai.data.LinuxSandbox.Status.Broken) "重新装" else "下载并安装（约 58 MB）") }
+                com.jack.ai.data.phone.LinuxSandbox.startInstall(ctx, com.jack.ai.api.sharedHttp) { vm.updateSettings { it.copy(linuxSandbox = true) } }
+            }) { Text(if (s is com.jack.ai.data.phone.LinuxSandbox.Status.Broken) "重新装" else "下载并安装（约 58 MB）") }
         }
-        if (s == com.jack.ai.data.LinuxSandbox.Status.Ready || s is com.jack.ai.data.LinuxSandbox.Status.Broken) {
+        if (s == com.jack.ai.data.phone.LinuxSandbox.Status.Ready || s is com.jack.ai.data.phone.LinuxSandbox.Status.Broken) {
             OutlinedButton(onClick = { confirmRemove = true }) { Text("删掉沙箱") }
         }
     }
@@ -849,7 +849,7 @@ private fun LinuxSandboxSection(vm: ChatViewModel) {
         onDismissRequest = { confirmRemove = false },
         title = { Text("删掉 Linux 沙箱？") },
         text = { Text("沙箱里装过的库、软件都会删掉，对话文件夹里的文件不动。以后要用再装一次（重新下载）。") },
-        confirmButton = { TextButton(onClick = { confirmRemove = false; scope.launch { com.jack.ai.data.LinuxSandbox.remove(ctx) } }) { Text("删掉") } },
+        confirmButton = { TextButton(onClick = { confirmRemove = false; scope.launch { com.jack.ai.data.phone.LinuxSandbox.remove(ctx) } }) { Text("删掉") } },
         dismissButton = { TextButton(onClick = { confirmRemove = false }) { Text("取消") } },
     )
 }

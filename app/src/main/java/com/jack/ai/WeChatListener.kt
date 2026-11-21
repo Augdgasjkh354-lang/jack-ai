@@ -13,7 +13,7 @@ import java.util.concurrent.Executors
 /**
  * 读通知（要用户在系统设置里给「通知使用权」）：
  * - 微信：打开了「微信消息交给 Kavi」才看，只拿私聊消息，攒起来交给 [WeChat]；
- * - 别的 App：打开了 设置 → 手机数据 →「通知」才记，交给 [com.jack.ai.data.PhoneData]（验证码遮掉，涉及钱的不记）。
+ * - 别的 App：打开了 设置 → 手机数据 →「通知」才记，交给 [com.jack.ai.data.phone.PhoneData]（验证码遮掉，涉及钱的不记）。
  */
 class WeChatListener : NotificationListenerService() {
     private val worker = Executors.newSingleThreadExecutor()
@@ -53,8 +53,8 @@ class WeChatListener : NotificationListenerService() {
                 val s = Store(this).loadSettings()
                 if (!s.noticeWatch) return@runCatching
                 val app = runCatching { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg)
-                if (!com.jack.ai.data.PhoneData.keep(pkg, app, packageName, s.noticeSkip, ongoing, title, text)) return@runCatching
-                com.jack.ai.data.PhoneData.add(this, com.jack.ai.data.Notice(at, pkg, app, com.jack.ai.data.PhoneData.mask(title).take(100), com.jack.ai.data.PhoneData.mask(text).take(600)))
+                if (!com.jack.ai.data.phone.PhoneData.keep(pkg, app, packageName, s.noticeSkip, ongoing, title, text)) return@runCatching
+                com.jack.ai.data.phone.PhoneData.add(this, com.jack.ai.data.phone.Notice(at, pkg, app, com.jack.ai.data.phone.PhoneData.mask(title).take(100), com.jack.ai.data.phone.PhoneData.mask(text).take(600)))
             }
         }
     }

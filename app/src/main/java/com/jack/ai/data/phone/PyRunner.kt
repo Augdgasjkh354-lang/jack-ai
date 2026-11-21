@@ -1,4 +1,4 @@
-package com.jack.ai.data
+package com.jack.ai.data.phone
 
 import android.content.Context
 import com.chaquo.python.Python
@@ -8,6 +8,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
+import com.jack.ai.data.Workspace
 
 /** 在 App 里跑 Python。同一时间只跑一段，因为工作目录和输出是全局的。 */
 object PyRunner {

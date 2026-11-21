@@ -3,6 +3,7 @@ package com.jack.ai.data
 import kotlinx.coroutines.*
 import org.junit.Assert.*
 import org.junit.Test
+import com.jack.ai.data.phone.CodeRunner
 
 /** 思路来自 deepseek-ai/deepseek-harness packages/ptc-runtime/，MIT。 */
 class CodeRunnerTest {

@@ -1,4 +1,4 @@
-package com.jack.ai.data
+package com.jack.ai.data.phone
 
 import android.content.Context
 import kotlinx.coroutines.CoroutineScope
@@ -8,6 +8,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.io.File
+import com.jack.ai.data.AppUsageNotes
+import com.jack.ai.data.Routine
+import com.jack.ai.data.Store
 
 /**
  * 手机操作考试：用用户勾过的 App 跑一组只看不改的题，按真实路径（后台任务 + phone 工具）做，自动核对、出报告。

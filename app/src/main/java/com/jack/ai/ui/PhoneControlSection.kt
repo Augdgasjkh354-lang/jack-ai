@@ -187,7 +187,7 @@ fun PhoneDataSection(vm: ChatViewModel, settings: Settings) {
         onDispose { owner.lifecycle.removeObserver(obs) }
     }
     val noticeOk = remember(tick) { com.jack.ai.WeChatListener.granted(ctx) }
-    val usageOk = remember(tick) { com.jack.ai.data.PhoneData.canUsage(ctx) }
+    val usageOk = remember(tick) { com.jack.ai.data.phone.PhoneData.canUsage(ctx) }
     var pickingSkip by remember { mutableStateOf(false) }
     val askContacts = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { ok ->
         vm.updateSettings { it.copy(contactsOn = ok) }
@@ -227,12 +227,12 @@ fun PhoneDataSection(vm: ChatViewModel, settings: Settings) {
         }
         row("联系人", "Kavi 能按名字查电话、邮箱（比如「给张三发邮件」）", settings.contactsOn) { on ->
             if (!on) vm.updateSettings { it.copy(contactsOn = false) }
-            else if (com.jack.ai.data.PhoneData.canContacts(ctx)) vm.updateSettings { it.copy(contactsOn = true) }
+            else if (com.jack.ai.data.phone.PhoneData.canContacts(ctx)) vm.updateSettings { it.copy(contactsOn = true) }
             else askContacts.launch(android.Manifest.permission.READ_CONTACTS)
         }
         row("位置", "问到附近、天气、路线时，Kavi 能知道你大概在哪（只用粗略定位，问的时候才定一次，不在后台跟踪）", settings.locationOn) { on ->
             if (!on) vm.updateSettings { it.copy(locationOn = false) }
-            else if (com.jack.ai.data.PhoneData.canLocate(ctx)) vm.updateSettings { it.copy(locationOn = true) }
+            else if (com.jack.ai.data.phone.PhoneData.canLocate(ctx)) vm.updateSettings { it.copy(locationOn = true) }
             else askLocation.launch(android.Manifest.permission.ACCESS_COARSE_LOCATION)
         }
         if (com.jack.ai.Edition.usage) row("使用时长",
@@ -257,14 +257,14 @@ fun PhoneDataSection(vm: ChatViewModel, settings: Settings) {
 @Composable
 private fun PhoneExamRow(enabled: Boolean) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
-    val st by com.jack.ai.data.PhoneExam.state.collectAsState()
+    val st by com.jack.ai.data.phone.PhoneExam.state.collectAsState()
     var show by remember { mutableStateOf(false) }
     OutlinedButton(
-        onClick = { if (st is com.jack.ai.data.PhoneExam.State.Running) show = true else { com.jack.ai.data.PhoneExam.start(ctx); show = true } },
+        onClick = { if (st is com.jack.ai.data.phone.PhoneExam.State.Running) show = true else { com.jack.ai.data.phone.PhoneExam.start(ctx); show = true } },
         enabled = enabled, modifier = Modifier.fillMaxWidth(),
     ) {
         Text(when (val s = st) {
-            is com.jack.ai.data.PhoneExam.State.Running -> "手机操作考试进行中（${s.done}/${s.total}）"
+            is com.jack.ai.data.phone.PhoneExam.State.Running -> "手机操作考试进行中（${s.done}/${s.total}）"
             else -> "跑一遍手机操作考试"
         })
     }
@@ -277,8 +277,8 @@ private fun PhoneExamRow(enabled: Boolean) {
             title = { Text("手机操作考试") },
             text = {
                 when (val s = st) {
-                    is com.jack.ai.data.PhoneExam.State.Running -> Text("正在考第 ${s.done + 1}/${s.total} 道：${s.now}\n跑完会在这里出报告，关掉这个窗口也会接着跑。")
-                    is com.jack.ai.data.PhoneExam.State.Done -> androidx.compose.foundation.layout.Column(Modifier.verticalScroll(rememberScrollState())) {
+                    is com.jack.ai.data.phone.PhoneExam.State.Running -> Text("正在考第 ${s.done + 1}/${s.total} 道：${s.now}\n跑完会在这里出报告，关掉这个窗口也会接着跑。")
+                    is com.jack.ai.data.phone.PhoneExam.State.Done -> androidx.compose.foundation.layout.Column(Modifier.verticalScroll(rememberScrollState())) {
                         Text(s.report, style = MaterialTheme.typography.bodySmall)
                     }
                     else -> Text("准备开始…")
@@ -286,7 +286,7 @@ private fun PhoneExamRow(enabled: Boolean) {
             },
             confirmButton = {
                 val s = st
-                if (s is com.jack.ai.data.PhoneExam.State.Done) androidx.compose.material3.TextButton(onClick = { clip.setText(androidx.compose.ui.text.AnnotatedString(s.report)); show = false }) { Text("复制报告") }
+                if (s is com.jack.ai.data.phone.PhoneExam.State.Done) androidx.compose.material3.TextButton(onClick = { clip.setText(androidx.compose.ui.text.AnnotatedString(s.report)); show = false }) { Text("复制报告") }
                 else androidx.compose.material3.TextButton(onClick = { show = false }) { Text("好") }
             },
         )

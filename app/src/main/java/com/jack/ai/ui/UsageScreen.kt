@@ -121,7 +121,7 @@ fun UsageScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                 value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                     listOf(
                         "浏览器实测成功率" to com.jack.ai.data.browser.BrowserStats.summary(com.jack.ai.data.browser.BrowserStats.load(appCtx)),
-                        "操作其他 App 实测成功率" to com.jack.ai.data.PhoneStats.summary(com.jack.ai.data.PhoneStats.load(appCtx)),
+                        "操作其他 App 实测成功率" to com.jack.ai.data.phone.PhoneStats.summary(com.jack.ai.data.phone.PhoneStats.load(appCtx)),
                         "Word、PPT、Excel 一次做对率" to com.jack.ai.data.office.OfficeStats.summary(com.jack.ai.data.office.OfficeStats.load(appCtx)),
                     ).filter { it.second.isNotEmpty() }
                 }

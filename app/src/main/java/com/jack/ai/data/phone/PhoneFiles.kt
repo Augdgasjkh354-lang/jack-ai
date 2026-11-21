@@ -1,4 +1,4 @@
-package com.jack.ai.data
+package com.jack.ai.data.phone
 
 import android.content.Context
 import android.content.Intent
@@ -9,6 +9,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import com.jack.ai.data.integrations.ToolSizes
+import com.jack.ai.data.PhoneFolder
+import com.jack.ai.data.Workspace
 
 /**
  * 用户授权给 Kavi 的手机文件夹（设置 → 手机文件夹，用系统的文件选择器选）：只能碰这些文件夹里面的东西。

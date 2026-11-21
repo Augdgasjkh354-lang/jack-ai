@@ -17,6 +17,8 @@ import java.util.Locale
 import com.jack.ai.data.design.DesignTemplates
 import com.jack.ai.data.design.StyleTemplates
 import com.jack.ai.data.office.OfficeStats
+import com.jack.ai.data.phone.JsRunner
+import com.jack.ai.data.phone.PyRunner
 
 /** 对话文件夹里的文件：读、写、局部修改，以及生成 Word/PPT/Excel/PDF/图表/流程图。 */
 
