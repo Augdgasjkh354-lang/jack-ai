@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 320">
+<metadata>{"name":"灯笼","tags":["灯笼","春节","节日","红色","喜庆"],"style":"clean","recolor":"fill","ratio":"tall"}</metadata>
+<path d="M100,38 L100,64" fill="none" stroke="var(--fg, #2B2620)" stroke-width="4" stroke-linecap="round"/>
+<circle cx="100" cy="50" r="6" fill="none" stroke="var(--fg, #2B2620)" stroke-width="4"/>
+<path d="M100,82 C140,82 162,114 162,152 C162,190 140,222 100,222 C60,222 38,190 38,152 C38,114 60,82 100,82 Z" fill="var(--primary, #E8483B)"/>
+<g fill="none" stroke="rgba(0,0,0,.15)" stroke-width="3" stroke-linecap="round">
+<path d="M76,86 C66,120 66,184 76,218"/>
+<path d="M100,82 L100,222"/>
+<path d="M124,86 C134,120 134,184 124,218"/>
+</g>
+<g fill="none" stroke="var(--secondary, #F6C453)" stroke-width="3" stroke-linecap="round">
+<path d="M42,146 C70,156 130,156 158,146"/>
+<path d="M42,162 C70,172 130,172 158,162"/>
+</g>
+<rect x="78" y="64" width="44" height="12" rx="3" fill="var(--secondary, #F6C453)"/>
+<rect x="80" y="222" width="40" height="12" rx="3" fill="var(--secondary, #F6C453)"/>
+<g stroke="var(--secondary, #F6C453)" stroke-width="4" stroke-linecap="round">
+<path d="M100,234 L100,274"/><path d="M90,234 L86,268"/><path d="M110,234 L114,268"/>
+</g>
+<circle cx="100" cy="236" r="5" fill="var(--secondary, #F6C453)"/>
+<g fill="var(--secondary, #F6C453)">
+<circle cx="100" cy="278" r="3"/><circle cx="86" cy="272" r="3"/><circle cx="114" cy="272" r="3"/>
+</g>
+</svg>

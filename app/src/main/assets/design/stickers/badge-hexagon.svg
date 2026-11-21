@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240">
+<metadata>{"name":"六边形章","tags":["六边形","印章","双线","空白"],"style":"clean","recolor":"stroke","ratio":"square","textArea":[66,88,108,64]}</metadata>
+<polygon points="120,16 210,68 210,172 120,224 30,172 30,68" fill="var(--bg, #FFF8F0)" stroke="currentColor" stroke-width="3.5" stroke-linejoin="round"/>
+<polygon points="120,34 194,76 194,164 120,206 46,164 46,76" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+</svg>

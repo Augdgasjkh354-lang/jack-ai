@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240">
+<metadata>{"name":"盾牌章","tags":["盾牌","徽章","双线","空白"],"style":"clean","recolor":"fill","ratio":"square","textArea":[72,84,96,84]}</metadata>
+<path d="M120 16 L198 42 V118 C198 168 164 200 120 218 C76 200 42 168 42 118 V42 Z" fill="var(--primary, #E8483B)"/>
+<path d="M120 32 L184 54 V116 C184 158 154 186 120 202 C86 186 56 158 56 116 V54 Z" fill="none" stroke="rgba(255,255,255,.65)" stroke-width="2"/>
+</svg>

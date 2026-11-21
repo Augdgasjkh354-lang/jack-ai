@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240">
+<metadata>{"name":"椭圆章","tags":["椭圆","印章","双线","空白"],"style":"clean","recolor":"stroke","ratio":"square","textArea":[62,90,116,60]}</metadata>
+<ellipse cx="120" cy="120" rx="106" ry="82" fill="var(--bg, #FFF8F0)" stroke="currentColor" stroke-width="3.5"/>
+<ellipse cx="120" cy="120" rx="88" ry="66" fill="none" stroke="currentColor" stroke-width="1.5"/>
+</svg>

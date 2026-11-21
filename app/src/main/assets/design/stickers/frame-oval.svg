@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
+<metadata>{"name":"椭圆框","tags":["椭圆","边框","双线","空白"],"style":"clean","recolor":"stroke","ratio":"wide","textArea":[92,72,216,156]}</metadata>
+<ellipse cx="200" cy="150" rx="182" ry="126" fill="none" stroke="currentColor" stroke-width="3.5"/>
+<ellipse cx="200" cy="150" rx="166" ry="110" fill="none" stroke="currentColor" stroke-width="1.5"/>
+</svg>

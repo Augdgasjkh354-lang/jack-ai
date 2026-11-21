@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240">
+<metadata>{"name":"生日蛋糕","tags":["蛋糕","生日","庆祝","甜点"],"style":"clean","recolor":"fill","ratio":"square"}</metadata>
+<ellipse cx="120" cy="206" rx="86" ry="10" fill="rgba(0,0,0,.12)"/>
+<rect x="48" y="140" width="144" height="64" rx="10" fill="var(--primary, #E8483B)"/>
+<rect x="70" y="92" width="100" height="50" rx="10" fill="var(--secondary, #F6C453)"/>
+<path d="M70,102 C80,112 86,100 96,110 C106,118 112,102 122,110 C132,118 140,102 150,110 C158,116 164,104 170,100 L170,92 L70,92 Z" fill="rgba(255,255,255,.85)"/>
+<path d="M48,150 C58,160 64,148 74,158 C84,166 90,150 100,158 C110,166 118,150 128,158 C138,166 146,150 156,158 C166,166 174,152 182,158 C188,162 192,156 192,150 L192,140 L48,140 Z" fill="rgba(255,255,255,.85)"/>
+<g fill="var(--primary, #E8483B)"><rect x="88" y="66" width="8" height="26"/><rect x="116" y="66" width="8" height="26"/><rect x="144" y="66" width="8" height="26"/></g>
+<g fill="var(--accent, #E07856)">
+<path d="M92,50 C97,58 97,64 92,66 C87,64 87,58 92,50 Z"/>
+<path d="M120,50 C125,58 125,64 120,66 C115,64 115,58 120,50 Z"/>
+<path d="M148,50 C153,58 153,64 148,66 C143,64 143,58 148,50 Z"/>
+</g>
+<g fill="rgba(255,255,255,.7)"><circle cx="76" cy="182" r="4"/><circle cx="120" cy="182" r="4"/><circle cx="164" cy="182" r="4"/></g>
+</svg>

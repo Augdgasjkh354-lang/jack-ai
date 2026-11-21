@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240">
+<metadata>{"name":"斜角标","tags":["角标","斜角","促销","空白"],"style":"clean","recolor":"fill","ratio":"square","textArea":[172,10,56,42]}</metadata>
+<path d="M120 6 H224 Q234 6 234 16 V120 L120 6 Z" fill="var(--primary, #E8483B)"/>
+<path d="M138 14 L220 96" fill="none" stroke="rgba(255,255,255,.6)" stroke-width="2" stroke-dasharray="5 4"/>
+<path d="M196 44 L234 82 V120 L196 44 Z" fill="rgba(0,0,0,.15)"/>
+</svg>

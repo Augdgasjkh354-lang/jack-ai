@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240">
+<metadata>{"name":"菱形章","tags":["菱形","印章","双线","空白"],"style":"clean","recolor":"stroke","ratio":"square","textArea":[72,88,96,64]}</metadata>
+<polygon points="120,18 218,120 120,222 22,120" fill="var(--bg, #FFF8F0)" stroke="currentColor" stroke-width="3.5" stroke-linejoin="round"/>
+<polygon points="120,40 196,120 120,200 44,120" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+</svg>

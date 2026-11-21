@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200">
+<metadata>{"name":"思考云","tags":["思考","云朵","气泡","手绘"],"style":"hand","recolor":"fill","ratio":"wide","textArea":[88,58,146,62]}</metadata>
+<path d="M72 112 C52 98 56 66 82 58 C88 34 122 26 142 44 C158 24 196 30 206 52 C232 44 254 70 242 92 C260 106 246 136 220 132 C210 154 176 156 160 140 C140 158 102 154 96 132 C78 136 68 126 72 112 Z" fill="var(--bg, #FFF8F0)" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>
+<circle cx="92" cy="172" r="9" fill="var(--bg, #FFF8F0)" stroke="currentColor" stroke-width="2.5"/>
+<circle cx="66" cy="190" r="6" fill="var(--bg, #FFF8F0)" stroke="currentColor" stroke-width="2.5"/>
+</svg>

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200">
+<metadata>{"name":"小旗标签","tags":["旗形","标签","空白","燕尾"],"style":"clean","recolor":"fill","ratio":"wide","textArea":[76,74,180,52]}</metadata>
+<path d="M28 58 H292 L264 100 L292 142 H28 Z" fill="var(--accent, #E07856)"/>
+<path d="M28 58 H44 V142 H28 Z" fill="rgba(0,0,0,.12)"/>
+<circle cx="56" cy="100" r="8" fill="var(--bg, #FFF8F0)"/>
+</svg>

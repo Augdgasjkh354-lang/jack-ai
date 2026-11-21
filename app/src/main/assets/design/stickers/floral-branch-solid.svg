@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240">
+<metadata>{"name":"枝叶剪影","tags":["枝叶","植物","剪影","装饰"],"style":"clean","recolor":"fill","ratio":"square"}</metadata>
+<path d="M30,216 C58,192 74,166 88,134 C100,106 116,82 142,60 C164,42 190,30 214,26" fill="none" stroke="var(--fg, #2B2620)" stroke-width="6" stroke-linecap="round"/>
+<path d="M88,134 C70,124 58,108 56,90 C74,94 86,110 88,134 Z" fill="var(--primary, #E8483B)"/>
+<path d="M100,106 C118,96 130,80 132,62 C114,66 102,82 100,106 Z" fill="var(--secondary, #F6C453)"/>
+<path d="M130,72 C114,60 104,46 102,30 C118,34 128,50 130,72 Z" fill="var(--primary, #E8483B)"/>
+<path d="M160,48 C176,38 186,24 188,10 C172,14 162,28 160,48 Z" fill="var(--secondary, #F6C453)"/>
+<path d="M214,26 C206,16 206,8 214,4 C222,8 222,16 214,26 Z" fill="var(--primary, #E8483B)"/>
+<circle cx="118" cy="120" r="4.5" fill="var(--secondary, #F6C453)"/>
+<circle cx="148" cy="88" r="4" fill="var(--secondary, #F6C453)"/>
+</svg>

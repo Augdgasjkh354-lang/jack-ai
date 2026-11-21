@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240">
+<metadata>{"name":"小叶枝","tags":["枝叶","植物","剪影","装饰"],"style":"clean","recolor":"fill","ratio":"square"}</metadata>
+<path d="M40,200 C80,170 130,120 190,60" fill="none" stroke="var(--fg, #2B2620)" stroke-width="5" stroke-linecap="round"/>
+<path d="M0,0 C18,-8 31,-26 34,-47 C13,-39 0,-21 0,0 Z" transform="translate(72 176) rotate(-52)" fill="var(--primary, #E8483B)"/>
+<path d="M0,0 C18,-8 31,-26 34,-47 C13,-39 0,-21 0,0 Z" transform="translate(112 138) rotate(-38)" fill="var(--secondary, #F6C453)"/>
+<path d="M0,0 C18,-8 31,-26 34,-47 C13,-39 0,-21 0,0 Z" transform="translate(150 100) rotate(-48)" fill="var(--primary, #E8483B)"/>
+<path d="M0,0 C18,-8 31,-26 34,-47 C13,-39 0,-21 0,0 Z" transform="translate(186 64) rotate(-30)" fill="var(--secondary, #F6C453)"/>
+<path d="M0,0 C18,-8 31,-26 34,-47 C13,-39 0,-21 0,0 Z" transform="translate(92 158) rotate(128)" fill="var(--secondary, #F6C453)"/>
+<path d="M0,0 C18,-8 31,-26 34,-47 C13,-39 0,-21 0,0 Z" transform="translate(132 120) rotate(142)" fill="var(--primary, #E8483B)"/>
+<g fill="var(--secondary, #F6C453)">
+<circle cx="196" cy="54" r="5"/><circle cx="206" cy="66" r="4"/><circle cx="188" cy="44" r="4"/>
+</g>
+</svg>

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 320">
+<metadata>{"name":"气球","tags":["气球","生日","庆祝","派对"],"style":"clean","recolor":"fill","ratio":"tall"}</metadata>
+<path d="M136,132 C144,170 128,210 136,250" fill="none" stroke="var(--fg, #2B2620)" stroke-width="3" stroke-linecap="round"/>
+<ellipse cx="136" cy="70" rx="42" ry="52" fill="var(--secondary, #F6C453)"/>
+<path d="M136,122 L129,132 L143,132 Z" fill="var(--secondary, #F6C453)"/>
+<ellipse cx="122" cy="50" rx="8" ry="13" fill="rgba(255,255,255,.55)" transform="rotate(-18 122 50)"/>
+<path d="M78,168 C70,200 86,230 78,262 C72,286 80,300 78,312" fill="none" stroke="var(--fg, #2B2620)" stroke-width="3" stroke-linecap="round"/>
+<ellipse cx="78" cy="96" rx="48" ry="60" fill="var(--primary, #E8483B)"/>
+<path d="M78,156 L70,168 L86,168 Z" fill="var(--primary, #E8483B)"/>
+<ellipse cx="62" cy="74" rx="10" ry="16" fill="rgba(255,255,255,.55)" transform="rotate(-20 62 74)"/>
+</svg>

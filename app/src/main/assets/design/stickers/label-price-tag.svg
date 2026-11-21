@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200">
+<metadata>{"name":"价签","tags":["标签","价签","空白","促销"],"style":"clean","recolor":"fill","ratio":"wide","textArea":[96,66,188,68]}</metadata>
+<path d="M72 34 H288 Q306 34 306 52 V148 Q306 166 288 166 H72 L18 100 Z" fill="var(--primary, #E8483B)"/>
+<path d="M80 48 H284 Q292 48 292 56 V144 Q292 152 284 152 H80 L36 100 Z" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="2" stroke-dasharray="6 5"/>
+<circle cx="64" cy="100" r="12" fill="var(--bg, #FFF8F0)"/>
+<circle cx="64" cy="100" r="12" fill="none" stroke="rgba(255,255,255,.6)" stroke-width="2"/>
+</svg>

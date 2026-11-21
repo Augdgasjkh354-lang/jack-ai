@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 320">
+<metadata>{"name":"书签","tags":["书签","丝带","竖版","空白"],"style":"clean","recolor":"fill","ratio":"tall","textArea":[70,70,60,160]}</metadata>
+<path d="M52 12 H148 V296 L100 256 L52 296 Z" fill="var(--primary, #E8483B)"/>
+<path d="M62 22 H138 V282 L100 248 L62 282 Z" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="2"/>
+<circle cx="100" cy="46" r="9" fill="var(--bg, #FFF8F0)"/>
+</svg>

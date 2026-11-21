@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
+<metadata>{"name":"角花框","tags":["角花","边框","手绘","花纹"],"style":"hand","recolor":"stroke","ratio":"wide","textArea":[100,60,200,180]}</metadata>
+<path d="M28 92 C28 50 50 28 92 28" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+<path d="M28 74 C28 48 48 28 74 28" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+<circle cx="67" cy="56" r="6" fill="var(--bg, #FFF8F0)" stroke="currentColor" stroke-width="2"/>
+<circle cx="77.5" cy="63.6" r="6" fill="var(--bg, #FFF8F0)" stroke="currentColor" stroke-width="2"/>
+<circle cx="73.5" cy="75.9" r="6" fill="var(--bg, #FFF8F0)" stroke="currentColor" stroke-width="2"/>
+<circle cx="60.5" cy="75.9" r="6" fill="var(--bg, #FFF8F0)" stroke="currentColor" stroke-width="2"/>
+<circle cx="56.5" cy="63.6" r="6" fill="var(--bg, #FFF8F0)" stroke="currentColor" stroke-width="2"/>
+<circle cx="67" cy="67" r="3.5" fill="currentColor"/>
+<path d="M372 92 C372 50 350 28 308 28" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+<path d="M372 74 C372 48 352 28 326 28" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+<circle cx="333" cy="56" r="6" fill="var(--bg, #FFF8F0)" stroke="currentColor" stroke-width="2"/>
+<circle cx="322.5" cy="63.6" r="6" fill="var(--bg, #FFF8F0)" stroke="currentColor" stroke-width="2"/>
+<circle cx="326.5" cy="75.9" r="6" fill="var(--bg, #FFF8F0)" stroke="currentColor" stroke-width="2"/>
+<circle cx="339.5" cy="75.9" r="6" fill="var(--bg, #FFF8F0)" stroke="currentColor" stroke-width="2"/>
+<circle cx="343.5" cy="63.6" r="6" fill="var(--bg, #FFF8F0)" stroke="currentColor" stroke-width="2"/>
+<circle cx="333" cy="67" r="3.5" fill="currentColor"/>
+<path d="M28 208 C28 250 50 272 92 272" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+<path d="M28 226 C28 252 48 272 74 272" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+<circle cx="67" cy="244" r="6" fill="var(--bg, #FFF8F0)" stroke="currentColor" stroke-width="2"/>
+<circle cx="77.5" cy="236.4" r="6" fill="var(--bg, #FFF8F0)" stroke="currentColor" stroke-width="2"/>
+<circle cx="73.5" cy="224.1" r="6" fill="var(--bg, #FFF8F0)" stroke="currentColor" stroke-width="2"/>
+<circle cx="60.5" cy="224.1" r="6" fill="var(--bg, #FFF8F0)" stroke="currentColor" stroke-width="2"/>
+<circle cx="56.5" cy="236.4" r="6" fill="var(--bg, #FFF8F0)" stroke="currentColor" stroke-width="2"/>
+<circle cx="67" cy="233" r="3.5" fill="currentColor"/>
+<path d="M372 208 C372 250 350 272 308 272" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+<path d="M372 226 C372 252 352 272 326 272" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+<circle cx="333" cy="244" r="6" fill="var(--bg, #FFF8F0)" stroke="currentColor" stroke-width="2"/>
+<circle cx="322.5" cy="236.4" r="6" fill="var(--bg, #FFF8F0)" stroke="currentColor" stroke-width="2"/>
+<circle cx="326.5" cy="224.1" r="6" fill="var(--bg, #FFF8F0)" stroke="currentColor" stroke-width="2"/>
+<circle cx="339.5" cy="224.1" r="6" fill="var(--bg, #FFF8F0)" stroke="currentColor" stroke-width="2"/>
+<circle cx="343.5" cy="236.4" r="6" fill="var(--bg, #FFF8F0)" stroke="currentColor" stroke-width="2"/>
+<circle cx="333" cy="233" r="3.5" fill="currentColor"/>
+</svg>

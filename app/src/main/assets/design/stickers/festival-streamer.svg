@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200">
+<metadata>{"name":"彩带","tags":["彩带","生日","庆祝","派对","手绘"],"style":"hand","recolor":"stroke","ratio":"wide"}</metadata>
+<g fill="none" stroke="currentColor" stroke-linecap="round">
+<path d="M20,87 C60,57 90,117 130,87 C170,57 200,117 240,87 C270,65 290,79 304,71" stroke-width="5"/>
+<path d="M16,127 C56,103 96,147 140,123 C180,101 220,139 260,119 C284,109 296,115 306,109" stroke-width="4"/>
+</g>
+<rect x="48" y="68.5" width="8" height="5" rx="1.5" fill="var(--primary, #E8483B)" transform="rotate(20 52 71)"/>
+<rect x="92" y="102.5" width="8" height="5" rx="1.5" fill="var(--secondary, #F6C453)" transform="rotate(-30 96 105)"/>
+<rect x="146" y="66.5" width="8" height="5" rx="1.5" fill="var(--accent, #E07856)" transform="rotate(40 150 69)"/>
+<rect x="200" y="100.5" width="8" height="5" rx="1.5" fill="var(--primary, #E8483B)" transform="rotate(-15 204 103)"/>
+<rect x="254" y="70.5" width="8" height="5" rx="1.5" fill="var(--secondary, #F6C453)" transform="rotate(25 258 73)"/>
+<rect x="292" y="102.5" width="8" height="5" rx="1.5" fill="var(--accent, #E07856)" transform="rotate(-40 296 105)"/>
+<rect x="72" y="134.5" width="8" height="5" rx="1.5" fill="var(--accent, #E07856)" transform="rotate(10 76 137)"/>
+<rect x="176" y="136.5" width="8" height="5" rx="1.5" fill="var(--primary, #E8483B)" transform="rotate(-25 180 139)"/>
+<rect x="228" y="130.5" width="8" height="5" rx="1.5" fill="var(--secondary, #F6C453)" transform="rotate(35 232 133)"/>
+<circle cx="40" cy="115" r="3.5" fill="var(--accent, #E07856)"/>
+<circle cx="120" cy="53" r="3.5" fill="var(--accent, #E07856)"/>
+<circle cx="168" cy="119" r="3.5" fill="var(--accent, #E07856)"/>
+<circle cx="246" cy="53" r="3.5" fill="var(--accent, #E07856)"/>
+<circle cx="288" cy="137" r="3.5" fill="var(--accent, #E07856)"/>
+</svg>

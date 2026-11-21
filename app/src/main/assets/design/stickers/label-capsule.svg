@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200">
+<metadata>{"name":"胶囊标签","tags":["胶囊","标签","空白","圆角"],"style":"clean","recolor":"fill","ratio":"wide","textArea":[44,80,232,40]}</metadata>
+<rect x="28" y="68" width="264" height="64" rx="32" fill="var(--secondary, #F6C453)"/>
+<path d="M28 100 A32 32 0 0 1 60 68 H160 V132 H60 A32 32 0 0 1 28 100 Z" fill="var(--primary, #E8483B)"/>
+<rect x="28" y="68" width="264" height="64" rx="32" fill="none" stroke="rgba(0,0,0,.12)" stroke-width="1.5"/>
+</svg>

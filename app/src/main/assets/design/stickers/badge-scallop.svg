@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240">
+<metadata>{"name":"波浪圆章","tags":["波浪边","圆章","手绘","空白"],"style":"hand","recolor":"stroke","ratio":"square","textArea":[66,90,108,60]}</metadata>
+<path d="M212 120 Q217.4 146.1 199.7 166 Q191.3 191.3 166 199.7 Q146.1 217.4 120 212 Q93.9 217.4 74 199.7 Q48.7 191.3 40.3 166 Q22.6 146.1 28 120 Q22.6 93.9 40.3 74 Q48.7 48.7 74 40.3 Q93.9 22.6 120 28 Q146.1 22.6 166 40.3 Q191.3 48.7 199.7 74 Q217.4 93.9 212 120 Z" fill="var(--bg, #FFF8F0)" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>
+<circle cx="120" cy="120" r="70" fill="none" stroke="currentColor" stroke-width="1.5"/>
+</svg>

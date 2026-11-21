@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+<metadata>{"name":"斜线","tags":["斜线","纹理","背景","条纹"],"style":"hand","recolor":"fill","ratio":"square","tile":true}</metadata>
+<defs>
+<pattern id="texture-diagonal-p1" width="24" height="24" patternUnits="userSpaceOnUse">
+<path d="M-2,26 C8,18 16,10 26,-2" fill="none" stroke="var(--muted, #9A8A7A)" stroke-width="2" stroke-linecap="round"/>
+</pattern>
+</defs>
+<rect width="200" height="200" fill="var(--bg, #FFF8F0)"/>
+<rect width="200" height="200" fill="url(#texture-diagonal-p1)" opacity=".6"/>
+</svg>

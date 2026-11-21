@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200">
+<metadata>{"name":"方气泡","tags":["气泡","对话","方形","空白"],"style":"clean","recolor":"fill","ratio":"wide","textArea":[52,42,216,90]}</metadata>
+<rect x="34" y="24" width="252" height="126" rx="18" fill="var(--bg, #FFF8F0)" stroke="currentColor" stroke-width="3"/>
+<path d="M92 150 L100 186 L134 150 Z" fill="var(--bg, #FFF8F0)"/>
+<path d="M92 150 L100 186 L134 150" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>
+</svg>

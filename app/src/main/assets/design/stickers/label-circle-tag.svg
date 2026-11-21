@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240">
+<metadata>{"name":"圆标签","tags":["圆标签","吊牌","手绘","空白"],"style":"hand","recolor":"stroke","ratio":"square","textArea":[66,92,108,64]}</metadata>
+<path d="M120 68 C110 44 96 28 76 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+<path d="M120 44 C168 42 210 78 208 122 C206 168 170 204 120 202 C72 200 34 166 34 120 C34 76 74 46 120 44 Z" fill="var(--secondary, #F6C453)" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>
+<circle cx="120" cy="68" r="9" fill="var(--bg, #FFF8F0)"/>
+</svg>

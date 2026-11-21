@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200">
+<metadata>{"name":"圆气泡","tags":["气泡","对话","圆形","手绘"],"style":"hand","recolor":"stroke","ratio":"wide","textArea":[66,52,188,84]}</metadata>
+<path d="M162 26 C222 22 290 48 292 94 C294 138 232 168 160 166 C92 164 30 140 32 94 C34 50 98 30 162 26 Z" fill="var(--bg, #FFF8F0)" stroke="currentColor" stroke-width="3.5" stroke-linejoin="round"/>
+<path d="M98 156 L110 192 L138 158 Z" fill="var(--bg, #FFF8F0)"/>
+<path d="M98 156 L110 192 L138 158" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linejoin="round"/>
+</svg>

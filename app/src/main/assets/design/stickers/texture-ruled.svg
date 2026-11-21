@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+<metadata>{"name":"横线本","tags":["横线本","纹理","背景","笔记本"],"style":"hand","recolor":"fill","ratio":"square","tile":true}</metadata>
+<defs>
+<pattern id="texture-ruled-p1" width="200" height="34" patternUnits="userSpaceOnUse">
+<path d="M0,33 H200" fill="none" stroke="var(--muted, #9A8A7A)" stroke-width="2"/>
+<path d="M30,0 V34" fill="none" stroke="var(--accent, #E07856)" stroke-width="2" opacity=".55"/>
+</pattern>
+</defs>
+<rect width="200" height="200" fill="var(--bg, #FFF8F0)"/>
+<rect width="200" height="200" fill="url(#texture-ruled-p1)" opacity=".6"/>
+</svg>

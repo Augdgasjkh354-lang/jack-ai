@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200">
+<metadata>{"name":"和纸条","tags":["和纸","胶带","纸条","手绘"],"style":"hand","recolor":"fill","ratio":"wide","textArea":[44,82,232,36]}</metadata>
+<path d="M30 72 L290 70 L298 80 L290 88 L298 98 L290 106 L298 116 L290 128 L30 130 L22 120 L30 112 L22 102 L30 94 L22 84 Z" fill="var(--primary, #E8483B)" opacity=".85"/>
+<line x1="40" y1="130" x2="100" y2="70" stroke="rgba(255,255,255,.45)" stroke-width="6"/>
+<line x1="100" y1="130" x2="160" y2="70" stroke="rgba(255,255,255,.45)" stroke-width="6"/>
+<line x1="160" y1="130" x2="220" y2="70" stroke="rgba(255,255,255,.45)" stroke-width="6"/>
+<line x1="220" y1="130" x2="280" y2="70" stroke="rgba(255,255,255,.45)" stroke-width="6"/>
+</svg>

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240">
+<metadata>{"name":"花朵剪影","tags":["花","植物","剪影","装饰"],"style":"clean","recolor":"fill","ratio":"square"}</metadata>
+<path d="M120,112 C100,86 100,54 120,40 C140,54 140,86 120,112 Z" transform="rotate(0 120 112)" fill="var(--primary, #E8483B)"/>
+<path d="M120,112 C100,86 100,54 120,40 C140,54 140,86 120,112 Z" transform="rotate(60 120 112)" fill="var(--primary, #E8483B)"/>
+<path d="M120,112 C100,86 100,54 120,40 C140,54 140,86 120,112 Z" transform="rotate(120 120 112)" fill="var(--primary, #E8483B)"/>
+<path d="M120,112 C100,86 100,54 120,40 C140,54 140,86 120,112 Z" transform="rotate(180 120 112)" fill="var(--primary, #E8483B)"/>
+<path d="M120,112 C100,86 100,54 120,40 C140,54 140,86 120,112 Z" transform="rotate(240 120 112)" fill="var(--primary, #E8483B)"/>
+<path d="M120,112 C100,86 100,54 120,40 C140,54 140,86 120,112 Z" transform="rotate(300 120 112)" fill="var(--primary, #E8483B)"/>
+<path d="M120,112 C106,94 106,72 120,60 C134,72 134,94 120,112 Z" transform="rotate(30 120 112)" fill="var(--secondary, #F6C453)"/>
+<path d="M120,112 C106,94 106,72 120,60 C134,72 134,94 120,112 Z" transform="rotate(90 120 112)" fill="var(--secondary, #F6C453)"/>
+<path d="M120,112 C106,94 106,72 120,60 C134,72 134,94 120,112 Z" transform="rotate(150 120 112)" fill="var(--secondary, #F6C453)"/>
+<path d="M120,112 C106,94 106,72 120,60 C134,72 134,94 120,112 Z" transform="rotate(210 120 112)" fill="var(--secondary, #F6C453)"/>
+<path d="M120,112 C106,94 106,72 120,60 C134,72 134,94 120,112 Z" transform="rotate(270 120 112)" fill="var(--secondary, #F6C453)"/>
+<path d="M120,112 C106,94 106,72 120,60 C134,72 134,94 120,112 Z" transform="rotate(330 120 112)" fill="var(--secondary, #F6C453)"/>
+<circle cx="120" cy="112" r="15" fill="var(--secondary, #F6C453)"/>
+<g fill="rgba(255,255,255,.85)">
+<circle cx="120" cy="103" r="2.5"/><circle cx="128" cy="112" r="2.5"/><circle cx="120" cy="121" r="2.5"/>
+<circle cx="112" cy="112" r="2.5"/>
+</g>
+<path d="M120,128 C122,160 118,190 120,214" fill="none" stroke="var(--fg, #2B2620)" stroke-width="6" stroke-linecap="round"/>
+<path d="M120,172 C138,160 148,146 150,130 C132,134 122,150 120,172 Z" fill="var(--secondary, #F6C453)"/>
+</svg>

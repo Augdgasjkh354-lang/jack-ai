@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
+<metadata>{"name":"圆角框","tags":["圆角","边框","双线","空白"],"style":"clean","recolor":"stroke","ratio":"wide","textArea":[62,60,276,180]}</metadata>
+<rect x="24" y="24" width="352" height="252" rx="30" fill="none" stroke="currentColor" stroke-width="3.5"/>
+<rect x="40" y="40" width="320" height="220" rx="22" fill="none" stroke="currentColor" stroke-width="1.5"/>
+</svg>
