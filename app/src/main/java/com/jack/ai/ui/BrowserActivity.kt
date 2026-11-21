@@ -125,59 +125,59 @@ import kotlinx.coroutines.launch
  */
 class BrowserActivity : androidx.fragment.app.FragmentActivity() {
     private lateinit var settings: Settings
-    private var editing by mutableStateOf("")
+    internal var editing by mutableStateOf("")
     /** 标签页列表开着。 */
-    private var showTabs by mutableStateOf(false)
+    internal var showTabs by mutableStateOf(false)
     /** 识别出的二维码内容，等弹窗。 */
-    private var qr by mutableStateOf<String?>(null)
+    internal var qr by mutableStateOf<String?>(null)
     /** 管理这个网站屏蔽的东西。 */
-    private var blockList by mutableStateOf(false)
+    internal var blockList by mutableStateOf(false)
     /** 自动填密码的说明。 */
-    private var autofillInfo by mutableStateOf(false)
+    internal var autofillInfo by mutableStateOf(false)
     /** 选网页字号。 */
-    private var textPick by mutableStateOf(false)
+    internal var textPick by mutableStateOf(false)
     /** 历史记录页开着。 */
-    private var shotJob: kotlinx.coroutines.Job? = null
-    private var shooting by mutableStateOf(false)
-    private var longShot by mutableStateOf<com.jack.ai.data.Downloads.Saved?>(null)
-    private val shotPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+    internal var shotJob: kotlinx.coroutines.Job? = null
+    internal var shooting by mutableStateOf(false)
+    internal var longShot by mutableStateOf<com.jack.ai.data.Downloads.Saved?>(null)
+    internal val shotPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) takeLongShot() else JackBrowser.notice = "没有相册存储权限，无法保存长截图"
     }
-    private var showDownloads by mutableStateOf(false)
-    private var showLater by mutableStateOf(false)
-    private var searchPick by mutableStateOf(false)
-    private var showHistory by mutableStateOf(false)
+    internal var showDownloads by mutableStateOf(false)
+    internal var showLater by mutableStateOf(false)
+    internal var searchPick by mutableStateOf(false)
+    internal var showHistory by mutableStateOf(false)
     /** 选电脑版放大多少。 */
-    private var zoomPick by mutableStateOf(false)
+    internal var zoomPick by mutableStateOf(false)
     /** 选开哪个分身。 */
-    private var accountPick by mutableStateOf(false)
+    internal var accountPick by mutableStateOf(false)
     /** 阅读模式：(标题, 正文 Markdown)。 */
-    private var reader by mutableStateOf<Pair<String, String>?>(null)
+    internal var reader by mutableStateOf<Pair<String, String>?>(null)
     /** 选视频倍速。 */
-    private var ratePick by mutableStateOf(false)
+    internal var ratePick by mutableStateOf(false)
     /** 菜单面板开着；地址栏正在打字。 */
-    private var menu by mutableStateOf(false)
+    internal var menu by mutableStateOf(false)
     private var typing by mutableStateOf(false)
     /** 地址栏放在底部（单手够得着）还是顶上。 */
-    private var addressAtBottom by mutableStateOf(true)
-    private val addressFocus = androidx.compose.ui.focus.FocusRequester()
+    internal var addressAtBottom by mutableStateOf(true)
+    internal val addressFocus = androidx.compose.ui.focus.FocusRequester()
     /** 网页脚本列表开着；正在改的脚本（新建的 id 是新的）。 */
-    private var showScripts by mutableStateOf(false)
-    private var editScript by mutableStateOf<com.jack.ai.api.UserScripts.Script?>(null)
+    internal var showScripts by mutableStateOf(false)
+    internal var editScript by mutableStateOf<com.jack.ai.api.UserScripts.Script?>(null)
     /** 标签页列表只看哪个分组（null = 全部）；长按的标签页（换分组）；分组的菜单（"" = 全部）；新建 / 改名分组。 */
-    private var tabGroup by mutableStateOf<String?>(null)
-    private var tabMove by mutableStateOf<JackBrowser.Tab?>(null)
-    private var groupMenu by mutableStateOf<String?>(null)
-    private var groupName by mutableStateOf<Pair<String, JackBrowser.Tab?>?>(null)
+    internal var tabGroup by mutableStateOf<String?>(null)
+    internal var tabMove by mutableStateOf<JackBrowser.Tab?>(null)
+    internal var groupMenu by mutableStateOf<String?>(null)
+    internal var groupName by mutableStateOf<Pair<String, JackBrowser.Tab?>?>(null)
     /** 书签页、离线网页列表开着；正在看的离线网页。 */
-    private var showMarks by mutableStateOf(false)
-    private var showOffline by mutableStateOf(false)
-    private var offlineView by mutableStateOf<BrowserPages.OfflinePage?>(null)
+    internal var showMarks by mutableStateOf(false)
+    internal var showOffline by mutableStateOf(false)
+    internal var offlineView by mutableStateOf<BrowserPages.OfflinePage?>(null)
     /** 这个网站的数据（null = 没打开）。 */
-    private var siteData by mutableStateOf<JackBrowser.SiteData?>(null)
+    internal var siteData by mutableStateOf<JackBrowser.SiteData?>(null)
 
     /** 导入别的浏览器导出的 bookmarks.html。 */
-    private val importMarks = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    internal val importMarks = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@registerForActivityResult
         lifecycleScope.launch {
             val html = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
@@ -193,7 +193,7 @@ class BrowserActivity : androidx.fragment.app.FragmentActivity() {
         }
     }
     /** 导出书签成 bookmarks.html，别的浏览器能导入。 */
-    private val exportMarks = registerForActivityResult(ActivityResultContracts.CreateDocument("text/html")) { uri ->
+    internal val exportMarks = registerForActivityResult(ActivityResultContracts.CreateDocument("text/html")) { uri ->
         uri ?: return@registerForActivityResult
         val html = com.jack.ai.api.BrowserBookmarks.export(JackBrowser.marks)
         lifecycleScope.launch {
@@ -211,7 +211,7 @@ class BrowserActivity : androidx.fragment.app.FragmentActivity() {
         return out.toByteArray()
     }
     /** 添加到主屏幕：(网址, 图标名字)，等用户改名字。 */
-    private var shortcutAsk by mutableStateOf<Pair<String, String>?>(null)
+    internal var shortcutAsk by mutableStateOf<Pair<String, String>?>(null)
 
     /** 地址栏的语音输入：说完直接打开（网址就去，别的就搜）。 */
     private val voice = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
@@ -223,7 +223,7 @@ class BrowserActivity : androidx.fragment.app.FragmentActivity() {
         if (BrowserPages.isWeb(text)) open(text) else qr = text
     }
 
-    private fun startVoice() {
+    internal fun startVoice() {
         val i = Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
             .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_WEB_SEARCH)
             .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
@@ -231,7 +231,7 @@ class BrowserActivity : androidx.fragment.app.FragmentActivity() {
         runCatching { voice.launch(i) }.onFailure { JackBrowser.notice = "手机没有语音识别服务，可以用输入法自带的语音输入" }
     }
 
-    private fun startScan() {
+    internal fun startScan() {
         runCatching {
             scan.launch(com.journeyapps.barcodescanner.ScanOptions().setPrompt("扫网址二维码").setBeepEnabled(false)
                 .setOrientationLocked(false).setDesiredBarcodeFormats(com.journeyapps.barcodescanner.ScanOptions.QR_CODE))
@@ -239,7 +239,7 @@ class BrowserActivity : androidx.fragment.app.FragmentActivity() {
     }
 
     /** 朗读这页：取正文念（隐身页通知栏上不显示标题）。 */
-    private fun readAloud() {
+    internal fun readAloud() {
         val b = JackBrowser
         lifecycleScope.launch {
             val page = b.readable(this@BrowserActivity)
@@ -249,9 +249,9 @@ class BrowserActivity : androidx.fragment.app.FragmentActivity() {
         }
     }
     /** 网页诊断报告（null = 没打开）。 */
-    private var diag by mutableStateOf<String?>(null)
+    internal var diag by mutableStateOf<String?>(null)
     /** 页内查找：null 没在找，否则是要找的字。 */
-    private var finding by mutableStateOf<String?>(null)
+    internal var finding by mutableStateOf<String?>(null)
 
     /** 网页要选文件上传：等选完把结果交回网页（取消也要交一个 null，不然网页再点就没反应）。 */
     private var fileCallback: ValueCallback<Array<Uri>>? = null
@@ -279,7 +279,7 @@ class BrowserActivity : androidx.fragment.app.FragmentActivity() {
         else -> listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
     }
 
-    private fun has(p: String) = checkSelfPermission(p) == PackageManager.PERMISSION_GRANTED
+    internal fun has(p: String) = checkSelfPermission(p) == PackageManager.PERMISSION_GRANTED
 
     private fun systemPerms(kinds: Set<String>, done: (Boolean) -> Unit) {
         if (kinds.all { k -> systemNames(k).any { has(it) } }) { done(true); return }
@@ -449,7 +449,7 @@ class BrowserActivity : androidx.fragment.app.FragmentActivity() {
         super.onDestroy()
     }
 
-    private fun open(input: String) {
+    internal fun open(input: String) {
         val url = BrowserNet.normalize(input, proxiedNow(), JackBrowser.searchEngine)
         if (url.isEmpty()) return
         editing = url
@@ -460,7 +460,7 @@ class BrowserActivity : androidx.fragment.app.FragmentActivity() {
     }
 
     /** 新开一个标签页打开网址；开满了就在当前页打开。 */
-    private fun openInNewTab(url: String?, incognito: Boolean = false, account: Int = 0) {
+    internal fun openInNewTab(url: String?, incognito: Boolean = false, account: Int = 0) {
         val b = JackBrowser
         b.webView(this)
         finding = null
@@ -474,19 +474,19 @@ class BrowserActivity : androidx.fragment.app.FragmentActivity() {
         if (url != null) open(url)
     }
 
-    private fun switchTab(i: Int) {
+    internal fun switchTab(i: Int) {
         if (finding != null) closeFind()
         JackBrowser.switchTo(i)
         showTabs = false
     }
 
-    private fun reload() {
+    internal fun reload() {
         val url = JackBrowser.address.ifEmpty { editing }
         if (url.isNotBlank()) open(url)
     }
 
     /** 现在打开新网页会不会走代理（决定搜索用 Google 还是必应）。 */
-    private fun proxiedNow(): Boolean = JackBrowser.route != BrowserNet.DIRECT && Net.config.enabled
+    internal fun proxiedNow(): Boolean = JackBrowser.route != BrowserNet.DIRECT && Net.config.enabled
 
     private fun openExternal(url: String) {
         val intent = runCatching {
@@ -1014,1176 +1014,13 @@ class BrowserActivity : androidx.fragment.app.FragmentActivity() {
         }
     }
 
-    /** 底栏：后退、前进、起始页、标签页、菜单，五个大按钮。长按标签页数字直接开新标签页。 */
-    @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
-    @Composable
-    private fun NavBar() {
-        val b = JackBrowser
-        val colors = MaterialTheme.colorScheme
-        @Composable
-        fun androidx.compose.foundation.layout.RowScope.Btn(desc: String, enabled: Boolean = true, onLong: (() -> Unit)? = null, onClick: () -> Unit, content: @Composable () -> Unit) {
-            Box(Modifier.weight(1f).height(56.dp).clip(androidx.compose.foundation.shape.CircleShape)
-                .combinedClickable(enabled = enabled, onClickLabel = desc, onClick = onClick, onLongClick = onLong),
-                contentAlignment = Alignment.Center) {
-                androidx.compose.runtime.CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides
-                    if (enabled) colors.onSurface else colors.onSurface.copy(alpha = 0.35f)) { content() }
-            }
-        }
-        Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Btn("后退", b.canBack, onClick = { b.clearError(); b.webView(this@BrowserActivity).goBack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "后退", Modifier.size(26.dp)) }
-            Btn("前进", b.canForward, onClick = { b.clearError(); b.webView(this@BrowserActivity).goForward() }) { Icon(Icons.AutoMirrored.Filled.ArrowForward, "前进", Modifier.size(26.dp)) }
-            Btn("起始页", b.address.isNotEmpty(), onClick = { finding = null; b.home(); editing = "" }) { Icon(Icons.Default.Home, "起始页", Modifier.size(26.dp)) }
-            Btn("标签页", onLong = { if (b.tabs.size < JackBrowser.MAX_TABS) openInNewTab(null) }, onClick = { b.snap(); showTabs = true }) {
-                Text(b.tabs.size.coerceAtLeast(1).toString(),
-                    Modifier.border(2.dp, LocalContentColor.current, androidx.compose.foundation.shape.RoundedCornerShape(6.dp)).padding(horizontal = 7.dp, vertical = 1.dp),
-                    style = MaterialTheme.typography.labelLarge)
-            }
-            Btn("菜单", onClick = { menu = true }) { Icon(Icons.Default.Menu, "菜单", Modifier.size(26.dp)) }
-        }
-    }
+    internal class Tile(val icon: androidx.compose.ui.graphics.vector.ImageVector, val label: String, val enabled: Boolean, val on: Boolean = false, val onClick: () -> Unit)
 
-    /** 菜单：从底部拉出。上面是常用的大图标，下面按「这个网页 / Kavi / 收藏 / 设置 / 线路」分好。 */
-    @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
-    @Composable
-    private fun MenuSheet() {
-        val b = JackBrowser
-        val colors = MaterialTheme.colorScheme
-        val has = b.address.isNotEmpty()
-        fun go(action: () -> Unit) { menu = false; action() }
-        androidx.compose.material3.ModalBottomSheet(onDismissRequest = { menu = false }) {
-            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-                // 这一页是什么、怎么上网（点线路在「自动」和「全部走代理」之间切）
-                Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
-                    if (has) Text(b.title.ifBlank { BrowserPages.host(b.address) }, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(routeLabel(), Modifier.clickable {
-                        val next = if (b.route == BrowserNet.PROXY) BrowserNet.AUTO else BrowserNet.PROXY
-                        b.changeRoute(next)
-                        b.notice = if (next == BrowserNet.PROXY) "全部走代理：网站都看不到你的真实 IP（国内网站可能慢一点）" else "自动：国内直连，国外走代理"
-                        if (has) reload()
-                    }.padding(vertical = 4.dp), style = MaterialTheme.typography.labelSmall,
-                        color = if (proxiedNow() && (b.route == BrowserNet.PROXY || b.proxyForcedHere())) colors.primary else colors.onSurfaceVariant)
-                }
-                val marked = b.marks.any { it.url == b.address }
-                val tiles = listOf(
-                    Tile(Icons.Default.Star, if (marked) "已加书签" else "加书签", has, marked) {
-                        b.toggleMark(); b.notice = if (!marked) "已加入书签，起始页能看到" else "已移出书签"
-                    },
-                    Tile(Icons.Default.List, "书签", true) { showMarks = true },
-                    Tile(Icons.Default.DateRange, "历史", true) { showHistory = true },
-                    Tile(AppIcons.Download, "下载", true) { showDownloads = true },
-                    Tile(Icons.Default.Share, "分享", has) { share(b.address, b.title) },
-                    Tile(Icons.Default.Search, "页内查找", has) { finding = "" },
-                    Tile(AppIcons.File, "阅读模式", has) {
-                        lifecycleScope.launch { b.readable(this@BrowserActivity)?.let { reader = it } ?: run { b.notice = "这一页找不出正文（可能不是文章页，或者还没加载完）" } }
-                    },
-                    Tile(AppIcons.Globe, if (b.tab.translated) "看原文" else "翻译", has && b.tab.translating == null, b.tab.translated) {
-                        if (b.tab.translated) b.showOriginal() else lifecycleScope.launch { b.translate(this@BrowserActivity)?.let { b.notice = it } }
-                    },
-                    Tile(AppIcons.Speaker, if (PageReader.active) "停止朗读" else "朗读", has || PageReader.active, PageReader.active) {
-                        if (PageReader.active) PageReader.stop() else readAloud()
-                    },
-                    Tile(AppIcons.Computer, "电脑版", has, has && b.isDesktopAt(b.address)) { b.toggleDesktop() },
-                    Tile(AppIcons.Image, "长截图", has && !shooting) { takeLongShot() },
-                    Tile(Icons.Default.Lock, "隐身页", b.incognitoSupported() && b.tabs.size < JackBrowser.MAX_TABS) { openInNewTab(null, incognito = true) },
-                )
-                tiles.chunked(4).forEach { row ->
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-                        row.forEach { t ->
-                            Column(Modifier.weight(1f).clip(Radii.s).clickable(enabled = t.enabled) { go(t.onClick) }.padding(vertical = 10.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally) {
-                                Box(Modifier.size(44.dp).clip(androidx.compose.foundation.shape.CircleShape)
-                                    .background(if (t.on) colors.primaryContainer else colors.surfaceVariant), contentAlignment = Alignment.Center) {
-                                    Icon(t.icon, null, Modifier.size(22.dp), tint = when {
-                                        !t.enabled -> colors.onSurface.copy(alpha = 0.35f); t.on -> colors.onPrimaryContainer; else -> colors.onSurfaceVariant })
-                                }
-                                Text(t.label, Modifier.padding(top = 4.dp), style = MaterialTheme.typography.labelSmall, maxLines = 1,
-                                    color = if (t.enabled) colors.onSurface else colors.onSurface.copy(alpha = 0.35f))
-                            }
-                        }
-                        repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
-                    }
-                }
-
-                @Composable
-                fun Head(name: String) = Text(name, Modifier.padding(start = 20.dp, top = 16.dp, bottom = 2.dp),
-                    style = MaterialTheme.typography.labelLarge, color = colors.primary)
-                @Composable
-                fun Item(label: String, enabled: Boolean = true, value: String? = null, switch: Boolean? = null, color: Color = Color.Unspecified, onClick: () -> Unit) {
-                    Row(Modifier.fillMaxWidth().clickable(enabled = enabled) { if (switch == null) go(onClick) else onClick() }
-                        .padding(horizontal = 20.dp, vertical = if (switch != null) 2.dp else 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge,
-                            color = if (!enabled) colors.onSurface.copy(alpha = 0.35f) else if (color != Color.Unspecified) color else colors.onSurface)
-                        value?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant) }
-                        switch?.let { androidx.compose.material3.Switch(it, { onClick() }, enabled = enabled) }
-                    }
-                }
-
-                Head("这个网页")
-                Item("视频倍速", has, BrowserPages.rateText(b.tab.rate)) { ratePick = true }
-                Item("存成离线网页", has && !b.tab.incognito) { lifecycleScope.launch { b.notice = b.saveOffline() } }
-                Item("存成 PDF", has) { savePdf() }
-                Item(if (b.later.any { it.url == b.address }) "移出阅读列表" else "加入阅读列表", has && !b.tab.incognito) {
-                    if (b.later.any { it.url == b.address }) b.removeLater(b.address) else b.addLater(b.address, b.title)
-                }
-                Item("存进资料库", has) { lifecycleScope.launch { b.notice = runCatching { b.saveToLibrary(this@BrowserActivity) }.getOrElse { "没存成：${it.message}" } } }
-                Item("复制链接", has) { copy(b.address); b.notice = "已复制链接" }
-                Item("添加到主屏幕", has && BrowserPages.isWeb(b.address) && !b.tab.incognito) {
-                    if (WebShortcut.supported(this@BrowserActivity)) shortcutAsk = b.address to b.title.ifBlank { WebShortcut.host(b.address) }
-                    else b.notice = "这个桌面不支持添加网页图标。"
-                }
-                Item("屏蔽网页上的东西", has, b.blocksHere().size.takeIf { it > 0 }?.let { "$it 处" }) {
-                    if (b.blocksHere().isNotEmpty()) blockList = true else b.startPick()
-                }
-                Item("这个网站的数据", has && BrowserPages.isWeb(b.address)) {
-                    lifecycleScope.launch { b.siteData()?.let { siteData = it } ?: run { b.notice = "看不出这是哪个网站" } }
-                }
-                if (has && b.permsHere()) Item("重置这个网站的权限") { b.resetPermsHere(); b.notice = "这个网站下次要用相机、麦克风或位置时会再问你。" }
-                Item("用系统浏览器打开", has) { Links.system(this@BrowserActivity, b.address) }
-                Item((if (b.tab.diagOn) "● " else "") + "网页诊断", has) { lifecycleScope.launch { diag = b.diagnose(this@BrowserActivity) } }
-
-                Head("Kavi")
-                Item("问 Kavi 这一页", has) { BrowserChat.open = true }
-                Item("带回聊天里问", has) { askKavi() }
-                Item(if (b.teaching) "停止教学" else "教 Kavi 一个流程", has || b.teaching) {
-                    if (b.teaching) finishTeach() else {
-                        b.startTeach()
-                        b.notice = "开始记录：照常在网页上操作一遍，做完点底下的「做完了」。密码只记「这里要填密码」，不记内容。"
-                    }
-                }
-                Item("网页脚本", value = b.tab.scriptsRan.size.takeIf { it > 0 }?.let { "这页 $it 个在跑" } ?: b.scripts.size.takeIf { it > 0 }?.let { "$it 个" }) { showScripts = true }
-
-                Head("收藏")
-                Item("阅读列表", value = b.later.count { !it.read }.takeIf { it > 0 }?.let { "$it 篇没读" }) { showLater = true }
-                Item("离线网页", value = b.offline.size.takeIf { it > 0 }?.let { "$it 个" }) { showOffline = true }
-
-                Head("设置")
-                Item("地址栏放在底部", switch = addressAtBottom) {
-                    addressAtBottom = !addressAtBottom
-                    getSharedPreferences("browser", MODE_PRIVATE).edit().putBoolean("addressbottom", addressAtBottom).apply()
-                }
-                Item("所有网站都用电脑版", switch = b.desktopAll) { b.toggleDesktopAll() }
-                Item("电脑版放大", value = "${b.desktopZoom}%") { zoomPick = true }
-                Item("网页字号", value = "${b.textZoom}%") { textPick = true }
-                Item("搜索引擎", value = mapOf("auto" to "自动", "google" to "Google", "bing" to "必应", "baidu" to "百度", "duckduckgo" to "DuckDuckGo")[b.searchEngine]) { searchPick = true }
-                Item("去广告" + if (b.tab.blocked > 0) "（这页 ${b.tab.blocked} 个）" else "", switch = b.adBlock) { b.changeAdBlock(!b.adBlock) }
-                Item("拦跟踪器" + if (b.tab.trackers > 0) "（这页 ${b.tab.trackers} 个）" else "", switch = b.trackBlock) { b.changeTrackBlock(!b.trackBlock) }
-                if ((b.adBlock || b.trackBlock) && has) Item("这个网站不拦广告和跟踪器", switch = b.adAllowedHere()) { b.toggleAdAllow() }
-                Item("只用加密连接（HTTPS）", switch = b.httpsOnly) {
-                    b.changeHttpsOnly(!b.httpsOnly)
-                    if (!b.httpsOnly) b.notice = "已关掉：不加密的网站也直接打开（同一个网络里的人能看到、改掉网页内容）。"
-                }
-                Item("自动填密码") { autofillInfo = true }
-
-                Head("线路")
-                listOf(BrowserNet.AUTO to "自动（国内直连，国外走代理）", BrowserNet.PROXY to "全部走代理", BrowserNet.DIRECT to "全部直连").forEach { (key, label) ->
-                    Item((if (b.route == key) "✓ " else "") + label) { if (b.route != key) { b.changeRoute(key); if (has) reload() } }
-                }
-                // 这两项属于设置里的「加强保护」，关着时不出来
-                if (has && b.route == BrowserNet.AUTO && Net.config.hardened) Item("这个网站总走代理", switch = b.proxyForcedHere()) {
-                    lifecycleScope.launch { b.notice = b.toggleProxySite(this@BrowserActivity) }
-                }
-                if (Net.config.hardened) Item("允许网页视频通话（会暴露真实 IP）", switch = b.webrtcAllowed) {
-                    b.changeWebrtc(!b.webrtcAllowed)
-                }
-
-                HorizontalDivider(Modifier.padding(top = 12.dp))
-                Item("清除浏览数据", color = colors.error) { b.clearData(); editing = "" }
-                Item("关闭浏览器") { finish() }
-            }
-        }
-    }
-
-    private class Tile(val icon: androidx.compose.ui.graphics.vector.ImageVector, val label: String, val enabled: Boolean, val on: Boolean = false, val onClick: () -> Unit)
-
-    /** 正在朗读时底栏上面的一条：念到哪、语速、暂停 / 继续、停止。 */
-    @Composable
-    private fun ReadingBar() {
-        val colors = MaterialTheme.colorScheme
-        Row(Modifier.fillMaxWidth().background(colors.secondaryContainer).padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(AppIcons.Speaker, null, Modifier.size(16.dp), tint = colors.onSecondaryContainer)
-            Text((if (PageReader.paused) "已暂停：" else "正在朗读：") + PageReader.title.orEmpty() + "（${PageReader.index + 1}/${PageReader.total}）",
-                Modifier.weight(1f).padding(start = 6.dp), style = MaterialTheme.typography.labelSmall, color = colors.onSecondaryContainer,
-                maxLines = 1, overflow = TextOverflow.Ellipsis)
-            TextButton(onClick = { PageReader.nextSpeed() }) { Text(BrowserPages.rateText(PageReader.speed)) }
-            TextButton(onClick = { PageReader.toggle() }) { Text(if (PageReader.paused) "继续" else "暂停") }
-            TextButton(onClick = { PageReader.stop() }) { Text("停止") }
-        }
-    }
-
-    /** 底栏小字：当前网页实际怎么上网。 */
-    private fun routeLabel(): String {
-        val route = JackBrowser.route
-        val host = runCatching { Uri.parse(JackBrowser.address).host }.getOrNull()
-        val proxied = when (route) {
-            BrowserNet.DIRECT -> false
-            BrowserNet.PROXY -> true
-            else -> host != null && (Net.shouldProxy(host) || (Net.config.enabled && JackBrowser.proxyForcedHere()))
-        }
-        val mode = when (route) { BrowserNet.PROXY -> "🛡 全部走代理"; BrowserNet.DIRECT -> "全部直连"; else -> "自动" }
-        val t = JackBrowser.tab
-        val ads = listOfNotNull(t.blocked.takeIf { it > 0 }?.let { "$it 个广告" }, t.trackers.takeIf { it > 0 }?.let { "$it 个跟踪器" })
-            .takeIf { it.isNotEmpty() }?.joinToString("、", prefix = " · 拦了 ").orEmpty() +
-            (if (JackBrowser.address.startsWith("http://")) " · ⚠ 不加密" else "")
-        return if (host == null) "线路：$mode" + if (route != BrowserNet.DIRECT && !Net.config.enabled) "（代理没开，现在都是直连）" else ""
-        else "$mode · 这个网站" + (if (proxied) "走代理" else "直连（看得到你的 IP）") + ads
-    }
-
-    /** 把当前网页的内容带回聊天：新开一个对话，网页正文作为附件，用户接着问。 */
-    /** 演示教学做完：把记下的步骤交给浏览器里的 Kavi，让它整理成流程存下来。 */
-    private fun finishTeach() {
-        val b = JackBrowser
-        if (BrowserChat.busy) { b.notice = "浏览器里的 Kavi 还在忙，等它做完再点「做完了」（记下的步骤还留着）。"; BrowserChat.open = true; return }
-        val steps = b.stopTeach()
-        if (steps.size < 2) { b.notice = "没记到操作，流程没存。"; return }
-        BrowserChat.open = true
-        BrowserChat.send(this, BrowserTeach.request(BrowserPages.site(steps.first().removePrefix("打开 ")).ifBlank { BrowserPages.site(b.address) }, steps))
-    }
-
-    /** 选要屏蔽的那块时底下的条：选中了什么、扩大一层、屏蔽、取消。 */
-    @Composable
-    private fun PickBar() {
-        val b = JackBrowser
-        val colors = MaterialTheme.colorScheme
-        Column(Modifier.fillMaxWidth().background(colors.secondaryContainer).padding(horizontal = 12.dp, vertical = 6.dp)) {
-            val p = b.picked
-            Text(if (p == null) "点一下网页上要屏蔽的地方（这时点了不会打开）" else "选中：${p.label}" + (if (p.count > 1) "，这一页一共 ${p.count} 处一样的" else ""),
-                style = MaterialTheme.typography.labelMedium, color = colors.onSecondaryContainer, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Row {
-                TextButton(enabled = p != null, onClick = { b.pickWider() }) { Text("选大一点") }
-                TextButton(enabled = p != null, onClick = { b.confirmPick() }) { Text("屏蔽") }
-                TextButton(onClick = { b.stopPick() }) { Text("取消") }
-            }
-        }
-    }
-
-    /** 演示教学进行中：记了几步、做完了、不记了。 */
-    @Composable
-    private fun TeachBar() {
-        val b = JackBrowser
-        val colors = MaterialTheme.colorScheme
-        Row(Modifier.fillMaxWidth().background(colors.tertiaryContainer).padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("正在记你的操作 · ${b.teachSteps.size} 步" + (b.teachSteps.lastOrNull()?.let { " · $it" } ?: ""), Modifier.weight(1f),
-                style = MaterialTheme.typography.labelMedium, color = colors.onTertiaryContainer, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            TextButton(onClick = { finishTeach() }) { Text("做完了") }
-            TextButton(onClick = { b.stopTeach(); b.notice = "不记了。" }) { Text("放弃") }
-        }
-    }
-
-    /** 浏览器里的 Kavi：问这一页、让它在这一页上做事。从底部浮起的圆角半屏，要确认的事直接在这里给两个大按钮。 */
-    @Composable
-    private fun ChatPanel() {
-        val chat = BrowserChat
-        val colors = MaterialTheme.colorScheme
-        var input by remember { mutableStateOf("") }
-        val list = androidx.compose.foundation.lazy.rememberLazyListState()
-        LaunchedEffect(chat.lines.size, chat.lines.lastOrNull()?.text?.length, chat.asking) {
-            val n = list.layoutInfo.totalItemsCount
-            if (n > 0) list.scrollToItem(n - 1)
-        }
-        val h = (resources.displayMetrics.heightPixels / resources.displayMetrics.density * 0.45f).dp
-        Surface(
-            Modifier.fillMaxWidth().height(h),
-            color = colors.surface,
-            shape = Radii.sheetTop,
-            shadowElevation = 12.dp,
-            border = androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant),
-        ) {
-            Column(Modifier.fillMaxSize()) {
-                // 拖动条（点它收起）
-                Box(Modifier.fillMaxWidth().clickable { BrowserChat.open = false }.padding(top = 8.dp, bottom = 4.dp), contentAlignment = Alignment.Center) {
-                    Box(Modifier.size(width = 40.dp, height = 4.dp).clip(androidx.compose.foundation.shape.CircleShape).background(colors.outlineVariant))
-                }
-                Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    LogoMark(36.dp)
-                    Column(Modifier.weight(1f).padding(start = 10.dp)) {
-                        Text("Kavi", style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-                        Text(if (chat.busy) (chat.progress ?: "想一想…") else "问这一页，或者让它在这页上做事",
-                            style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                    if (chat.lines.isNotEmpty()) {
-                        TextButton(onClick = { toChat(chat.transcript()) }) { Text("转到聊天") }
-                        TextButton(onClick = { chat.clear() }) { Text("清空") }
-                    }
-                    IconButton(onClick = { BrowserChat.open = false }) { Icon(Icons.Default.KeyboardArrowDown, "收起") }
-                }
-                LazyColumn(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp), state = list,
-                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (chat.lines.isEmpty()) item {
-                        Text("问问这一页讲了什么，或者让 Kavi 在这页上做事：比价、填表、找东西、把操作存成流程。",
-                            style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
-                    }
-                    items(chat.lines.size) { i ->
-                        val l = chat.lines[i]
-                        if (l.role == "user") Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-                            Text(l.text, Modifier.widthIn(max = 280.dp).clip(Radii.bubbleMine)
-                                .background(colors.surfaceContainerHigh).padding(horizontal = 14.dp, vertical = 9.dp),
-                                style = MaterialTheme.typography.bodyMedium, maxLines = 6, overflow = TextOverflow.Ellipsis)
-                        }
-                        else Column(Modifier.fillMaxWidth()) {
-                            if (l.steps.isNotEmpty()) Text(l.steps.joinToString(" → "), style = MaterialTheme.typography.labelSmall,
-                                color = colors.onSurfaceVariant, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(bottom = 4.dp))
-                            if (l.text.isNotBlank()) Box(Modifier.clip(Radii.bubbleTheirs)
-                                .background(colors.surfaceContainer).padding(horizontal = 14.dp, vertical = 10.dp)) {
-                                MarkdownBlocks(l.text, colors.onSurface, colors.surface, Modifier.fillMaxWidth(), textSizeSp = 15f)
-                            }
-                            l.error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = colors.error) }
-                            l.files.forEach { f ->
-                                Text("打开「${f.name}」", Modifier.clickable { openFile(f) }.padding(vertical = 4.dp),
-                                    style = MaterialTheme.typography.bodySmall, color = colors.primary)
-                            }
-                        }
-                    }
-                    // 要用户拍板的事：就在对话里给两个大按钮
-                    chat.asking?.let { a ->
-                        item {
-                            Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
-                                Text(a.title, style = MaterialTheme.typography.titleSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-                                Text(a.body.take(600), style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
-                                    maxLines = 6, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp, bottom = 10.dp))
-                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    androidx.compose.material3.Button(onClick = { a.answer.complete(true) }, modifier = Modifier.weight(1f).height(48.dp),
-                                        shape = Radii.m) { Text(a.action) }
-                                    androidx.compose.material3.FilledTonalButton(onClick = { a.answer.complete(false) }, modifier = Modifier.weight(1f).height(48.dp),
-                                        shape = Radii.m) { Text("先不要") }
-                                }
-                            }
-                        }
-                    }
-                }
-                // 输入：和聊天页一样的圆角胶囊，右边黑色圆按钮
-                Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 10.dp)
-                    .clip(Radii.xl).background(colors.surfaceContainer)
-                    .padding(start = 4.dp, end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    androidx.compose.material3.TextField(
-                        value = input,
-                        onValueChange = { input = it },
-                        placeholder = { Text("问这一页，或者让它做事", color = colors.outline) },
-                        maxLines = 3,
-                        textStyle = MaterialTheme.typography.bodyMedium,
-                        colors = androidx.compose.material3.TextFieldDefaults.colors(
-                            focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent,
-                            focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
-                        ),
-                        modifier = Modifier.weight(1f),
-                    )
-                    val busy = chat.busy
-                    Surface(
-                        onClick = { if (busy) chat.stop() else if (input.isNotBlank()) { chat.send(this@BrowserActivity, input); input = "" } },
-                        shape = androidx.compose.foundation.shape.CircleShape,
-                        color = if (busy || input.isNotBlank()) colors.onSurface else colors.surfaceVariant,
-                        modifier = Modifier.size(38.dp),
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(if (busy) AppIcons.Stop else AppIcons.ArrowUp, if (busy) "停" else "发送", Modifier.size(if (busy) 14.dp else 18.dp),
-                                tint = if (busy || input.isNotBlank()) colors.surface else colors.outline)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /** 用别的 App 打开浏览器里的 Kavi 存下的文件（表格、图片）。 */
-    private fun openFile(f: java.io.File) {
-        val uri = runCatching { androidx.core.content.FileProvider.getUriForFile(this, "$packageName.files", f) }.getOrNull()
-            ?: run { JackBrowser.notice = "文件打不开：${f.name}"; return }
-        val i = Intent(Intent.ACTION_VIEW).setDataAndType(uri, com.jack.ai.tools.ToolSession.mimeOf(f.name)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        runCatching { startActivity(Intent.createChooser(i, f.name)) }.onFailure { JackBrowser.notice = "没有能打开「${f.name}」的应用" }
-    }
-
-    /** 把文字带回主聊天的输入框。 */
-    private fun toChat(text: String) {
-        startActivity(Intent(this, com.jack.ai.MainActivity::class.java).setAction(Intent.ACTION_SEND)
-            .setType("text/plain").putExtra(Intent.EXTRA_TEXT, text.take(20_000))
-            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
-    }
-
-    /** 网页里选中一段字点「问 Kavi」：带着出处回到聊天，放进输入框，用户接着问。 */
-    private fun askAboutSelection(sel: String) {
-        val b = JackBrowser
-        val text = "「" + sel.trim().take(4000) + "」\n——摘自「" + b.title.ifBlank { BrowserPages.host(b.address) } + "」" + b.address + "\n\n"
-        startActivity(Intent(this, com.jack.ai.MainActivity::class.java).setAction(Intent.ACTION_SEND)
-            .setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
-            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
-    }
-
-    /** 把网页正文（视频页带上字幕）存成文件带回聊天；prompt 给了就一起放进输入框。 */
-    private fun askKavi(prompt: String? = null) {
-        val b = JackBrowser
-        lifecycleScope.launch {
-            val text = runCatching { b.pageText(this@BrowserActivity) }.getOrNull()
-            if (text == null || text.substringAfter("\n\n").isBlank()) { b.notice = "读不到这个网页的文字（可能还没加载完，或者内容是图片）"; return@launch }
-            val f = java.io.File(java.io.File(cacheDir, "exports").apply { mkdirs() }, BrowserPages.fileName(b.title, b.address))
-            runCatching { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { f.writeText(text) } }
-                .onFailure { b.notice = "没存下网页内容：${it.message}"; return@launch }
-            val uri = androidx.core.content.FileProvider.getUriForFile(this@BrowserActivity, "$packageName.files", f)
-            startActivity(Intent(this@BrowserActivity, com.jack.ai.MainActivity::class.java).setAction(Intent.ACTION_SEND)
-                .setType("text/plain").putExtra(Intent.EXTRA_STREAM, uri)
-                .apply { if (prompt != null) putExtra(Intent.EXTRA_TEXT, prompt) }
-                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                // 回到已经开着的聊天页（不另开一个），浏览器的网页留着，下次打开还在
-                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
-        }
-    }
-
-    /** 存成 PDF：用系统的打印，选「另存为 PDF」，存在哪由用户定。 */
-    private fun takeLongShot() {
-        if (!JackBrowser.userViewing || shooting) return
-        if (Build.VERSION.SDK_INT < 29 && !has(Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
-            shotPermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE); return
-        }
-        val w = JackBrowser.tab.web ?: return
-        shooting = true
-        shotJob = lifecycleScope.launch {
-            try {
-                val (saved, cut) = BrowserLongShot.capture(this@BrowserActivity, w)
-                longShot = saved
-                JackBrowser.notice = if (cut) "页面太长，只截了前面一部分" else "长截图已存到相册 Pictures/Kavi"
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (e: OutOfMemoryError) {
-                JackBrowser.notice = "页面图片太大，手机内存不够，没能完成截图"
-            } catch (e: Exception) {
-                JackBrowser.notice = "截图没完成：${e.message ?: "图片太大"}"
-            } finally { shooting = false; shotJob = null }
-        }
-    }
-
-    private fun savePdf() {
-        val b = JackBrowser
-        val name = b.title.ifBlank { BrowserPages.host(b.address) }.ifBlank { "网页" }
-        val pm = getSystemService(PRINT_SERVICE) as android.print.PrintManager
-        runCatching { pm.print(name, b.webView(this).createPrintDocumentAdapter(name), android.print.PrintAttributes.Builder().build()) }
-            .onFailure { b.notice = "这台手机打不开系统的打印（存 PDF 要用它）：${it.message}" }
-    }
-
-    private fun scanQr(img: String) {
-        val b = JackBrowser
-        lifecycleScope.launch {
-            val text = runCatching { b.scanQr(img) }.getOrElse { b.notice = "图片没取下来：${it.message}"; return@launch }
-            if (text.isNullOrBlank()) b.notice = "这张图里没识别出二维码。" else qr = text
-        }
-    }
-
-    private fun exitFullscreen() {
-        JackBrowser.fullscreen?.second?.onCustomViewHidden()
-        JackBrowser.fullscreen = null
-    }
-
-    private fun closeFind() {
-        finding = null
-        JackBrowser.webView(this).clearMatches()
-        JackBrowser.findCount = 0; JackBrowser.findIndex = 0
-    }
-
-    private fun copy(text: String) =
-        (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("网址", text))
-
-    private fun share(url: String, title: String) {
-        val send = Intent(Intent.ACTION_SEND).setType("text/plain")
-            .putExtra(Intent.EXTRA_TEXT, if (title.isBlank() || title == url) url else "$title\n$url")
-            .putExtra(Intent.EXTRA_SUBJECT, title)
-        runCatching { startActivity(Intent.createChooser(send, "分享网页")) }
-    }
-
-    /** 页内查找：边打字边找，上下跳，显示第几处 / 共几处。 */
-    @Composable
-    private fun FindBar(q: String) {
-        val b = JackBrowser
-        val w = b.webView(this)
-        LaunchedEffect(q) {
-            if (q.isEmpty()) { w.clearMatches(); b.findCount = 0; b.findIndex = 0 } else w.findAllAsync(q)
-        }
-        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
-                value = q,
-                onValueChange = { finding = it },
-                placeholder = { Text("在网页里找") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { if (q.isNotEmpty()) w.findNext(true) }),
-                textStyle = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                if (q.isEmpty()) "" else if (b.findCount == 0) "没找到" else "${b.findIndex + 1}/${b.findCount}",
-                Modifier.padding(horizontal = 8.dp),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            IconButton(enabled = b.findCount > 0, onClick = { w.findNext(false) }) { Icon(Icons.Default.KeyboardArrowUp, "上一处") }
-            IconButton(enabled = b.findCount > 0, onClick = { w.findNext(true) }) { Icon(Icons.Default.KeyboardArrowDown, "下一处") }
-            IconButton(onClick = { closeFind() }) { Icon(Icons.Default.Close, "关闭查找") }
-        }
-    }
-
-    /** 标签页列表：点一个切过去，× 关掉，顶上新开一个。 */
-    @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
-    @Composable
-    private fun TabsPanel() {
-        val b = JackBrowser
-        val colors = MaterialTheme.colorScheme
-        val groups = b.groups()
-        // 选着的分组被关光了：回到全部
-        if (tabGroup != null && tabGroup !in groups) tabGroup = null
-        // 记标签页本身、不记位置：关掉一个后列表先变短、这里晚一拍才重排，按位置去取会越界（闪退过）
-        val shown = b.tabs.filter { tabGroup == null || it.group == tabGroup }
-        val full = b.tabs.size >= JackBrowser.MAX_TABS
-        Surface(Modifier.fillMaxSize(), color = colors.background) {
-            Column(Modifier.fillMaxSize()) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { showTabs = false }) { Icon(Icons.Default.Close, "收起") }
-                    Text("标签页（${b.tabs.size}）", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-                    if (b.incognitoSupported()) {
-                        TextButton(enabled = !full, onClick = { accountPick = true }) { Text("分身") }
-                        TextButton(enabled = !full, onClick = { showTabs = false; openInNewTab(null, incognito = true) }) { Text("隐身") }
-                    }
-                    TextButton(enabled = !full, onClick = { showTabs = false; openInNewTab(null) }) { Text("新标签页") }
-                }
-                // 分组：点一下只看这组（这时新开的标签页也进这组），长按改名、关掉整组
-                androidx.compose.foundation.lazy.LazyRow(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    item { GroupChip("全部 ${b.tabs.size}", tabGroup == null, { tabGroup = null }, { groupMenu = "" }) }
-                    items(groups) { g -> GroupChip("$g ${b.tabs.count { it.group == g }}", tabGroup == g, { tabGroup = if (tabGroup == g) null else g }, { groupMenu = g }) }
-                    item { GroupChip("+ 分组", false, { groupName = "" to null }, null) }
-                }
-                HorizontalDivider()
-                // 两列卡片：上面是这一页的缩略图（没拍过的写网站名），下面是标题和关闭；长按换分组
-                LazyVerticalGrid(GridCells.Fixed(2), Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    items(shown, key = { it.id }) { t ->
-                        val on = t === b.tabs.getOrNull(b.current)
-                        Column(
-                            Modifier.clip(Radii.s)
-                                .border(if (on) 2.dp else 1.dp, if (on) colors.primary else colors.outlineVariant, Radii.s)
-                                .combinedClickable(onClick = { b.tabs.indexOf(t).takeIf { it >= 0 }?.let { switchTab(it) } }, onLongClick = { tabMove = t }),
-                        ) {
-                            Row(Modifier.fillMaxWidth().background(if (on) colors.primaryContainer else colors.surfaceVariant).padding(start = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically) {
-                                Text(t.badge + t.title.ifBlank { if (t.address.isEmpty()) "起始页" else BrowserPages.host(t.address) }, Modifier.weight(1f),
-                                    style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                    color = if (on) colors.onPrimaryContainer else colors.onSurfaceVariant)
-                                IconButton(onClick = { b.closeTab(t); if (b.tabs.isEmpty()) showTabs = false }, Modifier.size(36.dp)) {
-                                    Icon(Icons.Default.Close, "关闭这个标签页", Modifier.size(18.dp))
-                                }
-                            }
-                            Box(Modifier.fillMaxWidth().aspectRatio(0.8f).background(colors.surface), contentAlignment = Alignment.Center) {
-                                val thumb = t.thumb
-                                if (thumb != null) androidx.compose.foundation.Image(thumb.asImageBitmap(), null, Modifier.fillMaxSize(),
-                                    contentScale = ContentScale.Crop, alignment = Alignment.TopCenter)
-                                else Text(if (t.address.isEmpty()) "起始页" else BrowserPages.host(t.address), Modifier.padding(8.dp),
-                                    style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, maxLines = 2)
-                                if (t.group.isNotBlank() && tabGroup == null) Text(t.group,
-                                    Modifier.align(Alignment.BottomStart).padding(6.dp).clip(Radii.s).background(colors.secondaryContainer).padding(horizontal = 6.dp, vertical = 1.dp),
-                                    style = MaterialTheme.typography.labelSmall, color = colors.onSecondaryContainer, maxLines = 1)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        // 长按一个标签页：移到哪个分组
-        tabMove?.let { t ->
-            AlertDialog(
-                onDismissRequest = { tabMove = null },
-                title = { Text("移到分组") },
-                text = { Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {
-                    groups.forEach { g ->
-                        Text((if (t.group == g) "✓ " else "    ") + g, Modifier.fillMaxWidth().clickable { b.setGroup(t, g); tabMove = null }.padding(vertical = 12.dp))
-                    }
-                    Text("    新分组…", Modifier.fillMaxWidth().clickable { tabMove = null; groupName = "" to t }.padding(vertical = 12.dp))
-                    if (t.group.isNotBlank()) Text("    不分组", Modifier.fillMaxWidth().clickable { b.setGroup(t, ""); tabMove = null }.padding(vertical = 12.dp))
-                } },
-                confirmButton = { TextButton(onClick = { tabMove = null }) { Text("取消") } },
-            )
-        }
-        // 新分组 / 改名：(原来的名字, 要放进去的标签页)；原来的名字空 = 新建
-        groupName?.let { (from, t) ->
-            var name by remember(from) { mutableStateOf(from) }
-            AlertDialog(
-                onDismissRequest = { groupName = null },
-                title = { Text(if (from.isEmpty()) "新分组" else "分组改名") },
-                text = { Column {
-                    if (from.isEmpty() && t == null) Text("当前这个标签页会放进新分组。", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
-                    OutlinedTextField(name, { name = it.take(20) }, singleLine = true, placeholder = { Text("比如：工作、购物") },
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
-                } },
-                confirmButton = { TextButton(enabled = name.isNotBlank(), onClick = {
-                    groupName = null
-                    if (from.isEmpty()) { b.setGroup(t ?: b.tab, name); tabGroup = name.trim() } else { b.renameGroup(from, name); if (tabGroup == from) tabGroup = name.trim() }
-                }) { Text("好") } },
-                dismissButton = { TextButton(onClick = { groupName = null }) { Text("取消") } },
-            )
-        }
-        // 长按分组：改名、解散、关掉整组；长按「全部」：关掉所有标签页
-        groupMenu?.let { g ->
-            AlertDialog(
-                onDismissRequest = { groupMenu = null },
-                title = { Text(if (g.isEmpty()) "所有标签页" else "分组「$g」") },
-                text = { Column {
-                    if (g.isNotEmpty()) {
-                        Text("改名", Modifier.fillMaxWidth().clickable { groupMenu = null; groupName = g to null }.padding(vertical = 12.dp))
-                        Text("解散分组（标签页留着）", Modifier.fillMaxWidth().clickable { groupMenu = null; b.ungroup(g) }.padding(vertical = 12.dp))
-                    }
-                    Text(if (g.isEmpty()) "关掉全部 ${b.tabs.size} 个标签页" else "关掉这组 ${b.tabs.count { it.group == g }} 个标签页",
-                        Modifier.fillMaxWidth().clickable { groupMenu = null; b.closeGroup(g.ifEmpty { null }); if (g.isEmpty()) showTabs = false }.padding(vertical = 12.dp),
-                        color = colors.error)
-                } },
-                confirmButton = { TextButton(onClick = { groupMenu = null }) { Text("取消") } },
-            )
-        }
-    }
-
-    @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
-    @Composable
-    private fun GroupChip(label: String, selected: Boolean, onClick: () -> Unit, onLongClick: (() -> Unit)?) {
-        val colors = MaterialTheme.colorScheme
-        Text(label, Modifier.clip(Radii.s).border(1.dp, if (selected) colors.primary else colors.outlineVariant, Radii.s)
-            .background(if (selected) colors.primaryContainer else Color.Transparent)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick).padding(horizontal = 12.dp, vertical = 6.dp),
-            style = MaterialTheme.typography.labelLarge, color = if (selected) colors.onPrimaryContainer else colors.onSurface, maxLines = 1)
-    }
-
-    /** 选一个百分比的小弹窗（网页字号）。 */
-    @Composable
-    private fun ZoomDialog(title: String, note: String, options: List<Int>, now: Int, close: () -> Unit, pick: (Int) -> Unit) {
-        AlertDialog(
-            onDismissRequest = close,
-            title = { Text(title) },
-            text = {
-                Column {
-                    Text(note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    options.forEach { z ->
-                        Text((if (z == now) "✓ " else "    ") + "$z%" + if (z == 100) "（原样）" else "",
-                            Modifier.fillMaxWidth().clickable { close(); pick(z) }.padding(vertical = 10.dp),
-                            style = MaterialTheme.typography.bodyLarge)
-                    }
-                }
-            },
-            confirmButton = { TextButton(onClick = close) { Text("关闭") } },
-        )
-    }
-
-    private fun openLater(e: BrowserPages.Later) {
-        showLater = false
-        JackBrowser.markLaterRead(e.url)
-        open(e.url)
-    }
-
-    @Composable
-    private fun LaterPanel() {
-        val b = JackBrowser
-        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { showLater = false }) { Icon(Icons.Default.Close, "收起") }
-                    Text("阅读列表", style = MaterialTheme.typography.titleMedium)
-                }
-                LazyColumn {
-                    listOf(false to "未读", true to "已读").forEach { (read, label) ->
-                        item { Box(Modifier.padding(horizontal = 16.dp)) { Section(label) } }
-                        items(b.later.filter { it.read == read }, key = { it.url }) { e ->
-                            Row(Modifier.fillMaxWidth().clickable { openLater(e) }.padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(e.title.ifBlank { BrowserPages.host(e.url) }, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Text(BrowserPages.host(e.url), style = MaterialTheme.typography.labelSmall)
-                                }
-                                IconButton(onClick = { b.removeLater(e.url) }) { Icon(Icons.Default.Close, "删掉这条") }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /** 完整的历史记录：按天分组、能搜、能删单条、能清空。 */
-    @Composable
-    private fun HistoryPanel() {
-        val b = JackBrowser
-        val colors = MaterialTheme.colorScheme
-        var all by remember { mutableStateOf<List<com.jack.ai.data.browser.HistoryEntry>?>(null) }
-        var query by remember { mutableStateOf("") }
-        var confirmClear by remember { mutableStateOf(false) }
-        LaunchedEffect(Unit) { all = b.historyEntries() }
-        val now = remember { System.currentTimeMillis() }
-        val groups = remember(all, query) { com.jack.ai.data.browser.BrowserHistory.byDay(all.orEmpty(), query, now) }
-        val time = remember { java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()) }
-        Surface(Modifier.fillMaxSize(), color = colors.background) {
-            Column(Modifier.fillMaxSize()) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { showHistory = false }) { Icon(Icons.Default.Close, "收起") }
-                    Text("历史记录", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-                    TextButton(enabled = !all.isNullOrEmpty(), onClick = { confirmClear = true }) { Text("清空", color = colors.error) }
-                }
-                OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    placeholder = { Text("搜标题或网址") }, singleLine = true, textStyle = MaterialTheme.typography.bodyMedium)
-                when {
-                    all == null -> Text("正在读…", Modifier.padding(24.dp), color = colors.onSurfaceVariant)
-                    groups.isEmpty() -> Text(if (query.isBlank()) "还没有浏览记录。" else "没找到。", Modifier.padding(24.dp), color = colors.onSurfaceVariant)
-                    else -> LazyColumn(Modifier.fillMaxSize()) {
-                        groups.forEach { (day, list) ->
-                            item(key = "d$day") { Box(Modifier.padding(horizontal = 16.dp)) { Section(day) } }
-                            items(list, key = { "h" + it.url }) { e ->
-                                Row(Modifier.fillMaxWidth().clickable { showHistory = false; open(e.url) }.padding(start = 16.dp, top = 4.dp, bottom = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically) {
-                                    Column(Modifier.weight(1f)) {
-                                        Text(e.title.ifBlank { BrowserPages.host(e.url) }, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                        Text(time.format(java.util.Date(e.at)) + "  " + BrowserPages.host(e.url), style = MaterialTheme.typography.labelSmall,
-                                            color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    }
-                                    IconButton(onClick = { b.deleteHistory(e.url); all = all?.filterNot { it.url == e.url } }) { Icon(Icons.Default.Close, "删掉这条") }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        if (confirmClear) AlertDialog(
-            onDismissRequest = { confirmClear = false },
-            title = { Text("清空历史记录？") },
-            text = { Text("浏览记录和起始页的最近访问都删掉，Kavi 也翻不到了。登录状态、书签不动。") },
-            confirmButton = { TextButton(onClick = { confirmClear = false; b.clearHistory(); all = emptyList() }) { Text("清空", color = colors.error) } },
-            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("取消") } },
-        )
-    }
-
-    /** 书签：搜索、删除、按文件夹看，导入别的浏览器的书签、导出给别的浏览器。 */
-    @Composable
-    private fun MarksPanel() {
-        val b = JackBrowser
-        val colors = MaterialTheme.colorScheme
-        var query by remember { mutableStateOf("") }
-        var folder by remember { mutableStateOf<String?>(null) }
-        val folders = remember(b.marks) { b.marks.map { it.folder }.filter { it.isNotBlank() }.distinct() }
-        val shown = remember(b.marks, query, folder) {
-            val words = query.trim().lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
-            b.marks.filter { m -> (folder == null || m.folder == folder) &&
-                words.all { w -> m.title.lowercase().contains(w) || m.url.lowercase().contains(w) || m.folder.lowercase().contains(w) } }
-        }
-        Surface(Modifier.fillMaxSize(), color = colors.background) {
-            Column(Modifier.fillMaxSize()) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { showMarks = false }) { Icon(Icons.Default.Close, "收起") }
-                    Text("书签（${b.marks.size}）", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-                    TextButton(onClick = { runCatching { importMarks.launch(arrayOf("text/html", "*/*")) } }) { Text("导入") }
-                    TextButton(enabled = b.marks.isNotEmpty(), onClick = { runCatching { exportMarks.launch("bookmarks.html") } }) { Text("导出") }
-                }
-                if (b.marks.isEmpty()) {
-                    Text("还没有书签。网页菜单里点「加入书签」，或者从 Chrome、Edge 导入：在电脑上打开 书签管理 →「导出书签」，" +
-                        "把得到的 .html 文件传到手机，再点上面的「导入」。", Modifier.padding(24.dp), color = colors.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodyMedium)
-                    return@Column
-                }
-                OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    placeholder = { Text("搜标题、网址或文件夹") }, singleLine = true, textStyle = MaterialTheme.typography.bodyMedium)
-                if (folders.isNotEmpty()) androidx.compose.foundation.lazy.LazyRow(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    item { androidx.compose.material3.FilterChip(folder == null, { folder = null }, { Text("全部") }) }
-                    items(folders) { f -> androidx.compose.material3.FilterChip(folder == f, { folder = if (folder == f) null else f }, { Text(f, maxLines = 1) }) }
-                }
-                if (shown.isEmpty()) Text("没找到。", Modifier.padding(24.dp), color = colors.onSurfaceVariant)
-                LazyColumn(Modifier.fillMaxSize()) {
-                    items(shown, key = { "bm" + it.url }) { m ->
-                        Row(Modifier.fillMaxWidth().clickable { showMarks = false; open(m.url) }.padding(start = 16.dp, top = 4.dp, bottom = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text(BrowserPages.label(m), style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text((if (m.folder.isNotBlank() && folder == null) m.folder + " · " else "") + BrowserPages.host(m.url),
-                                    style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
-                            IconButton(onClick = { b.removeMark(m.url) }) { Icon(Icons.Default.Close, "删掉这个书签") }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /** 离线网页列表：存下的整页，没网也能打开。 */
-    @Composable
-    private fun OfflinePanel() {
-        val b = JackBrowser
-        val colors = MaterialTheme.colorScheme
-        val date = remember { java.text.SimpleDateFormat("M月d日 HH:mm", java.util.Locale.getDefault()) }
-        Surface(Modifier.fillMaxSize(), color = colors.background) {
-            Column(Modifier.fillMaxSize()) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { showOffline = false }) { Icon(Icons.Default.Close, "收起") }
-                    Text("离线网页", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-                    if (b.offline.isNotEmpty()) Text("共 " + com.jack.ai.api.BrowserSiteData.sizeText(b.offline.sumOf { it.size }),
-                        Modifier.padding(end = 12.dp), style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
-                }
-                if (b.offline.isEmpty()) Text("还没有。网页菜单里点「存成离线网页」，整页连图片和排版一起存下来，没网也能看。" +
-                    "（只存正文用「加入阅读列表」更省地方。）", Modifier.padding(24.dp), color = colors.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
-                LazyColumn(Modifier.fillMaxSize()) {
-                    items(b.offline, key = { "off" + it.file }) { p ->
-                        Row(Modifier.fillMaxWidth().clickable { offlineView = p }.padding(start = 16.dp, top = 4.dp, bottom = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text(p.title.ifBlank { BrowserPages.host(p.url) }, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text(date.format(java.util.Date(p.at)) + " · " + com.jack.ai.api.BrowserSiteData.sizeText(p.size) + " · " + BrowserPages.host(p.url),
-                                    style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
-                            IconButton(onClick = { b.removeOffline(p) }) { Icon(Icons.Default.Close, "删掉") }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /**
-     * 看一个离线网页：单独的网页窗口，只读本机这个文件，不联网、不跑脚本（存下的页面是死的，跑脚本也没用，还更安全）。
-     * 点里面的链接回到 Kavi 浏览器在线打开。
-     */
-    @Composable
-    private fun OfflineViewer(p: BrowserPages.OfflinePage) {
-        val b = JackBrowser
-        val colors = MaterialTheme.colorScheme
-        val file = remember(p) { b.offlineFile(p) }
-        Surface(Modifier.fillMaxSize(), color = colors.background) {
-            Column(Modifier.fillMaxSize()) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { offlineView = null }) { Icon(Icons.Default.Close, "关掉") }
-                    Column(Modifier.weight(1f)) {
-                        Text(p.title.ifBlank { BrowserPages.host(p.url) }, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text("离线 · " + BrowserPages.host(p.url), style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
-                    }
-                    TextButton(onClick = { offlineView = null; showOffline = false; open(p.url) }) { Text("打开原网页") }
-                }
-                if (!file.exists()) { Text("文件不见了。", Modifier.padding(24.dp), color = colors.onSurfaceVariant); return@Column }
-                AndroidView(factory = { c ->
-                    android.webkit.WebView(c).apply {
-                        settings.javaScriptEnabled = false
-                        settings.allowFileAccess = true
-                        settings.allowContentAccess = false
-                        settings.blockNetworkLoads = true
-                        settings.builtInZoomControls = true
-                        settings.displayZoomControls = false
-                        settings.useWideViewPort = true
-                        settings.loadWithOverviewMode = true
-                        webViewClient = object : android.webkit.WebViewClient() {
-                            override fun shouldOverrideUrlLoading(view: android.webkit.WebView, request: android.webkit.WebResourceRequest): Boolean {
-                                val u = request.url.toString()
-                                if (BrowserPages.isWeb(u)) { offlineView = null; showOffline = false; open(u) }
-                                return true
-                            }
-                        }
-                        loadUrl(Uri.fromFile(file).toString())
-                    }
-                }, onRelease = { it.destroy() }, modifier = Modifier.fillMaxSize())
-            }
-        }
-    }
-
-    /** 网页脚本：按网站自动跑的小脚本，能开关、改、删，新建或让 Kavi 写。 */
-    @Composable
-    private fun ScriptsPanel() {
-        val b = JackBrowser
-        val colors = MaterialTheme.colorScheme
-        val site = BrowserPages.site(b.address)
-        var ask by remember { mutableStateOf<String?>(null) }
-        Surface(Modifier.fillMaxSize(), color = colors.background) {
-            Column(Modifier.fillMaxSize()) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { showScripts = false }) { Icon(Icons.Default.Close, "收起") }
-                    Text("网页脚本", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-                    TextButton(onClick = { ask = "" }) { Text("让 Kavi 写") }
-                    TextButton(onClick = {
-                        editScript = com.jack.ai.api.UserScripts.Script(java.util.UUID.randomUUID().toString().take(8), "", listOfNotNull(site.ifEmpty { null }), "", at = System.currentTimeMillis())
-                    }) { Text("新建") }
-                }
-                Text("打开对得上的网站时自动跑，比如自动展开全文、去掉烦人的弹层、把价格换算成人民币。能直接贴油猴脚本（GM_addStyle、GM_getValue 这类常用的能用，复杂的可能不行）。" +
-                    "脚本和网页自己的脚本一样，只能动这个网页，碰不到手机上的文件。只用信得过的脚本。",
-                    Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
-                if (b.scripts.isEmpty()) Text("还没有脚本。", Modifier.padding(24.dp), color = colors.onSurfaceVariant)
-                LazyColumn(Modifier.fillMaxSize()) {
-                    items(b.scripts.sortedByDescending { site.isNotEmpty() && com.jack.ai.api.UserScripts.matches(it.copy(enabled = true), site) }, key = { "us" + it.id }) { sc ->
-                        Row(Modifier.fillMaxWidth().clickable { editScript = sc }.padding(start = 16.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text(sc.name + (if (sc.by == "kavi") "（Kavi 写的）" else ""), style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text((if (sc.name in b.tab.scriptsRan) "这页在跑 · " else "") + com.jack.ai.api.UserScripts.sitesText(sc),
-                                    style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
-                            androidx.compose.material3.Switch(sc.enabled, { b.toggleScript(sc.id); b.rerunScripts() })
-                        }
-                    }
-                }
-            }
-        }
-        ask?.let { text ->
-            var want by remember { mutableStateOf(text) }
-            AlertDialog(
-                onDismissRequest = { ask = null }, title = { Text("让 Kavi 写一个网页脚本") },
-                text = { Column {
-                    Text(if (site.isEmpty()) "想让网页自动做什么？" else "想让 $site 自动做什么？", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
-                    OutlinedTextField(want, { want = it }, Modifier.fillMaxWidth().padding(top = 8.dp), placeholder = { Text("比如：自动展开全文，去掉底部的「打开 App」") }, minLines = 2)
-                } },
-                confirmButton = { TextButton(enabled = want.isNotBlank(), onClick = {
-                    ask = null; showScripts = false
-                    BrowserChat.open = true
-                    BrowserChat.send(this@BrowserActivity, "给" + (if (site.isEmpty()) "网页" else "这个网站（$site）") + "写一个网页脚本，用 browser 的 save_script 存下来：" + want.trim())
-                }) { Text("交给 Kavi") } },
-                dismissButton = { TextButton(onClick = { ask = null }) { Text("取消") } },
-            )
-        }
-    }
-
-    /** 改一个网页脚本：名字、网站、代码。贴进来的油猴脚本自动读出名字和网站。 */
-    @Composable
-    private fun ScriptEditor(start: com.jack.ai.api.UserScripts.Script) {
-        val b = JackBrowser
-        val colors = MaterialTheme.colorScheme
-        var name by remember(start.id) { mutableStateOf(start.name) }
-        var sites by remember(start.id) { mutableStateOf(start.sites.joinToString(", ")) }
-        var code by remember(start.id) { mutableStateOf(start.code) }
-        var confirmDelete by remember { mutableStateOf(false) }
-        val exists = b.scripts.any { it.id == start.id }
-        Surface(Modifier.fillMaxSize(), color = colors.background) {
-            Column(Modifier.fillMaxSize()) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { editScript = null }) { Icon(Icons.Default.Close, "不改了") }
-                    Text(if (exists) "改网页脚本" else "新网页脚本", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-                    if (exists) TextButton(onClick = { confirmDelete = true }) { Text("删除", color = colors.error) }
-                    TextButton(enabled = code.isNotBlank(), onClick = {
-                        val head = com.jack.ai.api.UserScripts.header(code)
-                        val list = com.jack.ai.api.UserScripts.cleanSites(sites).ifEmpty { head?.second.orEmpty() }
-                        if (list.isEmpty()) { b.notice = "填一下在哪些网站上跑（比如 taobao.com；所有网站填 *）"; return@TextButton }
-                        b.saveScript(start.copy(name = name.ifBlank { head?.first.orEmpty() }, sites = list, code = code, at = System.currentTimeMillis()))
-                        editScript = null
-                        b.rerunScripts()
-                    }) { Text("保存") }
-                }
-                Column(Modifier.fillMaxSize().padding(horizontal = 16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(name, { name = it.take(40) }, Modifier.fillMaxWidth(), label = { Text("名字") }, singleLine = true)
-                    OutlinedTextField(sites, { sites = it }, Modifier.fillMaxWidth(), label = { Text("在哪些网站上跑") }, singleLine = true,
-                        supportingText = { Text("网站名，几个用逗号隔开，子域名也算；所有网站填 *。贴油猴脚本可以不填") })
-                    OutlinedTextField(code, { code = it }, Modifier.fillMaxWidth().heightIn(min = 240.dp), label = { Text("JavaScript 代码") },
-                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = CodeFont))
-                }
-            }
-        }
-        if (confirmDelete) AlertDialog(
-            onDismissRequest = { confirmDelete = false }, title = { Text("删掉「${start.name}」？") },
-            confirmButton = { TextButton(onClick = { confirmDelete = false; editScript = null; b.removeScript(start.id); b.rerunScripts() }) { Text("删除", color = colors.error) } },
-            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("取消") } },
-        )
-    }
-
-    /** 网页没打开：盖一层干净的说明，不露出网页组件自带的英文出错页。 */
-    @Composable
-    private fun ErrorPage(msg: String) {
-        Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("网页没打开", style = MaterialTheme.typography.titleMedium)
-            Text(msg, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { reload() }) { Text("重试") }
-                JackBrowser.tab.httpFallback?.let { http -> OutlinedButton(onClick = { open(JackBrowser.allowHttp(http)) }) { Text("仍然打开") } }
-                val url = JackBrowser.address.ifEmpty { editing }
-                if (BrowserPages.isWeb(url)) OutlinedButton(onClick = { Links.system(this@BrowserActivity, url) }) { Text("用系统浏览器打开") }
-            }
-        }
-    }
-
-    /** 网页还没显示出来时盖在空白网页窗口上的一页：写着在打开哪个网站。 */
-    @Composable
-    private fun OpeningPage(url: String) {
-        val colors = MaterialTheme.colorScheme
-        Column(Modifier.fillMaxSize().background(colors.background).padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            Text(BrowserPages.host(url).ifEmpty { url.take(60) }, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("正在打开…", Modifier.padding(top = 6.dp), style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
-        }
-    }
-
-    /** 长按链接或图片弹出的菜单。 */
-    @Composable
-    private fun PressMenu(p: JackBrowser.Pressed) {
-        val b = JackBrowser
-        val close = { b.pressed = null }
-        AlertDialog(
-            onDismissRequest = close,
-            title = { Text(if (p.link != null) "链接" else "图片") },
-            text = {
-                Column {
-                    (p.link ?: p.image)?.let {
-                        Text(it.take(200), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(bottom = 8.dp))
-                    }
-                    @Composable
-                    fun item(label: String, action: () -> Unit) = Text(label, Modifier.fillMaxWidth().clickable { close(); action() }.padding(vertical = 12.dp))
-                    p.link?.let { link ->
-                        Text("稍后读", Modifier.fillMaxWidth().clickable(enabled = !b.tab.incognito) { close(); b.addLater(link) }.padding(vertical = 12.dp),
-                            color = if (b.tab.incognito) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f) else MaterialTheme.colorScheme.onSurface)
-                        item("打开") { open(link) }
-                        item("在新标签页打开") { openInNewTab(link) }
-                        item("复制链接") { copy(link); b.notice = "已复制链接" }
-                        item("分享链接") { share(link, "") }
-                        item("用系统浏览器打开") { Links.system(this@BrowserActivity, link) }
-                    }
-                    p.image?.let { img ->
-                        item("识别二维码") { scanQr(img) }
-                        item("下载图片") { b.downloadImage(img) }
-                        if (BrowserPages.isWeb(img)) item("复制图片地址") { copy(img); b.notice = "已复制图片地址" }
-                    }
-                }
-            },
-            confirmButton = { TextButton(onClick = close) { Text("取消") } },
-        )
-    }
-
-    /** 网页要用相机、麦克风、位置：问用户。允许 / 不允许会按网站记住（隐身页不记），「只这次」不记。 */
-    @Composable
-    private fun PermDialog(a: JackBrowser.PermAsk) {
-        val notes = buildList {
-            if (BrowserPages.LOCATION in a.kinds) add("网站会知道你在哪，走代理也挡不住。")
-            if ((BrowserPages.CAMERA in a.kinds || BrowserPages.MIC in a.kinds) && JackBrowser.rtcBlocked())
-                add("要视频、语音通话，还得在菜单里打开「允许网页视频通话」。")
-            if (!a.incognito) add("选了会记住，以后不再问；菜单里能重置。")
-        }
-        AlertDialog(
-            onDismissRequest = { a.answer(false, false) },
-            title = { Text("「${a.site}」想用你的${BrowserPages.kindsText(a.kinds)}") },
-            text = { Text(notes.joinToString("\n"), style = MaterialTheme.typography.bodyMedium) },
-            confirmButton = {
-                Row {
-                    if (!a.incognito) TextButton(onClick = { a.answer(true, false) }) { Text("只这次") }
-                    TextButton(onClick = { a.answer(true, true) }) { Text("允许") }
-                }
-            },
-            dismissButton = { TextButton(onClick = { a.answer(false, true) }) { Text("不允许") } },
-        )
-    }
-
-    /** Kavi 是不是手机的默认浏览器。 */
-    private fun isDefaultBrowser(): Boolean =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) getSystemService(RoleManager::class.java)?.isRoleHeld(RoleManager.ROLE_BROWSER) == true
-        else packageManager.resolveActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://example.com")), PackageManager.MATCH_DEFAULT_ONLY)
-            ?.activityInfo?.packageName == packageName
-
-    private val askDefault = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+    internal val askDefault = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         defaultBrowser = isDefaultBrowser()
         if (defaultBrowser) JackBrowser.notice = "好了：别的 App 里点网页链接，会直接用 Kavi 浏览器打开。"
     }
-    private var defaultBrowser by mutableStateOf(true)
-
-    /** 设成默认浏览器：新系统弹系统自己的确认框，旧系统打开「默认应用」设置。 */
-    private fun makeDefault() {
-        val role = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) getSystemService(RoleManager::class.java)
-            ?.takeIf { it.isRoleAvailable(RoleManager.ROLE_BROWSER) }?.createRequestRoleIntent(RoleManager.ROLE_BROWSER) else null
-        val intent = role ?: Intent(android.provider.Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)
-        runCatching { askDefault.launch(intent) }.onFailure { JackBrowser.notice = "打不开系统设置。可以到 设置 → 应用 → 默认应用 → 浏览器 里选 Kavi。" }
-    }
-
-    @OptIn(ExperimentalLayoutApi::class)
-    @Composable
-    private fun StartPage() {
-        val b = JackBrowser
-        val colors = MaterialTheme.colorScheme
-        // 常用网站：书签在前，不够八个用默认的补上（同一个网站不重复）
-        val tiles = remember(b.marks) {
-            val defaults = listOf("Google" to "https://www.google.com", "YouTube" to "https://m.youtube.com", "B站" to "https://m.bilibili.com",
-                "淘宝" to "https://main.m.taobao.com", "京东" to "https://m.jd.com", "知乎" to "https://www.zhihu.com",
-                "GitHub" to "https://github.com", "百度" to "https://www.baidu.com")
-            val seen = HashSet<String>()
-            (b.marks.map { BrowserPages.label(it) to it.url } + defaults)
-                .filter { (_, u) -> seen.add(com.jack.ai.api.BrowserSiteData.root(BrowserPages.host(u))) }.take(8)
-        }
-        LazyColumn(Modifier.fillMaxSize().background(colors.background).padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            item {
-                Column(Modifier.fillMaxWidth().padding(top = 48.dp, bottom = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Kavi", style = MaterialTheme.typography.headlineLarge, color = colors.primary)
-                    // 大搜索框：点了就是地址栏（地址栏在底部时，键盘弹起来正好在手边）
-                    Row(Modifier.padding(top = 20.dp).fillMaxWidth().height(52.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(26.dp))
-                        .background(colors.surfaceVariant).clickable { runCatching { addressFocus.requestFocus() } }.padding(start = 16.dp, end = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Search, null, Modifier.size(20.dp), tint = colors.onSurfaceVariant)
-                        Text("搜索或输入网址", Modifier.weight(1f).padding(start = 12.dp), color = colors.onSurfaceVariant)
-                        IconButton(onClick = { startVoice() }) { Icon(AppIcons.Mic, "语音输入", Modifier.size(22.dp)) }
-                        IconButton(onClick = { startScan() }) { Icon(AppIcons.QrScan, "扫二维码", Modifier.size(22.dp)) }
-                    }
-                }
-            }
-            item {
-                tiles.chunked(4).forEach { row ->
-                    Row(Modifier.fillMaxWidth()) {
-                        row.forEach { (label, url) ->
-                            Column(Modifier.weight(1f).clip(Radii.s).clickable { open(url) }.padding(vertical = 10.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally) {
-                                val host = BrowserPages.host(url)
-                                Box(Modifier.size(48.dp).clip(androidx.compose.foundation.shape.CircleShape)
-                                    .background(Color.hsv((host.hashCode().mod(360)).toFloat(), 0.45f, 0.78f)), contentAlignment = Alignment.Center) {
-                                    Text(WebShortcut.letter(label, url), color = Color.White, style = MaterialTheme.typography.titleMedium)
-                                }
-                                Text(label, Modifier.padding(top = 6.dp, start = 2.dp, end = 2.dp), style = MaterialTheme.typography.labelMedium,
-                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
-                        }
-                        repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
-                    }
-                }
-            }
-            val unread = b.later.filterNot { it.read }
-            if (unread.isNotEmpty()) {
-                item { Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.weight(1f)) { Section("阅读列表") }
-                    TextButton(onClick = { showLater = true }) { Text("全部") }
-                } }
-                items(unread.take(5), key = { "l" + it.url }) { e ->
-                    Column(Modifier.fillMaxWidth().clickable { openLater(e) }.padding(vertical = 8.dp)) {
-                        Text(e.title.ifBlank { BrowserPages.host(e.url) }, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(BrowserPages.host(e.url), style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
-                    }
-                }
-            }
-            item { Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.weight(1f)) { Section("书签") }
-                TextButton(onClick = { showMarks = true }) { Text(if (b.marks.isEmpty()) "导入" else "全部（${b.marks.size}）") }
-            } }
-            items(b.marks.drop(8).take(6), key = { "m" + it.url }) { PageRow(it) }
-            if (b.visits.isNotEmpty()) {
-                item {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.weight(1f)) { Section("最近访问") }
-                        TextButton(onClick = { showHistory = true }) { Text("全部历史") }
-                    }
-                }
-                items(b.visits.take(8), key = { "v" + it.url }) { PageRow(it) }
-            }
-            item {
-                Column(Modifier.padding(top = 24.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    LaunchedEffect(Unit) { defaultBrowser = isDefaultBrowser() }
-                    if (!defaultBrowser) Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("别的 App 里点网页链接时直接用 Kavi 打开", Modifier.weight(1f),
-                            style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
-                        TextButton(onClick = { makeDefault() }) { Text("设为默认浏览器") }
-                    }
-                    Text(
-                        "开着 Kavi 专用代理时，国外网站自动走代理，不用开系统 VPN。Kavi 也能用这个浏览器替你操作网页，你在这里登录过的网站它也能用。" +
-                            "这里的登录状态和手机浏览器不共用。不能用来登录 Google 账号（Google 不允许）。",
-                        style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
-                    )
-                }
-            }
-        }
-    }
-
-    @Composable
-    private fun Section(name: String) =
-        Text(name, Modifier.padding(top = 16.dp, bottom = 4.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-
-    @Composable
-    private fun PageRow(v: BrowserPages.Visit) {
-        Column(Modifier.fillMaxWidth().clickable { open(v.url) }.padding(vertical = 8.dp)) {
-            Text(BrowserPages.label(v), style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(BrowserPages.host(v.url), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-        }
-    }
+    internal var defaultBrowser by mutableStateOf(true)
 
     companion object {
         const val EXTRA_URL = "url"
