@@ -1,4 +1,4 @@
-package com.jack.ai.data
+package com.jack.ai.data.media
 
 import java.io.File
 import java.io.RandomAccessFile

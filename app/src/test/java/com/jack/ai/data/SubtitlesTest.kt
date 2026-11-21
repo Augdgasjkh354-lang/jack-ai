@@ -1,11 +1,13 @@
 package com.jack.ai.data
 
-import com.jack.ai.data.Subtitles.Cue
-import com.jack.ai.data.Subtitles.Seg
+import com.jack.ai.data.media.Subtitles.Cue
+import com.jack.ai.data.media.Subtitles.Seg
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.jack.ai.data.media.Subtitles
+import com.jack.ai.data.media.VideoEdit
 
 class SubtitlesTest {
     @Test fun srtRoundTrips() {

@@ -1,4 +1,4 @@
-package com.jack.ai.data
+package com.jack.ai.data.media
 
 import android.content.Context
 import android.graphics.Bitmap

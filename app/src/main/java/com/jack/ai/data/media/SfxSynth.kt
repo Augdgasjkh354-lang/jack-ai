@@ -1,4 +1,4 @@
-package com.jack.ai.data
+package com.jack.ai.data.media
 
 import kotlin.math.PI
 import kotlin.math.exp

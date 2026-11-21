@@ -1,9 +1,10 @@
-package com.jack.ai.data
+package com.jack.ai.data.media
 
 import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.ln
 import kotlin.math.roundToInt
+import com.jack.ai.data.describe
 
 /**
  * 找音乐的节拍（卡点用）：16kHz 单声道 → 每 16 毫秒一帧的响度 → 响度突然变大的地方（起音）→

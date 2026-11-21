@@ -1,13 +1,13 @@
 package com.jack.ai.tools
 
 import com.jack.ai.api.Transcriber
-import com.jack.ai.data.AudioPcm
-import com.jack.ai.data.MediaMux
+import com.jack.ai.data.media.AudioPcm
+import com.jack.ai.data.media.MediaMux
 import com.jack.ai.data.PyRunner
 import com.jack.ai.data.SearchRecord
-import com.jack.ai.data.Subtitles
+import com.jack.ai.data.media.Subtitles
 import com.jack.ai.data.ToolSizes
-import com.jack.ai.data.VideoEdit
+import com.jack.ai.data.media.VideoEdit
 import com.jack.ai.data.Workspace
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -271,13 +271,13 @@ internal fun pageList(spec: String, n: Int): List<Int> {
 
 /** 找音乐的节拍（卡点）：BPM、每一拍和重拍的时间。 */
 private suspend fun ToolSession.beats(f: File): Pair<String, SearchRecord> {
-    val on = com.jack.ai.data.Beats.Onsets()
+    val on = com.jack.ai.data.media.Beats.Onsets()
     withContext(Dispatchers.IO) {
         MediaMux.decode16k(f, 20 * 60L, { at, total -> if (total > 0) ui.progress("找节拍：${at * 100 / total}%") }) { on.push(it) }
     }
-    val r = withContext(Dispatchers.Default) { com.jack.ai.data.Beats.detect(on.flux(), on.samples) }
+    val r = withContext(Dispatchers.Default) { com.jack.ai.data.media.Beats.detect(on.flux(), on.samples) }
         ?: return "「${f.name}」太短或者听不出节奏（要 4 秒以上、有鼓点的音乐）。" to SearchRecord("找节拍：${f.name}")
-    return com.jack.ai.data.Beats.describe(r, f.name) + "\n卡点：让每段的长度等于两个重拍（或拍子）之间的间隔，段落切换就落在拍子上。" to
+    return com.jack.ai.data.media.Beats.describe(r, f.name) + "\n卡点：让每段的长度等于两个重拍（或拍子）之间的间隔，段落切换就落在拍子上。" to
         SearchRecord("找节拍：${f.name}（${r.bpm.toInt()} BPM）")
 }
 
@@ -307,17 +307,17 @@ private suspend fun ToolSession.voiceover(args: JsonObject): String {
                     gate.withPermit {
                         val raw = com.jack.ai.api.DeepSeekTools.ttsStream(key, line, voice).use { it.readBytes() }
                         host.store.addPaidCall(com.jack.ai.api.DeepSeekTools.TTS_KEY, com.jack.ai.api.DeepSeekTools.ttsChars(line) * com.jack.ai.api.DeepSeekTools.TTS_PRICE_PER_CHAR)
-                        pcm[i] = com.jack.ai.data.VoiceTrack.trim(raw, rate)
+                        pcm[i] = com.jack.ai.data.media.VoiceTrack.trim(raw, rate)
                         ui.progress("配音：${synchronized(pcm) { ++done }}/${lines.size} 句")
                     }
                 }
             }.awaitAll()
         }
-        val (audio, cues) = com.jack.ai.data.VoiceTrack.join(lines, pcm.map { it!! }, rate, pauseMs)
+        val (audio, cues) = com.jack.ai.data.media.VoiceTrack.join(lines, pcm.map { it!! }, rate, pauseMs)
         val wav = Workspace.uniqueFile(wsDir, "$name.wav")
         val srt = File(wsDir, wav.nameWithoutExtension + ".srt")
         withContext(Dispatchers.IO) {
-            com.jack.ai.data.VideoCompose.Wav.write(wav, audio, rate)
+            com.jack.ai.data.media.VideoCompose.Wav.write(wav, audio, rate)
             srt.writeText(Subtitles.toSrt(cues))
         }
         ui.attach(wav)
@@ -357,7 +357,7 @@ private suspend fun ToolSession.makeVideo(args: JsonObject): String {
     val raw = args["plan"]
     val o = (raw as? JsonObject) ?: runCatching { Json.parseToJsonElement(raw.text()).jsonObject }.getOrNull()
         ?: return "make_video 要写 plan：剪辑方案（clips、texts、subtitles、music……），格式见工具说明"
-    val (plan, err) = com.jack.ai.data.VideoPlan.parse(o) { it.substringAfterLast('.', "").lowercase() in IMAGE_EXT }
+    val (plan, err) = com.jack.ai.data.media.VideoPlan.parse(o) { it.substringAfterLast('.', "").lowercase() in IMAGE_EXT }
     if (plan == null) return "剪辑方案有问题：$err。改好再调。"
     val names = (plan.clips.map { it.file } + listOfNotNull(plan.subtitles, plan.music, plan.voiceover)).distinct()
     val files = mutableMapOf<String, File>()
@@ -367,13 +367,13 @@ private suspend fun ToolSession.makeVideo(args: JsonObject): String {
         val subs = plan.subtitles?.let { name ->
             val cues = withContext(Dispatchers.IO) { Subtitles.parseSrt(files.getValue(name).readText()) }
             if (cues.isEmpty()) throw IllegalStateException("「$name」里没读出字幕，要 .srt（transcribe 加 timestamps=true 会做一份）")
-            val source = plan.subtitleSource ?: plan.clips.firstOrNull { !it.image }?.file ?: com.jack.ai.data.VideoPlan.OUTPUT
+            val source = plan.subtitleSource ?: plan.clips.firstOrNull { !it.image }?.file ?: com.jack.ai.data.media.VideoPlan.OUTPUT
             cues to source
         }
         val dst = outFile(args["out"].text(), first, "成片", "mp4")
         val work = File(wsCache, "compose-${System.currentTimeMillis()}")
         try {
-            val d = com.jack.ai.data.VideoCompose.make(app, plan, { files.getValue(it) }, subs, plan.music?.let { files.getValue(it) }, plan.voiceover?.let { files.getValue(it) }, work, dst) { ui.progress(it) }
+            val d = com.jack.ai.data.media.VideoCompose.make(app, plan, { files.getValue(it) }, subs, plan.music?.let { files.getValue(it) }, plan.voiceover?.let { files.getValue(it) }, work, dst) { ui.progress(it) }
             ui.attach(dst)
             val text = buildString {
                 append("出好了：「${dst.name}」（${Subtitles.stamp(d.durationMs).substringBefore('.')}，${d.width}×${d.height}，${ToolSizes.text(dst.length())}），已经显示在聊天里。")
@@ -396,9 +396,9 @@ private const val WATCH_LISTEN_MAX_MS = 30 * 60_000L
  * start、end 只看那一段，帧抽得更密。
  */
 private suspend fun ToolSession.watchVideo(f: File, args: JsonObject): Pair<String, SearchRecord> {
-    val info = withContext(Dispatchers.IO) { com.jack.ai.data.VideoFrames.info(f) }
+    val info = withContext(Dispatchers.IO) { com.jack.ai.data.media.VideoFrames.info(f) }
         ?: throw IllegalStateException("「${f.name}」读不出来：可能不是视频，或者是手机不支持的格式")
-    val stampOf = com.jack.ai.data.VideoFrames::stamp
+    val stampOf = com.jack.ai.data.media.VideoFrames::stamp
     if (!info.hasVideo && info.width == 0) return ("「${f.name}」没有画面（是纯音频），用 transcribe 转文字。") to SearchRecord("看视频：${f.name}（没有画面）")
     val dur = info.durationMs
     val start = args["start"].text().takeIf { it.isNotBlank() }?.let { VideoEdit.parseTime(it) ?: throw IllegalStateException("start 看不懂：写成 1:23 或秒数") } ?: 0L
@@ -408,16 +408,16 @@ private suspend fun ToolSession.watchVideo(f: File, args: JsonObject): Pair<Stri
     val text = StringBuilder("「${f.name}」${stampOf(dur)}，${info.width}×${info.height}" + (if (!info.hasAudio) "，没有声音" else "") +
         (if (part) "。这次只看 ${stampOf(start)}–${stampOf(end)}" else "") + "。\n")
     if (canSee) {
-        val keep = com.jack.ai.data.VideoFrames.keepFor(end - start)
+        val keep = com.jack.ai.data.media.VideoFrames.keepFor(end - start)
         val frames = withContext(Dispatchers.IO) {
-            com.jack.ai.data.VideoFrames.extract(f, start, end, keep) { i, n -> ui.progress("看视频：抽帧 $i/$n") }
+            com.jack.ai.data.media.VideoFrames.extract(f, start, end, keep) { i, n -> ui.progress("看视频：抽帧 $i/$n") }
         }
         if (frames.isEmpty()) text.append("画面抽不出来（这个格式手机解不了），只能听声音。\n")
         else {
             val grids = withContext(Dispatchers.Default) {
-                frames.chunked(com.jack.ai.data.VideoFrames.PER_GRID).map { g ->
-                    val b = com.jack.ai.data.VideoFrames.grid(g)
-                    com.jack.ai.data.VideoFrames.dataUrl(b).also { b.recycle() }
+                frames.chunked(com.jack.ai.data.media.VideoFrames.PER_GRID).map { g ->
+                    val b = com.jack.ai.data.media.VideoFrames.grid(g)
+                    com.jack.ai.data.media.VideoFrames.dataUrl(b).also { b.recycle() }
                 }
             }
             frames.forEach { it.bmp.recycle() }
@@ -443,7 +443,7 @@ private suspend fun ToolSession.watchVideo(f: File, args: JsonObject): Pair<Stri
         }
         val body = timed?.let { t ->
             val all = withContext(Dispatchers.IO) { t.readText() }.substringAfter("\n\n").trim()
-            if (part) com.jack.ai.data.VideoFrames.transcriptBetween(all, start, end) else all
+            if (part) com.jack.ai.data.media.VideoFrames.transcriptBetween(all, start, end) else all
         }.orEmpty()
         when {
             body.isNotBlank() -> text.append("\n声音的文字稿（「${timed!!.name}」，机器转写可能有错字、同音字）：\n")

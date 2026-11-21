@@ -163,7 +163,7 @@ private fun RecordBar(session: com.jack.ai.RecordService.Session) {
             Box(Modifier.size(10.dp).background(if (paused) colors.outline else colors.error, CircleShape))
             Spacer(Modifier.size(8.dp))
             Column(Modifier.weight(1f)) {
-                Text((if (paused) "暂停 " else "录音 ") + com.jack.ai.data.AudioPcm.stamp(session.elapsed(now) / 1000),
+                Text((if (paused) "暂停 " else "录音 ") + com.jack.ai.data.media.AudioPcm.stamp(session.elapsed(now) / 1000),
                     style = MaterialTheme.typography.titleSmall.tabular, color = colors.onErrorContainer)
                 Box(Modifier.padding(top = 4.dp).fillMaxWidth(0.8f).height(3.dp).background(colors.onErrorContainer.copy(alpha = 0.15f), CircleShape)) {
                     Box(Modifier.fillMaxWidth(if (paused) 0f else level.coerceIn(0.02f, 1f)).height(3.dp).background(colors.onErrorContainer, CircleShape))

@@ -7,6 +7,7 @@ import org.junit.Test
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.sin
+import com.jack.ai.data.media.Beats
 
 class BeatsTest {
     /** 合成一段鼓点：bpm 一拍一下（每 4 拍第一下更响），底下垫一点噪声和持续音。 */

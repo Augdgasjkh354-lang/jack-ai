@@ -6,6 +6,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.jack.ai.data.media.Subtitles
+import com.jack.ai.data.media.VideoPlan
 
 class VideoPlanTest {
     private fun parse(s: String) = VideoPlan.parse(Json.parseToJsonElement(s).jsonObject) { it.endsWith(".jpg") }

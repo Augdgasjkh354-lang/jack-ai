@@ -8,6 +8,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.GraphicsMode
 import com.jack.ai.data.design.TextArt
+import com.jack.ai.data.media.VideoCompose
+import com.jack.ai.data.media.VideoPlan
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)

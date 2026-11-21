@@ -1,5 +1,7 @@
 package com.jack.ai.data
 
+import com.jack.ai.data.media.AudioPcm
+
 /** 录音纪要、「用 Kavi 总结」替用户发的那句话：说清要转文字、怎么整理。 */
 object Minutes {
     /** 录完音：转文字 → 纪要；和客户谈的顺手记进客户表。 */

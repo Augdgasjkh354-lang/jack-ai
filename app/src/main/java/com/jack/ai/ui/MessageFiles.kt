@@ -126,7 +126,7 @@ internal fun VideoThumb(path: String, maxW: Dp, maxH: Dp, modifier: Modifier = M
     val loaded by produceState<Pair<Bitmap?, Long>?>(null, path) {
         value = withContext(Dispatchers.IO) {
             val f = File(path)
-            val info = com.jack.ai.data.VideoFrames.info(f)
+            val info = com.jack.ai.data.media.VideoFrames.info(f)
             val b = runCatching {
                 val r = android.media.MediaMetadataRetriever()
                 try {
@@ -152,7 +152,7 @@ internal fun VideoThumb(path: String, maxW: Dp, maxH: Dp, modifier: Modifier = M
             Icon(Icons.Default.PlayArrow, "播放", tint = Color.White, modifier = Modifier.size(if (maxW < 80.dp) 16.dp else 30.dp))
         }
         val dur = loaded?.second ?: -1L
-        if (dur > 0 && maxW >= 80.dp) Text(com.jack.ai.data.VideoFrames.stamp(dur), color = Color.White, style = MaterialTheme.typography.labelSmall,
+        if (dur > 0 && maxW >= 80.dp) Text(com.jack.ai.data.media.VideoFrames.stamp(dur), color = Color.White, style = MaterialTheme.typography.labelSmall,
             modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp).background(Color.Black.copy(alpha = 0.5f), Radii.s).padding(horizontal = 5.dp, vertical = 1.dp))
     }
 }

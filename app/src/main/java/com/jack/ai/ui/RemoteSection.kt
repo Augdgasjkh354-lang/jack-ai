@@ -34,7 +34,7 @@ import com.jack.ai.ChatViewModel
 import com.jack.ai.RemoteService
 import com.jack.ai.api.sharedHttp
 import com.jack.ai.data.ClaimResult
-import com.jack.ai.data.QrImage
+import com.jack.ai.data.media.QrImage
 import com.jack.ai.data.RemoteClient
 import com.jack.ai.data.RemoteDevice
 import com.jack.ai.data.RemoteInvite

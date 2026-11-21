@@ -8,6 +8,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import com.jack.ai.data.media.Subtitles
+import com.jack.ai.data.media.VideoCompose
+import com.jack.ai.data.media.VideoPlan
+import com.jack.ai.data.media.VoiceTrack
 
 class VoiceTrackTest {
     @get:Rule val tmp = TemporaryFolder()

@@ -6,6 +6,7 @@ import org.junit.Test
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.sin
+import com.jack.ai.data.media.AudioPcm
 
 class SpeechSplitterTest {
     private val rate = AudioPcm.RATE

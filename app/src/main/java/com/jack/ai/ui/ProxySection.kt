@@ -31,7 +31,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jack.ai.ChatViewModel
-import com.jack.ai.data.QrImage
+import com.jack.ai.data.media.QrImage
 import com.jack.ai.data.Settings
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions

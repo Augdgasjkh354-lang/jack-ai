@@ -1,4 +1,4 @@
-package com.jack.ai.data
+package com.jack.ai.data.media
 
 /**
  * 配音的拼接（不碰 Android，好测）：每句是 16 位单声道 PCM。先把每句头尾的静音剪到只剩一点，

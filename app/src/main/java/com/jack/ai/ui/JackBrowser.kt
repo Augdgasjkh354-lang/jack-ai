@@ -1183,7 +1183,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
                 out.toByteArray()
             }
         }
-        return withContext(Dispatchers.Default) { com.jack.ai.data.QrImage.decode(bytes) }
+        return withContext(Dispatchers.Default) { com.jack.ai.data.media.QrImage.decode(bytes) }
     }
 
     // ---- 长的浏览记录 ----

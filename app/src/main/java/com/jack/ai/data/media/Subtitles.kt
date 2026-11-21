@@ -1,4 +1,4 @@
-package com.jack.ai.data
+package com.jack.ai.data.media
 
 /**
  * 带时间的文字稿 / 字幕：转文字时按停顿切出来的一句句（[Cue]），存成 .srt；剪视频时按选中的片段把时间对到成片上，

@@ -7,6 +7,8 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import com.jack.ai.data.media.AudioPcm
+import com.jack.ai.data.media.VideoEdit
 
 class FileToolboxTest {
     @Test
