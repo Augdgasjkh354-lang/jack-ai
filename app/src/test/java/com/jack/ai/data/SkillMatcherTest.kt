@@ -26,7 +26,7 @@ class SkillMatcherTest {
         assertTrue((SkillIds.PLUGINS - SkillIds.FLOWS).all { it in ids })
         assertTrue(SkillIds.TOOL_PLUGIN.values.all { it in SkillIds.PLUGINS })
         val playbooks = BUILTIN_SKILLS.filter { it.id !in SkillIds.PLUGINS }.map { it.name }
-        assertEquals(15, playbooks.size)
-        assertTrue("视频剪辑" in playbooks)
+        assertEquals(16, playbooks.size)
+        assertTrue("视频剪辑" in playbooks && "小红书视觉导演" in playbooks)
     }
 }
