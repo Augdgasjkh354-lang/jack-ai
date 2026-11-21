@@ -252,7 +252,8 @@ class NudgeFeedback : BroadcastReceiver() {
         val pending = goAsync()
         Thread {
             try {
-                Proactive.feedback(ctx.applicationContext, at, v)
+                // 裸线程里抛出来的异常没人接，会让整个 App 闪退：读写出错就算了
+                runCatching { Proactive.feedback(ctx.applicationContext, at, v) }
                 NotificationManagerCompat.from(ctx).cancel(intent.getIntExtra("nid", 0))
             } finally {
                 pending.finish()

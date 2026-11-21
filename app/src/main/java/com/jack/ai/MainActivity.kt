@@ -155,7 +155,8 @@ class MainActivity : FragmentActivity() {
             // 悬浮球或长按电源键叫出来：带上当前屏幕开个新对话
             com.jack.ai.a11y.ScreenAsk.ACTION -> {
                 stack.clear()
-                vm.askScreen(intent.getStringExtra("app").orEmpty(), intent.getStringExtra("text"), intent.getStringExtra("shot"))
+                // 这个入口别的 App 也能调：文件只认 Kavi 自己截屏时存的那个文件夹里的
+                vm.askScreen(intent.getStringExtra("app").orEmpty(), screenAskFile(intent.getStringExtra("text")), screenAskFile(intent.getStringExtra("shot")))
             }
             ACTION_CAMERA -> { stack.clear(); vm.newChat(); vm.requestCamera() }
             ACTION_DOWNLOADS -> { stack.clear(); stack.add(Screen.Downloads) }
@@ -183,13 +184,31 @@ class MainActivity : FragmentActivity() {
 
     @Suppress("DEPRECATION")
     private fun streamExtra(intent: Intent): Uri? =
-        if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
-        else intent.getParcelableExtra(Intent.EXTRA_STREAM)
+        (if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        else intent.getParcelableExtra(Intent.EXTRA_STREAM))?.takeIf { sharedFromOutside(it, intent) }
 
     @Suppress("DEPRECATION")
     private fun streamListExtra(intent: Intent): List<Uri> =
         (if (Build.VERSION.SDK_INT >= 33) intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
-        else intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM)).orEmpty()
+        else intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM)).orEmpty().filter { sharedFromOutside(it, intent) }
+
+    /**
+     * 分享进来的地址能不能收：Kavi 读得到自己的私有文件（聊天记录、设置、Key），别的 App 要是递一个指向它们的地址
+     * （file:// 指到 Kavi 的数据目录，或 Kavi 自己的 content://），Kavi 会把私有文件当成附件放进对话，一发就交给了模型。
+     * 正常分享都是对方 App 自己的 content://，不受影响；Kavi 自己的浏览器带着 [INTERNAL_TOKEN]，照收。
+     */
+    private fun sharedFromOutside(uri: Uri, intent: Intent): Boolean =
+        (intent.getStringExtra(EXTRA_INTERNAL) == INTERNAL_TOKEN ||
+            ShareGuard.outside(uri.scheme, uri.authority, uri.path, packageName, listOfNotNull(java.io.File(applicationInfo.dataDir), getExternalFilesDir(null)?.parentFile)))
+            .also { ok -> if (!ok) android.widget.Toast.makeText(this, "不能从这里打开 Kavi 自己的私有文件", android.widget.Toast.LENGTH_SHORT).show() }
+
+    /** 「问这一屏」带来的文件：只认 [com.jack.ai.a11y.ScreenAsk] 存截屏的那个文件夹里的。 */
+    private fun screenAskFile(path: String?): String? = path?.takeIf { p ->
+        runCatching {
+            val f = java.io.File(p).canonicalFile
+            f.isFile && f.parentFile?.canonicalPath == java.io.File(cacheDir, "screen_ask").canonicalPath
+        }.getOrDefault(false)
+    }
 
     fun canLock(): Boolean =
         BiometricManager.from(this).canAuthenticate(BIOMETRIC_WEAK or DEVICE_CREDENTIAL) == BiometricManager.BIOMETRIC_SUCCESS
@@ -364,6 +383,9 @@ class MainActivity : FragmentActivity() {
     }
 
     companion object {
+        /** Kavi 自己（浏览器）把自己的文件交给聊天时带上的暗号：每次启动随机生成，别的 App 不知道，见 [sharedFromOutside]。 */
+        val INTERNAL_TOKEN: String = java.util.UUID.randomUUID().toString()
+        const val EXTRA_INTERNAL = "com.jack.ai.INTERNAL"
         /** 最后一次在前台（已解锁）的时间，跨页面重建保留。 */
         /** 上次用 Kavi 的时间（聊天页和浏览器共用）：离开超过 30 秒再回来才上锁，两边来回切不锁。 */
         var lastActive = 0L

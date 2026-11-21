@@ -523,6 +523,7 @@ internal fun BrowserActivity.askKavi(prompt: String? = null) {
         val uri = androidx.core.content.FileProvider.getUriForFile(this@askKavi, "$packageName.files", f)
         startActivity(Intent(this@askKavi, com.jack.ai.MainActivity::class.java).setAction(Intent.ACTION_SEND)
             .setType("text/plain").putExtra(Intent.EXTRA_STREAM, uri)
+            .putExtra(com.jack.ai.MainActivity.EXTRA_INTERNAL, com.jack.ai.MainActivity.INTERNAL_TOKEN)
             .apply { if (prompt != null) putExtra(Intent.EXTRA_TEXT, prompt) }
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             // 回到已经开着的聊天页（不另开一个），浏览器的网页留着，下次打开还在

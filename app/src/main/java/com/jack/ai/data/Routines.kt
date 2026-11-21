@@ -144,10 +144,35 @@ fun Routine.nextAt(now: Long = System.currentTimeMillis()): Long? {
     return null
 }
 
+/** 一次性提醒、任务定的那个时刻（不管过没过）；不是一次性的返回 null。 */
+fun Routine.oneShotAt(): Long? {
+    if (repeat != "none" || kind == "watch") return null
+    val anchor = runCatching { DAY_FMT.parse(date) }.getOrNull()
+    return Calendar.getInstance().apply {
+        if (anchor != null) time = anchor
+        set(Calendar.HOUR_OF_DAY, hour); set(Calendar.MINUTE, minute); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+}
+
+/** 一次性的、时间已经过了还没跑过（手机关着、App 被杀时错过的），并且没过太久：要补一次。 */
+fun Routine.missed(now: Long = System.currentTimeMillis()): Boolean {
+    if (!enabled) return false
+    val at = oneShotAt() ?: return false
+    return at <= now && now - at <= Routines.CATCH_UP_MS && lastRunAt < at
+}
+
 object Routines {
     private const val CHANNEL = "routines"
+    /** 错过的一次性提醒、任务多久以内补跑；再久就算了，免得几天后突然冒出来。 */
+    const val CATCH_UP_MS = 24 * 60 * 60 * 1000L
 
-    fun scheduleAll(ctx: Context) = Store(ctx).loadRoutines().forEach { schedule(ctx, it) }
+    /**
+     * 开机、更新、改时间、打开 App 时重排所有提醒。一次性的错过了（关机期间到点）：
+     * 以前算不出「下一次」就再也不排了，一直不跑；现在 24 小时以内的补跑一次。
+     */
+    fun scheduleAll(ctx: Context) = Store(ctx).loadRoutines().forEach { r ->
+        if (r.missed()) runCatching { fire(ctx, r.id) } else schedule(ctx, r)
+    }
 
     fun schedule(ctx: Context, r: Routine) {
         val am = ctx.getSystemService(AlarmManager::class.java)
@@ -244,6 +269,8 @@ object Routines {
     }
 
     /** 到点了：提醒直接弹通知，任务交给后台去跑。然后排下一次。 */
+    /** 同一个进程里闹钟到点和开机补跑可能同时来：排着队，第二个看到已经跑过（一次性的已关掉）就不再跑。 */
+    @Synchronized
     fun fire(ctx: Context, id: String) {
         val store = Store(ctx)
         val list = store.loadRoutines()

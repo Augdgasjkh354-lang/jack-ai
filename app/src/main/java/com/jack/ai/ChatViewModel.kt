@@ -843,7 +843,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 if (leftover.isNotEmpty()) viewModelScope.launch {
                     me?.join()
-                    if (_state.value.currentId == convId) send(leftover.joinToString("\n"))
+                    resendLeftover(convId, leftover.joinToString("\n"))
                 }
                 // Work 一时出错停下（网络断了、服务忙）：等一会儿自动接着做，连着最多 AUTO_RESUME_MAX 次；用户停下、花费到上限、复核的不接
                 if (failure == null) autoResumes.remove(convId)
@@ -873,6 +873,22 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 if (failure == null) maybeReviewMemory(convId)
             }
         }
+    }
+
+    /**
+     * 回答收尾时还没用上的插话，当成这个对话的新消息发出去。
+     * 以前只在用户还停在这个对话时才发，切到别的对话就悄悄丢了；发不出去（同时在答的太多、额度用完）也丢了。
+     * 现在不在这个对话也照发；发不出去就先作为一条消息记进对话，不丢字，等用户自己再发。
+     */
+    private fun resendLeftover(convId: String, text: String) {
+        val conv = _state.value.conversations.firstOrNull { it.id == convId } ?: return
+        // 又有新回答开始了（比如用户点了接着做）：交给它当插话
+        if (busy(convId)) { interjectionsOf(convId) += text; return }
+        if (_state.value.currentId == convId && _state.value.pending.isEmpty() && send(text)) return
+        updateConv(convId) { it.copy(messages = it.messages + ChatMessage(role = "user", content = text)) }
+        val blocked = conv.closedReason.isNotEmpty() || com.jack.ai.data.Quota.blocked(getApplication(), _state.value.settings) != null
+        if (blocked || tooMany(convId)) { core.toast("插的话没来得及用上，已记在对话「${conv.title.take(12)}」里，等会儿再发一次"); persist(); return }
+        startReply(convId)
     }
 
     private val reviewing = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()

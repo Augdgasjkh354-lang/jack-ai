@@ -128,6 +128,8 @@ internal suspend fun ChatViewModel.rewindFiles(conv: Conversation, leavingId: St
         val ws = Workspace.dir(app, key)
         val saved = com.jack.ai.data.Checkpoints.store(app, key)
         if (!com.jack.ai.data.Checkpoints.has(saved, restoreName)) return@withContext null
+        // 项目里的对话共用一个文件夹：退回会把别的对话（或用户自己）后来放进去、改过的文件一起删掉、改回去，所以不退
+        if (conv.projectId != null) return@withContext null
         if (!com.jack.ai.data.Checkpoints.save(ws, saved, com.jack.ai.data.Checkpoints.endName(leavingId)))
             return@withContext "对话文件夹太大，这次文件没有退回去"
         val r = com.jack.ai.data.Checkpoints.restore(ws, saved, restoreName) ?: return@withContext "对话文件夹太大，这次文件没有退回去"

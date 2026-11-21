@@ -101,7 +101,10 @@ object VoiceChat {
             phase = Phase.LISTENING
             VoiceMode.on = true
             VoiceMode.convId = vm.state.value.currentId
-            val wav = withContext(Dispatchers.IO) { runCatching { listen(app) }.getOrElse { e -> if (e is kotlinx.coroutines.CancellationException) throw e; null } }
+            val rec = withContext(Dispatchers.IO) { runCatching { listen(app) } }
+            // 麦克风打不开、录音中断：照实说，别说成「没听到你说话」
+            rec.exceptionOrNull()?.let { e -> if (e is kotlinx.coroutines.CancellationException) throw e; toast(app, "录音出错：${e.message ?: "麦克风用不了"}，语音对话先停了"); return }
+            val wav = rec.getOrNull()
             if (wav == null) { toast(app, "半分钟没听到你说话，语音对话先停了"); return }
             phase = Phase.THINKING
             level = 0f
