@@ -23,6 +23,12 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import java.io.File
+import com.jack.ai.ui.userAgent
+import com.jack.ai.ui.routeFor
+import com.jack.ai.ui.cookieFor
+import com.jack.ai.ui.mediaPage
+import com.jack.ai.ui.collectDownloads
+import com.jack.ai.ui.store
 
 /**
  * 下载：download_file 给网址直接下（文件、m3u8 视频），browser 的 download_all（整页的图片、附件）、

@@ -35,6 +35,8 @@ import java.io.File
 import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Locale
+import com.jack.ai.ui.pin
+import com.jack.ai.ui.closeTab
 
 /** 工具要改 App 里的数据时找它（由 ChatViewModel 提供）。 */
 /** 一次回答最多调用几轮工具。 */

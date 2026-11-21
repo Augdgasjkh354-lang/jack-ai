@@ -160,14 +160,14 @@ object JackBrowser {
     /** 网页里选中文字点「问 Kavi」时调（浏览器页开着时才有）。 */
     var askSelection: ((String) -> Unit)? = null
 
-    private const val INCOGNITO = "jack-incognito"
+    internal const val INCOGNITO = "jack-incognito"
 
     /** 网页组件支不支持隐身和分身（分开的 Cookie 和存储，要较新的 WebView）。 */
     fun incognitoSupported() = WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)
 
     /** 最多几个分身。 */
     const val ACCOUNTS = 3
-    private fun accountProfile(n: Int) = "jack-account-$n"
+    internal fun accountProfile(n: Int) = "jack-account-$n"
 
     /** 这个标签页用的 Cookie（分身、隐身各有各的）。 */
     fun cookiesOf(t: Tab): CookieManager {
@@ -183,14 +183,14 @@ object JackBrowser {
     }
 
     /** 隐身的 Cookie、网页存储全删掉（没有隐身页在用时整个删）。 */
-    private fun clearIncognito() {
+    internal fun clearIncognito() {
         if (!incognitoSupported()) return
         val store = androidx.webkit.ProfileStore.getInstance()
         if (runCatching { store.deleteProfile(INCOGNITO) }.getOrDefault(false)) return
         store.getProfile(INCOGNITO)?.let { p -> p.cookieManager.removeAllCookies(null); p.webStorage.deleteAllData() }
     }
     var current by mutableIntStateOf(0)
-        private set
+        internal set
     private var nextTabId = 0
     /** 还没建网页窗口时，界面读到的空白页。 */
     private val blank = Tab(-1)
@@ -198,7 +198,7 @@ object JackBrowser {
      * 当前这一页。Kavi 在自己的后台标签页里做事时（[PinTab] 钉住的那段操作里），读到的是它那一页，
      * 下面的 address、title、error 这些也跟着是那一页；界面和用户看的始终是 tabs[current]。
      */
-    private val pinLocal = ThreadLocal<PinTab?>()
+    internal val pinLocal = ThreadLocal<PinTab?>()
     val tab: Tab get() = pinLocal.get()?.t ?: tabs.getOrNull(current) ?: blank
 
     // 下面这些都是当前这一页的，界面和 browser 工具照旧这样读
@@ -215,13 +215,13 @@ object JackBrowser {
     var external by mutableStateOf<String?>(null)
     var notice by mutableStateOf<String?>(null)
     var searchEngine by mutableStateOf(BrowserNet.AUTO)
-        private set
+        internal set
     fun changeSearchEngine(engine: String) {
         searchEngine = engine
         prefs().edit().putString("searchEngine", engine).apply()
     }
     var route by mutableStateOf(BrowserNet.AUTO)
-        private set
+        internal set
     /** 网页要下载、还没决定下不下的文件。 */
     var pending by mutableStateOf<BrowserDownload.Pending?>(null)
     /** 这一页（Kavi 钉住的那页，或当前页）要下载的文件；别的标签页的不算（几个回答同时用浏览器时各管各的）。 */
@@ -244,8 +244,8 @@ object JackBrowser {
     /** 浏览器页开着时由它向系统要手机权限（相机、麦克风、位置），回调给没给。 */
     var systemPerms: ((Set<String>, (Boolean) -> Unit) -> Unit)? = null
     /** 记住的网站权限：允许的、不允许的（「网站|权限」）。 */
-    private var permYes = setOf<String>()
-    private var permNo = setOf<String>()
+    internal var permYes = setOf<String>()
+    internal var permNo = setOf<String>()
     /** 用户长按了链接或图片，等浏览器页弹菜单。 */
     var pressed by mutableStateOf<Pressed?>(null)
     data class Pressed(val link: String?, val image: String?)
@@ -254,14 +254,14 @@ object JackBrowser {
     var later by mutableStateOf(listOf<BrowserPages.Later>())
     var marks by mutableStateOf(listOf<BrowserPages.Visit>())
     /** 网页跟着 App 变深色（浅色主题时不变）。 */
-    private var darkAllowed = true
+    internal var darkAllowed = true
     /** 去广告开没开、哪些网站不去（网站名）。拦截在后台线程读，所以另存一份。 */
     var adBlock by mutableStateOf(true)
-        private set
+        internal set
     var adAllow by mutableStateOf(setOf<String>())
-        private set
-    @Volatile private var adBlockNow = true
-    @Volatile private var adAllowNow = setOf<String>()
+        internal set
+    @Volatile internal var adBlockNow = true
+    @Volatile internal var adAllowNow = setOf<String>()
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
 
     /** 这个网站名下拦不拦广告。 */
@@ -269,10 +269,10 @@ object JackBrowser {
 
     // ---------- 网页脚本（像油猴脚本） ----------
     var scripts by mutableStateOf(listOf<com.jack.ai.api.UserScripts.Script>())
-        private set
+        internal set
     private val scriptList = kotlinx.serialization.builtins.ListSerializer(com.jack.ai.api.UserScripts.Script.serializer())
     private fun scriptsFile() = java.io.File(app.filesDir, "user_scripts.json")
-    private fun loadScripts() {
+    internal fun loadScripts() {
         scripts = runCatching { listJson.decodeFromString(scriptList, scriptsFile().readText()) }.getOrNull().orEmpty()
     }
     private fun saveScripts() { runCatching { scriptsFile().writeText(listJson.encodeToString(scriptList, scripts)) } }
@@ -310,8 +310,8 @@ object JackBrowser {
 
     // ---------- 跟踪器、只用加密连接 ----------
     var trackBlock by mutableStateOf(true)
-        private set
-    @Volatile private var trackBlockNow = true
+        internal set
+    @Volatile internal var trackBlockNow = true
     fun changeTrackBlock(on: Boolean) {
         trackBlock = on; trackBlockNow = on
         prefs().edit().putBoolean("trackblock", on).apply()
@@ -320,9 +320,9 @@ object JackBrowser {
     private fun blocksTrackers(site: String) = trackBlockNow && adAllowNow.none { site == it || site.endsWith(".$it") }
 
     var httpsOnly by mutableStateOf(true)
-        private set
+        internal set
     /** 用户选过「仍然打开」的不加密网站（按网站记住）。 */
-    private var httpOk = setOf<String>()
+    internal var httpOk = setOf<String>()
     fun changeHttpsOnly(on: Boolean) {
         httpsOnly = on
         prefs().edit().putBoolean("httpsonly", on).apply()
@@ -469,7 +469,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
 
     fun adAllowedHere() = BrowserPages.site(address).let { s -> s.isNotEmpty() && adAllow.any { s == it || s.endsWith(".$it") } }
 
-    private fun reloadCurrent() {
+    internal fun reloadCurrent() {
         val w = web ?: return
         if (address.isNotEmpty()) { clearError(); w.reload() }
     }
@@ -538,10 +538,10 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
     var desktopSites by mutableStateOf(setOf<String>())
     /** 所有网站默认用电脑版（默认开：很多报名、办事网站手机上打不开或缺功能）；开着时 [mobileSites] 里的网站例外用手机版。 */
     var desktopAll by mutableStateOf(true)
-        private set
+        internal set
     /** 网页字号（百分比，所有网页通用）。 */
     var textZoom by mutableIntStateOf(100)
-        private set
+        internal set
 
     fun changeTextZoom(z: Int) {
         textZoom = z
@@ -599,9 +599,9 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
 
     /** 电脑版放大多少（百分比，见 BrowserPages.desktopWidth）。 */
     var desktopZoom by mutableIntStateOf(100)
-        private set
+        internal set
 
-    private fun desktopWidth() = BrowserPages.desktopWidth(desktopZoom)
+    internal fun desktopWidth() = BrowserPages.desktopWidth(desktopZoom)
 
     /** 换电脑版放大比例：每个标签页的电脑版脚本按新宽度重装，当前是电脑版就重新打开。 */
     fun changeDesktopZoom(zoom: Int) {
@@ -617,22 +617,22 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         if (address.isNotEmpty() && isDesktopAt(address)) { clearError(); w.reload() }
     }
     var mobileSites by mutableStateOf(setOf<String>())
-        private set
+        internal set
 
     /** 这个网址用不用电脑版。 */
     fun isDesktopAt(url: String): Boolean =
         if (desktopAll) BrowserPages.site(url).isNotEmpty() && !BrowserPages.isDesktop(mobileSites, url) else BrowserPages.isDesktop(desktopSites, url)
     /** 用户设了「总走代理」的网站（自动线路下也不直连，真实 IP 不暴露给它）。 */
     var proxySites by mutableStateOf(setOf<String>())
-        private set
+        internal set
     /** 允不允许网页用 WebRTC（视频通话要它，但它能绕过代理查到真实 IP）；默认不许。 */
     var webrtcAllowed by mutableStateOf(false)
-        private set
+        internal set
     /** 手机版的浏览器标识（去掉了 App 内嵌标记）；电脑版的由它换算。 */
-    private var mobileUa = ""
+    internal var mobileUa = ""
 
     /** 下载在后台跑，离开浏览器页也不停。 */
-    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
+    internal val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
 
     /** Kavi 最近一次操作网页的时刻；聊天页据此留一个放网页窗口的落点（见 BrowserHiddenHost）。 */
     var agentAt by mutableLongStateOf(0L)
@@ -654,15 +654,18 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
      */
     fun chatMayHost(w: WebView?): Boolean = !(userViewing && w != null && w === tabs.getOrNull(current)?.web)
 
-    private val web: WebView? get() = tab.web
-    private lateinit var wrapper: MutableContextWrapper
-    private lateinit var app: Context
+    internal val web: WebView? get() = tab.web
+    internal lateinit var wrapper: MutableContextWrapper
+    internal lateinit var app: Context
+    /** 拆到别的文件的扩展函数看不到 lateinit 有没有赋值，用这两个问。 */
+    internal val appReady get() = ::app.isInitialized
+    internal val wrapperReady get() = ::wrapper.isInitialized
 
     /** 网页上次是按哪个代理端口设的（0 = 直连）；内核重启换了端口就要重设。 */
     private var appliedPort = -1
     private var appliedRoute = ""
     private var appliedBypass = emptyList<String>()
-    private var pageDone: CompletableDeferred<Unit>? get() = tab.pageDone; set(v) { tab.pageDone = v }
+    internal var pageDone: CompletableDeferred<Unit>? get() = tab.pageDone; set(v) { tab.pageDone = v }
     /** 最近给代理口令的时刻：10 秒内要了 30 次以上，说明口令没被接受。 */
     private val authTimes = ArrayDeque<Long>()
 
@@ -711,767 +714,55 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         return t
     }
 
-    // ---------- 标签页分组 ----------
-    /** 现在有的分组（按第一次出现的先后）。 */
-    fun groups(): List<String> = tabs.map { it.group }.filter { it.isNotBlank() }.distinct()
-
-    fun setGroup(t: Tab, group: String) { t.group = group.trim().take(20); saveTabs() }
-
-    fun renameGroup(from: String, to: String) {
-        val name = to.trim().take(20)
-        if (name.isEmpty()) return
-        tabs.filter { it.group == from }.forEach { it.group = name }
-        saveTabs()
-    }
-
-    fun ungroup(group: String) { tabs.filter { it.group == group }.forEach { it.group = "" }; saveTabs() }
-
-    /** 关掉一组（或 null = 全部）标签页。最后剩一个时回起始页。 */
-    fun closeGroup(group: String?) {
-        tabs.filter { group == null || it.group == group }.forEach { closeTab(it) }
-        saveTabs()
-    }
-
-    /** 给标签页建网页窗口（新开时，或网页进程崩了重建时）。 */
-    @SuppressLint("SetJavaScriptEnabled")
-    private fun buildWeb(t: Tab): WebView {
-        val profile = if (t.incognito) INCOGNITO else if (t.account > 0) accountProfile(t.account) else null
-        t.fresh = true
-        // 换资料夹要在网页窗口做任何别的事之前
-        return JackWebView(wrapper).also { w -> profile?.let { androidx.webkit.WebViewCompat.setProfile(w, it) } }.apply {
-            settings.apply {
-                javaScriptEnabled = true
-                domStorageEnabled = true
-                allowFileAccess = false
-                allowContentAccess = false
-                // 允许网页弹新窗口（「用 Google / 微软 / Apple 登录」这类），开在新标签页里；网页自己乱弹的在 onCreateWindow 里拦掉
-                javaScriptCanOpenWindowsAutomatically = true
-                setSupportMultipleWindows(true)
-                // 网页要位置时弹窗问（见 askPerm）
-                setGeolocationEnabled(true)
-                mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
-                mediaPlaybackRequiresUserGesture = true
-                builtInZoomControls = true
-                displayZoomControls = false
-                useWideViewPort = true
-                textZoom = this@JackBrowser.textZoom
-                loadWithOverviewMode = true
-                userAgentString = BrowserPages.cleanUserAgent(userAgentString)
-                mobileUa = userAgentString
-            }
-            if (WebViewFeature.isFeatureSupported(WebViewFeature.USER_AGENT_METADATA) && mobileMeta == null) {
-                mobileMeta = runCatching { androidx.webkit.WebSettingsCompat.getUserAgentMetadata(settings) }.getOrNull()
-            }
-            if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
-                androidx.webkit.WebSettingsCompat.setAlgorithmicDarkeningAllowed(settings, darkAllowed)
-            }
-            // 第三方 Cookie 要开：「用 XX 账号登录」的跳转和内嵌登录靠它
-            CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
-            setFindListener { active, count, done -> if (done) { t.findIndex = active; t.findCount = count } }
-            // 手机自带的密码管理器（自动填充服务）能给网页里的账号密码框填密码：填的是用户自己的密码管理器，Kavi 不碰
-            importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_YES
-            setOnLongClickListener { v -> longPress(v as WebView) }
-            setOnTouchListener { _, e -> if (e.actionMasked == android.view.MotionEvent.ACTION_DOWN) touchedAt = System.currentTimeMillis(); false }
-            webViewClient = Client(t)
-            webChromeClient = Chrome(t)
-            setDownloadListener { url, userAgent, disposition, mime, length ->
-                // 先记下来：用户看着就弹窗问，Kavi 在操作就等它用 download 动作确认
-                val p = BrowserDownload.Pending(url, BrowserDownload.nameFor(url, disposition, mime), mime.orEmpty(),
-                    length, userAgent.orEmpty(), t.address, byUser = userViewing, tab = t.id)
-                pending = p
-                // 网页自己生成的文件（blob: / data:）：网址里没有名字，用网页给链接写的 download 名字
-                if (!BrowserPages.isWeb(url)) evaluateJavascript("JSON.stringify(window.__jackLastDl || null)") { r ->
-                    val o = runCatching { json.parseToJsonElement(unwrap(r)) as? JsonObject }.getOrNull() ?: return@evaluateJavascript
-                    val name = (o["name"] as? JsonPrimitive)?.content.orEmpty()
-                    if ((o["href"] as? JsonPrimitive)?.content == url.take(200) && name.isNotBlank() && pending == p) {
-                        pending = p.copy(name = BrowserDownload.nameFor("", "attachment; filename=\"${name.replace("\"", "")}\"", mime))
-                    }
-                }
-            }
-            // 网页生成文件后马上收回（revokeObjectURL）的话就存不下来了：晚两分钟再收；顺便记下链接上写的文件名
-            if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
-                runCatching { androidx.webkit.WebViewCompat.addDocumentStartJavaScript(this, KEEP_BLOB_JS, setOf("*")) }
-                // 切出浏览器时正在放的声音接着放
-                runCatching { androidx.webkit.WebViewCompat.addDocumentStartJavaScript(this, BrowserPages.KEEP_PLAYING_JS + BrowserPages.MEDIA_JS, setOf("*")) }
-                // 电脑版：网页一开始就当自己在电脑上（只在电脑版标识下起作用）
-                t.deskScript = runCatching { androidx.webkit.WebViewCompat.addDocumentStartJavaScript(this, BrowserPages.desktopJs(desktopWidth()), setOf("*")) }.getOrNull()
-                // 数着后台请求：动作做完等它们回来再读页面，失败的告诉模型（只在主页面装）
-                t.netScript = runCatching { androidx.webkit.WebViewCompat.addDocumentStartJavaScript(this, BrowserNetWatch.JS, setOf("*")) }.getOrNull()
-                // 不让网页靠 WebRTC 查到真实 IP（每个嵌入框也装）
-                if (rtcBlocked()) t.rtcScript = runCatching { androidx.webkit.WebViewCompat.addDocumentStartJavaScript(this, RTC_JS, setOf("*")) }.getOrNull()
-            }
-        }
-    }
-
-    /**
-     * 网页进程没了（崩溃，或手机内存紧被系统收回）：所有标签页共用一个网页进程，每页都会收到。
-     * 不接住的话系统会把整个 App 关掉。这一页换个新网页窗口：用户眼前的和 Kavi 正用着的马上重新打开，别的切过去时再开。
-     */
-    private fun recover(t: Tab, dead: WebView) {
-        val url = t.address
-        (dead.parent as? ViewGroup)?.removeView(dead)
-        BrowserCdp.release(t)
-        BrowserNetwork.release(t.id)
-        BrowserPacing.release(t.id)
-        runCatching { dead.destroy() }
-        if (t !in tabs) { t.web = null; return }
-        t.netScript = null; t.diagScript = null; t.teachScript = null; t.rtcScript = null; t.deskScript = null
-        t.diagOn = false
-        t.web = buildWeb(t)
-        t.pageDone?.complete(Unit)
-        t.loading = 100
-        t.media.clear(); t.mediaFrames.clear()
-        if (BrowserPages.isWeb(url)) {
-            val visible = t === tabs.getOrNull(current) || com.jack.ai.tools.BrowserLock.isAgentTab(t)
-            if (visible) { t.web?.let { w -> applyUa(w, url); w.loadUrl(url) } } else t.restore = url
-            t.error = "网页崩溃了（多半是手机内存紧），已经重新打开"; t.pageFailed = false
-        }
-        hostGen++
-    }
-
     // ---------- 网页要用相机、麦克风、位置 ----------
-
-    /**
-     * 先看记住的：不允许过就直接拒；都允许过就只向系统要手机权限。没记过的弹窗问用户。
-     * Kavi 在操作（用户没看着）、隐身页记住的不算数，也不记。
-     */
-    private fun askPerm(t: Tab, origin: String, kinds: Set<String>, done: (Boolean) -> Unit) {
-        val site = BrowserPages.site(origin)
-        val system = systemPerms
-        if (!userViewing || system == null || site.isEmpty() || permAsk != null) { done(false); return }
-        val keys = kinds.map { BrowserPages.permKey(site, it) }
-        if (!t.incognito && keys.any { it in permNo }) { done(false); return }
-        if (!t.incognito && keys.all { it in permYes }) { system(kinds, done); return }
-        permAsk = PermAsk(site, kinds, t.incognito) { ok, remember ->
-            permAsk = null
-            if (remember && !t.incognito) {
-                if (ok) { permYes = permYes + keys; permNo = permNo - keys.toSet() } else { permNo = permNo + keys; permYes = permYes - keys.toSet() }
-                prefs().edit().putStringSet("permyes", permYes).putStringSet("permno", permNo).apply()
-            }
-            if (ok) system(kinds, done) else done(false)
-        }
-    }
-
-    /** 当前网站记住了哪些权限（给菜单「重置网站权限」用）。 */
-    fun permsHere(): Boolean = BrowserPages.site(address).let { s -> s.isNotEmpty() && (permYes + permNo).any { it.startsWith("$s|") } }
-
-    fun resetPermsHere() {
-        val s = BrowserPages.site(address).ifEmpty { return }
-        permYes = permYes.filterNot { it.startsWith("$s|") }.toSet(); permNo = permNo.filterNot { it.startsWith("$s|") }.toSet()
-        prefs().edit().putStringSet("permyes", permYes).putStringSet("permno", permNo).apply()
-    }
 
     // ---------- 关掉 App 再打开时恢复标签页 ----------
 
-    private val savedTabs = BrowserPages.SavedTabs.serializer()
-
-    /** 记下现在开着的标签页（隐身的不记），离开浏览器页时调。 */
-    fun saveTabs() {
-        if (!::app.isInitialized || tabs.isEmpty()) return
-        val s = BrowserPages.tabsToSave(tabs.map { BrowserPages.SavedTab(it.restore ?: it.address, it.title, it.account, it.group) to (it.incognito || com.jack.ai.tools.BrowserLock.isAgentTab(it)) }, current, MAX_TABS)
-        prefs().edit().putString("tabs", listJson.encodeToString(savedTabs, s)).apply()
-    }
-
-    /**
-     * App 重开后第一次进浏览器：把上次的标签页建回来（只建窗口，切过去时才加载，见 [Tab.restore]）。
-     * 已经有标签页（比如 Kavi 先用过浏览器）就不动。返回有没有恢复。
-     */
-    fun restoreTabs(ctx: Context): Boolean {
-        if (tabs.isNotEmpty()) return false
-        webView(ctx)
-        val s = prefs().getString("tabs", null)?.let { runCatching { listJson.decodeFromString(savedTabs, it) }.getOrNull() }
-        if (s == null || s.tabs.isEmpty()) return false
-        // 只建要显示的那页的网页窗口，别的先休眠，切过去再开
-        s.tabs.take(MAX_TABS).forEachIndexed { i, st ->
-            newTab(switch = false, account = st.account, group = st.group, build = i == s.current).apply {
-                address = st.url; title = st.title; restore = st.url; usedAt = if (i == s.current) System.currentTimeMillis() else i.toLong()
-            }
-        }
-        // 第一个空白页是 webView() 建的，不要了。先把「眼前这页」指到要显示的那一页：
-        // 不然关空白页时会先切到排第一的那页、白白给它建一个网页窗口
-        current = (s.current.coerceIn(0, tabs.lastIndex - 1) + 1).coerceAtMost(tabs.lastIndex)
-        closeTab(0)
-        switchTo(s.current.coerceIn(0, tabs.lastIndex))
-        return true
-    }
+    internal val savedTabs = BrowserPages.SavedTabs.serializer()
 
     // ---------- 地址栏联想 ----------
 
-    /** 长的浏览记录先读进来，打字联想时用。 */
-    fun warmHistory() {
-        if (!::app.isInitialized || historyList != null) return
-        scope.launch(historyIo) { if (historyList == null) historyList = com.jack.ai.data.Store(app).loadHistory() }
-    }
-
-    /** 历史记录页要的完整浏览记录。 */
-    suspend fun historyEntries(): List<com.jack.ai.data.browser.HistoryEntry> = withContext(historyIo) {
-        historyList ?: com.jack.ai.data.Store(app).loadHistory().also { historyList = it }
-    }
-
-    /** 删掉一条浏览记录（起始页的最近访问里也去掉）。 */
-    fun deleteHistory(url: String) {
-        visits = visits.filterNot { it.url == url }; saveLists()
-        scope.launch(historyIo) {
-            val store = com.jack.ai.data.Store(app)
-            historyList = com.jack.ai.data.browser.BrowserHistory.remove(historyList ?: store.loadHistory(), url)
-            historySave?.cancel()
-            store.saveHistory(historyList.orEmpty())
-        }
-    }
-
-    /** 清空浏览记录和最近访问（登录状态、缓存不动）。 */
-    fun clearHistory() {
-        visits = emptyList(); saveLists()
-        historySave?.cancel()
-        scope.launch(historyIo) { historyList = emptyList(); com.jack.ai.data.Store(app).saveHistory(emptyList()) }
-    }
-
-    /** 地址栏输入时的联想：书签、最近访问、浏览记录里对得上的。 */
-    fun suggest(query: String): List<BrowserPages.Visit> =
-        BrowserPages.suggest(query, marks, visits + historyList.orEmpty().map { BrowserPages.Visit(it.url, it.title, it.at) })
-
     /** 最多开几个标签页（每个都是一个网页窗口，占内存）。 */
     const val MAX_TABS = 50
-
-    /** 切到第 i 个标签页：网页窗口换了，让浏览器页重新来要。 */
-    fun switchTo(i: Int) {
-        if (i !in tabs.indices) return
-        // Kavi 在自己的后台标签页里切标签：只换它钉住的那页，不动用户眼前的
-        pinLocal.get()?.let { it.t = tabs[i]; wake(tabs[i]); return }
-        if (i != current) snap()
-        barsHidden = false
-        current = i
-        tabs[i].usedAt = System.currentTimeMillis()
-        wake(tabs[i])
-        hostGen++
-        sleepIdle()
-    }
 
     // ---------- 标签页休眠 ----------
     /** 最多几个标签页同时开着网页（别的休眠，切过去再打开）。 */
     const val LIVE_MAX = 6
 
-    /** 休眠的标签页切过来时：补开网页窗口（要打开的网址在 restore 里，由浏览器页或 load 打开）。 */
-    private fun wake(t: Tab) {
-        if (t.web != null || t !in tabs || !::wrapper.isInitialized) return
-        t.web = buildWeb(t)
-        hostGen++
-    }
+    internal val listJson = Json { ignoreUnknownKeys = true }
+    internal val laterList = kotlinx.serialization.builtins.ListSerializer(BrowserPages.Later.serializer())
 
-    /** 能不能休眠：眼前的、Kavi 正用着的、在放声音的、在下载的、在录教学或诊断的都不动。 */
-    private fun canSleep(t: Tab): Boolean = t.web != null && t !== tabs.getOrNull(current) && t !== pinLocal.get()?.t &&
-        !com.jack.ai.tools.BrowserLock.isAgentTab(t) && !t.audible && !t.mediaFromUser && pending?.tab != t.id && !t.diagOn &&
-        !(teaching && t === tab) && t.loading >= 100
-
-    /** 开着网页的标签页超过 [LIVE_MAX] 个：最久没看的先休眠。 */
-    private fun sleepIdle() {
-        val live = tabs.filter { it.web != null }
-        BrowserPages.toSleep(live.map { Triple(it.id, it.usedAt, canSleep(it)) }, LIVE_MAX).forEach { id -> live.firstOrNull { it.id == id }?.let(::sleep) }
-    }
-
-    /** 手机内存紧：眼前这页以外能休眠的全休眠。 */
-    fun sleepAllBackground() { tabs.filter(::canSleep).forEach(::sleep) }
-
-    private fun sleep(t: Tab) {
-        val w = t.web ?: return
-        if (t.restore == null && BrowserPages.isWeb(t.address)) {
-            t.sleepState = android.os.Bundle().also { b -> runCatching { w.saveState(b) } }.takeIf { !it.isEmpty }
-            t.restore = t.address
-        }
-        (w.parent as? ViewGroup)?.removeView(w)
-        BrowserCdp.release(t)
-        BrowserNetwork.release(t.id)
-        BrowserPacing.release(t.id)
-        runCatching { w.destroy() }
-        t.web = null
-        t.netScript = null; t.diagScript = null; t.teachScript = null; t.rtcScript = null; t.deskScript = null
-        t.pageDone?.complete(Unit)
-        t.loading = 100
-        t.media.clear(); t.mediaFrames.clear()
-    }
-
-    /** 关掉一个标签页（最后一个不关，只回起始页）。 */
-    fun closeTab(i: Int) {
-        if (i !in tabs.indices) return
-        if (tabs.size == 1) { home(); return }
-        val t = tabs.removeAt(i)
-        (t.web?.parent as? ViewGroup)?.removeView(t.web)
-        BrowserCdp.release(t)
-        BrowserNetwork.release(t.id)
-        BrowserPacing.release(t.id)
-        t.web?.destroy()
-        if (t.incognito && tabs.none { it.incognito }) runCatching { clearIncognito() }
-        val stay = if (i < current) current - 1 else current.coerceAtMost(tabs.lastIndex)
-        // 在 Kavi 的后台操作里关的：用户眼前那页只挪位置，不跟着切
-        if (pinLocal.get() != null) { current = stay; hostGen++ } else switchTo(stay)
-        // 关的是哪个 Kavi 正用着的后台标签页：给它换一页（弹出的登录窗口关了就回到打开它的那页）
-        com.jack.ai.tools.BrowserLock.tabClosed(t) { tabs.firstOrNull { it.id == t.openedBy } ?: newTab(switch = false) }
-    }
-
-    /** Kavi 在后台标签页里要用户接手（登录、验证）：把用户眼前的换成它那页，打开浏览器就能看到。 */
-    fun showToUser() {
-        val p = pinLocal.get() ?: return
-        val i = tabs.indexOf(p.t).takeIf { it >= 0 } ?: return
-        if (i != current) { snap(); current = i; barsHidden = false; hostGen++ }
-    }
-
-    private fun prefs() = app.getSharedPreferences("browser", Context.MODE_PRIVATE)
-    private val listJson = Json { ignoreUnknownKeys = true }
-    private val laterList = kotlinx.serialization.builtins.ListSerializer(BrowserPages.Later.serializer())
-    private fun laterFile(url: String): java.io.File {
-        val hash = java.security.MessageDigest.getInstance("SHA-1").digest(url.toByteArray()).joinToString("") { "%02x".format(it) }
-        return java.io.File(app.filesDir, "readlater/$hash.md")
-    }
-    private fun saveLater() { prefs().edit().putString("readlater", listJson.encodeToString(laterList, later)).apply() }
-    fun removeLater(url: String) {
-        later = BrowserPages.removeLater(later, url); saveLater()
-        scope.launch(Dispatchers.IO) { laterFile(url).delete() }
-    }
-    fun markLaterRead(url: String) { later = BrowserPages.readLater(later, url); saveLater() }
-    fun addLater(url: String, name: String = "") {
-        if (tab.incognito || !userViewing) return
-        val before = later
-        later = BrowserPages.addLater(later, url, name, System.currentTimeMillis()); saveLater()
-        val kept = later.map { it.url }.toSet()
-        scope.launch(Dispatchers.IO) { before.filterNot { it.url in kept }.forEach { laterFile(it.url).delete() } }
-        val t = tabs.firstOrNull { !it.incognito && it.address == url } ?: return
-        scope.launch(pin(t)) {
-            val body = readable(app)?.second ?: return@launch
-            withContext(Dispatchers.IO) {
-                if (later.any { it.url == url }) laterFile(url).apply { parentFile?.mkdirs(); writeText(body) }
-            }
-        }
-    }
-    suspend fun offlineLater(url: String): Pair<String, String>? = withContext(Dispatchers.IO) {
-        val entry = later.find { it.url == url } ?: return@withContext null
-        runCatching { entry.title to laterFile(url).readText() }.getOrNull()
-    }
-
-    private val visitList = kotlinx.serialization.builtins.ListSerializer(BrowserPages.Visit.serializer())
-
-    private fun loadLists() {
-        fun read(k: String) = prefs().getString(k, null)?.let { runCatching { listJson.decodeFromString(visitList, it) }.getOrNull() }.orEmpty()
-        visits = read("visits"); marks = read("marks")
-        offline = prefs().getString("offline", null)?.let { runCatching { listJson.decodeFromString(offlineList, it) }.getOrNull() }.orEmpty()
-        later = prefs().getString("readlater", null)?.let { runCatching { listJson.decodeFromString(laterList, it) }.getOrNull() }.orEmpty()
-        searchEngine = prefs().getString("searchEngine", BrowserNet.AUTO) ?: BrowserNet.AUTO
-        desktopSites = prefs().getStringSet("desktop", emptySet()).orEmpty().toSet()
-        desktopAll = prefs().getBoolean("desktopall", true)
-        desktopZoom = prefs().getInt("deskzoom", 100)
-        textZoom = prefs().getInt("textzoom", 100)
-        mobileSites = prefs().getStringSet("mobile", emptySet()).orEmpty().toSet()
-        proxySites = prefs().getStringSet("proxysites", emptySet()).orEmpty().toSet()
-        webrtcAllowed = prefs().getBoolean("webrtc", false)
-        adBlock = prefs().getBoolean("adblock", true); adBlockNow = adBlock
-        trackBlock = prefs().getBoolean("trackblock", true); trackBlockNow = trackBlock
-        httpsOnly = prefs().getBoolean("httpsonly", true)
-        httpOk = prefs().getStringSet("httpok", emptySet()).orEmpty().toSet()
-        loadScripts()
-        adAllow = prefs().getStringSet("adallow", emptySet()).orEmpty().toSet(); adAllowNow = adAllow
-        permYes = prefs().getStringSet("permyes", emptySet()).orEmpty().toSet()
-        permNo = prefs().getStringSet("permno", emptySet()).orEmpty().toSet()
-        blocks = prefs().getString("blocks", null)?.let { runCatching { listJson.decodeFromString(blockMap, it) }.getOrNull() }.orEmpty()
-    }
-
-    private fun uaFor(url: String) = if (isDesktopAt(url)) BrowserPages.desktopUserAgent(mobileUa) else mobileUa
-
-    /** 换网页前按网站选手机版还是电脑版的标识。返回有没有换。 */
-    private fun needsUa(w: WebView, url: String): Boolean = mobileUa.isNotEmpty() && w.settings.userAgentString != uaFor(url)
-
-    private fun applyUa(w: WebView, url: String): Boolean {
-        if (!needsUa(w, url)) return false
-        val ua = uaFor(url)
-        // 正在加载时换标识，网页组件会自己重载当前页；调用方换完都会自己打开网址，先停掉，免得两次加载撞在一起
-        w.stopLoading()
-        w.settings.userAgentString = ua
-        // 新式设备标识（请求里的 Sec-CH-UA-*、网页里的 userAgentData）跟着换，不然大网站照样认出是手机
-        val meta = if (ua == mobileUa) mobileMeta else mobileMeta?.let { desktopMeta(it) }
-        if (meta != null) runCatching { androidx.webkit.WebSettingsCompat.setUserAgentMetadata(w.settings, meta) }
-        return true
-    }
+    internal val visitList = kotlinx.serialization.builtins.ListSerializer(BrowserPages.Visit.serializer())
 
     /** 手机版原本的新式设备标识（第一个网页窗口建好时记下）；网页组件不支持改它时是 null。 */
-    private var mobileMeta: androidx.webkit.UserAgentMetadata? = null
-
-    /** 电脑版的新式设备标识：Windows 上的 Chrome，不是手机；版本号照手机上的。 */
-    private fun desktopMeta(m: androidx.webkit.UserAgentMetadata): androidx.webkit.UserAgentMetadata {
-        val brands = m.brandVersionList.map { b ->
-            if (b.brand.contains("WebView", true)) androidx.webkit.UserAgentMetadata.BrandVersion.Builder(b).setBrand("Google Chrome").build() else b
-        }
-        return androidx.webkit.UserAgentMetadata.Builder(m).setBrandVersionList(brands).setPlatform("Windows").setPlatformVersion("10.0.0")
-            .setArchitecture("x86").setBitness(64).setModel("").setMobile(false).setWow64(false).build()
-    }
-
-    /** 当前网站切换电脑版 / 手机版（按网站记住），然后重新打开。默认全用电脑版时，记的是哪些网站例外用手机版。 */
-    fun toggleDesktop() {
-        val w = web ?: return
-        val site = BrowserPages.site(address).ifEmpty { return }
-        fun flip(set: Set<String>) = if (BrowserPages.isDesktop(set, address)) set.filterNot { site == it || site.endsWith(".$it") }.toSet() else set + site
-        if (desktopAll) { mobileSites = flip(mobileSites); prefs().edit().putStringSet("mobile", mobileSites).apply() }
-        else { desktopSites = flip(desktopSites); prefs().edit().putStringSet("desktop", desktopSites).apply() }
-        applyUa(w, address)
-        clearError()
-        w.loadUrl(address)
-    }
-
-    /** 所有网站都用电脑版：开关，然后按新设置重新打开当前网页。 */
-    fun toggleDesktopAll() {
-        desktopAll = !desktopAll
-        prefs().edit().putBoolean("desktopall", desktopAll).apply()
-        val w = web ?: return
-        if (address.isNotEmpty() && applyUa(w, address)) { clearError(); w.loadUrl(address) }
-    }
-
-    /** 电脑版：自适应的网站会按手机宽度排，把可视宽度改成电脑的，再缩到屏幕上。 */
-    private fun widenIfDesktop(w: WebView, url: String) {
-        if (!isDesktopAt(url)) return
-        w.evaluateJavascript(
-            "(function(){var m=document.querySelector('meta[name=viewport]');if(!m){m=document.createElement('meta');m.name='viewport';" +
-                "(document.head||document.documentElement).appendChild(m);}m.content='width=${desktopWidth()}';})();", null,
-        )
-    }
-
-    /** 「问 Kavi」：当前网页的标题、网址和正文（最多 6 万字）。 */
-    suspend fun pageText(ctx: Context): String {
-        // 先取正文（去掉导航、侧栏、评论），取不出多少再退回整页文字
-        val body = readable(ctx)?.second?.takeIf { it.length >= 200 }?.take(60_000)
-            ?: unwrap(eval(ctx, "(document.body ? document.body.innerText : '').slice(0, 60000)")).trim()
-        val subs = if (isVideoPage(address)) subtitles(ctx).first?.let { "\n\n【视频字幕】\n" + it.take(60_000) }.orEmpty() else ""
-        return "网页：$title\n链接：$address\n\n" + body + subs
-    }
-
-    /** 阅读模式：(标题, 正文 Markdown)；读不出返回 null。 */
-    suspend fun readable(ctx: Context): Pair<String, String>? {
-        val o = runCatching { json.parseToJsonElement(unwrap(eval(ctx, BrowserScripts.readable(ctx)))).jsonObject }.getOrNull() ?: return null
-        val md = (o["md"] as? JsonPrimitive)?.content.orEmpty().trim()
-        return if (md.isEmpty()) null else (o["title"] as? JsonPrimitive)?.content.orEmpty() to md
-    }
-
-    /** YouTube、B 站的视频页（能取字幕的）。 */
-    fun isVideoPage(url: String): Boolean {
-        val site = BrowserPages.site(url)
-        return (site.endsWith("youtube.com") && ("watch" in url || "/shorts/" in url)) || site == "youtu.be" ||
-            (site.endsWith("bilibili.com") && "/video/" in url)
-    }
-
-    /** 视频字幕（YouTube、B 站、网页里带字幕轨的视频），最多等 20 秒。返回 (字幕, 哪来的) 或 (null, 为什么没有)。 */
-    suspend fun subtitles(ctx: Context): Pair<String?, String> {
-        agentAt = System.currentTimeMillis()
-        eval(ctx, BrowserScripts.subtitles(ctx))
-        repeat(40) {
-            delay(500)
-            val o = runCatching { json.parseToJsonElement(unwrap(eval(ctx, "JSON.stringify(window.__jackSubs || null)"))) as? JsonObject }.getOrNull()
-            if (o != null) {
-                fun s(k: String) = (o[k] as? JsonPrimitive)?.content.orEmpty()
-                return if (s("ok") == "true" && s("text").isNotBlank()) s("text") to "${s("from")}字幕（${s("lang")}）" else null to s("why").ifBlank { "没取到字幕" }
-            }
-        }
-        return null to "等了 20 秒没取到字幕"
-    }
-
-    /** 长按图片「识别二维码」：带着网页的登录状态把图片取下来再读。读不出返回 null。 */
-    suspend fun scanQr(url: String): String? {
-        val bytes = if (url.startsWith("data:image", true)) {
-            runCatching { Base64.decode(url.substringAfter(","), Base64.DEFAULT) }.getOrNull() ?: return null
-        } else {
-            val cookie = withContext(Dispatchers.Main) { cookiesOf(tab).getCookie(url) }
-            val ua = withContext(Dispatchers.Main) { web?.settings?.userAgentString.orEmpty() }
-            withContext(Dispatchers.IO) {
-                val out = ByteArrayOutputStream()
-                BrowserDownload.fetch(BrowserDownload.Pending(url, "qr", "", -1, ua, address), cookie, route, 10L * 1024 * 1024,
-                    open = { out.also { it.reset() } }, reset = { out.reset() })
-                out.toByteArray()
-            }
-        }
-        return withContext(Dispatchers.Default) { com.jack.ai.data.media.QrImage.decode(bytes) }
-    }
+    internal var mobileMeta: androidx.webkit.UserAgentMetadata? = null
 
     // ---- 长的浏览记录 ----
-    private val historyIo = Dispatchers.IO.limitedParallelism(1)
-    @Volatile private var historyList: List<com.jack.ai.data.browser.HistoryEntry>? = null
-    private var historySave: kotlinx.coroutines.Job? = null
-
-    private fun recordHistory(url: String, title: String) {
-        val now = System.currentTimeMillis()
-        scope.launch(historyIo) {
-            val store = com.jack.ai.data.Store(app)
-            val list = historyList ?: store.loadHistory()
-            historyList = com.jack.ai.data.browser.BrowserHistory.record(list, url, title, now)
-            // 连着跳好几页只写一次
-            historySave?.cancel()
-            historySave = scope.launch(historyIo) { delay(2_000); historyList?.let { store.saveHistory(it) } }
-        }
-    }
+    internal val historyIo = Dispatchers.IO.limitedParallelism(1)
+    @Volatile internal var historyList: List<com.jack.ai.data.browser.HistoryEntry>? = null
+    internal var historySave: kotlinx.coroutines.Job? = null
 
     // ---- 屏蔽网页上的某一块 ----
-    private val blockMap = kotlinx.serialization.builtins.MapSerializer(String.serializer(), kotlinx.serialization.builtins.ListSerializer(String.serializer()))
+    internal val blockMap = kotlinx.serialization.builtins.MapSerializer(String.serializer(), kotlinx.serialization.builtins.ListSerializer(String.serializer()))
     /** 网站 → 要藏起来的选择器。 */
     var blocks by mutableStateOf(mapOf<String, List<String>>())
     /** 正在选要屏蔽的那块；picked 是点中的。 */
     var picking by mutableStateOf(false)
     var picked by mutableStateOf<BrowserBlocks.Picked?>(null)
 
-    private fun applyBlocks(view: WebView, site: String) {
-        val sels = BrowserBlocks.forSite(blocks, site)
-        if (sels.isNotEmpty() || blocks.isNotEmpty()) view.evaluateJavascript(BrowserBlocks.injectJs(sels), null)
-    }
-
-    /** 当前网站屏蔽了哪些。 */
-    fun blocksHere(): List<String> = blocks[BrowserPages.site(address)].orEmpty()
-
-    fun startPick() {
-        val w = web ?: return
-        picked = null
-        picking = true
-        w.evaluateJavascript(BrowserBlocks.PICK_JS, null)
-    }
-
-    /** 选中的范围往外扩一层（点到的是里面的小字、图标时）。 */
-    fun pickWider() { web?.evaluateJavascript("window.__jackPickUp&&window.__jackPickUp()", null) }
-
-    fun stopPick() {
-        picking = false
-        picked = null
-        web?.evaluateJavascript("window.__jackPickStop&&window.__jackPickStop()", null)
-    }
-
-    /** 把选中的那块存成这个网站的屏蔽规则，马上藏起来。 */
-    fun confirmPick() {
-        val p = picked ?: return
-        val site = BrowserPages.site(address)
-        stopPick()
-        if (site.isEmpty()) return
-        blocks = BrowserBlocks.add(blocks, site, p.selector)
-        saveBlocks()
-        web?.let { applyBlocks(it, site) }
-        notice = "已屏蔽" + (if (p.count > 1) "（这一页有 ${p.count} 处一样的，都藏了）" else "") + "。在菜单 → 屏蔽网页上的东西 里能恢复。"
-    }
-
-    fun unblock(selector: String) {
-        val site = BrowserPages.site(address)
-        blocks = BrowserBlocks.remove(blocks, site, selector)
-        saveBlocks()
-        web?.let { applyBlocks(it, site) }
-    }
-
-    private fun saveBlocks() { prefs().edit().putString("blocks", listJson.encodeToString(blockMap, blocks)).apply() }
-
     // ---- 演示教学 ----
     /** 正在记用户的操作；teachSteps 是记下的步骤。 */
     var teaching by mutableStateOf(false)
     var teachSteps by mutableStateOf(listOf<String>())
 
-    private fun installTeach(t: Tab) {
-        val w = t.web ?: return
-        if (t.teachScript == null && WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
-            t.teachScript = androidx.webkit.WebViewCompat.addDocumentStartJavaScript(w, BrowserTeach.RECORD_JS, setOf("*"))
-        }
-        // 已经打开的这一页也装上
-        w.evaluateJavascript(BrowserTeach.RECORD_JS, null)
-    }
-
-    fun startTeach() {
-        teaching = true
-        teachSteps = if (BrowserPages.isWeb(address)) listOf("打开 $address") else emptyList()
-        installTeach(tab)
-    }
-
-    /** 停止记录，返回记下的步骤。 */
-    fun stopTeach(): List<String> {
-        teaching = false
-        tabs.forEach { t -> t.teachScript?.remove(); t.teachScript = null }
-        // 页面里的监听刷新后才没（只往 console 打，不碍事）
-        return teachSteps.also { teachSteps = emptyList() }
-    }
-
-    // ---- 存进资料库 ----
-    /** 把当前网页的正文存进资料库（Kavi 以后能搜到）。返回给用户看的话。 */
-    suspend fun saveToLibrary(ctx: Context): String {
-        val (t, md) = readable(ctx) ?: (title to unwrap(eval(ctx, "(document.body ? document.body.innerText : '').slice(0, 200000)")).trim())
-        if (md.length < 50) return "这一页读不到多少文字，没存。"
-        val name = t.ifBlank { title }.ifBlank { BrowserPages.host(address) }.replace(Regex("""[\\/:*?"<>|]"""), "_").take(60)
-        val body = "# $name\n\n原网页：$address\n存于：" + java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.CHINA).format(java.util.Date()) + "\n\n" + md
-        withContext(Dispatchers.IO) {
-            val store = com.jack.ai.data.Store(app)
-            val doc = com.jack.ai.data.LibraryDoc(name = "$name.md", chars = body.length)
-            store.saveLibraryText(doc.id, body)
-            store.saveLibrary(store.loadLibrary() + doc)
-        }
-        return "已存进资料库：「$name」。以后问 Kavi 相关的事，它能搜到这篇。"
-    }
-
-    private fun saveLists() {
-        prefs().edit().putString("visits", listJson.encodeToString(visitList, visits)).putString("marks", listJson.encodeToString(visitList, marks)).apply()
-    }
-
-    /** 当前网页加进书签或从书签去掉。 */
-    fun toggleMark() {
-        marks = BrowserPages.toggle(marks, address, title, System.currentTimeMillis())
-        saveLists()
-    }
-
-    fun removeMark(url: String) {
-        marks = marks.filterNot { it.url == url }
-        saveLists()
-    }
-
-    /** 导入别的浏览器导出的 bookmarks.html。返回 (文件里有几个, 新加了几个)。 */
-    fun importMarks(html: String): Pair<Int, Int> {
-        val parsed = com.jack.ai.api.BrowserBookmarks.parse(html)
-        val (merged, added) = com.jack.ai.api.BrowserBookmarks.merge(marks, parsed)
-        if (added > 0) { marks = merged; saveLists() }
-        return parsed.size to added
-    }
-
     // ---------- 离线网页（整页存成 MHTML） ----------
     var offline by mutableStateOf(listOf<BrowserPages.OfflinePage>())
-        private set
-    private val offlineList = kotlinx.serialization.builtins.ListSerializer(BrowserPages.OfflinePage.serializer())
-    private fun offlineDir() = java.io.File(app.filesDir, "offline_pages").apply { mkdirs() }
-    fun offlineFile(p: BrowserPages.OfflinePage) = java.io.File(offlineDir(), p.file)
-    private fun saveOfflineList() { prefs().edit().putString("offline", listJson.encodeToString(offlineList, offline)).apply() }
-
-    /** 把当前网页整页存下来（同一个网址再存就换成新的）。返回给用户看的一句话。 */
-    suspend fun saveOffline(): String = withContext(Dispatchers.Main) {
-        val w = web ?: return@withContext "没有打开的网页"
-        val url = address
-        if (!BrowserPages.isWeb(url)) return@withContext "这一页存不了"
-        if (tab.incognito) return@withContext "隐身标签页不存离线网页"
-        val name = "${System.currentTimeMillis()}.mht"
-        val f = java.io.File(offlineDir(), name)
-        val path = withTimeoutOrNull(60_000) { suspendCancellableCoroutine<String?> { c -> w.saveWebArchive(f.path, false) { c.resume(it) } } }
-        if (path == null || !f.exists() || f.length() == 0L) { f.delete(); return@withContext "没存成（这个网页不让存，或者还没加载完）" }
-        offline.filter { it.url == url }.forEach { offlineFile(it).delete() }
-        offline = listOf(BrowserPages.OfflinePage(url, title.ifBlank { BrowserPages.host(url) }, System.currentTimeMillis(), name, f.length())) +
-            offline.filterNot { it.url == url }
-        saveOfflineList()
-        "已存成离线网页（${com.jack.ai.api.BrowserSiteData.sizeText(f.length())}），没网也能看：菜单 →「离线网页」"
-    }
-
-    fun removeOffline(p: BrowserPages.OfflinePage) {
-        offlineFile(p).delete()
-        offline = offline.filterNot { it.file == p.file }
-        saveOfflineList()
-    }
+        internal set
+    internal val offlineList = kotlinx.serialization.builtins.ListSerializer(BrowserPages.OfflinePage.serializer())
 
     // ---------- 这个网站的数据 ----------
     /** 一个网站（主域名）在这个标签页的资料夹里存了什么。 */
     data class SiteData(val root: String, val cookies: Int, val storage: Long, val origins: List<String>)
-
-    private fun storageOf(t: Tab): WebStorage {
-        val name = if (t.incognito) INCOGNITO else if (t.account > 0) accountProfile(t.account) else null
-        return name?.takeIf { incognitoSupported() }?.let { androidx.webkit.ProfileStore.getInstance().getProfile(it)?.webStorage } ?: WebStorage.getInstance()
-    }
-
-    /** 当前网页所在网站的 Cookie 个数、网页存储大小（主域名和子域名一起算）。 */
-    suspend fun siteData(): SiteData? = withContext(Dispatchers.Main) {
-        val host = runCatching { java.net.URI(address).host }.getOrNull()?.lowercase() ?: return@withContext null
-        val root = com.jack.ai.api.BrowserSiteData.root(host)
-        val origins = withTimeoutOrNull(5_000) {
-            suspendCancellableCoroutine<Map<*, *>?> { c -> storageOf(tab).getOrigins { c.resume(it) } }
-        }.orEmpty().values.filterIsInstance<WebStorage.Origin>()
-            .filter { o -> runCatching { java.net.URI(o.origin).host }.getOrNull()?.let { com.jack.ai.api.BrowserSiteData.belongs(it, root) } == true }
-        val names = cookieHosts(host, root, origins.map { it.origin }).flatMap { h ->
-            com.jack.ai.api.BrowserSiteData.names(cookiesOf(tab).getCookie("https://$h"))
-        }.toSet()
-        SiteData(root, names.size, origins.sumOf { it.usage }, origins.map { it.origin })
-    }
-
-    private fun cookieHosts(host: String, root: String, origins: List<String>): List<String> =
-        (listOf(host, root, "www.$root") + origins.mapNotNull { runCatching { java.net.URI(it).host }.getOrNull() }).map { it.lowercase() }.distinct()
-
-    /** 只清这个网站的 Cookie（登录状态）和网页存储，然后重新打开这一页。 */
-    suspend fun clearSite(d: SiteData) = withContext(Dispatchers.Main) {
-        val host = runCatching { java.net.URI(address).host }.getOrNull()?.lowercase() ?: d.root
-        val path = runCatching { java.net.URI(address).path }.getOrNull().orEmpty()
-        val cm = cookiesOf(tab)
-        val hosts = cookieHosts(host, d.root, d.origins)
-        val names = hosts.flatMap { h -> com.jack.ai.api.BrowserSiteData.names(cm.getCookie("https://$h")) + com.jack.ai.api.BrowserSiteData.names(cm.getCookie("http://$h")) }.toSet()
-        com.jack.ai.api.BrowserSiteData.expire(names, hosts, d.root, path).forEach { (u, c) -> cm.setCookie(u, c) }
-        cm.flush()
-        val ws = storageOf(tab)
-        d.origins.forEach { ws.deleteOrigin(it) }
-        reloadCurrent()
-    }
-
-    /** 网页跟着 App 的深浅色：浅色主题时不变暗。跟着系统深色走（网页组件看的是系统设置）。 */
-    fun setDark(allowed: Boolean) {
-        darkAllowed = allowed
-        if (!WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) return
-        tabs.forEach { t -> t.web?.let { androidx.webkit.WebSettingsCompat.setAlgorithmicDarkeningAllowed(it.settings, allowed) } }
-    }
-
-    /** 回到起始页（书签、最近访问）。能后退回刚才的网页。 */
-    fun home() {
-        val w = web ?: return
-        clearError()
-        tab.restore = null
-        w.loadUrl("about:blank")
-        address = ""; title = ""
-    }
-
-    /**
-     * 网页窗口到了这个网址，地址栏该显示什么。空白页（about:blank，回起始页时打开的那一页）算起始页，地址是空的：
-     * 后退、前进回到它时也一样，不然地址栏还留着别的网址、起始页不出来，只看到一整块空白（深色下是灰的）。
-     * 网页自己弹出的窗口（登录窗口先开空白页再往里写）不算。
-     */
-    internal fun shownAddress(t: Tab, url: String): String = if (url == "about:blank" && t.openedBy == null) "" else url
-
-    /** 用户或 Kavi 开始一次新的跳转：上一页的出错提示不再适用。 */
-    fun clearError() { error = null; pageFailed = false }
-
-    /** 长按链接或图片：记下来让浏览器页弹菜单；长按文字照旧选字。Kavi 在操作时不弹。 */
-    private fun longPress(w: WebView): Boolean {
-        if (!userViewing) return false
-        val r = w.hitTestResult
-        return when (r.type) {
-            WebView.HitTestResult.SRC_ANCHOR_TYPE -> { pressed = Pressed(r.extra, null); true }
-            WebView.HitTestResult.IMAGE_TYPE -> { pressed = Pressed(null, r.extra); true }
-            WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE -> {
-                // 图片外面包着链接：链接地址要另外问网页
-                val img = r.extra
-                val h = android.os.Handler(android.os.Looper.getMainLooper()) { m -> pressed = Pressed(m.data.getString("url"), img); true }
-                w.requestFocusNodeHref(h.obtainMessage())
-                true
-            }
-            else -> false
-        }
-    }
-
-    /** 长按图片选了「下载」：和网页里点下载一样，先弹窗问。 */
-    fun downloadImage(url: String) {
-        if (!BrowserPages.isWeb(url)) { notice = "这张图片是网页内嵌的，没法单独下载。可以截屏保存。"; return }
-        pending = BrowserDownload.Pending(url, BrowserDownload.nameFor(url, null, "image/jpeg"), "", -1,
-            web?.settings?.userAgentString.orEmpty(), address, byUser = true)
-    }
-
-    /** 放进某个界面：先从原来的地方拿出来。ctx 是那个界面所在的页面。 */
-    fun claim(ctx: Context): WebView {
-        val w = webView(ctx)
-        (w.parent as? ViewGroup)?.removeView(w)
-        wrapper.baseContext = ctx
-        return w
-    }
-
-    /**
-     * 浏览器页回到前台：网页窗口在它不在前台时被聊天页拿走了（浏览器页是 singleTask，切走不销毁），
-     * 它的框里就空了、只剩灰底。让所有放网页的地方重新来要，前台这个会拿回来。
-     */
-    fun reclaim(ctx: Context) {
-        val w = web ?: return
-        if (w.parent == null || wrapper.baseContext !== ctx) hostGen++
-    }
-
-    /** 那个界面不用了：Context 换回 App；handBack 时让别的地方（聊天页）重新来要。 */
-    fun release(ctx: Context, handBack: Boolean = true) {
-        if (::wrapper.isInitialized && wrapper.baseContext === ctx) wrapper.baseContext = app
-        if (handBack) hostGen++
-    }
-
-    fun changeRoute(r: String) {
-        route = r
-        if (::app.isInitialized) app.getSharedPreferences("browser", Context.MODE_PRIVATE).edit().putString("route", r).apply()
-    }
 
     // ---------- 打开网页（用户和 Kavi 共用） ----------
 
@@ -1603,7 +894,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         else -> "打不开（$desc）"
     }
 
-    private class Client(val t: Tab) : WebViewClient() {
+    internal class Client(val t: Tab) : WebViewClient() {
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
             val url = request.url.toString()
             return when (BrowserNet.classify(url)) {
@@ -1778,7 +1069,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         }
     }
 
-    private class Chrome(val t: Tab) : WebChromeClient() {
+    internal class Chrome(val t: Tab) : WebChromeClient() {
         override fun onProgressChanged(view: WebView, newProgress: Int) {
             t.loading = newProgress
             if (newProgress >= 100 && t.address.isNotEmpty()) t.fresh = false
@@ -1883,16 +1174,12 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
     }
 
     /** Kavi 操作时网页弹出的提示框内容（已自动关掉），下次读页面时告诉它。 */
-    @Volatile private var lastDialog: String? = null
+    @Volatile internal var lastDialog: String? = null
 
     // ---------- 下载 ----------
 
-    private fun progressText(name: String, got: Long, total: Long) =
-        "正在下载「$name」：" + if (total > 0) "${got * 100 / total}%（${BrowserDownload.sizeText(got)} / ${BrowserDownload.sizeText(total)}）"
-        else BrowserDownload.sizeText(got)
-
     /** 在网页里装好：晚两分钟再收回网页生成的文件；记下链接上写的下载文件名（blob: 网址里没有名字）。 */
-    private const val KEEP_BLOB_JS = """(function(){if(window.__jackKeep)return;window.__jackKeep=1;
+    internal const val KEEP_BLOB_JS = """(function(){if(window.__jackKeep)return;window.__jackKeep=1;
 try{var rv=URL.revokeObjectURL;URL.revokeObjectURL=function(u){setTimeout(function(){try{rv.call(URL,u);}catch(e){}},120000);};}catch(e){}
 function note(a){try{var h=a&&a.href;if(h&&(h.indexOf('blob:')===0||h.indexOf('data:')===0))window.__jackLastDl={href:h.slice(0,200),name:a.getAttribute('download')||''};}catch(e){}}
 try{var ck=HTMLAnchorElement.prototype.click;HTMLAnchorElement.prototype.click=function(){note(this);return ck.apply(this,arguments);};
@@ -1902,142 +1189,12 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
     /** 网页生成的文件最多读多大（要整个经过网页的内存，太大会卡死网页）。 */
     const val BLOB_LIMIT = 200L * 1024 * 1024
 
-    /** 浏览器的线路设置（没打开过浏览器也能读）。 */
-    fun routeFor(ctx: Context): String = if (::app.isInitialized) route
-        else ctx.getSharedPreferences("browser", Context.MODE_PRIVATE).getString("route", BrowserNet.AUTO) ?: BrowserNet.AUTO
-
-    /** 下载时报的浏览器标识（和网页里用的一样，网站才认）。 */
-    fun userAgent(): String = mobileUa.ifBlank { "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36" }
-
-    /** 某个网址在这个标签页里的 Cookie（登录过的网站下载要带上）。 */
-    suspend fun cookieFor(url: String, t: Tab? = null): String? = withContext(Dispatchers.Main) {
-        runCatching { (t?.let { cookiesOf(it) } ?: CookieManager.getInstance()).getCookie(url) }.getOrNull()
-    }
-
-    private fun tabById(id: Int): Tab? = tabs.firstOrNull { it.id == id }
-
-    /** 在某个标签页里跑脚本（不一定是当前这个）。 */
-    private suspend fun evalOn(t: Tab, js: String): String = withContext(Dispatchers.Main) {
-        val w = t.web ?: throw java.io.IOException("那个标签页已经关了")
-        ensureLaidOut(w)
-        suspendCancellableCoroutine { cont -> w.evaluateJavascript(js) { r -> if (cont.isActive) cont.resume(r ?: "null") } }
-    }
-
-    /**
-     * 把网页自己生成的文件（blob:）从网页里读出来：(类型, 内容)。要在生成它的那个标签页里读。
-     * 一段段搬（每次 1 MB 的 base64），太大的不读。
-     */
-    suspend fun blobBytes(p: BrowserDownload.Pending, progress: (Long, Long) -> Unit = { _, _ -> }): Pair<String, ByteArray> {
-        val t = tabById(p.tab) ?: tab
-        val js = "(function(u,l){window.__jackBlob={state:'loading'};fetch(u).then(function(r){return r.blob();}).then(function(b){" +
-            "if(b.size>l){window.__jackBlob={state:'big',size:b.size};return;}var f=new FileReader();" +
-            "f.onload=function(){var s=String(f.result);window.__jackBlob={state:'ok',mime:b.type,size:b.size,data:s.slice(s.indexOf(',')+1)};};" +
-            "f.onerror=function(){window.__jackBlob={state:'error',why:String(f.error)};};f.readAsDataURL(b);})" +
-            ".catch(function(e){window.__jackBlob={state:'error',why:String(e)};});return 1;})(${JsonPrimitive(p.url)},$BLOB_LIMIT)"
-        evalOn(t, js)
-        var info: JsonObject? = null
-        for (i in 0 until 240) {
-            delay(250)
-            info = runCatching { json.parseToJsonElement(unwrap(evalOn(t, "JSON.stringify(window.__jackBlob?{state:__jackBlob.state,mime:__jackBlob.mime,size:__jackBlob.size,len:(__jackBlob.data||'').length,why:__jackBlob.why}:null)"))) as? JsonObject }.getOrNull()
-            if (info != null && (info["state"] as? JsonPrimitive)?.content != "loading") break
-        }
-        fun s(k: String) = (info?.get(k) as? JsonPrimitive)?.content.orEmpty()
-        when (s("state")) {
-            "ok" -> {}
-            "big" -> throw BrowserDownload.DownloadException("网页生成的文件有 ${BrowserDownload.sizeText(s("size").toLongOrNull() ?: 0)}，超过 ${BrowserDownload.sizeText(BLOB_LIMIT)}，存不下来")
-            "loading" -> throw BrowserDownload.DownloadException("等了一分钟，网页还没把文件交出来")
-            else -> throw BrowserDownload.DownloadException("网页生成的文件读不出来（" + s("why").ifBlank { "可能已经被网页收回了，再点一次下载试试" } + "）")
-        }
-        val len = s("len").toIntOrNull() ?: 0
-        val size = s("size").toLongOrNull() ?: 0
-        val out = ByteArrayOutputStream(size.toInt().coerceAtLeast(0))
-        val chunk = 1024 * 1024
-        try {
-            var i = 0
-            while (i < len) {
-                val part = unwrap(evalOn(t, "window.__jackBlob.data.substr($i,$chunk)"))
-                out.write(Base64.decode(part, Base64.DEFAULT))
-                i += chunk
-                progress(out.size().toLong(), size)
-            }
-        } finally {
-            runCatching { evalOn(t, "window.__jackBlob=null;0") }
-        }
-        return s("mime") to out.toByteArray()
-    }
-
-    /**
-     * 存一个网页要下载的文件到 target（对话文件夹或手机「下载」）：普通网址带 Cookie 下（能断点续传），
-     * 网页生成的（blob:）从网页里读，data: 直接解。progress 报进度文字。
-     */
-    internal suspend fun storeDirect(p: BrowserDownload.Pending, target: (String, String) -> Downloads.Target, progress: (String) -> Unit = {}, control: BrowserDownload.Control? = null, privateDownload: Boolean = false, requestCookie: String? = null, requestRoute: String = route, rejectPage: Boolean = false, onBytes: (Long, Long) -> Unit = { _, _ -> }): Downloads.Saved {
-        var finish: (() -> Downloads.Saved)? = null
-        fun sink(name: String, mime: String) = target(name, mime).also { finish = it.finish }.sink
-        if (p.url.startsWith("blob:", true)) {
-            val (mime0, bytes) = blobBytes(p) { got, total -> onBytes(got, total); progress(progressText(p.name, got, total)) }
-            val mime = mime0.ifBlank { p.mime }.ifBlank { "application/octet-stream" }
-            val name = p.name.ifBlank { "下载" }.let { n -> if ('.' !in n) BrowserDownload.extFor(mime)?.let { "$n.$it" } ?: n else n }
-            withContext(Dispatchers.IO) {
-                val s = sink(name, mime)
-                try { s.open(false).use { it.write(bytes) } } catch (e: Exception) { s.discard(); throw e }
-            }
-        } else {
-            withContext(Dispatchers.IO) {
-                BrowserDownload.download(p, requestCookie, requestRoute, BrowserDownload.HARD_LIMIT, ::sink, rejectPage = rejectPage,
-                    progress = { got, total -> onBytes(got, total); progress(progressText(p.name, got, total)) }, control = control)
-            }
-        }
-        return withContext(Dispatchers.IO) { finish!!().also { s -> if (::app.isInitialized && !privateDownload) Downloads.log(app, s, p.url) } }
-    }
-
-    /**
-     * 用户点了下载：存到手机的「下载/Kavi」文件夹（Android 10 以上，文件管理器里能找到）；
-     * 更老的系统存到 App 自己的下载目录。在后台下，进度和结果显示在浏览器页。
-     */
-    fun saveToPhone(ctx: Context, p: BrowserDownload.Pending) {
-        val context = ctx.applicationContext
-        pending = null
-        com.jack.ai.data.browser.BrowserDownloads.enqueue(context, p, { name, mime -> Downloads.toPhone(context, name, mime) })
-    }
-
-    /** Kavi 的确认流程照旧，确认后也进入同一个队列。 */
-    suspend fun store(p: BrowserDownload.Pending, target: (String, String) -> Downloads.Target, progress: (String) -> Unit = {}): Downloads.Saved =
-        withContext(Dispatchers.Main) { com.jack.ai.data.browser.BrowserDownloads.enqueue(app, p, target, progress) }.result.await()
-
-    suspend fun saveTo(ctx: Context, dir: java.io.File?, p: BrowserDownload.Pending, progress: (String) -> Unit = {}): Downloads.Saved {
-        val context = ctx.applicationContext
-        if (pending == p) pending = null
-        return store(p, { name, mime -> if (dir != null) Downloads.toDir(context, dir, name, mime) else Downloads.toPhone(context, name, mime) }, progress)
-    }
-
-    /** 当前页面上能批量下的东西：images 图片、files 附件链接（PDF、文档、压缩包……）、all 都要。返回 (共几个, 前 max 个的 (网址, 名字))。 */
-    suspend fun collectDownloads(ctx: Context, kind: String, filter: String, max: Int): Pair<Int, List<Pair<String, String>>> {
-        agentAt = System.currentTimeMillis()
-        val raw = unwrap(eval(ctx, BrowserScripts.downloads(ctx, kind, filter, max)))
-        val o = runCatching { json.parseToJsonElement(raw).jsonObject }.getOrNull() ?: return 0 to emptyList()
-        val items = (o["items"] as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { e ->
-            val x = e as? JsonObject ?: return@mapNotNull null
-            val url = (x["url"] as? JsonPrimitive)?.content ?: return@mapNotNull null
-            url to (x["name"] as? JsonPrimitive)?.content.orEmpty()
-        }
-        return ((o["total"] as? JsonPrimitive)?.content?.toIntOrNull() ?: items.size) to items
-    }
-
     /** 当前页面上的视频、音频：网页里的播放器（地址、时长、大小、在不在放）、B 站的播放信息，加上拦截到的媒体请求。 */
     data class MediaPage(val title: String, val url: String, val elements: List<JsonObject>, val playinfo: String?, val hits: List<MediaGrab.Hit>, val tab: Tab)
 
-    suspend fun mediaPage(ctx: Context): MediaPage {
-        agentAt = System.currentTimeMillis()
-        val t = pinned() ?: tab
-        val o = runCatching { json.parseToJsonElement(unwrap(eval(ctx, BrowserScripts.media(ctx)))).jsonObject }.getOrNull()
-        val els = (o?.get("media") as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { it as? JsonObject }
-        val pi = (o?.get("playinfo") as? JsonPrimitive)?.content?.takeIf { it.isNotBlank() && it != "null" }
-        return MediaPage((o?.get("title") as? JsonPrimitive)?.content ?: title, address, els, pi, t.media.toList(), t)
-    }
-
     // ---------- Kavi 操作网页 ----------
 
-    private val json = Json { ignoreUnknownKeys = true }
+    internal val json = Json { ignoreUnknownKeys = true }
 
     /** 页面的一项可操作元素。坐标是网页像素（CSS px），截图上画框用。 */
     data class Item(val n: Int, val kind: String, val label: String, val value: String?, val checked: Boolean?,
@@ -2052,328 +1209,9 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
                     /** 读不到里面的嵌入框（别的网站的登录、支付框）有几个。 */
                     val frames: Int = 0)
 
-    /** 没放进任何界面时，按手机屏幕大小排版，网页才有正常的宽高。 */
-    private fun ensureLaidOut(w: WebView) {
-        if (w.parent != null && w.width > 0) return
-        val dm = app.resources.displayMetrics
-        w.measure(View.MeasureSpec.makeMeasureSpec(dm.widthPixels, View.MeasureSpec.EXACTLY),
-            View.MeasureSpec.makeMeasureSpec(dm.heightPixels, View.MeasureSpec.EXACTLY))
-        w.layout(0, 0, dm.widthPixels, dm.heightPixels)
-    }
-
-    private suspend fun eval(ctx: Context, js: String): String = withContext(Dispatchers.Main) {
-        val w = pinned()?.web ?: webView(ctx)
-        ensureLaidOut(w)
-        suspendCancellableCoroutine { cont -> w.evaluateJavascript(js) { r -> if (cont.isActive) cont.resume(r ?: "null") } }
-    }
-
-    /** evaluateJavascript 把返回的字符串再包了一层 JSON 引号，解开。 */
-    private fun unwrap(r: String): String = runCatching { (json.parseToJsonElement(r) as? JsonPrimitive)?.content }.getOrNull() ?: r
-
-    /** 读当前页面：可操作元素编上号，加上当前屏附近的文字。 */
-    suspend fun read(ctx: Context): Page {
-        agentAt = System.currentTimeMillis()
-        val t = pinned() ?: tab
-        val raw = unwrap(eval(ctx, BrowserScripts.snapshot(ctx)))
-        val o = runCatching { json.parseToJsonElement(raw).jsonObject }.getOrNull()
-            ?: return Page(address, title, emptyList(), 0, 0, 0, 0, 0, "", 0f, 0f, 0f,
-                error ?: "读不到页面内容（页面可能还没加载出来）", null).also {
-                BrowserPacing.report(t, it.url, it.title, it.text, t.mainHttpStatus, emptyList(),
-                    BrowserNetwork.risk(t.id, it.url))
-            }
-        fun JsonObject.s(k: String) = (this[k] as? JsonPrimitive)?.content.orEmpty()
-        fun JsonObject.f(k: String) = s(k).toFloatOrNull() ?: 0f
-        val items = (o["items"] as? kotlinx.serialization.json.JsonArray).orEmpty().map { e ->
-            val i = e.jsonObject
-            Item(
-                i.s("n").toIntOrNull() ?: 0, i.s("kind"), i.s("label"), (i["value"] as? JsonPrimitive)?.content,
-                (i["checked"] as? JsonPrimitive)?.content?.toBooleanStrictOrNull(),
-                (i["options"] as? kotlinx.serialization.json.JsonArray).orEmpty().map { (it as JsonPrimitive).content },
-                (i["href"] as? JsonPrimitive)?.content, i.f("x"), i.f("y"), i.f("w"), i.f("h"),
-            )
-        }
-        val dialog = lastDialog.also { lastDialog = null }
-        val page = Page(o.s("url"), o.s("title"), items, o.f("above").toInt(), o.f("below").toInt(), o.f("scroll").toInt(),
-            o.f("height").toInt(), o.f("vh").toInt(), o.s("text"), o.f("vx"), o.f("vy"), o.f("vw"),
-            withContext(Dispatchers.Main) { error }, dialog, pendingHere(), o.f("frames").toInt())
-        val frames = (o["frameUrls"] as? kotlinx.serialization.json.JsonArray).orEmpty()
-            .mapNotNull { (it as? JsonPrimitive)?.content }
-        BrowserPacing.report(t, page.url, page.title, page.text, t.mainHttpStatus, frames,
-            BrowserNetwork.risk(t.id, page.url),
-            longPage = o.s("textLength").toIntOrNull()?.let { it > 800 } ?: (page.height > page.vh * 2))
-        // 后台、没有 CDP 或页面已经跳转时维持脚本清单，避免影响现有读页。
-        if (o.s("docKey").isBlank() || !withContext(Dispatchers.Main) { t.web?.isAttachedToWindow == true }) return page
-        fun box(it: JsonObject): ElementFusion.Box {
-            fun n(k: String) = (it[k] as? JsonPrimitive)?.content?.toDoubleOrNull() ?: 0.0
-            return ElementFusion.Box(n("x"), n("y"), n("x") + n("w"), n("y") + n("h"))
-        }
-        val hidden = (o["hidden"] as? kotlinx.serialization.json.JsonArray).orEmpty()
-            .mapNotNull { it as? JsonObject }.map(::box)
-        val listeners = (o["probes"] as? kotlinx.serialization.json.JsonArray).orEmpty()
-            .mapNotNull { it as? JsonObject }.map {
-                ElementProbe.Listener((it["label"] as? JsonPrimitive)?.content.orEmpty(), box(it))
-            }
-        return BrowserCdp.enrich(t, page, o.s("docKey"), hidden, listeners) { count ->
-            unwrap(eval(ctx, BrowserScripts.reserve(ctx, o.s("docKey"), count))).toIntOrNull()
-        }
-    }
-
-    /** 某个编号的元素是什么（决定要不要先问用户）。找不到返回 null。 */
-    suspend fun inspect(ctx: Context, n: Int): JsonObject? {
-        val t = pinned() ?: tab
-        if (BrowserCdp.hasRef(t, n)) return BrowserCdp.inspect(t, n)
-        val raw = unwrap(eval(ctx, BrowserScripts.inspect(ctx, n)))
-        return runCatching { json.parseToJsonElement(raw).jsonObject }.getOrNull()
-    }
-
-    /** 对某个编号的元素做动作；CDP 不可用时沿用脚本输入。 */
-    suspend fun act(ctx: Context, n: Int, op: String, arg: String = "", clear: Boolean = false): String? {
-        agentAt = System.currentTimeMillis()
-        withContext(Dispatchers.Main) { error = null; pageDone = CompletableDeferred() }
-        val t = pinned() ?: tab
-        if (BrowserPacing.blocked(t) != null) return "网站已触发风控或验证，停止操作。请让用户接管后重新读页。"
-        if (op == "click" || op == "select" || (op == "key" && arg == "enter")) BrowserPacing.before(t)
-        BrowserCdp.observeNetwork(t)
-        if (BrowserCdp.hasRef(t, n)) {
-            if (op !in setOf("click", "hover", "type", "delete", "key")) {
-                return "这个编号来自嵌入页面或封闭组件，暂不支持 $op；请先点开再用编号操作。"
-            }
-            if (!withContext(Dispatchers.Main) { t.web?.isAttachedToWindow == true }) {
-                return "这个嵌入元素目前在后台，不能安全地发真实输入。请先打开它所在标签页。"
-            }
-            val point = BrowserCdp.locate(t, n) ?: return "编号 $n 已经移走或被挡住，请重新 read。"
-            if (op == "key" && !BrowserCdp.focus(t, n)) return "这个元素现在无法获得输入焦点，请重新 read。"
-            val sent = BrowserCdp.act(t, point.first, point.second, op, arg, clear)
-            t.lastCdpInput = sent == BrowserCdp.Outcome.DONE
-            if (sent == BrowserCdp.Outcome.UNCERTAIN) {
-                return "CDP 输入中途断开，页面可能已经收到操作。先读页面确认，不要直接重复。"
-            }
-            if (sent == BrowserCdp.Outcome.FALLBACK) {
-                return "CDP 已断开，这个元素没有脚本入口，请重新 read 再试。"
-            }
-            settle()
-            return withContext(Dispatchers.Main) { error }
-        }
-        var outcome = BrowserCdp.Outcome.FALLBACK
-        if (op in setOf("click", "hover", "type", "delete", "key")) {
-            // 日期等特殊原生控件仍按原方式设置，普通文本框才用 CDP 输入。
-            val info = if (op == "type" || op == "delete") inspect(ctx, n) else null
-            val fieldType = (info?.get("type") as? JsonPrimitive)?.content.orEmpty()
-            val isText = (info?.get("text") as? JsonPrimitive)?.content == "true"
-            val supported = op !in setOf("type", "delete") || (isText &&
-                (op != "type" || fieldType !in setOf("date", "datetime-local", "time", "month", "week", "range", "color")))
-            // 没挂在界面上的网页（后台标签页）收不收得到 CDP 输入还没在真机上验证过，先走原来的脚本
-            val attached = withContext(Dispatchers.Main) { (pinned() ?: tab).web?.isAttachedToWindow == true }
-            if (supported && attached) {
-                val at = runCatching {
-                    json.parseToJsonElement(unwrap(eval(ctx, BrowserScripts.center(ctx, n)))).jsonObject
-                }.getOrNull()
-                if ((at?.get("found") as? JsonPrimitive)?.content == "true") {
-                    fun coord(k: String) = (at[k] as? JsonPrimitive)?.content?.toDoubleOrNull() ?: 0.0
-                    delay(300)
-                    val focused = op != "key" || unwrap(eval(ctx, BrowserScripts.focus(ctx, n))) == "true"
-                    if (focused) outcome = BrowserCdp.act(pinned() ?: tab, coord("x"), coord("y"), op, arg, clear)
-                }
-            }
-        }
-        (pinned() ?: tab).lastCdpInput = outcome == BrowserCdp.Outcome.DONE
-        if (outcome == BrowserCdp.Outcome.UNCERTAIN) {
-            return "CDP 输入中途断开，网页可能已经收到这次操作。先读页面确认，不要直接重复提交。"
-        }
-        val err = if (outcome == BrowserCdp.Outcome.DONE) null else {
-            val raw = unwrap(eval(ctx, BrowserScripts.act(ctx, n, op, arg, clear)))
-            runCatching { (json.parseToJsonElement(raw).jsonObject["err"] as? JsonPrimitive)?.content }.getOrNull()
-        }
-        settle()
-        return err ?: withContext(Dispatchers.Main) { error }
-    }
-
-    /** 按文字找元素，标成编号 0，返回它的情况（和 inspect 一样）；找不到返回 null。 */
-    suspend fun markText(ctx: Context, text: String): JsonObject? {
-        agentAt = System.currentTimeMillis()
-        val raw = unwrap(eval(ctx, BrowserScripts.markText(ctx, text)))
-        return runCatching { json.parseToJsonElement(raw).jsonObject }.getOrNull()
-            ?.takeIf { (it["found"] as? JsonPrimitive)?.content == "true" }
-            ?: BrowserCdp.markText(pinned() ?: tab, text)
-    }
-
-    /**
-     * 像手指一样在网页窗口上点或划（真的触摸事件）：网页自己画的控件、嵌在里面的别的网站（登录框、支付框）、
-     * 要滑动的组件都认。坐标是截图（look）上的像素。网页窗口不在屏幕上时退回用脚本点那个位置。
-     */
-    suspend fun touch(ctx: Context, x1: Float, y1: Float, x2: Float = x1, y2: Float = y1, durationMs: Long = 60): String? {
-        agentAt = System.currentTimeMillis()
-        val w = withContext(Dispatchers.Main) { (pinned()?.web ?: webView(ctx)).also { ensureLaidOut(it) } }
-        val t = pinned() ?: tab
-        if (BrowserPacing.blocked(t) != null) return "网站已触发风控或验证，停止触摸。请用户接管。"
-        BrowserPacing.before(t)
-        BrowserCdp.observeNetwork(t)
-        val scale = withContext(Dispatchers.Main) { minOf(1f, 720f / w.width.coerceAtLeast(1)) }
-        val (ax, ay, bx, by) = listOf(x1 / scale, y1 / scale, x2 / scale, y2 / scale)
-        val inside = withContext(Dispatchers.Main) { listOf(ax, bx).all { it in 0f..w.width.toFloat() } && listOf(ay, by).all { it in 0f..w.height.toFloat() } }
-        if (!inside) return "坐标在网页窗口外面（截图大约 ${(w.width * scale).toInt()}×${(w.height * scale).toInt()}）"
-        withContext(Dispatchers.Main) { pageDone = CompletableDeferred(); clearError() }
-        val isSwipe = x1 != x2 || y1 != y2
-        val mark = if (isSwipe) BrowserNetwork.mark(t.id) else null
-        val cssWidth = unwrap(eval(ctx, "innerWidth")).toFloatOrNull()?.takeIf { it > 0 } ?: w.width.toFloat()
-        val outcome = if (!withContext(Dispatchers.Main) { w.isAttachedToWindow }) BrowserCdp.Outcome.FALLBACK
-        else BrowserCdp.at(pinned() ?: tab,
-            BrowserCdpCoords.fromScreenshot(x1, w.width, cssWidth),
-            BrowserCdpCoords.fromScreenshot(y1, w.width, cssWidth),
-            BrowserCdpCoords.fromScreenshot(x2, w.width, cssWidth),
-            BrowserCdpCoords.fromScreenshot(y2, w.width, cssWidth), durationMs)
-        if (outcome == BrowserCdp.Outcome.UNCERTAIN) {
-            return "CDP 输入中途断开，网页可能已经收到这次操作。先读页面确认，不要直接重复。"
-        }
-        if (outcome == BrowserCdp.Outcome.FALLBACK) {
-            if (withContext(Dispatchers.Main) { w.isAttachedToWindow }) {
-                withContext(Dispatchers.Main) { gesture(w, ax, ay, bx, by, durationMs) }
-            } else {
-                // 不在屏幕上：触摸事件不一定送得到，退回脚本（只能点，不能划）
-                val k = w.width.toFloat() / cssWidth
-                eval(ctx, "(function(){var e=document.elementFromPoint(${ax / k},${ay / k});if(e){e.click();}})();1")
-            }
-        }
-        settle()
-        if (isSwipe && BrowserNetwork.loadedMore(t.id, mark)) BrowserPacing.loadedMore(t)
-        return withContext(Dispatchers.Main) { error }
-    }
-
-    /** 按下、（划过去）、抬起。在主线程调。 */
-    private suspend fun gesture(w: WebView, x1: Float, y1: Float, x2: Float, y2: Float, durationMs: Long) {
-        val steps = if (x1 == x2 && y1 == y2) 1 else 12
-        val t0 = android.os.SystemClock.uptimeMillis()
-        fun send(action: Int, x: Float, y: Float, at: Long) {
-            val e = android.view.MotionEvent.obtain(t0, at, action, x, y, 0)
-            e.source = android.view.InputDevice.SOURCE_TOUCHSCREEN
-            w.dispatchTouchEvent(e)
-            e.recycle()
-        }
-        send(android.view.MotionEvent.ACTION_DOWN, x1, y1, t0)
-        for (i in 1..steps) {
-            delay(durationMs / steps)
-            val f = i.toFloat() / steps
-            send(android.view.MotionEvent.ACTION_MOVE, x1 + (x2 - x1) * f, y1 + (y2 - y1) * f, android.os.SystemClock.uptimeMillis())
-        }
-        send(android.view.MotionEvent.ACTION_UP, x2, y2, android.os.SystemClock.uptimeMillis())
-    }
-
-    /** 截图上这个位置是什么（动手前看要不要问用户）：和 inspect 一样的信息，或 frame=true（读不到的嵌入框）。 */
-    suspend fun elementAt(ctx: Context, x: Float, y: Float): JsonObject? {
-        val (cx, cy) = withContext(Dispatchers.Main) {
-            val w = webView(ctx)
-            val scale = minOf(1f, 720f / w.width.coerceAtLeast(1))
-            x / scale to y / scale
-        }
-        val k = withContext(Dispatchers.Main) { webView(ctx).width.toFloat() } / unwrap(eval(ctx, "innerWidth")).toFloat().coerceAtLeast(1f)
-        return runCatching { json.parseToJsonElement(unwrap(eval(ctx, BrowserScripts.at(ctx, cx / k, cy / k)))).jsonObject }.getOrNull()
-    }
-
-    /** 编号 n 的元素中心换成截图上的像素（先滚到屏幕中间）。找不到返回 null。 */
-    suspend fun centerOf(ctx: Context, n: Int): Pair<Float, Float>? {
-        val t = pinned() ?: tab
-        if (BrowserCdp.hasRef(t, n)) {
-            val center = BrowserCdp.locate(t, n) ?: return null
-            val w = withContext(Dispatchers.Main) { t.web ?: webView(ctx) }
-            val cssW = unwrap(eval(ctx, "innerWidth")).toFloatOrNull()?.coerceAtLeast(1f) ?: w.width.toFloat()
-            val k = w.width / cssW * minOf(1f, 720f / w.width.coerceAtLeast(1))
-            return (center.first * k).toFloat() to (center.second * k).toFloat()
-        }
-        val o = runCatching { json.parseToJsonElement(unwrap(eval(ctx, BrowserScripts.center(ctx, n)))).jsonObject }.getOrNull() ?: return null
-        if ((o["found"] as? JsonPrimitive)?.content != "true") return null
-        fun f(k: String) = (o[k] as? JsonPrimitive)?.content?.toFloatOrNull() ?: 0f
-        delay(300)
-        return withContext(Dispatchers.Main) {
-            val w = webView(ctx)
-            val k = w.width / f("vw").coerceAtLeast(1f)
-            val scale = minOf(1f, 720f / w.width.coerceAtLeast(1))
-            f("x") * k * scale to f("y") * k * scale
-        }
-    }
-
-    /** 页面有没有变：网址 + 文字长度 + 元素个数（点了以后比一比，看点没点上）。 */
-    suspend fun pageSignature(ctx: Context): String {
-        val url = withContext(Dispatchers.Main) { (pinned() ?: tab).address }
-        return url + "|" + unwrap(eval(ctx, BrowserScripts.fingerprint(ctx)))
-    }
-
-    /** 等网页里出现这段文字（最多 timeoutMs）；text 为空就等页面不再变化。返回等到没有。 */
-    suspend fun waitFor(ctx: Context, text: String, timeoutMs: Long): Boolean {
-        agentAt = System.currentTimeMillis()
-        if (text.isBlank()) return waitStable(ctx, timeoutMs)
-        val end = System.currentTimeMillis() + timeoutMs
-        while (System.currentTimeMillis() < end) {
-            if (unwrap(eval(ctx, BrowserScripts.hasText(ctx, text))) == "true") return true
-            delay(500)
-        }
-        return false
-    }
-
-    /** 等页面加载完、内容不再变（连着两次一样）。返回在时限内稳没稳下来。 */
-    private suspend fun waitStable(ctx: Context, timeoutMs: Long): Boolean {
-        val end = System.currentTimeMillis() + timeoutMs
-        var last = ""
-        var same = 0
-        while (System.currentTimeMillis() < end) {
-            val sig = unwrap(eval(ctx, BrowserScripts.signature(ctx)))
-            val busy = withContext(Dispatchers.Main) { (pinned() ?: tab).loading < 100 }
-            if (!busy && sig == last) { if (++same >= 2) return true } else same = 0
-            last = sig
-            delay(400)
-        }
-        return false
-    }
-
-    /** 读整页：what = text / links / table。返回网页给的 JSON。 */
-    suspend fun extract(ctx: Context, what: String, start: Int = 0, limit: Int = 12_000): JsonObject? {
-        agentAt = System.currentTimeMillis()
-        val fromPage = runCatching { json.parseToJsonElement(unwrap(eval(ctx, BrowserScripts.extract(ctx, what, start, limit)))).jsonObject }.getOrNull()
-        if (what != "table") return fromPage
-        val t = pinned() ?: tab
-        // 并行比价会在同一次工具调用里抽取；先取回本标签已完成的接口正文。
-        BrowserCdp.flushNetwork(t.id)
-        val fromNet = BrowserNetwork.table(t.id, t.address) ?: return fromPage
-        // 接口数据只有名称/价格/店铺/链接四列，也可能是推荐流这类无关列表：网页上读得到像样的表就还用网页的，
-        // 网页读不到或明显少一大截（虚拟列表、画在画布上）才换接口数据
-        val pageRows = tableRows(fromPage)
-        if (pageRows > 0 && tableRows(fromNet) < pageRows * 2) return fromPage
-        t.diag.add("CDP 接口列表用于 extract（网页脚本读到 $pageRows 行）")
-        return fromNet
-    }
-
-    /** extract(table) 结果里最多的一张表或第一组列表有几行。 */
-    private fun tableRows(o: JsonObject?): Int {
-        o ?: return 0
-        val tables = (o["tables"] as? kotlinx.serialization.json.JsonArray).orEmpty()
-            .maxOfOrNull { ((it as? JsonObject)?.get("rows") as? kotlinx.serialization.json.JsonArray)?.size ?: 0 } ?: 0
-        val list = ((o["lists"] as? kotlinx.serialization.json.JsonArray)?.firstOrNull() as? kotlinx.serialization.json.JsonArray)?.size ?: 0
-        return if (tables > 0) tables else list
-    }
-
     /** Kavi 要上传的文件：网页弹出选文件时直接交给它（不弹选择器）。uploadTaken 表示网页已经拿走了。 */
     @Volatile var agentUpload: android.net.Uri? = null
     @Volatile var uploadTaken = false
-
-    /**
-     * 上传对话文件夹里的文件：用手指点编号 n 的上传按钮（网页只认真的点击才肯弹选文件），
-     * 网页要文件时把这个文件交过去。返回出错原因，成功返回 null。
-     */
-    suspend fun upload(ctx: Context, n: Int, file: java.io.File): String? {
-        val (x, y) = centerOf(ctx, n) ?: return "找不到编号 $n，页面可能变了"
-        val uri = androidx.core.content.FileProvider.getUriForFile(app, app.packageName + ".files", file)
-        uploadTaken = false
-        agentUpload = uri
-        try {
-            touch(ctx, x, y)?.let { return it }
-            val end = System.currentTimeMillis() + 3000
-            while (!uploadTaken && System.currentTimeMillis() < end) delay(200)
-            if (!uploadTaken) return "点了编号 $n，但网页没有要文件（可能不是上传按钮，或者网页窗口不在屏幕上）。可以 look 看看上传按钮在哪，或者请用户自己传。"
-            settle()
-            return null
-        } finally {
-            agentUpload = null
-        }
-    }
 
     /**
      * 把一段操作钉在某个标签页上（并行抓取、几个回答同时用浏览器时各干各的）：这段协程跑着的时候，
@@ -2386,164 +1224,7 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
             pinLocal.get().also { pinLocal.set(this) }
         override fun restoreThreadContext(context: kotlin.coroutines.CoroutineContext, oldState: PinTab?) = pinLocal.set(oldState)
     }
-    fun pin(t: Tab) = PinTab(t)
-    private suspend fun pinned(): Tab? = kotlin.coroutines.coroutineContext[PinTab]?.t
 
-    /** 关掉某个标签页（按对象找，并行抓完收拾用）。 */
-    fun closeTab(t: Tab) { tabs.indexOf(t).takeIf { it >= 0 }?.let { closeTab(it) } }
-
-    /** 标签页清单（给 Kavi 看）：第几个、标题、网址、是不是当前。 */
-    fun tabList(): String = tabs.mapIndexed { i, t ->
-        "${i + 1}. ${t.badge}${t.title.ifBlank { if (t.address.isEmpty()) "起始页" else BrowserPages.host(t.address) }} ${t.address}" + if (t === tab) "（当前）" else ""
-    }.joinToString("\n")
-
-    /** 关掉挡着网页的弹窗（下 App、领券、Cookie 提示），返回关掉了什么。 */
-    suspend fun dismissPopups(ctx: Context): List<String> {
-        val raw = unwrap(eval(ctx, BrowserScripts.dismiss(ctx)))
-        val closed = runCatching { (json.parseToJsonElement(raw) as kotlinx.serialization.json.JsonArray).map { (it as JsonPrimitive).content } }.getOrDefault(emptyList())
-        if (closed.isNotEmpty()) delay(300)
-        return closed
-    }
-
-    /** 滚到页面最底下（往下划才加载更多的页面用），等新内容出来。 */
-    suspend fun scrollToBottom(ctx: Context) {
-        agentAt = System.currentTimeMillis()
-        val t = pinned() ?: tab
-        if (BrowserPacing.blocked(t) != null) return
-        BrowserPacing.before(t)
-        BrowserCdp.observeNetwork(t)
-        val mark = BrowserNetwork.mark(t.id)
-        eval(ctx, "window.scrollTo(0, Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0)); 1")
-        delay(600)
-        waitStable(ctx, 5_000)
-        if (BrowserNetwork.loadedMore(t.id, mark)) BrowserPacing.loadedMore(t)
-    }
-
-    /** 翻页：dir = 1 往下，-1 往上。 */
-    suspend fun scroll(ctx: Context, dir: Int) {
-        agentAt = System.currentTimeMillis()
-        val t = pinned() ?: tab
-        if (BrowserPacing.blocked(t) != null) return
-        if (dir > 0) BrowserPacing.before(t)
-        BrowserCdp.observeNetwork(t)
-        val mark = if (dir > 0) BrowserNetwork.mark(t.id) else null
-        eval(ctx, "window.scrollBy(0, ${dir} * window.innerHeight * 0.8); 1")
-        delay(400)
-        if (dir > 0) runCatching { waitNetQuiet(ctx, 2_000) }
-        if (dir > 0 && BrowserNetwork.loadedMore(t.id, mark)) BrowserPacing.loadedMore(t)
-    }
-
-    suspend fun back(ctx: Context): Boolean {
-        agentAt = System.currentTimeMillis()
-        val t = pinned() ?: tab
-        if (BrowserPacing.blocked(t) != null) return false
-        BrowserPacing.before(t)
-        BrowserCdp.observeNetwork(t)
-        val ok = withContext(Dispatchers.Main) {
-            val w = webView(ctx)
-            if (w.canGoBack()) { pageDone = CompletableDeferred(); clearError(); w.goBack(); true } else false
-        }
-        if (ok) settle()
-        return ok
-    }
-
-    /** 动作做完等一会儿：如果引起了跳转就等新页面加载完（最多 15 秒），再给脚本一点时间把内容画出来。 */
-    private suspend fun settle() {
-        delay(500)
-        val pending = withContext(Dispatchers.Main) { pageDone?.takeIf { loading < 100 } }
-        if (pending != null) withTimeoutOrNull(15_000) { pending.await() }
-        // 很多网页加载完还在慢慢往里填内容：等它不再变（最多 4 秒）
-        runCatching { waitStable(app, 4_000) }
-        // 后台请求还没回来的话，数据可能还没刷新：再等它们回来（最多 5 秒，长连接不等）
-        runCatching { waitNetQuiet(app, 5_000) }
-    }
-
-    /** 等网页的后台请求都回来。钩子没装上就不等。 */
-    private suspend fun waitNetQuiet(ctx: Context, timeoutMs: Long) {
-        val end = System.currentTimeMillis() + timeoutMs
-        var waited = false
-        while (System.currentTimeMillis() < end) {
-            val (inflight, _) = BrowserNetWatch.state(eval(ctx, BrowserNetWatch.STATE_JS)) ?: return
-            if (inflight == 0) { if (waited) runCatching { waitStable(ctx, 1_500) }; return }
-            waited = true
-            delay(300)
-        }
-    }
-
-    /** 现在的请求失败序号（动作前记一下，做完用 [netFailsSince] 取这期间失败的）。钩子没装上是 null。 */
-    suspend fun netSeq(ctx: Context): Int? = runCatching { BrowserNetWatch.state(eval(ctx, BrowserNetWatch.STATE_JS))?.second }.getOrNull()
-
-    suspend fun netFailsSince(ctx: Context, seq: Int): List<BrowserNetWatch.Fail> =
-        runCatching { BrowserNetWatch.fails(eval(ctx, BrowserNetWatch.failsSinceJs(seq))) }.getOrDefault(emptyList())
-
-    /**
-     * 这一步做完的网页截个小图（不画编号框），存成 JPEG，对话里按步骤显示。网页没画出来就不存，返回 false。
-     */
-    suspend fun snapshot(ctx: Context, out: java.io.File, maxWidth: Int = 480): Boolean {
-        val bmp = withContext(Dispatchers.Main) {
-            val w = webView(ctx)
-            ensureLaidOut(w)
-            if (w.width <= 0 || w.height <= 0) return@withContext null
-            val scale = minOf(1f, maxWidth.toFloat() / w.width)
-            val b = Bitmap.createBitmap((w.width * scale).toInt(), (w.height * scale).toInt(), Bitmap.Config.RGB_565)
-            val c = Canvas(b)
-            c.scale(scale, scale)
-            c.translate(-w.scrollX.toFloat(), -w.scrollY.toFloat())
-            w.draw(c)
-            val sample = IntArray(16) { i -> b.getPixel((b.width * (i % 4 + 1) / 5).coerceAtMost(b.width - 1), (b.height * (i / 4 + 1) / 5).coerceAtMost(b.height - 1)) }
-            if (sample.distinct().size == 1) { b.recycle(); null } else b
-        } ?: return false
-        return withContext(Dispatchers.IO) {
-            try {
-                out.parentFile?.mkdirs()
-                out.outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 70, it) }
-                true
-            } catch (e: Exception) {
-                false
-            } finally {
-                bmp.recycle()
-            }
-        }
-    }
-
-    /**
-     * 截图（画上和清单一样的编号框），缩到最宽 720 像素的 JPEG，返回 data URL。
-     * 网页窗口没放在任何界面里时可能截不出东西，返回 null。
-     */
-    suspend fun screenshot(ctx: Context, page: Page): String? = withContext(Dispatchers.Main) {
-        val w = webView(ctx)
-        ensureLaidOut(w)
-        if (w.width <= 0 || w.height <= 0) return@withContext null
-        val scale = minOf(1f, 720f / w.width)
-        val bmp = Bitmap.createBitmap((w.width * scale).toInt(), (w.height * scale).toInt(), Bitmap.Config.ARGB_8888)
-        val c = Canvas(bmp)
-        c.scale(scale, scale)
-        // 网页内容自己会按滚动位置画；画框的坐标是相对可视区的
-        c.translate(-w.scrollX.toFloat(), -w.scrollY.toFloat())
-        w.draw(c)
-        c.translate(w.scrollX.toFloat(), w.scrollY.toFloat())
-        // 全白（或全一色）就是没画出来
-        val sample = IntArray(16) { i -> bmp.getPixel((bmp.width * (i % 4 + 1) / 5).coerceAtMost(bmp.width - 1), (bmp.height * (i / 4 + 1) / 5).coerceAtMost(bmp.height - 1)) }
-        if (sample.distinct().size == 1) { bmp.recycle(); return@withContext null }
-        // 元素坐标（相对网页可视区左上角的 CSS px）→ 网页窗口像素
-        val k = if (page.vw > 0) w.width / page.vw else 1f
-        val box = Paint().apply { style = Paint.Style.STROKE; strokeWidth = 3f / scale; color = Color.rgb(230, 40, 40) }
-        val tag = Paint().apply { style = Paint.Style.FILL; color = Color.rgb(230, 40, 40) }
-        val txt = Paint().apply { color = Color.WHITE; textSize = 26f / scale; isAntiAlias = true; isFakeBoldText = true }
-        page.items.forEach { i ->
-            val l = (i.x - page.vx) * k; val t = (i.y - page.vy) * k
-            if (t > w.height || t + i.h * k < 0) return@forEach
-            c.drawRect(l, t, l + i.w * k, t + i.h * k, box)
-            val label = i.n.toString()
-            val tw = txt.measureText(label) + 8f / scale
-            c.drawRect(l, t, l + tw, t + txt.textSize + 6f / scale, tag)
-            c.drawText(label, l + 4f / scale, t + txt.textSize, txt)
-        }
-        val out = ByteArrayOutputStream()
-        bmp.compress(Bitmap.CompressFormat.JPEG, 70, out)
-        bmp.recycle()
-        "data:image/jpeg;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
-    }
 }
 
 /** 网页进程没了以后这个网页窗口就不能用了：从界面上拿下来、销毁，告诉系统已经处理（返回 true）。 */

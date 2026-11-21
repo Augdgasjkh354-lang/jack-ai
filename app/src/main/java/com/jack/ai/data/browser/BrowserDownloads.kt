@@ -9,6 +9,8 @@ import com.jack.ai.api.BrowserQueue.State
 import com.jack.ai.ui.JackBrowser
 import kotlinx.coroutines.*
 import com.jack.ai.data.Downloads
+import com.jack.ai.ui.routeFor
+import com.jack.ai.ui.storeDirect
 
 /** 浏览器和 Kavi 共用的下载队列，页面离开后继续工作。 */
 object BrowserDownloads {
