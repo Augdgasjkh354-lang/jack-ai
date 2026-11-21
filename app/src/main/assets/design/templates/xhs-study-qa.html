@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-study-qa","name":"学习笔记·问答","category":"xhs","size":[1080,1440],"style":"学习笔记","look":"study","set":"study-a","role":"qa","description":"红笔问、蓝笔答的问答页，问题短、回答两三句，适合考研、考公类经验帖的答疑内页","slots":[{"name":"tag","label":"贴纸标签","max":6},{"name":"title","label":"本页标题","max":10},{"name":"note","label":"底部提醒","max":14},{"name":"author","label":"账号名","max":12},{"name":"page","label":"页码","max":5}],"lists":[{"name":"qa","label":"问答","min":3,"max":5,"slots":[{"name":"question","label":"问题","max":12},{"name":"answer","label":"回答","max":36}]}],"images":[],"colors":{"bg":"#FDFDF8","fg":"#1E2B55","primary":"#1E2B55","secondary":"#FFF27A","accent":"#D63A32","muted":"#5B6380"}}'>
+<title>学习笔记·问答</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#FDFDF8;--fg:#1E2B55;--primary:#1E2B55;--secondary:#FFF27A;--accent:#D63A32;--muted:#5B6380;
+  --font-title:"LXGW WenKai","Noto Serif CJK SC",serif;--font-sans:"LXGW WenKai","Noto Sans CJK SC",sans-serif;--font-num:"Caveat","LXGW WenKai",serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:76px 80px 72px;display:flex;flex-direction:column;
+  background-color:var(--bg);
+  background-image:repeating-linear-gradient(transparent 0 47px,color-mix(in srgb,var(--fg) 7%,transparent) 47px 48px),repeating-linear-gradient(90deg,transparent 0 47px,color-mix(in srgb,var(--fg) 7%,transparent) 47px 48px);
+  color:var(--fg);font-family:var(--font-sans)}
+/* 颗粒：让纯色底不那么「电脑味」 */
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.10;mix-blend-mode:multiply}
+/* 本子左侧的装订线 */
+.margin-line{position:absolute;left:44px;top:0;bottom:0;width:3px;background:color-mix(in srgb,var(--accent) 45%,transparent)}
+.top{position:relative;display:flex;align-items:center;justify-content:space-between;height:60px}
+.tag{display:inline-block;padding:12px 24px 14px;border:3px solid var(--accent);color:var(--accent);font-family:var(--font-title);font-weight:700;font-size:34px;line-height:1;transform:rotate(-2deg)}
+.page{font-family:var(--font-num);font-weight:700;font-size:44px;color:var(--fg)}
+.title{position:relative;margin:20px 0 0;font-family:var(--font-title);font-weight:700;font-size:76px;line-height:1.1;color:var(--fg)}
+.rule{width:120px;height:5px;margin-top:14px;background:var(--accent);border-radius:3px;transform:rotate(-1deg)}
+.qa-list{position:relative;display:flex;flex-direction:column;justify-content:space-between;height:900px;margin-top:24px}
+.qa{padding:18px 0;border-bottom:2px solid color-mix(in srgb,var(--fg) 18%,transparent)}
+.qline{display:flex;align-items:baseline;gap:16px}
+.qmark{flex:none;width:40px;font-family:var(--font-num);font-weight:700;font-size:44px;line-height:1;color:var(--accent)}
+.question{font-size:34px;line-height:1.3;font-weight:700;color:var(--fg)}
+.aline{display:flex;align-items:baseline;gap:16px;margin-top:10px}
+.amark{flex:none;width:40px;font-family:var(--font-num);font-weight:700;font-size:44px;line-height:1;color:var(--primary)}
+.answer{font-size:28px;line-height:1.5;font-weight:400;color:var(--fg)}
+.note{position:relative;margin-top:16px;font-size:30px;line-height:1.4;font-weight:700;color:var(--fg)}
+.bottom{position:relative;margin-top:auto;display:flex;align-items:center;justify-content:space-between;padding-top:26px;border-top:3px solid color-mix(in srgb,var(--fg) 35%,transparent)}
+.author{font-size:30px;font-weight:700}
+.next{display:flex;align-items:center;gap:14px;font-family:var(--font-title);font-weight:700;font-size:36px;color:var(--primary)}
+.next svg{width:58px;height:28px}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="margin-line"></div>
+  <div class="top">
+    <span class="tag" data-slot="tag" data-max="6">考研问答</span>
+    <span class="page" data-slot="page" data-max="5">03/04</span>
+  </div>
+  <h2 class="title" data-slot="title" data-max="10">你问我答</h2>
+  <div class="rule"></div>
+  <div class="qa-list" data-list="qa" data-max="5">
+    <div class="qa" data-item>
+      <div class="qline"><span class="qmark">Q</span><span class="question" data-slot="question" data-max="12">每天背多少单词？</span></div>
+      <div class="aline"><span class="amark">A</span><span class="answer" data-slot="answer" data-max="36">每天 100 个新词，再复习 200 个旧词</span></div>
+    </div>
+    <div class="qa" data-item>
+      <div class="qline"><span class="qmark">Q</span><span class="question" data-slot="question" data-max="12">真题刷几遍？</span></div>
+      <div class="aline"><span class="amark">A</span><span class="answer" data-slot="answer" data-max="36">至少三遍：做题、精读、复盘错题</span></div>
+    </div>
+    <div class="qa" data-item>
+      <div class="qline"><span class="qmark">Q</span><span class="question" data-slot="question" data-max="12">作文怎么准备？</span></div>
+      <div class="aline"><span class="amark">A</span><span class="answer" data-slot="answer" data-max="36">先背 10 篇范文，再默写改写，每周两篇</span></div>
+    </div>
+    <div class="qa" data-item>
+      <div class="qline"><span class="qmark">Q</span><span class="question" data-slot="question" data-max="12">单词书用哪本？</span></div>
+      <div class="aline"><span class="amark">A</span><span class="answer" data-slot="answer" data-max="36">哪本都行，关键是每天都翻，别只买不看</span></div>
+    </div>
+  </div>
+  <div class="note" data-slot="note" data-max="14">没写到的，评论区问我</div>
+  <div class="bottom">
+    <span class="author" data-slot="author" data-max="12">@英语上岸日记</span>
+    <span class="next">往后翻<svg viewBox="0 0 58 28" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14h48M40 3l12 11-12 11"/></svg></span>
+  </div>
+</div>
+</body>
+</html>

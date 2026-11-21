@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"poster-study-recruit","name":"竖版海报·学习笔记招生","category":"poster","size":[1080,1920],"style":"学习笔记","look":"study","set":"poster-study","role":"content","description":"学习笔记招生海报：方格纸加红笔批注，3～5 条亮点加开营信息，适合考研、考公集训营招生","slots":[{"name":"title","label":"主标题（可用\\n分两行）","max":10},{"name":"subtitle","label":"副标题","max":16},{"name":"date","label":"开营日期","max":12},{"name":"time","label":"时间","max":14},{"name":"place","label":"地点","max":16},{"name":"contact","label":"报名方式","max":20}],"lists":[{"name":"points","label":"亮点","min":3,"max":5,"slots":[{"name":"head","label":"短标题","max":12},{"name":"text","label":"说明","max":30}]}],"images":[],"colors":{"bg":"#FDFDF8","fg":"#1E2B55","primary":"#1E2B55","secondary":"#FFF27A","accent":"#D63A32","muted":"#5B6380"}}'>
+<title>竖版海报·学习笔记招生</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1920px;overflow:hidden}
+.canvas{--bg:#FDFDF8;--fg:#1E2B55;--primary:#1E2B55;--secondary:#FFF27A;--accent:#D63A32;--muted:#5B6380;
+  --font-title:"LXGW WenKai","Noto Serif CJK SC",serif;--font-sans:"LXGW WenKai","Noto Serif CJK SC",serif;--font-num:"Caveat","LXGW WenKai",serif;
+  position:relative;width:1080px;height:1920px;overflow:hidden;padding:76px 84px 72px;display:flex;flex-direction:column;
+  background-color:var(--bg);background-image:repeating-linear-gradient(to right,color-mix(in srgb, var(--fg) 7%, transparent) 0 1px,transparent 1px 56px),repeating-linear-gradient(to bottom,color-mix(in srgb, var(--fg) 7%, transparent) 0 1px,transparent 1px 56px);
+  color:var(--fg);font-family:var(--font-sans)}
+.bind{position:absolute;left:44px;top:0;bottom:0;width:4px;background:color-mix(in srgb, var(--accent) 60%, transparent)}
+.hole{position:absolute;left:34px;width:22px;height:22px;border-radius:50%;background:var(--bg);border:3px solid var(--fg)}
+.hole.h1{top:300px}
+.hole.h2{top:900px}
+.hole.h3{top:1500px}
+.top{position:relative;display:flex;align-items:center;justify-content:space-between;height:56px}
+.camp{font-family:var(--font-num);font-weight:700;font-size:44px;letter-spacing:.04em;color:var(--accent)}
+.stamp{display:inline-block;padding:8px 18px;border:3px solid var(--accent);color:var(--accent);font-family:var(--font-title);font-weight:700;font-size:34px;line-height:1;transform:rotate(3deg)}
+.title{position:relative;margin:48px 0 0;font-family:var(--font-title);font-weight:700;font-size:96px;line-height:1.15;color:var(--fg)}
+.subtitle{position:relative;display:inline-block;margin-top:36px;padding:6px 18px;background:color-mix(in srgb, var(--secondary) 80%, transparent);font-size:34px;line-height:1.4;font-weight:400;color:var(--fg)}
+.squiggle{display:block;margin-top:20px;width:320px;height:16px;color:var(--accent)}
+.points{position:relative;margin-top:48px;display:flex;flex-direction:column;gap:28px}
+.point{display:grid;grid-template-columns:96px 1fr;column-gap:28px;max-height:240px;border-bottom:2px solid color-mix(in srgb, var(--fg) 18%, transparent)}
+.points:has(>.point:nth-child(3):last-child){gap:44px}
+.points:has(>.point:nth-child(3):last-child) .point{padding:14px 0}
+.points:has(>.point:nth-child(3):last-child) .head{font-size:48px}
+.points:has(>.point:nth-child(3):last-child) .text{font-size:34px;line-height:1.55}
+.num{display:flex;align-items:center;justify-content:center;width:96px;height:96px;border:4px solid var(--accent);border-radius:50%;color:var(--accent);font-family:var(--font-num);font-weight:700;font-size:64px;line-height:1}
+.body{min-width:0}
+.head{display:block;font-size:40px;line-height:1.3;font-weight:700;color:var(--fg)}
+.text{display:block;margin-top:8px;font-size:30px;line-height:1.5;font-weight:400;color:var(--fg)}
+.infobox{position:relative;margin-top:auto;padding:28px 36px;border:3px solid var(--fg);background:color-mix(in srgb, var(--secondary) 35%, transparent)}
+.irow{display:flex;align-items:baseline;gap:16px;padding:6px 0}
+.ilabel{flex:none;font-size:30px;font-weight:700;color:var(--accent)}
+.irow .date,.irow .time,.irow .place,.irow .contact{font-size:32px;line-height:1.35;font-weight:400;color:var(--fg)}
+.luck{position:relative;margin-top:28px;text-align:center;font-family:var(--font-num);font-weight:700;font-size:40px;color:var(--muted)}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <div class="bind"></div>
+  <div class="hole h1"></div>
+  <div class="hole h2"></div>
+  <div class="hole h3"></div>
+  <div class="top">
+    <span class="camp">2026 SUMMER CAMP</span>
+    <span class="stamp">仅招 60 人</span>
+  </div>
+  <h2 class="title" data-slot="title" data-max="10">暑期考研<br>集训营</h2>
+  <span class="subtitle" data-slot="subtitle" data-max="16">80 天，从基础到上岸</span>
+  <svg class="squiggle" viewBox="0 0 320 16" preserveAspectRatio="none" aria-hidden="true"><path d="M4 10 Q 24 2 44 9 T 84 9 T 124 9 T 164 9 T 204 9 T 244 9 T 284 9 T 316 9" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg>
+  <div class="points" data-list="points" data-max="5">
+    <div class="point" data-item>
+      <span class="num" data-slot="num">01</span>
+      <div class="body"><span class="head" data-slot="head" data-max="12">全程督学</span><span class="text" data-slot="text" data-max="30">每天 12 小时自习室，班主任全程跟班</span></div>
+    </div>
+    <div class="point" data-item>
+      <span class="num" data-slot="num">02</span>
+      <div class="body"><span class="head" data-slot="head" data-max="12">名师小班</span><span class="text" data-slot="text" data-max="30">每班不超过 30 人，讲练结合不灌水</span></div>
+    </div>
+    <div class="point" data-item>
+      <span class="num" data-slot="num">03</span>
+      <div class="body"><span class="head" data-slot="head" data-max="12">真题精讲</span><span class="text" data-slot="text" data-max="30">近十年真题逐题拆解，套路一次讲透</span></div>
+    </div>
+  </div>
+  <div class="infobox">
+    <div class="irow"><span class="ilabel">开营</span><span class="date" data-slot="date" data-max="12">7 月 10 日开营</span></div>
+    <div class="irow"><span class="ilabel">时间</span><span class="time" data-slot="time" data-max="14">每天 8:00–22:00</span></div>
+    <div class="irow"><span class="ilabel">地点</span><span class="place" data-slot="place" data-max="16">海淀区中关村大街 27 号</span></div>
+    <div class="irow"><span class="ilabel">报名</span><span class="contact" data-slot="contact" data-max="20">微信：kaoyan2026</span></div>
+  </div>
+  <div class="luck">Good luck!</div>
+</div>
+</body>
+</html>

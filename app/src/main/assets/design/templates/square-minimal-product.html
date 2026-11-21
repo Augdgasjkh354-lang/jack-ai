@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"square-minimal-product","name":"方图·极简产品","category":"square","size":[1080,1080],"style":"极简白","look":"minimal","set":"square-minimal","role":"content","description":"大图在上、产品名和价格在下的朋友圈产品图，严格网格、大量留白，适合上新和好物分享","slots":[{"name":"title","label":"产品名","max":12},{"name":"price","label":"价格","max":8},{"name":"body","label":"卖点一","max":16},{"name":"note","label":"卖点二","max":16},{"name":"tag","label":"标签","max":6}],"lists":[],"images":[{"name":"photo","label":"产品照片","optional":true}],"colors":{"bg":"#FFFFFF","fg":"#111111","primary":"#111111","secondary":"#F1F1F1","accent":"#2457F5","muted":"#6B6B6B"}}'>
+<title>方图·极简产品</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1080px;overflow:hidden}
+.canvas{--bg:#FFFFFF;--fg:#111111;--primary:#111111;--secondary:#F1F1F1;--accent:#2457F5;--muted:#6B6B6B;
+  --font-title:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-sans:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-num:"Montserrat","Noto Sans CJK SC",sans-serif;
+  position:relative;width:1080px;height:1080px;overflow:hidden;padding:60px 60px 56px;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.08;mix-blend-mode:multiply}
+.photo{position:relative;flex:none;height:560px;background-color:var(--secondary);background-image:radial-gradient(rgba(0,0,0,.07) 1.5px,transparent 1.6px);background-size:36px 36px}
+.title{margin:34px 0 0;font-family:var(--font-title);font-weight:900;font-size:76px;line-height:1.12;letter-spacing:.01em;color:var(--primary)}
+.buy{margin-top:18px;display:flex;align-items:baseline;justify-content:space-between}
+.price{font-family:var(--font-num);font-weight:700;font-size:52px;line-height:1.2;color:var(--accent)}
+.tag{display:inline-block;padding:8px 18px 10px;background:var(--secondary);color:var(--fg);font-size:24px;font-weight:700;line-height:1}
+.rule{margin-top:24px;height:2px;background:color-mix(in srgb,var(--fg) 14%,transparent)}
+.points{margin-top:22px;display:flex;flex-direction:column;gap:16px}
+.point{display:flex;align-items:flex-start;gap:14px;font-size:30px;line-height:1.4;font-weight:300;color:var(--fg)}
+.dot{flex:none;width:12px;height:12px;margin-top:15px;background:var(--accent)}
+.foot{margin-top:auto;display:flex;justify-content:space-between;align-items:center;font-family:var(--font-num);font-size:22px;font-weight:700;letter-spacing:.16em;color:var(--muted)}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1080" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="photo" data-slot="photo" data-kind="image"></div>
+  <h1 class="title" data-slot="title" data-max="12">陶瓷手冲咖啡壶</h1>
+  <div class="buy">
+    <span class="price" data-slot="price" data-max="8">¥299</span>
+    <span class="tag" data-slot="tag" data-max="6">新品</span>
+  </div>
+  <div class="rule"></div>
+  <div class="points">
+    <div class="point"><span class="dot"></span><span data-slot="body" data-max="16">手工釉面，每只纹理都不同</span></div>
+    <div class="point"><span class="dot"></span><span data-slot="note" data-max="16">耐热玻璃滤杯，冲煮更稳定</span></div>
+  </div>
+  <div class="foot"><span>MINIMAL GOODS</span><span>EST. 2026</span></div>
+</div>
+</body>
+</html>

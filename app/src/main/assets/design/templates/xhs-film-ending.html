@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-film-ending","name":"胶片复古·结尾","category":"xhs","size":[1080,1440],"style":"胶片复古","look":"film","set":"film-a","role":"ending","description":"一排三张带齿孔的小胶片框，下方是互动提问和下期预告，放在一组图的最后一张","slots":[{"name":"tag","label":"小标签","max":6},{"name":"question","label":"互动问题","max":18},{"name":"summary","label":"一句话总结","max":20},{"name":"next","label":"下期预告","max":14},{"name":"author","label":"账号名","max":12},{"name":"follow","label":"关注贴纸","max":6},{"name":"page","label":"页码","max":5},{"name":"cap1","label":"第一张小图说明","max":8},{"name":"cap2","label":"第二张小图说明","max":8},{"name":"cap3","label":"第三张小图说明","max":8}],"lists":[],"images":[{"name":"photo1","label":"第一张小图","optional":true},{"name":"photo2","label":"第二张小图","optional":true},{"name":"photo3","label":"第三张小图","optional":true}],"colors":{"bg":"#EFE6D2","fg":"#2B241B","primary":"#A8432A","secondary":"#DCCCA9","accent":"#E88A2E","muted":"#6F6250"}}'>
+<title>胶片复古·结尾</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#EFE6D2;--fg:#2B241B;--primary:#A8432A;--secondary:#DCCCA9;--accent:#E88A2E;--muted:#6F6250;
+  --font-title:"Noto Serif SC","Noto Serif CJK SC",serif;--font-sans:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-num:"Bebas Neue","Noto Sans CJK SC",sans-serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:72px 80px;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+/* 颗粒：让纯色底不那么「电脑味」 */
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.10;mix-blend-mode:multiply}
+/* 轻微暗角 */
+.vignette{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 58%,rgba(0,0,0,.12) 100%)}
+.top{position:relative;display:flex;align-items:center;justify-content:space-between;height:56px}
+.tag{display:inline-block;padding:12px 26px 14px;background:var(--fg);color:var(--bg);font-size:28px;font-weight:700;line-height:1}
+.page{font-family:var(--font-num);font-size:40px;line-height:1;letter-spacing:.06em;color:var(--fg)}
+.mid{position:relative;margin-top:auto;margin-bottom:auto;display:flex;flex-direction:column;align-items:center}
+.frames{position:relative;display:flex;gap:40px}
+.frame{position:relative;width:280px;background:rgba(255,255,255,.92);padding:0 0 14px}
+.sprockets{height:22px;background-color:var(--fg);background-image:radial-gradient(ellipse 6px 4px at center,var(--bg) 98%,transparent 100%);background-size:30px 22px;background-repeat:repeat}
+.ph{height:300px;margin:14px 14px 0;background-color:var(--secondary);background-image:repeating-linear-gradient(45deg,color-mix(in srgb,var(--primary) 4%,transparent) 0 1px,transparent 1px 26px)}
+.cap{display:block;margin:14px 14px 0;text-align:center;font-size:24px;font-weight:700;line-height:1.4;color:rgba(0,0,0,.85)}
+.rule{width:72px;height:6px;background:var(--accent);margin-top:64px}
+.question{margin:40px 0 0;text-align:center;font-family:var(--font-title);font-weight:700;font-size:72px;line-height:1.35;color:var(--fg)}
+.summary{margin-top:28px;text-align:center;font-size:28px;line-height:1.5;color:var(--muted)}
+.next{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:24px;font-size:28px;font-weight:700;line-height:1.4;color:var(--fg)}
+.next i{width:28px;height:28px;flex:none}
+.next i svg{width:28px;height:28px}
+.bottom{position:relative;display:flex;align-items:center;justify-content:space-between}
+.author{font-size:28px;font-weight:700}
+.follow{display:inline-block;padding:14px 32px 16px;background:var(--primary);color:var(--bg);font-family:var(--font-title);font-weight:700;font-size:40px;line-height:1;transform:rotate(-2deg)}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0 0 0 0 0 0 0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="vignette" aria-hidden="true"></div>
+  <div class="top">
+    <span class="tag" data-slot="tag" data-max="6">老街漫步</span>
+    <span class="page" data-slot="page" data-max="5">04/04</span>
+  </div>
+  <div class="mid">
+    <div class="frames">
+      <div class="frame">
+        <div class="sprockets" aria-hidden="true"></div>
+        <div class="ph" data-slot="photo1" data-kind="image"></div>
+        <span class="cap" data-slot="cap1" data-max="8">梧桐街口</span>
+      </div>
+      <div class="frame">
+        <div class="sprockets" aria-hidden="true"></div>
+        <div class="ph" data-slot="photo2" data-kind="image"></div>
+        <span class="cap" data-slot="cap2" data-max="8">旧书店</span>
+      </div>
+      <div class="frame">
+        <div class="sprockets" aria-hidden="true"></div>
+        <div class="ph" data-slot="photo3" data-kind="image"></div>
+        <span class="cap" data-slot="cap3" data-max="8">日落巷子</span>
+      </div>
+    </div>
+    <div class="rule" aria-hidden="true"></div>
+    <h2 class="question" data-slot="question" data-max="18">你上一次慢慢走路，<br>是什么时候？</h2>
+    <div class="summary" data-slot="summary" data-max="20">这组照片，拍给还在赶路的你</div>
+    <div class="next"><span data-slot="next" data-max="14">下期：老街的早餐铺子</span><i data-icon="arrow-right"></i></div>
+  </div>
+  <div class="bottom">
+    <span class="author" data-slot="author" data-max="12">@老街漫步者</span>
+    <span class="follow" data-slot="follow" data-max="6">关注我</span>
+  </div>
+</div>
+</body>
+</html>

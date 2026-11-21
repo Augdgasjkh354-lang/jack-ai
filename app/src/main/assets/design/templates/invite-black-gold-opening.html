@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"invite-black-gold-opening","name":"邀请函·黑金开业","category":"invite","size":[1080,1620],"style":"高级黑金","look":"black-gold","set":"invite-black-gold","role":"content","description":"黑金开业邀请函：金色细线双框加菱形分隔，居中对称内容极少，适合新店开业、品牌品鉴会","slots":[{"name":"title","label":"店名","max":8},{"name":"subtitle","label":"副标题","max":12},{"name":"date","label":"日期","max":12},{"name":"time","label":"时间","max":8},{"name":"place","label":"地点","max":16},{"name":"contact","label":"预约电话","max":20},{"name":"footer","label":"落款","max":8}],"lists":[],"images":[],"colors":{"bg":"#111111","fg":"#F2EBDD","primary":"#C8A464","secondary":"#1F1D1A","accent":"#E6D3A8","muted":"#ADA594"}}'>
+<title>邀请函·黑金开业</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1620px;overflow:hidden}
+.canvas{--bg:#111111;--fg:#F2EBDD;--primary:#C8A464;--secondary:#1F1D1A;--accent:#E6D3A8;--muted:#ADA594;
+  --font-title:"Noto Serif SC","Noto Serif CJK SC",serif;--font-sans:"Noto Serif SC","Noto Serif CJK SC",serif;--font-num:"DM Serif Display","Noto Serif CJK SC",serif;
+  position:relative;width:1080px;height:1620px;overflow:hidden;padding:100px 90px 96px;display:flex;flex-direction:column;align-items:center;text-align:center;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+.frame-outer{position:absolute;inset:36px;border:1px solid var(--primary);pointer-events:none}
+.frame-inner{position:absolute;inset:50px;border:1px solid color-mix(in srgb, var(--primary) 45%, transparent);pointer-events:none}
+.latin{position:relative;font-family:var(--font-num);font-weight:400;font-size:40px;letter-spacing:.4em;color:var(--primary)}
+.divider{position:relative;margin-top:32px;display:flex;align-items:center;justify-content:center;gap:16px}
+.dline{width:100px;height:1px;background:var(--primary)}
+.diamond{width:10px;height:10px;background:var(--primary);transform:rotate(45deg)}
+.title{position:relative;margin:36px 0 0;font-family:var(--font-title);font-weight:900;font-size:110px;line-height:1.1;letter-spacing:.06em;color:var(--fg)}
+.subtitle{position:relative;margin-top:28px;font-family:var(--font-sans);font-weight:400;font-size:36px;letter-spacing:.12em;color:var(--primary)}
+.info{position:relative;margin-top:36px;display:flex;flex-direction:column;gap:14px;align-items:center}
+.irow{display:flex;align-items:baseline;gap:20px}
+.ilabel{font-size:28px;font-weight:700;letter-spacing:.25em;color:var(--muted)}
+.irow .date,.irow .time,.irow .place,.irow .contact{font-size:32px;line-height:1.4;font-weight:400;color:var(--fg)}
+.footer{position:relative;margin-top:auto;font-family:var(--font-sans);font-weight:700;font-size:30px;letter-spacing:.2em;color:var(--muted)}
+.est{position:relative;margin-top:20px;font-family:var(--font-num);font-weight:400;font-size:28px;letter-spacing:.3em;color:var(--muted)}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <div class="frame-outer"></div>
+  <div class="frame-inner"></div>
+  <div class="latin">GRAND OPENING</div>
+  <div class="divider"><div class="dline"></div><div class="diamond"></div><div class="dline"></div></div>
+  <h1 class="title" data-slot="title" data-max="8">云锦茶室</h1>
+  <span class="subtitle" data-slot="subtitle" data-max="12">新店开业品鉴会</span>
+  <div class="divider"><div class="dline"></div><div class="diamond"></div><div class="dline"></div></div>
+  <div class="info">
+    <div class="irow"><span class="ilabel">日期</span><span class="date" data-slot="date" data-max="12">11 月 28 日 周五</span></div>
+    <div class="irow"><span class="ilabel">时间</span><span class="time" data-slot="time" data-max="8">上午 10:00</span></div>
+    <div class="irow"><span class="ilabel">地点</span><span class="place" data-slot="place" data-max="16">商丘市神火大道 168 号</span></div>
+    <div class="irow"><span class="ilabel">预约</span><span class="contact" data-slot="contact" data-max="20">预约电话 400-888-6666</span></div>
+  </div>
+  <span class="footer" data-slot="footer" data-max="8">恭候莅临</span>
+  <div class="est">EST. 2026</div>
+</div>
+</body>
+</html>

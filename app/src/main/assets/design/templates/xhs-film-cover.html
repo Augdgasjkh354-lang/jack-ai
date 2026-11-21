@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-film-cover","name":"胶片复古·封面","category":"xhs","size":[1080,1440],"style":"胶片复古","look":"film","set":"film-a","role":"cover","description":"胶片相机质感的封面：上部是带白色相纸边的照片，左缘一条胶片齿孔，标题在照片下方配橙色日期戳，适合秋日漫步、老街、旅行","slots":[{"name":"tag","label":"贴纸标签","max":6},{"name":"title","label":"标题（可用\\n分两行）","max":12},{"name":"subtitle","label":"副标题","max":22},{"name":"date","label":"日期戳","max":10},{"name":"caption","label":"照片下标注","max":12},{"name":"author","label":"账号名","max":12},{"name":"page","label":"页码","max":5}],"lists":[],"images":[{"name":"photo","label":"封面照片","optional":true}],"colors":{"bg":"#EFE6D2","fg":"#2B241B","primary":"#A8432A","secondary":"#DCCCA9","accent":"#E88A2E","muted":"#6F6250"}}'>
+<title>胶片复古·封面</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#EFE6D2;--fg:#2B241B;--primary:#A8432A;--secondary:#DCCCA9;--accent:#E88A2E;--muted:#6F6250;
+  --font-title:"Noto Serif SC","Noto Serif CJK SC",serif;--font-sans:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-num:"Bebas Neue","Noto Sans CJK SC",sans-serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:60px 80px 64px 110px;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+/* 颗粒：让纯色底不那么「电脑味」 */
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.10;mix-blend-mode:multiply}
+/* 轻微暗角 */
+.vignette{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 58%,rgba(0,0,0,.12) 100%)}
+/* 左缘胶片齿孔条 */
+.strip{position:absolute;left:0;top:0;bottom:0;width:46px;background-color:var(--fg);background-image:radial-gradient(ellipse 13px 8px at center,var(--bg) 98%,transparent 100%);background-size:46px 48px;background-repeat:repeat}
+.top{position:relative;display:flex;align-items:center;justify-content:space-between;height:56px}
+.tag{display:inline-block;padding:12px 26px 14px;background:var(--fg);color:var(--bg);font-size:28px;font-weight:700;line-height:1}
+.page{font-family:var(--font-num);font-size:40px;line-height:1;letter-spacing:.06em;color:var(--fg)}
+/* 白色相纸边框：照片 + 底部留白写标注 */
+.print{position:relative;margin-top:36px;padding:26px 26px 0;background:rgba(255,255,255,.92)}
+.photo{height:540px;background-color:var(--secondary);background-image:repeating-linear-gradient(45deg,color-mix(in srgb,var(--primary) 4%,transparent) 0 1px,transparent 1px 26px)}
+.print-foot{position:relative;display:flex;align-items:baseline;justify-content:space-between;padding:22px 4px 24px}
+.caption{font-size:26px;font-weight:700;line-height:1.2;color:rgba(0,0,0,.85)}
+.filmno{font-family:var(--font-num);font-size:30px;line-height:1;letter-spacing:.08em;color:rgba(0,0,0,.6)}
+.rule{position:relative;width:72px;height:6px;margin-top:44px;background:var(--accent)}
+.title{position:relative;margin:28px 0 0;font-family:var(--font-title);font-weight:700;font-size:92px;line-height:1.15;color:var(--fg)}
+.daterow{position:relative;display:flex;align-items:baseline;gap:18px;margin-top:30px}
+.date{font-family:var(--font-num);font-size:48px;line-height:1;letter-spacing:.06em;color:var(--accent);background:var(--fg);padding:10px 22px 12px}
+.dateline{font-family:var(--font-num);font-size:36px;line-height:1;letter-spacing:.14em;color:var(--primary)}
+.subtitle{position:relative;margin-top:22px;font-size:28px;line-height:1.5;font-weight:400;color:var(--muted)}
+.bottom{position:relative;display:flex;align-items:center;justify-content:space-between;margin-top:auto;padding-top:24px;border-top:2px solid var(--fg)}
+.author{font-size:28px;font-weight:700}
+.next{display:flex;align-items:center;gap:12px;font-family:var(--font-title);font-weight:700;font-size:32px}
+.next i{width:32px;height:32px;flex:none}
+.next i svg{width:32px;height:32px}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="vignette" aria-hidden="true"></div>
+  <div class="strip" data-bleed aria-hidden="true"></div>
+  <div class="top">
+    <span class="tag" data-slot="tag" data-max="6">老城漫步</span>
+    <span class="page" data-slot="page" data-max="5">01/04</span>
+  </div>
+  <div class="print">
+    <div class="photo" data-slot="photo" data-kind="image"></div>
+    <div class="print-foot">
+      <span class="caption" data-slot="caption" data-max="12">中山路 · 午后四点</span>
+      <span class="filmno">FILM 400</span>
+    </div>
+  </div>
+  <div class="rule" aria-hidden="true"></div>
+  <h1 class="title" data-slot="title" data-max="12">秋日老街<br>慢慢走</h1>
+  <div class="daterow">
+    <span class="date" data-slot="date" data-max="10">2026.11.19</span>
+    <span class="dateline">AUTUMN WALK</span>
+  </div>
+  <div class="subtitle" data-slot="subtitle" data-max="22">跟着胶片的颗粒，逛一逛秋天的老街</div>
+  <div class="bottom">
+    <span class="author" data-slot="author" data-max="12">@老街漫步者</span>
+    <span class="next">往后翻<i data-icon="arrow-right"></i></span>
+  </div>
+</div>
+</body>
+</html>

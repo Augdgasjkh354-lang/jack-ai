@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-japanese-ending","name":"日系清新·结尾","category":"xhs","size":[1080,1440],"style":"日系清新","look":"japanese","set":"japanese-a","role":"ending","description":"近乎空白的一页：一行提问、日期和一个小圆点，放在一组图的最后一张","slots":[{"name":"tag","label":"英文小标题","max":16},{"name":"question","label":"互动提问","max":16},{"name":"follow","label":"关注引导","max":24},{"name":"date","label":"日期","max":8},{"name":"author","label":"账号名","max":12},{"name":"page","label":"页码","max":5}],"lists":[],"images":[],"colors":{"bg":"#F4F8FA","fg":"#26323A","primary":"#4F7E9C","secondary":"#E3EDF2","accent":"#E7A65B","muted":"#5E6B74"}}'>
+<title>日系清新·结尾</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#F4F8FA;--fg:#26323A;--primary:#4F7E9C;--secondary:#E3EDF2;--accent:#E7A65B;--muted:#5E6B74;
+  --font-title:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-sans:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-num:"Montserrat","Noto Sans CJK SC",sans-serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:72px 80px;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+/* 颗粒：让纯色底不那么「电脑味」 */
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.10;mix-blend-mode:multiply}
+.top{position:relative;display:flex;align-items:baseline;justify-content:space-between}
+.kicker{font-family:var(--font-num);font-size:24px;font-weight:700;letter-spacing:.28em;color:var(--fg)}
+.page{font-family:var(--font-num);font-size:28px;font-weight:700;letter-spacing:.08em;color:var(--fg)}
+.mid{position:relative;margin-top:auto;margin-bottom:auto}
+.dot{width:12px;height:12px;margin-bottom:30px;border-radius:50%;background:var(--accent)}
+.question{margin:0;font-family:var(--font-title);font-weight:500;font-size:68px;line-height:1.35;letter-spacing:.08em;color:var(--fg)}
+.follow{margin-top:26px;font-size:26px;line-height:1.6;font-weight:300;color:var(--muted)}
+.rule2{width:48px;height:1px;margin-top:44px;background:var(--primary)}
+.date{margin-top:18px;font-size:22px;font-weight:700;letter-spacing:.12em;color:var(--fg)}
+.foot{position:relative;display:flex;align-items:baseline;justify-content:space-between}
+.author{font-size:24px;font-weight:700;color:var(--fg)}
+.sea{font-family:var(--font-num);font-size:22px;font-weight:700;letter-spacing:.2em;color:var(--fg)}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="top">
+    <span class="kicker" data-slot="tag" data-max="16">LAST PAGE</span>
+    <span class="page" data-slot="page" data-max="5">04/04</span>
+  </div>
+  <div class="mid">
+    <div class="dot"></div>
+    <h2 class="question" data-slot="question" data-max="16">你心里的海边小城是哪座？</h2>
+    <div class="follow" data-slot="follow" data-max="24">关注我，下期去另一座海边小城</div>
+    <div class="rule2"></div>
+    <span class="date" data-slot="date" data-max="8">11月 · 初冬</span>
+  </div>
+  <div class="foot">
+    <span class="author" data-slot="author" data-max="12">@你的账号</span>
+    <span class="sea">SEA SIDE — 2026</span>
+  </div>
+</div>
+</body>
+</html>

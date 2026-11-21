@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-newspaper-compare","name":"报纸·对比","category":"xhs","size":[1080,1440],"style":"报纸","look":"newspaper","set":"newspaper-a","role":"compare","description":"左右两栏文字对照：左边花得值打黑勾、右边花冤枉了打红叉，栏间竖线分隔，每组一个小标题，适合年度盘点、花钱复盘的对照页","slots":[{"name":"tag","label":"小标签","max":8},{"name":"title","label":"本页标题","max":12},{"name":"intro","label":"开头一段","max":40},{"name":"note","label":"底部提醒","max":24},{"name":"page","label":"页码","max":5}],"lists":[{"name":"rows","label":"对照组","min":3,"max":4,"slots":[{"name":"dim","label":"维度","max":6},{"name":"good","label":"花得值","max":20},{"name":"bad","label":"花冤枉了","max":20}]}],"images":[],"colors":{"bg":"#F1ECE1","fg":"#161412","primary":"#161412","secondary":"#E0D8C8","accent":"#C4302B","muted":"#5E5850"}}'>
+<title>报纸·对比</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#F1ECE1;--fg:#161412;--primary:#161412;--secondary:#E0D8C8;--accent:#C4302B;--muted:#5E5850;
+  --font-title:"Noto Serif SC","Noto Serif CJK SC",serif;--font-sans:"Noto Serif SC","Noto Serif CJK SC",serif;--font-num:"Playfair Display","Noto Serif SC",serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:72px 76px;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+/* 颗粒：让纯色底不那么「电脑味」 */
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.10;mix-blend-mode:multiply}
+.top{position:relative;display:flex;align-items:center;justify-content:space-between;height:56px}
+.tagrow{display:flex;align-items:center;gap:16px}
+.sq{width:16px;height:16px;background:var(--accent);flex:none}
+.tag{font-size:28px;font-weight:700;letter-spacing:.14em}
+.page{font-family:var(--font-num);font-size:30px;font-weight:700}
+.title{position:relative;margin:30px 0 0;font-family:var(--font-title);font-weight:900;font-size:80px;line-height:1.15;color:var(--fg)}
+.intro{position:relative;margin-top:18px;font-size:28px;line-height:1.7;color:var(--fg)}
+.intro::first-letter{font-size:64px;font-weight:900;line-height:1;float:left;padding:8px 14px 0 0}
+.heads{position:relative;display:grid;grid-template-columns:1fr 1fr;margin-top:26px;border-top:6px solid var(--fg);border-bottom:2px solid var(--fg)}
+.head-cell{display:flex;align-items:center;gap:14px;padding:18px 24px;font-size:36px;font-weight:700;line-height:1.3}
+.head-cell i{width:36px;height:36px;flex:none}
+.head-cell.bad{color:var(--accent);border-left:2px solid var(--fg)}
+.rows{position:relative;display:flex;flex-direction:column}
+.row{padding:22px 0 24px;border-bottom:2px solid var(--fg)}
+.dim{display:flex;align-items:center;gap:16px;font-size:28px;font-weight:700;letter-spacing:.18em}
+.dline{flex:1;height:2px;background:var(--fg)}
+.cells{position:relative;display:grid;grid-template-columns:36px 1fr 36px 1fr;column-gap:14px;margin-top:14px}
+.cv{position:absolute;left:50%;top:2px;bottom:2px;width:2px;margin-left:-1px;background:var(--fg)}
+.mark{font-size:32px;font-weight:900;line-height:1.25;text-align:center;padding-top:2px}
+.mark.good{color:var(--fg)}
+.mark.bad{color:var(--accent)}
+.cell{font-size:24px;line-height:1.5;color:var(--fg)}
+.note{position:relative;margin-top:auto;padding:16px 26px;border:2px solid var(--fg);font-size:26px;line-height:1.5;font-weight:700}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="top">
+    <div class="tagrow"><span class="sq"></span><span class="tag" data-slot="tag" data-max="8">值与不值</span></div>
+    <span class="page" data-slot="page" data-max="5">03/04</span>
+  </div>
+  <h2 class="title" data-slot="title" data-max="12">花得值 vs 花冤枉了</h2>
+  <div class="intro" data-slot="intro" data-max="40">同样是花钱，有人花出了长进，有人花完只剩后悔。对照下面四组，看看你的钱站哪边。</div>
+  <div class="heads">
+    <div class="head-cell"><i data-icon="check"></i><span>花得值</span></div>
+    <div class="head-cell bad"><i data-icon="x"></i><span>花冤枉了</span></div>
+  </div>
+  <div class="rows" data-list="rows" data-max="4">
+    <div class="row" data-item>
+      <div class="dim"><span class="dline"></span><span data-slot="dim" data-max="6">吃饭</span><span class="dline"></span></div>
+      <div class="cells">
+        <div class="cv"></div>
+        <span class="mark good">✓</span>
+        <span class="cell" data-slot="good" data-max="20">自己做饭带饭，一个月省下 900 元</span>
+        <span class="mark bad">✕</span>
+        <span class="cell" data-slot="bad" data-max="20">天天点外卖，配送费一年花了 1,800</span>
+      </div>
+    </div>
+    <div class="row" data-item>
+      <div class="dim"><span class="dline"></span><span data-slot="dim" data-max="6">穿戴</span><span class="dline"></span></div>
+      <div class="cells">
+        <div class="cv"></div>
+        <span class="mark good">✓</span>
+        <span class="cell" data-slot="good" data-max="20">等打折再买，同样的衣服省四成</span>
+        <span class="mark bad">✕</span>
+        <span class="cell" data-slot="bad" data-max="20">新款一出就下单，吊牌都没剪过</span>
+      </div>
+    </div>
+    <div class="row" data-item>
+      <div class="dim"><span class="dline"></span><span data-slot="dim" data-max="6">出行</span><span class="dline"></span></div>
+      <div class="cells">
+        <div class="cv"></div>
+        <span class="mark good">✓</span>
+        <span class="cell" data-slot="good" data-max="20">提前订票，机票比临时买便宜一半</span>
+        <span class="mark bad">✕</span>
+        <span class="cell" data-slot="bad" data-max="20">临时打车去机场，一趟花了 260</span>
+      </div>
+    </div>
+    <div class="row" data-item>
+      <div class="dim"><span class="dline"></span><span data-slot="dim" data-max="6">日用</span><span class="dline"></span></div>
+      <div class="cells">
+        <div class="cv"></div>
+        <span class="mark good">✓</span>
+        <span class="cell" data-slot="good" data-max="20">按需囤货，不囤用不上的东西</span>
+        <span class="mark bad">✕</span>
+        <span class="cell" data-slot="bad" data-max="20">囤了一柜子，最后全过期了</span>
+      </div>
+    </div>
+  </div>
+  <div class="note" data-slot="note" data-max="24">花得值的，继续花；花冤枉的，先等等。</div>
+</div>
+</body>
+</html>

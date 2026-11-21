@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"invite-cream-holiday","name":"邀请函·奶油节日贺卡","category":"invite","size":[1080,1620],"style":"奶油温柔","look":"cream","set":"invite-cream","role":"content","description":"奶油节日贺卡：圆角奶油面板加月亮和手写英文，适合中秋、节日祝福","slots":[{"name":"title","label":"标题","max":10},{"name":"body","label":"祝福正文","max":40},{"name":"author","label":"落款","max":10},{"name":"footer","label":"页脚","max":12}],"lists":[],"images":[],"colors":{"bg":"#FBF3E6","fg":"#4A3426","primary":"#B0703C","secondary":"#F2DFC4","accent":"#E9A6A0","muted":"#7E6656"}}'>
+<title>邀请函·奶油节日贺卡</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1620px;overflow:hidden}
+.canvas{--bg:#FBF3E6;--fg:#4A3426;--primary:#B0703C;--secondary:#F2DFC4;--accent:#E9A6A0;--muted:#7E6656;
+  --font-title:"LXGW WenKai","Noto Serif CJK SC",serif;--font-sans:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-num:"Caveat","Noto Sans CJK SC",sans-serif;
+  position:relative;width:1080px;height:1620px;overflow:hidden;padding:72px 76px 72px;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+.blob1{position:absolute;top:-80px;right:-60px;width:420px;height:420px;border-radius:50%;background:radial-gradient(circle,color-mix(in srgb, var(--accent) 55%, transparent),transparent 70%)}
+.blob2{position:absolute;bottom:120px;left:-100px;width:380px;height:380px;border-radius:50%;background:radial-gradient(circle,color-mix(in srgb, var(--primary) 40%, transparent),transparent 70%)}
+.panel{position:relative;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--secondary);border-radius:56px;padding:84px 64px 72px}
+.moon{width:300px;height:300px;flex:none;border-radius:50%;background:var(--bg);box-shadow:0 12px 32px rgba(0,0,0,.08)}
+.caveat{margin-top:48px;font-family:var(--font-num);font-weight:700;font-size:48px;line-height:1;color:var(--primary)}
+.title{margin:20px 0 0;font-family:var(--font-title);font-weight:700;font-size:120px;line-height:1.15;color:var(--fg);text-align:center}
+.body{margin-top:36px;max-width:700px;font-size:30px;line-height:1.8;font-weight:400;color:var(--fg);text-align:center}
+.author{align-self:flex-end;margin-top:36px;font-size:30px;line-height:1.4;font-weight:700;color:var(--fg)}
+.footer{margin-top:48px;font-size:26px;line-height:1.4;font-weight:700;letter-spacing:.15em;color:var(--fg)}
+.star{position:absolute;color:var(--primary)}
+.star.a{top:64px;right:76px;width:54px;height:54px}
+.star.b{top:430px;left:52px;width:40px;height:40px;color:var(--accent)}
+.star.c{bottom:150px;right:64px;width:36px;height:36px}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <div class="blob1"></div>
+  <div class="blob2"></div>
+  <div class="panel">
+    <div class="moon"></div>
+    <div class="caveat">Happy Mid-Autumn Festival</div>
+    <h2 class="title" data-slot="title" data-max="10">月圆人团圆</h2>
+    <div class="body" data-slot="body" data-max="40">海上生明月，天涯共此时。愿你与家人围坐一桌，月饼甜，人更甜。</div>
+    <span class="author" data-slot="author" data-max="10">阿斌 敬上</span>
+    <span class="footer" data-slot="footer" data-max="12">中秋快乐 · 2026</span>
+    <svg class="star a" viewBox="0 0 100 100" aria-hidden="true"><polygon points="50,4 62,34 96,34 68,55 79,90 50,68 21,90 32,55 4,34 38,34" fill="currentColor"/></svg>
+    <svg class="star b" viewBox="0 0 100 100" aria-hidden="true"><polygon points="50,4 62,34 96,34 68,55 79,90 50,68 21,90 32,55 4,34 38,34" fill="currentColor"/></svg>
+    <svg class="star c" viewBox="0 0 100 100" aria-hidden="true"><polygon points="50,4 62,34 96,34 68,55 79,90 50,68 21,90 32,55 4,34 38,34" fill="currentColor"/></svg>
+  </div>
+</div>
+</body>
+</html>

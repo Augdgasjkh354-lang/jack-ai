@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-study-steps","name":"学习笔记·步骤","category":"xhs","size":[1080,1440],"style":"学习笔记","look":"study","set":"study-a","role":"steps","description":"方格纸上的竖向时间线，红笔圈住步骤编号、手绘连接线，适合复习方法、备考流程的内页","slots":[{"name":"tag","label":"贴纸标签","max":6},{"name":"title","label":"本页标题","max":10},{"name":"subtitle","label":"副标题","max":20},{"name":"note","label":"底部提醒","max":20},{"name":"author","label":"账号名","max":12},{"name":"page","label":"页码","max":5}],"lists":[{"name":"steps","label":"步骤","min":3,"max":5,"slots":[{"name":"head","label":"步骤标题","max":10},{"name":"text","label":"步骤说明","max":30}]}],"images":[],"colors":{"bg":"#FDFDF8","fg":"#1E2B55","primary":"#1E2B55","secondary":"#FFF27A","accent":"#D63A32","muted":"#5B6380"}}'>
+<title>学习笔记·步骤</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#FDFDF8;--fg:#1E2B55;--primary:#1E2B55;--secondary:#FFF27A;--accent:#D63A32;--muted:#5B6380;
+  --font-title:"LXGW WenKai","Noto Serif CJK SC",serif;--font-sans:"LXGW WenKai","Noto Sans CJK SC",sans-serif;--font-num:"Caveat","LXGW WenKai",serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:76px 80px 72px;display:flex;flex-direction:column;
+  background-color:var(--bg);
+  background-image:repeating-linear-gradient(transparent 0 47px,color-mix(in srgb,var(--fg) 7%,transparent) 47px 48px),repeating-linear-gradient(90deg,transparent 0 47px,color-mix(in srgb,var(--fg) 7%,transparent) 47px 48px);
+  color:var(--fg);font-family:var(--font-sans)}
+/* 颗粒：让纯色底不那么「电脑味」 */
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.10;mix-blend-mode:multiply}
+/* 本子左侧的装订线 */
+.margin-line{position:absolute;left:44px;top:0;bottom:0;width:3px;background:color-mix(in srgb,var(--accent) 45%,transparent)}
+.top{position:relative;display:flex;align-items:center;justify-content:space-between;height:60px}
+.tag{display:inline-block;padding:12px 24px 14px;border:3px solid var(--accent);color:var(--accent);font-family:var(--font-title);font-weight:700;font-size:34px;line-height:1;transform:rotate(-2deg)}
+.page{font-family:var(--font-num);font-weight:700;font-size:44px;color:var(--fg)}
+.title{position:relative;margin:20px 0 0;font-family:var(--font-title);font-weight:700;font-size:76px;line-height:1.1;color:var(--fg)}
+.rule{width:120px;height:5px;margin-top:14px;background:var(--accent);border-radius:3px;transform:rotate(-1deg)}
+.subtitle{position:relative;margin-top:10px;font-size:30px;line-height:1.4;font-weight:400;color:var(--fg)}
+/* 竖向时间线：红笔手绘连接线，独立元素，不画在文字上 */
+.timeline{position:relative;margin-top:16px}
+.rail{position:absolute;left:48px;top:66px;bottom:66px;width:4px;border-radius:2px;background:color-mix(in srgb,var(--accent) 55%,transparent);transform:rotate(.5deg)}
+.steps{position:relative;display:flex;flex-direction:column;justify-content:space-between;height:900px}
+.step{display:grid;grid-template-columns:100px 1fr;column-gap:28px;align-items:start;padding:14px 0}
+.num{display:flex;align-items:center;justify-content:center;width:100px;height:100px;border:4px solid var(--accent);border-radius:48% 52% 55% 45%/52% 46% 54% 48%;font-family:var(--font-num);font-weight:700;font-size:46px;line-height:1;color:var(--accent);transform:rotate(-3deg)}
+.step-body{min-width:0;padding-top:6px}
+.head{display:block;font-size:40px;line-height:1.25;font-weight:700;color:var(--fg)}
+.text{display:block;margin-top:8px;font-size:28px;line-height:1.5;font-weight:400;color:var(--fg)}
+.note{position:relative;margin-top:12px;font-size:32px;line-height:1.4;font-weight:700;color:var(--accent)}
+.bottom{position:relative;margin-top:auto;display:flex;align-items:center;justify-content:space-between;padding-top:26px;border-top:3px solid color-mix(in srgb,var(--fg) 35%,transparent)}
+.author{font-size:30px;font-weight:700}
+.next{display:flex;align-items:center;gap:14px;font-family:var(--font-title);font-weight:700;font-size:36px;color:var(--primary)}
+.next svg{width:58px;height:28px}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="margin-line"></div>
+  <div class="top">
+    <span class="tag" data-slot="tag" data-max="6">考研英语</span>
+    <span class="page" data-slot="page" data-max="5">02/04</span>
+  </div>
+  <h2 class="title" data-slot="title" data-max="10">四步复习法</h2>
+  <div class="rule"></div>
+  <div class="subtitle" data-slot="subtitle" data-max="20">每天 2 小时，坚持 100 天</div>
+  <div class="timeline">
+    <div class="rail"></div>
+    <div class="steps" data-list="steps" data-max="5">
+      <div class="step" data-item>
+        <span class="num" data-slot="num">01</span>
+        <div class="step-body"><span class="head" data-slot="head" data-max="10">每天背单词</span><span class="text" data-slot="text" data-max="30">每天 100 个新词，睡前再复习一遍，滚动着记</span></div>
+      </div>
+      <div class="step" data-item>
+        <span class="num" data-slot="num">02</span>
+        <div class="step-body"><span class="head" data-slot="head" data-max="10">精读真题</span><span class="text" data-slot="text" data-max="30">一篇文章读三遍：做题、精读、复盘错题</span></div>
+      </div>
+      <div class="step" data-item>
+        <span class="num" data-slot="num">03</span>
+        <div class="step-body"><span class="head" data-slot="head" data-max="10">作文模板</span><span class="text" data-slot="text" data-max="30">先背范文再默写改写，考前每周写两篇</span></div>
+      </div>
+      <div class="step" data-item>
+        <span class="num" data-slot="num">04</span>
+        <div class="step-body"><span class="head" data-slot="head" data-max="10">模拟考试</span><span class="text" data-slot="text" data-max="30">掐表做整套卷子，练速度也练考试心态</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="note" data-slot="note" data-max="20">顺序别乱：单词是底子，真题是主菜</div>
+  <div class="bottom">
+    <span class="author" data-slot="author" data-max="12">@英语上岸日记</span>
+    <span class="next">往后翻<svg viewBox="0 0 58 28" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14h48M40 3l12 11-12 11"/></svg></span>
+  </div>
+</div>
+</body>
+</html>

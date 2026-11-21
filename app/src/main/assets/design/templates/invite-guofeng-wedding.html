@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"invite-guofeng-wedding","name":"邀请函·国风婚礼","category":"invite","size":[1080,1620],"style":"国风","look":"guofeng","set":"invite-guofeng","role":"content","description":"国风婚礼邀请函：宣纸底加朱红方印，居中对称大留白，适合中式婚礼请柬","slots":[{"name":"title","label":"新人姓名（可用\\n分两行）","max":10},{"name":"subtitle","label":"副标题","max":8},{"name":"date","label":"日期","max":14},{"name":"time","label":"时间","max":8},{"name":"place","label":"地点","max":16},{"name":"contact","label":"联系人","max":20},{"name":"footer","label":"落款","max":10}],"lists":[],"images":[],"colors":{"bg":"#F3ECDD","fg":"#231C16","primary":"#B83A2B","secondary":"#E4D8C0","accent":"#2E4F4A","muted":"#6D6253"}}'>
+<title>邀请函·国风婚礼</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1620px;overflow:hidden}
+.canvas{--bg:#F3ECDD;--fg:#231C16;--primary:#B83A2B;--secondary:#E4D8C0;--accent:#2E4F4A;--muted:#6D6253;
+  --font-title:"Ma Shan Zheng","Noto Serif CJK SC",serif;--font-sans:"Noto Serif SC","Noto Serif CJK SC",serif;--font-num:"Noto Serif SC","Noto Serif CJK SC",serif;
+  position:relative;width:1080px;height:1620px;overflow:hidden;padding:96px 90px 88px;display:flex;flex-direction:column;align-items:center;text-align:center;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.08;mix-blend-mode:multiply}
+.frame-outer{position:absolute;inset:36px;border:2px solid var(--fg);pointer-events:none}
+.frame-inner{position:absolute;inset:48px;border:1px solid color-mix(in srgb, var(--fg) 55%, transparent);pointer-events:none}
+.cloud{position:relative;width:200px;height:36px;color:color-mix(in srgb, var(--fg) 45%, transparent)}
+.xi{position:relative;margin-top:24px;font-family:var(--font-title);font-weight:400;font-size:170px;line-height:1;color:var(--primary)}
+.title{position:relative;margin:28px 0 0;font-family:var(--font-title);font-weight:400;font-size:140px;line-height:1.15;color:var(--fg)}
+.seal{position:relative;margin-top:36px;width:104px;height:104px;display:flex;align-items:center;justify-content:center;border:4px solid var(--primary)}
+.sealtext{font-family:var(--font-title);font-weight:400;font-size:34px;line-height:1.15;color:var(--primary);text-align:center}
+.subtitle{position:relative;margin-top:40px;font-family:var(--font-sans);font-weight:700;font-size:44px;letter-spacing:.35em;color:var(--primary)}
+.divider{position:relative;margin-top:36px;display:flex;align-items:center;justify-content:center;gap:16px}
+.dline{width:120px;height:2px;background:var(--fg)}
+.diamond{width:12px;height:12px;background:var(--primary);transform:rotate(45deg)}
+.info{position:relative;margin-top:36px;display:flex;flex-direction:column;gap:14px;align-items:center}
+.irow{display:flex;align-items:baseline;gap:20px}
+.ilabel{font-size:28px;font-weight:700;letter-spacing:.2em;color:var(--muted)}
+.irow .date,.irow .time,.irow .place,.irow .contact{font-size:36px;line-height:1.4;font-weight:400;color:var(--fg)}
+.footer{position:relative;margin-top:auto;font-family:var(--font-sans);font-weight:700;font-size:32px;letter-spacing:.2em;color:var(--fg)}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1620" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="frame-outer"></div>
+  <div class="frame-inner"></div>
+  <svg class="cloud" viewBox="0 0 200 36" aria-hidden="true"><path d="M10 26 Q 30 8 52 18 Q 66 4 88 14 Q 104 2 122 14 Q 140 4 156 16 Q 176 8 190 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>
+  <div class="xi">囍</div>
+  <h1 class="title" data-slot="title" data-max="10">陈子墨<br>林晓月</h1>
+  <div class="seal"><span class="sealtext">百年<br>好合</span></div>
+  <span class="subtitle" data-slot="subtitle" data-max="8">婚礼邀请</span>
+  <div class="divider"><div class="dline"></div><div class="diamond"></div><div class="dline"></div></div>
+  <div class="info">
+    <div class="irow"><span class="ilabel">日期</span><span class="date" data-slot="date" data-max="14">二〇二六年十一月二十二日</span></div>
+    <div class="irow"><span class="ilabel">时间</span><span class="time" data-slot="time" data-max="8">上午十点十八分</span></div>
+    <div class="irow"><span class="ilabel">地点</span><span class="place" data-slot="place" data-max="16">商丘市睢阳区凯旋路 88 号</span></div>
+    <div class="irow"><span class="ilabel">联系</span><span class="contact" data-slot="contact" data-max="20">陈先生 138 0000 0000</span></div>
+  </div>
+  <span class="footer" data-slot="footer" data-max="10">恭候光临</span>
+</div>
+</body>
+</html>

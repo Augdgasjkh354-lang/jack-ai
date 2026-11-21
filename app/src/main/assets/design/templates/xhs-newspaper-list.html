@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-newspaper-list","name":"报纸·清单","category":"xhs","size":[1080,1440],"style":"报纸","look":"newspaper","set":"newspaper-a","role":"list","description":"双栏账单清单：左右两栏加栏间竖线，每栏一个编号、一类开销和一年金额，底部是全年总支出，适合年度盘点、花销拆解的内页","slots":[{"name":"tag","label":"小标签","max":8},{"name":"title","label":"本页标题","max":14},{"name":"subtitle","label":"开头一句","max":22},{"name":"total","label":"合计标签","max":8},{"name":"amount","label":"合计金额","max":10},{"name":"note","label":"底部提醒","max":24},{"name":"page","label":"页码","max":5}],"lists":[{"name":"items","label":"开销","min":2,"max":5,"slots":[{"name":"head","label":"类别","max":8},{"name":"text","label":"明细","max":30}]}],"images":[],"colors":{"bg":"#F1ECE1","fg":"#161412","primary":"#161412","secondary":"#E0D8C8","accent":"#C4302B","muted":"#5E5850"}}'>
+<title>报纸·清单</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#F1ECE1;--fg:#161412;--primary:#161412;--secondary:#E0D8C8;--accent:#C4302B;--muted:#5E5850;
+  --font-title:"Noto Serif SC","Noto Serif CJK SC",serif;--font-sans:"Noto Serif SC","Noto Serif CJK SC",serif;--font-num:"Playfair Display","Noto Serif SC",serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:72px 76px;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+/* 颗粒：让纯色底不那么「电脑味」 */
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.10;mix-blend-mode:multiply}
+.top{position:relative;display:flex;align-items:center;justify-content:space-between;height:56px}
+.tagrow{display:flex;align-items:center;gap:16px}
+.sq{width:16px;height:16px;background:var(--accent);flex:none}
+.tag{font-size:28px;font-weight:700;letter-spacing:.14em}
+.page{font-family:var(--font-num);font-size:30px;font-weight:700}
+.title{position:relative;margin:30px 0 0;font-family:var(--font-title);font-weight:900;font-size:88px;line-height:1.15;color:var(--fg)}
+.subtitle{position:relative;margin-top:16px;font-size:28px;line-height:1.5;color:var(--muted)}
+.cols-wrap{position:relative;margin-top:34px}
+.vline{position:absolute;left:50%;top:38px;bottom:8px;width:2px;margin-left:-1px;background:var(--fg)}
+.items{position:relative;display:grid;grid-template-columns:1fr 1fr;column-gap:64px;border-top:6px solid var(--fg);padding-top:4px}
+.item{display:grid;grid-template-columns:72px 1fr;column-gap:18px;padding:20px 0;border-bottom:2px solid var(--fg)}
+.num{font-family:var(--font-num);font-weight:700;font-size:54px;line-height:1;padding-top:6px;color:var(--fg)}
+.body{min-width:0}
+.body .head{display:block;font-size:34px;line-height:1.25;font-weight:700}
+.body .text{display:block;margin-top:8px;font-size:26px;line-height:1.5;color:var(--muted)}
+.total{position:relative;margin-top:auto;border-top:6px solid var(--fg);padding-top:22px;display:flex;justify-content:space-between;align-items:baseline}
+.total-label{font-size:28px;font-weight:700;letter-spacing:.1em}
+.amount{font-family:var(--font-num);font-weight:700;font-size:68px;line-height:1}
+.note{position:relative;margin-top:26px;font-size:26px;line-height:1.5;color:var(--muted)}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="top">
+    <div class="tagrow"><span class="sq"></span><span class="tag" data-slot="tag" data-max="8">账单拆解</span></div>
+    <span class="page" data-slot="page" data-max="5">02/04</span>
+  </div>
+  <h2 class="title" data-slot="title" data-max="14">一年花掉的钱，分成这几份</h2>
+  <div class="subtitle" data-slot="subtitle" data-max="22">四笔开销，占了全年支出的八成</div>
+  <div class="cols-wrap">
+    <div class="vline"></div>
+    <div class="items" data-list="items" data-max="5">
+      <div class="item" data-item>
+        <span class="num" data-slot="num">01</span>
+        <div class="body"><span class="head" data-slot="head" data-max="8">住房</span><span class="text" data-slot="text" data-max="30">房租水电物业，一年 38,200 元</span></div>
+      </div>
+      <div class="item" data-item>
+        <span class="num" data-slot="num">02</span>
+        <div class="body"><span class="head" data-slot="head" data-max="8">吃饭</span><span class="text" data-slot="text" data-max="30">外卖下馆子聚餐，一年 24,600 元</span></div>
+      </div>
+      <div class="item" data-item>
+        <span class="num" data-slot="num">03</span>
+        <div class="body"><span class="head" data-slot="head" data-max="8">出行</span><span class="text" data-slot="text" data-max="30">打车地铁机票加油，一年 18,900 元</span></div>
+      </div>
+      <div class="item" data-item>
+        <span class="num" data-slot="num">04</span>
+        <div class="body"><span class="head" data-slot="head" data-max="8">穿戴</span><span class="text" data-slot="text" data-max="30">衣服鞋包配饰，一年 12,400 元</span></div>
+      </div>
+      <div class="item" data-item>
+        <span class="num" data-slot="num">05</span>
+        <div class="body"><span class="head" data-slot="head" data-max="8">娱乐</span><span class="text" data-slot="text" data-max="30">电影演出和游戏，一年 9,800 元</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="note" data-slot="note" data-max="24">其中三成，花在了没计划的地方</div>
+  <div class="total">
+    <span class="total-label" data-slot="total" data-max="8">全年总支出</span>
+    <span class="amount" data-slot="amount" data-max="10">¥128,600</span>
+  </div>
+</div>
+</body>
+</html>

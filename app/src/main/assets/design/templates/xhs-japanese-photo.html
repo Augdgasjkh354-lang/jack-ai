@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-japanese-photo","name":"日系清新·大图","category":"xhs","size":[1080,1440],"style":"日系清新","look":"japanese","set":"japanese-a","role":"photo","description":"满幅照片加底部一条细线图说，右上角一个描边大数字，适合旅行实拍","slots":[{"name":"day","label":"天数","max":2},{"name":"caption","label":"图说","max":20},{"name":"note","label":"小字标注","max":16},{"name":"page","label":"页码","max":5}],"lists":[],"images":[{"name":"photo","label":"主图照片","optional":true}],"colors":{"bg":"#F4F8FA","fg":"#26323A","primary":"#4F7E9C","secondary":"#E3EDF2","accent":"#E7A65B","muted":"#5E6B74"}}'>
+<title>日系清新·大图</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#F4F8FA;--fg:#26323A;--primary:#4F7E9C;--secondary:#E3EDF2;--accent:#E7A65B;--muted:#5E6B74;
+  --font-title:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-sans:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-num:"Montserrat","Noto Sans CJK SC",sans-serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:0;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+/* 颗粒：让纯色底不那么「电脑味」 */
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.10;mix-blend-mode:multiply}
+/* 照片区：占位层在下（没照片时是浅蓝底加细点阵和一个圆环），真照片盖在上面 */
+.ph-holder{position:absolute;inset:0;background-color:var(--secondary);background-image:radial-gradient(color-mix(in srgb, var(--primary) 18%, transparent) 1.5px, transparent 1.6px);background-size:26px 26px}
+.ring{position:absolute;left:50%;top:42%;width:280px;height:280px;margin:-140px 0 0 -140px;border:2px solid var(--primary);border-radius:50%}
+.photo{position:absolute;inset:0;background-color:var(--secondary);background-image:radial-gradient(color-mix(in srgb, var(--primary) 18%, transparent) 1.5px, transparent 1.6px);background-size:26px 26px}
+/* 右上角的描边大数字：装饰，不压正文 */
+.bignum{position:absolute;top:72px;right:80px;font-family:var(--font-num);font-weight:700;font-size:180px;line-height:1;color:transparent;-webkit-text-stroke:2px rgba(255,255,255,.8)}
+/* 底部蒙层：让压在照片上的白字看得清；图说放在蒙层里面 */
+.scrim{position:absolute;left:0;right:0;bottom:0;height:320px;background:linear-gradient(rgba(0,0,0,0),rgba(0,0,0,.55))}
+.capwrap{position:absolute;left:80px;right:80px;bottom:76px}
+.capbar{display:flex;align-items:center;gap:14px;padding-top:20px;border-top:1px solid rgba(255,255,255,.8)}
+.capbar i{width:28px;height:28px;flex:none;color:rgba(255,255,255,.95)}
+.capbar i svg{width:28px;height:28px}
+.caption{font-size:24px;font-weight:700;line-height:1.4;color:rgba(255,255,255,.95)}
+.capmeta{display:flex;align-items:baseline;justify-content:space-between;margin-top:14px}
+.note{font-size:22px;font-weight:700;color:rgba(255,255,255,.95)}
+.page{font-family:var(--font-num);font-size:24px;font-weight:700;color:rgba(255,255,255,.95)}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="ph-holder"><span class="ring"></span></div>
+  <div class="photo" data-slot="photo" data-kind="image"></div>
+  <span class="bignum" data-slot="day" data-max="2">02</span>
+  <div class="scrim">
+    <div class="capwrap">
+      <div class="capbar"><i data-icon="camera"></i><span class="caption" data-slot="caption" data-max="20">午后四点的海，蓝得安静</span></div>
+      <div class="capmeta"><span class="note" data-slot="note" data-max="16">DAY 02 · 午后四点</span><span class="page" data-slot="page" data-max="5">02/04</span></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

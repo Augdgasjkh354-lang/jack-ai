@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,initial-scale=1">
+<meta name="kavi-template" content='{"id":"xhs-film-quote","name":"胶片复古·金句","category":"xhs","size":[1080,1440],"style":"胶片复古","look":"film","set":"film-a","role":"quote","description":"一侧是胶片齿孔条，中间一句宋体金句居中大字，下方是出处和英文小字，适合语录、书摘、心情","slots":[{"name":"tag","label":"小标签","max":6},{"name":"quote","label":"金句","max":26},{"name":"source","label":"出处","max":16},{"name":"author","label":"账号名","max":12},{"name":"date","label":"日期戳","max":10},{"name":"page","label":"页码","max":5}],"lists":[],"images":[],"colors":{"bg":"#EFE6D2","fg":"#2B241B","primary":"#A8432A","secondary":"#DCCCA9","accent":"#E88A2E","muted":"#6F6250"}}'>
+<title>胶片复古·金句</title>
+<style>
+*{box-sizing:border-box}
+.canvas *{text-wrap:pretty}
+html,body{margin:0;width:1080px;height:1440px;overflow:hidden}
+.canvas{--bg:#EFE6D2;--fg:#2B241B;--primary:#A8432A;--secondary:#DCCCA9;--accent:#E88A2E;--muted:#6F6250;
+  --font-title:"Noto Serif SC","Noto Serif CJK SC",serif;--font-sans:"Noto Sans SC","Noto Sans CJK SC",sans-serif;--font-num:"Bebas Neue","Noto Sans CJK SC",sans-serif;
+  position:relative;width:1080px;height:1440px;overflow:hidden;padding:72px 80px 72px 110px;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans)}
+/* 颗粒：让纯色底不那么「电脑味」 */
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.10;mix-blend-mode:multiply}
+/* 轻微暗角 */
+.vignette{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 58%,rgba(0,0,0,.12) 100%)}
+/* 左缘胶片齿孔条 */
+.strip{position:absolute;left:0;top:0;bottom:0;width:46px;background-color:var(--fg);background-image:radial-gradient(ellipse 13px 8px at center,var(--bg) 98%,transparent 100%);background-size:46px 48px;background-repeat:repeat}
+.top{position:relative;display:flex;align-items:center;justify-content:space-between;height:56px}
+.tag{display:inline-block;padding:12px 26px 14px;background:var(--fg);color:var(--bg);font-size:28px;font-weight:700;line-height:1}
+.page{font-family:var(--font-num);font-size:40px;line-height:1;letter-spacing:.06em;color:var(--fg)}
+.quote-wrap{position:relative;margin-top:auto;margin-bottom:auto;display:flex;flex-direction:column;align-items:center;text-align:center;padding:0 30px}
+.mark{font-family:var(--font-title);font-weight:700;font-size:170px;line-height:.55;color:var(--primary)}
+.quote{margin-top:56px;font-family:var(--font-title);font-weight:700;font-size:76px;line-height:1.5;color:var(--fg)}
+.rule{width:72px;height:6px;background:var(--accent);margin-top:56px}
+.source{margin-top:28px;font-size:28px;line-height:1.5;color:var(--muted)}
+.english{margin-top:44px;font-family:var(--font-num);font-size:44px;line-height:1;letter-spacing:.18em;color:var(--primary)}
+.bottom{position:relative;display:flex;align-items:center;justify-content:space-between}
+.author{font-size:28px;font-weight:700}
+.date{font-family:var(--font-num);font-size:36px;line-height:1;letter-spacing:.06em;color:var(--accent);background:var(--fg);padding:10px 20px 12px}
+:where(span[data-slot]){display:inline-block}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="grain" width="1080" height="1440" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="vignette" aria-hidden="true"></div>
+  <div class="strip" data-bleed aria-hidden="true"></div>
+  <div class="top">
+    <span class="tag" data-slot="tag" data-max="6">一句喜欢的话</span>
+    <span class="page" data-slot="page" data-max="5">03/04</span>
+  </div>
+  <div class="quote-wrap">
+    <span class="mark" aria-hidden="true">“</span>
+    <div class="quote" data-slot="quote" data-max="26">慢一点，<br>旧时光才追得上你</div>
+    <div class="rule" aria-hidden="true"></div>
+    <span class="source" data-slot="source" data-max="16">写在老街的第六个秋天</span>
+    <span class="english">TAKE IT SLOW</span>
+  </div>
+  <div class="bottom">
+    <span class="author" data-slot="author" data-max="12">@老街漫步者</span>
+    <span class="date" data-slot="date" data-max="10">2026.11.19</span>
+  </div>
+</div>
+</body>
+</html>
