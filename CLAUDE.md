@@ -24,6 +24,8 @@
 
 ## 两个版本
 
+- **正式版暂停开发**（Jack 2026-11-21 说的，长期有效，等他说恢复）：只做开发版。新功能不用管正式版的删减和协议，CI 也不再打包、编译正式版；正式版的代码先留着不删。
+
 - `dev` 开发版：全部功能，包名 `com.jack.ai`（Jack 用的，发 Release、自动更新）。
 - `store` 正式版：上应用商店，包名 `com.kavi.ai`；没有浏览器、操作其他 App、后台手机助手、专用代理（VPN）、Linux 沙箱、读通知和微信、使用时长、App 内自更新。
 - 正式版第一次打开先弹《用户协议》《隐私政策》（`ui/Legal.kt`，正文在 `app/src/main/assets/legal/`），同意前不建主界面、不联网、不申请权限。改了功能涉及数据怎么用，要同步改这两份；有重大修改把 `Legal.VERSION` 加一。
@@ -63,7 +65,7 @@ settingsEvaluated { s ->
 然后：
 
 ```bash
-./gradlew --no-daemon -q :app:compileDevDebugKotlin :app:compileStoreDebugKotlin
+./gradlew --no-daemon -q :app:compileDevDebugKotlin
 ROBOLECTRIC_REPO=https://maven-central.storage-download.googleapis.com/maven2/ ./gradlew --no-daemon -q :app:testDevDebugUnitTest --tests "com.jack.ai.*"
 ```
 

@@ -9,7 +9,7 @@ import java.io.File
  */
 object LongPaste {
     /** 一次贴进来超过这么多字就存成文件。 */
-    const val THRESHOLD = 3000
+    const val THRESHOLD = 1500
 
     /** 输入框从 [old] 变成 [new]：是一次贴进来一大段的话，返回贴进来的那段，否则 null（打字、删字、语音塞进来的都不算）。 */
     fun inserted(old: String, new: String): String? {

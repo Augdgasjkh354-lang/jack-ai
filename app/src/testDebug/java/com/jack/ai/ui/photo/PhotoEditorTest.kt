@@ -61,7 +61,8 @@ class PhotoEditorTest {
         var saved: File? = null
         rule.mainClock.autoAdvance = false
         rule.setContent { JackTheme(com.jack.ai.data.ThemeMode.LIGHT) { PhotoEditorScreen(src, forResult = true, onSaved = { saved = it }, onClose = {}) } }
-        until { rule.onAllNodesWithText("撤销").fetchSemanticsNodes().isNotEmpty() }
+        // 顶栏的「撤销」一开始就有；图在后台读完、底部工具条出来才能点（机器忙时要等一会儿）
+        until { rule.onAllNodesWithText("裁剪").fetchSemanticsNodes().isNotEmpty() }
         shot("main")
         for (t in listOf("裁剪", "滤镜", "调节", "边框", "画笔", "文字", "马赛克", "贴纸", "虚化")) {
             click(t)

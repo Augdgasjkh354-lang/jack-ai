@@ -39,8 +39,8 @@ jobs:
           chmod +x gradlew
           set -o pipefail
           # 出错时把关键报错写成注释，方便在网页上直接看到
-          # 正式版也要编得过；单测跑在开发版上
-          ./gradlew compileStoreDebugKotlin testDevDebugUnitTest --tests "com.jack.ai.*" 2>&1 | tee test.log || {
+          # 单测跑在开发版上（正式版暂停开发，不再检查）
+          ./gradlew testDevDebugUnitTest --tests "com.jack.ai.*" 2>&1 | tee test.log || {
             grep -E "^e: |What went wrong|Exception|FAILED" -A3 test.log | head -40 | while IFS= read -r l; do echo "::error::$l"; done
             exit 1
           }

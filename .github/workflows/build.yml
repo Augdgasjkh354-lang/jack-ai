@@ -98,15 +98,12 @@ jobs:
           chmod +x gradlew
           set -o pipefail
           # 出错时把关键报错写成注释，方便在网页上直接看到
-          # 开发版（dev，Jack 用的，发到 Release、自动更新）和正式版（store，上应用商店的）都打
-          ./gradlew assembleDevRelease assembleStoreRelease 2>&1 | tee build.log || {
+          # 只打开发版（dev，Jack 用的，发到 Release、自动更新）；正式版（store）暂停开发，不打包
+          ./gradlew assembleDevRelease 2>&1 | tee build.log || {
             grep -E "^e: |What went wrong|error:" -A3 build.log | head -40 | while IFS= read -r l; do echo "::error::$l"; done
             exit 1
           }
           cp app/build/outputs/apk/dev/release/app-dev-release.apk Kavi-v${{ env.VERSION }}.apk
-          # 正式版不放进 Release（自动更新取 Release 里第一个 .apk，不能混），只放进这次打包的附件里
-          mkdir -p store-apk
-          cp app/build/outputs/apk/store/release/app-store-release.apk store-apk/Kavi-store-v${{ env.VERSION }}.apk
 
       - name: Check Office files
         run: |
@@ -128,11 +125,6 @@ jobs:
         with:
           name: Kavi-apk
           path: Kavi-*.apk
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Kavi-store-apk
-          path: store-apk/*.apk
 
       # Linux 沙箱带的 PRoot（GPL-2.0）和 talloc（LGPL-3.0）：每次发版把对应源码、补丁、编译脚本和许可证一起发出去
       - name: Pack GPL sources

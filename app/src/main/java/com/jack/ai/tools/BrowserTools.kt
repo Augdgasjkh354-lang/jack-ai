@@ -1071,28 +1071,3 @@ private fun itemLine(i: JackBrowser.Item) = buildString {
     if (i.options.isNotEmpty()) append(" 可选：" + i.options.joinToString(" / "))
     i.checked?.let { append(if (it) " ☑" else " ☐") }
 }
-
-/** 同一个页面这一步和上一步比，变了什么。 */
-internal object BrowserDiff {
-    data class Diff(val changed: List<JackBrowser.Item>, val gone: List<Int>, val newText: List<String>)
-
-    /** 跳到了别的网址、或者变化太大（新的超过一半），返回 null：发整页。 */
-    fun of(prev: JackBrowser.Page?, p: JackBrowser.Page): Diff? {
-        if (prev == null || prev.url != p.url) return null
-        val old = prev.items.associateBy { it.n }
-        val changed = p.items.filter { i ->
-            val o = old[i.n]
-            o == null || o.label != i.label || o.value != i.value || o.checked != i.checked || o.options != i.options
-        }
-        val now = p.items.map { it.n }.toSet()
-        val gone = prev.items.map { it.n }.filter { it !in now }
-        val oldLines = lines(prev.text).toHashSet()
-        val newText = lines(p.text).filter { it !in oldLines }
-        val newChars = newText.sumOf { it.length }
-        if (changed.size > 5 && changed.size * 2 > p.items.size) return null
-        if (newChars > 800 && newChars * 2 > p.text.length) return null
-        return Diff(changed, gone, newText)
-    }
-
-    private fun lines(t: String) = t.lines().map { it.trim() }.filter { it.isNotEmpty() }
-}
