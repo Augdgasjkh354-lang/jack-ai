@@ -3,6 +3,7 @@ package com.jack.ai.data
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.jack.ai.data.design.Diagram
 
 class DiagramTest {
     // 中文一个字 26 像素，其他 14 像素

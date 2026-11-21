@@ -211,7 +211,7 @@ internal fun PhotoEditorScreen(file: File, forResult: Boolean, onSaved: (File) -
                     val dir = file.parentFile?.takeIf { it.canWrite() } ?: ctx.cacheDir
                     val f = com.jack.ai.data.Workspace.uniqueFile(dir, file.nameWithoutExtension.removeSuffix("-修图") + "-修图." + if (png) "png" else "jpg")
                     f.outputStream().use { b.compress(if (png) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG, 95, it) }
-                    if (!forResult) com.jack.ai.data.DesignSeries.exportToGallery(ctx, listOf(f), f.nameWithoutExtension)
+                    if (!forResult) com.jack.ai.data.design.DesignSeries.exportToGallery(ctx, listOf(f), f.nameWithoutExtension)
                     f
                 }
             }

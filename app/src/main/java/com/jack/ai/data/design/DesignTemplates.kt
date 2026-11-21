@@ -1,4 +1,4 @@
-package com.jack.ai.data
+package com.jack.ai.data.design
 
 import android.content.Context
 import kotlinx.serialization.json.Json
@@ -7,6 +7,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import com.jack.ai.data.PptDeck
 
 /**
  * 设计模板（海报、小红书配图、邀请函、名片……）：一份模板就是一张固定大小的网页，放在 assets/design/templates/，

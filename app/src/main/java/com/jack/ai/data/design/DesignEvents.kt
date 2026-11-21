@@ -1,4 +1,4 @@
-package com.jack.ai.data
+package com.jack.ai.data.design
 
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow

@@ -2,7 +2,7 @@ package com.jack.ai.tools
 
 import com.jack.ai.data.PptStyle
 import com.jack.ai.data.SearchRecord
-import com.jack.ai.data.StyleTemplates
+import com.jack.ai.data.design.StyleTemplates
 import com.jack.ai.data.Workspace
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

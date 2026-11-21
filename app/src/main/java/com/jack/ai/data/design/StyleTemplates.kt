@@ -1,4 +1,4 @@
-package com.jack.ai.data
+package com.jack.ai.data.design
 
 import android.content.Context
 import kotlinx.serialization.Serializable
@@ -8,6 +8,9 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import java.io.File
+import com.jack.ai.data.PptDeck
+import com.jack.ai.data.SafeFile
+import com.jack.ai.data.describe
 
 /**
  * 我的模板：用户满意的风格存下来，以后「用我的模板」一句话就行；设成默认的话不说也照它来。

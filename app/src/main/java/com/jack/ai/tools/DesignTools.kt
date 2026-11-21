@@ -1,8 +1,8 @@
 package com.jack.ai.tools
 
-import com.jack.ai.data.DesignFonts
-import com.jack.ai.data.DesignStyles
-import com.jack.ai.data.DesignTemplates
+import com.jack.ai.data.design.DesignFonts
+import com.jack.ai.data.design.DesignStyles
+import com.jack.ai.data.design.DesignTemplates
 import com.jack.ai.data.SearchRecord
 import com.jack.ai.data.Workspace
 import com.jack.ai.ui.DesignRender
@@ -41,9 +41,9 @@ internal suspend fun ToolSession.design(args: JsonObject): String = when (args["
         DesignStyles.catalog(lib, id) to SearchRecord("看设计风格" + (id?.let { "：$it" } ?: ""))
     }
     "elements" -> runTool("看设计贴纸") {
-        val lib = withContext(Dispatchers.IO) { com.jack.ai.data.DesignElements.library(app) }
+        val lib = withContext(Dispatchers.IO) { com.jack.ai.data.design.DesignElements.library(app) }
         val q = args["query"].text().trim()
-        com.jack.ai.data.DesignElements.catalog(lib, q, args["category"].text().trim().ifBlank { null }?.takeIf { c -> lib.categories.any { it.id == c } }) to
+        com.jack.ai.data.design.DesignElements.catalog(lib, q, args["category"].text().trim().ifBlank { null }?.takeIf { c -> lib.categories.any { it.id == c } }) to
             SearchRecord("看设计贴纸" + (q.takeIf { it.isNotEmpty() }?.let { "：$it" } ?: ""))
     }
     "fonts" -> runTool("看设计字体") { DesignFonts.catalog(withContext(Dispatchers.IO) { DesignFonts.all(app) }) to SearchRecord("看设计字体") }
@@ -133,7 +133,7 @@ internal suspend fun ToolSession.renderDesign(args: JsonObject): String {
         val d = draw(file.nameWithoutExtension, Page(null, html, w, h), args, args, fresh = false, previewWidth = 720)
         // 聊天里的图跟着刷新；编辑器开着这页的话载入新版
         com.jack.ai.ui.DesignEditorActivity.bump(d.png)
-        com.jack.ai.data.DesignEvents.changed(file)
+        com.jack.ai.data.design.DesignEvents.changed(file)
         d.text to SearchRecord("$label：${d.png.name}" + if (d.problems > 0) "（${d.problems} 处要改）" else "")
     }
 }
@@ -192,7 +192,7 @@ private suspend fun ToolSession.draw(
     val png = withContext(Dispatchers.IO) { if (fresh) Workspace.uniqueFile(wsDir, "$base.png") else File(wsDir, "$base.png") }
     val src = File(png.parentFile, png.nameWithoutExtension + ".html")
     val pdf = if (pdfWanted) File(png.parentFile, png.nameWithoutExtension + ".pdf") else null
-    val data = DesignTemplates.data(vars, slots, lists, pics, DesignTemplates.icons(page.html), com.jack.ai.data.DesignElements.stickers(app, page.html))
+    val data = DesignTemplates.data(vars, slots, lists, pics, DesignTemplates.icons(page.html), com.jack.ai.data.design.DesignElements.stickers(app, page.html))
     val r = DesignRender.render(app, wsDir, page.html, page.w, page.h, data, png, pdf, previewWidth)
     if (r.source.isNotBlank()) withContext(Dispatchers.IO) { src.writeText(r.source) }
     ui.attach(png)

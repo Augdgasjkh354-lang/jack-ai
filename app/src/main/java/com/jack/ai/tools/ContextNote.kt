@@ -32,7 +32,7 @@ object ContextNote {
         }
         // 我的模板：有就列出名字，模型才知道「用我的模板」指哪个
         if (setOf(SkillIds.WORD, SkillIds.PPT, SkillIds.EXCEL).any { it in skillIds }) {
-            val templates = com.jack.ai.data.StyleTemplates.load(ctx)
+            val templates = com.jack.ai.data.design.StyleTemplates.load(ctx)
             if (templates.isNotEmpty()) append("【My templates】").append(templates.joinToString("; ") { t ->
                 "${t.name} (${t.kind}${if (t.isDefault) ", default" else ""})"
             }).append("\n")

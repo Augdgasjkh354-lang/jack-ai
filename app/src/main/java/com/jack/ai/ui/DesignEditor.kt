@@ -91,15 +91,15 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.ui.draw.clip
-import com.jack.ai.data.DesignSeries
+import com.jack.ai.data.design.DesignSeries
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import com.jack.ai.data.Attachments
-import com.jack.ai.data.DesignFonts
-import com.jack.ai.data.DesignStyles
-import com.jack.ai.data.DesignTemplates
+import com.jack.ai.data.design.DesignFonts
+import com.jack.ai.data.design.DesignStyles
+import com.jack.ai.data.design.DesignTemplates
 import com.jack.ai.data.Store
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -314,7 +314,7 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
         pages[i] = pages[i].copy(html = html, dirty = false)
     }
     LaunchedEffect(Unit) {
-        com.jack.ai.data.DesignEvents.sourceChanged.collect { path ->
+        com.jack.ai.data.design.DesignEvents.sourceChanged.collect { path ->
             val i = pages.indexOfFirst { p -> p.origin?.let { runCatching { it.canonicalPath }.getOrNull() } == path }
             if (i < 0 || saving) return@collect
             val html = withContext(Dispatchers.IO) { runCatching { File(path).readText() }.getOrNull() } ?: return@collect
@@ -443,7 +443,7 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
                 val (w, h) = DesignTemplates.savedSize(html) ?: (1080 to 1440)
                 val png = File(target.parentFile, target.nameWithoutExtension + ".png")
                 val pdf = File(target.parentFile, target.nameWithoutExtension + ".pdf").takeIf { it.exists() || doc.hadPdf }
-                val data = DesignTemplates.data(emptyMap(), null, null, emptyMap(), DesignTemplates.icons(html), com.jack.ai.data.DesignElements.stickers(ctx, html))
+                val data = DesignTemplates.data(emptyMap(), null, null, emptyMap(), DesignTemplates.icons(html), com.jack.ai.data.design.DesignElements.stickers(ctx, html))
                 val r = runCatching { DesignRender.render(ctx, root, html, w, h, data, png, pdf) }.getOrNull()
                 // 出图存下来的底稿去掉了临时的东西，以它为准
                 val saved = r?.source?.takeIf { it.isNotBlank() } ?: html
@@ -585,7 +585,7 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
                             scope.launch {
                                 withTimeoutOrNull(20_000) { done.await() }
                                 val html = page?.html.orEmpty()
-                                val data = DesignTemplates.data(emptyMap(), null, null, emptyMap(), DesignTemplates.icons(html), com.jack.ai.data.DesignElements.stickers(ctx, html))
+                                val data = DesignTemplates.data(emptyMap(), null, null, emptyMap(), DesignTemplates.icons(html), com.jack.ai.data.design.DesignElements.stickers(ctx, html))
                                 evaluateJavascript("kaviFill($data)", null)
                                 withTimeoutOrNull(20_000) { while (jsString(js("window.__kaviDone||''")).isEmpty()) delay(100) }
                                 evaluateJavascript("kvEdStart()", null)

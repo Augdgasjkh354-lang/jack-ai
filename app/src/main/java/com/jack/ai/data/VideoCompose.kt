@@ -31,6 +31,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.nio.ByteBuffer
+import com.jack.ai.data.design.TextArt
 
 /**
  * 照剪辑方案出片（Media3 Transformer，手机硬件编码，出 H.264 + AAC 的 mp4）：

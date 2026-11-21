@@ -182,7 +182,7 @@ internal fun ImageViewer(path: String, onDismiss: () -> Unit) {
         menu = false
         scope.launch {
             val n = withContext(Dispatchers.IO) {
-                com.jack.ai.data.DesignSeries.exportToGallery(ctx, files, com.jack.ai.data.DesignSeries.baseOf(files.first()) ?: files.first().nameWithoutExtension)
+                com.jack.ai.data.design.DesignSeries.exportToGallery(ctx, files, com.jack.ai.data.design.DesignSeries.baseOf(files.first()) ?: files.first().nameWithoutExtension)
             }
             Toast.makeText(ctx, if (n > 0) "已存 $n 张到相册（Pictures/Kavi）" else "没存成，看看是不是没给存储权限", Toast.LENGTH_LONG).show()
         }
@@ -221,7 +221,7 @@ private fun ViewerButton(onClick: () -> Unit, content: @Composable () -> Unit) {
 internal fun groupOf(png: File): List<File> {
     val html = File(png.parentFile, png.nameWithoutExtension + ".html")
     if (!html.isFile) return listOf(png)
-    return com.jack.ai.data.DesignSeries.pagesOf(html).map { File(it.parentFile, it.nameWithoutExtension + ".png") }.filter { it.isFile }.ifEmpty { listOf(png) }
+    return com.jack.ai.data.design.DesignSeries.pagesOf(html).map { File(it.parentFile, it.nameWithoutExtension + ".png") }.filter { it.isFile }.ifEmpty { listOf(png) }
 }
 
 @Composable

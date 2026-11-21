@@ -14,8 +14,8 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import com.jack.ai.data.DesignFonts
-import com.jack.ai.data.DesignTemplates
+import com.jack.ai.data.design.DesignFonts
+import com.jack.ai.data.design.DesignTemplates
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay

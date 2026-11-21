@@ -13,6 +13,9 @@ import kotlinx.serialization.json.JsonNull
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.jack.ai.data.design.Diagram
+import com.jack.ai.data.design.DiagramWriter
+import com.jack.ai.data.design.StyleTemplates
 
 /** 按工具名和参数把文件真正画出来/写出来（FileTools 用）。 */
 

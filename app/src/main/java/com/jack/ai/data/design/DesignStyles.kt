@@ -1,4 +1,4 @@
-package com.jack.ai.data
+package com.jack.ai.data.design
 
 import android.content.Context
 import kotlinx.serialization.json.Json

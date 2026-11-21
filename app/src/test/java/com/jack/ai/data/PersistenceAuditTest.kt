@@ -7,6 +7,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.io.File
+import com.jack.ai.data.design.StyleTemplates
 
 /** 写到一半被杀：AtomicFile 保住旧版本，用户的模板不会变成空。并发写记忆见 MemoryConcurrencyTest。 */
 @RunWith(RobolectricTestRunner::class)

@@ -1,6 +1,6 @@
 package com.jack.ai.ui
 
-import com.jack.ai.data.DesignSeries
+import com.jack.ai.data.design.DesignSeries
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test

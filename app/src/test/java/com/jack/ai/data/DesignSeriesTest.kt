@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.nio.file.Files
+import com.jack.ai.data.design.DesignSeries
 
 class DesignSeriesTest {
     @Test

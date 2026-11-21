@@ -7,6 +7,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.jack.ai.data.design.DesignTemplates
 
 class DesignTemplatesTest {
     private val index = """[{"id":"xhs-knowledge-fresh","name":"知识点卡片·清新","category":"xhs","size":[1080,1440],"style":"清新",
