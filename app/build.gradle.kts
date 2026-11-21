@@ -73,7 +73,6 @@ android {
     }
     buildFeatures {
         compose = true
-        aidl = true
         buildConfig = true
     }
     // 界面测试（Robolectric）要用到 Android 资源
@@ -103,8 +102,6 @@ androidComponents {
     }
 }
 
-// Mika 的无线调试、辅助进程和虚拟屏幕源码，保留原作者命名空间。
-android.sourceSets["main"].java.srcDir("src/main/mika")
 
 chaquopy {
     defaultConfig {
@@ -121,6 +118,10 @@ chaquopy {
 }
 
 dependencies {
+    // Mika 的源码单独一个模块（见 mika/build.gradle.kts）
+    implementation(project(":mika"))
+    // Office、设计、音视频的生成引擎（见 studio/build.gradle.kts）
+    implementation(project(":studio"))
     testImplementation("junit:junit:4.13.2")
     val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
     implementation(composeBom)

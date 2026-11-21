@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 组件（HelperHandoffProvider）在 App 的清单里登记，正式版要删掉它，放这里删不干净。 -->
+<manifest />

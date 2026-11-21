@@ -35,11 +35,13 @@ internal object BrowserNetworkRows {
         val sameSite = BrowserNetWatch.base(pageHost)
         var best: Candidate? = null
         for ((index, response) in responses.withIndex()) {
+            // CapturedResponse 在 mika 模块里，它的属性不能智能转换，先取出来
+            val body = response.body
             if (response.state != CapturedResponse.State.DONE || (response.status ?: 0) !in 200..299 ||
-                response.bodyTruncated || response.body.isNullOrBlank() ||
-                response.type !in setOf("XHR", "Fetch") || !isJson(response.mime, response.body) ||
+                response.bodyTruncated || body.isNullOrBlank() ||
+                response.type !in setOf("XHR", "Fetch") || !isJson(response.mime, body) ||
                 BrowserNetWatch.base(host(response.url)) != sameSite || blocked.containsMatchIn(path(response.url))) continue
-            val parsed = runCatching { json.parseToJsonElement(response.body) }.getOrNull() ?: continue
+            val parsed = runCatching { json.parseToJsonElement(body) }.getOrNull() ?: continue
             val candidates = ArrayList<List<Row>>()
             scan(parsed, 0, candidates)
             for (rows in candidates) {

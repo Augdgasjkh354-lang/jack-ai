@@ -14,3 +14,5 @@ dependencyResolutionManagement {
 }
 rootProject.name = "JackAI"
 include(":app")
+include(":mika")
+include(":studio")
