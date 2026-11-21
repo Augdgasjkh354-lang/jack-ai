@@ -176,6 +176,8 @@ private data class Picked(
     val opacity: Int = 100, val locked: Boolean = false, val count: Int = 0, val multi: Boolean = false,
     // 图片：有没有照片（占位色块没有）、是不是在裁剪、图片设置（data-kv-img：滤镜 f、蒙层 m、形状 r、描边 ol/olc、阴影 sh、调色 b/c/s/t、放大 z）
     val photo: Boolean = false, val cropping: Boolean = false, val img: Map<String, String> = emptyMap(),
+    // 加进来的元素：sticker 贴纸、shape 形状、icon 图标（空的是页面原有的）；贴纸怎么换色（fill / stroke）；形状描边多粗
+    val piece: String = "", val recolor: String = "", val stroke: Float = 0f,
 )
 
 private val lenient = Json { ignoreUnknownKeys = true }
@@ -187,7 +189,8 @@ private fun parsePicked(raw: String): Picked = runCatching {
         s("lineHeight").toFloatOrNull() ?: 1.4f, s("letterSpacing").toFloatOrNull() ?: 0f, s("fx"), s("added") == "true", s("editing") == "true", s("styled") == "true",
         s("opacity").toIntOrNull() ?: 100, s("locked") == "true", s("count").toIntOrNull() ?: 0, s("multi") == "true",
         s("photo") == "true", s("cropping") == "true",
-        (o["img"] as? JsonObject)?.mapValues { (it.value as? JsonPrimitive)?.content.orEmpty() }.orEmpty())
+        (o["img"] as? JsonObject)?.mapValues { (it.value as? JsonPrimitive)?.content.orEmpty() }.orEmpty(),
+        s("piece"), s("recolor"), s("stroke").toFloatOrNull() ?: 0f)
 }.getOrDefault(Picked())
 
 /** 页面里的 rgb()/rgba() → Compose 颜色（画色块用）。 */
@@ -228,7 +231,7 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
     // 换配色后等着问「整组都换吗」的那套
     var pendingVars by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     LaunchedEffect(picked.kind) {
-        if (picked.kind == "none" && panel != "kavi" && panel != "review") panel = null
+        if (picked.kind == "none" && panel != "kavi" && panel != "review" && panel != "elements") panel = null
         if (picked.kind == "image" && panel == "style") panel = null
         if (picked.kind != "image" && panel == "image") panel = null
     }
@@ -440,7 +443,7 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
                 val (w, h) = DesignTemplates.savedSize(html) ?: (1080 to 1440)
                 val png = File(target.parentFile, target.nameWithoutExtension + ".png")
                 val pdf = File(target.parentFile, target.nameWithoutExtension + ".pdf").takeIf { it.exists() || doc.hadPdf }
-                val data = DesignTemplates.data(emptyMap(), null, null, emptyMap(), DesignTemplates.icons(html))
+                val data = DesignTemplates.data(emptyMap(), null, null, emptyMap(), DesignTemplates.icons(html), com.jack.ai.data.DesignElements.stickers(ctx, html))
                 val r = runCatching { DesignRender.render(ctx, root, html, w, h, data, png, pdf) }.getOrNull()
                 // 出图存下来的底稿去掉了临时的东西，以它为准
                 val saved = r?.source?.takeIf { it.isNotBlank() } ?: html
@@ -582,7 +585,7 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
                             scope.launch {
                                 withTimeoutOrNull(20_000) { done.await() }
                                 val html = page?.html.orEmpty()
-                                val data = DesignTemplates.data(emptyMap(), null, null, emptyMap(), DesignTemplates.icons(html))
+                                val data = DesignTemplates.data(emptyMap(), null, null, emptyMap(), DesignTemplates.icons(html), com.jack.ai.data.DesignElements.stickers(ctx, html))
                                 evaluateJavascript("kaviFill($data)", null)
                                 withTimeoutOrNull(20_000) { while (jsString(js("window.__kaviDone||''")).isEmpty()) delay(100) }
                                 evaluateJavascript("kvEdStart()", null)
@@ -618,6 +621,7 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
                     resizing != null -> resizing!!
                     kaviBusy -> "Kavi 在改" + (if (picked.kind == "none") "整张" else "这一块") + "，几秒到十几秒…"
                     panel == "review" -> "Kavi 点评：${advice.size} 处可以改，编号标在图上"
+                    panel == "elements" -> "加元素：点一下放到画面中间，颜色跟着配色走"
                     panel == "kavi" -> if (picked.kind == "none") "让 Kavi 改整张图：说说想怎么改" else if (picked.count > 1) "选了好几个：Kavi 改整张图" else "让 Kavi 改选中的这一块"
                     editingText -> "正在改字：选中几个字，可以单独换颜色、加粗、划重点"
                     panel == "style" && picked.kind != "none" -> "文字样式 · ${picked.fontSize}px"
@@ -630,6 +634,9 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
                     panel == "image" && picked.kind == "image" -> "图片：滤镜、调色、蒙层、形状"
                     picked.kind == "image" -> if (picked.photo) "图片 · 双击裁剪" else "图片（占位，换上照片后能裁剪、加蒙层）"
                     picked.kind == "group" -> "一组（列表的一项）"
+                    picked.piece == "sticker" -> "贴纸 · 「颜色」换色，拖四角缩放"
+                    picked.piece == "shape" -> "形状 · 「颜色」换填充，「描边」加边框"
+                    picked.piece == "icon" -> "图标 · 「颜色」换色"
                     picked.kind == "box" -> "图形"
                     else -> "点一下选中，双击改字，长按多选；拖四角缩放，拖顶上圆点旋转"
                 }
@@ -638,6 +645,10 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
                 if (!editingText && panel == "review") {
                     ReviewPanel(advice, busy = kaviBusy, onApply = { applyAdvice(listOf(it)) }, onApplyAll = { applyAdvice(advice) },
                         onClose = { panel = null; advice = emptyList(); showMarks() })
+                    return@Column
+                }
+                if (!editingText && panel == "elements") {
+                    ElementsPanel(webView, onAdd = { o -> webView?.requestFocus(); cmd(o); panel = null }, onClose = { panel = null })
                     return@Column
                 }
                 if (!editingText && panel == "kavi") {
@@ -682,6 +693,7 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
                             Tool("让 Kavi 改", bold = true) { panel = "kavi" }
                             Tool("Kavi 点评") { startReview() }
                             Tool("加文字") { webView?.requestFocus(); cmd("addText") }
+                            Tool("加元素") { panel = "elements" }
                             Tool("换配色") { sheet = "palette" }
                             Tool("改尺寸") { sheet = "resize" }
                             Tool(if (picked.multi) "退出多选" else "多选", bold = picked.multi) { multiMode(!picked.multi) }
@@ -723,7 +735,8 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
                                 Tool(if (picked.weight >= 600) "变细" else "加粗") { cmd("weight", "value" to if (picked.weight >= 600) 400 else 700) }
                                 Tool("文字对齐") { cmd("align", "value" to when (picked.align) { "left", "start" -> "center"; "center" -> "right"; else -> "left" }) }
                             }
-                            if (picked.kind == "box" || picked.kind == "group") Tool("底色") { sheet = "background" }
+                            if (picked.piece == "shape") Tool(if (picked.recolor == "line") "粗细" else when (picked.stroke) { 0f -> "加描边"; 4f -> "描边加粗"; else -> "去掉描边" }) { cmd("stroke") }
+                            if ((picked.kind == "box" || picked.kind == "group") && picked.piece.isEmpty()) Tool("底色") { sheet = "background" }
                             Tool("上移一层") { cmd("z", "dir" to 1) }
                             Tool("下移一层") { cmd("z", "dir" to -1) }
                             Tool(if (picked.locked) "解锁" else "锁定") { cmd("lock") }

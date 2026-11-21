@@ -2,7 +2,7 @@
 // 调用：kaviFill(data)，填完把结果写到 window.__kaviDone（JSON 字符串）。
 // data = { vars: {bg,fg,primary,...}, slots: {title:"…"}, lists: {points:[{text:"…"}, …]},
 //          images: {photo:"/files/xx.jpg" 或 ""}, icons: {name: "<svg…>"} }
-// 约定和模板规则一致：data-slot、data-max、data-list/data-item、data-kind="image"、data-icon、.canvas。
+// 约定和模板规则一致：data-slot、data-max、data-list/data-item、data-kind="image"、data-icon、data-sticker、.canvas。
 (function () {
   function canvasOf() { return document.querySelector(".canvas") || document.body; }
 
@@ -80,6 +80,14 @@
     Array.prototype.forEach.call(document.querySelectorAll("[data-icon]"), function (el) {
       var svg = map[el.getAttribute("data-icon")];
       el.innerHTML = svg || "";
+    });
+  }
+
+  // 贴纸（data-sticker="贴纸id"）：图形不存在底稿里，出图、打开编辑器时按 id 填进去；没给的不动
+  function stickers(map) {
+    Array.prototype.forEach.call(document.querySelectorAll("[data-sticker]"), function (el) {
+      var svg = map[el.getAttribute("data-sticker")];
+      if (svg) el.innerHTML = svg;
     });
   }
 
@@ -304,6 +312,7 @@
       fillLists(data.lists, notes);
       fillSlots(document, data.slots, data.images, true, notes);
       icons(data.icons || {});
+      stickers(data.stickers || {});
     } catch (e) { notes.problems.push("填内容出错：" + e); }
     // 字体按字分块下载：先排一次版，浏览器才知道要哪几块；等它们到了再排一次、再等一次
     function frames() { return new Promise(function (ok) { requestAnimationFrame(function () { requestAnimationFrame(ok); }); }); }
@@ -319,7 +328,7 @@
   // 存底稿：图标的图形不存（每次出图重新放），去掉出图时临时加的东西
   window.kaviSource = function () {
     var doc = document.documentElement.cloneNode(true);
-    Array.prototype.forEach.call(doc.querySelectorAll("[data-icon]"), function (el) { el.innerHTML = ""; });
+    Array.prototype.forEach.call(doc.querySelectorAll("[data-icon],[data-sticker]"), function (el) { el.innerHTML = ""; });
     Array.prototype.forEach.call(doc.querySelectorAll("[data-kavi-temp]"), function (el) { el.remove(); });
     return "<!doctype html>\n" + doc.outerHTML;
   };

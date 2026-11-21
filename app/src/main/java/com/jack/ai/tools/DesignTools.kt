@@ -40,13 +40,19 @@ internal suspend fun ToolSession.design(args: JsonObject): String = when (args["
         val id = args["style"].text().trim().ifBlank { null }
         DesignStyles.catalog(lib, id) to SearchRecord("看设计风格" + (id?.let { "：$it" } ?: ""))
     }
+    "elements" -> runTool("看设计贴纸") {
+        val lib = withContext(Dispatchers.IO) { com.jack.ai.data.DesignElements.library(app) }
+        val q = args["query"].text().trim()
+        com.jack.ai.data.DesignElements.catalog(lib, q, args["category"].text().trim().ifBlank { null }?.takeIf { c -> lib.categories.any { it.id == c } }) to
+            SearchRecord("看设计贴纸" + (q.takeIf { it.isNotEmpty() }?.let { "：$it" } ?: ""))
+    }
     "fonts" -> runTool("看设计字体") { DesignFonts.catalog(withContext(Dispatchers.IO) { DesignFonts.all(app) }) to SearchRecord("看设计字体") }
     "render" -> renderDesign(args)
     "make" -> makeDesign(args)
     "series" -> makeSeries(args)
     "resize" -> resizeDesign(args)
     "cutout" -> cutout(args)
-    else -> "action 只能是 templates、styles、fonts、make、series、render、resize、cutout"
+    else -> "action 只能是 templates、styles、fonts、elements、make、series、render、resize、cutout"
 }
 
 private suspend fun ToolSession.makeDesign(args: JsonObject): String {
@@ -186,7 +192,7 @@ private suspend fun ToolSession.draw(
     val png = withContext(Dispatchers.IO) { if (fresh) Workspace.uniqueFile(wsDir, "$base.png") else File(wsDir, "$base.png") }
     val src = File(png.parentFile, png.nameWithoutExtension + ".html")
     val pdf = if (pdfWanted) File(png.parentFile, png.nameWithoutExtension + ".pdf") else null
-    val data = DesignTemplates.data(vars, slots, lists, pics, DesignTemplates.icons(page.html))
+    val data = DesignTemplates.data(vars, slots, lists, pics, DesignTemplates.icons(page.html), com.jack.ai.data.DesignElements.stickers(app, page.html))
     val r = DesignRender.render(app, wsDir, page.html, page.w, page.h, data, png, pdf, previewWidth)
     if (r.source.isNotBlank()) withContext(Dispatchers.IO) { src.writeText(r.source) }
     ui.attach(png)

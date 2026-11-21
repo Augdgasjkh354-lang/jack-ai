@@ -53,6 +53,9 @@
   // —— 能选中哪些：文字位、图片位、列表项、图标；点到装饰图形就选它自己 ——
   function pickable(el) {
     if (!el || el === canvas || !canvas.contains(el) || el.closest("[data-kavi-temp]")) return null;
+    // 加进来的元素（贴纸、形状、图标）整个选中，不选到里面的线条
+    var piece = el.closest("[data-sticker],[data-kv-el]");
+    if (piece && canvas.contains(piece) && piece.getAttribute("data-kv-el") !== "texture") return piece;
     var svg = el.closest("svg");
     if (svg && svg.closest("[data-icon]")) return svg.closest("[data-icon]");
     if (svg && svg.parentNode === canvas && /grain|noise/.test(svg.getAttribute("class") || "")) return null; // 铺满的颗粒层不选
@@ -89,6 +92,8 @@
       align: cs.textAlign, hidden: cs.visibility === "hidden", tf: tf(el),
       lineHeight: isNaN(lh) ? 1.4 : Math.round(lh / size * 100) / 100,
       letterSpacing: Math.round((parseFloat(cs.letterSpacing) || 0) / size * 100) / 100,
+      piece: el.getAttribute("data-kv-el") || (el.hasAttribute("data-sticker") ? "sticker" : ""), recolor: el.getAttribute("data-kv-recolor") || "",
+      stroke: parseFloat(el.style.getPropertyValue("--kv-sw")) || 0,
       fx: el.getAttribute("data-kv-fx") || "", added: el.hasAttribute("data-kv-added"), editing: editing === el,
       styled: !!el.querySelector("span[style]"),
       opacity: Math.round((parseFloat(cs.opacity) || 1) * 100), locked: el.hasAttribute("data-kv-lock"),
@@ -405,6 +410,52 @@
     return el;
   }
 
+  // —— 加元素：贴纸、形状、图标，放在看得见的画面中间（和 addText 一样），自动选中 ——
+  //    c: {html, w, h（1080 宽画布上的像素）, el: sticker/shape/icon, attrs: {属性: 值}, recolor: fill/stroke, stretch}
+  function addPiece(c) {
+    if (getComputedStyle(canvas).position === "static") canvas.style.position = "relative";
+    var el = document.createElement("div"), s = k();
+    el.setAttribute("data-kv-added", "");
+    el.setAttribute("data-kv-el", c.el);
+    if (c.recolor) el.setAttribute("data-kv-recolor", c.recolor);
+    Object.keys(c.attrs || {}).forEach(function (a) { el.setAttribute(a, c.attrs[a]); });
+    // 线条类贴纸和图标跟着 color 走，默认用主色；色块类跟着配色变量
+    el.style.cssText = "position:absolute;z-index:20;width:" + px(c.w * s) + ";height:" + px(c.h * s) + ";color:var(--" + (c.el === "icon" ? "primary" : "fg") + ")";
+    el.innerHTML = c.html;
+    canvas.appendChild(el);
+    var cr = canvas.getBoundingClientRect();
+    var viewMid = Math.min(cr.bottom, window.innerHeight) / 2 + Math.max(cr.top, 0) / 2 - cr.top;
+    el.style.left = px(Math.max(0, (canvas.clientWidth - el.offsetWidth) / 2));
+    el.style.top = px(Math.max(0, Math.min(canvas.clientHeight - el.offsetHeight, viewMid - el.offsetHeight / 2)));
+    return el;
+  }
+  // 纹理：铺满整张、垫在最底下、点不到；同一种再点一次拿掉，换一种就替换
+  function texture(c) {
+    var old = canvas.querySelector(':scope > [data-kv-el="texture"]');
+    if (old) old.remove();
+    if (!c.id || (old && old.getAttribute("data-kv-texture") === c.id && String(c.level) === old.getAttribute("data-kv-level"))) return;
+    if (getComputedStyle(canvas).position === "static") canvas.style.position = "relative";
+    canvas.style.isolation = "isolate";
+    var el = document.createElement("div");
+    el.setAttribute("data-kv-added", "");
+    el.setAttribute("data-kv-el", "texture");
+    el.setAttribute("data-kv-texture", c.id);
+    el.setAttribute("data-kv-level", String(c.level));
+    el.style.cssText = "position:absolute;inset:0;z-index:-1;pointer-events:none;" + c.css;
+    canvas.insertBefore(el, canvas.firstChild);
+  }
+  // 给加进来的元素换颜色：色块类改它自己的主色（--kv-fill 是形状的，--primary 是贴纸的），线条类改 color
+  function recolor(x, value) {
+    var el = x.getAttribute("data-kv-el") || (x.hasAttribute("data-sticker") ? "sticker" : "");
+    if (el === "shape") { x.style.setProperty("--kv-fill", value); return true; }
+    if (el === "sticker" && x.getAttribute("data-kv-recolor") !== "stroke") {
+      // 写成 var(--primary) 会自己引用自己变成无效，等于还原
+      if (value === "var(--primary)") x.style.removeProperty("--primary"); else x.style.setProperty("--primary", value);
+      return true;
+    }
+    return false;
+  }
+
   // —— 手势：点一下选中；双击文字直接改字；按住选中的东西拖动（多选时一起动）；拖手柄缩放、旋转、改宽；两指缩放加旋转；
   //    长按一个东西把它加进多选。没选中的地方照常滚动（长图） ——
   var pointers = {}, pressTimer = null;
@@ -573,7 +624,7 @@
   // 能拿来对齐的别的元素：文字位、图片位、图标、列表项、画布的直接子元素（不含正在拖的、看不见的、铺满的）
   function others(moving) {
     var cr = canvas.getBoundingClientRect(), out = [];
-    Array.prototype.forEach.call(canvas.querySelectorAll("[data-slot],[data-icon],[data-item],.canvas > *"), function (el) {
+    Array.prototype.forEach.call(canvas.querySelectorAll("[data-slot],[data-icon],[data-sticker],[data-kv-el],[data-item],.canvas > *"), function (el) {
       if (el.closest("[data-kavi-temp]") || moving.some(function (m) { return m === el || m.contains(el) || el.contains(m); })) return;
       var r = el.getBoundingClientRect();
       if (r.width < 4 || r.height < 4 || r.width > cr.width * 0.95 && r.height > cr.height * 0.6) return;
@@ -785,7 +836,18 @@
     font: function (c) { if (sel) sel.style.fontFamily = c.value; },
     weight: function (c) { if (sel) sel.style.fontWeight = String(c.value); },
     align: function (c) { if (sel) sel.style.textAlign = c.value; },
-    color: function (c) { sels.forEach(function (x) { x.style.color = c.value; }); },
+    color: function (c) { sels.forEach(function (x) { if (!recolor(x, c.value)) x.style.color = c.value; }); },
+    addPiece: function (c) { var el = addPiece(c); select(el); },
+    texture: function (c) { texture(c); },
+    // 形状的描边：没有 → 细 → 粗 → 没有；线条类（直线、箭头、波浪）是粗细：8（默认）→ 14 → 4 → 8
+    stroke: function () {
+      sels.forEach(function (x) {
+        var w = parseFloat(x.style.getPropertyValue("--kv-sw")) || 0, next;
+        if (x.getAttribute("data-kv-recolor") === "line") next = w === 0 ? 14 : w === 14 ? 4 : 0;
+        else next = w === 0 ? 4 : w === 4 ? 10 : 0;
+        if (next) x.style.setProperty("--kv-sw", String(next)); else x.style.removeProperty("--kv-sw");
+      });
+    },
     background: function (c) { sels.forEach(function (x) { x.style.backgroundColor = c.value; }); },
     // 局部样式：改字时选中的那几个字（没选中就整段）
     span: function (c) { wrapSelection(c.style); },
@@ -968,7 +1030,7 @@
     review: function () {
       endEdit();
       var cr = canvas.getBoundingClientRect(), kk = cr.width / 1080 || 1, list = [];
-      Array.prototype.forEach.call(canvas.querySelectorAll("[data-slot],[data-item],[data-icon]"), function (el) {
+      Array.prototype.forEach.call(canvas.querySelectorAll("[data-slot],[data-item],[data-icon],[data-sticker]"), function (el) {
         if (list.length >= 40 || el.closest("[data-kavi-temp]")) return;
         var r = el.getBoundingClientRect();
         if (r.width < 2 || r.height < 2) return;

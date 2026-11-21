@@ -143,12 +143,14 @@ object DesignTemplates {
     }
 
     /** 填内容的数据：交给 fill.js 的 kaviFill。 */
-    fun data(vars: Map<String, String>, slots: JsonObject?, lists: JsonObject?, images: Map<String, String>, icons: Map<String, String>): JsonObject = buildJsonObject {
+    fun data(vars: Map<String, String>, slots: JsonObject?, lists: JsonObject?, images: Map<String, String>, icons: Map<String, String>,
+             stickers: Map<String, String> = emptyMap()): JsonObject = buildJsonObject {
         put("vars", JsonObject(vars.mapValues { JsonPrimitive(it.value) }))
         put("slots", slots ?: JsonObject(emptyMap()))
         put("lists", lists ?: JsonObject(emptyMap()))
         put("images", JsonObject(images.mapValues { JsonPrimitive(it.value) }))
         put("icons", JsonObject(icons.mapValues { JsonPrimitive(it.value) }))
+        put("stickers", JsonObject(stickers.mapValues { JsonPrimitive(it.value) }))
     }
 
     private fun JsonObject.str(k: String) = (this[k] as? JsonPrimitive)?.content.orEmpty()

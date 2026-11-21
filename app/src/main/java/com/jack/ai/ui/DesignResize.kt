@@ -74,7 +74,7 @@ Change the layout so it looks designed for the new size, not scaled or cropped:
         var problems = emptyList<String>()
         for (round in 0..1) {
             val r = renderLock.withLock {
-                DesignRender.render(ctx, root, res.html, w, h, DesignTemplates.data(emptyMap(), null, null, emptyMap(), DesignTemplates.icons(res.html)), png, null)
+                DesignRender.render(ctx, root, res.html, w, h, DesignTemplates.data(emptyMap(), null, null, emptyMap(), DesignTemplates.icons(res.html), com.jack.ai.data.DesignElements.stickers(ctx, res.html)), png, null)
             }
             withContext(Dispatchers.IO) { out.writeText(r.source.ifBlank { res.html }) }
             val lost = (want - slotsOf(res.html)).map { "The element with data-slot=\"$it\" is missing: put it back (hide it with display:none if it doesn't fit)." }
