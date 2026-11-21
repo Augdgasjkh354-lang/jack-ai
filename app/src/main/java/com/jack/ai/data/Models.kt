@@ -62,6 +62,12 @@ data class ChatMessage(
     val createdAt: Long = System.currentTimeMillis(),
     /** 发给模型时附在用户消息前的说明，保留原样以便后续命中缓存。 */
     val contextPrefix: String? = null,
+    /**
+     * 分支：从这条消息起的其他版本（改了消息重发、重新回答时留下的旧版本），每个是一整段「这条 + 后面的消息」。
+     * 只挂在每段的第一条上；[altIndex] 是眼前这段排第几（从 0 起）。见 [com.jack.ai.data.Branches]。
+     */
+    val alts: List<List<ChatMessage>> = emptyList(),
+    val altIndex: Int = 0,
 )
 
 /** 当前装的 App 的版本号（每次打包加一）。 */

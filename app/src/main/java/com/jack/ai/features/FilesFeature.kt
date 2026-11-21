@@ -79,17 +79,21 @@ class FilesFeature(core: AppCore) : Feature(core) {
     }
 
     /** 删除消息时，顺带删掉它们的图片和生成的文件。 */
-    internal fun cleanup(msgs: List<ChatMessage>) {
-        deleteImages(msgs.flatMap { it.attachments })
+    internal fun cleanup(msgs0: List<ChatMessage>, keep: List<ChatMessage> = emptyList()) {
+        // 消息的其他版本（分支）里的也一起清；[keep] 里还用着的（改消息重发时新旧版本共用的图片）不删
+        val msgs = com.jack.ai.data.Branches.all(msgs0)
+        val kept = com.jack.ai.data.Branches.all(keep).flatMap { m -> m.attachments.map { it.path } + m.files.map { it.path } }.toSet()
+        deleteImages(msgs.flatMap { it.attachments }.filterNot { it.path in kept })
         val app = app
         // 对话文件夹里的文件跟着对话走，不随单条消息删除
-        val paths = msgs.flatMap { m -> m.files.map { it.path } }.filterNot { Workspace.isInside(app, it) }
+        val paths = msgs.flatMap { m -> m.files.map { it.path } }.filterNot { Workspace.isInside(app, it) || it in kept }
         if (paths.isNotEmpty()) scope.launch(Dispatchers.IO) { paths.forEach { runCatching { File(it).delete() } } }
     }
 
     internal fun deleteWorkspace(key: String) {
         val dir = Workspace.dir(app, key)
-        scope.launch(Dispatchers.IO) { runCatching { dir.deleteRecursively() } }
+        val saved = com.jack.ai.data.Checkpoints.store(app, key)
+        scope.launch(Dispatchers.IO) { runCatching { dir.deleteRecursively(); saved.deleteRecursively() } }
     }
 
     fun workspaceFiles(conv: Conversation): List<File> = Workspace.files(Workspace.dir(app, Workspace.key(conv)))

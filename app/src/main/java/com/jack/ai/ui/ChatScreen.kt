@@ -597,7 +597,7 @@ private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolea
                     Box(Modifier.animateItem()) {
                         if (msg.role == "user") {
                             UserBubble(msg, onDelete = { vm.deleteFrom(msg.id).let { if (it > 0) onDeleted(it) } }, onEdit = { onEdit(msg) },
-                                editing = msg.id == editingId)
+                                editing = msg.id == editingId, onSwitch = { k -> vm.switchBranch(msg.id, k) })
                         } else {
                             val isLast = msg.id == lastId
                             AssistantMessage(

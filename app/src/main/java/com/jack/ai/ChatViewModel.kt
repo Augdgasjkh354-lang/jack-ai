@@ -262,6 +262,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         files.cleanup(all)
         viewModelScope.launch(Dispatchers.IO) {
             Workspace.root(getApplication<Application>()).listFiles()?.filterNot { it.name.startsWith("p_") }?.forEach { it.deleteRecursively() }
+            com.jack.ai.data.Checkpoints.root(getApplication<Application>()).listFiles()?.filterNot { it.name.startsWith("p_") }?.forEach { it.deleteRecursively() }
         }
         persist()
     }
@@ -366,22 +367,102 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         return true
     }
 
-    /** 重新生成最后一条回答。 */
+    /**
+     * 重新生成最后一条回答。旧回答像样的话留成一个版本（[Branches]），能切回去看；
+     * 对话文件夹先退回这一轮开始前的样子（[Checkpoints]），旧版本做完时的文件也存一份，切回去时跟着回来。
+     */
     fun regenerate() {
         val conv = _state.value.current ?: return
         if (busy(conv.id) || tooMany(conv.id)) return
         val msgs = conv.messages.dropLastWhile { it.role == "assistant" }
         if (msgs.isEmpty()) return
-        files.cleanup(conv.messages.drop(msgs.size))
-        val boundary = conv.summaryUntilId?.let { id -> conv.messages.indexOfFirst { it.id == id } } ?: -1
-        updateConv(conv.id) {
-            it.copy(
-                messages = msgs,
-                summary = if (boundary >= msgs.size) "" else it.summary,
-                summaryUntilId = if (boundary >= msgs.size) null else it.summaryUntilId,
-            )
+        if (!preparing.add(conv.id)) return
+        viewModelScope.launch {
+            try {
+                val user = msgs.last().takeIf { it.role == "user" }
+                val note = user?.let { rewindFiles(conv, it.id, com.jack.ai.data.Checkpoints.startName(it.id)) }
+                val cur = _state.value.conversations.firstOrNull { it.id == conv.id } ?: return@launch
+                val at = msgs.size - 1
+                if (cur.messages.getOrNull(at)?.id != msgs.last().id) return@launch
+                val answers = cur.messages.drop(at + 1)
+                // 从哪条起变了：留成版本时这一轮的用户消息也换了新的
+                var cut = at + 1
+                val next = if (user != null && com.jack.ai.data.Branches.worthKeeping(answers)) {
+                    val fork = com.jack.ai.data.Branches.fork(cur.messages, at,
+                        user.copy(id = com.jack.ai.data.newId(), createdAt = System.currentTimeMillis()), keepOld = true)
+                    files.cleanup(fork.dropped.flatten(), keep = fork.messages)
+                    cut = at
+                    fork.messages
+                } else {
+                    files.cleanup(answers, keep = msgs)
+                    cur.messages.take(at + 1)
+                }
+                val boundary = cur.summaryUntilId?.let { id -> cur.messages.indexOfFirst { it.id == id } } ?: -1
+                updateConv(conv.id) {
+                    it.copy(
+                        messages = next,
+                        summary = if (boundary >= cut) "" else it.summary,
+                        summaryUntilId = if (boundary >= cut) null else it.summaryUntilId,
+                    )
+                }
+                note?.let { t -> _state.update { it.copy(toast = t) } }
+                startReply(conv.id)
+            } finally {
+                preparing.remove(conv.id)
+            }
         }
-        startReply(conv.id)
+    }
+
+    /** 正在准备重新回答、改消息、切版本（退回文件要一点时间）的对话：这时再点不重复做。 */
+    private val preparing = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    /**
+     * 换下从 [leavingId] 那条起的这段对话：先存下对话文件夹现在的样子（这段做完时的文件），再把文件夹退回存档 [restoreName]。
+     * 返回要提示的一句话；没有存档、文件没变时返回 null。
+     */
+    private suspend fun rewindFiles(conv: Conversation, leavingId: String, restoreName: String, done: String = "对话文件夹已退回到这条消息之前"): String? =
+        withContext(Dispatchers.IO) {
+            val app = getApplication<Application>()
+            val key = Workspace.key(conv)
+            val ws = Workspace.dir(app, key)
+            val saved = com.jack.ai.data.Checkpoints.store(app, key)
+            if (!com.jack.ai.data.Checkpoints.has(saved, restoreName)) return@withContext null
+            if (!com.jack.ai.data.Checkpoints.save(ws, saved, com.jack.ai.data.Checkpoints.endName(leavingId)))
+                return@withContext "对话文件夹太大，这次文件没有退回去"
+            val r = com.jack.ai.data.Checkpoints.restore(ws, saved, restoreName) ?: return@withContext "对话文件夹太大，这次文件没有退回去"
+            if (r.total == 0) null else "$done（${r.total} 个文件）"
+        }
+
+    /**
+     * 切到某处的第 [k] 个版本（[messageId] 是那处眼前这段的第一条）。对话文件夹也换成那个版本做完时的样子（有存档的话）。
+     */
+    fun switchBranch(messageId: String, k: Int) {
+        val conv = _state.value.current ?: return
+        if (busy(conv.id)) { _state.update { it.copy(toast = "正在回答，等写完再切换版本") }; return }
+        val at = conv.messages.indexOfFirst { it.id == messageId }
+        if (at < 0) return
+        val target = com.jack.ai.data.Branches.versions(conv.messages, at).getOrNull(k)?.firstOrNull() ?: return
+        if (!preparing.add(conv.id)) return
+        viewModelScope.launch {
+            try {
+                val note = rewindFiles(conv, messageId, com.jack.ai.data.Checkpoints.endName(target.id), done = "对话文件夹也换成了这个版本的")
+                val cur = _state.value.conversations.firstOrNull { it.id == conv.id } ?: return@launch
+                val i = cur.messages.indexOfFirst { it.id == messageId }
+                val next = com.jack.ai.data.Branches.switch(cur.messages, i, k) ?: return@launch
+                val boundary = cur.summaryUntilId?.let { id -> cur.messages.indexOfFirst { it.id == id } } ?: -1
+                updateConv(conv.id) {
+                    it.copy(
+                        messages = next,
+                        summary = if (boundary >= i) "" else it.summary,
+                        summaryUntilId = if (boundary >= i) null else it.summaryUntilId,
+                    )
+                }
+                persist()
+                note?.let { t -> _state.update { it.copy(toast = t) } }
+            } finally {
+                preparing.remove(conv.id)
+            }
+        }
     }
 
     /** 删除某条消息（以及它之后的所有消息）。 */
@@ -550,13 +631,23 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             val cur = _state.value.conversations.firstOrNull { it.id == conv.id } ?: return@launch
             val i = cur.messages.indexOfFirst { it.id == messageId }
             if (i < 0) return@launch
-            // 这条消息自己的附件留着，只清理后面的
-            files.cleanup(cur.messages.drop(i + 1))
-            val boundary = cur.summaryUntilId?.let { id -> cur.messages.indexOfFirst { it.id == id } } ?: -1
+            // 文件夹先退回这条消息发出前的样子；旧回答像样的话留成一个版本，能切回去
+            val note = rewindFiles(cur, old.id, com.jack.ai.data.Checkpoints.startName(old.id))
+            val c0 = _state.value.conversations.firstOrNull { it.id == conv.id } ?: return@launch
+            if (c0.messages.getOrNull(i)?.id != messageId) return@launch
+            val answers = c0.messages.drop(i + 1)
+            val keepOld = com.jack.ai.data.Branches.worthKeeping(answers)
+            val fork = com.jack.ai.data.Branches.fork(c0.messages, i,
+                old.copy(id = com.jack.ai.data.newId(), content = trimmed, createdAt = System.currentTimeMillis(), contextPrefix = null),
+                keepOld = keepOld)
+            // 扔掉的版本、没留成版本的旧回答清理掉；新消息还用着的附件留着
+            files.cleanup(fork.dropped.flatten() + (if (keepOld) emptyList() else answers), keep = fork.messages)
+            note?.let { t -> _state.update { it.copy(toast = t) } }
+            val boundary = c0.summaryUntilId?.let { id -> c0.messages.indexOfFirst { it.id == id } } ?: -1
             updateConv(conv.id) { c ->
                 c.copy(
                     title = if (i == 0) trimmed.ifEmpty { c.title }.take(20).replace('\n', ' ') else c.title,
-                    messages = c.messages.take(i) + old.copy(content = trimmed, createdAt = System.currentTimeMillis(), contextPrefix = null),
+                    messages = fork.messages,
                     summary = if (boundary >= i) "" else c.summary,
                     summaryUntilId = if (boundary >= i) null else c.summaryUntilId,
                 )
@@ -690,6 +781,13 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
         // 这个对话上一次回答（被停止的）先收尾，免得它的收尾把这次的状态改乱；别的对话的回答照常进行
         launchReply(convId) { done ->
+            // 新的一轮开始前记下对话文件夹的样子：之后改这条消息重发、重新回答时，文件能退回这一刻（见 Checkpoints）
+            if (lastUser != null && conv.messages.lastOrNull()?.id == lastUser.id) withContext(Dispatchers.IO) {
+                val app = getApplication<Application>()
+                val key = Workspace.key(conv)
+                runCatching { com.jack.ai.data.Checkpoints.save(Workspace.dir(app, key), com.jack.ai.data.Checkpoints.store(app, key),
+                    com.jack.ai.data.Checkpoints.startName(lastUser.id), overwrite = false) }
+            }
             // DeepSeek 看图：图片先传一次，之后只发编号；传不上的照旧内联
             if (ep.deepseek && images) {
                 val paths = com.jack.ai.data.Compression.liveMessages(conv).flatMap { m -> m.attachments.filter { it.kind == "image" }.map { it.path } }

@@ -224,7 +224,8 @@ internal fun groupOf(png: File): List<File> {
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
-fun UserBubble(msg: ChatMessage, onDelete: () -> Unit, onEdit: (() -> Unit)? = null, editing: Boolean = false) {
+fun UserBubble(msg: ChatMessage, onDelete: () -> Unit, onEdit: (() -> Unit)? = null, editing: Boolean = false,
+               onSwitch: ((Int) -> Unit)? = null) {
     val clipboard = LocalClipboardManager.current
     val ctx = LocalContext.current
     var menu by remember { mutableStateOf(false) }
@@ -297,6 +298,8 @@ fun UserBubble(msg: ChatMessage, onDelete: () -> Unit, onEdit: (() -> Unit)? = n
         } else {
             TextButton(onClick = { menu = true }) { Text("…", color = MaterialTheme.colorScheme.outline) }
         }
+        // 改过重发、重新回答过：「‹ 2/3 ›」切着看各个版本
+        if (onSwitch != null && msg.alts.isNotEmpty()) BranchSwitch(msg.altIndex, com.jack.ai.data.Branches.count(msg), onSwitch)
         // 长按：就地弹一个小菜单，不再弹对话框
         Box {
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
@@ -317,6 +320,25 @@ fun UserBubble(msg: ChatMessage, onDelete: () -> Unit, onEdit: (() -> Unit)? = n
         }
     }
     viewing?.let { ImageViewer(it) { viewing = null } }
+}
+
+/** 分支切换：「‹ 2/3 ›」，[index] 从 0 起。 */
+@Composable
+private fun BranchSwitch(index: Int, total: Int, onSwitch: (Int) -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
+        @Composable
+        fun arrow(label: String, desc: String, enabled: Boolean, to: Int) {
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(32.dp).clip(CircleShape)
+                .then(if (enabled) Modifier.clickable(onClickLabel = desc) { onSwitch(to) } else Modifier)) {
+                Text(label, style = MaterialTheme.typography.titleMedium,
+                    color = if (enabled) colors.onSurfaceVariant else colors.outlineVariant)
+            }
+        }
+        arrow("‹", "上一个版本", index > 0, index - 1)
+        Text("${index + 1} / $total", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
+        arrow("›", "下一个版本", index < total - 1, index + 1)
+    }
 }
 
 @Composable
