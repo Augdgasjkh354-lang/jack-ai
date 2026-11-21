@@ -39,6 +39,7 @@ class KaviAssistSession(ctx: Context) : VoiceInteractionSession(ctx) {
     private var pkg = ""
     private var label = ""
     private var text = ""
+    private var screen: Screen? = null
     private var shot: Bitmap? = null
     private var gotText = false
     private var gotShot = false
@@ -59,7 +60,8 @@ class KaviAssistSession(ctx: Context) : VoiceInteractionSession(ctx) {
                 val w = structure.getWindowNodeAt(i)
                 toUiNode(w.rootViewNode, w.left, w.top)
             }
-            text = ScreenText.plain(Screen(pkg, label, ScreenText.elements(UiNode(bounds = intArrayOf(0, 0, 100_000, 100_000), children = roots))))
+            screen = Screen(pkg, label, ScreenText.elements(UiNode(bounds = intArrayOf(0, 0, 100_000, 100_000), children = roots)))
+            text = ScreenText.plain(screen!!)
         }
         gotText = true
         if (gotShot) finishUp()
@@ -82,7 +84,8 @@ class KaviAssistSession(ctx: Context) : VoiceInteractionSession(ctx) {
         } else if (text.isBlank() && shot == null) {
             // 系统没给屏幕内容（用户关了「使用屏幕上的文字」）：直接开个新对话
             Intent(context, com.jack.ai.MainActivity::class.java).setAction(com.jack.ai.MainActivity.ACTION_NEW_CHAT).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        } else ScreenAsk.intent(context, label.ifBlank { "当前屏幕" }, text, shot)
+        } else if (shot != null) ScreenAsk.pickIntent(context, label.ifBlank { "当前屏幕" }, screen ?: Screen(pkg, label, emptyList()), shot)
+        else ScreenAsk.intent(context, label.ifBlank { "当前屏幕" }, text, null)
         if (intent != null) runCatching {
             if (Build.VERSION.SDK_INT >= 29) startAssistantActivity(intent) else context.startActivity(intent)
         }

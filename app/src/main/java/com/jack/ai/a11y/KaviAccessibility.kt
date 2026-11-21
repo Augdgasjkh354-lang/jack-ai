@@ -602,18 +602,19 @@ class KaviAccessibility : AccessibilityService() {
 
     fun hideBall() { ball?.let { runCatching { wm.removeView(it) } }; ball = null }
 
-    /** 读当前屏幕（截图时先把球藏起来），带进 Kavi 新对话。 */
+    /** 读当前屏幕（截图时先把球藏起来），先到圈选页圈出要问的一块（或整屏），再带进 Kavi 新对话。 */
     private fun askScreen() {
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
             val (pkg, root) = snapshot() ?: run { ScreenAsk.toast(this@KaviAccessibility, "读不到这一屏"); return@launch }
             val label = appLabel(pkg)
             ScreenAsk.refuse(this@KaviAccessibility, pkg, label)?.let { ScreenAsk.toast(this@KaviAccessibility, it); return@launch }
-            val text = ScreenText.plain(Screen(pkg, label, ScreenText.elements(root)))
+            val screen = Screen(pkg, label, ScreenText.elements(root))
             ball?.visibility = View.INVISIBLE
             delay(120)
             val shot = rawShot()
             ball?.visibility = View.VISIBLE
-            ScreenAsk.launch(this@KaviAccessibility, label, text, shot)
+            // 先到圈选页：圈一块只问这块，或者问整屏
+            startActivity(ScreenAsk.pickIntent(this@KaviAccessibility, label, screen, shot))
         }
     }
 

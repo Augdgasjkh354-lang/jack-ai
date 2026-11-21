@@ -188,6 +188,7 @@ private fun RecordBar(session: com.jack.ai.RecordService.Session) {
     )
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 internal fun InputBar(
     vm: ChatViewModel,
@@ -256,6 +257,15 @@ internal fun InputBar(
     // 录音纪要：先要麦克风权限，再开录（录在前台服务里）
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
         if (ok) com.jack.ai.RecordService.start(ctx) else Toast.makeText(ctx, "没有麦克风权限，录不了音。可以在系统设置里给 Kavi 打开", Toast.LENGTH_LONG).show()
+    }
+    // 语音对话：同样先要麦克风权限
+    val voiceChatPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+        if (ok) VoiceChat.start(ctx, vm) else Toast.makeText(ctx, "没有麦克风权限，没法语音对话。可以在系统设置里给 Kavi 打开", Toast.LENGTH_LONG).show()
+    }
+    fun startVoiceChat() {
+        if (androidx.core.content.ContextCompat.checkSelfPermission(ctx, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED)
+            VoiceChat.start(ctx, vm)
+        else voiceChatPermission.launch(android.Manifest.permission.RECORD_AUDIO)
     }
     fun startRecord() {
         if (androidx.core.content.ContextCompat.checkSelfPermission(ctx, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
@@ -363,6 +373,7 @@ internal fun InputBar(
                 Text("正在压缩较早的对话…", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
             }
         }
+        VoiceChatBar()
         com.jack.ai.RecordService.current?.let { RecordBar(it) }
         // 正在改一条发过的消息：输入框上面标一下，随时可以取消
         androidx.compose.animation.AnimatedVisibility(editing != null) {
@@ -447,6 +458,7 @@ internal fun InputBar(
                                 attachMenu = false
                                 try { pickFiles.launch(arrayOf("*/*")) } catch (e: Exception) { Toast.makeText(ctx, "打不开：${e.message}", Toast.LENGTH_LONG).show() }
                             }
+                            MenuRow("语音对话", icon = AppIcons.Mic, enabled = !VoiceChat.on && com.jack.ai.RecordService.current == null) { attachMenu = false; startVoiceChat() }
                             MenuRow("录音纪要", icon = AppIcons.Mic, enabled = com.jack.ai.RecordService.current == null) { attachMenu = false; startRecord() }
                             val skillNames = settings.activeSkills().map { it.name }
                             if (skillNames.isNotEmpty()) MenuRow("@技能", glyph = "@") { attachMenu = false; mentionPick = skillNames }
@@ -537,8 +549,11 @@ internal fun InputBar(
                                     Icon(AppIcons.Stop, "停止", Modifier.size(16.dp), tint = colors.surface)
                                 }
                             }
-                            SendAction.MIC -> Surface(onClick = { haptics.tick(); startVoice() }, shape = CircleShape, color = colors.primary, modifier = Modifier.size(42.dp), interactionSource = sendPress) {
-                                Box(contentAlignment = Alignment.Center) {
+                            // 点一下语音输入；长按开语音对话（说完自动发、读回答、接着听）
+                            SendAction.MIC -> Surface(shape = CircleShape, color = colors.primary, modifier = Modifier.size(42.dp)) {
+                                Box(Modifier.fillMaxSize().combinedClickable(interactionSource = sendPress, indication = androidx.compose.foundation.LocalIndication.current,
+                                    onClickLabel = "语音输入", onLongClickLabel = "语音对话",
+                                    onClick = { haptics.tick(); startVoice() }, onLongClick = { haptics.tick(); startVoiceChat() }), contentAlignment = Alignment.Center) {
                                     Icon(AppIcons.Mic, "语音输入", Modifier.size(20.dp), tint = colors.onPrimary)
                                 }
                             }

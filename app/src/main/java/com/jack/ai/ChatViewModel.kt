@@ -534,7 +534,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     // 深处的记忆：和这句话相关的浮上来（不常用的不再每轮都带着）
                     (if (conv.globalAllowed(project)) runCatching { com.jack.ai.data.memory.DeepRecall.note(getApplication(), settings, lastUser?.content.orEmpty()) }.getOrDefault("") else "") +
                     // 按意思推荐一两个技能（技能多了模型容易挑错）
-                    runCatching { com.jack.ai.data.SkillMatcher.note(getApplication(), settings, lastUser?.content.orEmpty(), skills) }.getOrDefault("")
+                    runCatching { com.jack.ai.data.SkillMatcher.note(getApplication(), settings, lastUser?.content.orEmpty(), skills) }.getOrDefault("") +
+                    // 语音对话：回答会被读出来，说短一点、别排版
+                    com.jack.ai.data.Persona.fill(com.jack.ai.chat.VoiceMode.note(convId), settings)
             })
             // 历史里的附加说明必须和第一次发出时一致，才能保住后续请求的前缀缓存。
             if (extraUser == null && lastUser != null && lastUser.contextPrefix == null) {

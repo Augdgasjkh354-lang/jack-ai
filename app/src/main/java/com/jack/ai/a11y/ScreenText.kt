@@ -158,13 +158,16 @@ object ScreenText {
     /** 「问这一屏」带进对话的：屏幕上的字按顺序一行一行，不编号（用户问的是内容，不是要点哪里）。 */
     fun plain(s: Screen): String = buildString {
         append("「${s.app}」屏幕上的内容：\n")
-        s.elements.filter { it.role != "列表" }.forEach { e ->
-            when {
-                e.role == "输入框" && !e.password && e.value.isNotEmpty() -> append("（输入框）${e.value}\n")
-                e.role == "输入框" -> {}
-                e.label.isNotEmpty() -> append(e.label).append('\n')
-            }
-        }
+        s.elements.forEach { e -> plainLine(e)?.let { append(it).append('\n') } }
+    }
+
+    /** 一个元素在「问这一屏」里写成的那行；不写的（列表、空输入框、密码）是 null。圈选时按位置挑这些行。 */
+    fun plainLine(e: Element): String? = when {
+        e.role == "列表" -> null
+        e.role == "输入框" && !e.password && e.value.isNotEmpty() -> "（输入框）${e.value}"
+        e.role == "输入框" -> null
+        e.label.isNotEmpty() -> e.label
+        else -> null
     }
 
     /** 给 Kavi 看的一屏。 */

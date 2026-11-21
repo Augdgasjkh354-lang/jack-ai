@@ -40,4 +40,46 @@ object ScreenAsk {
     }
 
     fun toast(ctx: Context, msg: String) = Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
+
+    // ---------- 圈出一块来问 ----------
+
+    /** 屏幕上的一行字和它的位置（屏幕坐标：左、上、右、下）。 */
+    @kotlinx.serialization.Serializable
+    data class Line(val t: String, val b: List<Int>)
+
+    private val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+
+    /**
+     * 先打开圈选页（[ScreenPickActivity]）：用手指圈出一块，只问这一块；或者点「问整屏」。
+     * 没截到图（安卓 11 以下、截图失败）就直接问整屏。
+     */
+    fun pickIntent(ctx: Context, app: String, screen: Screen, shot: Bitmap?): Intent {
+        if (shot == null) return intent(ctx, app, ScreenText.plain(screen), null)
+        val dir = File(ctx.cacheDir, "screen_ask").apply { mkdirs() }
+        dir.listFiles()?.sortedByDescending { it.lastModified() }?.drop(10)?.forEach { it.delete() }
+        val img = File(dir, "pick-${System.currentTimeMillis()}.png").also { f -> f.outputStream().use { shot.compress(Bitmap.CompressFormat.PNG, 100, it) } }
+        val lines = screen.elements.mapNotNull { e -> ScreenText.plainLine(e)?.let { Line(it, e.bounds.toList()) } }
+        val txt = File(dir, img.nameWithoutExtension + ".json").apply {
+            writeText(json.encodeToString(kotlinx.serialization.builtins.ListSerializer(Line.serializer()), lines))
+        }
+        return Intent(ctx, ScreenPickActivity::class.java).putExtra("app", app).putExtra("shot", img.path).putExtra("lines", txt.path)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+
+    fun readLines(f: File): List<Line> = runCatching {
+        json.decodeFromString(kotlinx.serialization.builtins.ListSerializer(Line.serializer()), f.readText())
+    }.getOrDefault(emptyList())
+
+    /** 圈出的那块（屏幕坐标）里的字：一行字一半以上落在里面，或者中心在里面，就算。 */
+    fun inside(lines: List<Line>, l: Int, t: Int, r: Int, b: Int): List<String> = lines.filter { line ->
+        if (line.b.size < 4) return@filter false
+        val (x1, y1, x2, y2) = line.b
+        val w = (x2 - x1).coerceAtLeast(1); val h = (y2 - y1).coerceAtLeast(1)
+        val iw = (minOf(x2, r) - maxOf(x1, l)).coerceAtLeast(0); val ih = (minOf(y2, b) - maxOf(y1, t)).coerceAtLeast(0)
+        val cx = (x1 + x2) / 2; val cy = (y1 + y2) / 2
+        iw.toLong() * ih >= w.toLong() * h / 2 || (cx in l..r && cy in t..b)
+    }.map { it.t }
+
+    /** 所有的字拼回整屏的样子（「问整屏」用）。 */
+    fun allText(app: String, lines: List<Line>): String = "「$app」屏幕上的内容：\n" + lines.joinToString("") { it.t + "\n" }
 }
