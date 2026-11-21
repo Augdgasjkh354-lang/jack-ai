@@ -126,6 +126,13 @@ import com.jack.ai.data.modelLabel
 import com.jack.ai.data.nextAt
 import kotlinx.coroutines.launch
 import java.util.Calendar
+import com.jack.ai.undoDelete
+import com.jack.ai.consumeIncomingText
+import com.jack.ai.editMessage
+import com.jack.ai.deleteFrom
+import com.jack.ai.switchBranch
+import com.jack.ai.regenerate
+import com.jack.ai.continueWriting
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

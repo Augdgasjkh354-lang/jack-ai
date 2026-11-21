@@ -126,6 +126,11 @@ import com.jack.ai.data.modelLabel
 import com.jack.ai.data.nextAt
 import kotlinx.coroutines.launch
 import java.util.Calendar
+import com.jack.ai.receiveText
+import com.jack.ai.consumeCameraRequest
+import com.jack.ai.consumeVoiceRequest
+import com.jack.ai.consumeRecordRequest
+import com.jack.ai.recordingDone
 
 // 聊天页底部的输入栏：输入框、附件、录音条、发送/停止按钮（从 ChatScreen.kt 拆出来）。
 
