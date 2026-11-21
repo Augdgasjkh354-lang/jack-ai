@@ -1399,6 +1399,17 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     // 附件和对话文件夹
     fun addImages(uris: List<Uri>) = files.addImages(uris)
     fun addFiles(uris: List<Uri>) = files.addFiles(uris)
+
+    /** 贴进输入框的一大段存成 .txt 附件（见 LongPaste）。 */
+    fun pasteAsFile(text: String) {
+        viewModelScope.launch {
+            val att = runCatching { withContext(Dispatchers.IO) { com.jack.ai.data.LongPaste.attachment(getApplication(), text) } }.getOrNull()
+            _state.update {
+                if (att == null) it.copy(toast = "存不下这段文字")
+                else it.copy(pending = it.pending + att, toast = "贴进来的 ${text.length} 字存成了附件「${att.name}」，点开能看")
+            }
+        }
+    }
     fun removePending(id: String) = files.removePending(id)
     fun workspaceFiles(conv: Conversation): List<File> = files.workspaceFiles(conv)
     fun addWorkspaceFiles(conv: Conversation, uris: List<Uri>, onDone: () -> Unit) = files.addWorkspaceFiles(conv, uris, onDone)

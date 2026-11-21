@@ -1025,7 +1025,12 @@ private fun InputBar(
                     }
                     androidx.compose.foundation.text.BasicTextField(
                         value = field,
-                        onValueChange = { field = it; if (it.text != text) onTextChange(it.text) },
+                        onValueChange = {
+                            // 一下子贴进来一大段：存成附件，输入框保持原样（改消息时不算，附件跟不过去）
+                            val pasted = if (editing == null) com.jack.ai.data.LongPaste.inserted(field.text, it.text) else null
+                            if (pasted != null) vm.pasteAsFile(pasted)
+                            else { field = it; if (it.text != text) onTextChange(it.text) }
+                        },
                         maxLines = 6,
                         textStyle = MaterialTheme.typography.bodyLarge.copy(color = colors.onSurface),
                         cursorBrush = androidx.compose.ui.graphics.SolidColor(colors.primary),
