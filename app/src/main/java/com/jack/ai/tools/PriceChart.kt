@@ -5,7 +5,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
-import com.jack.ai.data.PricePoint
+import com.jack.ai.data.browser.PricePoint
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date

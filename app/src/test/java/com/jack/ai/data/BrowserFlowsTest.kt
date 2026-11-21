@@ -4,6 +4,9 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.jack.ai.data.browser.BrowserFlow
+import com.jack.ai.data.browser.BrowserFlows
+import com.jack.ai.data.browser.SiteNote
 
 class BrowserFlowsTest {
     private val compare = BrowserFlow(name = "1688 比价", site = "1688.com", whenToUse = "找货比价时",

@@ -1,6 +1,7 @@
-package com.jack.ai.data
+package com.jack.ai.data.browser
 
 import kotlinx.serialization.Serializable
+import com.jack.ai.data.describe
 
 /** 浏览记录的一条：同一个网址只留一条，记最后一次看的时间和看了几次。 */
 @Serializable

@@ -1,6 +1,8 @@
 package com.jack.ai.data
 
 import org.yaml.snakeyaml.Yaml
+import com.jack.ai.data.browser.BrowserFlows
+import com.jack.ai.data.browser.SiteNote
 
 /** Mika 的 App / 网站使用知识：按真实包名、网站域名转成现有的内置备忘，正文不截成 200 字。 */
 object AppUsageNotes {

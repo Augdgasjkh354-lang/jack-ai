@@ -3,6 +3,7 @@ package com.jack.ai.data
 import org.junit.Assert.*
 import org.junit.Test
 import java.io.File
+import com.jack.ai.data.browser.BrowserFlows
 
 class GalleryTest {
     @Test fun onlyVideosAndImagesGoToTheGallery() {

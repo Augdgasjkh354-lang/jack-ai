@@ -6,7 +6,7 @@ import com.jack.ai.data.ChatMessage
 import com.jack.ai.data.Conversation
 import com.jack.ai.data.SearchRecord
 import com.jack.ai.data.Settings
-import com.jack.ai.data.SiteNotes
+import com.jack.ai.data.browser.SiteNotes
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

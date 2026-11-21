@@ -1,6 +1,6 @@
 package com.jack.ai.ui
 
-import com.jack.ai.data.BrowserStats
+import com.jack.ai.data.browser.BrowserStats
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue

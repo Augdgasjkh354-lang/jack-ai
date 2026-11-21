@@ -1702,12 +1702,12 @@ class BrowserActivity : androidx.fragment.app.FragmentActivity() {
     private fun HistoryPanel() {
         val b = JackBrowser
         val colors = MaterialTheme.colorScheme
-        var all by remember { mutableStateOf<List<com.jack.ai.data.HistoryEntry>?>(null) }
+        var all by remember { mutableStateOf<List<com.jack.ai.data.browser.HistoryEntry>?>(null) }
         var query by remember { mutableStateOf("") }
         var confirmClear by remember { mutableStateOf(false) }
         LaunchedEffect(Unit) { all = b.historyEntries() }
         val now = remember { System.currentTimeMillis() }
-        val groups = remember(all, query) { com.jack.ai.data.BrowserHistory.byDay(all.orEmpty(), query, now) }
+        val groups = remember(all, query) { com.jack.ai.data.browser.BrowserHistory.byDay(all.orEmpty(), query, now) }
         val time = remember { java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()) }
         Surface(Modifier.fillMaxSize(), color = colors.background) {
             Column(Modifier.fillMaxSize()) {

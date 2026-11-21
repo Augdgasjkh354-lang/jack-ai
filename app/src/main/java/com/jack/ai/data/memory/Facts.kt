@@ -10,7 +10,7 @@ import java.io.DataOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import com.jack.ai.data.LibraryIndex
-import com.jack.ai.data.SiteNotes
+import com.jack.ai.data.browser.SiteNotes
 import com.jack.ai.data.newId
 
 /** 一条事实的出处：网址、标题、什么时候读到的。 */

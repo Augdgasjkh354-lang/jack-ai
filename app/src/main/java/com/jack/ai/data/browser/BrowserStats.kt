@@ -1,10 +1,11 @@
-package com.jack.ai.data
+package com.jack.ai.data.browser
 
 import android.content.Context
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import java.io.File
+import com.jack.ai.data.SafeFile
 
 /**
  * 浏览器实测成功率：Kavi 每做一个网页动作（点、输入、选、按键、打开）记一笔结果，按网站分。

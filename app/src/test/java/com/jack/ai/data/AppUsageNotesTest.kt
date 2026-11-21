@@ -3,6 +3,9 @@ package com.jack.ai.data
 import org.junit.Assert.*
 import org.junit.Test
 import org.yaml.snakeyaml.Yaml
+import com.jack.ai.data.browser.BrowserFlow
+import com.jack.ai.data.browser.BrowserFlows
+import com.jack.ai.data.browser.SiteNote
 
 class AppUsageNotesTest {
     @Test fun allBundledAppsMatchTheirDeclaredPackagesWithoutChangingTheBody() {

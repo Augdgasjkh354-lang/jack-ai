@@ -327,10 +327,10 @@ private suspend fun ToolSession.browseNow(args: JsonObject, action: String): Str
         run {
             val url = JackBrowser.address
             val (flows, notes) = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                com.jack.ai.data.BrowserFlows.forUrl(host.store.loadFlows(), url) to com.jack.ai.data.BrowserFlows.notesFor(host.store.loadSiteNotes(), url) + com.jack.ai.data.BrowserFlows.builtinNotesFor(url)
+                com.jack.ai.data.browser.BrowserFlows.forUrl(host.store.loadFlows(), url) to com.jack.ai.data.browser.BrowserFlows.notesFor(host.store.loadSiteNotes(), url) + com.jack.ai.data.browser.BrowserFlows.builtinNotesFor(url)
             }
             val site = com.jack.ai.api.BrowserPages.site(url)
-            if ((flows.isNotEmpty() || notes.isNotEmpty()) && flowHinted.add(site)) note.append(com.jack.ai.data.BrowserFlows.hint(flows, notes))
+            if ((flows.isNotEmpty() || notes.isNotEmpty()) && flowHinted.add(site)) note.append(com.jack.ai.data.browser.BrowserFlows.hint(flows, notes))
         }
         if (action in setOf("tabs", "new_tab", "switch_tab", "close_tab") || JackBrowser.tabs.size > 1) {
             note.append("【标签页】\n").append(JackBrowser.tabList()).append("\n")
@@ -397,7 +397,7 @@ private suspend fun ToolSession.browseNow(args: JsonObject, action: String): Str
 /** 记一笔浏览器实测结果（隐私项目里不记）。 */
 private suspend fun ToolSession.stat(site: String, action: String, outcome: String) {
     if (project?.isolated == true) return
-    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { com.jack.ai.data.BrowserStats.record(app, site, action, outcome) } }
+    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { com.jack.ai.data.browser.BrowserStats.record(app, site, action, outcome) } }
 }
 
 /**
@@ -456,11 +456,11 @@ private suspend fun ToolSession.browseHistory(args: JsonObject): String {
     val now = System.currentTimeMillis()
     val all = withContext(kotlinx.coroutines.Dispatchers.IO) { host.store.loadHistory() }
     if (all.isEmpty()) return "浏览记录是空的（Kavi 浏览器里还没打开过网页，或者记录刚被清掉）。"
-    val found = com.jack.ai.data.BrowserHistory.search(all, q, now, days)
+    val found = com.jack.ai.data.browser.BrowserHistory.search(all, q, now, days)
     if (found.isEmpty()) return "浏览记录里没找到" + (if (q.isNotEmpty()) "和「$q」有关的" else "") + (days?.let { "（最近 $it 天）" } ?: "") +
         "网页。可以换个说法（网站名、商品名）再找，或者把 days 放宽。"
     return FENCE + "浏览记录里" + (if (q.isNotEmpty()) "和「$q」有关的" else "最近看的") + (days?.let { "（最近 $it 天）" } ?: "") + "：\n" +
-        com.jack.ai.data.BrowserHistory.describe(found, now) + "\n要打开哪个就用 open 填它的网址。"
+        com.jack.ai.data.browser.BrowserHistory.describe(found, now) + "\n要打开哪个就用 open 填它的网址。"
 }
 
 /** 记价格、看价格走势（盯价格、比价时用）：每查一次记一条，看的时候给几句总结和一张走势图。 */
@@ -472,23 +472,23 @@ private suspend fun ToolSession.priceAction(action: String, args: JsonObject): S
         if (name.isEmpty() || price == null || price <= 0) return "record_price 要填 name（东西的名字，每次用同一个）和 price（数字）"
         val url = args["url"].text().ifBlank { JackBrowser.address }
         val list = withContext(kotlinx.coroutines.Dispatchers.IO) {
-            com.jack.ai.data.PriceLog.add(store.loadPrices(), com.jack.ai.data.PricePoint(name, price, System.currentTimeMillis(), url)).also { store.savePrices(it) }
+            com.jack.ai.data.browser.PriceLog.add(store.loadPrices(), com.jack.ai.data.browser.PricePoint(name, price, System.currentTimeMillis(), url)).also { store.savePrices(it) }
         }
-        return "记下了。" + com.jack.ai.data.PriceLog.summary(com.jack.ai.data.PriceLog.series(list, name))
+        return "记下了。" + com.jack.ai.data.browser.PriceLog.summary(com.jack.ai.data.browser.PriceLog.series(list, name))
     }
     val list = withContext(kotlinx.coroutines.Dispatchers.IO) { store.loadPrices() }
     if (name.isEmpty()) {
-        val items = com.jack.ai.data.PriceLog.items(list)
+        val items = com.jack.ai.data.browser.PriceLog.items(list)
         return if (items.isEmpty()) "还没有记过价格。盯价格、比价时用 record_price 每次记一条，以后就能看走势。"
         else "记过价格的东西：" + items.joinToString("；") { (n, c) -> "「$n」$c 次" } + "。看哪个的走势就用 prices 填 name。"
     }
-    val s = com.jack.ai.data.PriceLog.series(list, name)
-    if (s.isEmpty()) return "没有「$name」的价格记录。记过的：" + com.jack.ai.data.PriceLog.items(list).joinToString("、") { it.first }.ifEmpty { "（没有）" }
+    val s = com.jack.ai.data.browser.PriceLog.series(list, name)
+    if (s.isEmpty()) return "没有「$name」的价格记录。记过的：" + com.jack.ai.data.browser.PriceLog.items(list).joinToString("、") { it.first }.ifEmpty { "（没有）" }
     val chart = withContext(kotlinx.coroutines.Dispatchers.IO) {
         runCatching { PriceChart.draw(s, java.io.File(wsDir, "价格走势-" + s.last().item.replace(Regex("""[\\/:*?"<>|\s]"""), "_").take(30) + ".png")) }.getOrNull()
     }
     chart?.let { ui.attach(it) }
-    return com.jack.ai.data.PriceLog.summary(s) + (if (chart != null) "走势图「${chart.name}」已经放进回答里了。" else "") +
+    return com.jack.ai.data.browser.PriceLog.summary(s) + (if (chart != null) "走势图「${chart.name}」已经放进回答里了。" else "") +
         "\n每次记录：" + s.takeLast(20).joinToString("；") { p ->
             java.text.SimpleDateFormat("M/d HH:mm", java.util.Locale.CHINA).format(java.util.Date(p.at)) + " ¥" + p.price
         }
@@ -565,23 +565,23 @@ private suspend fun ToolSession.flowAction(action: String, args: JsonObject): St
     val flows = withContext(kotlinx.coroutines.Dispatchers.IO) { store.loadFlows() }
     val name = args["name"].text().trim()
     if (action == "flow") {
-        val f = com.jack.ai.data.BrowserFlows.find(flows, name)
-            ?: return "没有叫「$name」的流程。现有流程：\n" + com.jack.ai.data.BrowserFlows.index(flows)
+        val f = com.jack.ai.data.browser.BrowserFlows.find(flows, name)
+            ?: return "没有叫「$name」的流程。现有流程：\n" + com.jack.ai.data.browser.BrowserFlows.index(flows)
         withContext(kotlinx.coroutines.Dispatchers.IO) {
             store.saveFlows(store.loadFlows().map { if (it.id == f.id) it.copy(uses = it.uses + 1, usedAt = System.currentTimeMillis()) else it })
         }
-        val blanks = com.jack.ai.data.BrowserFlows.blanks(f.steps)
+        val blanks = com.jack.ai.data.browser.BrowserFlows.blanks(f.steps)
         return "【流程「${f.name}」】网站：${f.site}" + f.whenToUse.takeIf { it.isNotBlank() }?.let { "\n什么时候用：$it" }.orEmpty() +
             (if (blanks.isNotEmpty()) "\n要填的空：" + blanks.joinToString("、") { "{$it}" } + "（换成这次用户给的值；必须有又没给的先问用户）" else "") +
             "\n步骤：\n${f.steps}\n\n照着做；网页和步骤对不上就按意思灵活处理，做完告诉用户哪一步变了、问要不要更新流程。"
     }
-    val site = com.jack.ai.data.BrowserFlows.siteOf(args["site"].text())
+    val site = com.jack.ai.data.browser.BrowserFlows.siteOf(args["site"].text())
     if (site.isEmpty()) return "site 要填网站名，比如 1688.com"
     val steps = args["steps"].text().trim().take(6000)
     val whenToUse = args["when"].text().trim().take(200)
     // 流程只是笔记（照着做时付款、发送照样要用户确认），Kavi 自己判断就存，不弹窗；存了在对话里说一声
     val old = flows.firstOrNull { it.name == name }
-    val saved = (old ?: com.jack.ai.data.BrowserFlow(name = name, site = site, steps = steps))
+    val saved = (old ?: com.jack.ai.data.browser.BrowserFlow(name = name, site = site, steps = steps))
         .copy(name = name, site = site, whenToUse = whenToUse, steps = steps)
     withContext(kotlinx.coroutines.Dispatchers.IO) {
         val now = store.loadFlows()
@@ -987,12 +987,12 @@ private suspend fun ToolSession.removeScript(args: JsonObject): String {
 }
 
 private suspend fun ToolSession.noteSite(args: JsonObject): String {
-    val site = com.jack.ai.data.BrowserFlows.siteOf(args["site"].text().ifBlank { JackBrowser.address })
+    val site = com.jack.ai.data.browser.BrowserFlows.siteOf(args["site"].text().ifBlank { JackBrowser.address })
     val text = args["note"].text().trim()
     if (site.isEmpty() || text.isEmpty()) return "note_site 要填 note（一句话），site 不填就是当前网页的网站"
     val store = host.store
-    withContext(kotlinx.coroutines.Dispatchers.IO) { store.saveSiteNotes(com.jack.ai.data.BrowserFlows.addNote(store.loadSiteNotes(), site, text)) }
-    val place = if (site.startsWith(com.jack.ai.data.BrowserFlows.APP_PREFIX)) " App " else "网站"
+    withContext(kotlinx.coroutines.Dispatchers.IO) { store.saveSiteNotes(com.jack.ai.data.browser.BrowserFlows.addNote(store.loadSiteNotes(), site, text)) }
+    val place = if (site.startsWith(com.jack.ai.data.browser.BrowserFlows.APP_PREFIX)) " App " else "网站"
     return "记下了（$site）：$text。下次打开这个${place}时会提醒。"
 }
 

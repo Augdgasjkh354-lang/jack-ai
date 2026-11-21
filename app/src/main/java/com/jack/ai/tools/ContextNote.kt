@@ -23,7 +23,7 @@ object ContextNote {
         }
         append(files(Workspace.dir(ctx, Workspace.key(conv))))
         // 能上网时：以前碰到过问题的网站，开工就知道该换来源（放在最后一条消息上，不影响缓存）
-        if (conv.work || com.jack.ai.data.SkillIds.WEB in skillIds) append(com.jack.ai.data.Persona.fill(com.jack.ai.data.SiteNotes.note(com.jack.ai.data.SiteNotes.load(ctx)), store.loadSettings()))
+        if (conv.work || com.jack.ai.data.SkillIds.WEB in skillIds) append(com.jack.ai.data.Persona.fill(com.jack.ai.data.browser.SiteNotes.note(com.jack.ai.data.browser.SiteNotes.load(ctx)), store.loadSettings()))
         // 收件箱要知道有哪些项目，才能归到对的项目里
         if (conv.id == com.jack.ai.data.INBOX_ID) {
             // 隐私项目不列出来：收件箱是公共的入口，不往隐私项目里归档

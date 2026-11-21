@@ -3,7 +3,7 @@ package com.jack.ai.tools
 import com.jack.ai.api.BrowserDownload
 import com.jack.ai.api.BrowserPages
 import com.jack.ai.api.MediaGrab
-import com.jack.ai.data.BrowserDownloads
+import com.jack.ai.data.browser.BrowserDownloads
 import com.jack.ai.data.Downloads
 import com.jack.ai.data.media.MediaMux
 import com.jack.ai.data.SearchRecord

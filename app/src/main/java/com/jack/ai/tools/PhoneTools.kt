@@ -625,10 +625,10 @@ private suspend fun ToolSession.phoneSteps(args: JsonObject, max: Int = 12): Str
  */
 private suspend fun ToolSession.phoneReplay(args: JsonObject): String {
     val name = args["name"].text().trim()
-    val prefix = com.jack.ai.data.BrowserFlows.APP_PREFIX
+    val prefix = com.jack.ai.data.browser.BrowserFlows.APP_PREFIX
     val mine = withContext(Dispatchers.IO) { host.store.loadFlows() }.filter { it.site.startsWith(prefix) }
-    val f = com.jack.ai.data.BrowserFlows.find(mine, name)
-        ?: return "没有叫「$name」的手机流程。现有手机流程：\n" + com.jack.ai.data.BrowserFlows.index(mine)
+    val f = com.jack.ai.data.browser.BrowserFlows.find(mine, name)
+        ?: return "没有叫「$name」的手机流程。现有手机流程：\n" + com.jack.ai.data.browser.BrowserFlows.index(mine)
     val raw = runCatching { kotlinx.serialization.json.Json.parseToJsonElement(f.actions) as kotlinx.serialization.json.JsonArray }.getOrNull()
     if (raw.isNullOrEmpty()) return "「${f.name}」没有录下动作，只能用 action=flow 读出文字步骤照着做。"
     // {关键词} 换成这次的值；有空没给值就不重放，先问用户
@@ -659,13 +659,13 @@ private fun ToolSession.locked(): Boolean {
 
 /** 首次读到这个 App 时，合并内置使用知识、用户备忘和已存流程（每轮每个 App 只给一次）。 */
 private suspend fun ToolSession.flowHint(pkg: String): String {
-    val site = com.jack.ai.data.BrowserFlows.APP_PREFIX + pkg
+    val site = com.jack.ai.data.browser.BrowserFlows.APP_PREFIX + pkg
     if (site in flowHinted) return ""
     val hint = withContext(Dispatchers.IO) {
         val flows = host.store.loadFlows().filter { it.site == site }
-        val notes = com.jack.ai.data.BrowserFlows.notesFor(host.store.loadSiteNotes(), site) +
-            com.jack.ai.data.BrowserFlows.builtinNotesFor(site)
-        com.jack.ai.data.BrowserFlows.hint(flows, notes, app = true)
+        val notes = com.jack.ai.data.browser.BrowserFlows.notesFor(host.store.loadSiteNotes(), site) +
+            com.jack.ai.data.browser.BrowserFlows.builtinNotesFor(site)
+        com.jack.ai.data.browser.BrowserFlows.hint(flows, notes, app = true)
     }
     return if (hint.isNotEmpty() && flowHinted.add(site)) "$hint\n" else ""
 }
@@ -673,18 +673,18 @@ private suspend fun ToolSession.flowHint(pkg: String): String {
 /** 读一个手机流程的步骤（记一次使用），或者存 / 更新一个（存的是文字步骤，照着做时发送、付款照样要用户确认）。 */
 private suspend fun ToolSession.phoneFlow(action: String, args: JsonObject): String {
     val store = host.store
-    val prefix = com.jack.ai.data.BrowserFlows.APP_PREFIX
+    val prefix = com.jack.ai.data.browser.BrowserFlows.APP_PREFIX
     val flows = withContext(Dispatchers.IO) { store.loadFlows() }
     val mine = flows.filter { it.site.startsWith(prefix) }
     val name = args["name"].text().trim()
-    if (name.isEmpty()) return "要填 name（流程名）。现有手机流程：\n" + com.jack.ai.data.BrowserFlows.index(mine)
+    if (name.isEmpty()) return "要填 name（流程名）。现有手机流程：\n" + com.jack.ai.data.browser.BrowserFlows.index(mine)
     if (action == "flow") {
-        val f = com.jack.ai.data.BrowserFlows.find(mine, name)
-            ?: return "没有叫「$name」的手机流程。现有手机流程：\n" + com.jack.ai.data.BrowserFlows.index(mine)
+        val f = com.jack.ai.data.browser.BrowserFlows.find(mine, name)
+            ?: return "没有叫「$name」的手机流程。现有手机流程：\n" + com.jack.ai.data.browser.BrowserFlows.index(mine)
         withContext(Dispatchers.IO) {
             store.saveFlows(store.loadFlows().map { if (it.id == f.id) it.copy(uses = it.uses + 1, usedAt = System.currentTimeMillis()) else it })
         }
-        val blanks = com.jack.ai.data.BrowserFlows.blanks(f.steps)
+        val blanks = com.jack.ai.data.browser.BrowserFlows.blanks(f.steps)
         return "【手机流程「${f.name}」】App：${f.site.removePrefix(prefix)}" + f.whenToUse.takeIf { it.isNotBlank() }?.let { "\n什么时候用：$it" }.orEmpty() +
             (if (blanks.isNotEmpty()) "\n要填的空：" + blanks.joinToString("、") { "{$it}" } + "（换成这次用户给的值；必须有又没给的先问用户）" else "") +
             "\n步骤：\n${f.steps}\n\n" + (if (f.actions.isNotBlank()) "这个流程录下了能直接重放的动作：用 action=replay name=「${f.name}」" +
@@ -707,7 +707,7 @@ private suspend fun ToolSession.phoneFlow(action: String, args: JsonObject): Str
         if (from < 0) emptyList() else all.drop(from)
     }.takeIf { it.size >= 2 }?.let { kotlinx.serialization.json.JsonArray(it).toString() }
     val actions = given ?: recorded ?: old?.actions.orEmpty()
-    val saved = (old ?: com.jack.ai.data.BrowserFlow(name = name, site = site, steps = steps)).copy(name = name, site = site, whenToUse = args["when"].text().trim().take(200), steps = steps, actions = actions)
+    val saved = (old ?: com.jack.ai.data.browser.BrowserFlow(name = name, site = site, steps = steps)).copy(name = name, site = site, whenToUse = args["when"].text().trim().take(200), steps = steps, actions = actions)
     withContext(Dispatchers.IO) {
         val now = store.loadFlows()
         store.saveFlows(if (now.any { it.id == saved.id }) now.map { if (it.id == saved.id) saved else it } else now + saved)

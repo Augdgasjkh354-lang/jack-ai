@@ -1,6 +1,6 @@
 package com.jack.ai.tools
 
-import com.jack.ai.data.PricePoint
+import com.jack.ai.data.browser.PricePoint
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule

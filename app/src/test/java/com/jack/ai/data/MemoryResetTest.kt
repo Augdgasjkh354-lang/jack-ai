@@ -12,6 +12,8 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import com.jack.ai.data.memory.MemoryOps
 import com.jack.ai.data.memory.MemoryReset
+import com.jack.ai.data.browser.BrowserFlow
+import com.jack.ai.data.browser.SiteNote
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], application = Application::class)

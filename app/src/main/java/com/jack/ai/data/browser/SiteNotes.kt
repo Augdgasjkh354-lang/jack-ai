@@ -1,10 +1,11 @@
-package com.jack.ai.data
+package com.jack.ai.data.browser
 
 import android.content.Context
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import java.io.File
+import com.jack.ai.data.SafeFile
 
 /** 一个网站在以前的任务里怎么样：要登录、被拦、读不到、限流各几次，读成功几次。 */
 @Serializable

@@ -1,7 +1,9 @@
-package com.jack.ai.data
+package com.jack.ai.data.browser
 
 import com.jack.ai.api.BrowserPages
 import kotlinx.serialization.Serializable
+import com.jack.ai.data.AppUsageNotes
+import com.jack.ai.data.newId
 
 /**
  * 浏览器流程：在某个网站上办一件事的做法（文字步骤，不录点击位置——网页改版也能照着意思做）。

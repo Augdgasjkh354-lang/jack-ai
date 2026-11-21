@@ -2,6 +2,7 @@ package com.jack.ai.data
 
 import android.content.Context
 import java.io.File
+import com.jack.ai.data.browser.BrowserStats
 
 /**
  * 操作其他 App 的实测成功率：Kavi 每做一步（打开、点、长按、输入、回车、翻页、划、返回）记一笔结果，按 App 分。

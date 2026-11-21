@@ -1,4 +1,4 @@
-package com.jack.ai.data
+package com.jack.ai.data.browser
 
 import android.content.Context
 import androidx.compose.runtime.*
@@ -8,6 +8,7 @@ import com.jack.ai.api.BrowserQueue
 import com.jack.ai.api.BrowserQueue.State
 import com.jack.ai.ui.JackBrowser
 import kotlinx.coroutines.*
+import com.jack.ai.data.Downloads
 
 /** 浏览器和 Kavi 共用的下载队列，页面离开后继续工作。 */
 object BrowserDownloads {

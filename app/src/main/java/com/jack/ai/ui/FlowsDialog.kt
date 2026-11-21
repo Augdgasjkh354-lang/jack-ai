@@ -39,8 +39,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.jack.ai.ChatViewModel
-import com.jack.ai.data.BrowserFlow
-import com.jack.ai.data.BrowserFlows
+import com.jack.ai.data.browser.BrowserFlow
+import com.jack.ai.data.browser.BrowserFlows
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -54,7 +54,7 @@ fun FlowsDialog(vm: ChatViewModel, onDismiss: () -> Unit) {
     var flows by remember { mutableStateOf<List<BrowserFlow>>(emptyList()) }
     var editing by remember { mutableStateOf<BrowserFlow?>(null) }
     var deleting by remember { mutableStateOf<BrowserFlow?>(null) }
-    var notes by remember { mutableStateOf<List<com.jack.ai.data.SiteNote>>(emptyList()) }
+    var notes by remember { mutableStateOf<List<com.jack.ai.data.browser.SiteNote>>(emptyList()) }
     LaunchedEffect(Unit) { flows = vm.loadFlows(); notes = vm.loadSiteNotes() }
     fun save(list: List<BrowserFlow>) { flows = list; scope.launch { vm.saveFlows(list) } }
 

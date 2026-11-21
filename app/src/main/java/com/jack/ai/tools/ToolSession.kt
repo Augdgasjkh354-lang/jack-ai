@@ -633,10 +633,10 @@ private val LOGIN_SITE = Regex("""这一页是 (\S+?) 的登录页""")
 internal suspend fun ToolSession.recordSite(name: String, argsText: String, result: String, status: ToolStatus, kind: Failures.Kind?) {
     if (name !in SITE_TOOLS || project?.isolated == true) return
     val host = LOGIN_SITE.find(result)?.groupValues?.get(1)?.lowercase()?.removePrefix("www.")
-        ?: Sources.find(argsText).firstOrNull()?.let(com.jack.ai.data.SiteNotes::hostOf) ?: return
+        ?: Sources.find(argsText).firstOrNull()?.let(com.jack.ai.data.browser.SiteNotes::hostOf) ?: return
     val ok = status == ToolStatus.OK && kind == null
     if (!ok && kind == null) return
-    withContext(Dispatchers.IO) { runCatching { com.jack.ai.data.SiteNotes.record(app, host, if (ok) null else kind) } }
+    withContext(Dispatchers.IO) { runCatching { com.jack.ai.data.browser.SiteNotes.record(app, host, if (ok) null else kind) } }
 }
 
 /** 清单有这么多步就算大任务，开工前先给用户确认（设置是 big 时）。 */

@@ -904,7 +904,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
     }
 
     /** 历史记录页要的完整浏览记录。 */
-    suspend fun historyEntries(): List<com.jack.ai.data.HistoryEntry> = withContext(historyIo) {
+    suspend fun historyEntries(): List<com.jack.ai.data.browser.HistoryEntry> = withContext(historyIo) {
         historyList ?: com.jack.ai.data.Store(app).loadHistory().also { historyList = it }
     }
 
@@ -913,7 +913,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         visits = visits.filterNot { it.url == url }; saveLists()
         scope.launch(historyIo) {
             val store = com.jack.ai.data.Store(app)
-            historyList = com.jack.ai.data.BrowserHistory.remove(historyList ?: store.loadHistory(), url)
+            historyList = com.jack.ai.data.browser.BrowserHistory.remove(historyList ?: store.loadHistory(), url)
             historySave?.cancel()
             store.saveHistory(historyList.orEmpty())
         }
@@ -1188,7 +1188,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
 
     // ---- 长的浏览记录 ----
     private val historyIo = Dispatchers.IO.limitedParallelism(1)
-    @Volatile private var historyList: List<com.jack.ai.data.HistoryEntry>? = null
+    @Volatile private var historyList: List<com.jack.ai.data.browser.HistoryEntry>? = null
     private var historySave: kotlinx.coroutines.Job? = null
 
     private fun recordHistory(url: String, title: String) {
@@ -1196,7 +1196,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         scope.launch(historyIo) {
             val store = com.jack.ai.data.Store(app)
             val list = historyList ?: store.loadHistory()
-            historyList = com.jack.ai.data.BrowserHistory.record(list, url, title, now)
+            historyList = com.jack.ai.data.browser.BrowserHistory.record(list, url, title, now)
             // 连着跳好几页只写一次
             historySave?.cancel()
             historySave = scope.launch(historyIo) { delay(2_000); historyList?.let { store.saveHistory(it) } }
@@ -1997,12 +1997,12 @@ document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&
     fun saveToPhone(ctx: Context, p: BrowserDownload.Pending) {
         val context = ctx.applicationContext
         pending = null
-        com.jack.ai.data.BrowserDownloads.enqueue(context, p, { name, mime -> Downloads.toPhone(context, name, mime) })
+        com.jack.ai.data.browser.BrowserDownloads.enqueue(context, p, { name, mime -> Downloads.toPhone(context, name, mime) })
     }
 
     /** Kavi 的确认流程照旧，确认后也进入同一个队列。 */
     suspend fun store(p: BrowserDownload.Pending, target: (String, String) -> Downloads.Target, progress: (String) -> Unit = {}): Downloads.Saved =
-        withContext(Dispatchers.Main) { com.jack.ai.data.BrowserDownloads.enqueue(app, p, target, progress) }.result.await()
+        withContext(Dispatchers.Main) { com.jack.ai.data.browser.BrowserDownloads.enqueue(app, p, target, progress) }.result.await()
 
     suspend fun saveTo(ctx: Context, dir: java.io.File?, p: BrowserDownload.Pending, progress: (String) -> Unit = {}): Downloads.Saved {
         val context = ctx.applicationContext

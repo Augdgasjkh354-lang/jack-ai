@@ -9,6 +9,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import com.jack.ai.data.browser.BrowserDownloads
 
 /**
  * 转到后台接着做的事（现在是下载）做完后，回头告诉那个对话里的 Kavi：

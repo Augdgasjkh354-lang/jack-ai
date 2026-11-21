@@ -11,7 +11,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.jack.ai.api.BrowserDownload
 import com.jack.ai.api.BrowserQueue.State
-import com.jack.ai.data.BrowserDownloads
+import com.jack.ai.data.browser.BrowserDownloads
 
 /** 浏览器面板和侧边栏下载页共用同一套进度和按钮。 */
 @Composable

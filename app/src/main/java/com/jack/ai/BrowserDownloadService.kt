@@ -6,7 +6,7 @@ import android.content.pm.ServiceInfo
 import android.os.*
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
-import com.jack.ai.data.BrowserDownloads
+import com.jack.ai.data.browser.BrowserDownloads
 import com.jack.ai.api.BrowserQueue
 
 /** 合并所有下载的进度，前台服务让锁屏后的网络传输继续。 */

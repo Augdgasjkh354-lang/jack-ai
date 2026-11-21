@@ -7,6 +7,10 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import java.io.File
+import com.jack.ai.data.browser.BrowserFlow
+import com.jack.ai.data.browser.HistoryEntry
+import com.jack.ai.data.browser.PricePoint
+import com.jack.ai.data.browser.SiteNote
 
 private val LOCK = Any()
 private class CachedConv(val modified: Long, val length: Long, val conv: Conversation)

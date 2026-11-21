@@ -3,6 +3,10 @@ package com.jack.ai.data
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.jack.ai.data.browser.BrowserHistory
+import com.jack.ai.data.browser.HistoryEntry
+import com.jack.ai.data.browser.PriceLog
+import com.jack.ai.data.browser.PricePoint
 
 class BrowserHistoryTest {
     private val day = 86_400_000L

@@ -67,7 +67,7 @@ fun DownloadsScreen(onBack: () -> Unit) {
     var query by remember { mutableStateOf("") }
     var deleting by remember { mutableStateOf<DownloadRecord?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
-    val completed = com.jack.ai.data.BrowserDownloads.tasks.count { it.state == com.jack.ai.api.BrowserQueue.State.COMPLETE }
+    val completed = com.jack.ai.data.browser.BrowserDownloads.tasks.count { it.state == com.jack.ai.api.BrowserQueue.State.COMPLETE }
     val list by produceState(emptyList<Pair<DownloadRecord, Boolean>>(), version, completed) {
         value = withContext(Dispatchers.IO) { Store(ctx).loadDownloads().asReversed().map { it to exists(ctx, it) } }
     }
@@ -108,7 +108,7 @@ fun DownloadsScreen(onBack: () -> Unit) {
                 Text(it, Modifier.fillMaxWidth().clickable { message = null }.padding(horizontal = 16.dp, vertical = 8.dp),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             }
-            if (list.isEmpty() && com.jack.ai.data.BrowserDownloads.tasks.none { it.state !in listOf(com.jack.ai.api.BrowserQueue.State.COMPLETE, com.jack.ai.api.BrowserQueue.State.CANCELLED) }) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            if (list.isEmpty() && com.jack.ai.data.browser.BrowserDownloads.tasks.none { it.state !in listOf(com.jack.ai.api.BrowserQueue.State.COMPLETE, com.jack.ai.api.BrowserQueue.State.CANCELLED) }) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("还没有下载过东西。\n在聊天里给 Kavi 一个网址，或者在浏览器里点下载。", color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(32.dp))
             }

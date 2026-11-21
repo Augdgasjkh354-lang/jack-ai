@@ -82,7 +82,7 @@ internal suspend fun ToolSession.selfCheck(args: JsonObject): String = runTool("
                         else "没开，只按关键词找（在 设置 → 本地模型 下一个，或在 其他模型服务 加硅基流动）"
                     } + "\n")
             }
-            com.jack.ai.data.BrowserStats.summary(com.jack.ai.data.BrowserStats.load(ctx)).takeIf { it.isNotEmpty() }?.let { append("【浏览器实测】$it\n") }
+            com.jack.ai.data.browser.BrowserStats.summary(com.jack.ai.data.browser.BrowserStats.load(ctx)).takeIf { it.isNotEmpty() }?.let { append("【浏览器实测】$it\n") }
             com.jack.ai.data.PhoneStats.summary(com.jack.ai.data.PhoneStats.load(ctx)).takeIf { it.isNotEmpty() }?.let { append("【操作其他 App 实测】$it\n") }
             com.jack.ai.data.office.OfficeStats.summary(com.jack.ai.data.office.OfficeStats.load(ctx)).takeIf { it.isNotEmpty() }?.let { append("【Office 一次做对率】$it\n") }
 
