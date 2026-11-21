@@ -74,6 +74,8 @@ data class Routine(
     val until: Long = 0,
     /** 监控满足后接着做的事（任务链）：空着就只通知。 */
     val then: String = "",
+    /** 监控：条件满足了、后续步骤（[then]）还没做完时，记着当时查到的结果；做到一半被杀，下一次周期任务接着做。 */
+    val matched: String = "",
 )
 
 /** 后台任务的结果，等 App 打开时并入对应的对话。 */
@@ -289,7 +291,9 @@ object Routines {
                 .setInitialDelay(wait, java.util.concurrent.TimeUnit.MILLISECONDS)
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .build()
-            WorkManager.getInstance(ctx).enqueue(req)
+            // 同一个任务只排一份：断网几天时每天到点都会新排一个，联网后几份同时跑、重复发邮件，还共用一个断点互相覆盖。
+            // 已经有一份在等网络或正在跑，这次就不再排（联网后跑一次就够了）
+            WorkManager.getInstance(ctx).enqueueUniqueWork("routine:${r.id}", androidx.work.ExistingWorkPolicy.KEEP, req)
         }
         val updated = r.copy(lastRunAt = System.currentTimeMillis(), enabled = r.repeat != "none")
         // 下次执行一定要排上：保存或刷新小部件中途抛错也不能让重复任务静默停摆（原来是先副作用后持久化，中间一抛错 schedule 就跑不到了）
@@ -419,7 +423,7 @@ object Routines {
                     log(RunLog.stepOf(name, status, it))
                 }
             },
-            onUsage = { ev -> store.addUsage(ev.endpoint ?: ep, ev.promptTokens, ev.cacheHit, ev.completionTokens) },
+            onUsage = { ev -> store.addUsage(ev.endpoint ?: ep, ev.promptTokens, ev.cacheHit, ev.completionTokens, exact = ev.exactCost) },
         )
         val text = agent.lastRound.trim()
         if (text.isBlank()) return Outcome(if (watch) "unknown" else "failed", "（这次没有生成内容）")
@@ -501,7 +505,7 @@ class RoutineWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
             if (r.work) {
                 // Work 可能跑很久，超过 WorkManager 的 10 分钟，要以前台方式运行
                 runCatching { setForeground(foregroundInfo("正在执行：${r.title}")) }
-                com.jack.ai.tools.runBackgroundWork(ctx, r, log = log) { label ->
+                com.jack.ai.tools.runBackgroundWork(ctx, r, log = log, runId = id.toString(), keepCheckpoint = true) { label ->
                     runCatching { setForegroundAsync(foregroundInfo("正在执行：${r.title}", label)) }
                 }
             } else Routines.runTask(ctx, r, log = log).let {
@@ -517,11 +521,14 @@ class RoutineWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
         } catch (e: Exception) {
             return failed(store, r, run, com.jack.ai.tools.ToolSession.errorText(e))
         }
+        // 收件箱、通知都写完了才删断点（见 runBackgroundWork 的 keepCheckpoint）
+        val cleanup = { if (r.work) com.jack.ai.tools.TaskCheckpoint.clear(com.jack.ai.tools.TaskCheckpoint.file(ctx.filesDir, r.id)) }
         return when (result.status) {
             com.jack.ai.tools.TaskStatus.OK -> {
                 store.addInbox(InboxItem(r.id, r.convId, r.title, r.prompt, result.text, files = result.files, work = r.work))
                 Routines.notify(ctx, r.id, r.title, result.text.take(300), openChat = r.convId)
                 RunLog.finish(ctx, run, "ok")
+                cleanup()
                 Result.success()
             }
             // 没配置好：再试也没用，说一次就行
@@ -529,9 +536,10 @@ class RoutineWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
                 store.addInbox(InboxItem(r.id, r.convId, r.title, r.prompt, result.text))
                 Routines.notify(ctx, r.id, "没跑成：${r.title}", "还没配置好模型（API Key），打开看详情", openChat = r.convId)
                 RunLog.finish(ctx, run, "needs_setup", error = "还没有填写 API Key")
+                cleanup()
                 Result.success()
             }
-            com.jack.ai.tools.TaskStatus.FAILED -> failed(store, r, run, result.text)
+            com.jack.ai.tools.TaskStatus.FAILED -> failed(store, r, run, result.text).also { cleanup() }
         }
     }
 
@@ -561,6 +569,12 @@ class RoutineWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
             com.jack.ai.AskWidget.refresh(ctx)
         }
         if (!r.enabled) {
+            // 条件满足后接着做的事上次做到一半被杀了：接着做完（断点按这个周期任务认，隔多久都能接上）
+            if (r.matched.isNotEmpty() && r.then.isNotBlank()) {
+                val run = RunLog.start(ctx, r)
+                followUp(store, r, r.matched, run) { RunLog.step(ctx, run, it) }
+                return Result.success()
+            }
             WorkManager.getInstance(ctx).cancelUniqueWork("watch:${r.id}")
             return Result.success()
         }
@@ -592,30 +606,10 @@ class RoutineWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
         val text = outcome.text
         when (outcome.status) {
             "ok" -> {
-                // 先标成停了，免得后续步骤跑得久、下一次检查又触发一遍；周期任务等做完再撤
-                update(cancel = false) { it.copy(enabled = false, lastRunAt = now) }
-                // 任务链：满足后按用户事先的安排接着做（Work，能用全部技能），做完再通知
-                val follow = if (r.then.isBlank()) null else try {
-                    runCatching { setForeground(foregroundInfo("条件满足，正在接着做：${r.title}")) }
-                    com.jack.ai.tools.runBackgroundWork(ctx, r.copy(work = true, prompt = followPrompt(r, text)), log = log) { label ->
-                        runCatching { setForegroundAsync(foregroundInfo("正在接着做：${r.title}", label)) }
-                    }
-                } catch (e: kotlinx.coroutines.CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    com.jack.ai.tools.TaskResult("后续步骤没做完：" + com.jack.ai.tools.ToolSession.errorText(e), status = com.jack.ai.tools.TaskStatus.FAILED)
-                }
-                val partial = follow != null && follow.status != com.jack.ai.tools.TaskStatus.OK
-                val body = "🔔 $text" + (follow?.let { (if (partial) "\n\n**后续步骤没做完**\n" else "\n\n**接着做的事**\n") + it.text } ?: "")
-                store.addInbox(InboxItem(r.id, r.convId, r.title, r.prompt, body, files = follow?.files.orEmpty(), work = follow != null))
-                if (partial) {
-                    Routines.notify(ctx, r.id, "🔔 ${r.title}（后续步骤没做完）", text.take(300), openChat = r.convId)
-                    RunLog.finish(ctx, run, "partial", error = follow!!.text)
-                } else {
-                    Routines.notify(ctx, r.id, "🔔 ${r.title}", (follow?.text ?: text).take(300), openChat = r.convId)
-                    RunLog.finish(ctx, run, "ok")
-                }
-                WorkManager.getInstance(ctx).cancelUniqueWork("watch:${r.id}")
+                // 先标成停了，免得后续步骤跑得久、下一次检查又触发一遍；周期任务等做完再撤。
+                // 有后续步骤的记下查到的结果：做到一半被杀，下一次周期任务看到它就接着做（以前停了就再没人管）
+                update(cancel = false) { it.copy(enabled = false, lastRunAt = now, matched = if (r.then.isBlank()) "" else text) }
+                followUp(store, r, text, run, log)
             }
             "not_met" -> {
                 RunLog.finish(ctx, run, "not_met")
@@ -635,6 +629,35 @@ class RoutineWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
             }
         }
         return Result.success()
+    }
+
+    /** 监控条件满足：按用户事先的安排接着做（Work，能用全部技能），做完发到对话、通知，再撤掉周期任务。 */
+    private suspend fun followUp(store: Store, r: Routine, text: String, run: String, log: (RunStep) -> Unit) {
+        val ctx = applicationContext
+        val follow = if (r.then.isBlank()) null else try {
+            runCatching { setForeground(foregroundInfo("条件满足，正在接着做：${r.title}")) }
+            com.jack.ai.tools.runBackgroundWork(ctx, r.copy(work = true, prompt = followPrompt(r, text)), log = log, runId = id.toString()) { label ->
+                runCatching { setForegroundAsync(foregroundInfo("正在接着做：${r.title}", label)) }
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            RunLog.finish(ctx, run, "failed", error = "被系统中途停掉了，下次接着做", retry = true)
+            throw e
+        } catch (e: Exception) {
+            com.jack.ai.tools.TaskResult("后续步骤没做完：" + com.jack.ai.tools.ToolSession.errorText(e), status = com.jack.ai.tools.TaskStatus.FAILED)
+        }
+        val partial = follow != null && follow.status != com.jack.ai.tools.TaskStatus.OK
+        val body = "🔔 $text" + (follow?.let { (if (partial) "\n\n**后续步骤没做完**\n" else "\n\n**接着做的事**\n") + it.text } ?: "")
+        store.addInbox(InboxItem(r.id, r.convId, r.title, r.prompt, body, files = follow?.files.orEmpty(), work = follow != null))
+        if (partial) {
+            Routines.notify(ctx, r.id, "🔔 ${r.title}（后续步骤没做完）", text.take(300), openChat = r.convId)
+            RunLog.finish(ctx, run, "partial", error = follow!!.text)
+        } else {
+            Routines.notify(ctx, r.id, "🔔 ${r.title}", (follow?.text ?: text).take(300), openChat = r.convId)
+            RunLog.finish(ctx, run, "ok")
+        }
+        // 做完了（成没成都已经告诉用户）：不再接着做，撤掉周期任务
+        store.saveRoutines(store.loadRoutines().map { if (it.id == r.id) it.copy(matched = "") else it })
+        WorkManager.getInstance(ctx).cancelUniqueWork("watch:${r.id}")
     }
 
     /** 监控连着 3 次没查成（出错或拿不到数据），提醒一次；之后再接着没查成不再响，查成一次后重新计。 */

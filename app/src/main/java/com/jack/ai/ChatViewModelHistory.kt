@@ -205,7 +205,7 @@ internal fun ChatViewModel.continueWriting() {
             client.stream(ep, hist, ThinkLevel.OFF, settings.temperature, null).collect { ev ->
                 when (ev) {
                     is StreamEvent.Text -> if (ev.content.isNotEmpty()) patchMessage(convId, m.id) { it.copy(content = it.content + ev.content) }
-                    is StreamEvent.Usage -> core.recordSpend(convId, ev.endpoint ?: ep0, ev.promptTokens, ev.cacheHit, ev.completionTokens, ev.prefix)
+                    is StreamEvent.Usage -> core.recordSpend(convId, ev.endpoint ?: ep0, ev.promptTokens, ev.cacheHit, ev.completionTokens, ev.prefix, exact = ev.exactCost)
                     is StreamEvent.Finish -> cut = ev.reason == "length"
                     else -> {}
                 }

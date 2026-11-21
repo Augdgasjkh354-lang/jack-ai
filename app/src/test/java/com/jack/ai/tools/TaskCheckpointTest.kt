@@ -43,6 +43,20 @@ class TaskCheckpointTest {
     }
 
     @Test
+    fun sameRunResumesHoweverLongItWaited() {
+        val f = TaskCheckpoint.file(tmp.root, "r2")
+        val msgs = listOf(msg("system", "s"), msg("user", "发周报"), call("a"), result("a"))
+        TaskCheckpoint.save(f, "k", msgs, 0.3, now = 1000, run = "work-1")
+        val days = 1000 + 3 * 24 * 3600_000L
+        // 关机三天后同一次执行重跑：接着做，不从头来（从头来会把发过的邮件再发一遍）
+        assertNotNull(TaskCheckpoint.load(f, "k", now = days, run = "work-1"))
+        // 别的一次执行、没说是哪次：照旧按 6 小时过期
+        assertNull(TaskCheckpoint.load(f, "k", now = days, run = "work-2"))
+        assertNull(TaskCheckpoint.load(f, "k", now = days))
+        assertNotNull(TaskCheckpoint.load(f, "k", now = 2000, run = "work-2"))
+    }
+
+    @Test
     fun halfDoneRoundGetsPlaceholderResults() {
         val msgs = listOf(msg("system", "s"), msg("user", "u"), call("a"), result("a"), call("b", "c"), result("b"))
         val fixed = TaskCheckpoint.repair(msgs)

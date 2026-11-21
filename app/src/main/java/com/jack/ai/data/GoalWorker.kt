@@ -27,9 +27,13 @@ class GoalWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, 
                     return Result.success()
                 }
                 if (Goals.pauseForBudget(ctx, id)) return Result.success()
+                // 上一轮做到一半被杀（inRound 还挂着）：接着这一轮，不再加一；新的一轮才计数
+                val resuming = goal.inRound
                 val admitted = Goals.change(ctx, id) { g ->
-                    if (g?.id == goal.id && g.canContinue) g.copy(autoRounds = g.autoRounds + 1) else g
+                    if (g?.id == goal.id && g.canContinue) g.copy(autoRounds = if (g.inRound) g.autoRounds else g.autoRounds + 1, inRound = true) else g
                 } ?: return Result.success()
+                /** 这一轮收尾了（做完、出错、被停）：下一次就是新的一轮。 */
+                fun endRound() = Goals.change(ctx, id) { g -> if (g?.id == goal.id) g.copy(inRound = false) else g }
                 if (admitted.id != goal.id || admitted.status != "active") return Result.success()
                 title = goal.objective
                 WorkService.start(ctx, id, title, true)
@@ -38,7 +42,7 @@ class GoalWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, 
                     coroutineScope {
                         val run = async(start = CoroutineStart.LAZY) {
                             runBackgroundWork(ctx, Routine(id = Goals.workId(id), title = title, prompt = Goals.prompt(goal), hour = 0, minute = 0, convId = id, work = true),
-                                goalId = goal.id, brief = "【Goal continuation】Continue the user's persistent goal. Read get_goal first, verify acceptance criteria, record progress with update_goal, mark complete only when all criteria are met. Stop for any user confirmation or takeover.",
+                                goalId = goal.id, goalSpent = admitted.spent, roundResumed = resuming, brief = "【Goal continuation】Continue the user's persistent goal. Read get_goal first, verify acceptance criteria, record progress with update_goal, mark complete only when all criteria are met. Stop for any user confirmation or takeover.",
                                 onProgress = { WorkService.progress(ctx, id, title, it, true) })
                         }
                         val monitor = launch(start = CoroutineStart.UNDISPATCHED) {
@@ -52,11 +56,16 @@ class GoalWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, 
                         try { run.await() } finally { monitor.cancel() }
                     }
                 } catch (e: CancellationException) {
+                    // 被用户停下、接管（进程被杀时这里跑不到，inRound 留着，重跑时接着这一轮）
+                    withContext(NonCancellable) { endRound() }
                     currentCoroutineContext().ensureActive()
                     return Result.success()
                 } catch (e: GoalStopped) {
+                    endRound()
                     return Result.success()
                 } catch (e: Exception) {
+                    // 出错也算这一轮结束了：不然一直出错时轮数不涨，会无休止地重试
+                    endRound()
                     if (e is com.jack.ai.api.ApiException && e.code in setOf(400, 401, 402, 403, 404, 422)) {
                         Goals.change(ctx, id) { g -> if (g?.id == goal.id) g.update("blocked", ToolSession.errorText(e)) else g }
                         return Result.success()
@@ -74,7 +83,8 @@ class GoalWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, 
                 }
                 Goals.change(ctx, id) { g -> if (g?.id == goal.id && g.status == "active") g.update(note = result.text) else g }
                 val limit = store.loadSettings().workCostLimit
-                val total = Goals.change(ctx, id) { g -> if (g?.id == goal.id) g.copy(spent = g.spent + result.spent) else g }?.spent ?: result.spent
+                // result.spent 只是这一轮花的（见 runBackgroundWork 的 goalSpent），这里累加到整个目标上；同时收掉这一轮
+                val total = Goals.change(ctx, id) { g -> if (g?.id == goal.id) g.copy(spent = g.spent + result.spent, inRound = false) else g }?.spent ?: result.spent
                 if (Goal.budgetReached(limit, total) && Goals.current(ctx, id)?.status == "active") {
                     Goals.change(ctx, id) { it?.update("paused", "自动续做累计花了 ¥%.2f，到了任务上限，请查看进展后继续。".format(total)) }
                     Routines.notify(ctx, Goals.workId(id), "目标已暂停", "自动续做累计花费已达上限。", openChat = id)

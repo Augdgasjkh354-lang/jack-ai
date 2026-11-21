@@ -13,6 +13,8 @@ data class Goal(
     val id: String = newId(),
     /** 这次自动续做以来累计花了多少元（用户点「继续」时清零）：上限按整个目标算，不按每轮各算各的。 */
     val spent: Double = 0.0,
+    /** 一轮自动续做开始了还没收尾：进程被杀、WorkManager 重跑时接着这一轮，不再算一轮（以前每被杀一次多算一轮，提前暂停）。 */
+    val inRound: Boolean = false,
 ) {
     val label: String get() = labels[status] ?: status
     val canContinue: Boolean get() = status == "active" && autoRounds < 5

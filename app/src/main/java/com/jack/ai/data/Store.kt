@@ -368,12 +368,13 @@ class Store(context: Context) {
      * 记一笔用量（按天、按模型累加），并按请求发生的这一刻的价格算钱。
      * cacheHit 为 null 表示服务没返回缓存命中数。返回这次花了多少元，不知道价格时返回 null。
      */
-    fun addUsage(ep: Endpoint, prompt: Int, cacheHit: Int?, completion: Int, label: String = "", prefix: String = ""): Double? = synchronized(LOCK) {
+    fun addUsage(ep: Endpoint, prompt: Int, cacheHit: Int?, completion: Int, label: String = "", prefix: String = "", exact: Double? = null): Double? = synchronized(LOCK) {
         val now = System.currentTimeMillis()
         val date = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date(now))
         val price = Pricing.priceAt(ep, now)
         val hit = cacheHit ?: 0
-        val cost = price?.let { Pricing.cost(it, prompt, hit, completion) }
+        // 服务直接给了这次的花费（OpenRouter）就用它：本地单价是拉模型列表时的快照，也不含缓存写入的溢价
+        val cost = exact ?: price?.let { Pricing.cost(it, prompt, hit, completion) }
         val list = loadUnlocked("usage.json", UsageDay.serializer()).toMutableList()
         val i = list.indexOfFirst { it.date == date && it.model == ep.key }
         val old = if (i >= 0) list[i] else UsageDay(date, ep.key, costed = true)

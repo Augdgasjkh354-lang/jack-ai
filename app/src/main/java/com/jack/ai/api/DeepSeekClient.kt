@@ -45,7 +45,9 @@ sealed interface StreamEvent {
     /** endpoint：换成备用模型答的时候是那个备用（记账要记到它头上）；主模型答的为 null。 */
     data class Usage(val promptTokens: Int, val completionTokens: Int, val cacheHit: Int? = null, val endpoint: Endpoint? = null,
         /** 请求开头的指纹（见 PrefixPrint），缓存没命中时用来判断是哪一段变了。 */
-        val prefix: String? = null) : StreamEvent
+        val prefix: String? = null,
+        /** 服务直接告诉了这次扣了多少（元，OpenRouter 的 usage.cost 换算过来）：有就用它，不按本地单价估。 */
+        val exactCost: Double? = null) : StreamEvent
     /** 这一轮怎么结束的：length 表示写到长度上限被截断了。 */
     data class Finish(val reason: String) : StreamEvent
 }
@@ -157,6 +159,9 @@ class DeepSeekClient(
                     // 思考模式下 temperature 不起作用，只在不思考时传
                     put("temperature", temperature.toDouble())
                 }
+            } else if (ThinkDialect.of(ep) != ThinkDialect.Kind.NONE) {
+                // 百炼 Qwen3、Kimi：按它们自己的参数开关思考（见 ThinkDialect）；它们的温度有固定要求，不发
+                ThinkDialect.put(this, ThinkDialect.of(ep), thinking.effort != null)
             } else if (ep.reasoning && thinking.effort != null) {
                 // OpenAI 格式只认 low / medium / high
                 put("reasoning_effort", if (thinking.effort == "max") "high" else thinking.effort)
@@ -198,6 +203,9 @@ class DeepSeekClient(
             }
 
             override fun onResponse(call: Call, response: Response) {
+                // 收到过用量没有、已经生成了多少字：传到一半断了又没收到用量，服务那边多半已经扣了钱，估一笔记上（见下面的 catch）
+                var usageSent = false
+                var generated = 0
                 try {
                     response.use { resp ->
                         if (!resp.isSuccessful) {
@@ -221,7 +229,11 @@ class DeepSeekClient(
                                 raw.append(line.take(65_536 - raw.length))
                             }
                             if (parser != null) {
-                                for (ev in parser.feed(line)) if (trySendBlocking(ev).isFailure) return
+                                for (ev in parser.feed(line)) {
+                                    if (ev is StreamEvent.Usage) usageSent = true
+                                    if (ev is StreamEvent.Text) generated += ev.content.length + ev.reasoning.length
+                                    if (trySendBlocking(ev).isFailure) return
+                                }
                                 validData = parser.sawData
                                 if (parser.finished) { finished = true; if (format == ApiFormat.ANTHROPIC) break }
                                 continue
@@ -239,7 +251,9 @@ class DeepSeekClient(
                             (obj["usage"] as? JsonObject)?.let { u ->
                                 val p = (u["prompt_tokens"] as? JsonPrimitive)?.intOrNull ?: 0
                                 val c = (u["completion_tokens"] as? JsonPrimitive)?.intOrNull ?: 0
-                                if (p > 0 && trySendBlocking(StreamEvent.Usage(p, c, cacheHitOf(u), prefix = PrefixPrint.of(ep.model, thinking.effort, messages, tools))).isFailure) return
+                                if (p > 0) usageSent = true
+                                if (p > 0 && trySendBlocking(StreamEvent.Usage(p, c, cacheHitOf(u), prefix = PrefixPrint.of(ep.model, thinking.effort, messages, tools),
+                                        exactCost = exactCostOf(ep, u))).isFailure) return
                             }
                             // 有的服务在最后的用量块里写 "choices": null
                             val choice = (obj["choices"] as? JsonArray)?.firstOrNull() as? JsonObject ?: continue
@@ -251,10 +265,12 @@ class DeepSeekClient(
                             val delta = choice["delta"] as? JsonObject ?: continue
                             val r = delta["reasoning_content"].str().ifEmpty { delta["reasoning"].str() }
                             val c = delta["content"].str()
+                            generated += r.length + c.length
                             if ((r.isNotEmpty() || c.isNotEmpty()) && trySendBlocking(StreamEvent.Text(r, c)).isFailure) return
                             (delta["tool_calls"] as? JsonArray)?.forEach { el ->
                                 val tc = el as? JsonObject ?: return@forEach
                                 val fn = tc["function"] as? JsonObject
+                                generated += fn?.get("arguments").str().length
                                 if (trySendBlocking(StreamEvent.ToolCall(
                                     index = (tc["index"] as? JsonPrimitive)?.intOrNull ?: 0,
                                     id = tc["id"].str(),
@@ -274,6 +290,8 @@ class DeepSeekClient(
                     }
                     close()
                 } catch (e: Exception) {
+                    // 网断了（不是服务报错，也不是用户停下）：已经写了一些字却没收到用量，估一笔
+                    if (e is IOException && !call.isCanceled() && !usageSent && generated > 0) trySendBlocking(estimatedUsage(messages, generated))
                     close(e)
                 }
             }
@@ -324,12 +342,19 @@ class DeepSeekClient(
         val body = buildJsonObject {
             put("model", ep.model)
             put("stream", false)
+            val dialect = ThinkDialect.of(ep)
             if (ep.deepseek) {
                 put("thinking", buildJsonObject { put("type", "disabled") })
                 put("max_tokens", maxTokens)
+            } else {
+                // 后台请求（压缩、做梦、复核）不开思考、限住输出长度：以前只对 DeepSeek 管用，别家照样想、照样写长
+                ThinkDialect.put(this, dialect, false)
+                // 只在调用方要得短时发（思考摘要 60、标题这类）：默认的 16384 超过不少模型的输出上限（8192），发了反而报错。
+                // OpenAI 官方的新模型不认 max_tokens，要用 max_completion_tokens
+                if (maxTokens <= 8192) put(if (runCatching { java.net.URI(ep.baseUrl).host }.getOrNull()?.endsWith("openai.com") == true) "max_completion_tokens" else "max_tokens", maxTokens)
             }
-            // 推理模型大多不接受自定义 temperature
-            if (!ep.reasoning || ep.deepseek) put("temperature", 0.7)
+            // 推理模型大多不接受自定义 temperature；百炼 Qwen3、Kimi 的温度有固定要求，也不发
+            if ((!ep.reasoning || ep.deepseek) && dialect == ThinkDialect.Kind.NONE) put("temperature", 0.7)
             if (jsonMode) put("response_format", buildJsonObject { put("type", "json_object") })
             put("messages", JsonArray(messages))
         }.toString()
@@ -496,6 +521,33 @@ class DeepSeekClient(
             "deepseek" in host -> balance(base.removeSuffix("/v1"), apiKey)
             else -> null
         }
+    }
+
+    /** OpenRouter 在 usage.cost 里直接给这次扣了多少美元（含缓存写入的溢价），换成元；别家没有这个字段。 */
+    internal fun exactCostOf(ep: Endpoint, u: JsonObject): Double? {
+        val host = runCatching { java.net.URI(ep.baseUrl).host }.getOrNull().orEmpty()
+        if (!host.endsWith("openrouter.ai")) return null
+        return (u["cost"] as? JsonPrimitive)?.content?.toDoubleOrNull()?.takeIf { it >= 0 }?.let { it * com.jack.ai.data.Pricing.USD_TO_CNY }
+    }
+
+    /**
+     * 传到一半断了、没收到用量：按发出去的字数和已经收到的字数估一笔（图片按每张 1000 记），缓存命中按不知道（全按没命中算，宁多勿少）。
+     * 不记的话这次的钱就漏了，之后重试成功只记重试那一笔，统计和预算都比账单少。
+     */
+    internal fun estimatedUsage(messages: List<JsonObject>, generated: Int): StreamEvent.Usage {
+        var images = 0
+        val text = StringBuilder()
+        for (m in messages) when (val c = m["content"]) {
+            is JsonPrimitive -> text.append(c.content)
+            is JsonArray -> c.forEach { part ->
+                val o = part as? JsonObject ?: return@forEach
+                if (o["type"].str() == "text") text.append(o["text"].str()) else images++
+            }
+            else -> {}
+        }
+        messages.forEach { m -> (m["tool_calls"] as? JsonArray)?.let { text.append(it.toString()) } }
+        val prompt = com.jack.ai.chat.PromptBuilder.estTokens(text.toString()) + images * 1000
+        return StreamEvent.Usage(prompt.coerceAtLeast(1), (generated * 0.6).toInt().coerceAtLeast(1), null)
     }
 
     /** DeepSeek 用 prompt_cache_hit_tokens，OpenAI 格式用 prompt_tokens_details.cached_tokens；都没有就是 null。 */

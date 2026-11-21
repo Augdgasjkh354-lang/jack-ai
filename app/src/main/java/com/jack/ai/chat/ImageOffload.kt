@@ -5,12 +5,31 @@ import kotlinx.serialization.json.*
 
 /** 思路来自 deepseek-ai/deepseek-harness packages/compaction/compaction-image-offload/，MIT。请求被图片预算拒绝后只补救一次。 */
 object ImageOffload {
-    fun rejected(e: ApiException): Boolean {
+    fun rejected(e: ApiException, messages: List<JsonObject>? = null): Boolean {
         val text = (e.message.orEmpty() + " " + e.serviceCode).lowercase()
-        if (e.code == 413) return true
-        return (e.code in setOf(0, 400, 422)) &&
-            Regex("image|图片|图像").containsMatchIn(text) &&
+        val aboutImages = Regex("image|图片|图像").containsMatchIn(text)
+        // 413（请求太大）不一定是图片的事：也可能是工具结果、长文。只有明说是图片、或图片占了请求的一大半时才删旧图，
+        // 不然删了图照样太大，还白白丢了图片
+        if (e.code == 413) return aboutImages || messages == null || imageShare(messages) >= 0.5
+        return (e.code in setOf(0, 400, 422)) && aboutImages &&
             Regex("too.?many|too.?large|exceed|maximum|limit|size|budget|过多|太多|过大|太大|超出|超过|上限").containsMatchIn(text)
+    }
+
+    /** 请求里内联图片（data URL）占了多大比例（按字数）。 */
+    internal fun imageShare(messages: List<JsonObject>): Double {
+        var images = 0L
+        var all = 0L
+        for (m in messages) {
+            val c = m["content"]
+            if (c is JsonArray) c.forEach { part ->
+                val p = part as? JsonObject ?: return@forEach
+                val n = p.toString().length.toLong()
+                all += n
+                if (p["type"]?.toString()?.contains("image") == true) images += n
+            } else all += c?.toString()?.length ?: 0
+            m["tool_calls"]?.let { all += it.toString().length }
+        }
+        return if (all == 0L) 0.0 else images.toDouble() / all
     }
 
     /** 思路来自 deepseek-ai/deepseek-harness packages/compaction/compaction-image-offload/，MIT。按消息顺序省略旧图，优先保留最新三张与 6MB 内联预算。 */

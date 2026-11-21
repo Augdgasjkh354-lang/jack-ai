@@ -73,4 +73,16 @@ class CompressionMemoTest {
         assertFalse(Compression.supersedes("用户：开会改成 10 点", "用户：提醒我 11 月 18 号上午 10 点交材料"))
         assertTrue(Compression.supersedes("用户：改成每天 9 点提醒", "用户：每天 8 点提醒"))
     }
+
+    @Test
+    fun compressionRequestHasAFileBudget() {
+        // 二十份大文件：压缩请求自己别先超限，超出预算的只留名字
+        val msgs = (1..20).map { i ->
+            ChatMessage(role = "user", content = "看看第 $i 份", attachments = listOf(Attachment(kind = "file", name = "报告$i.txt", text = "字".repeat(30_000))))
+        }
+        val req = Compression.buildRequest("", msgs, imagesOk = false).toString()
+        assertTrue(req.length < com.jack.ai.data.memory.Compression.FILE_BUDGET + 20_000)
+        assertTrue(req.contains("报告20.txt（内容太多，这里不再附上）"))
+        assertTrue(req.contains("[文件：报告1.txt]"))
+    }
 }

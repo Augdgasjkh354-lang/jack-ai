@@ -166,7 +166,7 @@ class Agent(
                 if (e !is ApiException) throw e
                 // 思路来自 deepseek-ai/deepseek-harness packages/compaction/compaction-image-offload/，MIT。
                 if (!imageRetried && roundContent.isEmpty() && roundReasoning.isEmpty() && calls.isEmpty() &&
-                    ImageOffload.rejected(e) && ImageOffload.reduce(messages)) {
+                    ImageOffload.rejected(e, messages) && ImageOffload.reduce(messages)) {
                     imageRetried = true
                     content.setLength(roundStart)
                     continue

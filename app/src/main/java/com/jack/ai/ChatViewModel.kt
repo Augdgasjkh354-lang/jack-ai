@@ -379,7 +379,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(core.ioSerial) {
             com.jack.ai.data.Goals.change(getApplication(), convId) { g -> when (action) {
                 "clear" -> null
-                "resume" -> g?.copy(status = "active", autoRounds = 0, spent = 0.0)
+                "resume" -> g?.copy(status = "active", autoRounds = 0, spent = 0.0, inRound = false)
                 else -> g?.update("paused", "用户暂停了目标。")
             } }
             if (action != "resume") {
@@ -435,6 +435,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 append("先用 update_plan 写出最新的清单和验收标准，再从没做完的那步开始。")
             }
             last.error?.let { append("\n上次停下的原因：$it") }
+            // 出错的回答不会发回给模型：把它已经发出去的邮件、写过的文件这些列出来，免得接着做时再来一遍
+            append(com.jack.ai.chat.DoneSoFar.note(last.trail))
         }
         startReply(conv.id, extraUser = extra)
     }
@@ -729,9 +731,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                         val total = ev.promptTokens + ev.completionTokens
                         updateConvQuiet(convId) { it.copy(lastPromptTokens = total) }
                         val used = ev.endpoint ?: ep
-                        core.recordSpend(convId, used, ev.promptTokens, ev.cacheHit, ev.completionTokens, ev.prefix)
+                        core.recordSpend(convId, used, ev.promptTokens, ev.cacheHit, ev.completionTokens, ev.prefix, exact = ev.exactCost)
                         if (work) {
-                            val c = com.jack.ai.data.Pricing.priceAt(used, System.currentTimeMillis())
+                            val c = ev.exactCost ?: com.jack.ai.data.Pricing.priceAt(used, System.currentTimeMillis())
                                 ?.let { com.jack.ai.data.Pricing.cost(it, ev.promptTokens, ev.cacheHit ?: 0, ev.completionTokens) } ?: 0.0
                             spent += c
                             val total = spent

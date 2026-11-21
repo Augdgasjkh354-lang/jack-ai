@@ -32,4 +32,16 @@ class ImageOffloadTest {
         assertEquals(1, (msgs[0]["content"] as JsonArray).count { it.jsonObject["type"]?.jsonPrimitive?.content == "image_url" })
         assertTrue(msgs.toString().contains("shot6"))
     }
+    @Test fun generic413OnlyCountsWhenImagesDominate() {
+        val e = ApiException("Request Entity Too Large", 413)
+        val textHeavy = listOf(buildJsonObject { put("role", "tool"); put("content", "字".repeat(50_000)) }) + messages()
+        // 大头是工具结果：删图也没用，不当成图片问题
+        assertFalse(ImageOffload.rejected(e, textHeavy))
+        val imageHeavy = listOf(buildJsonObject { put("role", "user"); put("content", buildJsonArray {
+            add(buildJsonObject { put("type", "image_url"); put("image_url", buildJsonObject { put("url", "data:image/jpeg;base64," + "A".repeat(50_000)) }) })
+        }) })
+        assertTrue(ImageOffload.rejected(e, imageHeavy))
+        // 明说是图片的照旧算
+        assertTrue(ImageOffload.rejected(ApiException("image too large", 413), textHeavy))
+    }
 }

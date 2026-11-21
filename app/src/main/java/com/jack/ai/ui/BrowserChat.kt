@@ -179,7 +179,7 @@ object BrowserChat {
                     val now = System.currentTimeMillis()
                     if (now - last > 80) { last = now; val c = agent.content.toString(); patchLast { it.copy(text = c) } }
                 },
-                onUsage = { ev -> runCatching { store.addUsage(ev.endpoint ?: ep, ev.promptTokens, ev.cacheHit, ev.completionTokens) } },
+                onUsage = { ev -> runCatching { store.addUsage(ev.endpoint ?: ep, ev.promptTokens, ev.cacheHit, ev.completionTokens, exact = ev.exactCost) } },
                 images = { session.takeImages() },
             )
         } finally {

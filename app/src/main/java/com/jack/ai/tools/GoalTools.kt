@@ -22,7 +22,7 @@ internal suspend fun ToolSession.goalTool(name: String, args: JsonObject): Strin
             requireNotNull(old) { "还没有目标，请先 create_goal" }
             val status = args["status"].text().ifBlank { old.status }
             old.update(status, args["progress"].text()).let { g ->
-                if (interactive && status == "active" && old.status != "active") g.copy(autoRounds = 0) else g
+                if (interactive && status == "active" && old.status != "active") g.copy(autoRounds = 0, inRound = false) else g
             }
         }
     }

@@ -140,6 +140,9 @@ object FreePool {
                     try { siliconFreeModels() } catch (e: kotlinx.coroutines.CancellationException) { throw e }
                     catch (e: Exception) { errors += "${p.name}：${e.message ?: "价格查询失败"}"; continue }
                 } else null
+                // 没有价格页能核对哪些免费的服务（百炼）：调通了也不能算免费，只能记下「额度用完」的，一个能用的都加不进来，
+                // 却要给每个模型发一次真请求（没开「免费额度用完即停」时会扣钱）。不探
+                if (freePrices == null) continue
                 val listed = try { client.listModels(p.baseUrl, p.apiKey, p.workspaceId) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { errors += "${p.name}：${e.message ?: "获取模型列表失败"}"; null }
                 if (listed == null) { found += old.models.filter { it.providerId == p.id && it.exhaustedAt != 0L }; continue }
                 anyListed = true

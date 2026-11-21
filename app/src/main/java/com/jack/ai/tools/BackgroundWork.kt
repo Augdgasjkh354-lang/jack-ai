@@ -95,8 +95,16 @@ suspend fun runBackgroundWork(
     model: String? = null,
     /** 思路来自 deepseek-ai/deepseek-harness packages/goal/goal-round-driver/，MIT。目标续做使用同一份断点。 */
     goalId: String? = null,
+    /** 目标这次自动续做以来已经花了多少（不含这一轮）：单次上限按「目标累计 + 这一轮」算。 */
+    goalSpent: Double = 0.0,
+    /** 目标：这一轮是上次被杀、接着做的（断点里记的花费是这一轮被杀前花的，要接上）；新的一轮从 0 算。 */
+    roundResumed: Boolean = false,
     /** 拿到这次的工具会话（手机操作考试看它读到过哪些屏幕）。 */
     onSession: (ToolSession) -> Unit = {},
+    /** 这是哪一次执行（WorkManager 的任务编号）：同一次的断点隔多久都接着用，见 TaskCheckpoint.save。 */
+    runId: String? = null,
+    /** 做完不删断点，由调用方写完收件箱、通知后自己删（[TaskCheckpoint.clear]）：中间被杀，重跑时不至于从头再做一遍。 */
+    keepCheckpoint: Boolean = false,
     onProgress: (String) -> Unit = {},
 ): TaskResult {
     val startedAt = System.currentTimeMillis()
@@ -142,16 +150,19 @@ suspend fun runBackgroundWork(
     // 上次半路被打断了：从断点接着做（系统提示换成这次的，时间是新的）
     val checkpoint = TaskCheckpoint.file(ctx.filesDir, r.id)
     val cpKey = goalId ?: TaskCheckpoint.keyOf((brief ?: "") + r.prompt.ifBlank { r.title })
+    // 目标的断点按目标认（同一个目标隔几天接着做），定时任务按这一次执行认
+    val cpRun = goalId ?: runId
     var resumed = false
     var spent = 0.0
-    TaskCheckpoint.load(checkpoint, cpKey)?.let { saved ->
+    TaskCheckpoint.load(checkpoint, cpKey, run = cpRun)?.let { saved ->
         resumed = true
         val fresh = messages.first()
         messages.clear()
         messages += fresh
         messages += saved.messages.drop(1)
         messages += buildJsonObject { put("role", "user"); put("content", TaskCheckpoint.RESUME_NOTE) }
-        spent = saved.spent
+        // 目标的断点一直留着（一轮接一轮），里面的花费是上一轮存的：新的一轮从 0 算，免得每轮都把以前的再加一遍
+        spent = if (goalId == null || roundResumed) saved.spent else 0.0
         onProgress("接着上次断掉的地方做")
     }
     val files = mutableListOf<GeneratedFile>()
@@ -211,7 +222,7 @@ suspend fun runBackgroundWork(
                 if (quota != null) {
                     session.maxRounds = 0
                     com.jack.ai.data.Quota.message(quota) + "。不要再调用工具，直接写出目前的结果，并说明还差什么。"
-                } else if (limit > 0 && spent >= limit) {
+                } else if (limit > 0 && (if (goalId != null) goalSpent + spent else spent) >= limit) {
                     session.maxRounds = 0
                     "花费到了上限，不要再调用工具，直接写出目前的结果，并说明还差什么。"
                 } else if (goalId != null && (com.jack.ai.data.Goals.current(ctx, conv.id)?.let { it.id != goalId || it.status != "active" } != false ||
@@ -223,8 +234,8 @@ suspend fun runBackgroundWork(
                 else session.perform(name, args).also { log(com.jack.ai.data.RunLog.stepOf(name, it.status, it.text)) }.text + (gate?.reminder(name) ?: "")
             },
             retool = { toolsFor(session.unlocked.toSet()) },
-            onTools = { TaskCheckpoint.save(checkpoint, cpKey, messages, spent) },
-            beforeTools = { TaskCheckpoint.save(checkpoint, cpKey, messages, spent) },
+            onTools = { TaskCheckpoint.save(checkpoint, cpKey, messages, spent, run = cpRun) },
+            beforeTools = { TaskCheckpoint.save(checkpoint, cpKey, messages, spent, run = cpRun) },
             beforeFinish = gate?.let { g -> { answer -> g.beforeFinish(answer) } },
             slim = { msgs -> com.jack.ai.chat.ContextSlim.slim(msgs) },
             beforeRequest = { _, _ ->
@@ -237,13 +248,13 @@ suspend fun runBackgroundWork(
             onFinish = { final ->
                 if (goalId != null) {
                     messages += final
-                    TaskCheckpoint.save(checkpoint, cpKey, messages, spent)
+                    TaskCheckpoint.save(checkpoint, cpKey, messages, spent, run = cpRun)
                 }
             },
             onUsage = { ev ->
                 val used = ev.endpoint ?: ep
-                store.addUsage(used, ev.promptTokens, ev.cacheHit, ev.completionTokens, label = "任务「${r.title.take(12)}」")
-                spent += Pricing.priceAt(used, System.currentTimeMillis())
+                store.addUsage(used, ev.promptTokens, ev.cacheHit, ev.completionTokens, label = "任务「${r.title.take(12)}」", exact = ev.exactCost)
+                spent += ev.exactCost ?: Pricing.priceAt(used, System.currentTimeMillis())
                     ?.let { Pricing.cost(it, ev.promptTokens, ev.cacheHit ?: 0, ev.completionTokens) } ?: 0.0
             },
         )
@@ -256,7 +267,7 @@ suspend fun runBackgroundWork(
         // 占着浏览器的话放出来，聊天里等着用的回答接着用
         session.releaseBrowser()?.let { log(com.jack.ai.data.RunStep("phone-close", true, it)) }
     }
-    if ((goalId == null || com.jack.ai.data.Goals.current(ctx, conv.id)?.status == "complete")) TaskCheckpoint.clear(checkpoint)
+    if (!keepCheckpoint && (goalId == null || com.jack.ai.data.Goals.current(ctx, conv.id)?.status == "complete")) TaskCheckpoint.clear(checkpoint)
     val text = agent.lastRound.trim().ifBlank { agent.content.toString().trim() }
     return if (text.isBlank()) TaskResult("（这次没有生成内容）", files, TaskStatus.FAILED, spent) else TaskResult(text, files, spent = spent)
 }

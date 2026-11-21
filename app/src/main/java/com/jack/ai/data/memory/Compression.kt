@@ -200,6 +200,10 @@ AI 用工具实际做成的事：设了哪些提醒和日程（时间、编号�
         return if (lines.isEmpty()) body else body + "\n\n" + MEMO + "\n" + lines.joinToString("\n") { "- $it" }
     }
 
+    /** 压缩请求里文件正文最多带多少字、图片最多几张。 */
+    const val FILE_BUDGET = 120_000
+    const val IMAGE_BUDGET = 8
+
     /** 生成压缩请求。图片原样发给模型（Flash 能看图），让它写成文字描述。user：设置里的名字，提要里用名字称呼用户。 */
     fun buildRequest(prevSummary: String, msgs: List<ChatMessage>, imagesOk: Boolean, user: String = "用户"): List<JsonObject> {
         val parts = buildJsonArray {
@@ -207,14 +211,25 @@ AI 用工具实际做成的事：设了哪些提醒和日程（时间、编号�
             if (prevSummary.isNotBlank()) text("【之前的提要】\n${withoutMemo(prevSummary)}\n\n【之后的新记录】\n")
             else text("【聊天记录】\n")
             val sb = StringBuilder()
+            // 压缩请求自己也有总量上限：旧记录里文件、图片攒多了，压缩请求先超限失败，长对话就再也压不下来。
+            // 文件正文加起来最多 FILE_BUDGET 字，之后的只写名字；图片只发最近的 IMAGE_BUDGET 张，更早的写一句
+            var fileChars = 0
+            val shownImages = msgs.filter { !(it.error != null && it.content.isBlank()) }
+                .flatMap { m -> m.attachments.filter { it.kind == "image" }.map { it.path } }.takeLast(IMAGE_BUDGET).toSet()
             for (m in msgs) {
                 if (m.error != null && m.content.isBlank()) continue
                 val who = if (m.role == "user") user else "AI"
                 sb.append("\n— $who：")
                 m.attachments.filter { it.kind == "file" }.forEach { f ->
-                    sb.append("\n[文件：${f.name}]\n${f.text.take(20_000)}\n[文件结束]\n")
+                    val room = (FILE_BUDGET - fileChars).coerceAtLeast(0).coerceAtMost(20_000)
+                    if (room < 500 && f.text.isNotEmpty()) { sb.append("\n[文件：${f.name}（内容太多，这里不再附上）]\n"); return@forEach }
+                    val body = f.text.take(room)
+                    fileChars += body.length
+                    sb.append("\n[文件：${f.name}]\n$body\n[文件结束]\n")
                 }
-                val imgs = m.attachments.filter { it.kind == "image" }
+                val allImgs = m.attachments.filter { it.kind == "image" }
+                val imgs = if (imagesOk) allImgs.filter { it.path in shownImages } else allImgs
+                if (imagesOk && allImgs.size > imgs.size) sb.append("\n[$user 发了 ${allImgs.size - imgs.size} 张图片，太多了这里没附上]\n")
                 if (imgs.isNotEmpty()) {
                     if (imagesOk) {
                         sb.append("\n[$user 发了 ${imgs.size} 张图片，见下]\n")

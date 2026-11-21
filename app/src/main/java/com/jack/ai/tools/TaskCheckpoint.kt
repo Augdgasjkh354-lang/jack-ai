@@ -31,11 +31,16 @@ object TaskCheckpoint {
     /** 同一个任务、同样的指令才接着做（改过指令就从头来）。 */
     fun keyOf(prompt: String) = prompt.hashCode().toString()
 
-    fun save(f: File, key: String, messages: List<JsonObject>, spent: Double, now: Long = System.currentTimeMillis()) {
+    /**
+     * [run]：是哪一次执行（WorkManager 的任务编号，重试、进程重启都不变；目标用目标编号）。
+     * 同一次执行的断点不看新旧，隔几天也接着做；对不上的（别的一次、或没给）才按 [MAX_AGE_MS] 判断过没过期。
+     */
+    fun save(f: File, key: String, messages: List<JsonObject>, spent: Double, now: Long = System.currentTimeMillis(), run: String? = null) {
         runCatching {
             f.parentFile?.mkdirs()
             val o = buildJsonObject {
                 put("key", key); put("at", now); put("spent", spent)
+                if (run != null) put("run", run)
                 put("messages", JsonArray(messages))
             }
             val tmp = File(f.path + ".tmp")
@@ -45,13 +50,15 @@ object TaskCheckpoint {
     }
 
     /** 读断点：对不上、太旧、还没做过工具、最后一条是没执行完的工具调用，都不算。 */
-    fun load(f: File, key: String, now: Long = System.currentTimeMillis()): Saved? {
+    fun load(f: File, key: String, now: Long = System.currentTimeMillis(), run: String? = null): Saved? {
         if (!f.isFile) return null
         val o = runCatching { Json.parseToJsonElement(f.readText()).jsonObject }.getOrNull() ?: return null
         fun s(k: String) = (o[k] as? JsonPrimitive)?.content
         if (s("key") != key) return null
         val at = s("at")?.toLongOrNull() ?: return null
-        if (now - at > MAX_AGE_MS || at > now) return null
+        // 同一次执行：关机一晚、断网几天后 WorkManager 才重跑，也接着做（从头做会把发过的邮件、提交过的表再做一遍）
+        val sameRun = run != null && s("run") == run
+        if (!sameRun && (now - at > MAX_AGE_MS || at > now)) return null
         val msgs = runCatching { (o["messages"] as JsonArray).map { it.jsonObject } }.getOrNull() ?: return null
         if (msgs.none { (it["role"] as? JsonPrimitive)?.content == "tool" }) return null
         return Saved(repair(msgs), s("spent")?.toDoubleOrNull() ?: 0.0)
