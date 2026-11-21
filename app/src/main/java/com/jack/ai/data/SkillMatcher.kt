@@ -1,6 +1,7 @@
 package com.jack.ai.data
 
 import android.content.Context
+import com.jack.ai.data.memory.DeepRecall
 
 /**
  * 按意思给这句话挑技能：技能清单一长，模型容易挑错或想不起来用。每轮拿用户这句话和每个技能的「名字：简介」比一比，

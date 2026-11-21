@@ -2,10 +2,10 @@ package com.jack.ai.tools
 
 import com.jack.ai.api.EmbedUse
 import com.jack.ai.api.Embedder
-import com.jack.ai.data.Fact
-import com.jack.ai.data.FactEdit
-import com.jack.ai.data.FactSource
-import com.jack.ai.data.Facts
+import com.jack.ai.data.memory.Fact
+import com.jack.ai.data.memory.FactEdit
+import com.jack.ai.data.memory.FactSource
+import com.jack.ai.data.memory.Facts
 import com.jack.ai.data.SearchRecord
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

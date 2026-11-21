@@ -10,6 +10,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
+import com.jack.ai.data.memory.MemoryOps
+import com.jack.ai.data.memory.MemoryReset
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], application = Application::class)

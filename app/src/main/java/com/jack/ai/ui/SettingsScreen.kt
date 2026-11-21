@@ -732,8 +732,8 @@ private fun MemoryResetRow(vm: ChatViewModel) {
     var refresh by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     // 重置、恢复是在后台做的：做完记忆列表会变，跟着它重查一次
     val memories = vm.state.collectAsState().value.memories
-    val backup by androidx.compose.runtime.produceState<com.jack.ai.data.MemoryReset.Backup?>(null, refresh, memories) {
-        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.jack.ai.data.MemoryReset.latest(ctx) }
+    val backup by androidx.compose.runtime.produceState<com.jack.ai.data.memory.MemoryReset.Backup?>(null, refresh, memories) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.jack.ai.data.memory.MemoryReset.latest(ctx) }
     }
     val day = remember { java.text.SimpleDateFormat("M月d日 HH:mm", Locale.CHINA) }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -765,7 +765,7 @@ private fun MemoryResetRow(vm: ChatViewModel) {
                         androidx.compose.material3.Checkbox(withChat, { withChat = it })
                         Text("各个对话、项目里的记忆也一起清", style = MaterialTheme.typography.bodyMedium)
                     }
-                    Text("清掉的先存 ${com.jack.ai.data.MemoryReset.KEEP_DAYS} 天，这期间能在这里恢复（会换掉重置后新记下的），之后自动删掉。",
+                    Text("清掉的先存 ${com.jack.ai.data.memory.MemoryReset.KEEP_DAYS} 天，这期间能在这里恢复（会换掉重置后新记下的），之后自动删掉。",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },

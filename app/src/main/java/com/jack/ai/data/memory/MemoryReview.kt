@@ -1,4 +1,4 @@
-package com.jack.ai.data
+package com.jack.ai.data.memory
 
 import android.content.Context
 import com.jack.ai.api.DeepSeekClient
@@ -9,6 +9,19 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
+import com.jack.ai.data.ChatMessage
+import com.jack.ai.data.Conversation
+import com.jack.ai.data.INBOX_ID
+import com.jack.ai.data.MemEdit
+import com.jack.ai.data.MemoryItem
+import com.jack.ai.data.Persona
+import com.jack.ai.data.Project
+import com.jack.ai.data.Retired
+import com.jack.ai.data.Settings
+import com.jack.ai.data.Store
+import com.jack.ai.data.backgroundEndpoint
+import com.jack.ai.data.globalAllowed
+import com.jack.ai.data.workMemoryAllowed
 
 /**
  * 聊着聊着就回看一下（借鉴 Hermes Agent 每轮之后的后台复盘）：每 [EVERY] 轮，用后台模型看看刚聊的几轮，

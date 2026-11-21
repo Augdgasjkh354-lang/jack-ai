@@ -68,7 +68,7 @@ object ContextNote {
      * 返回（这次要发的文字，新的 sent）。
      */
     fun delta(note: String, sent: Map<String, String>, conv: Conversation, msgId: String): Pair<String, Map<String, String>> {
-        val live = com.jack.ai.data.Compression.liveMessages(conv)
+        val live = com.jack.ai.data.memory.Compression.liveMessages(conv)
         val pos = live.withIndex().filter { it.value.contextPrefix != null }.associate { it.value.id to it.index }
         fun stillThere(v: String, header: String): Boolean {
             val i = pos[v.substringAfter('@')] ?: return false

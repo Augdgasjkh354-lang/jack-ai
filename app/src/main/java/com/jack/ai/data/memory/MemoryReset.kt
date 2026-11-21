@@ -1,7 +1,9 @@
-package com.jack.ai.data
+package com.jack.ai.data.memory
 
 import android.content.Context
 import java.io.File
+import com.jack.ai.data.Backup
+import com.jack.ai.data.Store
 
 /**
  * 重置记忆：清掉关于用户的一切（常记、深处、作废存档、历史版本、心里挂着的事、经历流、整理记录），

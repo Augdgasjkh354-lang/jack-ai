@@ -74,7 +74,7 @@ internal suspend fun ToolSession.selfCheck(args: JsonObject): String = runTool("
             append(items.joinToString("\n") { (n, ok) -> "- $n：" + if (ok) "有" else "没有" } + "\n")
             append("（闹钟写进系统时钟，系统不给读别的闹钟详情；设完会用「下一个闹钟」核对。）\n")
 
-            com.jack.ai.data.Facts.load(ctx).let { fs ->
+            com.jack.ai.data.memory.Facts.load(ctx).let { fs ->
                 val live = fs.filter { it.status != "retired" }
                 append("【事实库】${live.size} 条（已核对 ${live.count { it.status == "verified" }}，有冲突 ${live.count { it.status == "conflict" }}）；向量检索：" +
                     com.jack.ai.api.Embedder.engines(ctx, settings).let { es ->

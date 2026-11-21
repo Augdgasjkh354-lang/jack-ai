@@ -1,7 +1,10 @@
-package com.jack.ai.data
+package com.jack.ai.data.memory
 
 import android.content.Context
 import java.io.File
+import com.jack.ai.data.Conversation
+import com.jack.ai.data.SafeFile
+import com.jack.ai.data.Workspace
 
 /**
  * 对话记忆和项目记忆：存成对话文件夹里的 Markdown 文件，每条一行「- …」。

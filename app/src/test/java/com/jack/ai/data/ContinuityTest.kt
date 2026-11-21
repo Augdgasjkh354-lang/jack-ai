@@ -7,6 +7,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.jack.ai.data.memory.MemoryOps
 
 /** 连续性：做梦的修改单（有出处、作废不删、改太多整次不做）；挂着的事（记、了结、碰、淡出）。 */
 class ContinuityTest {

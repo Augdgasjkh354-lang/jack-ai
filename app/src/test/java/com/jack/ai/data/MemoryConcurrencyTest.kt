@@ -12,6 +12,7 @@ import java.io.File
 import java.nio.file.Files
 import java.util.concurrent.CountDownLatch
 import kotlin.concurrent.thread
+import com.jack.ai.data.memory.ChatMemory
 
 /** 几个对话同时改记忆（回看、Kavi 存、用户手改）：都走「锁里读改写」，谁的都不丢。 */
 @RunWith(RobolectricTestRunner::class)

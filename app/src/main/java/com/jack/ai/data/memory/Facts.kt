@@ -1,4 +1,4 @@
-package com.jack.ai.data
+package com.jack.ai.data.memory
 
 import android.content.Context
 import com.jack.ai.api.Embedder
@@ -9,6 +9,9 @@ import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.File
 import java.io.FileOutputStream
+import com.jack.ai.data.LibraryIndex
+import com.jack.ai.data.SiteNotes
+import com.jack.ai.data.newId
 
 /** 一条事实的出处：网址、标题、什么时候读到的。 */
 @Serializable

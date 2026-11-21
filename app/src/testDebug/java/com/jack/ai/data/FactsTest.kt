@@ -15,6 +15,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.io.File
+import com.jack.ai.data.memory.Fact
+import com.jack.ai.data.memory.Facts
 
 /** 事实库：只收真读过的出处；同一条合并出处、两个网站算核对过；更正留历史；检索关键词和向量一起排；向量存取。 */
 @RunWith(RobolectricTestRunner::class)

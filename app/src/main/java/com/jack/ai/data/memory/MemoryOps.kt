@@ -1,4 +1,4 @@
-package com.jack.ai.data
+package com.jack.ai.data.memory
 
 import android.content.Context
 import kotlinx.serialization.builtins.ListSerializer
@@ -7,6 +7,14 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import java.io.File
+import com.jack.ai.data.ArchivedMemory
+import com.jack.ai.data.LibraryIndex
+import com.jack.ai.data.MemEdit
+import com.jack.ai.data.MemoryItem
+import com.jack.ai.data.Persona
+import com.jack.ai.data.SafeFile
+import com.jack.ai.data.Settings
+import com.jack.ai.data.Timeline
 
 /**
  * 做梦改记忆不再整份重写，而是提交一张修改单：一条条新增 / 修改 / 作废 / 合并 / 放到深处 / 拿回来，各带理由和出处。

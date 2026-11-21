@@ -162,7 +162,7 @@ private fun MemoryPage(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
             item {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 12.dp)) {
                     Text("关于你", style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
-                    Text("  ${state.memories.size} 条 · 约 ${com.jack.ai.data.MemoryOps.hotTokens(state.memories)}/${com.jack.ai.data.MemoryOps.HOT_BUDGET}", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium,
+                    Text("  ${state.memories.size} 条 · 约 ${com.jack.ai.data.memory.MemoryOps.hotTokens(state.memories)}/${com.jack.ai.data.memory.MemoryOps.HOT_BUDGET}", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     IconButton(onClick = { adding = true }) { Icon(Icons.Default.Add, "添加记忆") }
                     if (state.memories.isNotEmpty()) TextButton(onClick = { confirmClear = true }) { Text("清空") }
@@ -285,9 +285,9 @@ internal fun FactsCard(vm: ChatViewModel) {
     val colors = MaterialTheme.colorScheme
     var refresh by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     var showFacts by remember { mutableStateOf(false) }
-    val facts by androidx.compose.runtime.produceState(emptyList<com.jack.ai.data.Fact>(), refresh) {
+    val facts by androidx.compose.runtime.produceState(emptyList<com.jack.ai.data.memory.Fact>(), refresh) {
         value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            com.jack.ai.data.Facts.load(ctx).filter { it.status != "retired" }.sortedByDescending { it.updatedAt }
+            com.jack.ai.data.memory.Facts.load(ctx).filter { it.status != "retired" }.sortedByDescending { it.updatedAt }
         }
     }
     Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = NIGHT_CARD, contentColor = colors.onSurface)) {
@@ -305,7 +305,7 @@ internal fun FactsCard(vm: ChatViewModel) {
                         Text(f.text, style = MaterialTheme.typography.bodyMedium)
                         val state = when (f.status) { "verified" -> "已核对"; "conflict" -> "有冲突"; else -> "单一来源" } +
                             (if (f.expiresAt in 1 until System.currentTimeMillis()) " · 可能过时" else "")
-                        Text(state + " · " + f.sources.map { com.jack.ai.data.Facts.host(it.url) }.distinct().take(3).joinToString("、") +
+                        Text(state + " · " + f.sources.map { com.jack.ai.data.memory.Facts.host(it.url) }.distinct().take(3).joinToString("、") +
                             (if (f.topic.isNotBlank()) " · ${f.topic}" else ""),
                             style = MaterialTheme.typography.labelSmall,
                             color = if (f.status == "conflict") colors.error else colors.onSurfaceVariant)
@@ -330,7 +330,7 @@ internal fun DeepMemories(vm: ChatViewModel, hot: List<com.jack.ai.data.MemoryIt
     var rev by remember { mutableStateOf(0) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val deep by androidx.compose.runtime.produceState(emptyList<com.jack.ai.data.MemoryItem>(), hot, rev) {
-        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.jack.ai.data.MemoryOps.deep(ctx) }
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.jack.ai.data.memory.MemoryOps.deep(ctx) }
     }
     if (deep.isEmpty()) return
     Column(Modifier.padding(top = 8.dp)) {
@@ -349,7 +349,7 @@ internal fun DeepMemories(vm: ChatViewModel, hot: List<com.jack.ai.data.MemoryIt
                     }
                     TextButton(onClick = { vm.promoteMemory(m.id) }) { Text("放回常记") }
                     IconButton(onClick = {
-                        scope.launch(kotlinx.coroutines.Dispatchers.IO) { com.jack.ai.data.MemoryOps.saveDeep(ctx, com.jack.ai.data.MemoryOps.deep(ctx).filterNot { it.id == m.id }); rev++ }
+                        scope.launch(kotlinx.coroutines.Dispatchers.IO) { com.jack.ai.data.memory.MemoryOps.saveDeep(ctx, com.jack.ai.data.memory.MemoryOps.deep(ctx).filterNot { it.id == m.id }); rev++ }
                     }, modifier = Modifier.size(36.dp)) {
                         Icon(Icons.Default.Delete, "删除", Modifier.size(17.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }

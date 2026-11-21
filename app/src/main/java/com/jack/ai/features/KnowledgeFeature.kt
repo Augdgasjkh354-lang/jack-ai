@@ -16,6 +16,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
+import com.jack.ai.data.memory.ChatMemory
+import com.jack.ai.data.memory.MemoryOps
+import com.jack.ai.data.memory.MemoryReset
 
 /** 资料库、复习卡片、记忆和梦。 */
 class KnowledgeFeature(core: AppCore) : Feature(core) {
@@ -225,20 +228,20 @@ class KnowledgeFeature(core: AppCore) : Feature(core) {
     fun deleteMemory(id: String) = editMemories { l -> l.filterNot { it.id == id } }
     fun clearMemories() = editMemories { emptyList() }
 
-    /** 重置记忆（见 [com.jack.ai.data.MemoryReset]）：清完重新读，界面跟着变空。 */
+    /** 重置记忆（见 [com.jack.ai.data.memory.MemoryReset]）：清完重新读，界面跟着变空。 */
     fun resetMemory(withChatFiles: Boolean) {
         scope.launch(ioSerial) {
-            com.jack.ai.data.MemoryReset.reset(app, store, withChatFiles)
-            state.update { it.copy(memories = store.loadMemories(), dreams = store.loadDreams(), toast = "记忆已重置。${com.jack.ai.data.MemoryReset.KEEP_DAYS} 天内可以在这里恢复") }
+            com.jack.ai.data.memory.MemoryReset.reset(app, store, withChatFiles)
+            state.update { it.copy(memories = store.loadMemories(), dreams = store.loadDreams(), toast = "记忆已重置。${com.jack.ai.data.memory.MemoryReset.KEEP_DAYS} 天内可以在这里恢复") }
         }
     }
 
     /** 恢复重置前的那份。 */
     fun restoreMemory() {
         scope.launch(ioSerial) {
-            val b = com.jack.ai.data.MemoryReset.latest(app)
-            if (b == null) { state.update { it.copy(toast = "没有能恢复的记忆了（超过 ${com.jack.ai.data.MemoryReset.KEEP_DAYS} 天会自动删掉）") }; return@launch }
-            com.jack.ai.data.MemoryReset.restore(app, store, b)
+            val b = com.jack.ai.data.memory.MemoryReset.latest(app)
+            if (b == null) { state.update { it.copy(toast = "没有能恢复的记忆了（超过 ${com.jack.ai.data.memory.MemoryReset.KEEP_DAYS} 天会自动删掉）") }; return@launch }
+            com.jack.ai.data.memory.MemoryReset.restore(app, store, b)
             state.update { it.copy(memories = store.loadMemories(), dreams = store.loadDreams(), toast = "已恢复重置前的记忆") }
         }
     }

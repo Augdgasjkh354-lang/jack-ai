@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
+import com.jack.ai.data.memory.Compression
 
 /** 长对话压缩成前情提要。 */
 class CompressFeature(core: AppCore) : Feature(core) {

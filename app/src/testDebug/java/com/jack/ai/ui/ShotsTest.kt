@@ -156,10 +156,10 @@ class ShotsTest {
         Assume.assumeTrue(System.getenv("SHOTS_DIR") != null)
         val app = RuntimeEnvironment.getApplication() as Application
         val now = System.currentTimeMillis()
-        com.jack.ai.data.Facts.save(app, listOf(
-            com.jack.ai.data.Fact(text = "珠穆朗玛峰海拔 8848.86 米（2020 年中尼联合测量）", topic = "地理", status = "verified",
-                sources = listOf(com.jack.ai.data.FactSource("https://www.gov.cn/x"), com.jack.ai.data.FactSource("https://en.wikipedia.org/wiki/Mount_Everest"))),
-            com.jack.ai.data.Fact(text = "某物流美国专线标准时效 7 到 12 个工作日", topic = "物流", sources = listOf(com.jack.ai.data.FactSource("https://example-logistics.com/us"))),
+        com.jack.ai.data.memory.Facts.save(app, listOf(
+            com.jack.ai.data.memory.Fact(text = "珠穆朗玛峰海拔 8848.86 米（2020 年中尼联合测量）", topic = "地理", status = "verified",
+                sources = listOf(com.jack.ai.data.memory.FactSource("https://www.gov.cn/x"), com.jack.ai.data.memory.FactSource("https://en.wikipedia.org/wiki/Mount_Everest"))),
+            com.jack.ai.data.memory.Fact(text = "某物流美国专线标准时效 7 到 12 个工作日", topic = "物流", sources = listOf(com.jack.ai.data.memory.FactSource("https://example-logistics.com/us"))),
         ))
         val vm = vm(emptyList())
         rule.mainClock.autoAdvance = false

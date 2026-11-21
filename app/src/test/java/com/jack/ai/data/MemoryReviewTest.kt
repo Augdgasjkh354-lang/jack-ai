@@ -4,6 +4,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.jack.ai.data.memory.MemoryOps
+import com.jack.ai.data.memory.MemoryReview
 
 class MemoryReviewTest {
     private fun msg(role: String, at: Long, text: String = "话") = ChatMessage(role = role, content = text, createdAt = at)

@@ -124,7 +124,7 @@ suspend fun runBackgroundWork(
     val memories = if (s.memoryEnabled && conv.globalAllowed(project)) store.loadMemories() else emptyList()
     val now = SimpleDateFormat("yyyy-MM-dd EEEE HH:mm", Locale.ENGLISH).format(Date())
     val system = PromptBuilder.systemPrompt(s, conv, project, tools, memories, skills,
-        workMemory = if (conv.workMemoryAllowed(project)) com.jack.ai.data.ChatMemory.read(com.jack.ai.data.ChatMemory.workFile(ctx)) else "") +
+        workMemory = if (conv.workMemoryAllowed(project)) com.jack.ai.data.memory.ChatMemory.read(com.jack.ai.data.memory.ChatMemory.workFile(ctx)) else "") +
         "\n\n" + com.jack.ai.data.Persona.fill(
             (brief ?: "【Background scheduled task】It is now $now. You're running a scheduled task {user} set up in advance: 「${r.title}」. {User} isn't online and can't be asked anything, so just get it done. ") +
                 (if (s.fullAuth) "{User} has turned on full authorization: actions like sending email or deleting run without a confirmation prompt. Do only what the task explicitly asks for, and nothing you're unsure about. "

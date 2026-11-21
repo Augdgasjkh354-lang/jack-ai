@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.jack.ai.data.memory.MemoryOps
 
 /** 记忆自更迭：放到深处、拿回来、合并，用到的记下来，深处的聊到相关的浮上来。 */
 class MemoryEvolutionTest {

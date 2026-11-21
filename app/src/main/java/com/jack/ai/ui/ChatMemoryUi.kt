@@ -28,7 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.jack.ai.ChatViewModel
-import com.jack.ai.data.ChatMemory
+import com.jack.ai.data.memory.ChatMemory
 import com.jack.ai.data.Conversation
 
 /** 记忆条目列表：每条可以删，传了 onMoveUp 时还能挪到全局；底下可以加一条。 */

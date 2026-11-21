@@ -1,9 +1,9 @@
 package com.jack.ai.chat
 
 import com.jack.ai.data.Attachments
-import com.jack.ai.data.ChatMemory
+import com.jack.ai.data.memory.ChatMemory
 import com.jack.ai.data.ChatMessage
-import com.jack.ai.data.Compression
+import com.jack.ai.data.memory.Compression
 import com.jack.ai.data.Conversation
 import com.jack.ai.data.MemoryItem
 import com.jack.ai.data.MailAccount
@@ -243,7 +243,7 @@ object PromptBuilder {
 
     /** 提要盖住了哪一段：几条消息、从哪天到哪天。 */
     fun compressedScope(conv: Conversation): String {
-        val old = com.jack.ai.data.Compression.compressedMessages(conv)
+        val old = com.jack.ai.data.memory.Compression.compressedMessages(conv)
         if (old.isEmpty()) return ""
         val f = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.ENGLISH)
         return "This summarizes the earlier ${old.size} messages of this conversation (${f.format(java.util.Date(old.first().createdAt))} to ${f.format(java.util.Date(old.last().createdAt))}); " +
@@ -431,11 +431,11 @@ object PromptBuilder {
     ): List<Pair<String, String>> {
         val parts = mutableListOf<Pair<String, String>>()
         if (globalOn && memories.isNotEmpty()) {
-            parts += "长期记忆" to f("【Long-term memories about {user}】(~${com.jack.ai.data.MemoryOps.hotTokens(memories)} of ${com.jack.ai.data.MemoryOps.HOT_BUDGET} tokens)\nThings you remembered about {user} earlier. Use them naturally; don't make a point of saying \"I remember\".\n") +
+            parts += "长期记忆" to f("【Long-term memories about {user}】(~${com.jack.ai.data.memory.MemoryOps.hotTokens(memories)} of ${com.jack.ai.data.memory.MemoryOps.HOT_BUDGET} tokens)\nThings you remembered about {user} earlier. Use them naturally; don't make a point of saying \"I remember\".\n") +
                 memories.joinToString("\n") { "- ${it.text}" }
         }
         if (settings.memoryEnabled && conv.workMemoryAllowed(project) && workMemory.isNotBlank()) {
-            parts += "工作记忆" to f("【Lessons from past tasks】(shared by every conversation; ~${com.jack.ai.data.MemoryOps.tokensOf(ChatMemory.items(workMemory))} of ${com.jack.ai.data.MemoryOps.FILE_BUDGET} tokens)\n") + workMemory.trim()
+            parts += "工作记忆" to f("【Lessons from past tasks】(shared by every conversation; ~${com.jack.ai.data.memory.MemoryOps.tokensOf(ChatMemory.items(workMemory))} of ${com.jack.ai.data.memory.MemoryOps.FILE_BUDGET} tokens)\n") + workMemory.trim()
         }
         return parts
     }

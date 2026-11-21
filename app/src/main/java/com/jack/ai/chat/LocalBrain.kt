@@ -3,8 +3,8 @@ package com.jack.ai.chat
 import android.content.Context
 import com.jack.ai.api.Embedder
 import com.jack.ai.api.LocalEmbed
-import com.jack.ai.data.DeepRecall
-import com.jack.ai.data.Facts
+import com.jack.ai.data.memory.DeepRecall
+import com.jack.ai.data.memory.Facts
 import com.jack.ai.data.Settings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

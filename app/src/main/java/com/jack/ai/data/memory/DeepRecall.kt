@@ -1,4 +1,4 @@
-package com.jack.ai.data
+package com.jack.ai.data.memory
 
 import android.content.Context
 import com.jack.ai.api.EmbedUse
@@ -8,6 +8,8 @@ import kotlinx.coroutines.withContext
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.File
+import com.jack.ai.data.Persona
+import com.jack.ai.data.Settings
 
 /**
  * 每轮从深处想起来：关于用户的深处记忆、自己的深处经历，和这句话相关的浮上来。

@@ -30,6 +30,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import com.jack.ai.data.memory.Recap
 
 /** Kavi 主动找用户的一次判断：说了（sent）还是忍住了，说了什么、为什么；用户点了「有用」或「别为这种事找我」。 */
 @Serializable

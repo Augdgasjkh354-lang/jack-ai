@@ -132,7 +132,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             core.toast("上次录音被系统打断了，救回了 ${if (mins > 0) "$mins 分钟" else "录到的部分"}，已放进输入框，发出去就整理成纪要")
         }
         com.jack.ai.data.Retired.cleanup(app)
-        viewModelScope.launch(Dispatchers.IO) { com.jack.ai.data.MemoryReset.expire(app) }
+        viewModelScope.launch(Dispatchers.IO) { com.jack.ai.data.memory.MemoryReset.expire(app) }
         // 桌面图标和设置对不上（比如从备份恢复了别的选择）：照设置改过来
         runCatching { com.jack.ai.ui.AppIcon.ensure(app, _state.value.settings.appIcon) }
         com.jack.ai.data.Proactive.schedule(app, _state.value.settings.proactive)
@@ -741,7 +741,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             }
             // DeepSeek 看图：图片先传一次，之后只发编号；传不上的照旧内联
             if (ep.deepseek && images) {
-                val paths = com.jack.ai.data.Compression.liveMessages(conv).flatMap { m -> m.attachments.filter { it.kind == "image" }.map { it.path } }
+                val paths = com.jack.ai.data.memory.Compression.liveMessages(conv).flatMap { m -> m.attachments.filter { it.kind == "image" }.map { it.path } }
                 if (paths.isNotEmpty()) promptInput = promptInput.copy(fileIds = runCatching { dsFiles.ensure(ep, paths) }.getOrDefault(emptyMap()))
             }
             viewModelScope.launch(Dispatchers.IO) {
@@ -765,7 +765,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     // Kavi 的连续性：最近的经历、上次见用户是什么时候（每轮变，放这里不影响缓存）
                     runCatching { com.jack.ai.data.Timeline.noteFor(getApplication(), settings, _state.value.conversations, _state.value.projects, conv) }.getOrDefault("") +
                     // 深处的记忆：和这句话相关的浮上来（不常用的不再每轮都带着）
-                    (if (conv.globalAllowed(project)) runCatching { com.jack.ai.data.DeepRecall.note(getApplication(), settings, lastUser?.content.orEmpty()) }.getOrDefault("") else "") +
+                    (if (conv.globalAllowed(project)) runCatching { com.jack.ai.data.memory.DeepRecall.note(getApplication(), settings, lastUser?.content.orEmpty()) }.getOrDefault("") else "") +
                     // 按意思推荐一两个技能（技能多了模型容易挑错）
                     runCatching { com.jack.ai.data.SkillMatcher.note(getApplication(), settings, lastUser?.content.orEmpty(), skills) }.getOrDefault("")
             })
@@ -1114,19 +1114,19 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private fun maybeReviewMemory(convId: String) {
         val st = _state.value
         val conv = st.conversations.firstOrNull { it.id == convId } ?: return
-        if (!com.jack.ai.data.MemoryReview.due(conv)) return
+        if (!com.jack.ai.data.memory.MemoryReview.due(conv)) return
         if (!reviewing.add(convId)) return
         val app = getApplication<Application>()
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val result = com.jack.ai.data.MemoryReview.review(
+                val result = com.jack.ai.data.memory.MemoryReview.review(
                     app, store, conv, st.project(conv.projectId), st.settings, client,
                 ) ?: return@launch
                 result.memories?.let { next -> _state.update { it.copy(memories = next) } }
                 if (result.done.isNotEmpty()) {
                     val lastAnswer = conv.messages.lastOrNull { it.role == "assistant" }?.id
                     if (lastAnswer != null) patchMessage(convId, lastAnswer) {
-                        it.copy(notices = it.notices + com.jack.ai.data.MemoryReview.notice(result.done, result.work))
+                        it.copy(notices = it.notices + com.jack.ai.data.memory.MemoryReview.notice(result.done, result.work))
                     }
                 }
                 updateConvQuiet(convId) { it.copy(memReviewedAt = result.reviewedAt) }
@@ -1333,8 +1333,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteFact(id: String) {
         viewModelScope.launch(Dispatchers.IO) {
             val app = getApplication<android.app.Application>()
-            com.jack.ai.data.Facts.save(app, com.jack.ai.data.Facts.load(app).filterNot { it.id == id })
-            com.jack.ai.data.Facts.removeVector(app, id)
+            com.jack.ai.data.memory.Facts.save(app, com.jack.ai.data.memory.Facts.load(app).filterNot { it.id == id })
+            com.jack.ai.data.memory.Facts.removeVector(app, id)
         }
     }
 

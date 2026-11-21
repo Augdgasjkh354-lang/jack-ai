@@ -4,6 +4,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.jack.ai.data.memory.MemoryOps
 
 class MemoryFullTest {
     private val big = List(10) { "第${it}条：" + "记".repeat(40) }

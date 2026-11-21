@@ -1,8 +1,11 @@
-package com.jack.ai.data
+package com.jack.ai.data.memory
 
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.jack.ai.data.Conversation
+import com.jack.ai.data.Project
+import com.jack.ai.data.globalAllowed
 
 /**
  * 新对话开场时记下「最近几场对话」：标题、时间、最后聊到哪（用户最后说了什么、你最后答了什么）。

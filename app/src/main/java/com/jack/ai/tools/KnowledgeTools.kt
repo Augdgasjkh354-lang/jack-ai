@@ -13,6 +13,9 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.jack.ai.data.memory.ChatMemory
+import com.jack.ai.data.memory.Compression
+import com.jack.ai.data.memory.MemoryOps
 
 /** 知识类工具：旧记录、聊天记录、资料库、项目资料、记忆、复习卡片、技能说明。 */
 
@@ -131,11 +134,11 @@ internal suspend fun ToolSession.remember(args: JsonObject): String {
                     // 放到深处：常记里拿掉，深处留着，聊到相关的会浮上来
                     val rest = host.store.updateMemories { list ->
                         val keep = ChatMemory.replace(list.map { it.text }, old, "")
-                        com.jack.ai.data.MemoryOps.saveDeep(app, com.jack.ai.data.MemoryOps.deep(app) + list.filter { it.text !in keep })
+                        com.jack.ai.data.memory.MemoryOps.saveDeep(app, com.jack.ai.data.memory.MemoryOps.deep(app) + list.filter { it.text !in keep })
                         list.filter { it.text in keep }
                     }
                     host.setMemories(rest)
-                    return@withContext "已放到深处（常记现在约 ${com.jack.ai.data.MemoryOps.hotTokens(rest)} / ${com.jack.ai.data.MemoryOps.HOT_BUDGET}）。"
+                    return@withContext "已放到深处（常记现在约 ${com.jack.ai.data.memory.MemoryOps.hotTokens(rest)} / ${com.jack.ai.data.memory.MemoryOps.HOT_BUDGET}）。"
                 }
                 var dup = false
                 val updated = host.store.updateMemories { list ->
@@ -146,7 +149,7 @@ internal suspend fun ToolSession.remember(args: JsonObject): String {
                         val byText = list.associateBy { it.text }
                         texts.map { byText[it] ?: MemoryItem(text = it) }
                     }
-                    com.jack.ai.data.MemoryOps.fullNote(list.map { it.text }, next.map { it.text }, com.jack.ai.data.MemoryOps.HOT_BUDGET, where, canDeep = true)
+                    com.jack.ai.data.memory.MemoryOps.fullNote(list.map { it.text }, next.map { it.text }, com.jack.ai.data.memory.MemoryOps.HOT_BUDGET, where, canDeep = true)
                         ?.let { throw IllegalArgumentException(it) }
                     next
                 }
@@ -162,7 +165,7 @@ internal suspend fun ToolSession.remember(args: JsonObject): String {
                 }
                 ChatMemory.update(file) { before ->
                     val after = if (old.isEmpty()) (if (text in before) before else before + text) else ChatMemory.replace(before, old, text)
-                    com.jack.ai.data.MemoryOps.fullNote(before, after, com.jack.ai.data.MemoryOps.FILE_BUDGET, where)?.let { throw IllegalArgumentException(it) }
+                    com.jack.ai.data.memory.MemoryOps.fullNote(before, after, com.jack.ai.data.memory.MemoryOps.FILE_BUDGET, where)?.let { throw IllegalArgumentException(it) }
                     after.takeIf { it != before }
                 }
                 null

@@ -5,6 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.jack.ai.data.memory.Facts
 
 class KnowledgeBaseTest {
     private fun f(path: String, sha: String = "s", size: Long = 100) = KbRepo.File(path, sha, size)

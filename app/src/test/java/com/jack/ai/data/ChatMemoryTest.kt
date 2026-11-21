@@ -6,6 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 import java.nio.file.Files
+import com.jack.ai.data.memory.ChatMemory
 
 class ChatMemoryTest {
     private val dir: File = Files.createTempDirectory("mem").toFile()

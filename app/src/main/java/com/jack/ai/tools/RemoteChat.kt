@@ -92,7 +92,7 @@ object RemoteChat {
         val thinkingOn = ep.deepseek && thinking.effort != null
         val memories = if (s.memoryEnabled && conv.globalAllowed(project)) store.loadMemories() else emptyList()
         val note = runCatching { ContextNote.build(ctx, store, conv, skills.map { it.id }.toSet()) }.getOrDefault("") +
-            (if (s.memoryEnabled) runCatching { com.jack.ai.data.DeepRecall.note(ctx, s, m.text) }.getOrDefault("") else "") +
+            (if (s.memoryEnabled) runCatching { com.jack.ai.data.memory.DeepRecall.note(ctx, s, m.text) }.getOrDefault("") else "") +
             "【Remote】{user} is asking from another device (iPhone or computer) through the Kavi remote site, not on this phone. " +
             "Files you create are sent to that device. Anything that needs confirmation is asked on that device." +
             (if (s.remotePhone) "" else " Operating other apps on the phone is turned off for remote use.") + "\n"

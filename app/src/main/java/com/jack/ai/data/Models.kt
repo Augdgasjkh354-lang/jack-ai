@@ -3,6 +3,8 @@ package com.jack.ai.data
 import kotlinx.serialization.Serializable
 import com.wangzan101.mika.core.cap.phone.OperatingPace
 import java.util.UUID
+import com.jack.ai.data.memory.ChatMemory
+import com.jack.ai.data.memory.MemoryReview
 
 fun newId(): String = UUID.randomUUID().toString()
 

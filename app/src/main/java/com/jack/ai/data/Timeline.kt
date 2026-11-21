@@ -20,6 +20,8 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import java.io.File
 import java.util.concurrent.TimeUnit
+import com.jack.ai.data.memory.MemoryOps
+import com.jack.ai.data.memory.Recap
 
 /**
  * 一段经历：什么时候、在哪（chat 聊天 / free 自由时间 / dream 做梦 / proactive 主动找用户）、哪个对话、发生了什么、用户当时怎么样。

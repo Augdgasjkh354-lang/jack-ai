@@ -7,6 +7,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.jack.ai.data.memory.Compression
 
 /** 压缩时具体的数字、日期、约定和工具做成的事不能丢。 */
 class CompressionMemoTest {

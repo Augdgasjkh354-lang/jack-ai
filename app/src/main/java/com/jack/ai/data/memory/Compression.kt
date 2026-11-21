@@ -1,9 +1,14 @@
-package com.jack.ai.data
+package com.jack.ai.data.memory
 
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import com.jack.ai.data.Attachments
+import com.jack.ai.data.ChatMessage
+import com.jack.ai.data.Conversation
+import com.jack.ai.data.Notion
+import com.jack.ai.data.Redact
 
 /**
  * 上下文压缩。做法参考 DeepSeek 官方 deepseek-harness 的 compaction-basic：

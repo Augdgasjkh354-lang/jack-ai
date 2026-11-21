@@ -13,6 +13,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
+import com.jack.ai.data.memory.Facts
 
 /**
  * 资料库（含各个知识库）和项目资料的段落向量，让检索能按意思找，不只认关键词。
