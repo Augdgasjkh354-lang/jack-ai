@@ -10,8 +10,6 @@ import java.util.zip.ZipOutputStream
  */
 object OfficeWriter {
 
-    private const val FONT = "微软雅黑"
-
     internal fun escXml(s: String): String = esc(s)
 
     private fun esc(s: String): String = buildString(s.length) {

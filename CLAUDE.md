@@ -34,6 +34,7 @@
 ## 代码
 
 - 包结构：`api/`（模型和网络客户端）、`chat/`（Agent、提示词）、`tools/`（工具执行）、`data/`（存储、记忆、各种服务）、`features/`、`ui/`。
+  `data/` 按领域分了子包：`design/`、`office/`、`media/`、`memory/`、`browser/`、`integrations/`、`phone/`，新文件放进对应的子包；存储、模型、设置这些通用的留在 `data/` 根上。WorkManager 的 Worker 类别换包（手机上排好的任务按类全名存着）。见 `docs/架构优化.md`。
 - 注释、界面文字都是中文，跟周围代码的风格保持一致。
 - 单测在 `app/src/test`（纯逻辑和 Robolectric），界面测试在 `app/src/testDebug`。
 

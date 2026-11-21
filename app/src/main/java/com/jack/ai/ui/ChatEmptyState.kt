@@ -214,39 +214,3 @@ private fun SuggestionRow(icon: ImageVector, tint: Color, title: String, onClick
     }
 }
 
-/** 圆角小按钮：选中时浅陶土底色，没选中时只有细边框。 */
-@Composable
-private fun Pill(
-    label: String,
-    active: Boolean,
-    icon: ImageVector? = null,
-    dropdown: Boolean = false,
-    onClick: () -> Unit,
-) {
-    val colors = MaterialTheme.colorScheme
-    val haptics = rememberHaptics()
-    // 开关时底色、字色、边框渐变过去
-    val spec = androidx.compose.animation.core.tween<Color>(Motion.NORMAL)
-    val fill by androidx.compose.animation.animateColorAsState(if (active) colors.primaryContainer else colors.primaryContainer.copy(alpha = 0f), spec, label = "pill")
-    val ink by androidx.compose.animation.animateColorAsState(if (active) colors.onPrimaryContainer else colors.onSurfaceVariant, spec, label = "pillInk")
-    val edge by androidx.compose.animation.animateColorAsState(if (active) colors.outlineVariant.copy(alpha = 0f) else colors.outlineVariant, spec, label = "pillEdge")
-    Surface(
-        onClick = { haptics.tick(); onClick() },
-        shape = CircleShape,
-        color = fill,
-        contentColor = ink,
-        border = BorderStroke(1.dp, edge),
-    ) {
-        Row(
-            Modifier.padding(start = if (icon != null) 10.dp else 14.dp, end = if (dropdown) 6.dp else 14.dp, top = 7.dp, bottom = 7.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (icon != null) {
-                Icon(icon, null, Modifier.size(16.dp))
-                Spacer(Modifier.size(5.dp))
-            }
-            Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1)
-            if (dropdown) Icon(Icons.Default.KeyboardArrowDown, null, Modifier.size(16.dp))
-        }
-    }
-}

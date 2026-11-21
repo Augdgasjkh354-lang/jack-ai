@@ -251,7 +251,6 @@ private fun MemoryPage(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
 private val NIGHT_CARD = androidx.compose.ui.graphics.Color(0xB3182046)
 
 private val dreamDate = SimpleDateFormat("M月d日 EEEE", Locale.CHINA)
-private val dreamDay = SimpleDateFormat("M月d日", Locale.CHINA)
 
 @Composable
 fun DreamCard(d: DreamEntry, onDelete: () -> Unit) {
