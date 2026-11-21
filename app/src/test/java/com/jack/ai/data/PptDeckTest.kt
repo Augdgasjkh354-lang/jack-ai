@@ -9,6 +9,10 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.zip.ZipInputStream
 import javax.xml.parsers.DocumentBuilderFactory
+import com.jack.ai.data.office.OfficeWriter
+import com.jack.ai.data.office.PptChart
+import com.jack.ai.data.office.PptDeck
+import com.jack.ai.data.office.PptStyle
 
 /**
  * 新版 PPT：每种版式都能画、每页 XML 合法，转场和动画写进去了，图标是矢量的，字多了有提醒。

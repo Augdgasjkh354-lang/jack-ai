@@ -16,6 +16,13 @@ import java.util.Locale
 import com.jack.ai.data.design.Diagram
 import com.jack.ai.data.design.DiagramWriter
 import com.jack.ai.data.design.StyleTemplates
+import com.jack.ai.data.office.ChartWriter
+import com.jack.ai.data.office.OfficeWriter
+import com.jack.ai.data.office.PdfWriter
+import com.jack.ai.data.office.PptChart
+import com.jack.ai.data.office.PptStyle
+import com.jack.ai.data.office.WordDoc
+import com.jack.ai.data.office.XlsxBook
 
 /** 按工具名和参数把文件真正画出来/写出来（FileTools 用）。 */
 

@@ -12,6 +12,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import com.jack.ai.data.design.StyleTemplates
+import com.jack.ai.data.office.PptDeck
 
 /** 我的模板：补设置不覆盖这次写的、默认模板只在新生成时记进底稿、同类只有一个默认。 */
 class StyleTemplatesTest {

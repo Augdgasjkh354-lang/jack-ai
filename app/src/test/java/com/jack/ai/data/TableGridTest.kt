@@ -2,6 +2,7 @@ package com.jack.ai.data
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import com.jack.ai.data.office.TableGrid
 
 /** 照片里的表格排回行列：一行里隔得远的拆开、缺的格子留空、歪一点也认得出同一行。 */
 class TableGridTest {

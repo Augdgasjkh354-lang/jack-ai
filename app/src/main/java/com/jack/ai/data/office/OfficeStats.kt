@@ -1,10 +1,11 @@
-package com.jack.ai.data
+package com.jack.ai.data.office
 
 import android.content.Context
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import java.io.File
+import com.jack.ai.data.SafeFile
 
 /**
  * Word、PPT、Excel 的一次做对率：每生成一份记一笔，同一次回答里 Kavi 自己返工（看了截图、按排版提醒改）也记一笔，

@@ -1,4 +1,4 @@
-package com.jack.ai.data
+package com.jack.ai.data.office
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray

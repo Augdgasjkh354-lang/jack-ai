@@ -5,7 +5,7 @@ import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
 import com.jack.ai.data.SearchRecord
-import com.jack.ai.data.TableGrid
+import com.jack.ai.data.office.TableGrid
 import com.jack.ai.data.Workspace
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine

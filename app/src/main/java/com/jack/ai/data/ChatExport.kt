@@ -21,6 +21,7 @@ import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.jack.ai.data.office.PdfWriter
 
 /** 把一个对话导出成 Markdown、PDF 或一张长图，用来分享。 */
 object ChatExport {

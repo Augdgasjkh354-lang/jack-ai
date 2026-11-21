@@ -1,4 +1,4 @@
-package com.jack.ai.data
+package com.jack.ai.data.office
 
 import android.graphics.Bitmap
 import android.graphics.Canvas

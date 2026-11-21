@@ -3,6 +3,7 @@ package com.jack.ai.data
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.jack.ai.data.office.OfficeStats
 
 /** 操作其他 App 的成功率、Office 一次做对率的算法。 */
 class MeasuredStatsTest {

@@ -8,7 +8,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import java.io.File
-import com.jack.ai.data.PptDeck
+import com.jack.ai.data.office.PptDeck
 import com.jack.ai.data.SafeFile
 import com.jack.ai.data.describe
 

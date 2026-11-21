@@ -8,6 +8,8 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.zip.ZipInputStream
 import javax.xml.parsers.DocumentBuilderFactory
+import com.jack.ai.data.office.OfficeWriter
+import com.jack.ai.data.office.WordDoc
 
 /** 新版 Word：封面、目录、标题编号、页眉页脚、表格；每个部件 XML 合法，旧的读文字、改文字照样能用。 */
 class WordDocTest {

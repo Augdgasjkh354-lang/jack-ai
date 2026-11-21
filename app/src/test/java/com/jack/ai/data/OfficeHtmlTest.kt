@@ -6,6 +6,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import com.jack.ai.data.office.OfficeHtml
+import com.jack.ai.data.office.OfficeWriter
 
 /** Word、Excel、PPT 转网页：拿 App 自己生成的文件转一遍，标题、列表、表格、每张表、每页都要在，特殊字符要转义。 */
 class OfficeHtmlTest {

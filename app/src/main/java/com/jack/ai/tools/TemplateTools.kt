@@ -1,6 +1,6 @@
 package com.jack.ai.tools
 
-import com.jack.ai.data.PptStyle
+import com.jack.ai.data.office.PptStyle
 import com.jack.ai.data.SearchRecord
 import com.jack.ai.data.design.StyleTemplates
 import com.jack.ai.data.Workspace

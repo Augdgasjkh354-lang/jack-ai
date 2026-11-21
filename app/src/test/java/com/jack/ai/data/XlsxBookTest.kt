@@ -8,6 +8,8 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.zip.ZipInputStream
 import javax.xml.parsers.DocumentBuilderFactory
+import com.jack.ai.data.office.OfficeWriter
+import com.jack.ai.data.office.XlsxBook
 
 /** 新版 Excel：数字格式认得对、合计行、条件格式、图表指着格子，XML 都合法。 */
 class XlsxBookTest {

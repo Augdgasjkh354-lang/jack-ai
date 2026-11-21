@@ -106,7 +106,7 @@ internal fun ElementsPanel(editor: WebView?, onAdd: (JsonObject) -> Unit, onClos
             2 -> {
                 val cells by produceState(emptyList<Cell>(), query) {
                     value = withContext(Dispatchers.Default) {
-                        DesignElements.searchIcons(com.jack.ai.data.PptDeck.ICONS.keys, query).mapNotNull { n -> DesignElements.iconSvg(n)?.let { Cell(n, n, it, 1f) } }
+                        DesignElements.searchIcons(com.jack.ai.data.office.PptDeck.ICONS.keys, query).mapNotNull { n -> DesignElements.iconSvg(n)?.let { Cell(n, n, it, 1f) } }
                     }
                 }
                 Grid(vars, cells) { name ->

@@ -2,6 +2,7 @@ package com.jack.ai.data
 
 import org.junit.Test
 import java.io.File
+import com.jack.ai.data.office.OfficeWriter
 
 /** 生成样例文件，CI 里用 python-docx / python-pptx / openpyxl 再检查一遍能不能打开。 */
 class OfficeWriterTest {

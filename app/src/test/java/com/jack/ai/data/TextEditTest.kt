@@ -6,6 +6,7 @@ import org.junit.Assert.fail
 import org.junit.Test
 import java.io.ByteArrayOutputStream
 import java.util.zip.ZipInputStream
+import com.jack.ai.data.office.OfficeWriter
 
 class TextEditTest {
     @Test
