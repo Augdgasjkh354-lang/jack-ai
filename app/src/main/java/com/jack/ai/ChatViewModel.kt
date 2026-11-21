@@ -693,7 +693,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             var failure: Exception? = null
             try {
                 // 拼历史要读图、转码，放到后台线程，免得界面卡
-                val history = withContext(Dispatchers.Default) { buildHistory(toolSet != null) }
+                // 按上一条回答当初一轮轮瘦身的样子重放一遍，追问时前面那一大段和上次发的一样，缓存照样命中（见 ContextSlim.replay）
+                val history = withContext(Dispatchers.Default) { buildHistory(toolSet != null).also { h -> ContextSlim.replay(h) { com.jack.ai.data.Spill.save(wsDir, it) } } }
                 agent.run(
                     messages = history,
                     tools = toolSet,
@@ -763,7 +764,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                             filesDropped = true
                             dsFiles.forget()
                             promptInput = promptInput.copy(fileIds = emptyMap())
-                            return@Recovery withContext(Dispatchers.Default) { buildHistory(toolSet != null) } to toolSet
+                            return@Recovery withContext(Dispatchers.Default) { buildHistory(toolSet != null).also { h -> ContextSlim.replay(h) { com.jack.ai.data.Spill.save(wsDir, it) } } } to toolSet
                         }
                         val attempt = if (filesDropped) tried - 1 else tried
                         when {

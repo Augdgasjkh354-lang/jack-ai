@@ -218,13 +218,21 @@ class Agent(
                     })
                     return
                 }
-                // 推回去接着做：这一轮说的话留在对话里，再补一条要它继续的消息（不进 trail，下次对话不用再发）
-                if (roundContent.isNotEmpty()) messages += buildJsonObject {
+                // 推回去接着做：这一轮说的话留在对话里，再补一条要它继续的消息。
+                // 也记进 trail：不记的话下次对话重拼的历史从这里起和这次发的不一样，后面几十轮的缓存全断。
+                // 开着思考却没有思考内容的那句不记（旧回合缺思考内容会让整段过程退成只发回答），这时照旧都不记
+                val said = if (roundContent.isEmpty()) null else buildJsonObject {
                     put("role", "assistant"); put("content", roundContent.toString())
                     // 开着思考时同一轮里的回答要带上思考内容，不然接口会拒
                     if (sendReasoning) put("reasoning_content", roundReasoning.toString())
                 }
-                messages += buildJsonObject { put("role", "user"); put("content", nudge) }
+                val push = buildJsonObject { put("role", "user"); put("content", nudge) }
+                said?.let { messages += it }
+                messages += push
+                if (said == null || !sendReasoning || roundReasoning.isNotEmpty()) {
+                    said?.let { trail += it.toString() }
+                    trail += push.toString()
+                }
                 continue
             }
 
@@ -274,9 +282,10 @@ class Agent(
             }
             val shots = images()
             if (shots.isNotEmpty()) {
-                imageAt.forEach { i -> if (i < messages.size) messages[i] = buildJsonObject { put("role", "user"); put("content", "（之前的网页截图已省略）") } }
+                imageAt.forEach { i -> if (i < messages.size) messages[i] = IMAGE_GONE }
                 imageAt.clear()
-                // 不进 trail：截图很大，下次对话不用再发
+                // 截图很大，不进 trail；trail 里记一句省略，和这一轮之后发出去的一样，下次对话前面那一大段缓存还能命中
+                trail += IMAGE_GONE.toString()
                 messages += buildJsonObject {
                     put("role", "user")
                     put("content", buildJsonArray {
@@ -303,6 +312,9 @@ class Agent(
     }
 
     companion object {
+        /** 旧截图换成的这一句（新截图来了旧的就不再发）。 */
+        private val IMAGE_GONE = buildJsonObject { put("role", "user"); put("content", "（之前的网页截图已省略）") }
+
         /** 调工具前说的话多长以内算进度说明（再长多半是正经回答）。 */
         const val NOTE_MAX = 300
 

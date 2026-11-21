@@ -58,6 +58,25 @@ object ContextSlim {
     }
 
     /** 压得更狠：只留开头一小段；压过一次的留着它写的「全文存在哪个文件」那句。 */
+    /**
+     * 从存档重拼的历史，按当初一轮轮瘦身的样子再压一遍，返回压了几条。
+     * 上一条回答是每次请求前压一回（压过的就不再变），一次性压整段会多压几条（当时还在「最近几条」里、后来没再超的），
+     * 和上次发出去的不一样，追问时缓存从那条起就断了。这里在每条 assistant 前面（每次请求的位置）按顺序重放 [slim]，
+     * 结果和当初发出去的一样。slim 只看工具结果，[spill] 存的文件名按内容算，重放多少次结果都相同。
+     */
+    fun replay(messages: MutableList<JsonObject>, spill: ((String) -> String?)? = null): Int {
+        var n = 0
+        var fresh = false
+        for (j in messages.indices) {
+            when ((messages[j]["role"] as? JsonPrimitive)?.content) {
+                "tool" -> fresh = true
+                // 上次压完以后没来新的工具结果，再压也不变，省掉
+                "assistant" -> if (fresh) { n += slim(messages.subList(0, j), spill); fresh = false }
+            }
+        }
+        return n + slim(messages, spill)
+    }
+
     internal fun stub(c: String, saved: String? = null): String {
         val trimmed = c.startsWith(MARK)
         val body = if (trimmed) c.removePrefix(MARK) else c

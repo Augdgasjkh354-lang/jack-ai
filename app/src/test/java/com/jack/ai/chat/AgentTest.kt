@@ -324,9 +324,10 @@ class AgentTest {
         assertEquals("（之前的网页截图已省略）", messages[3]["content"]!!.jsonPrimitive.content)
         val last = messages[6]["content"]!!.jsonArray
         assertEquals("data:image/jpeg;base64,2", last[1].jsonObject["image_url"]!!.jsonObject["url"]!!.jsonPrimitive.content)
-        // 截图不进 trail（下次对话不用再发）
-        assertEquals(4, agent.trail.size)
+        // 截图不进 trail，记成省略的那一句：重拼的历史和这次发的一样（只有最后一张不同）
+        assertEquals(6, agent.trail.size)
         assertTrue(agent.trail.none { "base64" in it })
+        assertEquals(messages.subList(1, 6).map { it.toString() }, agent.trail.take(5))
     }
 
     @Test
@@ -342,8 +343,19 @@ class AgentTest {
         assertTrue(msgs.any { it["content"]?.jsonPrimitive?.content == "还有两步没做完" })
         assertTrue(msgs.any { it["role"]?.jsonPrimitive?.content == "assistant" && it["content"]?.jsonPrimitive?.content == "做完了" })
         assertEquals("这回真做完了", agent.lastRound)
-        // 推回去的话不进 trail（下次对话不用再发）
-        assertTrue(agent.trail.none { "还有两步没做完" in it })
+        // 推回去的话也进 trail：下次对话重拼的历史和这次发的一样，缓存才接得上
+        assertEquals(msgs.drop(1).map { it.toString() }, agent.trail)
+    }
+
+    @Test
+    fun pushBackWithoutReasoningStaysOutOfTrailWhenThinking() = runBlocking {
+        val api = FakeApi(text("做完了"), text("这回真做完了"))
+        val agent = Agent(api::stream, sendReasoning = true)
+        var asked = 0
+        agent.run(mutableListOf(userMsg("找 5 家供应商")), someTools, { 10 }, { _, _ -> "结果" },
+            beforeFinish = { asked++; if (asked == 1) "还有两步没做完" else null })
+        // 开着思考、那句话没有思考内容：记进去会让整段过程退成只发回答，所以照旧不记
+        assertTrue(agent.trail.isEmpty())
     }
 
     @Test

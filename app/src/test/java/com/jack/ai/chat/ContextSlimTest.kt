@@ -61,4 +61,25 @@ class ContextSlimTest {
         assertTrue("压狠了也要留着全文在哪个文件", "网页-1.txt" in content(m[0]))
         assertEquals("最近几条模型正要用，原样留着", recent, m.takeLast(ContextSlim.KEEP_RECENT).map { content(it) })
     }
+
+    @Test
+    fun replayMatchesRoundByRoundSlimming() {
+        // 模拟一条长回答：每轮一条 assistant + 一条大结果，每次请求前压一回
+        fun assistant(n: Int) = JsonObject(mapOf("role" to JsonPrimitive("assistant"), "content" to JsonPrimitive("第 $n 步")))
+        val sent = mutableListOf(JsonObject(mapOf("role" to JsonPrimitive("user"), "content" to JsonPrimitive("查一下"))))
+        val original = sent.toMutableList()
+        repeat(40) { n ->
+            ContextSlim.slim(sent)
+            val a = assistant(n); val t = tool("结果$n " + "字".repeat(4_000 + n * 97))
+            sent += a; sent += t; original += a; original += t
+        }
+        ContextSlim.slim(sent)
+        // 一次性压整段和当初发的不一样（这就是以前追问时缓存断掉的原因）
+        val once = original.toMutableList().also { ContextSlim.slim(it) }
+        assertTrue(once != sent)
+        // 重放和当初发的一模一样；再重放一次也不变
+        val replayed = original.toMutableList().also { ContextSlim.replay(it) }
+        assertEquals(sent, replayed)
+        assertEquals(0, ContextSlim.replay(replayed))
+    }
 }
