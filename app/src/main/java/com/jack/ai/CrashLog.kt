@@ -66,7 +66,7 @@ object CrashLog {
             val title = text.lineSequence().drop(1).firstOrNull().orEmpty()
             val body = text.lineSequence().drop(2).joinToString("\n")
             val ok = runCatching {
-                com.jack.ai.data.GitHub.send(token, "POST", "/repos/${com.jack.ai.data.Updater.REPO}/issues", kotlinx.serialization.json.buildJsonObject {
+                com.jack.ai.data.integrations.GitHub.send(token, "POST", "/repos/${com.jack.ai.data.Updater.REPO}/issues", kotlinx.serialization.json.buildJsonObject {
                     put("title", kotlinx.serialization.json.JsonPrimitive("$title [$sig]"))
                     put("body", kotlinx.serialization.json.JsonPrimitive("```\n$body\n```\n\n（App 自动上报，只有代码位置，不含报错文字）"))
                     put("labels", kotlinx.serialization.json.JsonArray(listOf(kotlinx.serialization.json.JsonPrimitive("crash"))))

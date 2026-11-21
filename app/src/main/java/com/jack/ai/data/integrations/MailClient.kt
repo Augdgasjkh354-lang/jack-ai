@@ -1,4 +1,4 @@
-package com.jack.ai.data
+package com.jack.ai.data.integrations
 
 import com.sun.mail.imap.IMAPFolder
 import com.sun.mail.imap.IMAPStore
@@ -29,6 +29,8 @@ import javax.mail.search.FromStringTerm
 import javax.mail.search.OrTerm
 import javax.mail.search.SearchTerm
 import javax.mail.search.SubjectTerm
+import com.jack.ai.data.MailAccount
+import com.jack.ai.data.Workspace
 
 class MailException(message: String) : Exception(message)
 

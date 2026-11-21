@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.jack.ai.data.integrations.Rail12306
 
 class RailTest {
     private val js = "var station_names ='@bjb|北京北|VAP|beijingbei|bjb|0|0357|北京|||@bji|北京|BJP|beijing|bj|2|0357|北京|||" +

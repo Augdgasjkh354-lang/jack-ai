@@ -7,6 +7,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import java.io.File
 import java.security.MessageDigest
+import com.jack.ai.data.integrations.GitHub
 
 /**
  * 从 GitHub 仓库装技能、同步更新：认标准的 SKILL.md（Claude Code、Codex 等用的格式，开头 --- 里写 name、description，

@@ -1,6 +1,7 @@
 package com.jack.ai.data
 
 import android.content.Context
+import com.jack.ai.data.integrations.GitHub
 
 /**
  * 知识库的装、同步、开关、删除（界面和 Kavi 的 knowledge_base 工具共用）。

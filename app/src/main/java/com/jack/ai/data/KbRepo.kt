@@ -5,6 +5,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import java.security.MessageDigest
+import com.jack.ai.data.integrations.GitHub
 
 /**
  * 从 GitHub 装知识库。格式（见仓库 docs/knowledge-base-format.md）：

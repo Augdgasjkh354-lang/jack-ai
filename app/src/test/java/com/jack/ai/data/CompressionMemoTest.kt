@@ -8,6 +8,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import com.jack.ai.data.memory.Compression
+import com.jack.ai.data.integrations.GitHub
+import com.jack.ai.data.integrations.Notion
 
 /** 压缩时具体的数字、日期、约定和工具做成的事不能丢。 */
 class CompressionMemoTest {

@@ -17,6 +17,7 @@ import java.net.Socket
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import kotlin.concurrent.thread
+import com.jack.ai.data.integrations.GitHub
 
 /** 本机起一个假的 GitHub（api 在 127.0.0.1，下载跳到 localhost 当作 codeload），走一遍搜、看、读、下载。 */
 class GitHubTest {

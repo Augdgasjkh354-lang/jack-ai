@@ -302,5 +302,5 @@ object BrowserDownload {
     /** 文件名按类型补扩展名用。 */
     fun extFor(mime: String?): String? = EXT[mime?.substringBefore(';')?.trim()?.lowercase()]
 
-    fun sizeText(bytes: Long): String = com.jack.ai.data.ToolSizes.text(bytes)
+    fun sizeText(bytes: Long): String = com.jack.ai.data.integrations.ToolSizes.text(bytes)
 }

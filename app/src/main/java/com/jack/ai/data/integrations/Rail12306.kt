@@ -1,4 +1,4 @@
-package com.jack.ai.data
+package com.jack.ai.data.integrations
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -12,6 +12,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
+import com.jack.ai.data.describe
 
 /**
  * 查 12306 余票：用的是 12306 网页版查票时调的接口，不用登录，也不用自己架服务器。

@@ -24,8 +24,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jack.ai.ChatViewModel
-import com.jack.ai.data.Mcp
-import com.jack.ai.data.McpServer
+import com.jack.ai.data.integrations.Mcp
+import com.jack.ai.data.integrations.McpServer
 import kotlinx.coroutines.launch
 
 /**

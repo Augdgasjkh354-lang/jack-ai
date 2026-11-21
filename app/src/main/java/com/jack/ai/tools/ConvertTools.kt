@@ -6,7 +6,7 @@ import com.jack.ai.data.media.MediaMux
 import com.jack.ai.data.PyRunner
 import com.jack.ai.data.SearchRecord
 import com.jack.ai.data.media.Subtitles
-import com.jack.ai.data.ToolSizes
+import com.jack.ai.data.integrations.ToolSizes
 import com.jack.ai.data.media.VideoEdit
 import com.jack.ai.data.Workspace
 import kotlinx.coroutines.Dispatchers

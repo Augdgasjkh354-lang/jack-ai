@@ -5,6 +5,9 @@ import com.wangzan101.mika.core.cap.phone.OperatingPace
 import java.util.UUID
 import com.jack.ai.data.memory.ChatMemory
 import com.jack.ai.data.memory.MemoryReview
+import com.jack.ai.data.integrations.GitHub
+import com.jack.ai.data.integrations.McpServer
+import com.jack.ai.data.integrations.Notion
 
 fun newId(): String = UUID.randomUUID().toString()
 

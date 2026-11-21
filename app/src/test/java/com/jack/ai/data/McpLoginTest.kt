@@ -6,6 +6,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.net.ServerSocket
 import kotlin.concurrent.thread
+import com.jack.ai.data.integrations.McpLogin
+import com.jack.ai.data.integrations.McpServer
 
 class McpLoginTest {
     /** 只回一次的本机小服务：记下收到的请求正文。 */

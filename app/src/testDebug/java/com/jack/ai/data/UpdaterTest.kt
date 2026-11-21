@@ -16,6 +16,7 @@ import java.net.InetAddress
 import java.net.ServerSocket
 import java.security.MessageDigest
 import kotlin.concurrent.thread
+import com.jack.ai.data.integrations.GitHub
 
 /** 假 GitHub 上发了一个比手上新的版本：查到 → 下载 → 校验 → 记下等安装；校验不对就删掉。 */
 @RunWith(RobolectricTestRunner::class)

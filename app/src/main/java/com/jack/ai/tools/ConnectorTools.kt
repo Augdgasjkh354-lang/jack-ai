@@ -1,6 +1,6 @@
 package com.jack.ai.tools
 
-import com.jack.ai.data.Mcp
+import com.jack.ai.data.integrations.Mcp
 import com.jack.ai.data.SearchRecord
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement

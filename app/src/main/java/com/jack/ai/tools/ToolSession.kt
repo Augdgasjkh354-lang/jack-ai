@@ -337,7 +337,7 @@ class ToolSession(
         }
         // 连接器返回的也是外部内容；被扫描的来源（文件、手机文件、电话、手机数据）同样算，不能只认 EXTERNAL_TOOLS，
         // 否则读了文件里的注入内容、再往外发信时，严格确认会被绕过
-        if (name in SCANNED_TOOLS || name.startsWith(com.jack.ai.data.Mcp.PREFIX)) sawExternal = true
+        if (name in SCANNED_TOOLS || name.startsWith(com.jack.ai.data.integrations.Mcp.PREFIX)) sawExternal = true
         calls.incrementAndGet()
         val before = succeeded.get()
         val refusedBefore = rejected.get()
@@ -351,7 +351,7 @@ class ToolSession(
         val raw = ToolTimeout.run(name) { dispatch(name, argsText) }
         loop.record(name, argsText, raw)
         // 外部内容：查一遍有没有冲着 AI 下指令的话（纯代码，不花 token）
-        val result = if (name in SCANNED_TOOLS || name.startsWith(com.jack.ai.data.Mcp.PREFIX) || scanResult) guard(name, args, raw) else raw
+        val result = if (name in SCANNED_TOOLS || name.startsWith(com.jack.ai.data.integrations.Mcp.PREFIX) || scanResult) guard(name, args, raw) else raw
         val status = when {
             rejected.get() != refusedBefore -> ToolStatus.REJECTED
             succeeded.get() == before || com.jack.ai.data.Verify.failed(result) -> ToolStatus.FAILED
@@ -419,7 +419,7 @@ class ToolSession(
         val arg = args?.get(key).text()
         return when {
             args == null -> "参数不是有效的 JSON，可能内容太长被截断了，请精简后重试"
-            name.startsWith(com.jack.ai.data.Mcp.PREFIX) -> callConnector(name, args)
+            name.startsWith(com.jack.ai.data.integrations.Mcp.PREFIX) -> callConnector(name, args)
             name == "query_trains" && SkillIds.TRAIN in skillIds -> queryTrains(args)
             name == "check_ai_tone" && SkillIds.TONE in skillIds -> checkAiTone(args)
             name == "create_app" && SkillIds.APP in skillIds -> makeApp(args)

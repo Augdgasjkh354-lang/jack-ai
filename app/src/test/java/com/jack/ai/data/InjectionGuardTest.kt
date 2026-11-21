@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.jack.ai.data.integrations.Mcp
 
 class InjectionGuardTest {
     private fun hit(t: String) = InjectionGuard.scan(t).findings.isNotEmpty()

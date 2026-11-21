@@ -2,7 +2,7 @@ package com.jack.ai.tools
 
 import com.jack.ai.data.PhoneFiles
 import com.jack.ai.data.SearchRecord
-import com.jack.ai.data.ToolSizes
+import com.jack.ai.data.integrations.ToolSizes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray

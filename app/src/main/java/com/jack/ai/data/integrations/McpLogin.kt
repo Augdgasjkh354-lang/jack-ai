@@ -1,4 +1,4 @@
-package com.jack.ai.data
+package com.jack.ai.data.integrations
 
 import com.wangzan101.mika.core.cap.mcp.McpOAuth
 import com.wangzan101.mika.core.cap.mcp.McpOAuthTokens

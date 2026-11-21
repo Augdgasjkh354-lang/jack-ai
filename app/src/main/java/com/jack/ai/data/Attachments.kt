@@ -15,6 +15,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 import java.util.zip.ZipInputStream
+import com.jack.ai.data.integrations.GitHub
 
 /** 单个文件最多保留的文字数，避免一次塞爆上下文。 */
 private const val MAX_FILE_CHARS = 200_000

@@ -1,8 +1,8 @@
 package com.jack.ai.tools
 
 import com.jack.ai.data.MailAccount
-import com.jack.ai.data.MailClient
-import com.jack.ai.data.MailException
+import com.jack.ai.data.integrations.MailClient
+import com.jack.ai.data.integrations.MailException
 import com.jack.ai.data.SearchRecord
 import com.jack.ai.data.Workspace
 import com.jack.ai.data.readyMails

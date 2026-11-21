@@ -18,6 +18,9 @@ import java.net.ServerSocket
 import java.net.Socket
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
+import com.jack.ai.data.integrations.Mcp
+import com.jack.ai.data.integrations.McpException
+import com.jack.ai.data.integrations.McpServer
 
 /** 在本机起一个假的 MCP 服务，分别按新的 Streamable HTTP 和老式 SSE 走一遍握手、列工具、调工具。 */
 class McpTest {

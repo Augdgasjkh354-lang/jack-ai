@@ -1,6 +1,6 @@
 package com.jack.ai.tools
 
-import com.jack.ai.data.Notion
+import com.jack.ai.data.integrations.Notion
 import com.jack.ai.data.SearchRecord
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

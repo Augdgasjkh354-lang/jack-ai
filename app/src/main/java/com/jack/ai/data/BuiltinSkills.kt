@@ -4,6 +4,8 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
+import com.jack.ai.data.integrations.GitHub
+import com.jack.ai.data.integrations.Notion
 
 // 内置技能：名字、说明和做法（从 Skills.kt 拆出来）。
 

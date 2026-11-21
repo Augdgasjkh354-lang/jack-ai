@@ -4,6 +4,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
+import com.jack.ai.data.integrations.GitHub
 
 /**
  * Skill = 名字 + 一句话简介 + 详细做法说明（+ 它要用的工具）。

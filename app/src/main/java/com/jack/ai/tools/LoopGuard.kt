@@ -48,7 +48,7 @@ class LoopGuard {
         lastResult = result
     }
 
-    private fun stateful(name: String) = name == "phone" || name == "browser" || name.startsWith(com.jack.ai.data.Mcp.PREFIX)
+    private fun stateful(name: String) = name == "phone" || name == "browser" || name.startsWith(com.jack.ai.data.integrations.Mcp.PREFIX)
 
     private fun canonicalArgs(argsText: String): String {
         val trimmed = argsText.trim()

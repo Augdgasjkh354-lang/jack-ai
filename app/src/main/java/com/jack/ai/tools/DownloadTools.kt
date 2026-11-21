@@ -8,7 +8,7 @@ import com.jack.ai.data.Downloads
 import com.jack.ai.data.media.MediaMux
 import com.jack.ai.data.SearchRecord
 import com.jack.ai.data.SkillIds
-import com.jack.ai.data.ToolSizes
+import com.jack.ai.data.integrations.ToolSizes
 import com.jack.ai.data.Workspace
 import com.jack.ai.ui.JackBrowser
 import kotlinx.coroutines.Dispatchers

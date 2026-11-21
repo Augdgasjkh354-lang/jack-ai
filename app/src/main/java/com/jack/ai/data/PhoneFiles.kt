@@ -8,6 +8,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.jack.ai.data.integrations.ToolSizes
 
 /**
  * 用户授权给 Kavi 的手机文件夹（设置 → 手机文件夹，用系统的文件选择器选）：只能碰这些文件夹里面的东西。

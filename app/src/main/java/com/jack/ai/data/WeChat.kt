@@ -19,6 +19,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import com.jack.ai.data.integrations.Mcp
 
 /** 一条微信私聊消息（只有对方发来的；自己发的不会弹通知）。 */
 @Serializable

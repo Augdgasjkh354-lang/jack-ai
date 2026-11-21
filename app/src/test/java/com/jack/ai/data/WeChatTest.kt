@@ -5,6 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.jack.ai.data.integrations.Mcp
 
 class WeChatTest {
     private val at = 1_800_000_000_000L

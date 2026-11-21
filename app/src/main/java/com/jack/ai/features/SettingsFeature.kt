@@ -16,6 +16,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
+import com.jack.ai.data.integrations.MailClient
+import com.jack.ai.data.integrations.MailException
+import com.jack.ai.data.integrations.Mcp
+import com.jack.ai.data.integrations.McpLogin
+import com.jack.ai.data.integrations.McpServer
 
 /** 设置、其他模型服务、余额。 */
 class SettingsFeature(core: AppCore, private val client: DeepSeekClient) : Feature(core) {
@@ -83,7 +88,7 @@ class SettingsFeature(core: AppCore, private val client: DeepSeekClient) : Featu
 
     /** 连接器用账号登录：浏览器里点同意，拿到令牌后连上去拿工具列表、存下来。 */
     suspend fun loginConnector(server: McpServer, open: (String) -> Unit): Result<McpServer> = try {
-        saveConnector(com.jack.ai.data.McpLogin.login(server, open))
+        saveConnector(com.jack.ai.data.integrations.McpLogin.login(server, open))
     } catch (e: kotlinx.coroutines.CancellationException) {
         throw e
     } catch (e: Exception) {

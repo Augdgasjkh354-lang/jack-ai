@@ -17,6 +17,7 @@ import com.jack.ai.data.memory.ChatMemory
 import com.jack.ai.data.memory.Compression
 import com.jack.ai.data.memory.MemoryOps
 import com.jack.ai.data.browser.BrowserFlows
+import com.jack.ai.data.integrations.GitHub
 
 /** 知识类工具：旧记录、聊天记录、资料库、项目资料、记忆、复习卡片、技能说明。 */
 

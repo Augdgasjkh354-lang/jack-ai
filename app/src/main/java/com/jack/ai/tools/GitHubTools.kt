@@ -1,9 +1,9 @@
 package com.jack.ai.tools
 
-import com.jack.ai.data.GitHub
-import com.jack.ai.data.GitHubWrite
+import com.jack.ai.data.integrations.GitHub
+import com.jack.ai.data.integrations.GitHubWrite
 import com.jack.ai.data.SearchRecord
-import com.jack.ai.data.ToolSizes
+import com.jack.ai.data.integrations.ToolSizes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject

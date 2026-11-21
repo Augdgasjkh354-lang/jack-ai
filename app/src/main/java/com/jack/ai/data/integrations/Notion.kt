@@ -1,4 +1,4 @@
-package com.jack.ai.data
+package com.jack.ai.data.integrations
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -18,6 +18,8 @@ import kotlinx.serialization.json.put
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import com.jack.ai.data.Verify
+import com.jack.ai.data.newId
 
 /**
  * Notion：用户在 Notion 里建的「内部集成」密钥（ntn_ 开头），直接调官方接口。

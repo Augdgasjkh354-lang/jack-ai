@@ -19,6 +19,7 @@ import java.io.IOException
 import com.jack.ai.data.memory.ChatMemory
 import com.jack.ai.data.memory.MemoryOps
 import com.jack.ai.data.memory.MemoryReset
+import com.jack.ai.data.integrations.GitHub
 
 /** 资料库、复习卡片、记忆和梦。 */
 class KnowledgeFeature(core: AppCore) : Feature(core) {

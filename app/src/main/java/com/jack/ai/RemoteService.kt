@@ -14,7 +14,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.jack.ai.api.sharedHttp
-import com.jack.ai.data.RemoteClient
+import com.jack.ai.data.integrations.RemoteClient
 import com.jack.ai.data.Store
 import com.jack.ai.tools.RemoteChat
 import kotlinx.coroutines.CoroutineScope

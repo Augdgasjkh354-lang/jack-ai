@@ -20,9 +20,9 @@ class KaviApp : Application() {
         })
         CrashLog.install(this)
         // 连接器的登录令牌续过了：存回设置（前台、后台任务都走这里）
-        com.jack.ai.data.McpLogin.save = { s ->
+        com.jack.ai.data.integrations.McpLogin.save = { s ->
             val store = com.jack.ai.data.Store(this)
-            synchronized(com.jack.ai.data.McpLogin) {
+            synchronized(com.jack.ai.data.integrations.McpLogin) {
                 val cur = store.loadSettings()
                 store.saveSettings(cur.copy(mcpServers = cur.mcpServers.map { if (it.id == s.id) it.copy(oauth = s.oauth) else it }))
             }

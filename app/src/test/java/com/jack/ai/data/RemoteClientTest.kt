@@ -10,6 +10,8 @@ import org.junit.Assume.assumeTrue
 import org.junit.Test
 import java.io.File
 import java.io.IOException
+import com.jack.ai.data.integrations.ClaimResult
+import com.jack.ai.data.integrations.RemoteClient
 
 /**
  * 和真的站点（remote-site/，本地用 `npx wrangler dev` 跑起来、不设 KAVI_KEY）走一遍：Kavi 认领站点 → 网页扫码配对 → 网页发消息带文件 → Kavi 取到、下载文件 → 问确认、网页回答 →

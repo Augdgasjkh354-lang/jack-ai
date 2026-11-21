@@ -1,4 +1,4 @@
-package com.jack.ai.data
+package com.jack.ai.data.integrations
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -17,6 +17,7 @@ import java.io.File
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 import java.util.zip.ZipInputStream
+import com.jack.ai.data.Workspace
 
 /**
  * GitHub：搜项目、看自己的项目（填了令牌连私有的也能看）、读目录和文件、下载整个项目或 Releases 里的文件。

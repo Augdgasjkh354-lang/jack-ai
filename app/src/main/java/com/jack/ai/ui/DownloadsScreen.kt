@@ -46,7 +46,7 @@ import com.jack.ai.api.BrowserDownload
 import com.jack.ai.data.DownloadRecord
 import com.jack.ai.data.Downloads
 import com.jack.ai.data.Store
-import com.jack.ai.data.ToolSizes
+import com.jack.ai.data.integrations.ToolSizes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext

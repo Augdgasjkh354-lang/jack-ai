@@ -1,4 +1,4 @@
-package com.jack.ai.data
+package com.jack.ai.data.integrations
 
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -13,6 +13,9 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import java.io.File
 import java.security.MessageDigest
+import com.jack.ai.data.TextEdit
+import com.jack.ai.data.Workspace
+import com.jack.ai.data.describe
 
 /**
  * GitHub 的写操作：在下载下来的本地副本里改文件 → 看改动 → 提交并推送；PR、issue、自动打包（Actions）。

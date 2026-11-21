@@ -11,6 +11,7 @@ import com.jack.ai.data.browser.BrowserFlow
 import com.jack.ai.data.browser.HistoryEntry
 import com.jack.ai.data.browser.PricePoint
 import com.jack.ai.data.browser.SiteNote
+import com.jack.ai.data.integrations.McpServer
 
 private val LOCK = Any()
 private class CachedConv(val modified: Long, val length: Long, val conv: Conversation)

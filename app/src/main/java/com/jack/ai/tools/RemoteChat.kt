@@ -11,9 +11,9 @@ import com.jack.ai.data.ChatMessage
 import com.jack.ai.data.Conversation
 import com.jack.ai.data.GeneratedFile
 import com.jack.ai.data.InboxItem
-import com.jack.ai.data.RemoteClient
-import com.jack.ai.data.RemoteFile
-import com.jack.ai.data.RemoteMessage
+import com.jack.ai.data.integrations.RemoteClient
+import com.jack.ai.data.integrations.RemoteFile
+import com.jack.ai.data.integrations.RemoteMessage
 import com.jack.ai.data.SearchRecord
 import com.jack.ai.data.ThinkLevel
 import com.jack.ai.data.ThinkStep

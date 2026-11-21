@@ -10,6 +10,8 @@ import java.nio.file.Files
 import java.util.Properties
 import javax.mail.Session
 import javax.mail.internet.MimeMessage
+import com.jack.ai.data.integrations.MailClient
+import com.jack.ai.data.integrations.MailText
 
 class MailTest {
     private fun parse(raw: String) = MimeMessage(Session.getInstance(Properties()), raw.trimIndent().replace("\n", "\r\n").byteInputStream())

@@ -1,4 +1,4 @@
-package com.jack.ai.data
+package com.jack.ai.data.integrations
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -23,6 +23,10 @@ import java.io.Closeable
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
+import com.jack.ai.data.Preset
+import com.jack.ai.data.Settings
+import com.jack.ai.data.endpoint
+import com.jack.ai.data.newId
 
 /** 连接器上的一个工具。readOnly / destructive 是服务自己标的（没标就都是 false）。 */
 @Serializable

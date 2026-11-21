@@ -22,6 +22,8 @@ import java.net.Socket
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import kotlin.concurrent.thread
+import com.jack.ai.data.integrations.GitHub
+import com.jack.ai.data.integrations.GitHubWrite
 
 /** 假 GitHub，记着分支指向哪个提交、收到了哪些写请求，走一遍：下载 → 本地改 → diff → 推送；冲突、新分支、PR、issue、打包日志。 */
 class GitHubWriteTest {

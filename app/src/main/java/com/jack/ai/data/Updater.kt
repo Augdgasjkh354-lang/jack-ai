@@ -24,6 +24,7 @@ import kotlinx.serialization.json.jsonObject
 import java.io.File
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
+import com.jack.ai.data.integrations.GitHub
 
 /**
  * 自己更新自己：查 GitHub 上 jack-ai 的最新版本，比手上的新就下载（校验 SHA-256），下好了发通知，

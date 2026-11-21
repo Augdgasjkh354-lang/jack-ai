@@ -7,7 +7,7 @@ import kotlinx.serialization.json.put
 import com.jack.ai.data.Attachments
 import com.jack.ai.data.ChatMessage
 import com.jack.ai.data.Conversation
-import com.jack.ai.data.Notion
+import com.jack.ai.data.integrations.Notion
 import com.jack.ai.data.Redact
 
 /**

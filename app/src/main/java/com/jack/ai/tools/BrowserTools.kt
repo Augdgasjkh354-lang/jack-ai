@@ -278,7 +278,7 @@ private suspend fun ToolSession.browseNow(args: JsonObject, action: String): Str
                 if (f.length() > 100L * 1024 * 1024) return@runTool "「${f.name}」超过 100MB，不上传。" to SearchRecord("$label：太大")
                 // 把用户的文件交给网站：每次都问
                 if (!approve("让 Kavi 把「${f.name}」上传到网页？", "网页：${JackBrowser.title.ifBlank { JackBrowser.address }}\n${JackBrowser.address}\n\n" +
-                        "文件：${f.name}（${com.jack.ai.data.ToolSizes.text(f.length())}）", "上传", strict = true)) {
+                        "文件：${f.name}（${com.jack.ai.data.integrations.ToolSizes.text(f.length())}）", "上传", strict = true)) {
                     return@runTool "用户没有同意上传。" to SearchRecord("$label：已取消")
                 }
                 JackBrowser.upload(ctx, n!!, f)?.let { note.append("没传上：$it\n") } ?: note.append("已把「${f.name}」交给网页（有的网站还要再点「确定/上传」才算传完）。\n")
@@ -316,7 +316,7 @@ private suspend fun ToolSession.browseNow(args: JsonObject, action: String): Str
                 val s = JackBrowser.saveTo(ctx, if (phone) null else wsDir, p) { ui.progress(it) }
                 val f = s.file
                 if (f != null) ui.attach(f)
-                return@runTool (if (f != null) "已下载「${s.name}」（${com.jack.ai.data.ToolSizes.text(f.length())}）到对话文件夹，聊天里能打开或分享，需要的话用 read_file 或 run_python 处理它。"
+                return@runTool (if (f != null) "已下载「${s.name}」（${com.jack.ai.data.integrations.ToolSizes.text(f.length())}）到对话文件夹，聊天里能打开或分享，需要的话用 read_file 或 run_python 处理它。"
                     else "已下载「${s.name}」到${s.where}，用户在文件管理器里能找到。") +
                     (if (s.name.endsWith(".apk", true)) "这是安卓安装包：要不要装由用户决定，提醒他只装信得过的来源。" else "") to SearchRecord(label)
             }
@@ -1040,7 +1040,7 @@ internal fun describePage(p: JackBrowser.Page, prev: JackBrowser.Page? = null): 
     p.dialog?.let { append("网页弹出过提示「${it.take(200)}」，已自动关掉。\n") }
     if (p.frames > 0) append("网页里有 ${p.frames} 个读不到里面的嵌入框（常是别的网站的登录、支付、验证）：要操作里面的东西，先 look 截图，再用 tap 按截图坐标点。\n")
     p.download?.takeIf { !it.byUser }?.let {
-        append("网页要下载「${it.name}」" + (if (it.size > 0) "（${com.jack.ai.data.ToolSizes.text(it.size)}）" else "") +
+        append("网页要下载「${it.name}」" + (if (it.size > 0) "（${com.jack.ai.data.integrations.ToolSizes.text(it.size)}）" else "") +
             "：用户要这个文件的话用 action=download 存进对话文件夹，不要就不用管。\n")
     }
     val diff = BrowserDiff.of(prev, p)

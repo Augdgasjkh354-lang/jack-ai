@@ -1,6 +1,6 @@
 package com.jack.ai.tools
 
-import com.jack.ai.data.GitHub
+import com.jack.ai.data.integrations.GitHub
 import com.jack.ai.data.KbRepo
 import com.jack.ai.data.KnowledgeBases
 import com.jack.ai.data.SearchRecord

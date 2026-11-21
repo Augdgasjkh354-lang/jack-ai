@@ -2,6 +2,7 @@ package com.jack.ai.data
 
 import kotlinx.serialization.Serializable
 import kotlin.math.ln
+import com.jack.ai.data.integrations.GitHub
 
 /** 资料库里的一份文档。正文存在 files/library/<id>.txt。 */
 @Serializable

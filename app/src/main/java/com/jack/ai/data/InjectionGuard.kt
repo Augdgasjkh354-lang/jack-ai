@@ -5,6 +5,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import java.io.File
+import com.jack.ai.data.integrations.Mcp
 
 /**
  * 提示词注入的检测（纯代码，不请模型，不花 token）：网页、邮件、文件这些外部内容里，有没有冲着 AI 下指令的话。

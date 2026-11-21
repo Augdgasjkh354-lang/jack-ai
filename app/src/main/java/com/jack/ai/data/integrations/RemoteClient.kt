@@ -1,4 +1,4 @@
-package com.jack.ai.data
+package com.jack.ai.data.integrations
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json

@@ -1,6 +1,6 @@
 package com.jack.ai.tools
 
-import com.jack.ai.data.GitHub
+import com.jack.ai.data.integrations.GitHub
 import com.jack.ai.data.InjectionGuard
 import com.jack.ai.data.SearchRecord
 import com.jack.ai.data.Skill

@@ -21,6 +21,7 @@ import org.junit.Test
 import java.net.InetAddress
 import java.net.ServerSocket
 import kotlin.concurrent.thread
+import com.jack.ai.data.integrations.Notion
 
 /** 本机起一个假的 Notion，按 2025-09-03 版接口的样子回话，走一遍搜、读、建、改、删。 */
 class NotionTest {
