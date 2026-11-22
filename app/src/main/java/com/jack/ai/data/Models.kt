@@ -29,6 +29,20 @@ data class Attachment(
 @Serializable
 data class AskCard(val question: String, val options: List<String>, val multi: Boolean = false)
 
+/**
+ * Kavi 写好的发帖草稿（show_draft）：按平台排成发出去的样子（小红书、朋友圈、微信消息……），下面能复制、去发、改一下。
+ * images 是对话文件夹里图片的完整路径。
+ */
+@Serializable
+data class DraftCard(
+    val platform: String,
+    val title: String = "",
+    val body: String,
+    val tags: List<String> = emptyList(),
+    val images: List<String> = emptyList(),
+    val to: String = "",
+)
+
 @Serializable
 data class ThinkStep(val kind: String, val text: String, val at: Long = System.currentTimeMillis())
 
@@ -54,6 +68,8 @@ data class ChatMessage(
     val notices: List<String> = emptyList(),
     /** Kavi 问用户的问题卡片（ask_user），挂在回答下面点着答。 */
     val asks: List<AskCard> = emptyList(),
+    /** Kavi 写好的发帖草稿（show_draft），按平台排成发出去的样子。 */
+    val drafts: List<DraftCard> = emptyList(),
     /** 回答出来之前的进度：Kavi 调工具前说的话（note）和思考摘要（summary），按时间排。 */
     val steps: List<ThinkStep> = emptyList(),
     /** Work 的交付清单：这一轮对话文件夹里新建、改动、删除了哪些文件（比对文件夹得出，见 [Deliverables]）。 */

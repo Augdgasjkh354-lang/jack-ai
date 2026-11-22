@@ -351,6 +351,10 @@ fun AssistantMessage(
             Spacer(Modifier.height(10.dp))
             AskCards(msg.id, msg.asks, active = isLast && !streaming && onAnswer != null) { onAnswer?.invoke(it) }
         }
+        if (msg.drafts.isNotEmpty()) {
+            Spacer(Modifier.height(10.dp))
+            DraftCards(msg.drafts, active = isLast && !streaming && onAnswer != null) { onAnswer?.invoke(it) }
+        }
         if (msg.delivered.isNotEmpty() && !streaming) {
             Spacer(Modifier.height(8.dp))
             DeliveredBox(msg.delivered)

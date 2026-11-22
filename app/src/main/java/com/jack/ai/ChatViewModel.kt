@@ -599,6 +599,12 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     return true
                 }
 
+                override fun draft(card: com.jack.ai.data.DraftCard): Boolean {
+                    // 同一个平台再出一版就换掉旧的（改稿时只留最新的）
+                    patchMessage(convId, reply.id) { m -> m.copy(drafts = m.drafts.filterNot { it.platform == card.platform } + card) }
+                    return true
+                }
+
                 override fun endConversation(reason: String) = updateConv(convId) { it.copy(closedReason = reason) }
 
                 override fun progress(text: String) = WorkService.progress(getApplication(), convId, workTitle, text, tasked)

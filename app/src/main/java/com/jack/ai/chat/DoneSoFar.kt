@@ -16,7 +16,7 @@ object DoneSoFar {
     private val READ_ONLY = setOf(
         "web_search", "read_webpage", "read_file", "list_emails", "read_email", "notion_search", "notion_read", "search_my_data",
         "facts", "query_trains", "update_plan", "use_skill", "self_check", "list_events", "query_table", "check_page", "search_code",
-        "file_history", "my_templates", "get_goal", "check_ai_tone", "check_rewrite", "read_table_image", "run_code",
+        "file_history", "my_templates", "get_goal", "check_ai_tone", "check_rewrite", "show_draft", "read_table_image", "run_code",
     )
     const val MAX = 30
 

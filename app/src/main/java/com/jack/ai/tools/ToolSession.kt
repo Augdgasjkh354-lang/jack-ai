@@ -84,6 +84,8 @@ interface ToolUi {
     fun notice(text: String) {}
     /** 问题卡片（ask_user）挂到这条回答下面；返回 false 表示这里显示不了（后台、远程），让模型直接用文字问。 */
     fun ask(cards: List<com.jack.ai.data.AskCard>): Boolean = false
+    /** 发帖草稿卡片（show_draft）挂到这条回答下面；返回 false 表示这里显示不了。 */
+    fun draft(card: com.jack.ai.data.DraftCard): Boolean = false
     /** Kavi 结束了这个对话（极端辱骂时）。 */
     fun endConversation(reason: String) {}
     /** 慢的工具（下载大文件）的进度，显示在通知栏上。 */
@@ -459,6 +461,7 @@ class ToolSession(
             name == "facts" -> if (args["action"].text() == "save") saveFact(args) else recallFacts(args)
             name == "end_conversation" && interactive -> endConversation(args)
             name == "ask_user" -> askUser(args)
+            name == "show_draft" -> showDraft(args)
             name == "schedule" && SkillIds.ROUTINE in skillIds -> schedule(args)
             name == "cancel_schedule" && SkillIds.ROUTINE in skillIds -> cancelSchedule(args)
             name == "save_flashcards" && SkillIds.LEARN in skillIds -> saveCards(args)
