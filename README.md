@@ -1,6 +1,58 @@
 # Kavi
 
-一个安卓 AI 助手 App：默认用 DeepSeek，也能接入任何 OpenAI 兼容的模型服务，以及 Claude、Gemini 的原生接口。能聊天，也能动手做事。
+**An Android AI agent that chats, remembers and gets things done on your phone.**
+**一个能聊天、有记忆、会在手机上动手做事的安卓 AI 助手。**
+
+[![下载最新版](https://img.shields.io/github/v/release/Augdgasjkh354-lang/jack-ai?label=%E4%B8%8B%E8%BD%BD%20APK)](../../releases/latest)
+![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack%20Compose-7F52FF)
+![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84)
+
+默认用 DeepSeek，也能接入任何 OpenAI 兼容的模型服务，以及 Claude、Gemini 的原生接口。能聊天，也能动手做事：做 Word / PPT / 设计图 / 视频，开浏览器查资料、在后台操作别的 App，记住你说过的事。
+
+## 10 秒看懂
+
+### 一条消息怎么变成做完的事
+
+```mermaid
+flowchart LR
+    U["你发一句话"] --> P["拼请求<br/>PromptBuilder<br/>不变的在前，缓存命中"]
+    P --> A{"Agent 循环<br/>模型流式回答"}
+    A -- 要调工具 --> T["执行工具<br/>ToolSession<br/>防注入 · 超时 · 防打转 · 先问你"]
+    T -- 结果发回 --> A
+    A -- 想收尾 --> G{"收尾关卡<br/>WorkGate<br/>清单做完？链接真读过？"}
+    G -- 没做完，推回去 --> A
+    G -- 通过 --> D["交付<br/>文件卡片 · 花费 · 记忆"]
+```
+
+做任务时 Kavi 先列清单和验收标准，做完一步划掉一步；中途你插一句话它当场改方向，网络断了自动重试，被系统杀掉后台接着做。
+
+### 架构
+
+```mermaid
+flowchart TB
+    subgraph app["app 模块（com.jack.ai）"]
+        UI["ui/ 界面<br/>Jetpack Compose"] --> VM["ChatViewModel<br/>回答调度"]
+        VM --> CHAT["chat/<br/>Agent 循环 · 提示词 · 上下文瘦身"]
+        CHAT --> TOOLS["tools/<br/>60 多个工具"]
+        CHAT --> API["api/<br/>DeepSeek · OpenAI 兼容 · Claude · Gemini · 本地模型"]
+        TOOLS --> DATA["data/<br/>存储 · 记忆 · 资料库（RAG）· 浏览器 · 集成"]
+    end
+    TOOLS --> STUDIO["studio 模块<br/>Word · PPT · Excel · PDF · 设计图 · 音视频引擎"]
+    TOOLS --> MIKA["mika 模块<br/>无线调试 · 虚拟屏幕 · 操作其他 App"]
+```
+
+### 做出来的东西
+
+内置设计模板的渲染预览（同一套引擎，Kavi 做小红书配图、海报时用它排版）：
+
+<p>
+<img src="design-previews/xhs-magazine-cover.png" width="23%" alt="杂志风封面">
+<img src="design-previews/xhs-knowledge-cover.png" width="23%" alt="知识卡片封面">
+<img src="design-previews/xhs-guofeng-quote.png" width="23%" alt="国风金句">
+<img src="design-previews/xhs-minimal-cover.png" width="23%" alt="极简封面">
+</p>
+
+更多见 [design-previews/](design-previews/)。
 
 ## 功能
 
@@ -162,6 +214,41 @@
 - 桌面图标能换：K、对话气泡、月亮（蓝紫渐变），或者原来的那个；App 里的标志跟着变
 - 「记忆」页始终是夜晚的样子：深蓝夜空、星点、月亮色的强调
 - 桌面小组件是半透明的圆角卡片，标题前有彩色小图标块，记账用大数字
+
+## AI 协同开发与架构分工
+
+这个项目由作者 Jack 主导，代码主要由几个 AI 编程助手分工写成。人定方向、把关和验收，AI 负责写代码。
+
+### 谁做什么
+
+| 角色 | 负责 |
+|---|---|
+| **Jack（作者）** | 产品方向和架构设计（比如聊天和做任务合成一种对话、正式版暂停只做开发版、重构只做低风险的）；在真机上用、调试、反馈问题；看 CI 结果决定合不合 |
+| **Claude（Claude Code）** | 主力开发；审查并合并其他助手的分支；**唯一能推 `main` 的助手** |
+| **Codex / GPT** | 专项任务：浏览器底层（CDP）、Mika 手机操作移植、安全和并发审计、性能考场。只推自己的分支 |
+| **Muse** | 设计模板、贴纸等素材，照提示词规格出图 |
+
+### 用两份文件约束所有助手
+
+- **[`CLAUDE.md`](CLAUDE.md)**：项目说明书，所有助手都先读。写着包结构和模块边界（`studio`、`mika` 不许引用 `app`）、注释和界面文字用中文、怎么在云端编译和跑单测、签名密钥不进仓库、闪退怎么处理、长期有效的产品决定（比如正式版暂停）。
+- **[`AGENTS.md`](AGENTS.md)**：给 Claude 以外的助手的规矩。**不许推、不许合 `main`**；一件事一个分支（`codex/功能名`）；只改任务需要的文件，不顺手重构；测试够用就行（1 到 3 个），不加多余的防御代码；碰 `ChatViewModel.kt`、`ToolSession.kt` 这类热门文件要写明；交活用固定模板。
+- **`docs/`**：大的改动先写方案再动手，比如 [`docs/架构优化.md`](docs/架构优化.md) 记着每批重构的风险判断和核对方法。
+
+### 验收流程
+
+```mermaid
+flowchart LR
+    C["Codex / GPT<br/>推自己的分支"] --> K["CI「检查分支」<br/>编译 + 单测 + Office 文件校验"]
+    K --> R["Claude 审查<br/>绿的才合"]
+    R --> M["main"]
+    CL["Claude"] -->|编译、单测通过后| M
+    M --> B["CI「打包 APK」<br/>自动发 Release"]
+    B --> J["Jack 真机更新、试用"]
+    J -->|反馈、闪退自动报 Issue| CL
+```
+
+- 推到 `main` 就自动打包发版，所以 `main` 只开放给一个助手，其他的都要先过 CI 和审查。这条是之前几次打包被推坏后 Jack 定的。
+- App 闪退后，下次打开会自动把异常类型和代码位置发到 Issues（不含报错文字），修 bug 前先看那里。
 
 ## 安装
 1. 打开本仓库的 [Releases](../../releases/latest) 页面，下载最新的 `Kavi-*.apk`（v1.1.0 起版本号从 1.1 开始）
