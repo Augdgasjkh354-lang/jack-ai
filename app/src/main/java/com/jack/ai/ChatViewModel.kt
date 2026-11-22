@@ -88,7 +88,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     /** 每个对话正在进行的回答（几个对话可以同时答）。 */
     internal val jobs = java.util.concurrent.ConcurrentHashMap<String, Job>()
     /** 每个 Work 对话连着自动接着做了几次（答成功一次、用户发新消息就清零）。 */
-    private val autoResumes = java.util.concurrent.ConcurrentHashMap<String, Int>()
+    internal val autoResumes = java.util.concurrent.ConcurrentHashMap<String, Int>()
     /** 一件事（用户发一条消息起，含之后的自动接着做、手动接着做）累计花了多少、到多少再问：上限按整件事算，不按每段回答各算各的。 */
     private val taskSpend = java.util.concurrent.ConcurrentHashMap<String, Pair<Double, Double>>()
 
@@ -247,7 +247,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** 回答已经结束：后台的事做完了，开一条新回答让 Kavi 接着做。同时在答的太多就等一等。 */
-    private fun wake(convId: String, text: String, file: java.io.File? = null) {
+    internal fun wake(convId: String, text: String, file: java.io.File? = null) {
         viewModelScope.launch {
             while (jobs.filter { (id, j) -> id != convId && j.isActive }.size >= MAX_PARALLEL) delay(3000)
             jobs[convId]?.takeIf { it.isActive }?.let { reportsOf(convId) += text; return@launch }
@@ -354,7 +354,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** 对话超过这么多条消息，每轮附加说明里带一小段「我是谁」（防越聊越淡）。 */
-    private val ANCHOR_AFTER = 24
+    internal val ANCHOR_AFTER = 24
 
     /** 删除消息后能撤销的时间。 */
     internal val UNDO_MS = 8_000L
@@ -414,7 +414,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         m.role == "assistant" && (m.error != null || m.content.isBlank() || m.plan.any { it.status != "done" })
 
     /** Work 一时出错（网络、限流、服务端 5xx）才自动接着做；Key 不对、余额不足这类接了也没用。 */
-    private fun transient(e: Exception): Boolean = e is IOException || (e is ApiException && (e.code == 408 || e.code == 429 || e.code >= 500))
+    internal fun transient(e: Exception): Boolean = e is IOException || (e is ApiException && (e.code == 408 || e.code == 429 || e.code >= 500))
 
     /** 断点续做：带上清单，让 AI 从没做完的那一步接着做。 */
     fun continueWork(convId: String? = _state.value.currentId) {
@@ -518,30 +518,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             viewModelScope.launch(Dispatchers.IO) {
                 runCatching { com.jack.ai.data.FreePool.probe(getApplication(), settings) }
             }
-            // 清单分两块：固定的（文件、表格、任务……）只发变了的段落（见 ContextNote.delta）；每条消息现算的（经历、相关记忆、推荐技能）照发
             val persistNote = extraUser == null && lastUser != null && lastUser.contextPrefix == null
-            var noteSent: Map<String, String>? = null
-            promptInput = promptInput.copy(contextNote = withContext(Dispatchers.IO) {
-                val stable =
-                    // 能分头做：有免费模型时说一声
-                    com.jack.ai.data.freeCandidates(com.jack.ai.data.FreePool.load(getApplication()), settings, 0).size.takeIf { it > 0 }
-                        ?.let { "【Free sub-agents】$it free models available for delegate_tasks (no cost).\n" }.orEmpty() +
-                    runCatching { com.jack.ai.tools.ContextNote.build(getApplication(), store, conv, skills.map { it.id }.toSet()) }.getOrDefault("") +
-                    // 很长的对话里重新锚定一下「我是谁」：越聊越长时开头的设定会被冲淡（隔一阵提一次，见 ContextNote.REPEAT_AFTER）
-                    (if (conv.messages.size >= ANCHOR_AFTER) com.jack.ai.data.Persona.fill("【Still you】" + com.jack.ai.data.KaviSelf.text().replace("\n【", "\n[") +
-                        "\nThis conversation has run long: keep your own voice and the principles you started with.\n", settings) else "")
-                val shown = if (persistNote) com.jack.ai.tools.ContextNote.delta(stable, conv.noteSent, conv, lastUser!!.id).also { noteSent = it.second }.first
-                    else stable
-                shown +
-                    // Kavi 的连续性：最近的经历、上次见用户是什么时候（每轮变，放这里不影响缓存）
-                    runCatching { com.jack.ai.data.Timeline.noteFor(getApplication(), settings, _state.value.conversations, _state.value.projects, conv) }.getOrDefault("") +
-                    // 深处的记忆：和这句话相关的浮上来（不常用的不再每轮都带着）
-                    (if (conv.globalAllowed(project)) runCatching { com.jack.ai.data.memory.DeepRecall.note(getApplication(), settings, lastUser?.content.orEmpty()) }.getOrDefault("") else "") +
-                    // 按意思推荐一两个技能（技能多了模型容易挑错）
-                    runCatching { com.jack.ai.data.SkillMatcher.note(getApplication(), settings, lastUser?.content.orEmpty(), skills) }.getOrDefault("") +
-                    // 语音对话：回答会被读出来，说短一点、别排版
-                    com.jack.ai.data.Persona.fill(com.jack.ai.chat.VoiceMode.note(convId), settings)
-            })
+            val (contextNote, noteSent) = replyContextNote(convId, conv, project, settings, skills, lastUser, persistNote)
+            promptInput = promptInput.copy(contextNote = contextNote)
             // 历史里的附加说明必须和第一次发出时一致，才能保住后续请求的前缀缓存。
             if (extraUser == null && lastUser != null && lastUser.contextPrefix == null) {
                 val prefix = PromptBuilder.timeNote(promptInput.now) + PromptBuilder.updateNote(conv, reply.appVersion) +
@@ -555,86 +534,19 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             // Chat 和 Work 合并了：每个对话都能接长任务（花费到上限先问一声、断了自动接着做、压掉旧的大段工具结果）。
             // 要不要列清单、复核由 Kavi 自己判断（调了 update_plan 就算在做任务，见 WorkGate）
             val work = true
-            /** Kavi 列了清单，算在做任务：通知上写「正在工作」「完成了」。 */
-            var tasked = false
             val workTitle = conv.title
             // 回答期间开前台服务，切到后台也接着跑
             WorkService.start(getApplication(), convId, workTitle, false)
             /** 几个对话同时在答时，弹窗上写明是哪个对话在问。 */
-            suspend fun ask(title: String, body: String, action: String, always: com.jack.ai.data.AllowRule? = null): Boolean = kotlinx.coroutines.coroutineScope {
-                // 弹窗只在聊天页里看得到：用户切到别的 App（或 Kavi 浏览器）时推一条通知，不然任务就一直悄悄等着
-                val nid = "confirm-$convId"
-                val nag = launch {
-                    while (MainActivity.visible) delay(1500)
-                    com.jack.ai.data.Routines.notify(getApplication(), nid, "Kavi 等你确认：$title", "「${workTitle.take(20)}」停在这一步，点开回答后接着做。\n" + body.take(200), openChat = convId)
-                }
-                try {
-                    core.confirm(title, (if (_state.value.streamingIds.size > 1) "对话「$workTitle」：\n" else "") + body, action, always)
-                } finally {
-                    nag.cancel()
-                    runCatching { androidx.core.app.NotificationManagerCompat.from(getApplication<Application>()).cancel(nid.hashCode()) }
-                }
-            }
+            suspend fun ask(title: String, body: String, action: String, always: com.jack.ai.data.AllowRule? = null): Boolean =
+                confirmDuringReply(convId, workTitle, title, body, action, always)
             val limit = settings.workCostLimit
             // 接着做（自动或手动）沿用这件事已经花的钱；新消息、重新回答、复核从 0 算
             val carried = if (extraUser != null && extraUser != REVIEW_PROMPT) taskSpend[convId] else null
             var spent = carried?.first ?: 0.0
             var nextLimit = carried?.second ?: limit
-            val session = ToolSession(toolHost, settings, conv, project, skills, object : ToolUi {
-                override fun started(label: String) {
-                    patchMessage(convId, reply.id) { it.copy(searches = it.searches + SearchRecord(label, pending = true, at = System.currentTimeMillis())) }
-                    WorkService.progress(getApplication(), convId, workTitle, label, tasked)
-                }
-
-                override fun plan(items: List<com.jack.ai.data.PlanItem>, criteria: List<com.jack.ai.data.PlanItem>) {
-                    patchMessage(convId, reply.id) { it.copy(plan = items, criteria = criteria) }
-                    tasked = items.isNotEmpty()
-                    val doing = items.firstOrNull { it.status == "doing" }?.text
-                    WorkService.progress(getApplication(), convId, workTitle,
-                        "${items.count { it.status == "done" || it.status == "skipped" }}/${items.size}" + (doing?.let { " · $it" } ?: ""), true)
-                }
-
-                override fun notice(text: String) = patchMessage(convId, reply.id) { it.copy(notices = it.notices + text) }
-
-                override fun ask(cards: List<com.jack.ai.data.AskCard>): Boolean {
-                    patchMessage(convId, reply.id) { it.copy(asks = cards) }
-                    return true
-                }
-
-                override fun draft(card: com.jack.ai.data.DraftCard): Boolean {
-                    // 同一个平台再出一版就换掉旧的（改稿时只留最新的）
-                    patchMessage(convId, reply.id) { m -> m.copy(drafts = m.drafts.filterNot { it.platform == card.platform } + card) }
-                    return true
-                }
-
-                override fun endConversation(reason: String) = updateConv(convId) { it.copy(closedReason = reason) }
-
-                private var progressAt = 0L
-                override fun progress(text: String) {
-                    WorkService.progress(getApplication(), convId, workTitle, text, tasked)
-                    // 聊天里正在做的那一步也显示进度（一秒最多改一次，免得一直重画、一直存盘）
-                    val now = System.currentTimeMillis()
-                    if (now - progressAt < 1000) return
-                    progressAt = now
-                    patchMessage(convId, reply.id) { m ->
-                        val i = m.searches.indexOfLast { it.pending }
-                        if (i < 0) m else m.copy(searches = m.searches.toMutableList().also { it[i] = it[i].copy(progress = text) })
-                    }
-                }
-
-                override fun finished(label: String, record: SearchRecord) = patchMessage(convId, reply.id) { m ->
-                    m.copy(searches = m.searches.map { if (it.query == label && it.pending) record.copy(at = it.at) else it })
-                }
-
-                override suspend fun confirm(title: String, body: String, action: String) = ask(title, body, action)
-                override suspend fun confirmAlways(title: String, body: String, action: String, always: com.jack.ai.data.AllowRule) = ask(title, body, action, always)
-
-                /** 把生成或修改过的文件挂到这条回答上，显示成卡片。 */
-                override fun attach(file: File) {
-                    val gen = GeneratedFile(file.name, file.absolutePath, ToolSession.mimeOf(file.name), file.length())
-                    patchMessage(convId, reply.id) { m -> m.copy(files = m.files.filterNot { it.path == gen.path } + gen) }
-                }
-            })
+            val ui = ReplyToolUi(this@ChatViewModel, convId, reply.id, workTitle) { title, body, action, always -> ask(title, body, action, always) }
+            val session = ToolSession(toolHost, settings, conv, project, skills, ui)
             session.canSee = ep.vision
             session.modelName = com.jack.ai.data.modelLabel(model)
             session.unlocked.addAll(unlockedStart)
@@ -681,32 +593,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 val st = steps()
                 patchMessage(convId, reply.id) { it.copy(reasoning = r, content = c, trail = t, steps = st) }
             }
-            val summaryEp = settings.backgroundEndpoint()
-            // 选了「思考摘要用本地生成模型」又下好了：用手机上的 Qwen 写，不调后台模型
-            val localLlm = com.jack.ai.data.LocalModels.activeLlm(getApplication(), settings)
-            val summarizer = if (!settings.thinkSummary || (summaryEp == null && localLlm == null)) null else viewModelScope.launch(Dispatchers.IO) {
-                var done = 0
-                while (summaries.size < com.jack.ai.chat.ThinkSummary.MAX) {
-                    delay(com.jack.ai.chat.ThinkSummary.POLL_MS)
-                    val r = seenReasoning.get()
-                    if (!com.jack.ai.chat.ThinkSummary.due(r.length - done, answering.get())) continue
-                    val chunk = r.substring(done)
-                    done = r.length
-                    val previous = summaries.map { it.text }
-                    val line = runCatching {
-                        if (localLlm != null) com.jack.ai.api.LocalLlm.generate(
-                            com.jack.ai.data.LocalModels.dir(getApplication(), localLlm), localLlm.llm!!,
-                            com.jack.ai.chat.ThinkSummary.SYSTEM, com.jack.ai.chat.ThinkSummary.input(previous, chunk.takeLast(1200)), maxNew = 32, maxPrompt = 900)
-                        else client.complete(summaryEp!!, listOf(
-                            buildJsonObject { put("role", "system"); put("content", com.jack.ai.chat.ThinkSummary.SYSTEM) },
-                            buildJsonObject { put("role", "user"); put("content", com.jack.ai.chat.ThinkSummary.input(previous, chunk)) },
-                        ), maxTokens = 60)
-                    }.getOrNull()?.let { com.jack.ai.chat.ThinkSummary.clean(it, previous) } ?: continue
-                    summaries += com.jack.ai.data.ThinkStep("summary", line)
-                    val st = steps()
-                    patchMessage(convId, reply.id) { it.copy(steps = st) }
-                }
-            }
+            val summarizer = launchThinkSummarizer(settings, convId, reply.id, summaries, seenReasoning, answering, ::steps)
             // 交付清单：先记下对话文件夹现在的样子，答完一比就知道交了哪些文件
             val wsDir = com.jack.ai.data.Workspace.dir(getApplication(), com.jack.ai.data.Workspace.key(conv))
             val before = if (work) withContext(Dispatchers.IO) { runCatching { com.jack.ai.data.Deliverables.snapshot(wsDir) }.getOrNull() } else null
@@ -854,41 +741,15 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 // 这段聊天停下一阵后，在后台写进 Kavi 的经历流
                 com.jack.ai.data.Timeline.scheduleSummary(getApplication(), convId)
                 // 插的话没来得及用上（回答已经收尾了）：等这次结束后当成新消息发出去
-                val leftover = generateSequence { myInterjections.poll() }.toList()
-                val me = jobs[convId]
-                // 后台下好的消息来晚了（回答已经收尾，没带给模型）：等这次结束后叫醒 Kavi 接着做
-                val lateReports = generateSequence { myReports.poll() }.toList()
-                if (lateReports.isNotEmpty()) viewModelScope.launch {
-                    me?.join()
-                    wake(convId, lateReports.joinToString("\n\n"))
-                }
-                if (leftover.isNotEmpty()) viewModelScope.launch {
-                    me?.join()
-                    resendLeftover(convId, leftover.joinToString("\n"))
-                }
-                // Work 一时出错停下（网络断了、服务忙）：等一会儿自动接着做，连着最多 AUTO_RESUME_MAX 次；用户停下、花费到上限、复核的不接
-                if (failure == null) autoResumes.remove(convId)
                 if (extraUser != REVIEW_PROMPT) taskSpend[convId] = spent to nextLimit
-                val resumes = autoResumes[convId] ?: 0
                 // 已经花到上限的不自动接着做：接了也是马上停下问，不如等用户看了再说
                 val underLimit = limit <= 0 || spent < nextLimit
-                if (work && goalOf(convId) == null && leftover.isEmpty() && extraUser != REVIEW_PROMPT && session.maxRounds != 0 && underLimit &&
-                    failure?.let(::transient) == true && resumes < AUTO_RESUME_MAX) {
-                    autoResumes[convId] = resumes + 1
-                    val wait = AUTO_RESUME_DELAY_S * (resumes + 1)
-                    patchMessage(convId, reply.id) { it.copy(error = (it.error ?: "出错了") + "\n${wait} 秒后自动接着做（第 ${resumes + 1}/$AUTO_RESUME_MAX 次）") }
-                    viewModelScope.launch {
-                        me?.join()
-                        delay(wait * 1000L)
-                        // 这期间用户自己发了消息、点了接着做，或者对话被删了，就不再接
-                        val cur = _state.value.conversations.firstOrNull { it.id == convId }
-                        if (!busy(convId) && cur?.messages?.lastOrNull()?.id == reply.id) continueWork(convId)
-                    }
-                }
+                replyFollowUps(convId, reply.id, jobs[convId], myInterjections, myReports, work, extraUser,
+                    toolsStopped = session.maxRounds == 0, underLimit = underLimit, failure = failure)
                 run {
                     val m = _state.value.conversations.firstOrNull { it.id == convId }?.messages?.firstOrNull { it.id == reply.id }
                     val result = m?.error ?: m?.content?.takeLast(200)?.trim().orEmpty().ifBlank { "已停止" }
-                    WorkService.finish(getApplication(), convId, workTitle, result, tasked)
+                    WorkService.finish(getApplication(), convId, workTitle, result, ui.tasked)
                 }
                 compression.maybeAutoCompress(convId)
                 if (failure == null) maybeReviewMemory(convId)
@@ -901,7 +762,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
      * 以前只在用户还停在这个对话时才发，切到别的对话就悄悄丢了；发不出去（同时在答的太多、额度用完）也丢了。
      * 现在不在这个对话也照发；发不出去就先作为一条消息记进对话，不丢字，等用户自己再发。
      */
-    private fun resendLeftover(convId: String, text: String) {
+    internal fun resendLeftover(convId: String, text: String) {
         val conv = _state.value.conversations.firstOrNull { it.id == convId } ?: return
         // 又有新回答开始了（比如用户点了接着做）：交给它当插话
         if (busy(convId)) { interjectionsOf(convId) += text; return }
@@ -1027,7 +888,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     internal fun updateConvQuiet(id: String, transform: (Conversation) -> Conversation) = core.updateConvQuiet(id, transform)
 
     /** 这个对话的持久目标：读内存里的（后台改了会经 Goals.changes 同步过来），不在主线程上整份读盘。 */
-    private fun goalOf(convId: String) = _state.value.conversations.firstOrNull { it.id == convId }?.goal
+    internal fun goalOf(convId: String) = _state.value.conversations.firstOrNull { it.id == convId }?.goal
     /** 从事实库里删掉一条（连同向量）。 */
     fun deleteFact(id: String) {
         viewModelScope.launch(Dispatchers.IO) {
