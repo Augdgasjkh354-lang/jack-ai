@@ -462,6 +462,7 @@ class ToolSession(
             name == "end_conversation" && interactive -> endConversation(args)
             name == "ask_user" -> askUser(args)
             name == "show_draft" -> showDraft(args)
+            name == "make_animation" -> makeAnimation(args)
             name == "schedule" && SkillIds.ROUTINE in skillIds -> schedule(args)
             name == "cancel_schedule" && SkillIds.ROUTINE in skillIds -> cancelSchedule(args)
             name == "save_flashcards" && SkillIds.LEARN in skillIds -> saveCards(args)

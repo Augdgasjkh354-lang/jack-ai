@@ -240,6 +240,8 @@ object PromptBuilder {
             add(SkillTools.CHECK_REWRITE)
             // 发帖草稿卡片：和人聊的对话才有（后台没人看时工具自己回话）
             if (conv.id != com.jack.ai.data.Retired.FREE_TIME_CONV && conv.id != com.jack.ai.data.INBOX_ID) add(SkillTools.SHOW_DRAFT)
+            // 代码动画短片：要设计插件（出图的那套 WebView 和字体）
+            if (SkillIds.DESIGN in skillIds) add(SkillTools.MAKE_ANIMATION)
             // 连接器的工具放最后：增删连接器时前面那一大段工具说明不变，缓存照样命中
             com.jack.ai.data.integrations.Mcp.toolDefs(com.jack.ai.data.integrations.Mcp.active(settings)).forEach { add(it) }
         }.takeIf { it.isNotEmpty() }
