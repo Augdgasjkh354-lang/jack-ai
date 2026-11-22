@@ -284,36 +284,93 @@ private suspend fun ToolSession.beats(f: File): Pair<String, SearchRecord> {
 /**
  * 配音：几句文案用 DeepSeek 语音读出来，接成一条 wav（句子之间停一下），同时出一份按这条配音时间的 .srt。
  * 每句单独合成，所以每句从几秒到几秒是准的，Kavi 照着安排画面。
+ * 给了 srt（原视频带时间的文字稿）就是翻译配音：每句放回原句开始的时间，长了加速，放不下的标出来让 Kavi 缩短（[com.jack.ai.data.media.Dub]）。
+ * 每句的声音按「声音 + 文字」存在缓存里，改几句再配只重配改了的。配完默认回听核对一遍（[com.jack.ai.data.media.SpeechCheck]）。
  */
 private suspend fun ToolSession.voiceover(args: JsonObject): String {
-    val lines = ((args["lines"] as? JsonArray)?.map { it.text() } ?: args["text"].text().split('\n'))
-        .map { it.trim() }.filter { it.isNotEmpty() }
-    if (lines.isEmpty()) return "voiceover 要写 lines：配音文案，一句一项（一句就是一屏字幕，10～20 个字）"
-    if (lines.size > 80) return "一次最多 80 句，现在 ${lines.size} 句：分两段配"
+    val srtName = args["srt"].text().trim()
+    val timing = if (srtName.isEmpty()) null else {
+        val f = runCatching { withContext(Dispatchers.IO) { inputs(listOf(srtName)).first() } }.getOrElse { return it.message ?: "对话文件夹里没有「$srtName」" }
+        withContext(Dispatchers.IO) { Subtitles.parseSrt(f.readText()) }.ifEmpty { return "「$srtName」里没读出字幕：要 .srt（transcribe 加 timestamps=true 做的那份）" }
+    }
+    val given = ((args["lines"] as? JsonArray)?.map { it.text() } ?: args["text"].text().takeIf { it.isNotBlank() }?.split('\n').orEmpty()).map { it.trim() }
+    val lines = when {
+        timing == null -> given.filter { it.isNotEmpty() }
+        given.isEmpty() -> timing.map { it.text.replace('\n', ' ').trim() }
+        given.size != timing.size -> return "lines 要和「$srtName」一句对一句：它有 ${timing.size} 句，你给了 ${given.size} 句（某句不配就写空字符串）"
+        else -> given
+    }
+    if (lines.none { it.isNotEmpty() }) return "voiceover 要写 lines：配音文案，一句一项（一句就是一屏字幕，10～20 个字）；翻译配音再给 srt=原视频的字幕"
+    val maxLines = if (timing != null) 400 else 80
+    if (lines.size > maxLines) return "一次最多 $maxLines 句，现在 ${lines.size} 句：分两段配"
     val chars = lines.sumOf { com.jack.ai.api.DeepSeekTools.ttsChars(it) }
-    if (chars > 6000) return "文案太长（$chars 计费字符，上限 6000）：短视频配音一般几百字，精简一下"
+    val maxChars = if (timing != null) 30_000 else 6000
+    if (chars > maxChars) return "文案太长（$chars 计费字符，上限 $maxChars）" + if (timing == null) "：短视频配音一般几百字，精简一下" else "：视频分段配"
     val key = settings.apiKey.takeIf { it.isNotBlank() } ?: return "配音要用 DeepSeek Key（设置里填的那个），现在没填"
     val voice = args["voice"].text().ifBlank { settings.dsVoiceId }.let { if (it == "tide") "tide" else "stella" }
     val pauseMs = ((args["pause"].text().toDoubleOrNull() ?: 0.25) * 1000).toLong().coerceIn(0, 2000)
-    val name = args["out"].text().trim().substringBeforeLast('.').ifBlank { "配音" }
-    return runTool("配音：${lines.size} 句") {
+    val name = args["out"].text().trim().substringBeforeLast('.').ifBlank { if (timing != null) "翻译配音" else "配音" }
+    val check = args["check"]?.text() != "false"
+    val videoName = args["file"].text().trim()
+    return runTool((if (timing != null) "翻译配音" else "配音") + "：${lines.count { it.isNotEmpty() }} 句") {
         val rate = com.jack.ai.api.DeepSeekTools.TTS_RATE
+        val cache = File(wsCache, "tts").apply { mkdirs() }
+        fun keyOf(s: String) = java.security.MessageDigest.getInstance("SHA-1").digest("$voice|$s".toByteArray()).joinToString("") { "%02x".format(it) }
         val pcm = arrayOfNulls<ByteArray>(lines.size)
-        var done = 0
+        var done = 0; var fresh = 0
         coroutineScope {
             val gate = Semaphore(3)
             lines.mapIndexed { i, line ->
                 async(Dispatchers.IO) {
+                    if (line.isEmpty()) { pcm[i] = ByteArray(0); return@async }
+                    val hit = File(cache, keyOf(line) + ".pcm")
+                    if (hit.isFile) { pcm[i] = hit.readBytes(); return@async }
                     gate.withPermit {
                         val raw = com.jack.ai.api.DeepSeekTools.ttsStream(key, line, voice).use { it.readBytes() }
                         host.store.addPaidCall(com.jack.ai.api.DeepSeekTools.TTS_KEY, com.jack.ai.api.DeepSeekTools.ttsChars(line) * com.jack.ai.api.DeepSeekTools.TTS_PRICE_PER_CHAR)
-                        pcm[i] = com.jack.ai.data.media.VoiceTrack.trim(raw, rate)
-                        ui.progress("配音：${synchronized(pcm) { ++done }}/${lines.size} 句")
+                        val t = com.jack.ai.data.media.VoiceTrack.trim(raw, rate)
+                        pcm[i] = t
+                        runCatching { hit.writeBytes(t) }
+                        ui.progress("配音：${synchronized(pcm) { fresh++; ++done }}/${lines.count { it.isNotEmpty() }} 句")
                     }
                 }
             }.awaitAll()
         }
-        val (audio, cues) = com.jack.ai.data.media.VoiceTrack.join(lines, pcm.map { it!! }, rate, pauseMs)
+        val parts = pcm.map { it!! }
+        val cues: List<Subtitles.Cue>
+        val audio: ByteArray
+        val heardParts: List<ByteArray>
+        var report = ""
+        if (timing != null) {
+            val dur = parts.map { it.size * 1000L / (rate * 2) }
+            val places = com.jack.ai.data.media.Dub.plan(timing, dur)
+            val sped = parts.mapIndexed { i, p -> places[i]?.let { com.jack.ai.data.media.Dub.stretch(p, rate, it.speed) } ?: ByteArray(0) }
+            val videoMs = videoName.takeIf { it.isNotEmpty() }?.let { n ->
+                runCatching { withContext(Dispatchers.IO) { VideoEdit.info(inputs(listOf(n)).first()).first } }.getOrNull()
+            } ?: 0L
+            audio = com.jack.ai.data.media.Dub.lay(places, sped, rate, videoMs)
+            cues = places.mapIndexedNotNull { i, p -> p?.let { Subtitles.Cue(it.startMs, it.endMs, lines[i]) } }
+            heardParts = sped
+            val long = places.withIndex().filter { it.value?.fit == com.jack.ai.data.media.Dub.Fit.LONG }
+            val fast = places.count { it?.fit == com.jack.ai.data.media.Dub.Fit.FAST }
+            report = buildString {
+                append("对时间：${cues.size} 句，${cues.size - long.size - fast} 句原速放得下，$fast 句稍微加速（最多 ${com.jack.ai.data.media.Dub.MAX_SPEED}×）")
+                if (long.isEmpty()) append("，都在原句的位置上。")
+                else {
+                    append("，${long.size} 句太长、往后挤了，要缩短译文（意思保留，删修饰、换短的说法）：\n")
+                    long.forEach { (i, p) ->
+                        p!!
+                        append("${i + 1}. [${Subtitles.stamp(timing[i].startMs)}] 原句 ${"%.1f".format(p.slotMs / 1000.0)} 秒，配音要 ${"%.1f".format(p.needMs / 1000.0)} 秒" +
+                            (if (p.lateMs > 0) "，晚了 ${"%.1f".format(p.lateMs / 1000.0)} 秒" else "") + "：「${lines[i]}」→ 缩到 ${com.jack.ai.data.media.Dub.shorter(lines[i], p)} 个字左右\n")
+                    }
+                    append("改好这几句，lines 其他句子照旧、srt 不变再配一次（没改的句子用缓存，不重复花钱）。")
+                }
+            }
+        } else {
+            val joined = com.jack.ai.data.media.VoiceTrack.join(lines, parts, rate, pauseMs)
+            audio = joined.first; cues = joined.second
+            heardParts = parts
+        }
         val wav = Workspace.uniqueFile(wsDir, "$name.wav")
         val srt = File(wsDir, wav.nameWithoutExtension + ".srt")
         withContext(Dispatchers.IO) {
@@ -321,12 +378,54 @@ private suspend fun ToolSession.voiceover(args: JsonObject): String {
             srt.writeText(Subtitles.toSrt(cues))
         }
         ui.attach(wav)
+        val qc = if (!check) "" else listenBack(lines, heardParts, rate, cache) { keyOf(it) }
         val total = audio.size * 1000L / (rate * 2)
-        ("配好了：「${wav.name}」（${Subtitles.stamp(total)}，${if (voice == "tide") "男声" else "女声"}），字幕「${srt.name}」，每句的时间：\n" +
-            Subtitles.timed(cues) +
-            "\n\n出片时 plan 里写 voiceover=「${wav.name}」、subtitles=「${srt.name}」、subtitles_source=\"output\"；按每句的时间安排画面（这句在说什么就放什么镜头），画面总长不短于 ${Subtitles.stamp(total)}；" +
-            "素材原声一般关掉（volume 0）或压低（0.2），背景音乐 music_volume 0.15～0.25。") to SearchRecord("配音：${wav.name}")
+        val head = "配好了：「${wav.name}」（${Subtitles.stamp(total)}，${if (voice == "tide") "男声" else "女声"}" +
+            (if (fresh < lines.count { it.isNotEmpty() }) "，新配 $fresh 句，其余用上次配好的" else "") + "），字幕「${srt.name}」"
+        val text = if (timing != null) {
+            "$head，按原视频的时间排好了。\n$report" + (if (qc.isNotEmpty()) "\n\n$qc" else "") +
+                "\n\n出片：make_video，clips=[{file=原视频, volume=0.1（留一点环境声；要完全换掉写 0）}]，voiceover=「${wav.name}」，subtitles=「${srt.name}」，subtitles_source=\"output\"；别加 cover（会把配音往后挪、对不上嘴）。"
+        } else {
+            "$head，每句的时间：\n" + Subtitles.timed(cues) + (if (qc.isNotEmpty()) "\n\n$qc" else "") +
+                "\n\n出片时 plan 里写 voiceover=「${wav.name}」、subtitles=「${srt.name}」、subtitles_source=\"output\"；按每句的时间安排画面（这句在说什么就放什么镜头），画面总长不短于 ${Subtitles.stamp(total)}；" +
+                "素材原声一般关掉（volume 0）或压低（0.2），背景音乐 music_volume 0.15～0.25。"
+        }
+        text to SearchRecord("配音：${wav.name}")
     }
+}
+
+/** 回听：每句配音再转成文字和文案比（转过的按「声音 + 文字 + 长度」缓存）。没有能转文字的服务就跳过。 */
+private suspend fun ToolSession.listenBack(lines: List<String>, parts: List<ByteArray>, rate: Int, cache: File, keyOf: (String) -> String): String {
+    val engine = Transcriber.engine(settings) ?: return "（没做回听核对：没有能转文字的服务）"
+    val heard = arrayOfNulls<String>(lines.size)
+    var done = 0
+    val todo = lines.indices.filter { lines[it].isNotEmpty() && parts[it].isNotEmpty() }
+    try {
+        coroutineScope {
+            val gate = Semaphore(3)
+            todo.map { i ->
+                async(Dispatchers.IO) {
+                    val hit = File(cache, keyOf(lines[i]) + "-" + parts[i].size + ".heard")
+                    if (hit.isFile) { heard[i] = hit.readText(); return@async }
+                    gate.withPermit {
+                        val w = File(cache, "listen-$i-${System.nanoTime()}.wav")
+                        try {
+                            com.jack.ai.data.media.VideoCompose.Wav.write(w, parts[i], rate)
+                            val t = transcribeRetrying(engine, w)
+                            heard[i] = t
+                            runCatching { hit.writeText(t) }
+                        } finally { w.delete() }
+                        ui.progress("回听核对：${synchronized(heard) { ++done }}/${todo.size} 句")
+                    }
+                }
+            }.awaitAll()
+        }
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        return "（回听核对没做完：${e.message?.take(80)}）"
+    }
+    return com.jack.ai.data.media.SpeechCheck.format(com.jack.ai.data.media.SpeechCheck.check(lines, heard.toList()), todo.size)
 }
 
 /** 从视频里截几张图（做封面、填设计的图片位用），存成 PNG。 */
