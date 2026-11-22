@@ -114,6 +114,8 @@ data class SearchRecord(
     val shot: String = "",
     /** 这一步什么时候开始的（Work 的执行记录上显示时间）；以前的记录是 0。 */
     val at: Long = 0,
+    /** 慢的工具做到哪了（「出片 45%」「第 120/900 帧」），做完就不显示。 */
+    val progress: String = "",
 )
 
 @Serializable

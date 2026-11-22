@@ -366,8 +366,14 @@ fun AssistantMessage(
             when {
                 f.mime.startsWith("image/") -> ChartImage(f)
                 f.name.endsWith(".html", true) -> AppCard(f, onFixApp)
+                ResultKinds.isVideo(f.name) -> VideoResult(f)
+                ResultKinds.isAudio(f.name) -> AudioResult(f)
                 else -> GeneratedFileCard(f)
             }
+        }
+        // 最后一条回答做出了东西：给几个「接着做」，点一下就发给 Kavi
+        if (isLast && !streaming && onAnswer != null && shownFiles.isNotEmpty() && msg.asks.isEmpty()) {
+            NextSteps(remember(shownFiles) { shownFiles.map { it.name } }) { onAnswer(it) }
         }
         msg.error?.let { err ->
             Spacer(Modifier.height(6.dp))

@@ -211,7 +211,7 @@ internal fun SearchBox(searches: List<SearchRecord>, busy: Boolean = false) {
                 }
                 Spacer(Modifier.size(8.dp))
                 Text(
-                    if (searching) "正在${searches.last { it.pending }.query.let { if (isOther(it)) it else "搜索：$it" }}"
+                    if (searching) searches.last { it.pending }.let { r -> r.progress.ifBlank { "正在" + r.query.let { if (isOther(it)) it else "搜索：$it" } } }
                     else if (busy) "用了 ${searches.size} 次工具，接着想…"
                     else if (sources.isEmpty() || searches.all { isOther(it.query) }) "用了 ${searches.size} 次工具"
                     else "用了 ${searches.size} 次工具 · 参考 ${sources.size} 个来源",
@@ -430,7 +430,7 @@ internal fun ToolTimeline(searches: List<SearchRecord>, busy: Boolean) {
                     }
                     Spacer(Modifier.size(10.dp))
                     Text(
-                        rec.query + (rec.error?.let { "（$it）" } ?: ""),
+                        rec.query + (rec.error?.let { "（$it）" } ?: "") + (if (rec.pending && rec.progress.isNotBlank()) "\n" + rec.progress else ""),
                         style = MaterialTheme.typography.bodySmall,
                         color = if (rec.error != null) colors.error else colors.onSurface,
                         maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),

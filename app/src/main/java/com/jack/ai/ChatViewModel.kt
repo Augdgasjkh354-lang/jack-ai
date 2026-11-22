@@ -609,7 +609,18 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
                 override fun endConversation(reason: String) = updateConv(convId) { it.copy(closedReason = reason) }
 
-                override fun progress(text: String) = WorkService.progress(getApplication(), convId, workTitle, text, tasked)
+                private var progressAt = 0L
+                override fun progress(text: String) {
+                    WorkService.progress(getApplication(), convId, workTitle, text, tasked)
+                    // 聊天里正在做的那一步也显示进度（一秒最多改一次，免得一直重画、一直存盘）
+                    val now = System.currentTimeMillis()
+                    if (now - progressAt < 1000) return
+                    progressAt = now
+                    patchMessage(convId, reply.id) { m ->
+                        val i = m.searches.indexOfLast { it.pending }
+                        if (i < 0) m else m.copy(searches = m.searches.toMutableList().also { it[i] = it[i].copy(progress = text) })
+                    }
+                }
 
                 override fun finished(label: String, record: SearchRecord) = patchMessage(convId, reply.id) { m ->
                     m.copy(searches = m.searches.map { if (it.query == label && it.pending) record.copy(at = it.at) else it })
