@@ -437,6 +437,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             last.error?.let { append("\n上次停下的原因：$it") }
             // 出错的回答不会发回给模型：把它已经发出去的邮件、写过的文件这些列出来，免得接着做时再来一遍
             append(com.jack.ai.chat.DoneSoFar.note(last.trail))
+            // 长任务的工作笔记：查到的结论、做过的决定，接着做时直接带上
+            append(runCatching { com.jack.ai.data.WorkNotes.recall(com.jack.ai.data.Workspace.dir(getApplication(), com.jack.ai.data.Workspace.key(conv))) }.getOrDefault(""))
         }
         startReply(conv.id, extraUser = extra)
     }

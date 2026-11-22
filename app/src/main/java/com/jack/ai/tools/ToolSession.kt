@@ -463,6 +463,14 @@ class ToolSession(
             name == "ask_user" -> askUser(args)
             name == "show_draft" -> showDraft(args)
             name == "make_animation" -> makeAnimation(args)
+            name == "work_note" -> {
+                val text = args["text"].text().trim()
+                if (text.isEmpty()) "work_note 要写 text：一两句话" else {
+                    withContext(kotlinx.coroutines.Dispatchers.IO) { com.jack.ai.data.WorkNotes.append(wsDir, args["kind"].text().trim(), text) }
+                    succeeded.incrementAndGet()
+                    "记下了（${com.jack.ai.data.WorkNotes.NAME}）。"
+                }
+            }
             name == "schedule" && SkillIds.ROUTINE in skillIds -> schedule(args)
             name == "cancel_schedule" && SkillIds.ROUTINE in skillIds -> cancelSchedule(args)
             name == "save_flashcards" && SkillIds.LEARN in skillIds -> saveCards(args)

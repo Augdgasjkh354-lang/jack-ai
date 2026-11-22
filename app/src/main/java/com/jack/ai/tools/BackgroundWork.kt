@@ -160,7 +160,8 @@ suspend fun runBackgroundWork(
         messages.clear()
         messages += fresh
         messages += saved.messages.drop(1)
-        messages += buildJsonObject { put("role", "user"); put("content", TaskCheckpoint.RESUME_NOTE) }
+        val notes = runCatching { com.jack.ai.data.WorkNotes.recall(com.jack.ai.data.Workspace.dir(ctx, com.jack.ai.data.Workspace.key(conv))) }.getOrDefault("")
+        messages += buildJsonObject { put("role", "user"); put("content", TaskCheckpoint.RESUME_NOTE + notes) }
         // 目标的断点一直留着（一轮接一轮），里面的花费是上一轮存的：新的一轮从 0 算，免得每轮都把以前的再加一遍
         spent = if (goalId == null || roundResumed) saved.spent else 0.0
         onProgress("接着上次断掉的地方做")

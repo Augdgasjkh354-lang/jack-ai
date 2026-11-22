@@ -473,11 +473,16 @@ private suspend fun ToolSession.makeVideo(args: JsonObject): String {
         val work = File(wsCache, "compose-${System.currentTimeMillis()}")
         try {
             val d = com.jack.ai.data.media.VideoCompose.make(app, plan, { files.getValue(it) }, subs, plan.music?.let { files.getValue(it) }, plan.voiceover?.let { files.getValue(it) }, work, dst) { ui.progress(it) }
+            // 质检：响度调到 -14 LUFS，找黑屏和长时间没声音（思路来自 kinocut、autoclip）
+            val qc = try { com.jack.ai.data.media.VideoQc.check(app, dst, work) { ui.progress(it) }.text() }
+                catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                catch (e: Exception) { "质检没做成：${e.message?.take(60)}" }
             ui.attach(dst)
             val text = buildString {
                 append("出好了：「${dst.name}」（${Subtitles.stamp(d.durationMs).substringBefore('.')}，${d.width}×${d.height}，${ToolSizes.text(dst.length())}），已经显示在聊天里。")
                 if (d.subtitleCount > 0) append("字幕 ${d.subtitleCount} 句。")
                 d.notes.forEach { append(it).append("。") }
+                append("\n").append(qc)
                 append("\n交给用户前可以用 watch_video 看一眼成片（字幕、花字的位置，卡点准不准）；要改就改方案再出一次，原素材都没动。")
             }
             text to SearchRecord("剪辑出片：${dst.name}")

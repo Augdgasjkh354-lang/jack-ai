@@ -242,6 +242,8 @@ object PromptBuilder {
             if (conv.id != com.jack.ai.data.Retired.FREE_TIME_CONV && conv.id != com.jack.ai.data.INBOX_ID) add(SkillTools.SHOW_DRAFT)
             // 代码动画短片：要设计插件（出图的那套 WebView 和字体）
             if (SkillIds.DESIGN in skillIds) add(SkillTools.MAKE_ANIMATION)
+            // 长任务的工作笔记（思路来自 planning-with-files，MIT）
+            add(SkillTools.WORK_NOTE)
             // 连接器的工具放最后：增删连接器时前面那一大段工具说明不变，缓存照样命中
             com.jack.ai.data.integrations.Mcp.toolDefs(com.jack.ai.data.integrations.Mcp.active(settings)).forEach { add(it) }
         }.takeIf { it.isNotEmpty() }
@@ -484,7 +486,7 @@ object PromptBuilder {
         if (conv.summary.isNotBlank()) {
             parts += "前情提要" to "【Summary of the earlier conversation】\n" + compressedScope(conv) +
                 "It's a summary, so exact numbers, wording and who decided what may have been dropped. To cite such details, first look up the original with search_my_data (where = history); " +
-                "if you can't find it, say you don't remember clearly rather than filling in details from the summary. Otherwise treat it as your own memory and carry on; don't mention the summary or compression." +
+                "if you can't find it, say you don't remember clearly rather than filling in details from the summary. If the folder has 「${com.jack.ai.data.WorkNotes.NAME}」 (your own notes from a long task), read_file it before going on with that task. Otherwise treat it as your own memory and carry on; don't mention the summary or compression." +
                 "\n<compacted-summary>\n${conv.summary}\n</compacted-summary>"
         }
         if (conv.recap.isNotBlank()) {
