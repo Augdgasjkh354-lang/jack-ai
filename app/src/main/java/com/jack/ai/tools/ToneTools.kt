@@ -22,3 +22,20 @@ internal suspend fun ToolSession.checkAiTone(args: JsonObject): String {
         AiTone.format(AiTone.check(now), before) to SearchRecord("检查 AI 味")
     }
 }
+
+/** check_rewrite：改写稿对着原文核对数字和人称（见 RewriteCheck）。 */
+internal suspend fun ToolSession.checkRewrite(args: JsonObject): String {
+    suspend fun load(file: String, text: String): String? = when {
+        file.isNotBlank() -> withContext(Dispatchers.IO) { Workspace.readText(wsFile(file), extracted = true) }
+        text.isNotBlank() -> text
+        else -> null
+    }
+    return runTool("核对改写稿") {
+        val draft = load(args["file"].text().trim(), args["text"].text())
+            ?: return@runTool "要填 file 或 text（稿子）。" to SearchRecord("核对改写稿")
+        val source = load(args["source_file"].text().trim(), args["source_text"].text())
+            ?: return@runTool "要填 source_file 或 source_text（原文）。网页先用 browser extract what=article save_as=原文 存下来。" to SearchRecord("核对改写稿")
+        val r = com.jack.ai.data.RewriteCheck.check(draft, source, self = args["self"].text() == "true")
+        com.jack.ai.data.RewriteCheck.format(r) to SearchRecord("核对改写稿" + if (r.missing.isNotEmpty() || r.firstPerson.isNotEmpty()) "（${r.missing.size + r.firstPerson.size} 处）" else "")
+    }
+}

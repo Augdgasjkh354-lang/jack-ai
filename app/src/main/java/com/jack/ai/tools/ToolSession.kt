@@ -431,6 +431,7 @@ class ToolSession(
             name == "download_file" && web -> downloadFile(args)
             name == "convert_file" -> convertFile(args)
             name == "self_check" -> selfCheck(args)
+            name == "check_rewrite" -> checkRewrite(args)
             name == "phone_files" -> phoneFiles(args)
             // 用过一次就换成完整说明（下一步起带着，见 SkillIds.PHONE_FULL）
             name == "phone" -> { unlocked.add(SkillIds.PHONE_FULL); phone(args) }

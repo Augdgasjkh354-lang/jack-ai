@@ -74,6 +74,7 @@ object SkillIds {
     const val PHONE_FULL = "tool-phone-full"
     const val XHS = "builtin-xhs"
     const val XHS_VISUAL = "builtin-xhs-visual"
+    const val REPURPOSE = "builtin-repurpose"
     const val AD_CHECK = "builtin-ad-check"
     const val VIDEO_PROMPT = "builtin-video-prompt"
     const val IMAGE_PROMPT = "builtin-image-prompt"

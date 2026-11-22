@@ -236,6 +236,8 @@ object PromptBuilder {
             if (web) add(SkillTools.DOWNLOAD_FILE)
             if (SkillIds.DESIGN in skillIds) add(SkillTools.DESIGN)
             add(SkillTools.CONVERT_FILE)
+            // 新工具加在最后（见上面）：改写别人的文章后核对数字和人称
+            add(SkillTools.CHECK_REWRITE)
             // 连接器的工具放最后：增删连接器时前面那一大段工具说明不变，缓存照样命中
             com.jack.ai.data.integrations.Mcp.toolDefs(com.jack.ai.data.integrations.Mcp.active(settings)).forEach { add(it) }
         }.takeIf { it.isNotEmpty() }
