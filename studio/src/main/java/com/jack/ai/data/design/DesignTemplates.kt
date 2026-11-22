@@ -11,7 +11,7 @@ import com.jack.ai.data.office.PptDeck
 
 /**
  * 设计模板（海报、小红书配图、邀请函、名片……）：一份模板就是一张固定大小的网页，放在 assets/design/templates/，
- * 目录在 assets/design/index.json。规则见 建议/设计模板_给Muse的提示词.md：data-slot 文字和图片位、data-list/data-item 列表、
+ * 目录在 assets/design/index.json。规则见 docs/建议/设计模板_给Muse的提示词.md：data-slot 文字和图片位、data-list/data-item 列表、
  * data-icon 图标、.canvas 画布、配色全用 --bg/--fg/--primary/--secondary/--accent/--muted 六个变量。
  */
 object DesignTemplates {

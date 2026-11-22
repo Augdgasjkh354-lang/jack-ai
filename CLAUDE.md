@@ -38,6 +38,7 @@
 - 三个 Gradle 模块：`app`；`mika/`（Mika 移植来的手机和网页操作，包名 `com.wangzan101.mika`）；`studio/`（Office、设计、音视频的生成引擎，`data/office`、`data/design`、`data/media`）。这两个模块不能引用 `app` 的代码，App 要用的声明别写成 `internal`。
 - 注释、界面文字都是中文，跟周围代码的风格保持一致。
 - 单测在 `app/src/test`（纯逻辑和 Robolectric），界面测试在 `app/src/testDebug`。
+- 根目录只放工程文件。方案和说明放 `docs/`，给其他模型的提示词放 `docs/建议/`，审计、修复这类过程记录放 `docs/records/`。
 
 ## 本地编译（云端容器）
 

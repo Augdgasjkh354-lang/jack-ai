@@ -43,7 +43,7 @@
 
 ## 设计图和编辑器
 
-- 做设计模板：照 `建议/设计模板_给Muse的提示词.md` 的规格，交付前跑 `node tools/check_design_templates.js --write-index`，全部通过才推。
+- 做设计模板：照 `docs/建议/设计模板_给Muse的提示词.md` 的规格，交付前跑 `node tools/check_design_templates.js --write-index`，全部通过才推。
 - 做编辑器：先读 `docs/设计编辑器_目标.md`（原则和约定）和 `docs/设计编辑器_后续三步.md`（还没做的第 5、7、8 步，按小节做）。改动落在底稿 DOM 上，临时元素带 `data-kavi-temp`，编辑器状态用 `data-kv-*`。
 - `assets/design/editor.js`、`ui/DesignEditor.kt` 也是热门文件：一个分支只做一个小节。网页那侧的逻辑先在本地 Chromium（Playwright）里跑通再推；交活时写明在手机上要试什么。
 

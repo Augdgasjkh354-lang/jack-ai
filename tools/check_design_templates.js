@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 "use strict";
-// 设计模板校验（规格见 建议/设计模板_给Muse的提示词.md）。
+// 设计模板校验（规格见 docs/建议/设计模板_给Muse的提示词.md）。
 //   node tools/check_design_templates.js                 全部检查 + 出预览图（design-previews/）
 //   node tools/check_design_templates.js --static-only   只查文件本身（不开浏览器）
 //   node tools/check_design_templates.js --write-index   先按模板里的元数据重新生成 index.json，再检查

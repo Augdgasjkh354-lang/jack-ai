@@ -38,4 +38,4 @@
 - `app/src/main/java/com/jack/ai/data/Secrets.kt`（新增）
 - `app/src/main/java/com/jack/ai/data/Store.kt`
 - `app/src/main/java/com/jack/ai/data/Updater.kt`
-- `tools/BUG_FIXES.md`（本说明）
+- `docs/records/BUG_FIXES.md`（本说明）
