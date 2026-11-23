@@ -43,7 +43,7 @@ internal suspend fun ToolSession.selfCheck(args: JsonObject): String = runTool("
             if ("phone" !in tools) missing += "phone：用户还没勾能操作的 App（设置 → 操作其他 App）"
             else if (com.jack.ai.a11y.KaviAccessibility.instance == null) missing += "phone：勾了 App，但无障碍服务没开或没连上（设置 → 操作其他 App → 去打开）"
             if ("web_search" !in tools) missing += "web_search、read_webpage、download_file：联网搜索没开，或没有可用的 Key"
-            val locked = skills.filter { it.id in SkillIds.ON_DEMAND && it.id !in unlocked && it.id !in conv.skillTools }
+            val locked = skills.filter { it.id in com.jack.ai.data.lazySkills(project) && it.id !in unlocked && it.id !in conv.skillTools }
             if (locked.isNotEmpty()) missing += "要先 use_skill 读做法才出现工具的技能：" + locked.joinToString("、") { "「${it.name}」" }
             val off = settings.allSkills().filter { !it.enabled }
             if (off.isNotEmpty()) missing += "用户关掉的技能（设置 → 技能 能打开）：" + off.joinToString("、") { "「${it.name}」" }

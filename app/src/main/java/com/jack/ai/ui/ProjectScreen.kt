@@ -165,7 +165,7 @@ fun ProjectScreen(
             }
             when (tab) {
                 ProjectTab.CHATS -> if (chats.isEmpty()) EmptyHint(
-                    "还没有聊天",
+                    com.jack.ai.data.ProjectKind.of(project.kind).let { "${it.label} · 还没有聊天" },
                     if (project.instructions.isBlank()) "在下面直接说。想让 Kavi 在这个项目里一直按某种方式做，右上角「编辑指令」写下来。"
                     else "在下面直接说，项目指令、资料和记忆每个对话都会带上。",
                 ) else LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)) {
@@ -368,16 +368,13 @@ private fun ProjectMemoryTab(vm: ChatViewModel, project: Project) {
     }
 }
 
-/** 新建项目时一点就填好名字和图标的几类。 */
-private val PROJECT_KINDS = listOf("✍️" to "写作", "💼" to "生意", "🎬" to "视频", "📚" to "学习", "❤️" to "健康", "✈️" to "旅行")
-
 /** 项目图标能选的。 */
-private val PROJECT_ICONS = listOf("📁", "✍️", "💼", "🎬", "📚", "❤️", "✈️", "💡", "🧪", "🏠", "💰", "🎨", "🎮", "🍜", "🛒", "📈", "🧠", "⭐")
+private val PROJECT_ICONS = listOf("📁", "💻", "🎨", "✍️", "💼", "🎬", "📚", "❤️", "✈️", "💡", "🧪", "🏠", "💰", "🎨", "🎮", "🍜", "🛒", "📈", "🧠", "⭐")
 
-fun Project.iconOrDefault(): String = icon.ifBlank { "📁" }
+fun Project.iconOrDefault(): String = icon.ifBlank { com.jack.ai.data.ProjectKind.of(kind).takeIf { it != com.jack.ai.data.ProjectKind.GENERAL }?.icon ?: "📁" }
 
 /**
- * 新建或编辑项目：图标、名字、常见的几类一点就填好；记忆方式（默认 / 仅项目）。
+ * 新建或编辑项目：类型（代码 / 写作 / 通用创作，决定开局带哪些工具）、图标、名字、记忆方式（默认 / 仅项目）。
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -386,6 +383,7 @@ fun ProjectDialog(initial: Project?, onDismiss: () -> Unit, onSave: (Project) ->
     var name by remember { mutableStateOf(initial?.name.orEmpty()) }
     var icon by remember { mutableStateOf(initial?.icon.orEmpty()) }
     var isolated by remember { mutableStateOf(initial?.isolated ?: false) }
+    var kind by remember { mutableStateOf(com.jack.ai.data.ProjectKind.of(initial?.kind)) }
     var picking by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -410,9 +408,12 @@ fun ProjectDialog(initial: Project?, onDismiss: () -> Unit, onSave: (Project) ->
                     Spacer(Modifier.size(10.dp))
                     OutlinedTextField(name, { name = it }, placeholder = { Text("项目名称") }, singleLine = true, modifier = Modifier.weight(1f))
                 }
-                if (initial == null) FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    PROJECT_KINDS.forEach { (e, n) ->
-                        FilterChip(selected = name == n && icon == e, onClick = { name = n; icon = e }, label = { Text("$e $n") })
+                Text("类型", style = MaterialTheme.typography.titleSmall)
+                com.jack.ai.data.ProjectKind.entries.forEach { k ->
+                    MemoryModeOption("${k.icon} ${k.label}", k.desc, kind == k) {
+                        // 图标还是上一个类型的默认的（或没选），跟着换
+                        if (icon.isBlank() || com.jack.ai.data.ProjectKind.entries.any { it.icon == icon }) icon = k.icon
+                        kind = k
                     }
                 }
                 Text("记忆", style = MaterialTheme.typography.titleSmall)
@@ -424,7 +425,7 @@ fun ProjectDialog(initial: Project?, onDismiss: () -> Unit, onSave: (Project) ->
         },
         confirmButton = {
             TextButton(enabled = name.isNotBlank(), onClick = {
-                onSave((initial ?: Project(name = "")).copy(name = name.trim(), icon = icon, isolated = isolated))
+                onSave((initial ?: Project(name = "")).copy(name = name.trim(), icon = icon, isolated = isolated, kind = kind.id))
             }) { Text(if (initial == null) "创建项目" else "保存") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },

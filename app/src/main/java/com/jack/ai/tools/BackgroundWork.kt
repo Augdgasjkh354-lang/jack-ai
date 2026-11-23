@@ -187,7 +187,7 @@ suspend fun runBackgroundWork(
     if (resumed) WorkGate.restorePlan(session, messages)
     // 接着上次做：上次用 use_skill 打开过的技能，工具要接着带上
     if (resumed) TaskCheckpoint.skillsUsed(messages).forEach { name ->
-        findSkill(skills, name)?.id?.takeIf { it in com.jack.ai.data.SkillIds.ON_DEMAND }?.let { id ->
+        findSkill(skills, name)?.id?.takeIf { it in com.jack.ai.data.lazySkills(project) }?.let { id ->
             session.unlocked.add(id)
             if (id == com.jack.ai.data.SkillIds.FLOWS) session.unlocked.add(com.jack.ai.data.SkillIds.BROWSER)
         }

@@ -235,7 +235,7 @@ internal suspend fun ToolSession.useSkill(name: String, file: String = "") = run
         return@runTool "【${skill.name} · $file】\n$shown" to SearchRecord("使用技能：${skill.name} · $file")
     }
     // 工具按需出现的技能：读了做法就把它的工具加上（下一步就能用，本对话之后一直带着）
-    val opened = skill?.id?.takeIf { it in SkillIds.ON_DEMAND }?.let { unlocked.add(it) } == true
+    val opened = skill?.id?.takeIf { it in com.jack.ai.data.lazySkills(project) }?.let { unlocked.add(it) } == true
     // 读过插件的用法，第一次调它的工具时就不再附一遍
     skill?.id?.takeIf { it in SkillIds.PLUGINS }?.let { unlocked.add(it) }
     // 浏览器流程并进了「操作浏览器」：读它时附上现有流程的清单

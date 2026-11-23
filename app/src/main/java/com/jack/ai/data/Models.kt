@@ -186,7 +186,34 @@ data class Project(
     val icon: String = "",
     /** 置顶的项目在侧边栏排在前面。 */
     val pinned: Boolean = false,
+    /** 项目类型（[ProjectKind] 的 id）：代码、写作开局只带相关的工具，通用创作全带。 */
+    val kind: String = ProjectKind.GENERAL.id,
 )
+
+/**
+ * 专业项目的类型。代码、写作项目开局只带少量相关的技能和插件（[starter]），别的工具要用时 use_skill 打开；
+ * 工具少，模型不容易选错，上下文也省。通用创作全部带着，和以前一样。
+ */
+enum class ProjectKind(val id: String, val label: String, val desc: String, val icon: String, val starter: Set<String>?) {
+    CODE("code", "代码项目", "写代码、改 bug、做小工具。开局只带联网、写代码、Python、计算、GitHub 这几样，要别的再打开。", "💻",
+        setOf(SkillIds.WEB, SkillIds.CODE, SkillIds.PYTHON, SkillIds.CALC, SkillIds.GITHUB, SkillIds.APP, SkillIds.CHATS)),
+    WRITING("writing", "写作项目", "小说、文章、文案。开局只带联网、Word、PDF、小说创作、去 AI 味、深度研究这几样，要别的再打开。", "✍️",
+        setOf(SkillIds.WEB, SkillIds.WORD, SkillIds.PDF, SkillIds.NOVEL, SkillIds.TONE, SkillIds.REPURPOSE, SkillIds.RESEARCH, SkillIds.CHATS, SkillIds.LIBRARY)),
+    GENERAL("general", "通用创作", "什么都能做：设计、视频、文档、操作手机……所有工具都带着。", "🎨", null);
+
+    /** 开局不带、要 use_skill 打开的内置技能。 */
+    fun locked(): Set<String> = starter?.let { s -> BUILTIN_SKILLS.map { it.id }.toSet() - s }.orEmpty()
+
+    companion object {
+        fun of(id: String?): ProjectKind = entries.firstOrNull { it.id == id } ?: GENERAL
+    }
+}
+
+/** 这个项目里开局不带、要先 use_skill 打开工具的技能（项目类型限定的，加上全局按需的）。 */
+fun lazySkills(project: Project?): Set<String> = SkillIds.ON_DEMAND + ProjectKind.of(project?.kind).locked()
+
+/** 这个项目里能不能操作手机（代码、写作项目不带手机工具）。 */
+fun Project?.allowsPhone(): Boolean = ProjectKind.of(this?.kind) == ProjectKind.GENERAL
 
 /** 这个对话能不能用全局记忆和日记：自己关了、在隐私项目里，都不能。 */
 fun Conversation.globalAllowed(project: Project?): Boolean = useGlobalMemory && project?.isolated != true

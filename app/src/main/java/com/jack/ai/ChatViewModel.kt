@@ -499,7 +499,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val memories = if (settings.memoryEnabled) snap.memories else emptyList()
         // 工具按需出现的技能：这个对话以前打开过的，加上这条消息里 @ 到的，开场就带着它们的工具
         val asked = lastUser?.content.orEmpty()
-        val unlockedStart = conv.skillTools + skills.filter { it.id in com.jack.ai.data.SkillIds.ON_DEMAND && "@${it.name}" in asked }.map { it.id }
+        val unlockedStart = conv.skillTools + skills.filter { it.id in com.jack.ai.data.lazySkills(project) && "@${it.name}" in asked }.map { it.id }
         val toolSet = PromptBuilder.toolSet(settings, skills, conv, project, unlockedStart)
 
         var promptInput = PromptBuilder.Input(settings, conv, project, memories, skills, vision = images, sendReasoning = thinkingOn,

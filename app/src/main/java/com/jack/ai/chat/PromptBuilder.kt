@@ -1,5 +1,6 @@
 package com.jack.ai.chat
 
+import com.jack.ai.data.allowsPhone
 import com.jack.ai.data.endpoint
 import com.jack.ai.data.Attachments
 import com.jack.ai.data.memory.ChatMemory
@@ -177,7 +178,9 @@ object PromptBuilder {
      */
     fun toolSet(settings: Settings, skills: List<Skill>, conv: Conversation, project: Project?, unlocked: Set<String> = conv.skillTools): JsonArray? {
         val all = skills.map { it.id }.toSet()
-        val skillIds = all.filter { it !in SkillIds.ON_DEMAND || it in unlocked }.toSet()
+        // 代码、写作项目开局只带相关的（见 ProjectKind），其余读过做法才带
+        val lazy = com.jack.ai.data.lazySkills(project)
+        val skillIds = all.filter { it !in lazy || it in unlocked }.toSet()
         val web = SkillIds.WEB in skillIds
         return buildJsonArray {
             // 文件、表格、提醒的清单直接写在最后一条用户消息前面（见 Input.contextNote），不用专门调工具去列
@@ -203,8 +206,8 @@ object PromptBuilder {
             if (conv.id != com.jack.ai.data.Retired.FREE_TIME_CONV && conv.id != com.jack.ai.data.INBOX_ID) add(SkillTools.ASK_USER)
             add(SkillTools.SELF_CHECK)
             if (settings.phoneFolders.isNotEmpty()) add(SkillTools.PHONE_FILES)
-            // 操作其他 App：勾了 App 才有（无障碍没开时工具自己会告诉 Kavi 让用户去开）
-            if (settings.phoneDataOn) add(SkillTools.PHONE_DATA)
+            // 操作其他 App：勾了 App 才有（无障碍没开时工具自己会告诉 Kavi 让用户去开）；代码、写作项目不带
+            if (settings.phoneDataOn && project.allowsPhone()) add(SkillTools.PHONE_DATA)
             // 开着 Python 就只留 run_python，两个都给模型会犹豫用哪个；算数一直能用，画图要先读「计算与图表」
             if (SkillIds.CALC in all && SkillIds.PYTHON !in all) add(SkillTools.RUN_JS)
             if (SkillIds.CALC in skillIds) { add(SkillTools.CREATE_CHART); add(SkillTools.CREATE_DIAGRAM) }
@@ -232,7 +235,7 @@ object PromptBuilder {
             // DeepSeek 的缓存从开头逐字比，改了哪个工具，从它往后才算新的。新版本改工具时只丢最后一截，前面照样命中：
             // 越常改的越往后排（按以往的改动次数），新加的工具也一律加在这一段的末尾，别插到前面去。
             if (SkillIds.LIBRARY in skillIds) add(SkillTools.KNOWLEDGE_BASE)
-            if (settings.phoneApps.isNotEmpty() && com.jack.ai.Edition.phoneControl) add(SkillTools.PHONE) // 一直给完整的：中途换成完整版会让工具说明变、缓存断
+            if (settings.phoneApps.isNotEmpty() && com.jack.ai.Edition.phoneControl && project.allowsPhone()) add(SkillTools.PHONE) // 一直给完整的：中途换成完整版会让工具说明变、缓存断
             if (SkillIds.BROWSER in skillIds && com.jack.ai.Edition.browser) add(SkillTools.BROWSER)
             if (web) add(SkillTools.DOWNLOAD_FILE)
             if (SkillIds.DESIGN in skillIds) add(SkillTools.DESIGN)
@@ -311,8 +314,8 @@ object PromptBuilder {
      * 有些技能的工具要读过做法才出现，先告诉模型，免得它以为没有这个能力。
      * 只列技能名、不随打开了哪些而变（这段在前面，变了缓存就断了）。
      */
-    private fun onDemandNote(skills: List<Skill>): String {
-        val lazy = skills.filter { it.id in SkillIds.ON_DEMAND }.map { it.name }
+    private fun onDemandNote(skills: List<Skill>, lazyIds: Set<String>): String {
+        val lazy = skills.filter { it.id in lazyIds }.map { it.name }
         if (lazy.isEmpty()) return ""
         return " The tools of these skills only appear after you read the skill with use_skill, and are usable from the next step: ${lazy.joinToString(", ") { "「$it」" }}. Don't say you can't do something just because you don't see the tool yet."
     }
@@ -337,6 +340,7 @@ object PromptBuilder {
         parts += "固定说明" to com.jack.ai.data.Persona.devBlock(settings, conv.work)
         val names = tools?.mapNotNull { (it as? JsonObject)?.get("function")?.jsonObject?.get("name")?.jsonPrimitive?.content }.orEmpty()
         val plugins = skills.filter { it.id in SkillIds.PLUGINS }
+        val lazyIds = com.jack.ai.data.lazySkills(project)
         val playbooks = skills.filter { it.id !in SkillIds.PLUGINS }
         parts += "固定说明" to f(Capabilities.text(settings, skills, names))
         if (names.isNotEmpty()) {
@@ -414,14 +418,14 @@ object PromptBuilder {
         if ("use_skill" in names && plugins.isNotEmpty()) {
             // 插件：带工具的能力。一直带着的直接调，用法第一次调时附上；工具要先打开的标出来
             parts += "固定说明" to "【Plugins】\nYour tools, grouped by plugin. Just call their tools; the plugin's usage notes come back with its first tool call in a conversation, follow them. " +
-                (if (plugins.any { it.id in SkillIds.ON_DEMAND }) "Plugins marked (open first) have their tools added only after use_skill with the plugin name (usable from the next step); don't say you can't do something just because you don't see the tool yet. " else "") +
+                (if (plugins.any { it.id in lazyIds }) "Plugins marked (open first) have their tools added only after use_skill with the plugin name (usable from the next step); don't say you can't do something just because you don't see the tool yet. " else "") +
                 "You can also read any plugin's notes with use_skill.\n" +
-                plugins.joinToString("\n") { "- ${it.name}" + (if (it.id in SkillIds.ON_DEMAND) " (open first)" else "") + ": ${it.description}" }
+                plugins.joinToString("\n") { "- ${it.name}" + (if (it.id in lazyIds) " (open first)" else "") + ": ${it.description}" }
         }
         if ("use_skill" in names && playbooks.isNotEmpty()) {
             parts += "固定说明" to "【Skills】\nSkills are worked-out methods for a kind of job (not tools). You have these:\n" + playbooks.joinToString("\n") { "- ${it.name}: ${it.description}" } +
                 f("\n\nWhen a request from {user} is this kind of job, first read the skill's instructions with use_skill, then follow them (no need to re-read one already read in this conversation). A message may carry a 【Matching skills】 hint picked by meaning; use it if it fits.") +
-                onDemandNote(playbooks) +
+                onDemandNote(playbooks, lazyIds) +
                 f(" If no skill fits, just answer. Only produce files when {user} wants a file; don't generate them unprompted.") +
                 f(" When you finish something that took several steps and will likely come up again (a procedure you worked out, a fix found by trial and error, a way {user} corrected you), save the method with save_skill so next time you can just follow it; improve your own skill rather than adding a near-duplicate.")
         }
@@ -467,6 +471,7 @@ object PromptBuilder {
             val (small, big) = project.files.partition { it.text.length <= PROJECT_INLINE_CHARS }
             val p = buildString {
                 append("【Current project: ${project.name}】\n")
+                KIND_NOTES[com.jack.ai.data.ProjectKind.of(project.kind)]?.let { append(f(it)).append("\n") }
                 if (project.instructions.isNotBlank()) append(project.instructions.trim()).append("\n")
                 if (small.isNotEmpty()) {
                     append("\nProject materials:\n")
@@ -612,3 +617,15 @@ internal const val GPT_STYLE = """【Style notes for this model】
 - Commit to a judgment. When {user} asks what you think, which one to pick, or whether something will work, give your answer first and stand by it. Put uncertainty in once, at the point it applies, as a concrete condition ("预算超过 5 万就选 B"), not as "这取决于具体情况" or a stack of caveats.
 - Drop the reflexive caution. {User} is an adult who makes their own decisions and asked you because they want a real answer; every disclaimer costs them reading time and tells him nothing new. So on health, money, law, relationships, business or tech questions, answer the way a knowledgeable friend would: the most likely explanation, what to do, the numbers. Don't add "建议咨询专业人士", "以上仅供参考", "请注意风险", "每个人情况不同" or similar. Mention a doctor, lawyer or other expert only when there's a concrete reason, and name it ("胸口痛还出冷汗就马上去医院"). A real risk they may not see gets one specific sentence; risks they obviously know get none. Don't moralize or point out what they "should" consider unless they ask. Genuinely dangerous requests are the only exception, and the rest of your instructions already cover those.
 - Write Chinese the way a person from mainland China talks: natural spoken phrasing, not translated English. Go easy on dashes (——) and skip filler like 说白了, 一句话总结, 值得注意的是, 总的来说."""
+
+/** 专业项目各自的做事方式，接在项目名后面。通用创作没有。 */
+internal val KIND_NOTES = mapOf(
+    com.jack.ai.data.ProjectKind.CODE to "This is a code project. Work like a careful engineer: read the files you're about to change first, change only what the task needs, " +
+        "and run or check the code after every change instead of assuming it works. Keep the project memory's 【进度】 and 【待办】 current (what's built, what's broken, what's next). " +
+        "Only coding tools are loaded here; if a task truly needs another kind (documents, design, a browser), open it with use_skill.",
+    com.jack.ai.data.ProjectKind.WRITING to "This is a writing project. Keep voice, characters, facts and timeline consistent with the instructions, sources and project memory; " +
+        "when a new setting, character or plot decision is made, record it in 【设定】 or 【决定】 right away, and keep 【进度】 at the chapter or section level. " +
+        "Write the actual prose rather than outlines about it unless {user} asks for an outline. " +
+        "Only writing tools are loaded here; if a task truly needs another kind (design, video, spreadsheets), open it with use_skill.",
+)
+
