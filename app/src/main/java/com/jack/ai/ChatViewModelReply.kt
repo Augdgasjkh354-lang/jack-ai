@@ -9,6 +9,7 @@ import com.jack.ai.data.Project
 import com.jack.ai.data.SearchRecord
 import com.jack.ai.data.Settings
 import com.jack.ai.data.Skill
+import com.jack.ai.data.endpoint
 import com.jack.ai.data.backgroundEndpoint
 import com.jack.ai.data.globalAllowed
 import com.jack.ai.tools.ToolSession
@@ -165,6 +166,18 @@ internal fun ChatViewModel.launchThinkSummarizer(
     answering: java.util.concurrent.atomic.AtomicBoolean,
     steps: () -> List<com.jack.ai.data.ThinkStep>,
 ): Job? {
+    // GPT（ChatGPT 账号）自己的思考摘要就带小标题（**…**）：直接拿来用，不用再请后台模型写
+    if (settings.endpoint()?.chatgpt == true) return if (!settings.thinkSummary) null else viewModelScope.launch(Dispatchers.IO) {
+        while (summaries.size < com.jack.ai.chat.ThinkSummary.MAX) {
+            delay(com.jack.ai.chat.ThinkSummary.POLL_MS)
+            val previous = summaries.map { it.text }
+            val fresh = com.jack.ai.chat.ThinkSummary.gptHeadings(seenReasoning.get()).filter { it !in previous }
+            if (fresh.isEmpty()) continue
+            fresh.take(com.jack.ai.chat.ThinkSummary.MAX - summaries.size).forEach { summaries += com.jack.ai.data.ThinkStep("summary", it) }
+            val st = steps()
+            patchMessage(convId, replyId) { it.copy(steps = st) }
+        }
+    }
     val summaryEp = settings.backgroundEndpoint()
     // 选了「思考摘要用本地生成模型」又下好了：用手机上的 Qwen 写，不调后台模型
     val localLlm = com.jack.ai.data.LocalModels.activeLlm(getApplication(), settings)

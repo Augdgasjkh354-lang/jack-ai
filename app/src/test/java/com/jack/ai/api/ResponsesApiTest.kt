@@ -161,4 +161,16 @@ class ResponsesApiTest {
             ResponsesApi.noXhigh = false; ResponsesApi.noReasoning = false
         }
     }
+
+    @Test fun gptSummaryHeadingsAreUsedDirectly() {
+        val r = "**Checking the prices**\n\nI need to compare **two** shops.\n\n**核对两家的报价**\n\n比一下。\n**Checking the prices**"
+        assertEquals(listOf("Checking the prices", "核对两家的报价"), com.jack.ai.chat.ThinkSummary.gptHeadings(r))
+    }
+
+    @Test fun gptStyleNotesOnlyForChatGpt() {
+        val conv = com.jack.ai.data.Conversation()
+        fun prompt(s: Settings) = com.jack.ai.chat.PromptBuilder.systemPrompt(s, conv, null, null, emptyList(), emptyList())
+        assertTrue("Style notes for this model" in prompt(settings.copy(model = customModelKey("g", "gpt-6.1-sol"))))
+        assertFalse("Style notes for this model" in prompt(settings.copy(model = com.jack.ai.data.MODEL_FLASH)))
+    }
 }

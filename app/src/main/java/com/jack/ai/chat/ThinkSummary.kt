@@ -29,6 +29,16 @@ Reply with the heading only."""
     /** 提示词里写的例子。 */
     private val EXAMPLES = listOf("Comparing the two plans", "Checking where the numbers came from", "核对两家的报价", "发现路径写错了", "思考中", "分析问题")
 
+    /**
+     * GPT 的思考摘要一段一个小标题，写成单独一行的 **标题**：按出现的顺序取出来（去重、太长截断）。
+     * 只认整行都是粗体的，正文里夹的粗体词不算。
+     */
+    fun gptHeadings(reasoning: String): List<String> = reasoning.lineSequence()
+        .mapNotNull { line -> Regex("^\\s*\\*\\*(.+?)\\*\\*\\s*$").matchEntire(line)?.groupValues?.get(1)?.trim() }
+        .filter { it.isNotEmpty() }
+        .map { if (it.length > 40) it.take(40) + "…" else it }
+        .distinct().toList()
+
     fun input(previous: List<String>, chunk: String): String =
         (if (previous.isEmpty()) "" else "Headings so far:\n" + previous.joinToString("\n") { "- $it" } + "\n\n") +
             "New thinking:\n" + chunk.takeLast(INPUT)

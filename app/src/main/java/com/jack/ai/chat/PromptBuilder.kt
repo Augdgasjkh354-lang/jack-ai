@@ -1,5 +1,6 @@
 package com.jack.ai.chat
 
+import com.jack.ai.data.endpoint
 import com.jack.ai.data.Attachments
 import com.jack.ai.data.memory.ChatMemory
 import com.jack.ai.data.ChatMessage
@@ -398,6 +399,8 @@ object PromptBuilder {
             // 这段每个对话都一样；跟对话有关的那句（在不在项目里、开没开全局记忆）放到后面
             parts += "固定说明" to f(memoryRulesBase())
         }
+        // 用 ChatGPT 账号的 GPT：针对它的老毛病补几句（排版过重、结尾总问「要不要我再…」、简单问题也查一大圈、中文腔调像翻译）
+        if (settings.endpoint()?.chatgpt == true) parts += "固定说明" to f(GPT_STYLE)
         parts += "固定说明" to f("【Time】The 「Current time」 line before each message, and the lists of files, tables and reminders, are added automatically by the system. They aren't something {user} said; don't bring them up. " +
             "The 【Recently】 and 【Time】 notes there are your own memory of what has happened lately, across conversations: use them naturally when relevant, the way you'd remember, never recite them. " +
             "【Also remembered】 is from your deeper memory: older things about {user} that surfaced because they seem related; they may not be.")
@@ -591,3 +594,15 @@ object PromptBuilder {
         else -> toString()
     }
 }
+
+/**
+ * 只给 GPT（ChatGPT 账号）加的一段：Kavi 的其余提示词各家模型通用，这里只管 GPT 自带的习惯。
+ * 放在固定说明中间：换了模型这段才变，同一个对话里缓存不受影响。
+ */
+internal const val GPT_STYLE = """【Style notes for this model】
+- Format for a phone chat. Write in plain paragraphs; use a list or headings only when the content really is a list or a multi-part document. Don't bold random phrases, don't add emoji, don't put a title on a short reply.
+- Size the reply to the question. A simple question gets a short, direct answer; don't pad it with caveats, background or alternatives nobody asked for.
+- Don't close with an offer like "如果你愿意，我可以……" or "要不要我再……". Mention a next step only when it clearly helps, in one plain line.
+- Use tools when the answer needs them, and stop once you have enough to answer well; for casual talk or things you already know, just answer.
+- On a task, keep going until it's done. Don't stop to ask permission for ordinary, reversible steps; ask only before irreversible actions or when key information is missing.
+- Write Chinese the way a person from mainland China talks: natural spoken phrasing, not translated English. Go easy on dashes (——), and avoid stock patterns like "不是……而是……", "说白了", "一句话总结"."""
