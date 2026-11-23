@@ -13,6 +13,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Search
+import com.jack.ai.data.endpoint
 import com.jack.ai.data.hasAnyKey
 import com.jack.ai.data.phoneDataOn
 import androidx.compose.ui.draw.clip
@@ -251,7 +252,7 @@ fun SettingsScreen(
                         FilterChip(
                             selected = settings.thinking == lv,
                             onClick = { vm.updateSettings { it.copy(thinking = lv) } },
-                            label = { Text(lv.label) },
+                            label = { Text(lv.labelFor(settings.endpoint())) },
                         )
                     }
                 }
@@ -656,7 +657,7 @@ private fun SettingsHome(
     SettingsGroup("模型", listOf(
         go(SettingsPage.KEY, AppIcons.Lock, if (settings.apiKey.isNotBlank()) "已填" else "未填", warn = noKey),
         go(SettingsPage.PROVIDERS, AppIcons.Code, if (settings.providers.isEmpty()) "未添加" else "${settings.providers.size} 个"),
-        go(SettingsPage.MODEL, AppIcons.Brain, listOfNotNull(model, settings.thinking.label).joinToString(" · ")),
+        go(SettingsPage.MODEL, AppIcons.Brain, listOfNotNull(model, settings.thinking.labelFor(settings.endpoint())).joinToString(" · ")),
         go(SettingsPage.LOCAL, AppIcons.Chip),
         go(SettingsPage.COMPRESS, AppIcons.Compress, "${settings.compressTokens / 1000}k"),
     ))

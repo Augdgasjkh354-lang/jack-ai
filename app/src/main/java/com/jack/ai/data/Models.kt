@@ -251,6 +251,14 @@ enum class ThinkLevel(val label: String, val effort: String?) {
     HIGH("思考·高", "high"),
     MAX("思考·最高", "max");
 
+    /** 菜单上怎么叫：用 ChatGPT 账号的模型按 ChatGPT 的四档强度叫（它的思考关不掉，最低是轻度），其余照旧。 */
+    fun labelFor(ep: Endpoint?): String = if (ep?.chatgpt != true) label else when (this) {
+        OFF -> "强度·轻度"
+        LOW -> "强度·中"
+        HIGH -> "强度·高"
+        MAX -> "强度·极高"
+    }
+
     companion object {
         /** 存过的档位名 → 档位；以前的「思考·自动」（AUTO）删掉了，按高档算：一个对话里档位不变，缓存才不断。 */
         fun parse(name: String?): ThinkLevel? = when (name) {
@@ -648,8 +656,11 @@ fun modelLabel(model: String): String = when {
     model == com.jack.ai.api.DeepSeekTools.ASR_KEY -> "DeepSeek 转文字"
     model == com.jack.ai.api.DeepSeekTools.OCR_KEY -> "DeepSeek 认字"
     model == com.jack.ai.api.DeepSeekTools.TTS_KEY -> "DeepSeek 朗读"
-    // 自定义模型只显示模型名；OpenRouter 这类 "厂商/模型" 去掉厂商前缀
-    else -> (parseCustomKey(model)?.second ?: model).substringAfterLast('/')
+    // 自定义模型只显示模型名；OpenRouter 这类 "厂商/模型" 去掉厂商前缀；gpt-6.2-sol 按 ChatGPT 的叫法写成 GPT-6.2 Sol
+    else -> (parseCustomKey(model)?.second ?: model).substringAfterLast('/').let { id ->
+        Regex("^gpt-(\\d+(?:\\.\\d+)?)-([a-z]+)$").matchEntire(id)
+            ?.let { m -> "GPT-${m.groupValues[1]} ${m.groupValues[2].replaceFirstChar { it.uppercase() }}" } ?: id
+    }
 }
 
 val DEFAULT_PRESETS = listOf(

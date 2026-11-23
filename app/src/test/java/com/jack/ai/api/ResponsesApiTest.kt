@@ -136,4 +136,29 @@ class ResponsesApiTest {
         assertEquals("user-1", c["sub"]!!.jsonPrimitive.content)
         assertNull(ChatGptAuth.claims("not-a-jwt"))
     }
+
+    @Test fun fourStrengthsLikeChatGpt() {
+        ResponsesApi.noXhigh = false; ResponsesApi.noReasoning = false
+        assertEquals(listOf("low", "medium", "high", "xhigh"), ThinkLevel.entries.map { ResponsesApi.effort(it) })
+        assertEquals(listOf("强度·轻度", "强度·中", "强度·高", "强度·极高"), ThinkLevel.entries.map { it.labelFor(ep) })
+        // 别的模型照旧叫
+        assertEquals("思考·高", ThinkLevel.HIGH.labelFor(null))
+        assertEquals("GPT-6.2 Sol", com.jack.ai.data.modelLabel(customModelKey("g", "gpt-6.2-sol")))
+        assertEquals("gpt-4o-mini", com.jack.ai.data.modelLabel(customModelKey("g", "gpt-4o-mini")))
+    }
+
+    @Test fun rejectedXhighFallsBackToHigh() {
+        ResponsesApi.noXhigh = false; ResponsesApi.noReasoning = false
+        try {
+            val body = o(ResponsesApi.request(ep, "t", history, ThinkLevel.MAX, null).body)
+            assertEquals("xhigh", body["reasoning"]!!.jsonObject["effort"]!!.jsonPrimitive.content)
+            val e = ResponsesApi.httpError(400, """{"error":{"code":"unsupported_value","param":"reasoning.effort","message":"bad"}}""")
+            assertTrue(e.message!!.contains("改用「高」"))
+            assertFalse(ResponsesApi.noReasoning)
+            val again = o(ResponsesApi.request(ep, "t", history, ThinkLevel.MAX, null).body)
+            assertEquals("high", again["reasoning"]!!.jsonObject["effort"]!!.jsonPrimitive.content)
+        } finally {
+            ResponsesApi.noXhigh = false; ResponsesApi.noReasoning = false
+        }
+    }
 }

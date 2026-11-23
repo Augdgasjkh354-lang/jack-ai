@@ -514,11 +514,20 @@ internal object GeminiApi {
 internal object ResponsesApi {
     /** 服务说不支持 reasoning 参数后就不再发（这次进程里记住）。 */
     @Volatile var noReasoning = false
+    /** 服务说不认「极高」（xhigh）后，极高按「高」发。 */
+    @Volatile var noXhigh = false
+    /** 最近一次请求发的是不是 xhigh：报错说思考参数不对时，先怪它、降成高，不整个关掉思考。 */
+    @Volatile private var sentXhigh = false
 
-    private fun effort(level: ThinkLevel): String = when (level.effort) {
-        null, "low" -> "low"
-        "high", "max" -> "high"
-        else -> "medium"
+    /**
+     * Kavi 的四个档位对上 ChatGPT 的四档强度（界面上也按 ChatGPT 的叫法显示，见 ThinkLevel.labelFor）：
+     * 不思考 → 轻度（low），低 → 中（medium），高 → 高（high），最高 → 极高（xhigh）。GPT 的思考关不掉，最低就是轻度。
+     */
+    fun effort(level: ThinkLevel): String = when (level) {
+        ThinkLevel.OFF -> "low"
+        ThinkLevel.LOW -> "medium"
+        ThinkLevel.HIGH -> "high"
+        ThinkLevel.MAX -> if (noXhigh) "high" else "xhigh"
     }
 
     fun request(ep: Endpoint, token: String, messages: List<JsonObject>, thinking: ThinkLevel, tools: JsonArray?): NativeRequest {
@@ -541,9 +550,12 @@ internal object ResponsesApi {
                     })
                 }
             })
+            val e = effort(thinking)
+            sentXhigh = ep.reasoning && !noReasoning && e == "xhigh"
             if (ep.reasoning && !noReasoning) putJsonObject("reasoning") {
-                put("effort", effort(thinking))
-                if (thinking.effort != null) put("summary", "auto")
+                put("effort", e)
+                // 思考过程的摘要：显示在「思考」里，和 ChatGPT 一样
+                put("summary", "auto")
             }
         }
         val headers = mapOf("Authorization" to "Bearer $token")
@@ -679,15 +691,21 @@ internal object ResponsesApi {
         val code = err?.get("code").str()
         val message = err?.get("message").str().ifBlank { err?.get("detail").str() }
         val param = err?.get("param").str()
-        if (code == "subscription_sharing_unsupported_capability" && "reasoning" in param) noReasoning = true
+        // 思考参数不认：发的是极高就降成高再试；否则这次进程里不再发思考参数
+        val reasoningRejected = "reasoning" in param && (code == "subscription_sharing_unsupported_capability" || status == 400 || "unsupported" in code || "invalid" in code)
+        if (reasoningRejected) {
+            if (sentXhigh && !noXhigh) noXhigh = true else noReasoning = true
+            return ApiException(
+                if (noReasoning) "这个模型不支持调思考强度，已经关掉了，再发一次就行。" else "这个模型没有「极高」强度，已经改用「高」，再发一次就行。",
+                400, code,
+            )
+        }
         val (text, http) = when (code) {
             "subscription_sharing_usage_limit_exceeded" ->
                 "ChatGPT 套餐额度用完了（或者到了给 Kavi 设的每周上限）。在 chatgpt.com/settings/usage 看用量，等额度恢复或先换个模型。" to 429
             "subscription_sharing_usage_unavailable", "subscription_sharing_user_unavailable" -> "ChatGPT 那边暂时用不了，稍后再试。" to 503
             "subscription_sharing_user_not_eligible" -> "这个 ChatGPT 账号不能在其他 App 里用套餐额度（要 Go、Plus 或 Pro）。" to 403
-            "subscription_sharing_unsupported_capability" ->
-                (if (noReasoning && "reasoning" in param) "这个模型不支持调思考强度，已经关掉了，再发一次就行。"
-                else "ChatGPT 不支持这次请求里的「${param.ifBlank { message }}」。") to 400
+            "subscription_sharing_unsupported_capability" -> "ChatGPT 不支持这次请求里的「${param.ifBlank { message }}」。" to 400
             "subscription_sharing_invalid_user" -> "ChatGPT 登录失效了，到 设置 → 模型服务 里重新登录。" to 401
             "subscription_sharing_route_not_supported", "chatpass_v2_scope_not_authorized", "chatpass_v2_invalid_authorization_context" ->
                 "ChatGPT 不让 Kavi 这样用（$code）：${message.ifBlank { "权限不够" }}" to 403

@@ -470,7 +470,7 @@ internal fun InputBar(
                             }
                             HorizontalDivider(Modifier.padding(horizontal = 20.dp, vertical = 6.dp), color = colors.onSurface.copy(alpha = 0.08f))
                             // 不支持深度思考的模型不显示思考开关
-                            if (settings.endpoint()?.reasoning != false) MenuRow(settings.thinking.label, icon = AppIcons.Brain, checked = settings.thinking != ThinkLevel.OFF) {
+                            if (settings.endpoint()?.reasoning != false) MenuRow(settings.thinking.labelFor(settings.endpoint()), icon = AppIcons.Brain, checked = settings.thinking != ThinkLevel.OFF) {
                                 attachMenu = false; thinkMenu = true
                             }
                             MenuRow("联网搜索", icon = AppIcons.Globe, checked = settings.webSearch && settings.webReady()) {
@@ -487,8 +487,9 @@ internal fun InputBar(
                         }
                         // 思考档位：从上面那一行点进来
                         RoundMenu(expanded = thinkMenu, onDismiss = { thinkMenu = false }) {
+                            val ep = settings.endpoint()
                             ThinkLevel.entries.forEach { lv ->
-                                MenuRow(lv.label, icon = AppIcons.Brain, checked = lv == settings.thinking) {
+                                MenuRow(lv.labelFor(ep), icon = AppIcons.Brain, checked = lv == settings.thinking) {
                                     vm.updateSettings { it.copy(thinking = lv) }; thinkMenu = false
                                 }
                             }
