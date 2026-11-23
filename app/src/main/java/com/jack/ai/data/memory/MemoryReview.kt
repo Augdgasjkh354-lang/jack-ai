@@ -47,21 +47,26 @@ object MemoryReview {
         (if (m.role == "user") user else "You") + ": " + m.content.trim().let { if (it.length > MAX_CHARS) it.take(MAX_CHARS) + "…" else it }
     }
 
-    data class Op(val op: String, val text: String = "", val old: String = "")
+    /** scope：项目对话里的回看分「project」（项目记忆）和「global」（全局记忆）；别处是空的。 */
+    data class Op(val op: String, val text: String = "", val old: String = "", val scope: String = "")
 
-    fun parse(raw: String): List<Op> {
+    /** 项目对话一次最多改几条（要顺手整理进度、删掉做完的待办，比别处多一些）。 */
+    const val PROJECT_MAX_OPS = 6
+
+    fun parse(raw: String, max: Int = MAX_OPS): List<Op> {
         val obj = runCatching { Json.parseToJsonElement(raw.trim().removePrefix("```json").removeSuffix("```").trim()).jsonObject }.getOrNull() ?: return emptyList()
         return (obj["ops"] as? JsonArray).orEmpty().mapNotNull { e ->
             val o = e as? JsonObject ?: return@mapNotNull null
             fun s(k: String) = (o[k] as? JsonPrimitive)?.content?.trim().orEmpty()
             val op = s("op").lowercase()
+            val scope = s("scope").lowercase()
             when {
-                op == "add" && s("text").isNotEmpty() -> Op("add", s("text"))
-                op == "update" && s("old").isNotEmpty() && s("text").isNotEmpty() -> Op("update", s("text"), s("old"))
-                op == "delete" && s("old").isNotEmpty() -> Op("delete", old = s("old"))
+                op == "add" && s("text").isNotEmpty() -> Op("add", s("text"), scope = scope)
+                op == "update" && s("old").isNotEmpty() && s("text").isNotEmpty() -> Op("update", s("text"), s("old"), scope)
+                op == "delete" && s("old").isNotEmpty() -> Op("delete", old = s("old"), scope = scope)
                 else -> null
             }
-        }.take(MAX_OPS)
+        }.take(max)
     }
 
     /**
@@ -127,8 +132,9 @@ object MemoryReview {
     }
 
 
-    /** 顺手记执行结果；界面负责刷新状态和显示提示，考场负责保存回看位置。 */
-    data class ReviewResult(val done: List<String>, val reviewedAt: Long, val memories: List<MemoryItem>?, val work: Boolean)
+    /** 顺手记执行结果；界面负责刷新状态和显示提示，考场负责保存回看位置。project：项目记忆改了哪些（全局的在 done 里）。 */
+    data class ReviewResult(val done: List<String>, val reviewedAt: Long, val memories: List<MemoryItem>?, val work: Boolean,
+        val project: List<String> = emptyList())
 
     /**
      * App 与记忆考场共用同一条真实回看路径。
@@ -137,9 +143,13 @@ object MemoryReview {
     suspend fun review(
         ctx: Context, store: Store, conv: Conversation, project: Project?,
         settings: Settings, client: DeepSeekClient,
+        /** 离开项目里的对话时交接：没攒够几轮也看（有一条没看过的用户消息就行）。 */
+        handoff: Boolean = false,
     ): ReviewResult? {
-        if (!due(conv) || !settings.memoryEnabled || !conv.inDream || conv.ownLife ||
+        val ready = due(conv) || (handoff && project != null && unseen(conv).any { it.role == "user" })
+        if (!ready || !settings.memoryEnabled || !conv.inDream || conv.ownLife ||
             conv.id == INBOX_ID || conv.id == Retired.FREE_TIME_CONV) return null
+        if (project != null) return reviewProject(ctx, store, conv, project, settings, client)
         val unseen = unseen(conv)
         val work = unseen.any { it.plan.isNotEmpty() } && conv.workMemoryAllowed(project)
         val chat = !work && conv.globalAllowed(project)
@@ -183,9 +193,76 @@ object MemoryReview {
         return ReviewResult(done, unseen.maxOf { it.createdAt }, saved, work)
     }
 
+    /**
+     * 项目里的对话：一次请求同时管项目记忆（设定、决定、进度、待办）和全局记忆（隐私项目、关了全局记忆的不管）。
+     * 新对话开头带着项目记忆，所以这里记好了，下次在项目里开新对话就能接着做。
+     */
+    private suspend fun reviewProject(
+        ctx: Context, store: Store, conv: Conversation, project: Project, settings: Settings, client: DeepSeekClient,
+    ): ReviewResult? {
+        val ep = settings.backgroundEndpoint() ?: return null
+        val unseen = unseen(conv)
+        val globalOn = conv.globalAllowed(project)
+        val file = ChatMemory.projectFile(ctx, project.id)
+        val before = ChatMemory.items(ChatMemory.read(file))
+        val globals = if (globalOn) store.loadMemories().map { it.text } else emptyList()
+        val input = buildString {
+            append("【Project】${project.name}\n")
+            project.instructions.trim().takeIf { it.isNotEmpty() }?.let { append(it.take(800)).append("\n") }
+            append("\n【Current project memory】(~${MemoryOps.tokensOf(before)} of ${MemoryOps.PROJECT_BUDGET} tokens)\n")
+            append(before.ifEmpty { listOf("(none)") }.joinToString("\n") { "- $it" })
+            if (globalOn) {
+                append("\n\n【Current global memories】(~${MemoryOps.tokensOf(globals)} of ${MemoryOps.HOT_BUDGET} tokens)\n")
+                append(globals.ifEmpty { listOf("(none)") }.joinToString("\n") { "- $it" })
+            }
+            append("\n\n【The latest exchanges in conversation 「${conv.title}」】\n")
+            append(transcript(unseen, Persona.ref(settings) ?: "User"))
+        }
+        val raw = client.complete(ep, listOf(
+            buildJsonObject {
+                put("role", "system")
+                put("content", Persona.fill(PROJECT + (if (globalOn) PROJECT_GLOBAL else PROJECT_NO_GLOBAL) +
+                    Persona.nameLine(settings).let { if (it.isEmpty()) "" else "\n\n$it" }, settings))
+            },
+            buildJsonObject { put("role", "user"); put("content", input) },
+        ), maxTokens = 1200, jsonMode = true)
+        val ops = parse(raw, PROJECT_MAX_OPS)
+        var projectDone: List<String> = emptyList()
+        ChatMemory.update(file) { live ->
+            val (next, changes) = apply(live, keepSections(live, ops.filter { it.scope != "global" }), MemoryOps.PROJECT_BUDGET)
+            projectDone = changes
+            next.takeIf { changes.isNotEmpty() }
+        }
+        var done: List<String> = emptyList()
+        var saved: List<MemoryItem>? = null
+        val globalOps = ops.filter { it.scope == "global" }.take(MAX_OPS)
+        if (globalOn && globalOps.isNotEmpty()) store.updateMemories { live ->
+            val (next, changes) = applyItems(live, globalOps, MemoryOps.HOT_BUDGET, "聊天时回看：${conv.title}")
+            done = changes
+            if (changes.isEmpty()) null else {
+                MemoryOps.snapshot(ctx, live)
+                saved = next
+                next
+            }
+        }
+        return ReviewResult(done, unseen.maxOf { it.createdAt }, saved, work = false, project = projectDone)
+    }
+
+    /** 改一条时新写法忘了带块标记：沿用原来那条的（不然会从「进度」掉到「其他」里）。 */
+    internal fun keepSections(live: List<String>, ops: List<Op>): List<Op> = ops.map { op ->
+        if (op.op != "update" || ChatMemory.sectionOf(op.text) != null) op
+        else {
+            val key = op.old.trim().removePrefix("- ").trim()
+            val hit = live.firstOrNull { it == key } ?: live.singleOrNull { it.contains(key, ignoreCase = true) }
+            hit?.let { ChatMemory.sectionOf(it) }?.let { op.copy(text = "【$it】" + op.text) } ?: op
+        }
+    }
+
     /** 给用户看的那条说明（挂在回答下面）。 */
     fun notice(done: List<String>, work: Boolean): String =
         (if (work) "顺手更新了做事经验" else "顺手更新了记忆") + "\n" + done.joinToString("\n")
+
+    fun projectNotice(done: List<String>): String = "顺手更新了项目记忆\n" + done.joinToString("\n")
 
     const val NOTICE_PREFIX = "顺手更新了"
 
@@ -214,4 +291,30 @@ Reply with JSON only: {"ops":[...]}, at most 3, each one of
 {"op":"update","old":"an existing entry's exact text, or a unique part of it","text":"the new text"}
 {"op":"delete","old":"..."}
 One self-contained sentence each, in the language {user} uses."""
+
+    private const val PROJECT = """You're looking back over the latest exchanges in one conversation of a project with {user}, to keep the project memory current. Every new conversation in this project starts with the project memory and nothing else from the old conversations, so it must let you pick up exactly where things stand.
+Project memory has four sections; start every entry with its tag:
+【设定】 lasting background: what the project is, characters, audience, style, constraints, materials and where they are.
+【决定】 things {user} decided or agreed on, with the reason when it matters.
+【进度】 what's done and where things stand now (finished chapters, files made, current step). Keep it to a few entries: update the existing 【进度】 entry instead of adding another.
+【待办】 concrete open items: next steps, unanswered questions, things {user} said to do later. Delete one once it's done.
+Keep it tidy as you go: merge entries about the same thing, correct entries these exchanges show are wrong or outdated, and when it's close to the limit, shorten or remove what no longer matters before adding.
+Not worth saving: chit-chat, one-off questions, your own guesses, and details only this conversation needs.
+If nothing changed, return no ops."""
+
+    private const val PROJECT_GLOBAL = """
+Separately, if these exchanges show a lasting fact or preference about {user} themselves (not about the project), you may also update global memory, at most 3 ops; usually none.
+Reply with JSON only: {"ops":[...]}, at most 6, each one of
+{"scope":"project","op":"add","text":"【进度】..."}
+{"scope":"project","op":"update","old":"an existing entry's exact text, or a unique part of it","text":"【进度】the new text"}
+{"scope":"project","op":"delete","old":"..."}
+or the same with "scope":"global" (no section tag; one sentence about {user} by name).
+One self-contained sentence per entry, in the language {user} uses."""
+
+    private const val PROJECT_NO_GLOBAL = """
+Reply with JSON only: {"ops":[...]}, at most 6, each one of
+{"scope":"project","op":"add","text":"【进度】..."}
+{"scope":"project","op":"update","old":"an existing entry's exact text, or a unique part of it","text":"【进度】the new text"}
+{"scope":"project","op":"delete","old":"..."}
+One self-contained sentence per entry, in the language {user} uses."""
 }

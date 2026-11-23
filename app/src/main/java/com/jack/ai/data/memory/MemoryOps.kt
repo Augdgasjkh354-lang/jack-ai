@@ -62,6 +62,8 @@ object MemoryOps {
 
     /** 本对话、项目、工作记忆文件各自的上限（token）。全局记忆用 [HOT_BUDGET]。 */
     const val FILE_BUDGET = 1500
+    /** 项目记忆的上限（token）：项目要记设定、决定、进度、待办，比别的记忆文件宽一些。 */
+    const val PROJECT_BUDGET = 3000
 
     fun tokensOf(items: List<String>) = items.sumOf { estTokens(it) + 4 }
 

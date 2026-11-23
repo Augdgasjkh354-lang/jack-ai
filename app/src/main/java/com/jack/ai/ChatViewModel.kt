@@ -171,12 +171,20 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     // ---------- 对话管理 ----------
 
     fun newChat(projectId: String? = null) {
+        handoff(_state.value.currentId)
         // 不打断别的对话里正在写的回答：它在后台写完，回去就能看到
         _state.update { it.copy(currentId = null, draftProjectId = projectId, pending = emptyList()) }
     }
 
     fun select(id: String) {
+        if (id != _state.value.currentId) handoff(_state.value.currentId)
         _state.update { it.copy(currentId = id, pending = emptyList()) }
+    }
+
+    /** 离开项目里的对话：最近几轮还没回看的，补一次，把进度、决定、待办记进项目记忆，下个对话接得上。 */
+    private fun handoff(leaving: String?) {
+        val conv = _state.value.conversations.firstOrNull { it.id == leaving } ?: return
+        if (conv.projectId != null && leaving !in _state.value.streamingIds) maybeReviewMemory(conv.id, handoff = true)
     }
 
     fun delete(id: String) {
@@ -779,23 +787,25 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
      * 每聊几轮在后台回看一下，有值得长期记住的就记下（见 MemoryReview）。平常聊天记进全局记忆，做任务（列过清单）记进做事经验；
      * 关了记忆、关了「参与做梦」、隐私项目、Kavi 自己的后台对话不回看。出错就算了，下次再看。
      */
-    private fun maybeReviewMemory(convId: String) {
+    private fun maybeReviewMemory(convId: String, handoff: Boolean = false) {
         val st = _state.value
         val conv = st.conversations.firstOrNull { it.id == convId } ?: return
-        if (!com.jack.ai.data.memory.MemoryReview.due(conv)) return
+        if (!handoff && !com.jack.ai.data.memory.MemoryReview.due(conv)) return
         if (!reviewing.add(convId)) return
         val app = getApplication<Application>()
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val result = com.jack.ai.data.memory.MemoryReview.review(
-                    app, store, conv, st.project(conv.projectId), st.settings, client,
+                    app, store, conv, st.project(conv.projectId), st.settings, client, handoff = handoff,
                 ) ?: return@launch
                 result.memories?.let { next -> _state.update { it.copy(memories = next) } }
-                if (result.done.isNotEmpty()) {
+                val notes = listOfNotNull(
+                    result.project.takeIf { it.isNotEmpty() }?.let { com.jack.ai.data.memory.MemoryReview.projectNotice(it) },
+                    result.done.takeIf { it.isNotEmpty() }?.let { com.jack.ai.data.memory.MemoryReview.notice(it, result.work) },
+                )
+                if (notes.isNotEmpty()) {
                     val lastAnswer = conv.messages.lastOrNull { it.role == "assistant" }?.id
-                    if (lastAnswer != null) patchMessage(convId, lastAnswer) {
-                        it.copy(notices = it.notices + com.jack.ai.data.memory.MemoryReview.notice(result.done, result.work))
-                    }
+                    if (lastAnswer != null) patchMessage(convId, lastAnswer) { it.copy(notices = it.notices + notes) }
                 }
                 updateConvQuiet(convId) { it.copy(memReviewedAt = result.reviewedAt) }
                 persist()

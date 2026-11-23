@@ -32,15 +32,44 @@ object ChatMemory {
 
     fun read(file: File): String = runCatching { SafeFile.readText(file) }.getOrDefault("")
 
-    /** 文件里的每一条（「- 」开头的行）。用户手写的其他格式的行也算一条。 */
-    fun items(text: String): List<String> = text.lines()
-        .map { it.trim() }
-        .filter { it.isNotEmpty() && !it.startsWith("#") }
-        .map { it.removePrefix("- ").removePrefix("* ").trim() }
-        .filter { it.isNotEmpty() }
+    /**
+     * 项目记忆分几块：设定（背景、人物、约束）、决定（定下来的事）、进度（做到哪了）、待办（还没做的）。
+     * 每条前面带「【决定】」这样的标记，文件里按块写成「## 决定」下面一行行（标记不重复写），读回来再按所在的块补上标记。
+     * 不带标记的放在「其他」里，原样往返。别的记忆文件不带标记，还是一行行的老样子。
+     */
+    val SECTIONS = listOf("设定", "决定", "进度", "待办")
+    private const val OTHER = "其他"
 
-    fun render(title: String, items: List<String>): String =
-        if (items.isEmpty()) "" else "# $title\n\n" + items.joinToString("\n") { "- $it" } + "\n"
+    /** 这条属于哪一块（【决定】…）；没标记是 null。 */
+    fun sectionOf(item: String): String? = SECTIONS.firstOrNull { item.startsWith("【$it】") }
+
+    /** 文件里的每一条（「- 」开头的行）。用户手写的其他格式的行也算一条。「## 决定」这类块标题下的条目补上【决定】标记。 */
+    fun items(text: String): List<String> {
+        var section: String? = null
+        val out = mutableListOf<String>()
+        for (raw in text.lines()) {
+            val line = raw.trim()
+            if (line.isEmpty()) continue
+            if (line.startsWith("#")) {
+                section = line.trimStart('#').trim().takeIf { it in SECTIONS }
+                continue
+            }
+            val item = line.removePrefix("- ").removePrefix("* ").trim()
+            if (item.isEmpty()) continue
+            out += if (section != null && sectionOf(item) == null) "【$section】$item" else item
+        }
+        return out
+    }
+
+    fun render(title: String, items: List<String>): String {
+        if (items.isEmpty()) return ""
+        if (items.none { sectionOf(it) != null }) return "# $title\n\n" + items.joinToString("\n") { "- $it" } + "\n"
+        // 分块写：没标记的放最后的「其他」
+        val groups = items.groupBy { sectionOf(it) ?: OTHER }
+        return "# $title\n" + (SECTIONS + OTHER).mapNotNull { sec ->
+            groups[sec]?.let { list -> "\n## $sec\n" + list.joinToString("\n") { "- " + it.removePrefix("【$sec】") } + "\n" }
+        }.joinToString("")
+    }
 
     fun titleOf(file: File) = when (file.name) { PROJECT_FILE -> "项目记忆"; WORK_FILE -> "做事经验"; else -> "本对话记忆" }
 

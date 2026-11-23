@@ -167,7 +167,7 @@ internal suspend fun ToolSession.remember(args: JsonObject): String {
                 }
                 ChatMemory.update(file) { before ->
                     val after = if (old.isEmpty()) (if (text in before) before else before + text) else ChatMemory.replace(before, old, text)
-                    com.jack.ai.data.memory.MemoryOps.fullNote(before, after, com.jack.ai.data.memory.MemoryOps.FILE_BUDGET, where)?.let { throw IllegalArgumentException(it) }
+                    com.jack.ai.data.memory.MemoryOps.fullNote(before, after, if (scope == "project") com.jack.ai.data.memory.MemoryOps.PROJECT_BUDGET else com.jack.ai.data.memory.MemoryOps.FILE_BUDGET, where)?.let { throw IllegalArgumentException(it) }
                     after.takeIf { it != before }
                 }
                 null
