@@ -668,6 +668,7 @@ private fun gptMissReason(v: String): String? {
         "first" -> "这个对话的第一次请求"
         "ok" -> "和上一步完全接得上（Kavi 没改动前面的内容）：是 ChatGPT 那边没命中（缓存还没写好，或者分到了别的服务器）"
         "head" -> "工具说明、系统提示或思考强度和上一步不一样（比如刚打开了一个技能），从开头起都没命中"
+        "ws" -> "常连接：只发了新内容，前面的对话留在 ChatGPT 那边；这里没命中是 ChatGPT 没算缓存"
         "edit" -> "Kavi 改动了上一步发过的第 ${p.getOrNull(1)} 项（共 ${p.getOrNull(2)} 项，多半是压缩了旧的工具结果），从那里往后没命中"
         else -> null
     }

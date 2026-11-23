@@ -182,6 +182,20 @@ class DeepSeekClient(
             put("stream_options", buildJsonObject { put("include_usage", true) })
         }.toString()
 
+        // ChatGPT：先试常连接，每步只发新内容（见 ResponsesSocket）；走不了再走下面的 HTTP
+        if (format == ApiFormat.RESPONSES && native != null && ResponsesSocket.enabled) {
+            val viaSocket = try {
+                ResponsesSocket.send(http, native, streamIdleMs(ep)) { send(it) }
+                true
+            } catch (e: ResponsesSocket.Unavailable) {
+                false
+            } catch (e: ApiException) {
+                if (e.code == 401) com.jack.ai.data.integrations.ChatGptAuth.invalidate()
+                throw e
+            }
+            if (viaSocket) { channel.close(); return@callbackFlow }
+        }
+
         val request = Request.Builder()
             .url(native?.url ?: (ep.baseUrl.trimEnd('/') + "/chat/completions"))
             .apply { if (native != null) native.headers.forEach { (k, v) -> header(k, v) } else header("Authorization", "Bearer ${ep.apiKey}") }

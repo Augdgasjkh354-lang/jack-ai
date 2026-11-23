@@ -1,0 +1,124 @@
+package com.jack.ai.api
+
+import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+import okhttp3.OkHttpClient
+import okhttp3.Response
+import okhttp3.WebSocket
+import okhttp3.WebSocketListener
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+import java.util.Collections
+
+/** ChatGPT 常连接：第一步发全量，之后只发新内容并接上一步；接不上就发全量。 */
+class ResponsesSocketTest {
+    private fun o(s: String) = Json.parseToJsonElement(s).jsonObject
+    private val dev = o("""{"type":"message","role":"developer","content":[{"type":"input_text","text":"你是 Kavi"}]}""")
+    private val u1 = o("""{"type":"message","role":"user","content":[{"type":"input_text","text":"查天气"}]}""")
+    private val call = o("""{"type":"function_call","call_id":"c1","name":"web_search","arguments":"{}"}""")
+    private val out = o("""{"type":"function_call_output","call_id":"c1","output":"晴"}""")
+    private val head = o("""{"model":"gpt","store":false}""")
+
+    @Test fun deltaKeepsOnlyNewItems() {
+        val chain = ResponsesSocket.Chain("r1", head, listOf(dev, u1))
+        assertEquals(listOf(out), ResponsesSocket.delta(chain, head, listOf(dev, u1, call, out)))
+        // 参数变了、前面改过、没有上一步的输出、没有新内容：都发全量
+        assertNull(ResponsesSocket.delta(chain, o("""{"model":"gpt2"}"""), listOf(dev, u1, call, out)))
+        assertNull(ResponsesSocket.delta(chain, head, listOf(dev, out, call, out)))
+        assertNull(ResponsesSocket.delta(chain, head, listOf(dev, u1, out)))
+        assertNull(ResponsesSocket.delta(chain, head, listOf(dev, u1, call)))
+        assertNull(ResponsesSocket.delta(null, head, listOf(dev, u1, call, out)))
+    }
+
+    private lateinit var server: MockWebServer
+    private val got: MutableList<JsonObject> = Collections.synchronizedList(mutableListOf())
+
+    @Before fun setUp() {
+        ResponsesSocket.reset(); ResponsesSocket.enabled = true
+        server = MockWebServer()
+        server.enqueue(MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
+            var n = 0
+            override fun onMessage(webSocket: WebSocket, text: String) {
+                val m = o(text); got += m
+                n++
+                val prev = m["previous_response_id"]?.jsonPrimitive?.content
+                if (prev == "gone") {
+                    webSocket.send("""{"type":"error","status":400,"error":{"type":"invalid_request_error","code":"previous_response_not_found","message":"x"}}""")
+                    return
+                }
+                webSocket.send("""{"type":"response.created","response":{"id":"r$n"}}""")
+                webSocket.send("""{"type":"response.output_text.delta","output_index":0,"delta":"好$n"}""")
+                webSocket.send("""{"type":"response.completed","response":{"id":"r$n","usage":{"input_tokens":100,"output_tokens":5,"input_tokens_details":{"cached_tokens":90}}}}""")
+            }
+        }))
+        server.start()
+    }
+
+    @After fun tearDown() { ResponsesSocket.reset(); server.shutdown() }
+
+    private fun req(vararg input: JsonElement) = NativeRequest(
+        server.url("/v1/responses").toString(), mapOf("Authorization" to "Bearer t"),
+        buildJsonObject { put("model", "gpt"); put("store", false); put("stream", true); put("input", JsonArray(input.toList())) }.toString(),
+    )
+
+    private fun send(r: NativeRequest): List<StreamEvent> = runBlocking {
+        val evs = mutableListOf<StreamEvent>()
+        ResponsesSocket.send(OkHttpClient(), r, 5_000) { evs += it }
+        evs
+    }
+
+    @Test fun secondStepSendsOnlyTheNewItems() {
+        val first = send(req(dev, u1))
+        assertEquals(StreamEvent.Text("", "好1"), first[0])
+        assertTrue(first.any { it is StreamEvent.Usage })
+        send(req(dev, u1, call, out))
+        assertEquals(2, got.size)
+        assertEquals("response.create", got[0]["type"]!!.jsonPrimitive.content)
+        assertFalse("stream" in got[0])
+        assertNull(got[0]["previous_response_id"])
+        assertEquals(2, got[0]["input"]!!.jsonArray.size)
+        assertEquals("r1", got[1]["previous_response_id"]!!.jsonPrimitive.content)
+        assertEquals(listOf<JsonElement>(out), got[1]["input"]!!.jsonArray.toList())
+        assertEquals("gpt:ws", ResponsesApi.lastVerdict)
+    }
+
+    @Test fun lostPreviousResponseResendsEverything() {
+        send(req(dev, u1))
+        // 模拟连接里的缓存丢了上一步
+        val key = ResponsesSocket.keyOf(listOf(dev, u1))
+        ResponsesSocket.forTest(key, ResponsesSocket.Chain("gone", o("""{"model":"gpt","store":false}"""), listOf(dev, u1)))
+        val evs = send(req(dev, u1, call, out))
+        assertEquals(3, got.size)
+        assertEquals(4, got[2]["input"]!!.jsonArray.size)
+        assertNull(got[2]["previous_response_id"])
+        assertTrue(evs.contains(StreamEvent.Text("", "好3")))
+    }
+
+    @Test fun refusedHandshakeFallsBackToHttp() {
+        val s = MockWebServer().apply { enqueue(MockResponse().setResponseCode(404)); start() }
+        val r = NativeRequest(s.url("/v1/responses").toString(), mapOf("Authorization" to "Bearer t2"), """{"input":[]}""")
+        var unavailable = false
+        runBlocking {
+            try { ResponsesSocket.send(OkHttpClient(), r, 5_000) {} } catch (e: ResponsesSocket.Unavailable) { unavailable = true }
+        }
+        assertTrue(unavailable)
+        assertFalse(ResponsesSocket.enabled)
+        s.shutdown()
+    }
+}
