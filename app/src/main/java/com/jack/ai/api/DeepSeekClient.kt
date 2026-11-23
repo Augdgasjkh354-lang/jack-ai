@@ -50,6 +50,12 @@ sealed interface StreamEvent {
         val exactCost: Double? = null) : StreamEvent
     /** 这一轮怎么结束的：length 表示写到长度上限被截断了。 */
     data class Finish(val reason: String) : StreamEvent
+    /**
+     * Kavi 不看、只原样带回下一次请求的东西：GPT 加密的思考（reasoning 项）。
+     * 调工具的那几步要把它带回去，不然请求开头和上一步对不上，缓存就断了（OpenAI cookbook「reasoning items」）。
+     * 存在助手消息的 [ResponsesApi.ITEMS] 字段里，只有 GPT 那条路用，别的格式发出去前去掉。
+     */
+    data class Carry(val item: kotlinx.serialization.json.JsonObject) : StreamEvent
 }
 
 class ApiException(message: String, val code: Int = 0, val serviceCode: String = "") : Exception(message)
@@ -171,7 +177,7 @@ class DeepSeekClient(
             } else if (!ep.reasoning) {
                 put("temperature", temperature.toDouble())
             }
-            put("messages", JsonArray(messages))
+            put("messages", JsonArray(messages.map(ResponsesApi::strip)))
             if (tools != null) put("tools", tools)
             put("stream_options", buildJsonObject { put("include_usage", true) })
         }.toString()
@@ -365,7 +371,7 @@ class DeepSeekClient(
             // 推理模型大多不接受自定义 temperature；百炼 Qwen3、Kimi 的温度有固定要求，也不发
             if ((!ep.reasoning || ep.deepseek) && dialect == ThinkDialect.Kind.NONE) put("temperature", 0.7)
             if (jsonMode) put("response_format", buildJsonObject { put("type", "json_object") })
-            put("messages", JsonArray(messages))
+            put("messages", JsonArray(messages.map(ResponsesApi::strip)))
         }.toString()
         val request = Request.Builder()
             .url(ep.baseUrl.trimEnd('/') + "/chat/completions")

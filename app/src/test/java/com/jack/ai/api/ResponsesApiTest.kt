@@ -231,4 +231,35 @@ class ResponsesApiTest {
         assertTrue(body["input"]!!.jsonArray.none { it.jsonObject["role"]?.jsonPrimitive?.content == "developer" })
         ResponsesApi.useInstructions = false
     }
+
+    @Test fun encryptedReasoningIsCarriedBackInPlace() {
+        // 解析：output_item.done 里的加密思考变成 Carry
+        val p = ResponsesApi.Parser()
+        val ev = p.feed("""data: {"type":"response.output_item.done","output_index":0,"item":{"type":"reasoning","id":"rs_1","status":"completed","summary":[],"encrypted_content":"ENC"}}""")
+        val carry = ev.single() as com.jack.ai.api.StreamEvent.Carry
+        assertEquals("ENC", carry.item["encrypted_content"]!!.jsonPrimitive.content)
+        assertFalse("status" in carry.item)
+        // 请求里要回加密思考
+        val req = o(ResponsesApi.request(ep, "t", history, ThinkLevel.HIGH, null).body)
+        assertEquals("reasoning.encrypted_content", req["include"]!!.jsonArray[0].jsonPrimitive.content)
+        // 带回去：放在那一步的工具调用前面
+        val withCarry = listOf(
+            o("""{"role":"system","content":"你是 Kavi"}"""),
+            o("""{"role":"user","content":"查天气"}"""),
+            o("""{"role":"assistant","content":null,"openai_items":[{"type":"reasoning","id":"rs_1","summary":[],"encrypted_content":"ENC"}],"tool_calls":[{"id":"call_1","type":"function","function":{"name":"web_search","arguments":"{}"}}]}"""),
+            o("""{"role":"tool","tool_call_id":"call_1","content":"晴"}"""),
+        )
+        val input = o(ResponsesApi.request(ep, "t", withCarry, ThinkLevel.HIGH, null).body)["input"]!!.jsonArray.map { it.jsonObject }
+        val types = input.map { it["type"]?.jsonPrimitive?.content }
+        assertEquals(listOf("message", "message", "reasoning", "function_call", "function_call_output"), types)
+        // 别的格式发出去前去掉
+        assertFalse(ResponsesApi.ITEMS in ResponsesApi.strip(withCarry[2]))
+        // 服务端不认：关掉，也不再带回去
+        ResponsesApi.httpError(400, """{"detail":"Unknown parameter: include"}""")
+        assertTrue(ResponsesApi.noEncrypted)
+        val again = o(ResponsesApi.request(ep, "t", withCarry, ThinkLevel.HIGH, null).body)
+        assertFalse("include" in again)
+        assertTrue(again["input"]!!.jsonArray.none { it.jsonObject["type"]?.jsonPrimitive?.content == "reasoning" })
+        ResponsesApi.noEncrypted = false
+    }
 }

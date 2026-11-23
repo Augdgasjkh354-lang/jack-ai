@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -109,6 +110,9 @@ class Agent(
             val calls = sortedMapOf<Int, Call>()
             val roundReasoning = StringBuilder()
             val roundContent = StringBuilder()
+            // GPT 这一步的加密思考：记在这一步的助手消息上，下一步原样带回去
+            val roundCarry = mutableListOf<JsonObject>()
+            fun JsonObjectBuilder.carry() { if (roundCarry.isNotEmpty()) put(com.jack.ai.api.ResponsesApi.ITEMS, JsonArray(roundCarry.toList())) }
             val roundStart = content.length
             if (content.isNotEmpty() && !content.endsWith("\n")) content.append("\n\n")
             try {
@@ -122,6 +126,7 @@ class Agent(
                         }
                         is StreamEvent.Usage -> onUsage(ev)
                         is StreamEvent.Finish -> truncated = ev.reason == "length"
+                        is StreamEvent.Carry -> roundCarry += ev.item
                         is StreamEvent.ToolCall -> {
                             // 工具调用是分片流式返回的，按 index 拼起来
                             val c = calls.getOrPut(ev.index) { Call() }
@@ -142,6 +147,7 @@ class Agent(
                         val shown = buildJsonObject {
                             put("role", "assistant"); put("content", roundContent.toString())
                             if (sendReasoning) put("reasoning_content", roundReasoning.toString())
+                            carry()
                         }
                         messages += shown
                         trail += shown.toString()
@@ -215,6 +221,7 @@ class Agent(
                     onFinish(buildJsonObject {
                         put("role", "assistant"); put("content", roundContent.toString())
                         if (sendReasoning && roundReasoning.isNotEmpty()) put("reasoning_content", roundReasoning.toString())
+                        carry()
                     })
                     return
                 }
@@ -225,6 +232,7 @@ class Agent(
                     put("role", "assistant"); put("content", roundContent.toString())
                     // 开着思考时同一轮里的回答要带上思考内容，不然接口会拒
                     if (sendReasoning) put("reasoning_content", roundReasoning.toString())
+                    carry()
                 }
                 val push = buildJsonObject { put("role", "user"); put("content", nudge) }
                 said?.let { messages += it }
@@ -250,6 +258,7 @@ class Agent(
                 put("role", "assistant")
                 if (roundContent.isEmpty()) put("content", JsonNull) else put("content", roundContent.toString())
                 if (sendReasoning) put("reasoning_content", roundReasoning.toString())
+                carry()
                 put("tool_calls", buildJsonArray {
                     calls.values.forEach { c ->
                         add(buildJsonObject {

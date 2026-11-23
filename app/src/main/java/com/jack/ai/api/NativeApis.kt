@@ -11,6 +11,7 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 
@@ -524,6 +525,15 @@ internal object ResponsesApi {
      */
     @Volatile var useInstructions = false
 
+    /** 助手消息里存 GPT 原样要带回的输出项（加密的思考）的字段，见 [StreamEvent.Carry]。 */
+    const val ITEMS = "openai_items"
+
+    /** 发给别的格式前去掉 [ITEMS]（只有 Responses 认得它）。 */
+    fun strip(m: JsonObject): JsonObject = if (ITEMS in m) JsonObject(m - ITEMS) else m
+
+    /** 服务端不认加密思考（include / encrypted_content）：这次进程里不再要、也不再带回去。 */
+    @Volatile var noEncrypted = false
+
     /** 服务端不认 prompt_cache_key：这次进程里不再发。 */
     @Volatile var noCacheKey = false
 
@@ -572,6 +582,8 @@ internal object ResponsesApi {
             })
             val e = effort(thinking)
             sentXhigh = ep.reasoning && !noReasoning && e == "xhigh"
+            // 要回加密的思考，下一步原样带回去，缓存才接得上（store=false 时只能这样带）
+            if (ep.reasoning && !noReasoning && !noEncrypted) put("include", buildJsonArray { add("reasoning.encrypted_content") })
             if (ep.reasoning && !noReasoning) putJsonObject("reasoning") {
                 put("effort", e)
                 // 思考过程的摘要：显示在「思考」里，和 ChatGPT 一样
@@ -617,6 +629,8 @@ internal object ResponsesApi {
                 }
                 "assistant" -> {
                     leading = false
+                    // 这一步的加密思考放回原位（在它的回答和工具调用前面）
+                    if (!noEncrypted) m[ITEMS].arr()?.forEach { el -> el.obj()?.let { items += it } }
                     val text = partsOf(m["content"]).filterIsInstance<Part.Text>().joinToString("") { it.text }
                     if (text.isNotBlank()) items += message("assistant", listOf(buildJsonObject { put("type", "output_text"); put("text", text) }))
                     m["tool_calls"].arr()?.forEach { el ->
@@ -677,6 +691,15 @@ internal object ResponsesApi {
                 }
                 "response.output_item.done" -> {
                     val item = o["item"].obj()
+                    // 加密的思考：原样留着下一步带回去（只留这几个字段，状态之类的不要）
+                    if (item?.get("type").str() == "reasoning" && item?.get("encrypted_content").str().orEmpty().isNotEmpty()) {
+                        return listOf(StreamEvent.Carry(buildJsonObject {
+                            put("type", "reasoning")
+                            item?.get("id")?.let { put("id", it) }
+                            put("summary", item?.get("summary") ?: JsonArray(emptyList()))
+                            put("encrypted_content", item!!["encrypted_content"]!!)
+                        }))
+                    }
                     val i = tools[at]
                     if (i == null || at in gotArgs || item?.get("type").str() != "function_call") return emptyList()
                     gotArgs += at
@@ -722,6 +745,10 @@ internal object ResponsesApi {
         val param = err?.get("param").str()
         // 思考参数不认：发的是极高就降成高再试；否则这次进程里不再发思考参数
         if (code == "subscription_sharing_usage_limit_exceeded") com.jack.ai.data.integrations.ChatGptUsage.limitHit()
+        if (!noEncrypted && ("include" in param || "encrypted_content" in message || "not persisted" in message)) {
+            noEncrypted = true
+            return ApiException("ChatGPT 不认带回思考的方式，已经关掉了，再发一次就行。", 400, code)
+        }
         if (!useInstructions && ("developer" in message || "instructions" in param || "instructions" in message)) {
             useInstructions = true
             return ApiException("ChatGPT 不认这种系统提示的放法，已经换回原来的，再发一次就行。", 400, code)
@@ -758,6 +785,10 @@ internal object ResponsesApi {
         val err = o?.get("error").obj() ?: o
         if (err?.get("code").str().isNotEmpty()) return errorOf(err, status)
         val detail = err?.get("message").str().ifBlank { o?.get("detail").str() }.ifBlank { body.orEmpty().take(200) }
+        if (status in 400..404 && !noEncrypted && ("encrypted_content" in detail || "include" in detail || "not persisted" in detail)) {
+            noEncrypted = true
+            return ApiException("ChatGPT 不认带回思考的方式，已经关掉了，再发一次就行。", status)
+        }
         if (status == 400 && !useInstructions && ("developer" in detail || "instructions" in detail)) {
             useInstructions = true
             return ApiException("ChatGPT 不认这种系统提示的放法，已经换回原来的，再发一次就行。", 400)
