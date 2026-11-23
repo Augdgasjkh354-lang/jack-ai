@@ -517,6 +517,13 @@ internal object ResponsesApi {
     /** 服务说不认「极高」（xhigh）后，极高按「高」发。 */
     @Volatile var noXhigh = false
 
+    /**
+     * 系统提示放哪：默认放进 input 开头的一条 developer 消息。OpenAI 文档写明 GPT-6.2 起顶层 instructions
+     * 会接在 input 后面、永远不进缓存，要缓存就得放 developer 消息（openai/codex#62312 里套餐登录也一样）。
+     * 服务端不认 developer 消息时退回 instructions，这次进程里不再试。
+     */
+    @Volatile var useInstructions = false
+
     /** 服务端不认 prompt_cache_key：这次进程里不再发。 */
     @Volatile var noCacheKey = false
 
@@ -548,9 +555,9 @@ internal object ResponsesApi {
             put("model", ep.model)
             put("store", false)
             put("stream", true)
-            if (instructions.isNotBlank()) put("instructions", instructions)
+            if (instructions.isNotBlank() && useInstructions) put("instructions", instructions)
             if (!noCacheKey) put("prompt_cache_key", cacheKey(instructions))
-            put("input", JsonArray(input))
+            put("input", JsonArray(if (instructions.isNotBlank() && !useInstructions) listOf(developer(instructions)) + input else input))
             if (!tools.isNullOrEmpty()) put("tools", buildJsonArray {
                 tools.forEach { t ->
                     val fn = t.obj()?.get("function").obj() ?: return@forEach
@@ -573,6 +580,11 @@ internal object ResponsesApi {
         }
         val headers = mapOf("Authorization" to "Bearer $token")
         return NativeRequest(ep.baseUrl.trimEnd('/') + "/responses", headers, body.toString())
+    }
+
+    private fun developer(text: String) = buildJsonObject {
+        put("type", "message"); put("role", "developer")
+        put("content", buildJsonArray { add(buildJsonObject { put("type", "input_text"); put("text", text) }) })
     }
 
     /**
@@ -710,6 +722,10 @@ internal object ResponsesApi {
         val param = err?.get("param").str()
         // 思考参数不认：发的是极高就降成高再试；否则这次进程里不再发思考参数
         if (code == "subscription_sharing_usage_limit_exceeded") com.jack.ai.data.integrations.ChatGptUsage.limitHit()
+        if (!useInstructions && ("developer" in message || "instructions" in param || "instructions" in message)) {
+            useInstructions = true
+            return ApiException("ChatGPT 不认这种系统提示的放法，已经换回原来的，再发一次就行。", 400, code)
+        }
         if ("prompt_cache_key" in param || "prompt_cache_key" in message) {
             noCacheKey = true
             return ApiException("ChatGPT 不认缓存参数，已经去掉了，再发一次就行。", 400, code)
@@ -742,6 +758,10 @@ internal object ResponsesApi {
         val err = o?.get("error").obj() ?: o
         if (err?.get("code").str().isNotEmpty()) return errorOf(err, status)
         val detail = err?.get("message").str().ifBlank { o?.get("detail").str() }.ifBlank { body.orEmpty().take(200) }
+        if (status == 400 && !useInstructions && ("developer" in detail || "instructions" in detail)) {
+            useInstructions = true
+            return ApiException("ChatGPT 不认这种系统提示的放法，已经换回原来的，再发一次就行。", 400)
+        }
         if (status == 400 && "prompt_cache_key" in detail) {
             noCacheKey = true
             return ApiException("ChatGPT 不认缓存参数，已经去掉了，再发一次就行。", 400)

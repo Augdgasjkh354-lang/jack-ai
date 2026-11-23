@@ -57,7 +57,8 @@ class ResponsesApiTest {
         val body = o(req.body)
         assertEquals("false", body["store"]!!.jsonPrimitive.content)
         assertEquals("true", body["stream"]!!.jsonPrimitive.content)
-        assertEquals("你是 Kavi", body["instructions"]!!.jsonPrimitive.content)
+        // 系统提示放在 input 开头的 developer 消息里（GPT-6.2 起顶层 instructions 不进缓存）
+        assertFalse("instructions" in body)
         // 文档里不认的参数一个都不发
         listOf("temperature", "max_output_tokens", "top_p", "metadata", "user", "previous_response_id").forEach { assertFalse(it, it in body) }
         assertEquals("high", body["reasoning"]!!.jsonObject["effort"]!!.jsonPrimitive.content)
@@ -65,7 +66,10 @@ class ResponsesApiTest {
         assertEquals("web_search", tool["name"]!!.jsonPrimitive.content)
         assertEquals("function", tool["type"]!!.jsonPrimitive.content)
 
-        val input = body["input"]!!.jsonArray.map { it.jsonObject }
+        val all = body["input"]!!.jsonArray.map { it.jsonObject }
+        assertEquals("developer", all[0]["role"]!!.jsonPrimitive.content)
+        assertEquals("你是 Kavi", all[0]["content"]!!.jsonArray[0].jsonObject["text"]!!.jsonPrimitive.content)
+        val input = all.drop(1)
         // 不能有 system 角色的消息
         assertTrue(input.none { it["role"]?.jsonPrimitive?.content == "system" })
         val user = input[0]["content"]!!.jsonArray.map { it.jsonObject }
@@ -215,5 +219,16 @@ class ResponsesApiTest {
         org.junit.Assert.assertTrue(e.message!!.contains("再发一次"))
         org.junit.Assert.assertFalse(ResponsesApi.request(ep, "t", msgs, com.jack.ai.data.ThinkLevel.OFF, null).body.contains("prompt_cache_key"))
         ResponsesApi.noCacheKey = false
+    }
+
+    @Test fun fallsBackToInstructionsWhenDeveloperIsRejected() {
+        ResponsesApi.useInstructions = false
+        val e = ResponsesApi.httpError(400, """{"detail":"Unsupported role: developer"}""")
+        assertTrue(ResponsesApi.useInstructions)
+        assertTrue(e.message!!.contains("再发一次"))
+        val body = o(ResponsesApi.request(ep, "t", history, ThinkLevel.OFF, null).body)
+        assertEquals("你是 Kavi", body["instructions"]!!.jsonPrimitive.content)
+        assertTrue(body["input"]!!.jsonArray.none { it.jsonObject["role"]?.jsonPrimitive?.content == "developer" })
+        ResponsesApi.useInstructions = false
     }
 }
