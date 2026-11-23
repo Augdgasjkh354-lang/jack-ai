@@ -747,7 +747,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 done()
                 persist()
                 // 这段聊天停下一阵后，在后台写进 Kavi 的经历流
-                com.jack.ai.data.Timeline.scheduleSummary(getApplication(), convId)
+                // （关了「记忆」就不写）
+                if (_state.value.settings.memoryEnabled) com.jack.ai.data.Timeline.scheduleSummary(getApplication(), convId)
                 // 插的话没来得及用上（回答已经收尾了）：等这次结束后当成新消息发出去
                 if (extraUser != REVIEW_PROMPT) taskSpend[convId] = spent to nextLimit
                 // 已经花到上限的不自动接着做：接了也是马上停下问，不如等用户看了再说

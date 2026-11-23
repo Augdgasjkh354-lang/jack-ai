@@ -187,6 +187,8 @@ Write in {lang}. Output only one JSON object:
     suspend fun summarize(ctx: Context, convId: String) {
         val store = Store(ctx)
         val s = store.loadSettings()
+        // 经历流也是一种记忆：关了「记忆」就不写，也不在后台调模型
+        if (!s.memoryEnabled) return
         val conv = store.loadConversations().firstOrNull { it.id == convId } ?: return
         if (!counts(conv, store.loadProjects())) return
         val since = summarizedUpTo(ctx)[convId] ?: 0L
