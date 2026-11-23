@@ -76,6 +76,10 @@ android {
         buildConfig = true
     }
     // 界面测试（Robolectric）要用到 Android 资源
+    // 发版前的 lint 检查（lintVitalRelease）每次要半分钟：CI 上有单测把关，这里不跑
+    lint {
+        checkReleaseBuilds = false
+    }
     testOptions {
         unitTests.isIncludeAndroidResources = true
         // Robolectric 运行时要下载安卓系统包；设了 ROBOLECTRIC_REPO 就从这个镜像下（本机 Maven Central 被限流时用）

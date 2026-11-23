@@ -29,16 +29,18 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       # Kavi 专用代理的内核：从 sing-box 源码只编译需要的协议（官方安卓版 80MB，这样 40MB），放进 jniLibs
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.25.5"
-          cache: false
-
       - uses: actions/cache@v4
         id: singbox
         with:
           path: app/src/main/jniLibs/arm64-v8a/libsingbox.so
           key: singbox-v1.14.3-quic-utls
+
+      # Go 只在要重编代理内核时才装（缓存里有就省掉这一步）
+      - uses: actions/setup-go@v5
+        if: steps.singbox.outputs.cache-hit != 'true'
+        with:
+          go-version: "1.25.5"
+          cache: false
 
       - name: Build proxy core
         if: steps.singbox.outputs.cache-hit != 'true'
@@ -101,8 +103,9 @@ jobs:
           set -o pipefail
           # 出错时把关键报错写成注释，方便在网页上直接看到
           # 只打开发版（dev，Jack 用的，发到 Release、自动更新）；正式版（store）暂停开发，不打包
-          ./gradlew assembleDevRelease 2>&1 | tee build.log || {
-            grep -E "^e: |What went wrong|error:" -A3 build.log | head -40 | while IFS= read -r l; do echo "::error::$l"; done
+          # 打包和单测放在同一次 Gradle 里跑：省掉第二次启动和配置（约半分钟）；单测不过照样不发版
+          ./gradlew assembleDevRelease testDevReleaseUnitTest --tests "com.jack.ai.*" 2>&1 | tee build.log || {
+            grep -E "^e: |What went wrong|error:|Exception|FAILED" -A3 build.log | head -40 | while IFS= read -r l; do echo "::error::$l"; done
             exit 1
           }
           cp app/build/outputs/apk/dev/release/app-dev-release.apk Kavi-v${{ env.VERSION }}.apk
@@ -110,10 +113,7 @@ jobs:
       - name: Check Office files
         run: |
           set -o pipefail
-          ./gradlew testDevReleaseUnitTest --tests "com.jack.ai.*" 2>&1 | tee test.log || {
-            grep -E "^e: |What went wrong|Exception|FAILED" -A3 test.log | head -40 | while IFS= read -r l; do echo "::error::$l"; done
-            exit 1
-          }
+          # 样本文件是上一步单测生成的（app/build/office-samples）
           pip install -q python-docx==1.2.0 python-pptx==1.0.2 openpyxl==3.1.5
           python scripts/check_office.py app/build/office-samples
           python scripts/check_sandbox.py
