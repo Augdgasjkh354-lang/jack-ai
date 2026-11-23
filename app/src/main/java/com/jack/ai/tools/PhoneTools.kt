@@ -123,6 +123,14 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
     fun UiNode.anyNode(test: (UiNode) -> Boolean): Boolean = test(this) || children.any { it.anyNode(test) }
 
     /** 读当前屏幕：先检查 App 权限和付款，再识别登录、验证码与加载状态。 */
+    /** 请能看图的模型看截图（[k]：截图像素 × k = 屏幕像素），返回清单；没有能看图的模型、没认出东西是 null。 */
+    suspend fun eyesLook(image: String, k: Float, screen: Pair<Int, Int>): String? {
+        val ep = com.jack.ai.data.phone.ScreenEyes.eyes(settings) ?: return null
+        val spots = com.jack.ai.data.phone.ScreenEyes.look(com.jack.ai.api.DeepSeekClient(host.store::addUsage), ep, image,
+            (screen.first / k).toInt(), (screen.second / k).toInt())
+        return com.jack.ai.data.phone.ScreenEyes.format(spots, ep.model).takeIf { it.isNotEmpty() }
+    }
+
     suspend fun read(allowTakeover: Boolean = true): Pair<Screen?, String> {
         val (pkg, root) = svc.snapshot() ?: return null to "读不到屏幕（可能在锁屏或系统界面上）。"
         val rawElements = ScreenText.elements(root)
@@ -197,6 +205,11 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
                         images += img; phoneScale = k2
                         note.append("这一屏树读不全，已附截图（在下一条消息里）；红框数字与清单编号一致，可以按截图坐标 tap。\n")
                     }
+                    // 当前模型看不了图：请一个能看图的模型看一眼，认成带坐标的清单（图标、游戏、画出来的按钮也认得出）
+                    capture?.image != null && !canSee && eyesLook(capture.image.first, capture.image.second, size)?.let { seen ->
+                        note.append(seen); phoneScale = capture.image.second
+                        note.append("这一屏树读不全，上面是看截图认出的（还有文字识别的字）；按 x、y tap。\n")
+                    } != null -> {}
                     ocrText.isNotEmpty() -> note.append("这一屏树读不全，上面是文字识别补读的字；当前模型看不了截图，按字的位置 tap 的 x、y。\n")
                     !canSee -> note.append("这一屏树读不全，文字识别也没认出字，当前模型看不了截图，请用户来查看这一屏。\n")
                     else -> note.append("这一屏树读不全，截图暂时拿不到，请用户查看这一屏后再继续。\n")
@@ -278,6 +291,7 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
 
     fun needScreen(): Screen? = phoneSeen?.takeIf { it.pkg == svc.foreground() }
 
+
     /** 快模式保持旧固定间隔；像人模式按换屏、字数、批量操作补足停留。 */
     suspend fun beforeAction(s: Screen, counts: Boolean = true): String? {
         phoneLimitStop?.let { return "$it 这一轮请停止自动操作。" }
@@ -352,7 +366,6 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
             }
             "read" -> read().second
             "screenshot" -> {
-                if (!canSee) return@runTool "当前模型看不了图，用 read 读屏幕上的字和按钮。" to SearchRecord(toolLabel)
                 val (s, t) = read()
                 if (s == null) return@runTool t to SearchRecord(toolLabel)
                 if (svc.foreground() != s.pkg) {
@@ -365,6 +378,13 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
                     return@runTool "这一屏防截屏，画面全黑。请用户自己完成这一步，Kavi 不继续操作。" to SearchRecord(toolLabel)
                 }
                 val (img, k) = capture?.image ?: return@runTool "截不了图（要安卓 11 以上；或者截得太频繁、系统禁止截图）。下面是读到的清单：\n$t" to SearchRecord(toolLabel)
+                if (!canSee) {
+                    // 当前模型看不了图：请能看图的模型看，认成带坐标的清单
+                    val seen = eyesLook(img, k, svc.screenSize())
+                        ?: return@runTool "当前模型看不了图，也没有配能看图的模型帮着看（DeepSeek Flash 或别的标着「能看图」的模型）。用 read 读屏幕上的字和按钮。\n$t" to SearchRecord(toolLabel)
+                    phoneScale = k
+                    return@runTool "$seen\n$t" to SearchRecord(toolLabel)
+                }
                 images += img; phoneScale = k
                 "截图在下一条消息里，红框上的数字就是下面清单的编号；按图上的位置点用 tap 的 x、y（截图上的像素）。\n$t"
             }

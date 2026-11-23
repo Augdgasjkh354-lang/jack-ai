@@ -33,6 +33,7 @@ import com.jack.ai.a11y.KaviAccessibility
 import com.jack.ai.a11y.PhoneGuard
 import com.jack.ai.data.Settings
 import com.wangzan101.mika.core.cap.phone.OperatingPace
+import com.jack.ai.data.modelChoices
 
 /**
  * 设置页的「操作其他 App」：无障碍开没开（去系统里打开，安卓 13 以上先允许受限制的设置），
@@ -69,6 +70,11 @@ fun PhoneControlSection(vm: ChatViewModel, settings: Settings) {
             }
         }
         Text("像人：落点略偏、弧线滑动，输入按词上屏；快：固定手势，文字一次填入。动作之间的间隔仍按 App 的原有规则。",
+            style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+        // 看截图的「眼睛」：读不出字的界面（图标、游戏），当前模型又看不了图时请它帮着看
+        val eyes = remember(settings) { com.jack.ai.data.phone.ScreenEyes.eyes(settings)?.let { e -> settings.modelChoices().firstOrNull { it.key == e.key }?.label ?: e.model } }
+        Text(if (eyes != null) "读不出字的界面（图标、游戏）：当前模型看不了图时，请「$eyes」看截图，认成带坐标的清单再点。"
+            else "读不出字的界面（图标、游戏）要能看图的模型：配上 DeepSeek 或别的标着「能看图」的模型，Kavi 就能看截图操作。",
             style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
