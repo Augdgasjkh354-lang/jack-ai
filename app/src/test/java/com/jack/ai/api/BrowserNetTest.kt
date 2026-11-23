@@ -95,4 +95,28 @@ class BrowserNetTest {
         assertEquals(null, BrowserNet.confirmReason("key", "搜点什么", false, false, false, "搜索", "enter"))
         assertEquals(null, BrowserNet.confirmReason("type", "发表评论", false, true, false, "发表"))
     }
+
+    @Test
+    fun proxyOffButNodesAddedStillProxiesOpenAiOnly() {
+        val nodesOnly = Net.Config(enabled = false, nodes = listOf(node))
+        val plan = BrowserNet.plan(BrowserNet.AUTO, nodesOnly) { true } as BrowserNet.Plan.Proxy
+        assertTrue(plan.reverse)
+        assertTrue("auth.openai.com" !in plan.bypass && "*.openai.com" in plan.bypass && "chatgpt.com" in plan.bypass)
+        // 内核起不来：别的网页照常直连，不整个挡住
+        assertEquals(BrowserNet.Plan.Direct, BrowserNet.plan(BrowserNet.AUTO, nodesOnly) { false })
+    }
+
+    @Test
+    fun onlyThePendingLoginCallbackMayReachLocalhost() {
+        assertEquals(Kind.BLOCKED, BrowserNet.classify("http://127.0.0.1:1455/auth/callback?code=x"))
+        BrowserNet.loginCallbackPort = 1455
+        try {
+            assertEquals(Kind.OPEN, BrowserNet.classify("http://127.0.0.1:1455/auth/callback?code=x&state=y"))
+            assertEquals(Kind.BLOCKED, BrowserNet.classify("http://127.0.0.1:1455/other"))
+            assertEquals(Kind.BLOCKED, BrowserNet.classify("http://127.0.0.1:8080/auth/callback"))
+            assertEquals(Kind.BLOCKED, BrowserNet.classify("http://localhost:1455/auth/callback"))
+        } finally {
+            BrowserNet.loginCallbackPort = 0
+        }
+    }
 }

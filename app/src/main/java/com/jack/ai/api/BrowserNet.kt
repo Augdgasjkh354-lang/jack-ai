@@ -16,8 +16,8 @@ object BrowserNet {
     /** 这次要怎么上网。 */
     sealed class Plan {
         object Direct : Plan()
-        /** 走 127.0.0.1:port；bypass 里的直连。 */
-        data class Proxy(val port: Int, val bypass: List<String>) : Plan()
+        /** 走 127.0.0.1:port；bypass 里的直连。reverse = 反过来：只有 bypass 里的走代理，其余直连。 */
+        data class Proxy(val port: Int, val bypass: List<String>, val reverse: Boolean = false) : Plan()
         /** 要走代理但代理用不了：不打开网页，告诉用户为什么。 */
         data class Blocked(val reason: String) : Plan()
     }
@@ -27,8 +27,10 @@ object BrowserNet {
     fun plan(mode: String, c: Net.Config = Net.config, always: Set<String> = emptySet(), ensure: (Net.Config) -> Boolean = { Net.ensureCore(it) }): Plan {
         if (mode == DIRECT) return Plan.Direct
         if (!c.enabled) {
-            return if (mode == PROXY) Plan.Blocked("Kavi 专用代理没开（设置 → Kavi 专用代理），选了「全部走代理」就不会直连")
-            else Plan.Direct
+            if (mode == PROXY) return Plan.Blocked("Kavi 专用代理没开（设置 → Kavi 专用代理），选了「全部走代理」就不会直连")
+            // 代理关着但加了节点：OpenAI / ChatGPT（登录页）照样走代理，其余直连；内核起不来就都直连，不挡别的网页
+            if (com.jack.ai.Edition.proxy && c.nodes.isNotEmpty() && ensure(c)) return Plan.Proxy(ProxyCore.port, alwaysProxyRules(), reverse = true)
+            return Plan.Direct
         }
         if (!ensure(c)) return Plan.Blocked("代理没能启动：" + (ProxyCore.lastError ?: "原因不明"))
         return Plan.Proxy(ProxyCore.port, if (mode == PROXY) emptyList() else bypassRules(always))
@@ -73,6 +75,15 @@ object BrowserNet {
     fun httpOf(url: String): String =
         if (url.startsWith("https://", ignoreCase = true)) "http://" + url.substring(8) else url
 
+    /** Net.ALWAYS_PROXY 换成 WebView 认的规则：本身和子域名。 */
+    fun alwaysProxyRules(): List<String> = Net.ALWAYS_PROXY.flatMap { listOf(it, "*.$it") }
+
+    /**
+     * 正在等的登录回调（ChatGPT 登录）：浏览器登录完会跳到 http://127.0.0.1:端口/auth/callback，
+     * 平时本机地址一律拦下，只放行这一个端口的这一个路径，登录完就关。
+     */
+    @Volatile var loginCallbackPort: Int = 0
+
     /** 浏览器里一个网址该怎么处理。 */
     enum class Kind { OPEN, EXTERNAL, BLOCKED }
 
@@ -83,10 +94,19 @@ object BrowserNet {
     fun classify(url: String): Kind {
         val uri = runCatching { URI(url) }.getOrNull() ?: return Kind.BLOCKED
         return when (uri.scheme?.lowercase()) {
-            "http", "https" -> if (isLocal(uri.host.orEmpty())) Kind.BLOCKED else Kind.OPEN
+            "http", "https" -> when {
+                isLoginCallback(uri) -> Kind.OPEN
+                isLocal(uri.host.orEmpty()) -> Kind.BLOCKED
+                else -> Kind.OPEN
+            }
             "mailto", "tel", "sms", "geo", "market", "intent", "weixin", "alipays", "zhihu", "bilibili", "snssdk1128" -> Kind.EXTERNAL
             else -> Kind.BLOCKED
         }
+    }
+
+    private fun isLoginCallback(uri: URI): Boolean {
+        val port = loginCallbackPort
+        return port > 0 && uri.scheme == "http" && uri.host == "127.0.0.1" && uri.port == port && uri.path == "/auth/callback"
     }
 
     /** 本机、局域网、链路本地地址。 */

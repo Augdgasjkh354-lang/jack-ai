@@ -25,7 +25,7 @@ import java.io.IOException
  * 用 ChatGPT 账号登录（OpenAI 的 Sign in with ChatGPT，开源、本机运行的 App 用）：花的是用户 ChatGPT 套餐
  * （Go / Plus / Pro）里的额度，不用 API Key。文档：developers.openai.com/siwc/token-sharing-open-source。
  *
- * 在系统浏览器里打开 OpenAI 自己的登录页，用户在那里输账号密码、点同意，浏览器跳回本机 127.0.0.1 的回调，
+ * 在浏览器（默认是 Kavi 浏览器，走 Kavi 专用代理；设置里关了就是系统浏览器）里打开 OpenAI 自己的登录页，用户在那里输账号密码、点同意，浏览器跳回本机 127.0.0.1 的回调，
  * 这里换到令牌。Kavi 碰不到密码；令牌只能花额度，看不到 ChatGPT 里的聊天和记忆。
  *
  * 令牌单独存（不放进设置：续令牌时旧的会作废，跟着设置来回存容易拿旧的去续，账号就被踢下线），
@@ -110,7 +110,9 @@ object ChatGptAuth {
      */
     suspend fun signIn(open: (String) -> Unit): Account {
         val cb = runCatching { LoopbackCallback.open(PORT) }.getOrElse { LoopbackCallback.open() }
-        cb.use {
+        // 在 Kavi 浏览器里登录时，跳回本机的回调要放行（平时本机地址一律拦下）
+        com.jack.ai.api.BrowserNet.loginCallbackPort = cb.port
+        try { cb.use {
             val redirect = cb.redirectUri
             val verifier = Pkce.verifier()
             val state = Pkce.state()
@@ -169,6 +171,8 @@ object ChatGptAuth {
             } ?: throw IOException("等了 5 分钟没等到登录完成")
             failure?.let { throw it }
             return result!!.also { save(it) }
+        } } finally {
+            if (com.jack.ai.api.BrowserNet.loginCallbackPort == cb.port) com.jack.ai.api.BrowserNet.loginCallbackPort = 0
         }
     }
 

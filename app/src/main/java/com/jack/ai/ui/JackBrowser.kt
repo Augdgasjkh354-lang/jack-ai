@@ -665,6 +665,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
     private var appliedPort = -1
     private var appliedRoute = ""
     private var appliedBypass = emptyList<String>()
+    private var appliedReverse = false
     internal var pageDone: CompletableDeferred<Unit>? get() = tab.pageDone; set(v) { tab.pageDone = v }
     /** 最近给代理口令的时刻：10 秒内要了 30 次以上，说明口令没被接受。 */
     private val authTimes = ArrayDeque<Long>()
@@ -775,13 +776,15 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
             when (plan) {
                 is BrowserNet.Plan.Blocked -> plan.reason
                 BrowserNet.Plan.Direct -> apply(0, emptyList())
-                is BrowserNet.Plan.Proxy -> apply(plan.port, plan.bypass)
+                is BrowserNet.Plan.Proxy -> apply(plan.port, plan.bypass, plan.reverse)
             }
         }
     }
 
-    private suspend fun apply(port: Int, bypass: List<String>): String? {
-        if (port == appliedPort && route == appliedRoute && bypass == appliedBypass) return null
+    private suspend fun apply(port: Int, bypass: List<String>, reverse: Boolean = false): String? {
+        // 只让 OpenAI 走代理要「反向」规则，旧的网页组件没有：那就照旧直连
+        if (reverse && !WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE_REVERSE_BYPASS)) return apply(0, emptyList())
+        if (port == appliedPort && route == appliedRoute && bypass == appliedBypass && reverse == appliedReverse) return null
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE)) {
             if (port == 0) { appliedPort = 0; appliedRoute = route; return null }
             return "这台手机的网页组件版本太旧，不能单独给浏览器设代理。到应用商店更新「Android System WebView」后再试。"
@@ -791,11 +794,14 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
             val done = Runnable { if (cont.isActive) cont.resume(Unit) }
             if (port == 0) controller.clearProxyOverride({ it.run() }, done)
             else controller.setProxyOverride(
-                ProxyConfig.Builder().addProxyRule("http://127.0.0.1:$port").apply { bypass.forEach { addBypassRule(it) } }.build(),
+                ProxyConfig.Builder().addProxyRule("http://127.0.0.1:$port").apply {
+                    bypass.forEach { addBypassRule(it) }
+                    if (reverse) setReverseBypassEnabled(true)
+                }.build(),
                 { it.run() }, done,
             )
         }
-        appliedPort = port; appliedRoute = route; appliedBypass = bypass
+        appliedPort = port; appliedRoute = route; appliedBypass = bypass; appliedReverse = reverse
         return null
     }
 

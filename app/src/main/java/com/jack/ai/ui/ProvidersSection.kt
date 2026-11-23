@@ -401,9 +401,8 @@ fun FreePoolCard(settings: com.jack.ai.data.Settings) {
     }
 }
 
-private fun openLink(ctx: android.content.Context, link: String) {
-    runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(link)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
-}
+/** 登录页、用量页：默认在 Kavi 浏览器里打开（走 Kavi 专用代理，国内也打得开），设置里关了就交给系统浏览器。 */
+private fun openLink(ctx: android.content.Context, link: String) = Links.open(ctx, link)
 
 private fun chatGptFailure(e: Throwable): String = when (e) {
     is ApiException -> e.message
