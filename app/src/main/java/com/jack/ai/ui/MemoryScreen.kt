@@ -183,6 +183,17 @@ private fun MemoryPage(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                     if (hot.isNotEmpty()) TextButton(onClick = { confirmClear = true }) { Text("清空") }
                 }
                 AboutBar(hot + deepHere, aboutPick) { aboutPick = it }
+                // 关系图：标过的人和事、谁和谁出现在同一条记忆里
+                var showGraph by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+                if (MemoryGraphHas(hot + deepHere)) {
+                    TextButton(onClick = { showGraph = !showGraph }) { Text(if (showGraph) "收起关系图" else "看关系图") }
+                    AnimatedVisibility(showGraph) {
+                        androidx.compose.material3.Surface(color = NIGHT_CARD, shape = Radii.m,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+                            MemoryGraphView(hot + deepHere, aboutPick, { aboutPick = it })
+                        }
+                    }
+                }
                 undo?.let { t ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("已删除「${t.take(16)}${if (t.length > 16) "…" else ""}」", Modifier.weight(1f),
@@ -477,3 +488,6 @@ internal fun aboutLine(m: MemoryItem): String? = listOfNotNull(
     m.about.takeIf { it.isNotEmpty() }?.joinToString("、", prefix = "涉及 "),
     m.at.takeIf { it.isNotBlank() },
 ).takeIf { it.isNotEmpty() }?.joinToString(" · ")
+
+/** 至少有两个标过的人和事才画关系图。 */
+internal fun MemoryGraphHas(all: List<MemoryItem>): Boolean = com.jack.ai.data.memory.MemoryGraph.entities(all).size >= 2

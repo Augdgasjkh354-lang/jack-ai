@@ -180,6 +180,27 @@ class ShotsTest {
     }
 
     @Test
+    fun memoryGraph() {
+        Assume.assumeTrue(System.getenv("SHOTS_DIR") != null)
+        fun m(t: String, vararg a: String) = com.jack.ai.data.MemoryItem(text = t, about = a.toList())
+        val all = listOf(
+            m("小王是同事，做设计", "小王", "公司"), m("小王的生日在 12 月 3 日", "小王"), m("国庆和小王去了杭州", "小王", "杭州"),
+            m("觉得杭州的龙井虾仁一般", "杭州"), m("养了一只橘猫叫团子", "团子"), m("团子每年 3 月打疫苗", "团子", "宠物医院"),
+            m("公司在做跨境电商", "公司", "跨境电商"), m("店铺在 1688 和淘宝", "跨境电商", "淘宝"), m("妈妈住在成都", "妈妈", "成都"),
+            m("春节回成都看妈妈", "妈妈", "成都", "春节"), m("体检约在下周三", "体检"),
+        )
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            JackTheme(dark()) {
+                androidx.compose.material3.Surface {
+                    MemoryGraphView(all, "小王", {})
+                }
+            }
+        }
+        save("memory-graph-" + dark().name.lowercase())
+    }
+
+    @Test
     fun memory() {
         Assume.assumeTrue(System.getenv("SHOTS_DIR") != null)
         val app = RuntimeEnvironment.getApplication() as Application
