@@ -932,7 +932,8 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         // 网页里的图片、脚本、请求也不许碰本机和局域网
         override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
             val host = request.url.host ?: return null
-            if (request.url.scheme in setOf("http", "https", "ws", "wss") && BrowserNet.isLocal(host)) {
+            // 正在等的登录回调（ChatGPT 登录跳回本机）照常放行，其余本机地址一律拦
+            if (request.url.scheme in setOf("http", "https", "ws", "wss") && BrowserNet.isLocal(host) && !BrowserNet.isLoginCallback(request.url.toString())) {
                 t.diag.add("拦下请求：本机或局域网 $host")
                 return WebResourceResponse("text/plain", "utf-8", 403, "Forbidden", emptyMap(), java.io.ByteArrayInputStream(ByteArray(0)))
             }
