@@ -51,6 +51,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.runtime.collectAsState
+import com.jack.ai.data.compressLimit
 import com.jack.ai.data.activeSkills
 import com.jack.ai.data.readyMails
 import com.jack.ai.data.ChatExport
@@ -481,7 +482,7 @@ internal fun InputBar(
                             val conv = state.current
                             if (conv != null && conv.messages.size >= 4) MenuRow(
                                 "压缩上下文", icon = AppIcons.Compress,
-                                sub = "${conv.lastPromptTokens / 1000}k / ${settings.compressTokens / 1000}k",
+                                sub = "${conv.lastPromptTokens / 1000}k / ${settings.compressLimit() / 1000}k",
                                 enabled = !state.streamingHere && state.compressingId == null,
                             ) { attachMenu = false; vm.compress() }
                         }

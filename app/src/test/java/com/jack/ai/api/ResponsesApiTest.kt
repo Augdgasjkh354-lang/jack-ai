@@ -8,6 +8,7 @@ import com.jack.ai.data.Settings
 import com.jack.ai.data.ThinkLevel
 import com.jack.ai.data.customModelKey
 import com.jack.ai.data.endpoint
+import com.jack.ai.data.compressLimit
 import com.jack.ai.data.integrations.ChatGptAuth
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
@@ -172,5 +173,11 @@ class ResponsesApiTest {
         fun prompt(s: Settings) = com.jack.ai.chat.PromptBuilder.systemPrompt(s, conv, null, null, emptyList(), emptyList())
         assertTrue("Style notes for this model" in prompt(settings.copy(model = customModelKey("g", "gpt-6.1-sol"))))
         assertFalse("Style notes for this model" in prompt(settings.copy(model = com.jack.ai.data.MODEL_FLASH)))
+    }
+
+    @Test fun gptCompressesBeforeTheLongContextPriceLine() {
+        val gpt = settings.copy(model = customModelKey("g", "gpt-6.1-sol"), compressTokens = 800_000)
+        assertEquals(200_000, gpt.compressLimit())
+        assertEquals(800_000, gpt.copy(model = com.jack.ai.data.MODEL_FLASH).compressLimit())
     }
 }

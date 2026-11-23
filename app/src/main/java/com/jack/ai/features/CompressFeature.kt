@@ -22,7 +22,7 @@ import com.jack.ai.data.memory.Compression
 class CompressFeature(core: AppCore) : Feature(core) {
     internal fun maybeAutoCompress(convId: String) {
         val conv = state.value.conversations.firstOrNull { it.id == convId } ?: return
-        if (conv.lastPromptTokens >= state.value.settings.compressTokens) compress(convId, manual = false)
+        if (conv.lastPromptTokens >= state.value.settings.compressLimit()) compress(convId, manual = false)
     }
 
     /** 压缩当前对话。manual=true 时，即使没到阈值也压缩。 */
@@ -35,7 +35,7 @@ class CompressFeature(core: AppCore) : Feature(core) {
         val settings = s.settings
         val ep = settings.backgroundEndpoint() ?: return
         // 保留约 16% 阈值的最近原文（手动压缩时保留少一些，至少 8k）
-        val retain = (settings.compressTokens * 0.16).toInt().let { if (manual) (it / 2).coerceAtLeast(8_000) else it }
+        val retain = (settings.compressLimit() * 0.16).toInt().let { if (manual) (it / 2).coerceAtLeast(8_000) else it }
         val msgs = Compression.toCompress(conv, retain)
         if (msgs.isEmpty()) {
             if (manual) state.update { it.copy(toast = "对话还比较短，暂时不需要压缩") }

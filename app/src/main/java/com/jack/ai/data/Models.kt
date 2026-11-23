@@ -643,6 +643,15 @@ const val DEFAULT_BASE_URL = "https://api.deepseek.com"
 /** 长对话自动压缩的门槛能调的范围（token）。 */
 const val COMPRESS_MIN = 200_000
 const val COMPRESS_MAX = 1_000_000
+
+/**
+ * GPT（ChatGPT 账号）超过 27.2 万 token 输入整次请求按长上下文算（API 上输入 2 倍、输出 1.5 倍，套餐额度多半也按这个扣），
+ * 所以用 GPT 时设置里调得再高也在 20 万就压缩，留出一轮工具调用的余量。
+ */
+const val GPT_COMPRESS_CAP = 200_000
+
+/** 这次实际在多少 token 时压缩：用 GPT 时不超过 [GPT_COMPRESS_CAP]。 */
+fun Settings.compressLimit(): Int = if (endpoint()?.chatgpt == true) minOf(compressTokens, GPT_COMPRESS_CAP) else compressTokens
 const val MODEL_FLASH = "deepseek-flash"
 const val MODEL_PRO = "deepseek-v4-pro"
 
