@@ -256,6 +256,10 @@ data class MemoryItem(
     /** 最近一次在聊天里用到（或从深处浮上来）是什么时候、一共用到几次：整理时按这个决定放不放到深处。 */
     val lastUsedAt: Long = 0,
     val uses: Int = 0,
+    /** 涉及谁、什么（人、地方、项目、东西）：涉及同一个的记忆连在一起，聊到它就一起想起来（见 MemoryGraph）。 */
+    val about: List<String> = emptyList(),
+    /** 这件事是什么时候的（2026-11-20 / 2026-11 / 2026），不是记下的时间；不知道就空。 */
+    val at: String = "",
 )
 
 @Serializable

@@ -27,16 +27,20 @@ object MemoryOps {
     /** 常记的预算（token，约 60 来句）。 */
     const val HOT_BUDGET = 1500
     /** own：针对 Kavi 自己的经历（编号 [o:]），交给 OwnMemory.applyOps，这里跳过。 */
-    data class Op(val op: String, val id: String = "", val text: String = "", val why: String = "", val source: String = "", val ids: List<String> = emptyList(), val own: Boolean = false)
+    data class Op(val op: String, val id: String = "", val text: String = "", val why: String = "", val source: String = "", val ids: List<String> = emptyList(), val own: Boolean = false,
+                  /** 涉及谁、什么，和这件事的时间（见 MemoryGraph）；add、update、tag 用。 */
+                  val about: List<String> = emptyList(), val at: String = "")
     data class Result(
         val live: List<MemoryItem>, val archived: List<ArchivedMemory>, val added: Int, val updated: Int, val invalidated: Int, val skipped: Int,
         val deep: List<MemoryItem> = emptyList(), val demoted: Int = 0, val promoted: Int = 0, val merged: Int = 0,
+        /** 补标了「涉及」、时间的（深处的标了也要存深处）。 */
+        val tagged: Int = 0,
     )
 
     /** 一次最多动多少条已有的（修改 + 作废 + 合并掉的）：超过就整次不做。放到深处、拿回来能撤回，不算在里面。 */
     fun limit(liveSize: Int) = maxOf(5, (liveSize * 0.3).toInt())
 
-    private val OPS = setOf("add", "update", "invalidate", "demote", "promote", "merge")
+    private val OPS = setOf("add", "update", "invalidate", "demote", "promote", "merge", "tag")
 
     fun parse(arr: JsonArray?): List<Op> = arr.orEmpty().mapNotNull { e ->
         val o = e as? JsonObject ?: return@mapNotNull null
@@ -44,7 +48,9 @@ object MemoryOps {
         val op = s("op").lowercase().takeIf { it in OPS } ?: return@mapNotNull null
         val rawIds = (o["ids"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.content?.trim() }
         val own = s("id").startsWith("o:") || rawIds.any { it.startsWith("o:") }
-        Op(op, s("id").removePrefix("m:").removePrefix("o:"), s("text"), s("why"), s("source"), rawIds.map { it.removePrefix("m:").removePrefix("o:") }, own)
+        val about = MemoryGraph.cleanAbout((o["about"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.content })
+        Op(op, s("id").removePrefix("m:").removePrefix("o:"), s("text"), s("why"), s("source"), rawIds.map { it.removePrefix("m:").removePrefix("o:") }, own,
+            about, MemoryGraph.cleanAt(s("at")))
     }
 
     /** 这张修改单动到的已有记忆是不是太多了。 */
@@ -89,7 +95,7 @@ object MemoryOps {
         val list = live.toMutableList()
         val deep = deepNow.toMutableList()
         val archived = mutableListOf<ArchivedMemory>()
-        var added = 0; var updated = 0; var invalidated = 0; var skipped = 0; var demoted = 0; var promoted = 0; var merged = 0
+        var added = 0; var updated = 0; var invalidated = 0; var skipped = 0; var demoted = 0; var promoted = 0; var merged = 0; var tagged = 0
         fun find(id: String): Int {
             if (id.length < 4) return -1
             // 前缀撞车时不能取第一条：取错一条就是静默改错记忆；撞车就当找不到（计入 skipped），让模型给更长的编号
@@ -107,14 +113,15 @@ object MemoryOps {
                 // 深处已经有这一条：拿回来就行
                 val d = deep.indexOfFirst { norm(it.text) == norm(op.text) }
                 if (d >= 0) { list += deep.removeAt(d).copy(lastUsedAt = now); promoted++; continue }
-                list += MemoryItem(text = op.text, createdAt = now, source = op.source); added++
+                list += MemoryItem(text = op.text, createdAt = now, source = op.source, about = op.about, at = op.at); added++
             }
             "update" -> {
                 val i = find(op.id)
                 if (i < 0 || op.text.length < 4) { skipped++; continue }
                 val m = list[i]
                 if (norm(m.text) == norm(op.text)) { skipped++; continue }
-                list[i] = m.copy(text = op.text, source = op.source.ifBlank { m.source }, history = m.history + MemEdit(now, m.text, op.text, op.why, op.source)); updated++
+                list[i] = m.copy(text = op.text, source = op.source.ifBlank { m.source }, history = m.history + MemEdit(now, m.text, op.text, op.why, op.source),
+                    about = op.about.ifEmpty { m.about }, at = op.at.ifEmpty { m.at }); updated++
             }
             "invalidate" -> {
                 val i = find(op.id)
@@ -123,6 +130,15 @@ object MemoryOps {
                 val d = findDeep(op.id)
                 if (d < 0) { skipped++; continue }
                 archived += ArchivedMemory(deep.removeAt(d), now, op.why, op.source); invalidated++
+            }
+            "tag" -> {
+                // 只补「涉及」和时间，不改文字：常记、深处的都能标
+                if (op.about.isEmpty() && op.at.isEmpty()) { skipped++; continue }
+                val i = find(op.id)
+                if (i >= 0) { list[i] = list[i].let { it.copy(about = op.about.ifEmpty { it.about }, at = op.at.ifEmpty { it.at }) }; tagged++; continue }
+                val d = findDeep(op.id)
+                if (d < 0) { skipped++; continue }
+                deep[d] = deep[d].let { it.copy(about = op.about.ifEmpty { it.about }, at = op.at.ifEmpty { it.at }) }; tagged++
             }
             "demote" -> {
                 val i = find(op.id)
@@ -141,6 +157,7 @@ object MemoryOps {
                 val first = list[idx.first()]
                 val others = idx.drop(1).map { list[it] }
                 list[idx.first()] = first.copy(text = op.text, source = op.source.ifBlank { first.source },
+                    about = op.about.ifEmpty { (listOf(first) + others).flatMap { it.about }.distinctBy(MemoryGraph::norm).take(6) }, at = op.at.ifEmpty { first.at },
                     uses = first.uses + others.sumOf { it.uses }, lastUsedAt = maxOf(first.lastUsedAt, others.maxOf { it.lastUsedAt }),
                     history = first.history + MemEdit(now, (listOf(first) + others).joinToString(" / ") { it.text }, op.text, op.why.ifBlank { "合并" }, op.source))
                 others.forEach { o -> archived += ArchivedMemory(o, now, "合并进了「${op.text.take(30)}」", op.source) }
@@ -148,7 +165,7 @@ object MemoryOps {
                 merged += others.size
             }
         }
-        return Result(list, archived, added, updated, invalidated, skipped, deep, demoted, promoted, merged)
+        return Result(list, archived, added, updated, invalidated, skipped, deep, demoted, promoted, merged, tagged)
     }
 
     /** 虚字：带它们的两字组（「了一」「的橘」）谁都有，不算数。 */
@@ -203,7 +220,11 @@ object MemoryOps {
     /** 给模型看的记忆：带短编号、出处、多久没用了、用过几次。 */
     fun listing(live: List<MemoryItem>, now: Long = System.currentTimeMillis()): String = if (live.isEmpty()) "(none)\n" else live.joinToString("") { m ->
         val used = if (m.lastUsedAt > 0) "last used ${Timeline.ago(m.lastUsedAt, now)}, ${m.uses}×" else "not used since " + Timeline.day(m.createdAt)
-        "- [m:${m.id.take(6)}] ${m.text}（" + listOfNotNull(m.source.takeIf { it.isNotBlank() }, used).joinToString("; ") + "）\n"
+        "- [m:${m.id.take(6)}] ${m.text}（" + listOfNotNull(
+            m.about.takeIf { it.isNotEmpty() }?.let { "about " + it.joinToString("、") } ?: "no about yet",
+            m.at.takeIf { it.isNotBlank() }?.let { "when $it" },
+            m.source.takeIf { it.isNotBlank() }, used,
+        ).joinToString("; ") + "）\n"
     }
 
     // ---------- 深处 ----------

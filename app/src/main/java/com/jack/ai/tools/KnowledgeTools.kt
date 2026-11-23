@@ -72,7 +72,27 @@ private fun ToolSession.libraryDocs(): String {
     return parts.joinToString("\n\n")
 }
 
-private val SOURCE_NAMES = mapOf("chats" to "以前的聊天", "history" to "本对话较早的原话", "library" to "资料库", "project" to "项目资料")
+private val SOURCE_NAMES = mapOf("chats" to "以前的聊天", "history" to "本对话较早的原话", "library" to "资料库", "project" to "项目资料", "memory" to "记忆")
+
+/** 在记忆里找（常记 + 深处）：关键词、提到的人和事、时间（上周、10 月、去年国庆），再带上相连的；说到一段时间时附上那段时间的经历。 */
+private suspend fun ToolSession.findMemory(query: String): String = withContext(Dispatchers.IO) {
+    val hot = host.store.loadMemories()
+    val deep = MemoryOps.deep(app)
+    val hits = com.jack.ai.data.memory.MemoryGraph.search(query, hot, deep)
+    val span = com.jack.ai.data.memory.MemoryGraph.timeOf(query)
+    val lines = hits.joinToString("\n") { f ->
+        val m = f.item
+        val tags = listOfNotNull(if (f.deep) "深处" else "常记", m.at.takeIf { it.isNotBlank() }?.let { "时间 $it" },
+            m.about.takeIf { it.isNotEmpty() }?.let { "涉及 " + it.joinToString("、") },
+            if (f.why == "linked") "和上面的相连" else null, "记于 " + Timeline.day(m.createdAt))
+        "- [m:${m.id.take(6)}] ${m.text}（${tags.joinToString("；")}）"
+    }
+    val episodes = span?.let { sp -> Timeline.load(app).filter { it.at >= sp.from && it.at < sp.to && it.place == "chat" }.takeLast(10) }.orEmpty()
+    buildString {
+        append(if (hits.isEmpty()) "记忆里没有找到和“$query”相关的。" else lines)
+        if (episodes.isNotEmpty()) append("\n\n【${span!!.label}的经历】\n").append(episodes.joinToString("\n") { "- ${Timeline.day(it.at)}「${it.title}」${it.text}" })
+    }
+}
 
 /**
  * search_my_data：在用户自己的东西里找，合并了以前的 search_chats、search_history、search_library、list_library、search_project。
@@ -80,7 +100,8 @@ private val SOURCE_NAMES = mapOf("chats" to "以前的聊天", "history" to "本
  */
 internal suspend fun ToolSession.searchMyData(args: JsonObject): String {
     val query = args["query"].text().trim()
-    val available = com.jack.ai.chat.PromptBuilder.searchSources(skillIds, conv, project)
+    val available = com.jack.ai.chat.PromptBuilder.searchSources(skillIds, conv, project) +
+        listOfNotNull("memory".takeIf { settings.memoryEnabled && conv.globalAllowed(project) })
     val want = args["where"].text().ifBlank { "all" }
     val where = if (want == "all") available else listOf(want).filter { it in available }
     if (available.isEmpty()) return "现在没有能找的地方：聊天记录搜索和资料库技能都没开，本对话也还没被压缩过。"
@@ -94,6 +115,7 @@ internal suspend fun ToolSession.searchMyData(args: JsonObject): String {
                 query.isEmpty() -> null
                 w == "chats" -> findChats(query)
                 w == "history" -> findOld(query)
+                w == "memory" -> findMemory(query)
                 w == "library" -> findLibrary(query)
                 else -> findProject(query)
             } ?: return@mapNotNull null

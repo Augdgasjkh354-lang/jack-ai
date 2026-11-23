@@ -10,6 +10,9 @@ import java.io.DataOutputStream
 import java.io.File
 import com.jack.ai.data.Persona
 import com.jack.ai.data.Settings
+import com.jack.ai.data.MemoryItem
+import com.jack.ai.data.Episode
+import com.jack.ai.data.Timeline
 
 /**
  * 每轮从深处想起来：关于用户的深处记忆、自己的深处经历，和这句话相关的浮上来。
@@ -100,16 +103,45 @@ object DeepRecall {
         val (sims, minSim) = similarities(ctx, settings, query, deep.map { key(it.id, it.text) to it.text })
         fun sim(id: String, text: String) = sims[key(id, text)] ?: 0f
 
-        val userHits = (MemoryOps.recall(deep, query, ignore = ignore) + deep.filter { sim(it.id, it.text) >= minSim })
+        val byMeaning = (MemoryOps.recall(deep, query, ignore = ignore) + deep.filter { sim(it.id, it.text) >= minSim })
             .distinctBy { it.id }.sortedByDescending { sim(it.id, it.text) }.take(6)
+        val links = linked(ctx, query, deep, byMeaning, now)
+        val userHits = (byMeaning + links.memories).distinctBy { it.id }.take(10)
 
         val out = StringBuilder()
         if (userHits.isNotEmpty()) {
             val ids = userHits.map { it.id }.toSet()
             MemoryOps.saveDeep(ctx, MemoryOps.deep(ctx).map { if (it.id in ids) it.copy(lastUsedAt = now, uses = it.uses + 1) else it })
             out.append(Persona.fill("【Also remembered】(from deeper memory, because it seems related; use only if it helps)\n", settings))
-                .append(userHits.joinToString("\n") { "- [m:${it.id.take(6)}] ${it.text}" }).append("\n")
+                .append(userHits.joinToString("\n") { "- [m:${it.id.take(6)}] ${it.text}" + tags(it) }).append("\n")
+        }
+        if (links.episodes.isNotEmpty()) {
+            out.append("【Around ${links.span!!.label}】(what happened then, from your timeline)\n")
+                .append(links.episodes.joinToString("\n") { "- ${Timeline.day(it.at)} ${it.title.takeIf { t -> t.isNotBlank() }?.let { t -> "「$t」" } ?: ""}${it.text}" }).append("\n")
         }
         return out.toString()
+    }
+
+    private fun tags(m: MemoryItem): String = listOfNotNull(
+        m.about.takeIf { it.isNotEmpty() }?.let { "about " + it.joinToString("、") },
+        m.at.takeIf { it.isNotBlank() },
+    ).takeIf { it.isNotEmpty() }?.joinToString("; ", " (", ")").orEmpty()
+
+    /** 顺着关系、时间想起来的：话里提到的人和事、和按意思想起的那几条相连的、话里说的那段时间的记忆和经历。 */
+    class Linked(val memories: List<MemoryItem>, val span: MemoryGraph.Span?, val episodes: List<Episode>)
+
+    internal fun linked(ctx: Context, query: String, deep: List<MemoryItem>, seeds: List<MemoryItem>, now: Long): Linked {
+        val hot = runCatching { com.jack.ai.data.Store(ctx).loadMemories() }.getOrDefault(emptyList())
+        val named = MemoryGraph.mentioned(query, MemoryGraph.entities(hot + deep).keys).toSet()
+        // 话里直接提到的（「小王」）：深处里关于它的都带出来，最近用过的在前
+        val byName = if (named.isEmpty()) emptyList() else deep.filter { m -> m.about.any { MemoryGraph.norm(it) in named } }
+            .sortedByDescending { maxOf(it.lastUsedAt, it.createdAt) }.take(4)
+        val span = MemoryGraph.timeOf(query, now)
+        // 时间只认标了时间的（没标的按记下的时间算会带出一堆不相干的）
+        val byTime = span?.let { sp -> deep.filter { it.at.isNotBlank() && MemoryGraph.inSpan(it, sp) }.take(4) }.orEmpty()
+        val nearby = MemoryGraph.neighbors(seeds + byName, deep, top = 3)
+        val episodes = span?.let { sp -> runCatching { Timeline.load(ctx) }.getOrDefault(emptyList())
+            .filter { it.at >= sp.from && it.at < sp.to && it.place == "chat" }.takeLast(6) }.orEmpty()
+        return Linked((byName + byTime + nearby).distinctBy { it.id }, span, episodes)
     }
 }

@@ -48,7 +48,9 @@ object MemoryReview {
     }
 
     /** scope：项目对话里的回看分「project」（项目记忆）和「global」（全局记忆）；别处是空的。 */
-    data class Op(val op: String, val text: String = "", val old: String = "", val scope: String = "")
+    data class Op(val op: String, val text: String = "", val old: String = "", val scope: String = "",
+                  /** 全局记忆用：涉及谁、什么，这件事的时间（见 MemoryGraph）。 */
+                  val about: List<String> = emptyList(), val at: String = "")
 
     /** 项目对话一次最多改几条（要顺手整理进度、删掉做完的待办，比别处多一些）。 */
     const val PROJECT_MAX_OPS = 6
@@ -60,9 +62,11 @@ object MemoryReview {
             fun s(k: String) = (o[k] as? JsonPrimitive)?.content?.trim().orEmpty()
             val op = s("op").lowercase()
             val scope = s("scope").lowercase()
+            val about = MemoryGraph.cleanAbout((o["about"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.content })
+            val at = MemoryGraph.cleanAt(s("at"))
             when {
-                op == "add" && s("text").isNotEmpty() -> Op("add", s("text"), scope = scope)
-                op == "update" && s("old").isNotEmpty() && s("text").isNotEmpty() -> Op("update", s("text"), s("old"), scope)
+                op == "add" && s("text").isNotEmpty() -> Op("add", s("text"), scope = scope, about = about, at = at)
+                op == "update" && s("old").isNotEmpty() && s("text").isNotEmpty() -> Op("update", s("text"), s("old"), scope, about, at)
                 op == "delete" && s("old").isNotEmpty() -> Op("delete", old = s("old"), scope = scope)
                 else -> null
             }
@@ -110,12 +114,13 @@ object MemoryReview {
         for (op in ops) {
             val next = runCatching {
                 when (op.op) {
-                    "add" -> if (list.any { it.text == op.text }) null else list + MemoryItem(text = op.text, createdAt = now, source = source)
+                    "add" -> if (list.any { it.text == op.text }) null else list + MemoryItem(text = op.text, createdAt = now, source = source, about = op.about, at = op.at)
                     "update" -> {
                         val i = match(op.old)
                         val m = list[i]
                         list.mapIndexed { j, v ->
-                            if (j == i) v.copy(text = op.text, history = m.history + MemEdit(now, m.text, op.text, "聊天时回看", source)) else v
+                            if (j == i) v.copy(text = op.text, history = m.history + MemEdit(now, m.text, op.text, "聊天时回看", source),
+                                about = op.about.ifEmpty { v.about }, at = op.at.ifEmpty { v.at }) else v
                         }
                     }
                     else -> {
@@ -158,7 +163,8 @@ object MemoryReview {
         val workFile = ChatMemory.workFile(ctx)
         val budget = if (work) MemoryOps.FILE_BUDGET else MemoryOps.HOT_BUDGET
         val before = if (work) ChatMemory.items(ChatMemory.read(workFile)) else store.loadMemories().map { it.text }
-        val input = "【Current ${if (work) "work memory" else "memories"}】(~${MemoryOps.tokensOf(before)} of $budget tokens)\n" +
+        val input = "Today is ${com.jack.ai.data.Timeline.day(System.currentTimeMillis())}.\n\n" +
+            "【Current ${if (work) "work memory" else "memories"}】(~${MemoryOps.tokensOf(before)} of $budget tokens)\n" +
             before.ifEmpty { listOf("(none)") }.joinToString("\n") { "- $it" } +
             "\n\n【The latest exchanges】\n" + transcript(unseen, Persona.ref(settings) ?: "User")
         val raw = client.complete(ep, listOf(
@@ -277,10 +283,12 @@ Not worth saving: one-off questions, things only this conversation needs, your o
 If {user} asks you not to remember something, don't record it in any form, not even a memory saying it must not be recorded, since that memory would itself repeat it; if a memory below already contains it, delete that memory.
 Most of the time nothing needs to change; then return no ops.
 Reply with JSON only: {"ops":[...]}, at most 3, each one of
-{"op":"add","text":"..."}
-{"op":"update","old":"an existing memory's exact text, or a unique part of it","text":"the new text"}
+{"op":"add","text":"...","about":["..."],"at":""}
+{"op":"update","old":"an existing memory's exact text, or a unique part of it","text":"the new text","about":["..."],"at":""}
 {"op":"delete","old":"..."}
-Write each memory as one self-contained sentence about {user} by name, in the language {user} uses."""
+Write each memory as one self-contained sentence about {user} by name, in the language {user} uses.
+"about": who or what it is about besides {user} (people by the name {user} uses, places, pets, projects, recurring topics), 1 to 4 short names, so memories about the same one link up; [] if nothing fits.
+"at": when the thing itself happens or happened ("2026-11-20", "2026-11", "2026"), worked out from today's date; "" for lasting facts."""
 
     private const val WORK = """You're looking back over the last few exchanges of a Work task with {user}, right after they happened, to keep your work memory up to date. Work memory is shared by every future Work task.
 Worth saving: how {user} wants work delivered (format, length, style, what to check), sources and methods that worked or failed, paths, accounts and conventions {user} uses, and corrections {user} made to your work.

@@ -125,8 +125,8 @@ You'll receive:
 Write memory changes and "changes" in {lang}, or in the language {user} uses in the chats.
 
 I. Write "ops": a list of changes to your memories about {user}. Don't rewrite the list; only say what changes. Memories you don't mention stay exactly as they are.
-   - {"op": "add", "text": "...", "why": "...", "source": "..."}: something new worth remembering long term: {user}'s identity and background, lasting preferences and habits, important people and events, ongoing plans, decisions, anything they said to remember.
-   - {"op": "update", "id": "ab12cd", "text": "...", "why": "...", "source": "..."}: an existing memory that the chats refine or correct (also use this to fold a duplicate into one, then invalidate the other).
+   - {"op": "add", "text": "...", "about": ["..."], "at": "2026-11-20", "why": "...", "source": "..."}: something new worth remembering long term: {user}'s identity and background, lasting preferences and habits, important people and events, ongoing plans, decisions, anything they said to remember.
+   - {"op": "update", "id": "ab12cd", "text": "...", "about": ["..."], "at": "...", "why": "...", "source": "..."}: an existing memory that the chats refine or correct (also use this to fold a duplicate into one, then invalidate the other).
    - {"op": "invalidate", "id": "ab12cd", "why": "...", "source": "..."}: an existing memory the chats clearly overturned, that has passed (a one-off plan whose date is gone or that {user} said is done), or that {user} asked you to forget. It isn't deleted, just retired with its reason.
    - {"op": "merge", "ids": ["ab12cd", "ef34gh"], "text": "...", "why": "..."}: several memories that say the same thing or belong together; they become one sentence.
    - {"op": "demote", "id": "ab12cd", "why": "..."}: still true, but rarely comes up. It moves to your deeper memory: not carried in every chat, but it surfaces by itself when a chat touches it. Nothing is lost.
@@ -139,7 +139,10 @@ I. Write "ops": a list of changes to your memories about {user}. Don't rewrite t
    - How {user} likes you to talk and work belongs in one or two memories, not a new one each day: when a chat confirms or refines it, update the existing memory instead of adding another that says nearly the same thing.
    - Each memory is one complete sentence that makes sense on its own, with {user} as the subject.
    - Your context is limited. The memories you always carry share a budget (shown with the list); every chat pays for all of them. Over budget, or close to it, make room: merge duplicates first, then demote what's still true but hasn't come up in a long while; trim long memories to their point. Never invalidate something just to save space: invalidate only what's no longer true. Keep what defines {user} (identity, people who matter, lasting preferences, what they asked you to remember) even if it's rarely used. Under budget, don't tidy for its own sake.
-   - "source" isn't needed for merge, demote and promote (they don't change what you know).
+   - {"op": "tag", "id": "ab12cd", "about": ["..."], "at": "..."}: fill in "about" and "at" for a memory marked "no about yet" (current or deeper), without changing its words. Tag up to 30 a night; it doesn't count as a change.
+   - "about" links memories into a web: list who or what the memory is about besides {user}: people by the name {user} uses (小王, 妈妈), places, pets, projects, products, organizations, recurring topics (体检, 减肥). 1 to 4 short names, the same spelling every time so memories about the same one connect. Leave {user} out. Use [] only if nothing fits.
+   - "at" is when the thing itself happens or happened ("2026-11-20", "2026-11", or "2026"), worked out from the chat's date ("昨天" in a chat on 11-21 is 2026-11-20). Leave it "" for lasting facts with no particular time (preferences, identity).
+   - "source" isn't needed for merge, demote, promote and tag (they don't change what you know).
 
 II. Write "changes": one or two sentences on what you newly remembered, changed or let go of this time (empty if nothing changed).
 
@@ -171,6 +174,7 @@ Output only one JSON object, in this format:
         val held = heldNote(ctx)
         val input = buildString {
             if (held.isNotBlank()) append("【Note】Last time your memory changes were held back: $held Redo the look-back carefully, changing only what the chats clearly support.\n\n")
+            append("Today is ${Timeline.day(startedAt)}.\n\n")
             append("【Current memories】\n")
             append(MemoryOps.listing(memories))
             append("(memory budget: ~${MemoryOps.hotTokens(memories)} of ${MemoryOps.HOT_BUDGET} tokens used" + (if (MemoryOps.hotTokens(memories) > MemoryOps.HOT_BUDGET) " — over budget, make room" else "") + ")\n")
@@ -180,6 +184,12 @@ Output only one JSON object, in this format:
             val touched = MemoryOps.touching(deepNow, transcript, ignore = MemoryOps.ignoreFor(settings))
             (surfaced + touched).distinctBy { it.id }.takeIf { it.isNotEmpty() }?.let { l ->
                 append("\n【Deeper memories that surfaced or that these chats touch on】(${deepNow.size} in deeper memory in all; update or invalidate any the chats show are outdated)\n").append(MemoryOps.listing(l))
+            }
+            // 还没标「涉及」的（升级前记的）：每晚带一批，让模型顺手标上，慢慢连成网
+            val untagged = (memories + deepNow).filter { it.about.isEmpty() && it.at.isEmpty() }
+            val shown = memories.map { it.id }.toSet() + (surfaced + touched).map { it.id }
+            untagged.filter { it.id !in shown }.take(30).takeIf { it.isNotEmpty() }?.let { l ->
+                append("\n【Deeper memories not linked yet】(${untagged.size} memories still have no about; tag the ones below)\n").append(MemoryOps.listing(l))
             }
             append("\n【Chats since the last look-back】")
             append(transcript)
@@ -202,7 +212,7 @@ Output only one JSON object, in this format:
         val ops = MemoryOps.parse(obj["ops"] as? JsonArray).filter { !it.own }
         // 一次动到太多已有的记忆：这次整个不算，第二天重新整理（时间点不往后挪）
         if (MemoryOps.tooMany(memories.size, ops)) {
-            val n = ops.count { it.op != "add" }
+            val n = ops.count { it.op != "add" && it.op != "tag" }
             setHeld(ctx, "the change list touched $n of ${memories.size} memories at once (the limit is ${MemoryOps.limit(memories.size)}).")
             return null
         }
@@ -213,7 +223,7 @@ Output only one JSON object, in this format:
             result = MemoryOps.apply(current, ops, deepNow = MemoryOps.deep(ctx))
             result.live
         }
-        if (result.demoted + result.promoted + result.invalidated > 0) MemoryOps.saveDeep(ctx, result.deep)
+        if (result.demoted + result.promoted + result.invalidated + result.tagged > 0) MemoryOps.saveDeep(ctx, result.deep)
         MemoryOps.addToArchive(ctx, result.archived)
         setHeld(ctx, "")
         val entry = DreamEntry(journal = "", changes = str("changes"), createdAt = startedAt)
