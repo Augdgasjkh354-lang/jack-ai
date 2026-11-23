@@ -105,6 +105,7 @@ fun SettingsScreen(
     onOpenUsage: () -> Unit,
     canLock: () -> Boolean,
     startLook: Boolean = false,
+    onOpenTerminal: () -> Unit = {},
 ) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -242,7 +243,7 @@ fun SettingsScreen(
             }
 
             if (page == SettingsPage.LINUX) Section(hint = "一个装在 App 里的小 Linux（Alpine）：Kavi 能在对话文件夹里跑命令、pip 装库、用 Node 和 git。系统包约 58 MB，第一次装时下载（来自开源项目 Mika 的固定版本，下载后核对校验值），装好后不联网也能用，解开后约占 230 MB。只支持 64 位手机。") {
-                LinuxSandboxSection(vm)
+                LinuxSandboxSection(vm, onOpenTerminal)
             }
 
             if (page == SettingsPage.FOLDERS) Section(hint = "授权给 Kavi 的文件夹：它能在里面找文件、拷进对话处理、把做好的文件存回去，搬和删之前先问你。别的地方它碰不到。") {
@@ -773,7 +774,7 @@ private fun AllowRulesRow(vm: ChatViewModel, settings: com.jack.ai.data.Settings
 
 /** Linux 沙箱：状态、装上（带进度）、删掉。 */
 @Composable
-private fun LinuxSandboxSection(vm: ChatViewModel) {
+private fun LinuxSandboxSection(vm: ChatViewModel, onTerminal: () -> Unit) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     val status by com.jack.ai.data.phone.LinuxSandbox.status.collectAsState()
@@ -804,6 +805,9 @@ private fun LinuxSandboxSection(vm: ChatViewModel) {
                 // 装在 App 级的协程里：退出设置页也接着下
                 com.jack.ai.data.phone.LinuxSandbox.startInstall(ctx, com.jack.ai.api.sharedHttp) { vm.updateSettings { it.copy(linuxSandbox = true) } }
             }) { Text(if (s is com.jack.ai.data.phone.LinuxSandbox.Status.Broken) "重新装" else "下载并安装（约 58 MB）") }
+        }
+        if (s == com.jack.ai.data.phone.LinuxSandbox.Status.Ready) {
+            androidx.compose.material3.Button(onClick = { onTerminal() }) { Text("打开终端") }
         }
         if (s == com.jack.ai.data.phone.LinuxSandbox.Status.Ready || s is com.jack.ai.data.phone.LinuxSandbox.Status.Broken) {
             OutlinedButton(onClick = { confirmRemove = true }) { Text("删掉沙箱") }

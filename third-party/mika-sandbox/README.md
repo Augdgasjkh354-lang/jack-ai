@@ -33,5 +33,9 @@ Kavi 只以子进程方式运行它们，不链接它们。文件与 Mika 同一
 
 - `app/src/main/mika/com/wangzan101/mika/core/cap/sandbox/RootfsExtractor.kt`：原样移植自同一提交（Apache-2.0），保留上游命名空间。
 - 解压用的库：XZ for Java 1.10（0BSD）、Apache Commons Compress 1.28.0（Apache-2.0）。
-- Jack AI modification：不移植 Mika 的沙箱桥、技能同步、终端和分享导出；系统包从随 APK 自带改成首次使用时下载；
+- 用户终端（设置 → Linux 沙箱 → 打开终端，或对话的「更多 → 终端」）：会话和输出缓冲移植自 Mika 同一提交的 `terminal/TerminalSession.kt`、`TerminalHub.kt`，
+  WebView 桥照 `ui/terminal/TerminalWebView.kt`，页面照 `assets/terminal/`（Apache-2.0），见 `app/src/main/java/com/jack/ai/data/phone/Terminal.kt`、`ui/TerminalScreen.kt`。
+  显示用 xterm.js 和 addon-fit（MIT，Copyright (c) 2017-2019 The xterm.js authors 等，全文 `app/src/main/assets/terminal/LICENSE-xterm.txt`），文件与 Mika 带的逐字节相同。
+  伪终端由 `libmikarun.so` 的 `--pty` 提供。
+- Jack AI modification：不移植 Mika 的沙箱桥、技能同步和分享导出；终端可以开几个、不按对话一一对应，Kavi 跑的命令记进只读的一格给用户看；系统包从随 APK 自带改成首次使用时下载；
   沙箱只在用户装好后给模型一个 `run_shell` 工具，读到可疑注入内容后照 `run_python` 一样先问用户。

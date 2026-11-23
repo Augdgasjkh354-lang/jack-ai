@@ -152,6 +152,8 @@ fun ChatScreen(
     onOpenApps: () -> Unit,
     onOpenDownloads: () -> Unit = {},
     onOpenFiles: () -> Unit = {},
+    /** 打开终端，参数是对话文件夹的 key（Workspace.key）。 */
+    onOpenTerminal: (String) -> Unit = {},
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -270,7 +272,8 @@ fun ChatScreen(
                             // 文件夹收在「更多」里（做出了文件时，「更多」上标个数），顶栏右边只留两个圆按钮，标题胶囊才居中
                             if (conv != null && conv.messages.isNotEmpty()) ExportMenu(vm,
                                 made = conv.messages.flatMap { it.files }.distinctBy { it.path }.size,
-                                onFiles = { showFiles = true }, onMemory = { memoryOf = conv })
+                                onFiles = { showFiles = true }, onMemory = { memoryOf = conv },
+                                onTerminal = if (com.jack.ai.Edition.linux) { { onOpenTerminal(com.jack.ai.data.Workspace.key(conv)) } } else null)
                         }
                     },
                 )
@@ -370,7 +373,7 @@ internal fun Modifier.swipeToOpen(open: () -> Unit): Modifier = pointerInput(Uni
 }
 
 @Composable
-private fun ExportMenu(vm: ChatViewModel, made: Int, onFiles: () -> Unit, onMemory: () -> Unit) {
+private fun ExportMenu(vm: ChatViewModel, made: Int, onFiles: () -> Unit, onMemory: () -> Unit, onTerminal: (() -> Unit)? = null) {
     var open by remember { mutableStateOf(false) }
     val busy by vm.exporting.collectAsState()
     val ctx = LocalContext.current
@@ -382,6 +385,8 @@ private fun ExportMenu(vm: ChatViewModel, made: Int, onFiles: () -> Unit, onMemo
         RoundMenu(expanded = open, onDismiss = { open = false }) {
             MenuRow("文件夹", icon = AppIcons.Folder, sub = if (made > 0) "做出了 $made 个文件" else null) { open = false; onFiles() }
             MenuRow("记忆", icon = AppIcons.Moon) { open = false; onMemory() }
+            // 在这个对话的文件夹里开终端（Kavi 跑的命令也在里面能看到）
+            onTerminal?.let { t -> MenuRow("终端", glyph = ">_", sub = "在这个对话的文件夹里") { open = false; t() } }
             listOf(
                 ChatExport.Format.IMAGE to "分享为长图",
                 ChatExport.Format.PDF to "导出为 PDF",

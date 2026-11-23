@@ -64,6 +64,8 @@ sealed interface Screen {
     data object Downloads : Screen
     data object Files : Screen
     data class ProjectPage(val id: String) : Screen
+    /** 终端：folder 是对话文件夹的 key（Workspace.key），空的是终端自己的「主目录」。 */
+    data class Terminal(val folder: String = "") : Screen
 }
 
 class MainActivity : FragmentActivity() {
@@ -322,6 +324,7 @@ class MainActivity : FragmentActivity() {
                             onOpenApps = { stack.add(Screen.Apps) },
                             onOpenDownloads = { stack.add(Screen.Downloads) },
                             onOpenFiles = { stack.add(Screen.Files) },
+                            onOpenTerminal = { stack.add(Screen.Terminal(it)) },
                         )
                         Screen.Routines -> RoutinesScreen(vm = vm, state = state, onBack = back)
                         Screen.Library -> LibraryScreen(vm = vm, state = state, onBack = back)
@@ -340,7 +343,9 @@ class MainActivity : FragmentActivity() {
                             onOpenSkills = { stack.add(Screen.Skills) },
                             onOpenUsage = { stack.add(Screen.Usage) },
                             canLock = ::canLock,
+                            onOpenTerminal = { stack.add(Screen.Terminal()) },
                         )
+                        is Screen.Terminal -> com.jack.ai.ui.TerminalScreen(folder = screen.folder, title = state.current?.title.orEmpty(), onBack = back)
                         is Screen.ProjectPage -> ProjectScreen(
                             vm = vm,
                             state = state,

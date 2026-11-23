@@ -286,10 +286,14 @@ object LinuxSandbox {
     internal fun argv(
         mikarun: String, proot: String, rootfs: String, workspace: String, standIns: List<Pair<String, String>>,
         timeoutSec: Int, network: Boolean, command: String, devices: List<String>,
+        /** 用户终端：给 shell 一块伪终端（启动器的 --pty，照 Mika 的 ProcRunner），sizeFile 里写「列 行」可以随时改窗口大小。 */
+        pty: Pair<Int, Int>? = null, sizeFile: String? = null, shell: List<String>? = null,
     ): List<String> = buildList {
         add(mikarun)
         if (timeoutSec > 0) addAll(listOf("--timeout", timeoutSec.toString()))
         addAll(listOf("--net", if (network) "on" else "off"))
+        pty?.let { (c, r) -> addAll(listOf("--pty", "--pty-cols", c.toString(), "--pty-rows", r.toString())) }
+        if (pty != null && sizeFile != null) addAll(listOf("--pty-size", sizeFile))
         add("--")
         add(proot)
         addAll(listOf("--kill-on-exit", "--link2symlink", "-0", "-r", rootfs))
@@ -297,15 +301,18 @@ object LinuxSandbox {
         addAll(listOf("-b", "/proc", "-b", "/sys"))
         standIns.forEach { (file, name) -> addAll(listOf("-b", "$file:/proc/$name")) }
         addAll(listOf("-b", "$workspace:$WORKSPACE", "-w", WORKSPACE))
-        addAll(listOf("/bin/sh", "-lc", command))
+        addAll(shell ?: listOf("/bin/sh", "-lc", command))
     }
 
     /** 环境变量先清空，只给这些。 */
-    internal fun env(loader: String, tmp: String, tz: String): Map<String, String> = mapOf(
+    internal fun env(loader: String, tmp: String, tz: String, pty: Boolean = false): Map<String, String> = mapOf(
         "PROOT_LOADER" to loader, "PROOT_TMP_DIR" to tmp,
         "HOME" to "/root", "PATH" to PATH, "LANG" to "C.UTF-8", "TMPDIR" to "/tmp", "TZ" to tz,
         // pip 装的包留在对话文件夹外的系统里；别让它在手机上编译 C 扩展卡半天
         "PIP_DISABLE_PIP_VERSION_CHECK" to "1", "PIP_ROOT_USER_ACTION" to "ignore",
+    ) + if (!pty) emptyMap() else mapOf(
+        // 终端用的；输入过的命令（可能带密钥）不写进系统里（照 Mika）
+        "TERM" to "xterm-256color", "COLORTERM" to "truecolor", "HISTFILE" to "/dev/null",
     )
 
     /**
@@ -359,6 +366,59 @@ object LinuxSandbox {
                 }
                 throw e
             }
+        }
+    }
+
+    // ------------------------------------------------------------------ 用户终端
+
+    /**
+     * 启动终端进程的专用线程，终端开着它就一直在（照 Mika）：启动器设了 PR_SET_PDEATHSIG，跟的是 fork 它的那条线程，
+     * 用线程池的话空闲线程一回收，终端就被当成「App 死了」杀掉。
+     */
+    private val launcher = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "kavi-terminal-launcher").apply { isDaemon = true } }
+
+    /** 一个开着的终端 shell：输入输出接在伪终端上，[resize] 改窗口大小（启动器每 200ms 读一次 sizeFile）。 */
+    class Shell internal constructor(private val process: Process, private val sizeFile: File) {
+        val input: java.io.OutputStream get() = process.outputStream
+        val output: InputStream get() = process.inputStream
+        val alive: Boolean get() = process.isAlive
+        fun waitFor(): Int = runCatching { process.waitFor() }.getOrDefault(-1)
+
+        fun resize(cols: Int, rows: Int) {
+            if (cols !in 1..1000 || rows !in 1..1000) return
+            synchronized(sizeFile) { if (process.isAlive) runCatching { sizeFile.writeText("$cols $rows") } }
+        }
+
+        /** 先礼貌结束，3 秒后还在就强杀；关管道可能卡住，放在单独的线程里。 */
+        fun close() {
+            kotlin.concurrent.thread(isDaemon = true, name = "kavi-terminal-reaper") {
+                if (!process.waitFor(3, TimeUnit.SECONDS)) process.destroyForcibly()
+                synchronized(sizeFile) { runCatching { sizeFile.delete() } }
+            }
+            runCatching { process.destroy() }
+            runCatching { process.outputStream.close() }
+            runCatching { process.inputStream.close() }
+        }
+    }
+
+    /** 在 [workspace]（挂成 /workspace）里开一个交互 shell：有 bash 用 bash，没有用 sh；不限时、能联网。 */
+    suspend fun openShell(ctx: Context, workspace: File, cols: Int, rows: Int): Shell {
+        if (!ready(ctx)) throw IOException("Linux 沙箱还没装好")
+        val c = cols.coerceIn(1, 1000); val r = rows.coerceIn(1, 1000)
+        return withContext(Dispatchers.IO) {
+            workspace.mkdirs()
+            tmp(ctx).mkdirs()
+            writeDns(ctx)
+            val sizeFile = File(tmp(ctx), "pty-${java.util.UUID.randomUUID()}.size").apply { writeText("$c $r") }
+            val stand = standIns(ctx).listFiles()?.sortedBy { it.name }?.map { it.path to it.name }.orEmpty()
+            val sh = if (File(rootfs(ctx), "bin/bash").exists()) listOf("/bin/bash", "-l") else listOf("/bin/sh", "-l")
+            val cmd = argv(lib(ctx, "libmikarun.so").path, lib(ctx, "libproot.so").path, rootfs(ctx).path, workspace.canonicalPath, stand,
+                0, true, "", DEVICES.filter { File(it).exists() }, pty = c to r, sizeFile = sizeFile.path, shell = sh)
+            val env = env(lib(ctx, "libproot_loader.so").path, tmp(ctx).path, timezone(), pty = true)
+            val p = launcher.submit<Process> {
+                ProcessBuilder(cmd).redirectErrorStream(true).directory(workspace).apply { environment().clear(); environment().putAll(env) }.start()
+            }.get()
+            Shell(p, sizeFile)
         }
     }
 

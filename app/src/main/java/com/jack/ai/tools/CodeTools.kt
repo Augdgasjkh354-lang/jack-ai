@@ -149,6 +149,8 @@ internal suspend fun ToolSession.runShell(args: JsonObject): String {
     return runTool(label) {
         val before = Workspace.files(wsDir).associate { it.name to (it.lastModified() to it.length()) }
         val r = LinuxSandbox.run(app, wsDir, command, timeout, network)
+        // 终端页的「Kavi」那一格能看到它跑了什么
+        runCatching { com.jack.ai.data.phone.TerminalHub.logKavi(wsDir, conv.title, command, r.output, r.exitCode) }
         val changed = Workspace.files(wsDir).filter { f -> before[f.name] != f.lastModified() to f.length() }
         changed.forEach { ui.attach(it) }
         val text = buildString {
