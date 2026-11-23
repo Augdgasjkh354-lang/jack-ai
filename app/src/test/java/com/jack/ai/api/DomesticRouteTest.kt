@@ -25,4 +25,16 @@ class DomesticRouteTest {
             .forEach { assertFalse(it, Net.foreign(it)) }
         assertTrue(Net.foreign("fc2.com"))
     }
+
+    @Test
+    fun openAiGoesThroughTheProxyWheneverThereAreNodes() {
+        val node = com.jack.ai.data.ProxyNode(name = "n", type = "vless", outbound = "{}")
+        val off = Net.Config(enabled = false, nodes = listOf(node))
+        listOf("api.openai.com", "auth.openai.com", "chatgpt.com").forEach { assertTrue(it, Net.shouldProxy(it, off)) }
+        // 代理关着，别的国外网站照旧直连
+        assertFalse(Net.shouldProxy("www.google.com", off))
+        // 没节点就不硬走代理
+        assertFalse(Net.shouldProxy("api.openai.com", Net.Config(enabled = false)))
+        assertFalse(Net.alwaysProxy("notopenai.com"))
+    }
 }

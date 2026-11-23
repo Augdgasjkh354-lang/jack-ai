@@ -76,11 +76,24 @@ object Net {
     fun apply(s: Settings) {
         val c = Config(s.proxyEnabled && s.proxyNodes.isNotEmpty(), s.proxyNodes, s.proxyNode, s.proxyHardened, s.proxyEntry)
         config = c
+        // 关了代理就停内核；还有节点的话 OpenAI 的请求会在要用时再拉起来
         if (!c.enabled && ProxyCore.isRunning) ProxyCore.stop()
     }
 
+    /**
+     * OpenAI / ChatGPT（调 GPT 模型、ChatGPT 登录换令牌）：国内直连不通，加了节点就总走代理，代理开关关着也走。
+     * 一个节点都没有就照常直连试试。按域名后缀匹配。
+     */
+    val ALWAYS_PROXY = listOf("openai.com", "chatgpt.com", "oaistatic.com", "oaiusercontent.com")
+
+    fun alwaysProxy(host: String): Boolean {
+        val h = host.lowercase().trimEnd('.')
+        return ALWAYS_PROXY.any { h == it || h.endsWith(".$it") }
+    }
+
     /** 这个主机走不走代理。 */
-    fun shouldProxy(host: String, c: Config = config): Boolean = c.enabled && foreign(host)
+    fun shouldProxy(host: String, c: Config = config): Boolean =
+        (c.enabled && foreign(host)) || (com.jack.ai.Edition.proxy && c.nodes.isNotEmpty() && alwaysProxy(host))
 
     /** 国外服务（不在直连名单里，也不是本机、局域网）。 */
     fun foreign(host: String): Boolean {
@@ -92,6 +105,8 @@ object Net {
 
     /** 网络出错时告诉模型下一步怎么办：看代理开没开、是不是国外服务。host 不知道就填 null。 */
     fun nextStep(host: String?): String = when {
+        host != null && alwaysProxy(host) && config.nodes.isEmpty() ->
+            "下一步：$host（OpenAI / ChatGPT）国内直连不通，请用户到 设置 → Kavi 专用代理 加个节点（加了就自动走代理，不用打开开关），再重试。"
         config.enabled -> "下一步：稍后重试一次；还不行就请用户到 设置 → Kavi 专用代理 点「测试」看节点通不通，必要时换节点或更新订阅。"
         host != null && foreign(host) -> "下一步：$host 是国外服务，需要先打开 Kavi 专用代理（设置 → Kavi 专用代理），再重试。"
         else -> "下一步：检查手机网络后重试一次；连续失败就如实告诉用户网络有问题，不要反复重试。"
@@ -123,8 +138,8 @@ object Net {
             }
             if (!proxy || host == "127.0.0.1" || host == "localhost") return (getDefault()?.select(uri)).orEmpty().ifEmpty { listOf(Proxy.NO_PROXY) }
             val c = config
-            // 指定走代理但代理没开：照样指向代理（会失败并提示），不偷偷直连
-            val ok = c.enabled && ensureCore(c)
+            // 指定走代理但代理没开：照样指向代理（会失败并提示），不偷偷直连。OpenAI 这类总走代理的，有节点就把内核拉起来
+            val ok = (c.enabled || (c.nodes.isNotEmpty() && alwaysProxy(host))) && ensureCore(c)
             return listOf(Proxy(Proxy.Type.HTTP, if (ok) InetSocketAddress("127.0.0.1", ProxyCore.port) else DEAD))
         }
 
