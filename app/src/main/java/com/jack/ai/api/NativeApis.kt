@@ -540,19 +540,21 @@ internal object ResponsesApi {
      * 结论记在 [lastVerdict]，回答结束时随用量一起记下来，统计页据此说明为什么没命中。
      */
     private var lastHead = 0
+    private var lastModel = ""
     private var lastItems: List<Int> = emptyList()
     @Volatile var lastVerdict: String = ""
 
     /** 这一次和上一次比：gpt:first（新对话）/ gpt:ok（接得上）/ gpt:head（工具、系统提示、模型或思考强度变了）/ gpt:edit:第几项:共几项。 */
-    internal fun verdict(head: Int, items: List<Int>): String = synchronized(this) {
+    internal fun verdict(head: Int, items: List<Int>, model: String = ""): String = synchronized(this) {
         val prev = lastItems
         val v = when {
             prev.isEmpty() || items.isEmpty() || prev.first() != items.first() -> "gpt:first"
+            model.isNotEmpty() && lastModel.isNotEmpty() && model != lastModel -> "gpt:model"
             head != lastHead -> "gpt:head"
             items.size < prev.size -> "gpt:edit:${items.size + 1}:${prev.size}"
             else -> prev.indices.firstOrNull { prev[it] != items[it] }?.let { "gpt:edit:${it + 1}:${prev.size}" } ?: "gpt:ok"
         }
-        lastHead = head; lastItems = items
+        lastHead = head; lastItems = items; lastModel = model
         v
     }
 
@@ -616,7 +618,7 @@ internal object ResponsesApi {
         val sent = body["input"].arr().orEmpty()
         val items = sent.drop(if (instructions.isNotBlank() && !useInstructions) 1 else 0).map { it.toString().hashCode() }
         val head = listOf(ep.model, body["reasoning"].toString(), body["tools"].toString(), instructions).hashCode()
-        lastVerdict = verdict(head, items)
+        lastVerdict = verdict(head, items, ep.model)
         val headers = mapOf("Authorization" to "Bearer $token")
         return NativeRequest(ep.baseUrl.trimEnd('/') + "/responses", headers, body.toString())
     }

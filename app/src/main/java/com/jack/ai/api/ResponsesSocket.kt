@@ -37,7 +37,14 @@ internal object ResponsesSocket {
     private const val MAX_AGE_MS = 55 * 60_000L
     private val json = Json { ignoreUnknownKeys = true }
 
-    private class Conn(val ws: WebSocket, val auth: String, val opened: Long, val inbox: Channel<String>)
+    private class Conn(val ws: WebSocket, val auth: String, val opened: Long, val inbox: Channel<String>,
+                       private val gone: java.util.concurrent.atomic.AtomicBoolean) {
+        /** 连接已经被断开（切到后台、网络切换、服务端关掉）。 */
+        val closed get() = gone.get()
+    }
+
+    /** 连接断了、链跟着没了的对话 → 为什么（统计页说明这一次为什么从头发、没命中）。 */
+    private val lost = HashMap<Int, String>()
 
     /** 一条链：上一步的回答 id、那一步的开头（除 input 外的参数）和发过的全部 input。 */
     internal data class Chain(val id: String, val head: JsonObject, val input: List<JsonElement>)
@@ -109,6 +116,8 @@ internal object ResponsesSocket {
         val head = JsonObject(body - "input" - "stream")
         val key = keyOf(input)
         var c = connect(client, req)
+        // 这个对话上一步还接着、这次因为连接换了只能从头发：记下原因
+        synchronized(chains) { lost.remove(key) }?.let { why -> if (synchronized(chains) { chains[key] } == null) ResponsesApi.lastVerdict = "gpt:wslost:$why" }
         var emitted = false
         var retried = false
         while (true) {
@@ -125,7 +134,7 @@ internal object ResponsesSocket {
             // 统计页：接着上一步发的标一下（命不命中照样看 ChatGPT 报的数）
             if (delta != null) ResponsesApi.lastVerdict = "gpt:ws"
             synchronized(chains) { chains.remove(key) }
-            if (!c.ws.send(msg.toString())) { drop(); throw IOException("和 ChatGPT 的连接断了") }
+            if (!c.ws.send(msg.toString())) { drop("closed"); throw IOException("和 ChatGPT 的连接断了") }
             val parser = ResponsesApi.Parser((head["model"] as? JsonPrimitive)?.content.orEmpty())
             var done = false
             try {
@@ -140,7 +149,7 @@ internal object ResponsesSocket {
                         // 上一步不在连接的缓存里了：发全量再来一次
                         if (code == "previous_response_not_found") { retried = true; done = true; break }
                         // 连接到了 60 分钟：重连、发全量
-                        if (code == "websocket_connection_limit_reached") { retried = true; done = true; drop(); c = connect(client, req); break }
+                        if (code == "websocket_connection_limit_reached") { retried = true; done = true; drop("age"); c = connect(client, req); break }
                     }
                     for (ev in parser.feed("data: $text")) { emitted = true; emit(ev) }
                     if (parser.finished) {
@@ -152,24 +161,27 @@ internal object ResponsesSocket {
                 }
             } finally {
                 // 没收完就停了（用户停下、出错）：连接里还在跑的那个回答会把事件塞进来，扔掉这条连接
-                if (!done) drop()
+                if (!done) drop("stopped")
             }
             // 到这里是要重试一次全量（链已经删了，下一圈 delta 为 null）
         }
     }
 
-    private fun drop() {
+    private fun drop(why: String) {
         conn?.ws?.cancel()
         conn = null
-        synchronized(chains) { chains.clear() }
+        synchronized(chains) { chains.keys.forEach { lost[it] = why }; chains.clear() }
     }
 
     private suspend fun connect(client: OkHttpClient, req: NativeRequest): Conn {
         val auth = req.headers["Authorization"].orEmpty()
-        conn?.let { if (it.auth == auth && System.currentTimeMillis() - it.opened < MAX_AGE_MS) return it }
-        drop()
+        conn?.let {
+            if (!it.closed && it.auth == auth && System.currentTimeMillis() - it.opened < MAX_AGE_MS) return it
+            drop(when { it.closed -> "closed"; it.auth != auth -> "token"; else -> "age" })
+        }
         val url = req.url.replaceFirst("https://", "wss://").replaceFirst("http://", "ws://")
         val inbox = Channel<String>(Channel.UNLIMITED)
+        val gone = java.util.concurrent.atomic.AtomicBoolean()
         val opened = CompletableDeferred<Result<Unit>>()
         val request = Request.Builder().url(url).apply { req.headers.forEach { (k, v) -> header(k, v) } }
             .header("OpenAI-Beta", "responses_websockets=2026-02-06")
@@ -182,9 +194,10 @@ internal object ResponsesSocket {
             override fun onMessage(webSocket: WebSocket, text: String) { inbox.trySend(text) }
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
                 webSocket.close(1000, null)
+                gone.set(true)
                 inbox.close(IOException("ChatGPT 关掉了连接（$code）"))
             }
-            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) { inbox.close(IOException("ChatGPT 关掉了连接（$code）")) }
+            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) { gone.set(true); inbox.close(IOException("ChatGPT 关掉了连接（$code）")) }
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 val code = response?.code ?: 0
                 response?.close()
@@ -193,6 +206,7 @@ internal object ResponsesSocket {
                     if (code in 400..499 && code != 401 && code != 408 && code != 429) enabled = false
                     opened.complete(Result.failure(Unavailable("handshake $code: ${t.message}")))
                 }
+                gone.set(true)
                 inbox.close(t as? IOException ?: IOException(t.message, t))
             }
         })
@@ -201,6 +215,6 @@ internal object ResponsesSocket {
             ws.cancel()
             throw Unavailable(r?.exceptionOrNull()?.message ?: "handshake timeout")
         }
-        return Conn(ws, auth, System.currentTimeMillis(), inbox).also { conn = it }
+        return Conn(ws, auth, System.currentTimeMillis(), inbox, gone).also { conn = it }
     }
 }

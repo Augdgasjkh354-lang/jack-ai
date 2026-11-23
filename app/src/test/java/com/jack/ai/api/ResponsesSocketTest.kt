@@ -121,4 +121,21 @@ class ResponsesSocketTest {
         assertFalse(ResponsesSocket.enabled)
         s.shutdown()
     }
+
+    @Test fun newTokenMeansFullSendAndSaysWhy() {
+        send(req(dev, u1))
+        // 令牌换了：连接重开，链没了，从头发全量并说明原因
+        server.enqueue(MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
+            override fun onMessage(webSocket: WebSocket, text: String) {
+                got += o(text)
+                webSocket.send("""{"type":"response.completed","response":{"id":"z1","usage":{"input_tokens":10,"output_tokens":1}}}""")
+            }
+        }))
+        val r = NativeRequest(server.url("/v1/responses").toString(), mapOf("Authorization" to "Bearer NEW"),
+            buildJsonObject { put("model", "gpt"); put("store", false); put("stream", true); put("input", JsonArray(listOf(dev, u1, call, out))) }.toString())
+        ResponsesApi.lastVerdict = "gpt:ok"
+        send(r)
+        assertEquals(4, got.last()["input"]!!.jsonArray.size)
+        assertEquals("gpt:wslost:token", ResponsesApi.lastVerdict)
+    }
 }
