@@ -85,6 +85,7 @@ class ResponsesApiTest {
     }
 
     @Test fun streamIsReadIntoEvents() {
+        ResponsesApi.lastVerdict = ""
         val p = ResponsesApi.Parser()
         val lines = listOf(
             """event: response.created""",
@@ -261,5 +262,18 @@ class ResponsesApiTest {
         assertFalse("include" in again)
         assertTrue(again["input"]!!.jsonArray.none { it.jsonObject["type"]?.jsonPrimitive?.content == "reasoning" })
         ResponsesApi.noEncrypted = false
+    }
+
+    @Test fun continuityVerdictExplainsMisses() {
+        ResponsesApi.verdict(0, emptyList())
+        assertEquals("gpt:first", ResponsesApi.verdict(1, listOf(10, 11)))
+        // 上一步的都原样在前面，后面多了新的：接得上
+        assertEquals("gpt:ok", ResponsesApi.verdict(1, listOf(10, 11, 12, 13)))
+        // 第 2 项被改了（比如压缩了旧工具结果）
+        assertEquals("gpt:edit:2:4", ResponsesApi.verdict(1, listOf(10, 99, 12, 13, 14)))
+        // 工具说明变了
+        assertEquals("gpt:head", ResponsesApi.verdict(2, listOf(10, 99, 12, 13, 14, 15)))
+        // 换了个对话
+        assertEquals("gpt:first", ResponsesApi.verdict(2, listOf(50)))
     }
 }

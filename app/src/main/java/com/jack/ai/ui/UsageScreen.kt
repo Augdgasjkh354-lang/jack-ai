@@ -464,7 +464,7 @@ private fun RecentRequestsCard() {
             (if (all) list else list.take(10)).forEachIndexed { idx, r ->
                 val rate = r.hit?.let { h -> if (r.prompt > 0) h * 100.0 / r.prompt else 0.0 }
                 // 命中低的：和同一个对话的上一次请求比开头，说清是哪一段变了
-                val why = if (rate == null || rate >= 60 || r.label.isBlank()) null else {
+                val why = if (rate == null || rate >= 60 || r.label.isBlank()) null else if (r.prefix?.startsWith("gpt:") == true) gptMissReason(r.prefix) else {
                     val prev = list.drop(idx + 1).firstOrNull { it.label == r.label }
                     when (val c = prev?.let { com.jack.ai.api.PrefixPrint.firstChange(it.prefix, r.prefix) }) {
                         null -> if (prev == null) "这个对话的第一次请求" else "开头和上一次一样：${if (r.model.contains("gpt", ignoreCase = true)) "ChatGPT" else "服务"}那边没找到缓存（缓存过期，或者被分到了别的服务器）"
@@ -659,6 +659,18 @@ private fun ChatGptUsageCard() {
         onOpenUsage = { Links.open(ctx, com.jack.ai.data.integrations.ChatGptAuth.USAGE_URL) },
         onDismiss = { calibrating = false },
     ) { pcts -> usage.calibrate(pcts); refresh++; calibrating = false }
+}
+
+/** GPT 的请求没命中：Kavi 发的和上一步接不接得上（见 ResponsesApi.verdict）。 */
+private fun gptMissReason(v: String): String? {
+    val p = v.removePrefix("gpt:").split(':')
+    return when (p[0]) {
+        "first" -> "这个对话的第一次请求"
+        "ok" -> "和上一步完全接得上（Kavi 没改动前面的内容）：是 ChatGPT 那边没命中（缓存还没写好，或者分到了别的服务器）"
+        "head" -> "工具说明、系统提示或思考强度和上一步不一样（比如刚打开了一个技能），从开头起都没命中"
+        "edit" -> "Kavi 改动了上一步发过的第 ${p.getOrNull(1)} 项（共 ${p.getOrNull(2)} 项，多半是压缩了旧的工具结果），从那里往后没命中"
+        else -> null
+    }
 }
 
 /** 校准：照 ChatGPT 用量页上「5 小时」「每周」已用的百分比填进来。 */
