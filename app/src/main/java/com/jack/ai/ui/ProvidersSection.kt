@@ -76,6 +76,10 @@ private val PROVIDER_PRESETS = listOf(
 fun ProvidersSection(vm: ChatViewModel, providers: List<Provider>) {
     var editing by remember { mutableStateOf<Provider?>(null) }
     var deleting by remember { mutableStateOf<Provider?>(null) }
+    var gptBusy by remember { mutableStateOf(false) }
+    var gptError by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     val colors = MaterialTheme.colorScheme
     providers.forEach { p ->
         Row(
@@ -112,11 +116,25 @@ fun ProvidersSection(vm: ChatViewModel, providers: List<Provider>) {
             Spacer(Modifier.size(4.dp))
             Text("添加服务")
         }
-        // 花 ChatGPT 套餐（Go / Plus / Pro）的额度，不用 API Key；只有一个账号
-        if (!com.jack.ai.Edition.STORE && providers.none { it.isChatGpt }) OutlinedButton(onClick = {
-            editing = Provider(name = "ChatGPT", baseUrl = CHATGPT_PROVIDER_URL, apiKey = CHATGPT_API_KEY)
-        }) { Text("用 ChatGPT 登录") }
+        // 花 ChatGPT 套餐（Go / Plus / Pro）的额度，不用 API Key；只有一个账号。
+        // 一键：点了直接打开登录页，回来自动存好、自动换成 ChatGPT 的模型
+        if (!com.jack.ai.Edition.STORE && providers.none { it.isChatGpt }) OutlinedButton(enabled = !gptBusy, onClick = {
+            gptBusy = true; gptError = null
+            scope.launch {
+                vm.loginChatGpt { link -> openLink(ctx, link) }.onFailure { gptError = chatGptFailure(it) }
+                gptBusy = false
+            }
+        }) {
+            if (gptBusy) {
+                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                Spacer(Modifier.size(6.dp))
+            }
+            Text(if (gptBusy) "等浏览器里登录…" else "用 ChatGPT 登录")
+        }
     }
+    if (gptBusy) Text("在浏览器里登录、点同意，然后回到 Kavi，剩下的自动弄好。",
+        style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+    gptError?.let { Text("ChatGPT 登录没成功：$it", style = MaterialTheme.typography.bodySmall, color = colors.error) }
     editing?.let { p ->
         if (p.isChatGpt) ChatGptDialog(vm, p, onDismiss = { editing = null }) { vm.saveProvider(it); editing = null }
         else ProviderDialog(vm, p, onDismiss = { editing = null }) { vm.saveProvider(it); editing = null }
@@ -383,6 +401,16 @@ fun FreePoolCard(settings: com.jack.ai.data.Settings) {
     }
 }
 
+private fun openLink(ctx: android.content.Context, link: String) {
+    runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(link)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+}
+
+private fun chatGptFailure(e: Throwable): String = when (e) {
+    is ApiException -> e.message
+    is IOException -> "连不上 OpenAI：${e.message ?: "网络问题"}"
+    else -> e.message
+} ?: "出错了"
+
 /**
  * 用 ChatGPT 账号登录的服务：登录 / 退出、看是哪个账号、勾选模型。
  * 登录在 OpenAI 自己的网页上做（系统浏览器），Kavi 只拿到只能花额度的令牌。
@@ -397,14 +425,8 @@ private fun ChatGptDialog(vm: ChatViewModel, initial: Provider, onDismiss: () ->
     val chosen = remember { mutableStateListOf<ProviderModel>().apply { addAll(initial.models) } }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    fun open(link: String) {
-        runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(link)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
-    }
-    fun failure(e: Throwable) = when (e) {
-        is ApiException -> e.message
-        is IOException -> "连不上 OpenAI：${e.message ?: "网络问题"}"
-        else -> e.message
-    } ?: "出错了"
+    fun open(link: String) = openLink(ctx, link)
+    fun failure(e: Throwable) = chatGptFailure(e)
 
     fun login() {
         busy = true; error = null

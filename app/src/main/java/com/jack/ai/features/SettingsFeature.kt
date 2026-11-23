@@ -71,7 +71,7 @@ class SettingsFeature(core: AppCore, private val client: DeepSeekClient) : Featu
 
     /**
      * 用 ChatGPT 账号登录：浏览器里登录、同意，回来拿模型列表，存成一个服务（已有就更新）。
-     * 第一次登录默认勾选全部模型；重新登录保留原来勾选的。
+     * 第一次登录默认勾选全部模型、换成其中第一个；重新登录保留原来勾选的。
      */
     suspend fun loginChatGpt(open: (String) -> Unit): Result<Provider> = try {
         val account = com.jack.ai.data.integrations.ChatGptAuth.signIn(open)
@@ -80,6 +80,8 @@ class SettingsFeature(core: AppCore, private val client: DeepSeekClient) : Featu
         val models = old?.models?.filter { it.id in ids }?.takeIf { it.isNotEmpty() } ?: ids.map { chatGptModel(it) }
         val p = (old ?: Provider(name = "ChatGPT", baseUrl = CHATGPT_PROVIDER_URL)).copy(apiKey = CHATGPT_API_KEY, models = models)
         saveProvider(p)
+        // 第一次登录：直接换成 ChatGPT 的第一个模型，回来就能聊
+        if (old == null) p.models.firstOrNull()?.let { m -> updateSettings { it.copy(model = customModelKey(p.id, m.id)) } }
         Result.success(p)
     } catch (e: CancellationException) {
         throw e
