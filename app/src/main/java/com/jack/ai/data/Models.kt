@@ -209,8 +209,25 @@ enum class ProjectKind(val id: String, val label: String, val desc: String, val 
     }
 }
 
-/** 这个项目里开局不带、要先 use_skill 打开工具的技能（项目类型限定的，加上全局按需的）。 */
-fun lazySkills(project: Project?): Set<String> = SkillIds.ON_DEMAND + ProjectKind.of(project?.kind).locked()
+/**
+ * 用 GPT（ChatGPT 套餐）时开局就带工具的技能：联网、翻聊天记录、调研、提醒、计算、资料库。
+ * 套餐通道的缓存基本不命中，每句话都全价读一遍工具说明，所以其余的（文档、PPT、表格、浏览器、GitHub、设计……）
+ * 用到时再 use_skill 打开，打开后这个对话一直带着。
+ */
+val GPT_STARTER = setOf(SkillIds.WEB, SkillIds.CHATS, SkillIds.RESEARCH, SkillIds.ROUTINE, SkillIds.CALC, SkillIds.LIBRARY)
+
+/** 现在用的是不是 GPT（ChatGPT 套餐）：是的话工具说明按 [GPT_STARTER] 精简。 */
+fun Settings.slimTools(): Boolean = endpoint()?.chatgpt == true
+
+/**
+ * 这个项目里开局不带、要先 use_skill 打开工具的技能（项目类型限定的，加上全局按需的）。
+ * 用 GPT 时，普通对话和通用创作项目也只带 [GPT_STARTER]（代码、写作项目本来就有自己的精简开局）。
+ */
+fun lazySkills(project: Project?, settings: Settings? = null): Set<String> {
+    val kind = ProjectKind.of(project?.kind)
+    val slim = settings?.slimTools() == true && kind.starter == null
+    return SkillIds.ON_DEMAND + kind.locked() + if (slim) BUILTIN_SKILLS.map { it.id }.toSet() - GPT_STARTER else emptySet()
+}
 
 /** 这个项目里能不能操作手机（代码、写作项目不带手机工具）。 */
 fun Project?.allowsPhone(): Boolean = ProjectKind.of(this?.kind) == ProjectKind.GENERAL

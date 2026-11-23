@@ -1,5 +1,6 @@
 package com.jack.ai.chat
 
+import com.jack.ai.data.slimTools
 import com.jack.ai.data.allowsPhone
 import com.jack.ai.data.endpoint
 import com.jack.ai.data.Attachments
@@ -179,9 +180,13 @@ object PromptBuilder {
     fun toolSet(settings: Settings, skills: List<Skill>, conv: Conversation, project: Project?, unlocked: Set<String> = conv.skillTools): JsonArray? {
         val all = skills.map { it.id }.toSet()
         // 代码、写作项目开局只带相关的（见 ProjectKind），其余读过做法才带
-        val lazy = com.jack.ai.data.lazySkills(project)
+        val lazy = com.jack.ai.data.lazySkills(project, settings)
         val skillIds = all.filter { it !in lazy || it in unlocked }.toSet()
         val web = SkillIds.WEB in skillIds
+        // 用 GPT 时精简：下面几个原本一直带着的大工具，只在用得上的技能打开后才带
+        val slim = settings.slimTools()
+        val office = listOf(SkillIds.WORD, SkillIds.PDF, SkillIds.PPT, SkillIds.EXCEL).any { it in skillIds }
+        val drafts = listOf(SkillIds.XHS, SkillIds.DOUYIN, SkillIds.XIANYU, SkillIds.REPURPOSE, SkillIds.XHS_VISUAL).any { it in skillIds }
         return buildJsonArray {
             // 文件、表格、提醒的清单直接写在最后一条用户消息前面（见 Input.contextNote），不用专门调工具去列
             add(SkillTools.READ_FILE); add(SkillTools.WRITE_FILE); add(SkillTools.EDIT_FILE)
@@ -239,11 +244,11 @@ object PromptBuilder {
             if (SkillIds.BROWSER in skillIds && com.jack.ai.Edition.browser) add(SkillTools.BROWSER)
             if (web) add(SkillTools.DOWNLOAD_FILE)
             if (SkillIds.DESIGN in skillIds) add(SkillTools.DESIGN)
-            add(SkillTools.CONVERT_FILE)
+            if (!slim || office) add(SkillTools.CONVERT_FILE)
             // 新工具加在最后（见上面）：改写别人的文章后核对数字和人称
-            add(SkillTools.CHECK_REWRITE)
+            if (!slim || SkillIds.REPURPOSE in skillIds || SkillIds.NOVEL in skillIds) add(SkillTools.CHECK_REWRITE)
             // 发帖草稿卡片：和人聊的对话才有（后台没人看时工具自己回话）
-            if (conv.id != com.jack.ai.data.Retired.FREE_TIME_CONV && conv.id != com.jack.ai.data.INBOX_ID) add(SkillTools.SHOW_DRAFT)
+            if (conv.id != com.jack.ai.data.Retired.FREE_TIME_CONV && conv.id != com.jack.ai.data.INBOX_ID && (!slim || drafts)) add(SkillTools.SHOW_DRAFT)
             // 代码动画短片：要设计插件（出图的那套 WebView 和字体）
             if (SkillIds.DESIGN in skillIds) add(SkillTools.MAKE_ANIMATION)
             // 长任务的工作笔记（思路来自 planning-with-files，MIT）
@@ -315,7 +320,8 @@ object PromptBuilder {
      * 只列技能名、不随打开了哪些而变（这段在前面，变了缓存就断了）。
      */
     private fun onDemandNote(skills: List<Skill>, lazyIds: Set<String>): String {
-        val lazy = skills.filter { it.id in lazyIds }.map { it.name }
+        // 只列带工具的插件：做法类技能本来就要 use_skill 读，不用再提
+        val lazy = skills.filter { it.id in lazyIds && it.id in SkillIds.PLUGINS }.map { it.name }
         if (lazy.isEmpty()) return ""
         return " The tools of these skills only appear after you read the skill with use_skill, and are usable from the next step: ${lazy.joinToString(", ") { "「$it」" }}. Don't say you can't do something just because you don't see the tool yet."
     }
@@ -340,7 +346,7 @@ object PromptBuilder {
         parts += "固定说明" to com.jack.ai.data.Persona.devBlock(settings, conv.work)
         val names = tools?.mapNotNull { (it as? JsonObject)?.get("function")?.jsonObject?.get("name")?.jsonPrimitive?.content }.orEmpty()
         val plugins = skills.filter { it.id in SkillIds.PLUGINS }
-        val lazyIds = com.jack.ai.data.lazySkills(project)
+        val lazyIds = com.jack.ai.data.lazySkills(project, settings)
         val playbooks = skills.filter { it.id !in SkillIds.PLUGINS }
         parts += "固定说明" to f(Capabilities.text(settings, skills, names))
         if (names.isNotEmpty()) {

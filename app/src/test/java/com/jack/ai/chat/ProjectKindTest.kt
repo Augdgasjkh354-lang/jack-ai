@@ -43,4 +43,22 @@ class ProjectKindTest {
         val none = PromptBuilder.toolSet(settings, skills, conv, null).orEmpty().size
         assertTrue(tools(ProjectKind.GENERAL).size >= none - 1)
     }
+
+    @Test fun gptStartsWithAFewToolsAndOpensTheRestOnDemand() {
+        val gpt = Settings(apiKey = "k", tavilyKey = "t", providers = listOf(com.jack.ai.data.Provider(id = "g", name = "ChatGPT",
+            baseUrl = com.jack.ai.data.CHATGPT_PROVIDER_URL, apiKey = com.jack.ai.data.CHATGPT_API_KEY,
+            models = listOf(com.jack.ai.data.ProviderModel("gpt-6.1-sol", vision = true, reasoning = true)))),
+            model = com.jack.ai.data.customModelKey("g", "gpt-6.1-sol"))
+        fun names(s: Settings, unlocked: Set<String> = emptySet()) = PromptBuilder.toolSet(s, s.activeSkills(), Conversation(), null, unlocked).orEmpty()
+        val slim = names(gpt)
+        val full = names(gpt.copy(model = ""))
+        val slimNames = slim.map { it.jsonObject["function"]!!.jsonObject["name"]!!.jsonPrimitive.content }.toSet()
+        assertTrue("web_search" in slimNames && "read_file" in slimNames && "schedule" in slimNames)
+        assertFalse("create_ppt" in slimNames || "browser" in slimNames || "convert_file" in slimNames || "github" in slimNames || "design" in slimNames)
+        // 至少省一半
+        assertTrue("${slim.toString().length} vs ${full.toString().length}", slim.toString().length * 2 < full.toString().length)
+        // 读过「PPT」的做法，PPT 和转换文件的工具就带上
+        val opened = names(gpt, setOf(SkillIds.PPT)).map { it.jsonObject["function"]!!.jsonObject["name"]!!.jsonPrimitive.content }
+        assertTrue("create_ppt" in opened && "convert_file" in opened)
+    }
 }
