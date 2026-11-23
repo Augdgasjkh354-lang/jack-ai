@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -602,19 +604,40 @@ private fun ChatGptUsageCard() {
         while (true) { kotlinx.coroutines.delay(15_000); value = System.currentTimeMillis() }
     }
     val usage = com.jack.ai.data.integrations.ChatGptUsage
-    val windows = remember(now) { usage.windows(now) }
+    var refresh by remember { mutableStateOf(0) }
+    val windows = remember(now, refresh) { usage.windows(now) }
+    var calibrating by remember { mutableStateOf(false) }
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("ChatGPT 套餐", style = MaterialTheme.typography.titleSmall)
             windows.forEach { w ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(w.label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(w.label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                        // 校准过才有百分比（估算的，前面带「约」）
+                        w.percent?.let { pct ->
+                            Text("约 " + String.format(java.util.Locale.US, "%.2f%%", pct), style = MaterialTheme.typography.labelLarge.tabular,
+                                color = when { pct >= 90 -> colors.error; pct >= 70 -> Hue.AMBER.color; else -> colors.primary })
+                        }
+                    }
+                    w.percent?.let { pct ->
+                        androidx.compose.material3.LinearProgressIndicator(
+                            progress = { (pct / 100).toFloat().coerceIn(0f, 1f) },
+                            modifier = Modifier.fillMaxWidth().height(6.dp).clip(CircleShape),
+                            color = when { pct >= 90 -> colors.error; pct >= 70 -> Hue.AMBER.color; else -> colors.primary },
+                            trackColor = colors.onSurface.copy(alpha = 0.08f),
+                            drawStopIndicator = {},
+                        )
+                    }
                     Text(
                         "${w.requests} 次 · ${com.jack.ai.data.Quota.short(w.tokens)} token" +
                             if (w.input > 0) " · 缓存 ${hitPercent(w.cached.toLong(), w.input.toLong())}" else "",
                         style = MaterialTheme.typography.bodySmall.tabular, color = colors.onSurfaceVariant,
                     )
                 }
+            }
+            TextButton(onClick = { calibrating = true }) {
+                Text(if (usage.calibratedAt > 0) "重新校准百分比" else "显示百分比：照 ChatGPT 用量页校准一次")
             }
             if (usage.limitHitAt > 0) Text(
                 "上次额度用完：" + com.jack.ai.data.Quota.resetText(usage.limitHitAt, now),
@@ -625,10 +648,45 @@ private fun ChatGptUsageCard() {
                 "服务给的额度信息：\n" + usage.headers.entries.joinToString("\n") { "${it.key}: ${it.value}" },
                 style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant,
             )
-            Text("OpenAI 不提供查剩余额度的接口，这里是 Kavi 自己记的用量。还剩百分之几、几点恢复，要在 ChatGPT 的用量页看。",
+            Text("OpenAI 不提供查剩余额度的接口，这里是 Kavi 自己记的用量；百分比是照你上次校准估算的，" +
+                "只算 Kavi 这边用的（网页版、手机 App 里用的不在内）。准确的数和几点恢复，要在 ChatGPT 的用量页看。",
                 style = MaterialTheme.typography.bodySmall, color = colors.outline)
             TextButton(onClick = { Links.open(ctx, com.jack.ai.data.integrations.ChatGptAuth.USAGE_URL) }) { Text("看剩余额度、设每周上限") }
         }
     }
+    if (calibrating) ChatGptCalibrateDialog(
+        current = windows.map { it.percent },
+        onOpenUsage = { Links.open(ctx, com.jack.ai.data.integrations.ChatGptAuth.USAGE_URL) },
+        onDismiss = { calibrating = false },
+    ) { pcts -> usage.calibrate(pcts); refresh++; calibrating = false }
+}
+
+/** 校准：照 ChatGPT 用量页上「5 小时」「每周」已用的百分比填进来。 */
+@Composable
+private fun ChatGptCalibrateDialog(current: List<Double?>, onOpenUsage: () -> Unit, onDismiss: () -> Unit, onSave: (List<Double?>) -> Unit) {
+    fun fmt(d: Double?) = d?.let { String.format(java.util.Locale.US, "%.2f", it).trimEnd('0').trimEnd('.') }.orEmpty()
+    var five by remember { mutableStateOf(fmt(current.getOrNull(0))) }
+    var week by remember { mutableStateOf(fmt(current.getOrNull(1))) }
+    fun parse(s: String) = s.trim().removeSuffix("%").trim().toDoubleOrNull()?.takeIf { it > 0 && it <= 100 }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("校准百分比") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("打开 ChatGPT 的用量页，把「5 小时」和「每周」已用的百分比填进来。Kavi 按现在记的用量算出 100% 大概是多少，之后自己估。" +
+                    "最好在主要用 Kavi、而且已经用掉一些的时候校准，越多越准。",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                TextButton(onClick = onOpenUsage) { Text("打开用量页") }
+                androidx.compose.material3.OutlinedTextField(five, { five = it }, label = { Text("5 小时已用（%）") }, singleLine = true,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal))
+                androidx.compose.material3.OutlinedTextField(week, { week = it }, label = { Text("每周已用（%）") }, singleLine = true,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal))
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = parse(five) != null || parse(week) != null, onClick = { onSave(listOf(parse(five), parse(week))) }) { Text("保存") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+    )
 }
 
