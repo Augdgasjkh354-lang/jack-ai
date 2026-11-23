@@ -272,9 +272,7 @@ object ChatGptAuth {
     private fun kotlinx.serialization.json.JsonElement?.string(): String = (this as? JsonPrimitive)?.takeIf { it.isString }?.content.orEmpty()
 
     private const val PAGE_OK = "<html><meta charset=utf-8><meta name=viewport content='width=device-width'><body style='font-family:sans-serif;padding:40px'>" +
-        "<h2>已用 ChatGPT 登录</h2><p>回到 Kavi 就能用了，这个页面可以关掉。</p>" +
-        "<p><a href='intent:#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;package=com.jack.ai;end'>回到 Kavi</a></p></body></html>"
+        "<h2>已用 ChatGPT 登录</h2><p>正在回到 Kavi。没自动跳回去的话，按返回键就行。</p></body></html>"
     private const val PAGE_FAIL = "<html><meta charset=utf-8><meta name=viewport content='width=device-width'><body style='font-family:sans-serif;padding:40px'>" +
-        "<h2>没登录成功</h2><p>回到 Kavi 看看原因，再试一次。</p>" +
-        "<p><a href='intent:#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;package=com.jack.ai;end'>回到 Kavi</a></p></body></html>"
+        "<h2>没登录成功</h2><p>按返回键回到 Kavi 看看原因，再试一次。</p></body></html>"
 }

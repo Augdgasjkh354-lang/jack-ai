@@ -92,6 +92,8 @@ object BrowserNet {
      * mailto、tel、intent、market 之类交给手机上的 App；file、content、javascript 等一律不开。
      */
     fun classify(url: String): Kind {
+        // intent:#Intent;… 这种写法 URI 解析不了，按前缀认
+        if (url.startsWith("intent:", ignoreCase = true)) return Kind.EXTERNAL
         val uri = runCatching { URI(url) }.getOrNull() ?: return Kind.BLOCKED
         return when (uri.scheme?.lowercase()) {
             "http", "https" -> when {

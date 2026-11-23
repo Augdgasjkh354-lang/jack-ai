@@ -121,7 +121,7 @@ fun ProvidersSection(vm: ChatViewModel, providers: List<Provider>) {
         if (!com.jack.ai.Edition.STORE && providers.none { it.isChatGpt }) OutlinedButton(enabled = !gptBusy, onClick = {
             gptBusy = true; gptError = null
             scope.launch {
-                vm.loginChatGpt { link -> openLink(ctx, link) }.onFailure { gptError = chatGptFailure(it) }
+                vm.loginChatGpt { link -> openLink(ctx, link) }.onSuccess { backToKavi(ctx) }.onFailure { gptError = chatGptFailure(it); backToKavi(ctx) }
                 gptBusy = false
             }
         }) {
@@ -404,6 +404,17 @@ fun FreePoolCard(settings: com.jack.ai.data.Settings) {
 /** 登录页、用量页：默认在 Kavi 浏览器里打开（走 Kavi 专用代理，国内也打得开），设置里关了就交给系统浏览器。 */
 private fun openLink(ctx: android.content.Context, link: String) = Links.open(ctx, link)
 
+/**
+ * 登录完（成功或失败）从 Kavi 浏览器回到主界面：浏览器是另一个任务，把主界面那个任务提到前面来。
+ * 在系统浏览器里登录的话 Kavi 在后台，系统可能不让跳，那就靠用户自己回来。
+ */
+private fun backToKavi(ctx: android.content.Context) {
+    runCatching {
+        ctx.startActivity(android.content.Intent(ctx, com.jack.ai.MainActivity::class.java).addFlags(
+            android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP))
+    }
+}
+
 private fun chatGptFailure(e: Throwable): String = when (e) {
     is ApiException -> e.message
     is IOException -> "连不上 OpenAI：${e.message ?: "网络问题"}"
@@ -432,12 +443,13 @@ private fun ChatGptDialog(vm: ChatViewModel, initial: Provider, onDismiss: () ->
         scope.launch {
             vm.loginChatGpt(::open)
                 .onSuccess { p ->
+                    backToKavi(ctx)
                     account = ChatGptAuth.account
                     available = p.models.map { it.id }.ifEmpty { available }
                     chosen.clear(); chosen.addAll(p.models)
                     if (p.models.isEmpty()) error = "登录好了，但没拿到能用的模型"
                 }
-                .onFailure { error = failure(it) }
+                .onFailure { error = failure(it); backToKavi(ctx) }
             busy = false
         }
     }
