@@ -25,6 +25,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -64,11 +65,16 @@ fun TextViewer(
     onOpenWith: (() -> Unit)? = null,
     /** 菜单里另加的几项：(名字, 点了做什么)。 */
     extra: List<Pair<String, () -> Unit>> = emptyList(),
+    /** 能改的文件：顶栏多一个「编辑」，用代码编辑器打开，改完回来重新读。 */
+    editFile: java.io.File? = null,
 ) {
+    var editing by remember { mutableStateOf(false) }
+    var rev by remember { mutableStateOf(0) }
+    if (editing && editFile != null) CodeEditor(editFile) { editing = false; rev++ }
     val ctx = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val colors = MaterialTheme.colorScheme
-    val loaded by produceState<Loaded?>(null, name) {
+    val loaded by produceState<Loaded?>(null, name, rev) {
         value = withContext(Dispatchers.IO) {
             runCatching { load() }.fold(
                 { (t, cut) -> Loaded(if (TextPreview.ext(name) == "json") TextPreview.prettyJson(t) else t, cut) },
@@ -91,6 +97,7 @@ fun TextViewer(
                     },
                     navigationIcon = { IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, "关闭") } },
                     actions = {
+                        if (editFile != null && Editable.ok(editFile)) TextButton(onClick = { editing = true }) { Text("编辑") }
                         Box {
                             IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "更多") }
                             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {

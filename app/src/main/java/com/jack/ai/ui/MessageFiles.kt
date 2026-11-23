@@ -341,7 +341,9 @@ internal fun rememberFileOpener(): (GeneratedFile) -> Unit {
     doc?.let { f -> DocViewer(File(f.path), onDismiss = { doc = null }, onShare = { shareFile(ctx, f) }, onOpenWith = { openFile(ctx, f) }) }
     text?.let { f ->
         TextViewer(f.name, load = { com.jack.ai.data.TextPreview.read(File(f.path)) }, onDismiss = { text = null },
-            onShare = { shareFile(ctx, f) }, onOpenWith = { openFile(ctx, f) })
+            onShare = { shareFile(ctx, f) }, onOpenWith = { openFile(ctx, f) },
+            // App 自己文件夹里的（Kavi 做出来的、对话文件夹里的）才能改
+            editFile = File(f.path).takeIf { it.canonicalPath.startsWith(ctx.filesDir.canonicalPath) })
     }
     return { f ->
         when {
