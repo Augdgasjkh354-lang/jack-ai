@@ -182,6 +182,10 @@ data class Project(
      * 别的对话「翻以前的聊天」也翻不到它；只用它自己的项目记忆。
      */
     val isolated: Boolean = false,
+    /** 项目图标（一个 emoji），空的显示 📁。 */
+    val icon: String = "",
+    /** 置顶的项目在侧边栏排在前面。 */
+    val pinned: Boolean = false,
 )
 
 /** 这个对话能不能用全局记忆和日记：自己关了、在隐私项目里，都不能。 */

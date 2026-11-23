@@ -370,8 +370,7 @@ class MainActivity : FragmentActivity() {
                     )
                 }
                 if (creatingProject) {
-                    RenameDialog("", "新建项目（起个名字）", onDismiss = { creatingProject = false }) { name ->
-                        val p = Project(name = name)
+                    com.jack.ai.ui.ProjectDialog(null, onDismiss = { creatingProject = false }) { p ->
                         vm.saveProject(p)
                         creatingProject = false
                         stack.add(Screen.ProjectPage(p.id))

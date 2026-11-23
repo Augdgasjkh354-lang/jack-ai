@@ -72,6 +72,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.jack.ai.UiState
 import com.jack.ai.data.Conversation
 
@@ -186,10 +187,13 @@ fun HistoryDrawer(
                 }
                 item { SectionLabel("项目", action = "新建", onAction = onNewProject) }
                 // 项目多了只露出最近的 3 个，其余收起来，免得把聊天记录挤到下面去
-                val shownProjects = if (showAllProjects) state.projects else state.projects.take(PROJECTS_SHOWN)
+                // 置顶的在前，其余按最近改过的
+                val sortedProjects = state.projects.sortedByDescending { it.pinned }
+                val shownProjects = if (showAllProjects) sortedProjects else sortedProjects.take(PROJECTS_SHOWN)
                 items(shownProjects, key = { "p" + it.id }) { p ->
                     ProjectRow(
                         name = p.name + if (p.isolated) " 🔒" else "",
+                        icon = p.icon,
                         selected = state.currentProjectId == p.id,
                         onClick = { onOpenProject(p.id) },
                     )
@@ -270,7 +274,7 @@ private const val PROJECTS_SHOWN = 3
 
 /** 抽屉里的一个项目：文件夹图标加名字，不带框；当前项目有一层淡底。 */
 @Composable
-private fun ProjectRow(name: String, selected: Boolean, onClick: () -> Unit) {
+private fun ProjectRow(name: String, selected: Boolean, icon: String = "", onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -283,7 +287,9 @@ private fun ProjectRow(name: String, selected: Boolean, onClick: () -> Unit) {
             .heightIn(min = 48.dp)
             .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
-        Icon(AppIcons.Folder, null, Modifier.size(24.dp), tint = colors.onSurface)
+        // 项目选了图标就显示它，没选是文件夹
+        if (icon.isNotBlank()) Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) { Text(icon, fontSize = 18.sp) }
+        else Icon(AppIcons.Folder, null, Modifier.size(24.dp), tint = colors.onSurface)
         Spacer(Modifier.size(14.dp))
         Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
     }
