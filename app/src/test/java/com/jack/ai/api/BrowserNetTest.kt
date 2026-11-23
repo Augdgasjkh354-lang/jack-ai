@@ -112,11 +112,18 @@ class BrowserNetTest {
         BrowserNet.loginCallbackPort = 1455
         try {
             assertEquals(Kind.OPEN, BrowserNet.classify("http://127.0.0.1:1455/auth/callback?code=x&state=y"))
+            assertTrue(BrowserNet.isLoginCallback("http://127.0.0.1:1455/auth/callback?code=x"))
             assertEquals(Kind.BLOCKED, BrowserNet.classify("http://127.0.0.1:1455/other"))
             assertEquals(Kind.BLOCKED, BrowserNet.classify("http://127.0.0.1:8080/auth/callback"))
             assertEquals(Kind.BLOCKED, BrowserNet.classify("http://localhost:1455/auth/callback"))
         } finally {
             BrowserNet.loginCallbackPort = 0
         }
+    }
+
+    @Test
+    fun googleSignInAlwaysGetsTheMobileVersion() {
+        assertTrue(BrowserPages.isMobileOnly("https://accounts.google.com/v3/signin/identifier?x=1"))
+        assertFalse(BrowserPages.isMobileOnly("https://www.google.com/search?q=a"))
     }
 }

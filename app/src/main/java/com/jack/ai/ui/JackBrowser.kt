@@ -330,7 +330,7 @@ object JackBrowser {
 
     /** 这个 http 网址要不要换成 https：开着「只用加密连接」、用户没放过这个网站。 */
     private fun upgradeOf(url: String): String? {
-        if (!httpsOnly) return null
+        if (!httpsOnly || BrowserNet.isLoginCallback(url)) return null
         val up = BrowserNet.httpsOf(url) ?: return null
         val host = runCatching { java.net.URI(url).host }.getOrNull()?.lowercase() ?: return null
         return up.takeIf { httpOk.none { host == it || host.endsWith(".$it") } }
@@ -621,7 +621,8 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
 
     /** 这个网址用不用电脑版。 */
     fun isDesktopAt(url: String): Boolean =
-        if (desktopAll) BrowserPages.site(url).isNotEmpty() && !BrowserPages.isDesktop(mobileSites, url) else BrowserPages.isDesktop(desktopSites, url)
+        if (BrowserPages.isMobileOnly(url)) false
+        else if (desktopAll) BrowserPages.site(url).isNotEmpty() && !BrowserPages.isDesktop(mobileSites, url) else BrowserPages.isDesktop(desktopSites, url)
     /** 用户设了「总走代理」的网站（自动线路下也不直连，真实 IP 不暴露给它）。 */
     var proxySites by mutableStateOf(setOf<String>())
         internal set

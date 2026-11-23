@@ -104,6 +104,9 @@ object BrowserNet {
         }
     }
 
+    /** 是不是正在等的登录回调（它只说明文 http，不能换成 https）。 */
+    fun isLoginCallback(url: String): Boolean = runCatching { isLoginCallback(URI(url)) }.getOrDefault(false)
+
     private fun isLoginCallback(uri: URI): Boolean {
         val port = loginCallbackPort
         return port > 0 && uri.scheme == "http" && uri.host == "127.0.0.1" && uri.port == port && uri.path == "/auth/callback"

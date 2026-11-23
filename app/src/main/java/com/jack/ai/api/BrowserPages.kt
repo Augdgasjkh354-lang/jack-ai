@@ -4,6 +4,15 @@ import kotlinx.serialization.Serializable
 
 /** Kavi 浏览器的小规则（纯逻辑）：最近访问、书签、浏览器标识、选文件的类型。 */
 object BrowserPages {
+    /**
+     * 一定用手机版打开的网址：Google 登录页看到「手机里的电脑版浏览器」会说不安全、不让登录
+     * （用 Google 账号登录 ChatGPT 时遇到过）。按主机名认。
+     */
+    private val MOBILE_ONLY_HOSTS = setOf("accounts.google.com", "accounts.youtube.com")
+
+    fun isMobileOnly(url: String): Boolean =
+        runCatching { java.net.URI(url).host.orEmpty().lowercase() }.getOrDefault("") in MOBILE_ONLY_HOSTS
+
     /** 一个网页：最近访问和书签都用它。folder：书签从别的浏览器导进来时所在的文件夹。 */
     @Serializable
     data class Visit(val url: String, val title: String = "", val at: Long = 0, val folder: String = "")
