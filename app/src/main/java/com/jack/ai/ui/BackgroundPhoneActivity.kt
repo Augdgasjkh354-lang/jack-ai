@@ -81,13 +81,13 @@ private fun BackgroundScreen() {
         androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (paused) {
                 Button(enabled = !busy && !phone.stopped, onClick = { run({ phone.resume() }, "没有切换成功，请稍后再试。") }) { Text("继续后台") }
-                if (operating) androidx.compose.material3.OutlinedButton(enabled = !phone.stopped,
+                if (operating) OutlinedButton(enabled = !phone.stopped,
                     onClick = { scope.launch { if (!phone.userBack()) message = "返回键没按成功。" } }) { Text("返回") }
             } else {
                 Button(enabled = !busy && !phone.stopped, onClick = { run({ phone.operateHere() }, "没有暂停成功，请稍后再试。") }) { Text("在这里操作") }
-                androidx.compose.material3.OutlinedButton(enabled = !busy && !phone.stopped, onClick = { run({ phone.handOver() }, "没有切换成功，请稍后再试。") }) { Text("接管到主屏") }
+                OutlinedButton(enabled = !busy && !phone.stopped, onClick = { run({ phone.handOver() }, "没有切换成功，请稍后再试。") }) { Text("接管到主屏") }
             }
-            androidx.compose.material3.OutlinedButton(onClick = { phone.stop(); message = "已停止后台手机操作。" }) { Text("停止") }
+            OutlinedButton(onClick = { phone.stop(); message = "已停止后台手机操作。" }) { Text("停止") }
         }
         if (message.isNotBlank()) Text(message)
         frame?.let { bmp ->

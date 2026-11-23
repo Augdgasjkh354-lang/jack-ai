@@ -49,7 +49,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
@@ -117,6 +116,9 @@ fun SettingsScreen(
     val homeScroll = rememberScrollState()
     val pageScroll = remember(page) { androidx.compose.foundation.ScrollState(0) }
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    // 和聊天页一样：内容从毛玻璃顶栏后面滚过去
+    val glass = remember { dev.chrisbanes.haze.HazeState() }
+    androidx.compose.runtime.CompositionLocalProvider(LocalGlass provides glass) {
     Scaffold(
         // 浅灰的底，上面一张张白卡片
         containerColor = if (dark) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.surfaceContainerLow,
@@ -124,20 +126,21 @@ fun SettingsScreen(
             androidx.compose.material3.CenterAlignedTopAppBar(
                 title = { Text(page?.title ?: "设置", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
                 colors = androidx.compose.material3.TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = if (dark) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.surfaceContainerLow,
-                    scrolledContainerColor = if (dark) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.surfaceContainerLow),
+                    containerColor = androidx.compose.ui.graphics.Color.Transparent, scrolledContainerColor = androidx.compose.ui.graphics.Color.Transparent),
+                modifier = Modifier.glassBar(top = true),
                 navigationIcon = {
                     CircleIconButton(Icons.AutoMirrored.Filled.ArrowBack, "返回", Modifier.padding(start = 12.dp)) { if (page != null) page = null else onBack() }
                 },
             )
         },
     ) { padding ->
+        GlassSource(glass, Modifier.fillMaxSize()) {
         Column(
             Modifier
-                .padding(padding)
                 .fillMaxSize()
                 .imePadding()
                 .verticalScroll(if (page == null) homeScroll else pageScroll)
+                .padding(padding)
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
@@ -458,6 +461,8 @@ fun SettingsScreen(
 
             Spacer(Modifier.height(24.dp))
         }
+        }
+    }
     }
 
     confirmRestore?.let { uri ->
@@ -512,7 +517,7 @@ private fun Section(hint: String? = null, content: @Composable () -> Unit) {
         androidx.compose.material3.Surface(
             shape = Radii.l,
             color = if (dark) colors.surfaceContainerHigh else colors.surfaceContainerLowest,
-            border = androidx.compose.foundation.BorderStroke(1.dp, if (dark) androidx.compose.ui.graphics.Color.White.copy(alpha = 0.06f) else colors.outlineVariant),
+            border = androidx.compose.foundation.BorderStroke(0.8.dp, glassEdge()),
             modifier = Modifier.fillMaxWidth(),
         ) {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -699,7 +704,8 @@ private fun SettingsGroup(title: String, entries: List<SettingsEntry>) {
         androidx.compose.material3.Surface(
             shape = Radii.xl,
             color = if (dark) colors.surfaceContainerHigh else colors.surfaceContainerLowest,
-            modifier = Modifier.fillMaxWidth().hairline(Radii.xl),
+            border = androidx.compose.foundation.BorderStroke(0.8.dp, glassEdge()),
+            modifier = Modifier.fillMaxWidth(),
         ) {
             Column {
                 entries.forEachIndexed { i, e ->

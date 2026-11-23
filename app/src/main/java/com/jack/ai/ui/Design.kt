@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.filled.Check
@@ -372,6 +373,63 @@ fun MenuRow(label: String, icon: ImageVector? = null, glyph: String? = null, sub
         if (checked) {
             Spacer(Modifier.width(10.dp))
             Icon(Icons.Default.Check, "已选", Modifier.size(20.dp), tint = colors.primary)
+        }
+    }
+}
+
+/**
+ * 全 App 的描边按钮都走这一个：一颗半透明的玻璃胶囊，按下去缩一下。
+ * （和 [Switch] 一样，同一个包里的这个会盖过 material3 的，界面代码照常写 OutlinedButton(...)。）
+ * 传了 colors 只用它的字色（比如删除用红字），底色总是玻璃。
+ */
+@Composable
+fun OutlinedButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    colors: androidx.compose.material3.ButtonColors? = null,
+    content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit,
+) {
+    val press = remember { MutableInteractionSource() }
+    val base = colors ?: androidx.compose.material3.ButtonDefaults.outlinedButtonColors()
+    val fill = glassFill
+    androidx.compose.material3.OutlinedButton(
+        onClick = onClick,
+        modifier = modifier.pressScale(press, 0.95f),
+        enabled = enabled,
+        shape = CircleShape,
+        colors = base.copy(containerColor = fill, disabledContainerColor = fill.copy(alpha = fill.alpha * 0.5f)),
+        border = androidx.compose.foundation.BorderStroke(0.8.dp, glassEdge()),
+        interactionSource = press,
+        content = content,
+    )
+}
+
+/**
+ * 几个并排的页签（项目页的「聊天 / 资料 / 记忆」这类）：一条玻璃胶囊，选中的那格有一块实心的底，
+ * 换页签时那块底弹着滑过去，不是一格一格闪。
+ */
+@Composable
+fun GlassTabs(labels: List<String>, selected: Int, modifier: Modifier = Modifier, onSelect: (Int) -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    val haptics = rememberHaptics()
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxWidth().glass(CircleShape).padding(4.dp)) {
+        val cell = maxWidth / labels.size.coerceAtLeast(1)
+        val x by androidx.compose.animation.core.animateDpAsState(cell * selected, spring(dampingRatio = 0.75f, stiffness = 500f), label = "tab")
+        Box(Modifier.offset(x = x).width(cell).heightIn(min = 36.dp).clip(CircleShape)
+            .background(if (isDarkSurface) Color.White.copy(alpha = 0.16f) else Color.White).hairline(CircleShape))
+        Row {
+            labels.forEachIndexed { i, label ->
+                val on = i == selected
+                Box(
+                    Modifier.width(cell).heightIn(min = 36.dp).clip(CircleShape)
+                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { if (!on) { haptics.tick(); onSelect(i) } },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(label, style = MaterialTheme.typography.labelLarge, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (on) colors.onSurface else colors.onSurfaceVariant)
+                }
+            }
         }
     }
 }

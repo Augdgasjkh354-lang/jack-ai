@@ -1,5 +1,8 @@
 package com.jack.ai.ui
 
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.ui.graphics.Color
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -40,7 +43,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -100,90 +102,107 @@ fun ProjectScreen(
     var draft by remember { mutableStateOf("") }
     val chats = state.conversations.filter { it.projectId == projectId && it.messages.isNotEmpty() }
 
+    // 和聊天页一样：内容从毛玻璃的顶栏、底栏后面滚过去
+    val glass = remember { dev.chrisbanes.haze.HazeState() }
+    androidx.compose.runtime.CompositionLocalProvider(LocalGlass provides glass) {
     Scaffold(
+        containerColor = colors.background,
         topBar = {
-            TopAppBar(
-                title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(project.iconOrDefault(), fontSize = 20.sp)
-                        Spacer(Modifier.size(8.dp))
-                        Text(project.name + if (project.isolated) " 🔒" else "", maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") } },
-                actions = {
-                    Box {
-                        IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "项目菜单") }
-                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                            DropdownMenuItem(text = { Text(if (project.pinned) "取消置顶" else "置顶") },
-                                onClick = { menu = false; vm.saveProject(project.copy(pinned = !project.pinned)) })
-                            DropdownMenuItem(text = { Text("编辑项目") }, onClick = { menu = false; editingProject = true })
-                            DropdownMenuItem(text = { Text("编辑指令") }, onClick = { menu = false; editingInstructions = true })
-                            DropdownMenuItem(text = { Text("删除项目", color = colors.error) }, onClick = { menu = false; deletingProject = true })
+            Column(Modifier.glassBar(top = true)) {
+                TopAppBar(
+                    colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent, scrolledContainerColor = Color.Transparent),
+                    title = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(project.iconOrDefault(), fontSize = 20.sp)
+                            Spacer(Modifier.size(8.dp))
+                            Text(project.name + if (project.isolated) " 🔒" else "", maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
-                    }
-                },
-            )
-        },
-        bottomBar = {
-            // 直接在这个项目里开新对话
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(horizontal = 12.dp, vertical = 8.dp)
-                    .clip(RoundedCornerShape(24.dp)).background(colors.surfaceVariant).padding(start = 16.dp, end = 4.dp),
-            ) {
-                androidx.compose.foundation.text.BasicTextField(
-                    value = draft, onValueChange = { draft = it }, maxLines = 5,
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = colors.onSurface),
-                    cursorBrush = androidx.compose.ui.graphics.SolidColor(colors.primary),
-                    modifier = Modifier.weight(1f).padding(vertical = 12.dp),
-                    decorationBox = { inner ->
-                        Box {
-                            if (draft.isEmpty()) Text("给「${project.name}」发消息", color = colors.outline, style = MaterialTheme.typography.bodyLarge,
-                                maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            inner()
+                    },
+                    navigationIcon = { CircleIconButton(Icons.AutoMirrored.Filled.ArrowBack, "返回", Modifier.padding(start = 12.dp, end = 4.dp), onClick = onBack) },
+                    actions = {
+                        Box(Modifier.padding(end = 12.dp)) {
+                            CircleIconButton(Icons.Default.MoreVert, "项目菜单") { menu = true }
+                            RoundMenu(expanded = menu, onDismiss = { menu = false }) {
+                                MenuRow(if (project.pinned) "取消置顶" else "置顶", icon = AppIcons.Pin) { menu = false; vm.saveProject(project.copy(pinned = !project.pinned)) }
+                                MenuRow("编辑项目", icon = Icons.Default.Edit) { menu = false; editingProject = true }
+                                MenuRow("编辑指令", icon = AppIcons.Brain) { menu = false; editingInstructions = true }
+                                MenuRow("删除项目", icon = Icons.Default.Delete, danger = true) { menu = false; deletingProject = true }
+                            }
                         }
                     },
                 )
-                IconButton(enabled = draft.isNotBlank(), onClick = {
-                    vm.newChat(projectId)
-                    if (vm.send(draft)) { draft = ""; onOpenChat() }
-                }) {
-                    Box(Modifier.size(34.dp).clip(CircleShape).background(if (draft.isNotBlank()) colors.primary else colors.outlineVariant),
-                        contentAlignment = Alignment.Center) {
-                        Icon(AppIcons.ArrowUp, "发送", Modifier.size(18.dp), tint = colors.onPrimary)
+                // 聊天 / 资料 / 记忆：一条玻璃胶囊，选中的那块底滑着跟过去
+                GlassTabs(ProjectTab.entries.map { it.label }, tab.ordinal, Modifier.padding(horizontal = 16.dp).padding(bottom = 8.dp)) { tab = ProjectTab.entries[it] }
+            }
+        },
+        bottomBar = {
+            // 直接在这个项目里开新对话：和聊天页一样的毛玻璃胶囊
+            Box(Modifier.glassBar(top = false)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 10.dp)
+                        .glass(Radii.xl).padding(start = 18.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+                ) {
+                    androidx.compose.foundation.text.BasicTextField(
+                        value = draft, onValueChange = { draft = it }, maxLines = 5,
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = colors.onSurface),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(colors.primary),
+                        modifier = Modifier.weight(1f).padding(vertical = 10.dp),
+                        decorationBox = { inner ->
+                            Box {
+                                if (draft.isEmpty()) Text("给「${project.name}」发消息", color = colors.outline, style = MaterialTheme.typography.bodyLarge,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                inner()
+                            }
+                        },
+                    )
+                    val canSend = draft.isNotBlank()
+                    Surface(
+                        onClick = { vm.newChat(projectId); if (vm.send(draft)) { draft = ""; onOpenChat() } },
+                        enabled = canSend, shape = CircleShape,
+                        color = if (canSend) colors.primary else colors.onSurface.copy(alpha = 0.08f),
+                        modifier = Modifier.size(42.dp),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(AppIcons.ArrowUp, "发送", Modifier.size(20.dp), tint = if (canSend) colors.onPrimary else colors.outline)
+                        }
                     }
                 }
             }
         },
     ) { padding ->
-        Column(Modifier.padding(padding).fillMaxSize()) {
-            Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ProjectTab.entries.forEach { t ->
-                    FilterChip(selected = tab == t, onClick = { tab = t }, label = { Text(t.label) })
-                }
-            }
-            when (tab) {
-                ProjectTab.CHATS -> if (chats.isEmpty()) EmptyHint(
-                    com.jack.ai.data.ProjectKind.of(project.kind).let { "${it.label} · 还没有聊天" },
-                    if (project.instructions.isBlank()) "在下面直接说。想让 Kavi 在这个项目里一直按某种方式做，右上角「编辑指令」写下来。"
-                    else "在下面直接说，项目指令、资料和记忆每个对话都会带上。",
-                ) else LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)) {
-                    items(chats, key = { it.id }) { c ->
-                        ChatItem(
-                            c, false,
-                            onClick = { vm.select(c.id); onOpenChat() },
-                            onRename = { renaming = c },
-                            onDelete = { deleting = c },
-                            onPin = { vm.togglePin(c.id) },
-                            onMemory = { memoryOf = c },
+        GlassSource(glass, Modifier.fillMaxSize()) {
+            // 换页签时内容淡入淡出，不是硬切
+            androidx.compose.animation.Crossfade(tab, animationSpec = androidx.compose.animation.core.tween(Motion.NORMAL), label = "projectTab") { t ->
+                when (t) {
+                    ProjectTab.CHATS -> if (chats.isEmpty()) Box(Modifier.padding(padding)) {
+                        EmptyHint(
+                            com.jack.ai.data.ProjectKind.of(project.kind).let { "${it.label} · 还没有聊天" },
+                            if (project.instructions.isBlank()) "在下面直接说。想让 Kavi 在这个项目里一直按某种方式做，右上角「编辑指令」写下来。"
+                            else "在下面直接说，项目指令、资料和记忆每个对话都会带上。",
                         )
+                    } else LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(
+                        start = 8.dp, end = 8.dp, top = padding.calculateTopPadding() + 8.dp, bottom = padding.calculateBottomPadding() + 8.dp)) {
+                        items(chats, key = { it.id }) { c ->
+                            Box(Modifier.animateItem()) {
+                                ChatItem(
+                                    c, false,
+                                    onClick = { vm.select(c.id); onOpenChat() },
+                                    onRename = { renaming = c },
+                                    onDelete = { deleting = c },
+                                    onPin = { vm.togglePin(c.id) },
+                                    onMemory = { memoryOf = c },
+                                )
+                            }
+                        }
                     }
+                    ProjectTab.SOURCES -> ProjectSources(vm, state, project, padding)
+                    ProjectTab.MEMORY -> ProjectMemoryTab(vm, project, padding)
                 }
-                ProjectTab.SOURCES -> ProjectSources(vm, state, project)
-                ProjectTab.MEMORY -> ProjectMemoryTab(vm, project)
             }
         }
+    }
     }
 
     memoryOf?.let { c -> ConversationMemoryDialog(vm, c) { memoryOf = null } }
@@ -248,7 +267,7 @@ private fun EmptyHint(title: String, body: String, action: (@Composable () -> Un
 
 /** 资料：项目里每个对话都能用的背景材料。可以加文件，也可以直接贴一段文字。 */
 @Composable
-private fun ProjectSources(vm: ChatViewModel, state: UiState, project: Project) {
+private fun ProjectSources(vm: ChatViewModel, state: UiState, project: Project, bars: PaddingValues) {
     val colors = MaterialTheme.colorScheme
     var adding by remember { mutableStateOf(false) }
     var pasting by remember { mutableStateOf(false) }
@@ -262,19 +281,21 @@ private fun ProjectSources(vm: ChatViewModel, state: UiState, project: Project) 
                 Spacer(Modifier.size(4.dp))
                 Text("添加")
             }
-            DropdownMenu(expanded = adding, onDismissRequest = { adding = false }) {
-                DropdownMenuItem(text = { Text("添加文件") }, onClick = { adding = false; pickFile.launch(arrayOf("*/*")) })
-                DropdownMenuItem(text = { Text("添加文字") }, onClick = { adding = false; pasting = true })
+            RoundMenu(expanded = adding, onDismiss = { adding = false }) {
+                MenuRow("添加文件", icon = AppIcons.File) { adding = false; pickFile.launch(arrayOf("*/*")) }
+                MenuRow("添加文字", icon = Icons.Default.Edit) { adding = false; pasting = true }
             }
         }
     }
-    if (project.files.isEmpty()) {
+    if (project.files.isEmpty()) Box(Modifier.padding(bars)) {
         EmptyHint("给 Kavi 更多背景资料", "加上文件或一段文字（资料、设定、参考文章），项目里的每个对话都能用；太长的会在需要时搜着看。", addButton)
-    } else LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    } else LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(
+        start = 16.dp, end = 16.dp, top = bars.calculateTopPadding() + 12.dp, bottom = bars.calculateBottomPadding() + 16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)) {
         items(project.files, key = { it.id }) { f ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.animateItem().fillMaxWidth().glass(Radii.m).padding(start = 14.dp, end = 4.dp, top = 6.dp, bottom = 6.dp)) {
                 Icon(AppIcons.File, null, Modifier.size(20.dp), tint = colors.primary)
-                Spacer(Modifier.size(8.dp))
+                Spacer(Modifier.size(10.dp))
                 Column(Modifier.weight(1f)) {
                     Text(f.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text("${f.text.length} 字", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
@@ -322,13 +343,13 @@ private fun ProjectSources(vm: ChatViewModel, state: UiState, project: Project) 
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ProjectMemoryTab(vm: ChatViewModel, project: Project) {
+private fun ProjectMemoryTab(vm: ChatViewModel, project: Project, bars: PaddingValues) {
     val colors = MaterialTheme.colorScheme
     var items by remember(project.id) { mutableStateOf(vm.projectMemory(project.id)) }
     var adding by remember { mutableStateOf("") }
     var section by remember { mutableStateOf(ChatMemory.SECTIONS.last()) }
     fun save(next: List<String>) { items = next; vm.setProjectMemory(project.id, next) }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bars).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
             (if (project.isolated) "仅项目记忆：和外面完全隔开，只用这里的记忆。" else "Kavi 聊着聊着会自己更新这里，") +
                 "离开一个对话时也会补记一次，下个对话就从这里接着做。",
@@ -339,8 +360,8 @@ private fun ProjectMemoryTab(vm: ChatViewModel, project: Project) {
         val groups = items.groupBy { ChatMemory.sectionOf(it) ?: "其他" }
         (ChatMemory.SECTIONS + "其他").forEach { sec ->
             val list = groups[sec] ?: return@forEach
-            Surface(shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, colors.outlineVariant), modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Box(Modifier.fillMaxWidth().glass(Radii.l)) {
+                Column(Modifier.padding(start = 16.dp, end = 6.dp, top = 12.dp, bottom = 8.dp)) {
                     Text(sec, style = MaterialTheme.typography.titleSmall, color = colors.primary)
                     list.forEach { item ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -353,10 +374,8 @@ private fun ProjectMemoryTab(vm: ChatViewModel, project: Project) {
                 }
             }
         }
-        HorizontalDivider(color = colors.outlineVariant)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            ChatMemory.SECTIONS.forEach { s -> FilterChip(selected = section == s, onClick = { section = s }, label = { Text(s) }) }
-        }
+        Spacer(Modifier.size(4.dp))
+        GlassTabs(ChatMemory.SECTIONS, ChatMemory.SECTIONS.indexOf(section).coerceAtLeast(0)) { section = ChatMemory.SECTIONS[it] }
         Row(verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(adding, { adding = it }, placeholder = { Text("加一条$section") }, singleLine = true, modifier = Modifier.weight(1f))
             TextButton(enabled = adding.isNotBlank(), onClick = {
@@ -394,7 +413,7 @@ fun ProjectDialog(initial: Project?, onDismiss: () -> Unit, onSave: (Project) ->
                     style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box {
-                        Surface(onClick = { picking = true }, shape = RoundedCornerShape(12.dp), color = colors.surfaceVariant, modifier = Modifier.size(52.dp)) {
+                        Surface(onClick = { picking = true }, shape = Radii.m, color = glassFill, border = BorderStroke(0.8.dp, glassEdge()), modifier = Modifier.size(52.dp)) {
                             Box(contentAlignment = Alignment.Center) { Text(icon.ifBlank { "📁" }, fontSize = 24.sp) }
                         }
                         DropdownMenu(expanded = picking, onDismissRequest = { picking = false }) {
@@ -437,8 +456,9 @@ private fun MemoryModeOption(title: String, body: String, selected: Boolean, onC
     val colors = MaterialTheme.colorScheme
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) colors.primary else colors.outlineVariant),
+        shape = Radii.m,
+        color = glassFill,
+        border = if (selected) BorderStroke(1.5.dp, colors.primary) else BorderStroke(0.8.dp, glassEdge()),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(Modifier.padding(12.dp)) {

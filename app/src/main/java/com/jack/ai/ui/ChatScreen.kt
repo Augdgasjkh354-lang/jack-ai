@@ -282,7 +282,7 @@ fun ChatScreen(
                 if (conv != null && conv.closedReason.isNotEmpty()) Surface(color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.navigationBarsPadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Kavi 结束了这个对话：${conv.closedReason}", style = MaterialTheme.typography.bodyMedium)
-                        androidx.compose.material3.OutlinedButton(onClick = { vm.newChat(state.currentProjectId) }) { Text("开一个新对话") }
+                        OutlinedButton(onClick = { vm.newChat(state.currentProjectId) }) { Text("开一个新对话") }
                     }
                 } else Box(if (conv == null || conv.messages.isEmpty()) Modifier else Modifier.glassBar(top = false)) { InputBar(
                     vm = vm,
