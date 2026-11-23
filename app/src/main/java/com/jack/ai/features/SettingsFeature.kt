@@ -63,7 +63,35 @@ class SettingsFeature(core: AppCore, private val client: DeepSeekClient) : Featu
         }
     }
 
-    fun deleteProvider(id: String) = updateSettings { s -> fixModel(s.copy(providers = s.providers.filterNot { it.id == id })) }
+    fun deleteProvider(id: String) {
+        // 删掉 ChatGPT 服务就顺手退出登录（通知 OpenAI 作废令牌）
+        if (state.value.settings.providers.any { it.id == id && it.isChatGpt }) scope.launch { com.jack.ai.data.integrations.ChatGptAuth.signOut() }
+        updateSettings { s -> fixModel(s.copy(providers = s.providers.filterNot { it.id == id })) }
+    }
+
+    /**
+     * 用 ChatGPT 账号登录：浏览器里登录、同意，回来拿模型列表，存成一个服务（已有就更新）。
+     * 第一次登录默认勾选全部模型；重新登录保留原来勾选的。
+     */
+    suspend fun loginChatGpt(open: (String) -> Unit): Result<Provider> = try {
+        val account = com.jack.ai.data.integrations.ChatGptAuth.signIn(open)
+        val ids = client.listModels(CHATGPT_PROVIDER_URL, CHATGPT_API_KEY).second.map { it.first }
+        val old = state.value.settings.providers.firstOrNull { it.isChatGpt }
+        val models = old?.models?.filter { it.id in ids }?.takeIf { it.isNotEmpty() } ?: ids.map { chatGptModel(it) }
+        val p = (old ?: Provider(name = "ChatGPT", baseUrl = CHATGPT_PROVIDER_URL)).copy(apiKey = CHATGPT_API_KEY, models = models)
+        saveProvider(p)
+        Result.success(p)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+    /** ChatGPT 里的模型都能看图、能调思考强度；套餐额度不另算钱。 */
+    fun chatGptModel(id: String) = ProviderModel(id, vision = true, reasoning = true, price = CHATGPT_PRICE)
+
+    /** 退出 ChatGPT 登录（服务和勾选的模型留着，重新登录就能接着用）。 */
+    suspend fun logoutChatGpt() = com.jack.ai.data.integrations.ChatGptAuth.signOut()
 
     /** 当前选的模型没了（服务删了、模型取消勾选），换成第一个能用的。 */
     internal fun fixModel(s: Settings): Settings {

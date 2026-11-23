@@ -49,6 +49,10 @@ import com.jack.ai.data.Price
 import com.jack.ai.data.Pricing
 import com.jack.ai.data.Provider
 import com.jack.ai.data.ProviderModel
+import com.jack.ai.data.CHATGPT_API_KEY
+import com.jack.ai.data.CHATGPT_PROVIDER_URL
+import com.jack.ai.data.isChatGpt
+import com.jack.ai.data.integrations.ChatGptAuth
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import java.io.IOException
@@ -78,7 +82,17 @@ fun ProvidersSection(vm: ChatViewModel, providers: List<Provider>) {
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth().clickable { editing = p }.padding(vertical = 4.dp),
         ) {
-            Column(Modifier.weight(1f)) {
+            if (p.isChatGpt) Column(Modifier.weight(1f)) {
+                val account = ChatGptAuth.account
+                Text(p.name, style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    (if (account == null) "没登录 · " else "ChatGPT 账号 · " + account.email.ifBlank { "已登录" } + " · ") + "${p.models.size} 个模型",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (account == null) colors.error else colors.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            } else Column(Modifier.weight(1f)) {
                 Text(p.name, style = MaterialTheme.typography.bodyLarge)
                 Text(
                     (if (p.apiKey.isBlank()) "还没填 Key · " else "") + (if (p.models.isEmpty()) "只用 Key（转文字、向量检索） · " else "${p.models.size} 个模型 · ") + p.baseUrl,
@@ -92,13 +106,20 @@ fun ProvidersSection(vm: ChatViewModel, providers: List<Provider>) {
             TextButton(onClick = { deleting = p }) { Text("删除", color = colors.error) }
         }
     }
-    OutlinedButton(onClick = { editing = Provider(name = "", baseUrl = "") }) {
-        Icon(Icons.Default.Add, null, Modifier.size(18.dp))
-        Spacer(Modifier.size(4.dp))
-        Text("添加服务")
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(onClick = { editing = Provider(name = "", baseUrl = "") }) {
+            Icon(Icons.Default.Add, null, Modifier.size(18.dp))
+            Spacer(Modifier.size(4.dp))
+            Text("添加服务")
+        }
+        // 花 ChatGPT 套餐（Go / Plus / Pro）的额度，不用 API Key；只有一个账号
+        if (!com.jack.ai.Edition.STORE && providers.none { it.isChatGpt }) OutlinedButton(onClick = {
+            editing = Provider(name = "ChatGPT", baseUrl = CHATGPT_PROVIDER_URL, apiKey = CHATGPT_API_KEY)
+        }) { Text("用 ChatGPT 登录") }
     }
     editing?.let { p ->
-        ProviderDialog(vm, p, onDismiss = { editing = null }) { vm.saveProvider(it); editing = null }
+        if (p.isChatGpt) ChatGptDialog(vm, p, onDismiss = { editing = null }) { vm.saveProvider(it); editing = null }
+        else ProviderDialog(vm, p, onDismiss = { editing = null }) { vm.saveProvider(it); editing = null }
     }
     deleting?.let { p ->
         ConfirmDeleteDialog("删除「${p.name}」？", "这个服务和它的模型会从列表里移除。", onDismiss = { deleting = null }) {
@@ -360,4 +381,119 @@ fun FreePoolCard(settings: com.jack.ai.data.Settings) {
             }) { Text(if (probing) "探测中…" else "重新探测") }
         }
     }
+}
+
+/**
+ * 用 ChatGPT 账号登录的服务：登录 / 退出、看是哪个账号、勾选模型。
+ * 登录在 OpenAI 自己的网页上做（系统浏览器），Kavi 只拿到只能花额度的令牌。
+ */
+@Composable
+private fun ChatGptDialog(vm: ChatViewModel, initial: Provider, onDismiss: () -> Unit, onSave: (Provider) -> Unit) {
+    val scope = rememberCoroutineScope()
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val colors = MaterialTheme.colorScheme
+    var account by remember { mutableStateOf(ChatGptAuth.account) }
+    var available by remember { mutableStateOf(initial.models.map { it.id }) }
+    val chosen = remember { mutableStateListOf<ProviderModel>().apply { addAll(initial.models) } }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    fun open(link: String) {
+        runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(link)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+    }
+    fun failure(e: Throwable) = when (e) {
+        is ApiException -> e.message
+        is IOException -> "连不上 OpenAI：${e.message ?: "网络问题"}"
+        else -> e.message
+    } ?: "出错了"
+
+    fun login() {
+        busy = true; error = null
+        scope.launch {
+            vm.loginChatGpt(::open)
+                .onSuccess { p ->
+                    account = ChatGptAuth.account
+                    available = p.models.map { it.id }.ifEmpty { available }
+                    chosen.clear(); chosen.addAll(p.models)
+                    if (p.models.isEmpty()) error = "登录好了，但没拿到能用的模型"
+                }
+                .onFailure { error = failure(it) }
+            busy = false
+        }
+    }
+
+    fun refresh() {
+        busy = true; error = null
+        scope.launch {
+            try {
+                val ids = vm.fetchModels(CHATGPT_PROVIDER_URL, CHATGPT_API_KEY).second.map { it.first }
+                available = ids
+                chosen.removeAll { it.id !in ids }
+                if (ids.isEmpty()) error = "没拿到能用的模型"
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                error = failure(e)
+            } finally {
+                busy = false
+            }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("ChatGPT 账号") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "花的是你 ChatGPT 套餐（Go、Plus、Pro）里的额度，不用 API Key。在 OpenAI 自己的网页上登录，Kavi 看不到你的密码，" +
+                        "也看不到 ChatGPT 里的聊天和记忆；令牌只存在这台手机上。",
+                    style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
+                )
+                val a = account
+                if (a != null) {
+                    Text("已登录：" + a.email.ifBlank { "（没拿到邮箱）" } + (a.name.takeIf { it.isNotBlank() }?.let { "（$it）" } ?: ""),
+                        style = MaterialTheme.typography.bodyMedium)
+                    if (a.sub.isNotBlank()) Text("账号 ID：${a.sub}", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                } else Text("还没登录", style = MaterialTheme.typography.bodyMedium, color = colors.error)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(enabled = !busy, onClick = { login() }) { Text(if (a == null) "用 ChatGPT 登录" else "换个账号 / 重新登录") }
+                    if (busy) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                }
+                if (busy && a == null) Text("在浏览器里登录、点同意，然后回到 Kavi。", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                error?.let { Text(it, color = colors.error, style = MaterialTheme.typography.bodySmall) }
+                if (a != null) {
+                    TextButton(onClick = { open(ChatGptAuth.USAGE_URL) }) { Text("看用量、给 Kavi 设每周上限") }
+                    Text("要彻底断开：ChatGPT 设置 → 安全与登录 → 登录连接 → Kavi → 断开。只在这里退出不会断开。",
+                        style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                    TextButton(enabled = !busy, onClick = {
+                        scope.launch { vm.logoutChatGpt(); account = null }
+                    }) { Text("退出登录", color = colors.error) }
+                    HorizontalDivider(color = colors.outlineVariant)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("模型（已选 ${chosen.size} 个）", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                        TextButton(enabled = !busy, onClick = { refresh() }) { Text("刷新") }
+                    }
+                    LazyColumn(Modifier.fillMaxWidth().heightIn(max = 280.dp)) {
+                        items(available, key = { it }) { id ->
+                            val m = chosen.firstOrNull { it.id == id }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth().clickable { if (m != null) chosen.remove(m) else chosen.add(vm.chatGptModel(id)) },
+                            ) {
+                                Checkbox(checked = m != null, onCheckedChange = null, modifier = Modifier.padding(8.dp))
+                                Text(id, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = chosen.isNotEmpty(), onClick = {
+                val order = available.withIndex().associate { it.value to it.index }
+                onSave(initial.copy(apiKey = CHATGPT_API_KEY, models = chosen.sortedBy { order[it.id] ?: Int.MAX_VALUE }))
+            }) { Text("保存") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("关闭") } },
+    )
 }

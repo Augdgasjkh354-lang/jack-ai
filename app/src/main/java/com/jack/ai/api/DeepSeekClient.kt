@@ -141,11 +141,14 @@ class DeepSeekClient(
         val native = when (format) {
             ApiFormat.ANTHROPIC -> AnthropicApi.request(ep, messages, thinking, tools, stream = true)
             ApiFormat.GEMINI -> GeminiApi.request(ep, messages, thinking, temperature, tools, stream = true, jsonMode = jsonMode)
+            // 令牌一小时过期：发之前现取（快过期就先续）
+            ApiFormat.RESPONSES -> ResponsesApi.request(ep, com.jack.ai.data.integrations.ChatGptAuth.accessToken(), messages, thinking, tools)
             ApiFormat.OPENAI -> null
         }
         val parser: SseParser? = when (format) {
             ApiFormat.ANTHROPIC -> AnthropicApi.Parser()
             ApiFormat.GEMINI -> GeminiApi.Parser()
+            ApiFormat.RESPONSES -> ResponsesApi.Parser()
             ApiFormat.OPENAI -> null
         }
         val body = native?.body ?: buildJsonObject {
@@ -210,6 +213,10 @@ class DeepSeekClient(
                     response.use { resp ->
                         if (!resp.isSuccessful) {
                             val body = resp.body?.string()
+                            if (format == ApiFormat.RESPONSES) {
+                                if (resp.code == 401) com.jack.ai.data.integrations.ChatGptAuth.invalidate()
+                                throw ResponsesApi.httpError(resp.code, body)
+                            }
                             val quota = com.jack.ai.data.isFreeTierOnly(body)
                             throw ApiException(describeError(resp.code, body), resp.code, if (quota) "AllocationQuota.FreeTierOnly" else "")
                         }
@@ -235,7 +242,7 @@ class DeepSeekClient(
                                     if (trySendBlocking(ev).isFailure) return
                                 }
                                 validData = parser.sawData
-                                if (parser.finished) { finished = true; if (format == ApiFormat.ANTHROPIC) break }
+                                if (parser.finished) { finished = true; if (format == ApiFormat.ANTHROPIC || format == ApiFormat.RESPONSES) break }
                                 continue
                             }
                             if (!line.startsWith("data:")) continue
@@ -376,6 +383,17 @@ class DeepSeekClient(
         }
     }
 
+    /** 用 ChatGPT 账号登录后能用的模型（GET /v1/models，带登录令牌）。 */
+    private suspend fun listChatGptModels(): List<String> {
+        val token = com.jack.ai.data.integrations.ChatGptAuth.accessToken()
+        val req = Request.Builder().url(com.jack.ai.data.integrations.ChatGptAuth.BASE_URL + "/models").header("Authorization", "Bearer $token").get().build()
+        return http.newCall(req).execute().use { resp ->
+            val text = resp.body?.string()
+            if (!resp.isSuccessful) throw ResponsesApi.httpError(resp.code, text)
+            ResponsesApi.parseModels(text)
+        }
+    }
+
     /** 查询账户余额，返回类似 "¥12.34" 的文字。 */
     suspend fun balance(baseUrl: String, apiKey: String): String = withContext(Dispatchers.IO) {
         val request = Request.Builder()
@@ -403,6 +421,7 @@ class DeepSeekClient(
      */
     suspend fun listModels(baseUrl: String, apiKey: String, workspaceId: String = ""): Pair<String, List<Pair<String, Price?>>> = withContext(Dispatchers.IO) {
         val base = baseUrl.trim().trimEnd('/')
+        if (base == com.jack.ai.data.CHATGPT_PROVIDER_URL) return@withContext base to listChatGptModels().map { it to com.jack.ai.data.CHATGPT_PRICE }
         if (!base.startsWith("http")) throw ApiException("接口地址要以 http:// 或 https:// 开头")
         // Anthropic、Gemini 原生接口各有自己的模型列表
         when (ApiFormat.of(base)) {
@@ -425,7 +444,7 @@ class DeepSeekClient(
                 }
                 return@withContext base to ids.map { it to null }
             }
-            ApiFormat.OPENAI -> {}
+            ApiFormat.RESPONSES, ApiFormat.OPENAI -> {}
         }
         val host = runCatching { java.net.URI(base).host.orEmpty().lowercase() }.getOrDefault("")
         // 百炼的模型目录：北京要填业务空间 ID；没填就照常走 OpenAI 兼容的 /models（以前就是这么拿列表的）

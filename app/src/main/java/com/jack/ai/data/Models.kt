@@ -479,7 +479,24 @@ data class Endpoint(
     val price: Price? = null,
     /** 这个模型出错时按顺序换用的备用模型（自己不带备用）。 */
     val fallbacks: List<Endpoint> = emptyList(),
+    /** 用 ChatGPT 账号登录的（花套餐额度，走 Responses 接口，令牌见 ChatGptAuth）。 */
+    val chatgpt: Boolean = false,
 )
+
+/**
+ * 用 ChatGPT 账号登录的服务存成这个地址（不是真的网址：转文字、向量检索这些按地址找服务的地方不会误用它）。
+ * 真正的请求发到 [com.jack.ai.data.integrations.ChatGptAuth.BASE_URL]。
+ */
+const val CHATGPT_PROVIDER_URL = "chatgpt://plan"
+
+/** ChatGPT 服务的 apiKey 里放这个占位（真令牌单独存、发请求时现取），「有没有 Key」的判断照常能用。 */
+const val CHATGPT_API_KEY = "chatgpt"
+
+/** 用 ChatGPT 账号登录的服务。 */
+val Provider.isChatGpt: Boolean get() = baseUrl == CHATGPT_PROVIDER_URL
+
+/** 套餐额度不按 token 另收钱：记成 0 元。 */
+val CHATGPT_PRICE = Price(0.0, 0.0, 0.0)
 
 /** 自定义模型在设置里存成 "c:服务id:模型id"，内置 DeepSeek 模型直接存模型名。 */
 fun customModelKey(providerId: String, modelId: String) = "c:$providerId:$modelId"
@@ -508,6 +525,8 @@ private fun Settings.rawEndpoint(key: String): Endpoint? {
     }
     val p = providers.firstOrNull { it.id == custom.first } ?: return null
     val m = p.models.firstOrNull { it.id == custom.second } ?: ProviderModel(custom.second)
+    if (p.isChatGpt) return Endpoint(com.jack.ai.data.integrations.ChatGptAuth.BASE_URL, CHATGPT_API_KEY, m.id, deepseek = false,
+        vision = m.vision, reasoning = m.reasoning, key = key, price = m.price ?: CHATGPT_PRICE, chatgpt = true)
     return Endpoint(p.baseUrl, p.apiKey, m.id, deepseek = false, vision = m.vision, reasoning = m.reasoning, key = key, price = m.price)
 }
 

@@ -19,6 +19,8 @@ class KaviApp : Application() {
             override fun onActivityDestroyed(activity: Activity) = Unit
         })
         CrashLog.install(this)
+        // ChatGPT 登录的令牌单独存，前台、后台任务发请求前都要现取
+        com.jack.ai.data.integrations.ChatGptAuth.init(this)
         // 连接器的登录令牌续过了：存回设置（前台、后台任务都走这里）
         com.jack.ai.data.integrations.McpLogin.save = { s ->
             val store = com.jack.ai.data.Store(this)

@@ -19,10 +19,16 @@ import kotlinx.serialization.json.putJsonObject
  * 发给 Anthropic、Gemini 原生接口前在这里转换，回来的流再转回 StreamEvent。按接口地址自动认。
  */
 enum class ApiFormat {
-    OPENAI, ANTHROPIC, GEMINI;
+    OPENAI, ANTHROPIC, GEMINI,
+    /** OpenAI 的 Responses 接口：用 ChatGPT 账号登录（花套餐额度）时走这个，见 [ResponsesApi]。 */
+    RESPONSES;
 
     companion object {
-        fun of(ep: Endpoint): ApiFormat = if (ep.deepseek) OPENAI else of(ep.baseUrl)
+        fun of(ep: Endpoint): ApiFormat = when {
+            ep.chatgpt -> RESPONSES
+            ep.deepseek -> OPENAI
+            else -> of(ep.baseUrl)
+        }
 
         fun of(baseUrl: String): ApiFormat {
             val uri = runCatching { java.net.URI(baseUrl.trim()) }.getOrNull() ?: return OPENAI
@@ -496,4 +502,225 @@ internal object GeminiApi {
                 m["name"].str().removePrefix("models/").takeIf { it.isNotBlank() && (methods.isEmpty() || "generateContent" in methods) }
             }?.sorted()
             ?: throw ApiException("这个地址返回的不是模型列表，检查一下地址对不对")
+}
+
+// ------------------------------------------------------------------ OpenAI Responses（ChatGPT 账号登录）
+
+/**
+ * 用 ChatGPT 账号登录后走的 Responses 接口（POST /v1/responses）。按文档必须 store=false、stream=true；
+ * 不认 temperature、max_output_tokens、system 角色的消息（系统提示放 instructions）。
+ * 文档：developers.openai.com/siwc/token-sharing-open-source/models-and-inference。
+ */
+internal object ResponsesApi {
+    /** 服务说不支持 reasoning 参数后就不再发（这次进程里记住）。 */
+    @Volatile var noReasoning = false
+
+    private fun effort(level: ThinkLevel): String = when (level.effort) {
+        null, "low" -> "low"
+        "high", "max" -> "high"
+        else -> "medium"
+    }
+
+    fun request(ep: Endpoint, token: String, messages: List<JsonObject>, thinking: ThinkLevel, tools: JsonArray?): NativeRequest {
+        val (instructions, input) = convert(messages)
+        val body = buildJsonObject {
+            put("model", ep.model)
+            put("store", false)
+            put("stream", true)
+            if (instructions.isNotBlank()) put("instructions", instructions)
+            put("input", JsonArray(input))
+            if (!tools.isNullOrEmpty()) put("tools", buildJsonArray {
+                tools.forEach { t ->
+                    val fn = t.obj()?.get("function").obj() ?: return@forEach
+                    add(buildJsonObject {
+                        put("type", "function")
+                        put("name", fn["name"].str())
+                        fn["description"].str().takeIf { it.isNotBlank() }?.let { put("description", it) }
+                        put("parameters", fn["parameters"].obj() ?: buildJsonObject { put("type", "object") })
+                        put("strict", false)
+                    })
+                }
+            })
+            if (ep.reasoning && !noReasoning) putJsonObject("reasoning") {
+                put("effort", effort(thinking))
+                if (thinking.effort != null) put("summary", "auto")
+            }
+        }
+        val headers = mapOf("Authorization" to "Bearer $token")
+        return NativeRequest(ep.baseUrl.trimEnd('/') + "/responses", headers, body.toString())
+    }
+
+    /**
+     * OpenAI 格式的对话 → (instructions, input)。开头的 system 合成 instructions，中途的 system 当用户那边的提示；
+     * 助手的工具调用拆成 function_call，工具结果是 function_call_output（里面的图片另起一条用户消息带上）。
+     */
+    fun convert(messages: List<JsonObject>): Pair<String, List<JsonObject>> {
+        val system = StringBuilder()
+        var leading = true
+        val items = mutableListOf<JsonObject>()
+        fun message(role: String, parts: List<JsonObject>) = buildJsonObject {
+            put("type", "message"); put("role", role); put("content", JsonArray(parts))
+        }
+        fun inputText(t: String) = buildJsonObject { put("type", "input_text"); put("text", t) }
+        fun inputParts(content: JsonElement?): List<JsonObject> = partsOf(content).mapNotNull { p ->
+            when (p) {
+                is Part.Text -> p.text.takeIf { it.isNotBlank() }?.let { inputText(it) }
+                is Part.Image -> buildJsonObject { put("type", "input_image"); put("image_url", p.url); put("detail", "auto") }
+            }
+        }
+        messages.forEach { m ->
+            when (m["role"].str()) {
+                "system" -> if (leading) {
+                    if (system.isNotEmpty()) system.append("\n\n")
+                    system.append(textOf(m["content"]))
+                } else textOf(m["content"]).takeIf { it.isNotBlank() }?.let { items += message("user", listOf(inputText("【系统提示】$it"))) }
+                "user" -> {
+                    leading = false
+                    inputParts(m["content"]).takeIf { it.isNotEmpty() }?.let { items += message("user", it) }
+                }
+                "assistant" -> {
+                    leading = false
+                    val text = partsOf(m["content"]).filterIsInstance<Part.Text>().joinToString("") { it.text }
+                    if (text.isNotBlank()) items += message("assistant", listOf(buildJsonObject { put("type", "output_text"); put("text", text) }))
+                    m["tool_calls"].arr()?.forEach { el ->
+                        val tc = el.obj() ?: return@forEach
+                        val fn = tc["function"].obj()
+                        items += buildJsonObject {
+                            put("type", "function_call")
+                            put("call_id", AnthropicApi.toolId(tc["id"].str()))
+                            put("name", fn?.get("name").str())
+                            put("arguments", fn?.get("arguments").str().ifBlank { "{}" })
+                        }
+                    }
+                }
+                "tool" -> {
+                    leading = false
+                    items += buildJsonObject {
+                        put("type", "function_call_output")
+                        put("call_id", AnthropicApi.toolId(m["tool_call_id"].str()))
+                        put("output", textOf(m["content"]).ifBlank { "（空）" })
+                    }
+                    val images = inputParts(m["content"]).filter { it["type"].str() == "input_image" }
+                    if (images.isNotEmpty()) items += message("user", listOf(inputText("（上面工具返回的图片）")) + images)
+                }
+            }
+        }
+        if (items.none { it["type"].str() == "message" && it["role"].str() == "user" }) items.add(0, message("user", listOf(inputText("（继续）"))))
+        return system.toString() to items
+    }
+
+    class Parser : SseParser {
+        override var finished = false
+        override var sawData = false
+        /** 输出里第几项（output_index）→ 第几个工具调用。 */
+        private val tools = mutableMapOf<Int, Int>()
+        /** 收到过参数分片的工具调用（没收到的在这一项结束时一次补齐）。 */
+        private val gotArgs = mutableSetOf<Int>()
+        private var summaryParts = 0
+
+        override fun feed(line: String): List<StreamEvent> {
+            if (!line.startsWith("data:")) return emptyList()
+            val o = runCatching { json.parseToJsonElement(line.removePrefix("data:").trim()).obj() }.getOrNull() ?: return emptyList()
+            sawData = true
+            val at = o["output_index"].int()
+            return when (o["type"].str()) {
+                "response.output_item.added" -> {
+                    val item = o["item"].obj()
+                    if (item?.get("type").str() != "function_call") return emptyList()
+                    val i = tools.size
+                    tools[at] = i
+                    val args = item?.get("arguments").str()
+                    if (args.isNotEmpty()) gotArgs += at
+                    listOf(StreamEvent.ToolCall(i, item?.get("call_id").str(), item?.get("name").str(), args))
+                }
+                "response.function_call_arguments.delta" -> {
+                    val i = tools[at] ?: return emptyList()
+                    gotArgs += at
+                    listOf(StreamEvent.ToolCall(i, "", "", o["delta"].str()))
+                }
+                "response.output_item.done" -> {
+                    val item = o["item"].obj()
+                    val i = tools[at]
+                    if (i == null || at in gotArgs || item?.get("type").str() != "function_call") return emptyList()
+                    gotArgs += at
+                    listOf(StreamEvent.ToolCall(i, "", "", item?.get("arguments").str().ifBlank { "{}" }))
+                }
+                "response.output_text.delta" -> o["delta"].str().takeIf { it.isNotEmpty() }?.let { listOf(StreamEvent.Text("", it)) }.orEmpty()
+                "response.reasoning_summary_part.added" -> if (summaryParts++ > 0) listOf(StreamEvent.Text("\n\n", "")) else emptyList()
+                "response.reasoning_summary_text.delta", "response.reasoning_text.delta" ->
+                    o["delta"].str().takeIf { it.isNotEmpty() }?.let { listOf(StreamEvent.Text(it, "")) }.orEmpty()
+                "response.completed", "response.incomplete" -> {
+                    finished = true
+                    val r = o["response"].obj()
+                    val events = mutableListOf<StreamEvent>()
+                    usage(r?.get("usage").obj())?.let { events += it }
+                    val reason = r?.get("incomplete_details").obj()?.get("reason").str()
+                    events += StreamEvent.Finish(when {
+                        o["type"].str() == "response.completed" -> if (tools.isNotEmpty()) "tool_calls" else "stop"
+                        reason == "max_output_tokens" || reason.isEmpty() -> "length"
+                        else -> reason
+                    })
+                    events
+                }
+                "response.failed" -> throw errorOf(o["response"].obj()?.get("error").obj())
+                "error" -> throw errorOf(o["error"].obj() ?: o)
+                else -> emptyList()
+            }
+        }
+
+        private fun usage(u: JsonObject?): StreamEvent.Usage? {
+            val input = u?.get("input_tokens").int().takeIf { it > 0 } ?: return null
+            return StreamEvent.Usage(input, u?.get("output_tokens").int(), u?.get("input_tokens_details").obj()?.get("cached_tokens").int())
+        }
+    }
+
+    /** 服务返回的错误（流里的或请求被拒时的）→ 给用户看的话；码和文档里的一一对应。 */
+    fun errorOf(err: JsonObject?, status: Int = 0): ApiException {
+        val code = err?.get("code").str()
+        val message = err?.get("message").str().ifBlank { err?.get("detail").str() }
+        val param = err?.get("param").str()
+        if (code == "subscription_sharing_unsupported_capability" && "reasoning" in param) noReasoning = true
+        val (text, http) = when (code) {
+            "subscription_sharing_usage_limit_exceeded" ->
+                "ChatGPT 套餐额度用完了（或者到了给 Kavi 设的每周上限）。在 chatgpt.com/settings/usage 看用量，等额度恢复或先换个模型。" to 429
+            "subscription_sharing_usage_unavailable", "subscription_sharing_user_unavailable" -> "ChatGPT 那边暂时用不了，稍后再试。" to 503
+            "subscription_sharing_user_not_eligible" -> "这个 ChatGPT 账号不能在其他 App 里用套餐额度（要 Go、Plus 或 Pro）。" to 403
+            "subscription_sharing_unsupported_capability" ->
+                (if (noReasoning && "reasoning" in param) "这个模型不支持调思考强度，已经关掉了，再发一次就行。"
+                else "ChatGPT 不支持这次请求里的「${param.ifBlank { message }}」。") to 400
+            "subscription_sharing_invalid_user" -> "ChatGPT 登录失效了，到 设置 → 模型服务 里重新登录。" to 401
+            "subscription_sharing_route_not_supported", "chatpass_v2_scope_not_authorized", "chatpass_v2_invalid_authorization_context" ->
+                "ChatGPT 不让 Kavi 这样用（$code）：${message.ifBlank { "权限不够" }}" to 403
+            else -> "服务返回错误：" + message.ifBlank { code.ifBlank { "未知错误" } } to status
+        }
+        return ApiException(text, if (status != 0 && code.isEmpty()) status else http, code)
+    }
+
+    /** 请求还没开始传就被拒了（HTTP 不是 200）：正文可能是 {"error":{…}} 或 {"detail":"…"}。 */
+    fun httpError(status: Int, body: String?): ApiException {
+        val o = runCatching { json.parseToJsonElement(body.orEmpty()).obj() }.getOrNull()
+        val err = o?.get("error").obj() ?: o
+        if (err?.get("code").str().isNotEmpty()) return errorOf(err, status)
+        val detail = err?.get("message").str().ifBlank { o?.get("detail").str() }.ifBlank { body.orEmpty().take(200) }
+        val text = when (status) {
+            401 -> "ChatGPT 不认这次登录（401），到 设置 → 模型服务 里重新登录试试。"
+            403 -> "ChatGPT 拒绝了这次请求（403）：${detail.ifBlank { "可能是所在地区不支持" }}"
+            429 -> "ChatGPT 请求太频繁或额度用完了，稍后再试。"
+            503 -> "ChatGPT 那边暂时用不了（503），稍后再试。"
+            else -> "ChatGPT 返回错误（$status）：$detail"
+        }
+        return ApiException(text, status)
+    }
+
+    /** GET /v1/models：{"models":[{"slug":…,"display_name":…,"visibility":"list"}]}；只要 visibility 是 list 的。 */
+    fun parseModels(body: String?): List<String> {
+        val o = runCatching { json.parseToJsonElement(body.orEmpty()).obj() }.getOrNull()
+        val arr = (o?.get("models") ?: o?.get("data")).arr() ?: throw ApiException("ChatGPT 返回的不是模型列表")
+        return arr.mapNotNull { el ->
+            val m = el.obj() ?: return@mapNotNull null
+            val vis = m["visibility"].str()
+            if (vis.isNotEmpty() && vis != "list") return@mapNotNull null
+            m["slug"].str().ifBlank { m["id"].str() }.takeIf { it.isNotBlank() }
+        }.distinct()
+    }
 }
