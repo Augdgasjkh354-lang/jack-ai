@@ -68,7 +68,11 @@ settingsEvaluated { s ->
 然后：
 
 ```bash
-./gradlew --no-daemon -q :app:compileDevDebugKotlin
-ROBOLECTRIC_REPO=https://maven-central.storage-download.googleapis.com/maven2/ ./gradlew --no-daemon -q :app:testDevDebugUnitTest --tests "com.jack.ai.*"
+./gradlew -q :app:compileDevDebugKotlin
+ROBOLECTRIC_REPO=https://maven-central.storage-download.googleapis.com/maven2/ ./gradlew -q :app:testDevDebugUnitTest --tests "com.jack.ai.chat.*"
 ```
+
+- **别加 `--no-daemon`、别用 in-process 编译**：守护进程热起来以后增量编译快得多（实测改一行界面 6 秒、改核心数据类 38 秒；`--no-daemon` 每次都要 1 分 40 秒左右）。第一次编译要等守护进程热身，正常。
+- 单测只跑改到的那几组（`--tests "com.jack.ai.api.ResponsesApiTest"` 这样），全量交给 CI；改了公共的东西（Models、PromptBuilder、Agent）再跑全量。
+- 守护进程崩了就 `./gradlew --stop` 再来。
 

@@ -83,6 +83,8 @@ android {
             System.getenv("ROBOLECTRIC_REPO")?.let { t.systemProperty("robolectric.dependency.repo.url", it) }
             // 测试里有中文文件名：系统语言不是 UTF-8 的机器上（比如云端容器）会被写成「????」，固定成 UTF-8
             t.environment("LC_ALL", "C.UTF-8")
+            // 测试分两个进程同时跑（Robolectric 每个进程要 1～2G 内存，CI 机器 4 核 16G，两个正好）
+            t.maxParallelForks = (Runtime.getRuntime().availableProcessors() / 2).coerceIn(1, 2)
         }
     }
     packaging {

@@ -126,6 +126,12 @@ jobs:
           name: Kavi-apk
           path: Kavi-*.apk
 
+      # 源码包按 sources.lock 缓存：版本不变就不用每次重新下载（以前这一步要 3 分多钟）
+      - uses: actions/cache@v4
+        with:
+          path: build/gpl-cache
+          key: gpl-sources-${{ hashFiles('third-party/mika-sandbox/sources.lock') }}
+
       # Linux 沙箱带的 PRoot（GPL-2.0）和 talloc（LGPL-3.0）：每次发版把对应源码、补丁、编译脚本和许可证一起发出去
       - name: Pack GPL sources
         run: |
@@ -135,7 +141,12 @@ jobs:
           rm -rf "$OUT" && mkdir -p "$OUT"
           while read -r name version url sum; do
             case "$name" in ''|'#'*) continue ;; esac
-            curl -fsSL --retry 3 "$url" -o "$OUT/$name-$version.tar.gz"
+            mkdir -p build/gpl-cache
+            CACHED="build/gpl-cache/$name-$version.tar.gz"
+            if ! echo "$sum  $CACHED" | sha256sum -c - >/dev/null 2>&1; then
+              curl -fsSL --retry 3 "$url" -o "$CACHED"
+            fi
+            cp "$CACHED" "$OUT/$name-$version.tar.gz"
             echo "$sum  $OUT/$name-$version.tar.gz" | sha256sum -c -
           done < third-party/mika-sandbox/sources.lock
           cp -R third-party/mika-sandbox/. "$OUT/"
