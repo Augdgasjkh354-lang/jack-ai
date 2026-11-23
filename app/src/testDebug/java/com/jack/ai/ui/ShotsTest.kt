@@ -180,6 +180,21 @@ class ShotsTest {
     }
 
     @Test
+    fun projectFiles() {
+        Assume.assumeTrue(System.getenv("SHOTS_DIR") != null)
+        val app = RuntimeEnvironment.getApplication() as Application
+        val p = com.jack.ai.data.Project(id = "shot1", name = "小工具")
+        val root = com.jack.ai.data.Workspace.dir(app, "p_shot1")
+        com.jack.ai.data.ProjectTree.Template.WEB.apply(root)
+        root.resolve("src").mkdirs(); root.resolve("src/app.py").writeText("print(1)\n".repeat(200))
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            JackTheme(dark()) { androidx.compose.material3.Surface { ProjectFiles(p, androidx.compose.foundation.layout.PaddingValues(), {}) } }
+        }
+        save("project-files-" + dark().name.lowercase())
+    }
+
+    @Test
     fun memoryGraph() {
         Assume.assumeTrue(System.getenv("SHOTS_DIR") != null)
         fun m(t: String, vararg a: String) = com.jack.ai.data.MemoryItem(text = t, about = a.toList())

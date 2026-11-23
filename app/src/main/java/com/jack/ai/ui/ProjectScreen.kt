@@ -70,7 +70,7 @@ import com.jack.ai.data.Project
 import com.jack.ai.data.memory.ChatMemory
 
 /** 项目页的三个标签：聊天、资料（项目说明以外的背景材料）、记忆（Kavi 自己维护的设定、决定、进度、待办）。 */
-private enum class ProjectTab(val label: String) { CHATS("聊天"), SOURCES("资料"), MEMORY("记忆") }
+private enum class ProjectTab(val label: String) { CHATS("聊天"), FILES("文件"), SOURCES("资料"), MEMORY("记忆") }
 
 /**
  * 项目页：顶上图标和名字、右上角菜单（置顶、编辑项目、编辑指令、记忆方式、删除），下面三个标签，
@@ -84,6 +84,8 @@ fun ProjectScreen(
     projectId: String,
     onBack: () -> Unit,
     onOpenChat: () -> Unit,
+    /** 在项目文件夹里开终端（参数是 Workspace 的 key）。 */
+    onOpenTerminal: (String) -> Unit = {},
 ) {
     val project = state.project(projectId)
     if (project == null) {
@@ -197,6 +199,7 @@ fun ProjectScreen(
                             }
                         }
                     }
+                    ProjectTab.FILES -> ProjectFiles(project, padding, onOpenTerminal)
                     ProjectTab.SOURCES -> ProjectSources(vm, state, project, padding)
                     ProjectTab.MEMORY -> ProjectMemoryTab(vm, project, padding)
                 }

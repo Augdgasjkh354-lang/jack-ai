@@ -345,13 +345,15 @@ class MainActivity : FragmentActivity() {
                             canLock = ::canLock,
                             onOpenTerminal = { stack.add(Screen.Terminal()) },
                         )
-                        is Screen.Terminal -> com.jack.ai.ui.TerminalScreen(folder = screen.folder, title = state.current?.title.orEmpty(), onBack = back)
+                        is Screen.Terminal -> com.jack.ai.ui.TerminalScreen(folder = screen.folder,
+                            title = screen.folder.removePrefix("p_").let { id -> state.project(id)?.name } ?: state.current?.title.orEmpty(), onBack = back)
                         is Screen.ProjectPage -> ProjectScreen(
                             vm = vm,
                             state = state,
                             projectId = screen.id,
                             onBack = back,
                             onOpenChat = { stack.clear() },
+                            onOpenTerminal = { stack.add(Screen.Terminal(it)) },
                         )
                     }
                 }
