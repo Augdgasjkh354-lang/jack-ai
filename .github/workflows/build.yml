@@ -95,6 +95,8 @@ jobs:
 
       - name: Build
         run: |
+          # Linux 沙箱的三个程序在仓库里：先核对和 Mika 固定版本的产物一模一样（README 里的 SHA-256）
+          sha256sum -c third-party/mika-sandbox/binaries.sha256
           chmod +x gradlew
           set -o pipefail
           # 出错时把关键报错写成注释，方便在网页上直接看到
@@ -126,13 +128,8 @@ jobs:
           name: Kavi-apk
           path: Kavi-*.apk
 
-      # 源码包按 sources.lock 缓存：版本不变就不用每次重新下载（以前这一步要 3 分多钟）
-      - uses: actions/cache@v4
-        with:
-          path: build/gpl-cache
-          key: gpl-sources-${{ hashFiles('third-party/mika-sandbox/sources.lock') }}
-
-      # Linux 沙箱带的 PRoot（GPL-2.0）和 talloc（LGPL-3.0）：每次发版把对应源码、补丁、编译脚本和许可证一起发出去
+      # Linux 沙箱带的 PRoot（GPL-2.0）和 talloc（LGPL-3.0）：每次发版把对应源码、补丁、编译脚本和许可证一起发出去。
+      # 源码包就放在仓库里（third-party/mika-sandbox/sources/），不用每次去官网下载；这里只核对一遍 SHA-256
       - name: Pack GPL sources
         run: |
           set -euo pipefail
@@ -141,13 +138,7 @@ jobs:
           rm -rf "$OUT" && mkdir -p "$OUT"
           while read -r name version url sum; do
             case "$name" in ''|'#'*) continue ;; esac
-            mkdir -p build/gpl-cache
-            CACHED="build/gpl-cache/$name-$version.tar.gz"
-            if ! echo "$sum  $CACHED" | sha256sum -c - >/dev/null 2>&1; then
-              curl -fsSL --retry 3 "$url" -o "$CACHED"
-            fi
-            cp "$CACHED" "$OUT/$name-$version.tar.gz"
-            echo "$sum  $OUT/$name-$version.tar.gz" | sha256sum -c -
+            echo "$sum  third-party/mika-sandbox/sources/$name-$version.tar.gz" | sha256sum -c -
           done < third-party/mika-sandbox/sources.lock
           cp -R third-party/mika-sandbox/. "$OUT/"
           tar -czf "$NAME.tar.gz" -C build/gpl-sources "$NAME"

@@ -5,7 +5,10 @@ local.properties
 *.iml
 .DS_Store
 .kotlin/
-app/src/main/jniLibs/
+# 代理内核和转发组件每次打包时编译（见 build.yml），不进仓库；
+# Linux 沙箱的三个程序（libproot、libproot_loader、libmikarun）进仓库，见 third-party/mika-sandbox/README.md
+app/src/main/jniLibs/arm64-v8a/libsingbox.so
+app/src/main/jniLibs/arm64-v8a/libhev-socks5-tunnel.so
 
 # 签名密钥：只放在 GitHub Secrets 和 Jack 自己手里，永远不进仓库
 .signing/

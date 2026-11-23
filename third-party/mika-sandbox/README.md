@@ -6,8 +6,8 @@ Kavi 的 Linux 沙箱（设置 → Linux 沙箱）参考 Mika（https://github.c
 
 ## 随 APK 带的三个程序
 
-都在 `app/src/main/jniLibs/arm64-v8a/`，随 APK 装到 `nativeLibraryDir`。Kavi 只以子进程方式运行它们，不链接它们。
-文件与 Mika 同一提交里的产物逐字节相同：
+都在 `app/src/main/jniLibs/arm64-v8a/`（提交在仓库里；同目录的代理内核是打包时编的，不进仓库），随 APK 装到 `nativeLibraryDir`。
+Kavi 只以子进程方式运行它们，不链接它们。文件与 Mika 同一提交里的产物逐字节相同，打包前按 `binaries.sha256` 核对：
 
 | 文件 | 是什么 | 许可证 | SHA-256 |
 |---|---|---|---|
@@ -17,7 +17,7 @@ Kavi 的 Linux 沙箱（设置 → Linux 沙箱）参考 Mika（https://github.c
 
 - PRoot：Copyright (C) 2015 STMicroelectronics，作者名单见源码包内 `AUTHORS`。全文 `GPL-2.0.txt`。
 - talloc：Copyright (C) Andrew Tridgell 2004；Copyright (C) Stefan Metzmacher 2006。全文 `LGPL-3.0.txt`（附加在 `GPL-3.0.txt` 之上）。
-- 源码包地址与 SHA-256 在 `sources.lock`；补丁在 `patches/`（跟随 PRoot 的 GPL-2.0-or-later）；编译脚本 `build-native.sh` 原样取自 Mika
+- 两个源码包就放在 `sources/` 里（打包时不联网下载，只按 `sources.lock` 核对 SHA-256），原地址也记在 `sources.lock`；补丁在 `patches/`（跟随 PRoot 的 GPL-2.0-or-later）；编译脚本 `build-native.sh` 原样取自 Mika
   （脚本里的路径按 Mika 仓库的布局：`tools/sandbox/` 对应这里）。
 - 每次发版，打包流程把这两个源码包、补丁、编译脚本和许可证打成 `Kavi-<版本>-gpl-sources.tar.gz`，和 APK 放在同一个发布页
   （见 `.github/workflows/build.yml`）。
