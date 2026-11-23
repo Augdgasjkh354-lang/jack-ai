@@ -241,19 +241,21 @@ fun ChatScreen(
             )
         },
     ) {
+        // 毛玻璃：消息那一层是被模糊的底，顶栏、输入框和上面的圆按钮从它取模糊
+        val glass = remember { dev.chrisbanes.haze.HazeState() }
+        androidx.compose.runtime.CompositionLocalProvider(LocalGlass provides glass) {
         Scaffold(
             containerColor = bg,
             snackbarHost = { androidx.compose.material3.SnackbarHost(snackbar) },
             topBar = {
                 Column {
-                // 顶栏透明：标题那一段背景几乎不透（滚上来的消息不和标题、模型名叠在一起看不清），只在最下面一小段淡出到全透明
+                // 顶栏是一条渐变的毛玻璃：靠屏幕顶的地方最糊，往下渐渐变清楚，滚上来的消息不和标题、模型名叠在一起看不清
                 CenterAlignedTopAppBar(
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                         containerColor = Color.Transparent, scrolledContainerColor = Color.Transparent,
                     ),
                     // 空白页没有消息会滚上来，顶栏全透明，让那一角天露出来
-                    modifier = if (conv == null || conv.messages.isEmpty()) Modifier
-                        else Modifier.background(Brush.verticalGradient(0f to bg, 0.8f to bg.copy(alpha = 0.96f), 1f to bg.copy(alpha = 0f))),
+                    modifier = if (conv == null || conv.messages.isEmpty()) Modifier else Modifier.glassBar(top = true),
                     title = {
                         // 中间一个胶囊：对话标题，下面是模型名，点一下换模型
                         ModelPicker(conv?.takeIf { it.messages.isNotEmpty() }?.title ?: "Kavi", state.settings, project?.name) { m -> vm.updateSettings { it.copy(model = m) } }
@@ -282,7 +284,7 @@ fun ChatScreen(
                         Text("Kavi 结束了这个对话：${conv.closedReason}", style = MaterialTheme.typography.bodyMedium)
                         androidx.compose.material3.OutlinedButton(onClick = { vm.newChat(state.currentProjectId) }) { Text("开一个新对话") }
                     }
-                } else InputBar(
+                } else Box(if (conv == null || conv.messages.isEmpty()) Modifier else Modifier.glassBar(top = false)) { InputBar(
                     vm = vm,
                     state = state,
                     text = text,
@@ -295,11 +297,11 @@ fun ChatScreen(
                         Toast.makeText(ctx, "请先在 设置 → 连接 → 联网搜索 里填 Exa 或 Tavily 的 Key", Toast.LENGTH_LONG).show()
                         onOpenSettings()
                     },
-                )
+                ) }
             },
         ) { padding ->
             // 消息铺满整屏，从上下两个半透明的框后面滚过去
-            Box(Modifier.fillMaxSize().swipeToOpen { scope.launch { drawerState.open() } }) {
+            GlassSource(glass, Modifier.fillMaxSize().swipeToOpen { scope.launch { drawerState.open() } }) {
                 // Kavi 在用浏览器、回答里的实时画面又不在屏幕上时，网页窗口的落点（看不见，垫在消息下面、顶栏后面）
                 BrowserHiddenHost(Modifier.align(Alignment.TopStart).padding(top = padding.calculateTopPadding() / 2), working = state.streaming, convId = conv?.id.orEmpty())
                 if (conv == null || conv.messages.isEmpty()) {
@@ -315,6 +317,7 @@ fun ChatScreen(
                     })
                 }
             }
+        }
         }
     }
     memoryOf?.let { c -> ConversationMemoryDialog(vm, c) { memoryOf = null } }
@@ -400,7 +403,7 @@ private fun ModelPicker(title: String, settings: Settings, projectName: String?,
     Box {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.pressScale(press, 0.95f).heightIn(min = 42.dp).clip(CircleShape).background(raisedColor).hairline(CircleShape)
+            modifier = Modifier.pressScale(press, 0.95f).heightIn(min = 42.dp).glass(CircleShape)
                 .clickable(interactionSource = press, indication = androidx.compose.foundation.LocalIndication.current) { open = true }
                 .padding(horizontal = 18.dp, vertical = 4.dp),
             verticalArrangement = Arrangement.Center,
@@ -522,10 +525,9 @@ private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolea
             enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.scaleIn(initialScale = 0.7f),
             exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.scaleOut(targetScale = 0.7f),
         ) {
-            androidx.compose.material3.SmallFloatingActionButton(
-                onClick = { follow.on = true; scope.launch { val n = listState.layoutInfo.totalItemsCount; if (n > 0) listState.animateScrollToItem(n - 1, Int.MAX_VALUE) } },
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            ) { Icon(Icons.Default.KeyboardArrowDown, "回到底部") }
+            CircleIconButton(Icons.Default.KeyboardArrowDown, "回到底部", size = 40.dp) {
+                follow.on = true; scope.launch { val n = listState.layoutInfo.totalItemsCount; if (n > 0) listState.animateScrollToItem(n - 1, Int.MAX_VALUE) }
+            }
         }
     }
 }

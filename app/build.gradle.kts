@@ -133,6 +133,8 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-test-manifest")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
+    // 毛玻璃：顶栏、输入框、圆按钮后面的消息真的被模糊（Android 12 起；更老的系统退成半透明）
+    implementation("dev.chrisbanes.haze:haze:1.2.2")
     implementation("androidx.compose.material:material-icons-core")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.activity:activity-compose:1.9.3")

@@ -67,6 +67,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.jack.ai.R
+import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.hazeSource
 
 /**
  * 全 App 共用的那套样子：圆角、分类色、代码字体、动效、触感。
@@ -230,12 +232,86 @@ fun Switch(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?, modifier: Mo
     )
 }
 
+/**
+ * 毛玻璃。整屏会滚动的内容挂 [glassSource]，浮在它上面的东西（顶栏、输入框、圆按钮、标题胶囊）用 [glass]：
+ * 后面的消息真的被模糊，再压一层半透明的灰（Android 12 起；更老的系统退成一层更不透明的灰）。
+ * 没有可模糊的底时（设置页、侧边栏，或者自己就在可滚动内容里面），[glass] 退成一层很淡的半透明。
+ */
+val LocalGlass = androidx.compose.runtime.staticCompositionLocalOf<dev.chrisbanes.haze.HazeState?> { null }
+
+/** 玻璃片的颜色：浅色是带一点灰的白，深色是比纯黑亮几档的灰；再撒一点颗粒，像磨砂而不是糊开。 */
+@Composable
+fun glassStyle(): dev.chrisbanes.haze.HazeStyle {
+    val dark = isDarkSurface
+    val tint = if (dark) Color(0xFF2A2A2D) else Color(0xFFF2F2F4)
+    return dev.chrisbanes.haze.HazeStyle(
+        backgroundColor = MaterialTheme.colorScheme.background,
+        tint = dev.chrisbanes.haze.HazeTint(tint.copy(alpha = if (dark) 0.55f else 0.68f)),
+        blurRadius = 20.dp,
+        noiseFactor = 0.05f,
+        fallbackTint = dev.chrisbanes.haze.HazeTint(tint.copy(alpha = 0.92f)),
+    )
+}
+
+/** 顶栏、输入框后面那一整条：颜色和底色一样，只是半透明加模糊，消息滚进去是渐渐糊掉，不是一刀切掉。 */
+@Composable
+fun barStyle(): dev.chrisbanes.haze.HazeStyle {
+    val bg = MaterialTheme.colorScheme.background
+    return dev.chrisbanes.haze.HazeStyle(
+        backgroundColor = bg,
+        tint = dev.chrisbanes.haze.HazeTint(bg.copy(alpha = 0.72f)),
+        blurRadius = 24.dp,
+        noiseFactor = 0f,
+        fallbackTint = dev.chrisbanes.haze.HazeTint(bg.copy(alpha = 0.94f)),
+    )
+}
+
+/** 没有可模糊的底时，玻璃退成这层淡淡的半透明。 */
+val glassFill: Color
+    @Composable @ReadOnlyComposable get() = if (isDarkSurface) Color.White.copy(alpha = 0.10f) else Color.Black.copy(alpha = 0.045f)
+
+/** 玻璃的边：上沿亮、下沿淡，像光从上面打下来。 */
+@Composable
+@ReadOnlyComposable
+fun glassEdge(): Brush = if (isDarkSurface) Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.20f), Color.White.copy(alpha = 0.05f)))
+    else Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.04f), Color.Black.copy(alpha = 0.09f)))
+
+/** 会被模糊的那层内容。里面的东西自己不再取模糊（自己模糊自己会套娃），退成半透明。 */
+@Composable
+fun GlassSource(state: dev.chrisbanes.haze.HazeState, modifier: Modifier = Modifier, content: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit) {
+    Box(modifier.hazeSource(state)) {
+        androidx.compose.runtime.CompositionLocalProvider(LocalGlass provides null) { content() }
+    }
+}
+
+/** 一片玻璃：裁成 [shape]、模糊后面的内容、描一道上亮下淡的边。 */
+fun Modifier.glass(shape: Shape): Modifier = composed {
+    val haze = LocalGlass.current
+    val clipped = clip(shape)
+    (if (haze != null) clipped.hazeEffect(haze, glassStyle()) else clipped.background(glassFill))
+        .border(0.8.dp, glassEdge(), shape)
+}
+
+/**
+ * 顶栏 / 底栏后面那条渐变的玻璃：靠屏幕边的一头最糊，往内容那头渐渐变清楚。
+ * [top] 为 true 时是顶栏（上糊下清），否则是底栏（下糊上清）。
+ */
+fun Modifier.glassBar(top: Boolean): Modifier = composed {
+    val haze = LocalGlass.current ?: return@composed this
+    hazeEffect(haze, barStyle()) {
+        progressive = dev.chrisbanes.haze.HazeProgressive.verticalGradient(
+            startIntensity = if (top) 1f else 0f, endIntensity = if (top) 0f else 1f,
+            easing = androidx.compose.animation.core.LinearEasing,
+        )
+    }
+}
+
 /** 浮在底色上面的那一层（圆按钮、胶囊、输入框、弹出菜单）用的颜色：深色是比纯黑亮一档的灰，浅色是很浅的灰。 */
 val raisedColor: Color
     @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.let { if (isDarkSurface) it.surfaceContainerHigh else it.surfaceContainer }
 
 /**
- * 圆形的图标按钮：一块比底色亮一点的圆，深色模式描一道淡边；按下去缩一下、轻轻震一下。
+ * 圆形的图标按钮：一片圆的毛玻璃；按下去缩一下、轻轻震一下。
  * 顶栏的菜单、新对话这类都用它。
  */
 @Composable
@@ -244,7 +320,7 @@ fun CircleIconButton(icon: ImageVector, label: String, modifier: Modifier = Modi
     val press = remember { MutableInteractionSource() }
     val haptics = rememberHaptics()
     Box(
-        modifier.pressScale(press, 0.9f).size(size).clip(CircleShape).background(raisedColor).hairline(CircleShape)
+        modifier.pressScale(press, 0.9f).size(size).glass(CircleShape)
             .clickable(interactionSource = press, indication = androidx.compose.foundation.LocalIndication.current, enabled = enabled) { haptics.tick(); onClick() },
         contentAlignment = Alignment.Center,
     ) {

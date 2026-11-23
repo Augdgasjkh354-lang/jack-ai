@@ -12,6 +12,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -388,13 +389,12 @@ internal fun InputBar(
         }
         Surface(
             shape = Radii.xl,
-            // 浮在消息上面的一个大胶囊：左边加号，中间打字，右边一个圆按钮（话筒 / 发送 / 停止）
-            color = if (dark) colors.surfaceContainerHigh else colors.surfaceContainerLowest,
-            border = BorderStroke(1.dp, if (dark) Color.White.copy(alpha = 0.08f) else colors.outlineVariant),
-            shadowElevation = if (dark) 0.dp else 6.dp,
-            modifier = Modifier.fillMaxWidth(),
+            // 浮在消息上面的一个毛玻璃大胶囊：左边加号，中间打字，右边一个圆按钮（话筒 / 发送 / 停止）
+            color = Color.Transparent,
+            modifier = Modifier.fillMaxWidth().glass(Radii.xl),
         ) {
-            Column(Modifier.padding(6.dp)) {
+            // 加了附件、打字换行时胶囊平滑地长高，不是一下子跳上去
+            Column(Modifier.animateContentSize(androidx.compose.animation.core.spring(stiffness = 700f)).padding(6.dp)) {
                 if (state.pending.isNotEmpty() || state.importing || showClip) {
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -567,7 +567,7 @@ internal fun InputBar(
                                     onClick = { haptics.tick(); if (edit) onSubmitEdit() else if (vm.send(text)) onTextChange("") },
                                     enabled = canSend,
                                     shape = CircleShape,
-                                    color = if (canSend) colors.primary else colors.surfaceVariant,
+                                    color = if (canSend) colors.primary else colors.onSurface.copy(alpha = 0.08f),
                                     modifier = Modifier.size(42.dp),
                                     interactionSource = sendPress,
                                 ) {

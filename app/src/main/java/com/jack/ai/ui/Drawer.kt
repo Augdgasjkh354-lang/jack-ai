@@ -251,7 +251,7 @@ fun HistoryDrawer(
                 else {
                     val settingsPress = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
                     Box(
-                        Modifier.pressScale(settingsPress, 0.9f).size(42.dp).clip(androidx.compose.foundation.shape.CircleShape).background(raisedColor).hairline(androidx.compose.foundation.shape.CircleShape)
+                        Modifier.pressScale(settingsPress, 0.9f).size(42.dp).glass(androidx.compose.foundation.shape.CircleShape)
                             .clickable(interactionSource = settingsPress, indication = androidx.compose.foundation.LocalIndication.current) { haptics.tick(); onSettings() },
                         contentAlignment = Alignment.Center,
                     ) { Text(name.take(1), style = MaterialTheme.typography.titleSmall, color = colors.onSurface) }
@@ -485,7 +485,7 @@ internal fun searchConversations(all: List<Conversation>, query: String): List<P
 @Composable
 private fun SearchField(value: String, onChange: (String) -> Unit, modifier: Modifier = Modifier, focus: androidx.compose.ui.focus.FocusRequester? = null) {
     val colors = MaterialTheme.colorScheme
-    Surface(shape = androidx.compose.foundation.shape.CircleShape, color = raisedColor, modifier = modifier.fillMaxWidth()) {
+    Surface(shape = androidx.compose.foundation.shape.CircleShape, color = Color.Transparent, modifier = modifier.fillMaxWidth().glass(androidx.compose.foundation.shape.CircleShape)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 16.dp)) {
             Icon(Icons.Default.Search, null, Modifier.size(20.dp), tint = colors.onSurfaceVariant)
             Spacer(Modifier.size(10.dp))
