@@ -117,6 +117,24 @@ fun ProxySection(vm: ChatViewModel, s: Settings) {
                 }
             }
         }
+        // OpenAI / ChatGPT 单独选出口：它不对香港、大陆等地开放，自动选最快的又常常挑到香港
+        var pickingAi by remember { mutableStateOf(false) }
+        Box {
+            OutlinedButton(onClick = { pickingAi = true }, modifier = Modifier.fillMaxWidth()) {
+                Text("GPT / ChatGPT 走：" + s.proxyOpenAi.ifBlank { "自动（避开香港等不支持的地区）" }, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            DropdownMenu(expanded = pickingAi, onDismissRequest = { pickingAi = false }) {
+                DropdownMenuItem(text = { Text("自动（避开香港等不支持的地区）") }, onClick = { pickingAi = false; vm.updateSettings { it.copy(proxyOpenAi = "") } })
+                s.proxyNodes.forEach { n ->
+                    val blocked = com.jack.ai.data.NodeRegion.blockedByOpenAi(n.name)
+                    DropdownMenuItem(text = { Text(n.name + if (blocked) "  ·  OpenAI 可能不让用" else "", color = if (blocked) colors.error else colors.onSurface) },
+                        onClick = { pickingAi = false; vm.updateSettings { it.copy(proxyOpenAi = n.name) } })
+                }
+            }
+        }
+        if (s.proxyNodes.isNotEmpty() && s.proxyNodes.all { com.jack.ai.data.NodeRegion.blockedByOpenAi(it.name) }) Text(
+            "看节点名，这些都在香港、大陆等 OpenAI 不开放的地区，用 GPT 和 ChatGPT 登录会被拦。要加一个美国、日本、新加坡、台湾等地的节点。",
+            style = MaterialTheme.typography.bodySmall, color = colors.error)
     }
     // 双跳：先连第一跳，再从它连到上面选的出口节点
     if (s.proxyNodes.size > 1) {

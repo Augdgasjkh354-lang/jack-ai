@@ -381,6 +381,8 @@ data class Settings(
     val proxyNode: String = "",
     /** 双跳的第一跳：先连这个节点，再从它连到 proxyNode（出口）。空 = 不用双跳。 */
     val proxyEntry: String = "",
+    /** OpenAI / ChatGPT 的请求走哪个节点；空 = 自动（只在 OpenAI 支持的地区里挑，避开香港等）。 */
+    val proxyOpenAi: String = "",
     /** 按 App 分流：这些 App 也走 Kavi 专用代理（系统 VPN，只管它们）；proxyAppsOn 是开关。 */
     val proxyApps: List<String> = emptyList(),
     val proxyAppsOn: Boolean = false,

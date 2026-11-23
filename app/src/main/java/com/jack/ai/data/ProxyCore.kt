@@ -60,8 +60,30 @@ object ProxyCore {
      * Kavi → 第一跳 → 出口 → 网站。第一跳只看到你连了出口节点，看不到你访问的网站；出口和网站只看到第一跳的地址，看不到你的。
      * 「自动选最快」也在这些双跳线路里挑（测的是整条线路的速度）。
      */
-    fun config(nodes: List<ProxyNode>, selected: String, port: Int, user: String, pass: String, hardened: Boolean = true, entry: String = ""): String = buildJsonObject {
+    /**
+     * OpenAI / ChatGPT 的流量走哪个出口：用户指定的节点；没指定就在 OpenAI 支持的地区里自动挑（见 [NodeRegion]）。
+     * 返回 null 表示不另走（和别的流量一样）：没有能挑的，或者挑出来的就是平常的出口。
+     */
+    fun openAiTag(nodes: List<ProxyNode>, selected: String, entry: String, openAi: String, hardened: Boolean): String? {
         val hop = entryIndex(nodes, entry)
+        fun exitTag(i: Int) = if (hop >= 0 && i != hop) "c$i" else "n$i"
+        val chosen = nodes.indexOfFirst { it.name == openAi }
+        if (chosen >= 0) return exitTag(chosen).takeIf { it != tagFor(nodes, selected, entry) }
+        val main = nodes.indexOfFirst { it.name == selected }
+        // 平常的出口本身就在支持的地区：不用另走
+        if (main >= 0 && !NodeRegion.blockedByOpenAi(nodes[main].name)) return null
+        val pool = (if (hardened) NodeSecurity.autoPool(nodes) else nodes.indices.toList()).filter { it != hop && !NodeRegion.blockedByOpenAi(nodes[it].name) }
+            .ifEmpty { nodes.indices.filter { it != hop && !NodeRegion.blockedByOpenAi(nodes[it].name) } }
+        return when {
+            pool.isEmpty() -> null
+            pool.size == 1 -> exitTag(pool[0])
+            else -> "openai"
+        }
+    }
+
+    fun config(nodes: List<ProxyNode>, selected: String, port: Int, user: String, pass: String, hardened: Boolean = true, entry: String = "", openAi: String = ""): String = buildJsonObject {
+        val hop = entryIndex(nodes, entry)
+        val aiTag = openAiTag(nodes, selected, entry, openAi, hardened)
         fun exitTag(i: Int) = if (hop >= 0) "c$i" else "n$i"
         put("log", buildJsonObject { put("level", "warn") })
         put("dns", buildJsonObject {
@@ -89,6 +111,14 @@ object ProxyCore {
                 put("outbounds", JsonArray(pool.map { JsonPrimitive(exitTag(it)) }))
                 put("url", "https://www.gstatic.com/generate_204"); put("interval", "10m")
             })
+            // OpenAI 专用的「自动选最快」：只在 OpenAI 支持的地区里挑（自动选最快的往往是香港，OpenAI 不对香港开放）
+            if (aiTag == "openai") add(buildJsonObject {
+                put("type", "urltest"); put("tag", "openai")
+                val pool = (if (hardened) NodeSecurity.autoPool(nodes) else nodes.indices.toList()).filter { it != hop && !NodeRegion.blockedByOpenAi(nodes[it].name) }
+                    .ifEmpty { nodes.indices.filter { it != hop && !NodeRegion.blockedByOpenAi(nodes[it].name) } }
+                put("outbounds", JsonArray(pool.map { JsonPrimitive(exitTag(it)) }))
+                put("url", "https://www.gstatic.com/generate_204"); put("interval", "10m")
+            })
             nodes.forEachIndexed { i, n -> add(ProxyNodes.outbound(n, "n$i")) }
             if (hop >= 0) nodes.forEachIndexed { i, n ->
                 if (i != hop) add(kotlinx.serialization.json.JsonObject(ProxyNodes.outbound(n, "c$i") + ("detour" to JsonPrimitive("n$hop"))))
@@ -96,6 +126,12 @@ object ProxyCore {
             add(buildJsonObject { put("type", "direct"); put("tag", "direct") })
         })
         put("route", buildJsonObject {
+            if (aiTag != null) put("rules", buildJsonArray {
+                add(buildJsonObject {
+                    put("domain_suffix", JsonArray(com.jack.ai.api.Net.ALWAYS_PROXY.map { JsonPrimitive(it) }))
+                    put("outbound", aiTag)
+                })
+            })
             put("final", tagFor(nodes, selected, entry))
             put("default_domain_resolver", "dns")
         })
@@ -116,9 +152,9 @@ object ProxyCore {
      * 确保内核在跑、而且用的是现在的节点设置；没在跑或设置变了就（重新）启动。成功返回 true。
      * binary 是内核程序，workDir 放配置文件。会阻塞最多几秒，不要在主线程调。
      */
-    fun ensure(binary: File, workDir: File, nodes: List<ProxyNode>, selected: String, hardened: Boolean = true, entry: String = ""): Boolean = synchronized(lock) {
+    fun ensure(binary: File, workDir: File, nodes: List<ProxyNode>, selected: String, hardened: Boolean = true, entry: String = "", openAi: String = ""): Boolean = synchronized(lock) {
         if (nodes.isEmpty()) { lastError = "还没有导入节点"; return false }
-        val key = nodes.joinToString("|") { it.outbound } + "#" + selected + "#" + hardened + "#" + entry
+        val key = nodes.joinToString("|") { it.outbound } + "#" + selected + "#" + hardened + "#" + entry + "#" + openAi
         if (running?.isAlive == true && key == runningKey) return true
         stopLocked()
         if (!binary.exists()) { lastError = "这个安装包里没有代理内核"; return false }
@@ -126,7 +162,7 @@ object ProxyCore {
         val p = freePort()
         val u = token()
         val pw = token()
-        val cfg = File(workDir, "config.json").apply { writeText(config(nodes, selected, p, u, pw, hardened, entry)) }
+        val cfg = File(workDir, "config.json").apply { writeText(config(nodes, selected, p, u, pw, hardened, entry, openAi)) }
         synchronized(log) { log.clear() }
         val proc = try {
             ProcessBuilder(binary.absolutePath, "run", "-c", cfg.absolutePath, "-D", workDir.absolutePath, "--disable-color")
@@ -170,3 +206,20 @@ object ProxyCore {
         runningKey = ""
     }
 }
+
+/**
+ * 按节点名猜地区。OpenAI 不对中国大陆、香港、澳门、俄罗斯、伊朗等地开放，从这些地区的出口连 chatgpt.com / auth.openai.com
+ * 会被拦（「Unable to load site … If you are using a VPN, try turning it off」）。节点名里一般写着地区，按名字认。
+ */
+object NodeRegion {
+    private val BLOCKED_WORDS = listOf("香港", "港", "澳门", "中国", "回国", "大陆", "俄罗斯", "伊朗", "朝鲜", "叙利亚", "古巴",
+        "hong kong", "hongkong", "macau", "macao", "china", "russia", "iran", "🇭🇰", "🇲🇴", "🇨🇳", "🇷🇺", "🇮🇷")
+    /** 两三个字母的地区缩写：前后不能连着别的字母（免得 RU 认成 TRUE 里的一段）。 */
+    private val BLOCKED_CODES = Regex("(?i)(^|[^a-z])(hk|hkg|mo|cn|chn|ru|rus|ir)([^a-z]|$)")
+
+    fun blockedByOpenAi(name: String): Boolean {
+        val n = name.lowercase()
+        return BLOCKED_WORDS.any { it in n } || BLOCKED_CODES.containsMatchIn(name)
+    }
+}
+

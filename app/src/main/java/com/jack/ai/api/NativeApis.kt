@@ -722,7 +722,7 @@ internal object ResponsesApi {
         val detail = err?.get("message").str().ifBlank { o?.get("detail").str() }.ifBlank { body.orEmpty().take(200) }
         val text = when (status) {
             401 -> "ChatGPT 不认这次登录（401），到 设置 → 模型服务 里重新登录试试。"
-            403 -> "ChatGPT 拒绝了这次请求（403）：${detail.ifBlank { "可能是所在地区不支持" }}"
+            403 -> "ChatGPT 拒绝了这次请求（403）：${detail.ifBlank { "多半是代理节点所在的地区 OpenAI 不支持（比如香港），到 设置 → Kavi 专用代理 把「GPT / ChatGPT 走」换成美国、日本、新加坡等地的节点" }}"
             429 -> "ChatGPT 请求太频繁或额度用完了，稍后再试。"
             503 -> "ChatGPT 那边暂时用不了（503），稍后再试。"
             else -> "ChatGPT 返回错误（$status）：$detail"

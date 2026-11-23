@@ -51,6 +51,8 @@ object Net {
         val hardened: Boolean = true,
         /** 双跳的第一跳（节点名）；空 = 不用双跳。 */
         val entry: String = "",
+        /** OpenAI / ChatGPT 走哪个节点；空 = 自动（避开 OpenAI 不支持的地区，见 NodeRegion）。 */
+        val openAi: String = "",
     )
 
     @Volatile var config = Config()
@@ -74,7 +76,7 @@ object Net {
 
     /** 设置变了（读出或保存设置时）就更新；关掉代理时顺手停掉内核。 */
     fun apply(s: Settings) {
-        val c = Config(s.proxyEnabled && s.proxyNodes.isNotEmpty(), s.proxyNodes, s.proxyNode, s.proxyHardened, s.proxyEntry)
+        val c = Config(s.proxyEnabled && s.proxyNodes.isNotEmpty(), s.proxyNodes, s.proxyNode, s.proxyHardened, s.proxyEntry, s.proxyOpenAi)
         config = c
         // 关了代理就停内核；还有节点的话 OpenAI 的请求会在要用时再拉起来
         if (!c.enabled && ProxyCore.isRunning) ProxyCore.stop()
@@ -105,6 +107,8 @@ object Net {
 
     /** 网络出错时告诉模型下一步怎么办：看代理开没开、是不是国外服务。host 不知道就填 null。 */
     fun nextStep(host: String?): String = when {
+        host != null && alwaysProxy(host) && config.nodes.isNotEmpty() && config.nodes.all { com.jack.ai.data.NodeRegion.blockedByOpenAi(it.name) } ->
+            "下一步：看节点名，现有节点都在香港、大陆等 OpenAI 不开放的地区，请用户到 设置 → Kavi 专用代理 加一个美国、日本、新加坡等地的节点。"
         host != null && alwaysProxy(host) && config.nodes.isEmpty() ->
             "下一步：$host（OpenAI / ChatGPT）国内直连不通，请用户到 设置 → Kavi 专用代理 加个节点（加了就自动走代理，不用打开开关），再重试。"
         config.enabled -> "下一步：稍后重试一次；还不行就请用户到 设置 → Kavi 专用代理 点「测试」看节点通不通，必要时换节点或更新订阅。"
@@ -116,7 +120,7 @@ object Net {
     fun ensureCore(c: Config = config): Boolean {
         val bin = binary ?: return false
         val dir = appDir ?: return false
-        return ProxyCore.ensure(bin, dir, c.nodes, c.selected, c.hardened, c.entry)
+        return ProxyCore.ensure(bin, dir, c.nodes, c.selected, c.hardened, c.entry, c.openAi)
     }
 
     /** 本机一个没人听的端口：内核起不来时把请求指到这里，宁可失败也不偷偷直连。 */

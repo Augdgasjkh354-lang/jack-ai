@@ -6,6 +6,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Base64
@@ -108,4 +109,30 @@ class ProxyNodesTest {
         assertEquals("n2", ProxyCore.tagFor(nodes, exit, "已经删掉的节点"))
         assertTrue(outbounds(exit, "").none { it["detour"] != null })
     }
+
+    @Test fun openAiAvoidsHongKongNodes() {
+        assertTrue(NodeRegion.blockedByOpenAi("🇭🇰 香港 01"))
+        assertTrue(NodeRegion.blockedByOpenAi("HK-IPLC"))
+        assertTrue(NodeRegion.blockedByOpenAi("Russia Moscow"))
+        assertFalse(NodeRegion.blockedByOpenAi("🇺🇸 美国 洛杉矶"))
+        assertFalse(NodeRegion.blockedByOpenAi("Japan Tokyo TRUE"))
+        val hk = ProxyNode("香港 01", "shadowsocks", "{\"type\":\"shadowsocks\",\"method\":\"2022-blake3-aes-128-gcm\"}")
+        val us = ProxyNode("美国 01", "shadowsocks", hk.outbound)
+        val jp = ProxyNode("日本 01", "shadowsocks", hk.outbound)
+        // 自动选最快时，OpenAI 只在美国、日本里挑
+        val cfg = Json.parseToJsonElement(ProxyCore.config(listOf(hk, us, jp), "", 1080, "u", "p")).jsonObject
+        val rule = cfg["route"]!!.jsonObject["rules"]!!.jsonArray[0].jsonObject
+        assertEquals("openai", rule["outbound"]!!.jsonPrimitive.content)
+        val ai = cfg["outbounds"]!!.jsonArray.map { it.jsonObject }.first { it["tag"]!!.jsonPrimitive.content == "openai" }
+        assertEquals(listOf("n1", "n2"), ai["outbounds"]!!.jsonArray.map { it.jsonPrimitive.content })
+        // 选了美国当出口：不用另走
+        assertEquals(null, ProxyCore.openAiTag(listOf(hk, us, jp), "美国 01", "", "", true))
+        // 选了香港当出口：OpenAI 另走
+        assertEquals("openai", ProxyCore.openAiTag(listOf(hk, us, jp), "香港 01", "", "", true))
+        // 用户指定了日本
+        assertEquals("n2", ProxyCore.openAiTag(listOf(hk, us, jp), "香港 01", "", "日本 01", true))
+        // 全是香港：没得挑
+        assertEquals(null, ProxyCore.openAiTag(listOf(hk), "", "", "", true))
+    }
 }
+

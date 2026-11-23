@@ -594,6 +594,7 @@ class Store(context: Context) {
                 runCatching { json.decodeFromString(ListSerializer(ProxyNode.serializer()), it) }.getOrNull()
             } ?: emptyList(),
             proxyNode = prefs.getString("proxyNode", "") ?: "",
+            proxyOpenAi = prefs.getString("proxyOpenAi", "") ?: "",
             proxyEntry = prefs.getString("proxyEntry", "") ?: "",
             proxyApps = prefs.getString("proxyApps", null)?.let { runCatching { json.decodeFromString(ListSerializer(String.serializer()), it) }.getOrNull() }.orEmpty(),
             proxyAppsOn = prefs.getBoolean("proxyAppsOn", false),
@@ -679,6 +680,7 @@ class Store(context: Context) {
             .putString("proxySub", Secrets.seal(s.proxySub))
             .putString("proxyNodes", Secrets.seal(json.encodeToString(ListSerializer(ProxyNode.serializer()), s.proxyNodes)))
             .putString("proxyNode", s.proxyNode)
+            .putString("proxyOpenAi", s.proxyOpenAi)
             .putString("proxyEntry", s.proxyEntry)
             .putString("proxyApps", json.encodeToString(ListSerializer(String.serializer()), s.proxyApps))
             .putBoolean("proxyAppsOn", s.proxyAppsOn)
