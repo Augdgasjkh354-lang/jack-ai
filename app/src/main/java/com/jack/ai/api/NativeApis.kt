@@ -516,6 +516,18 @@ internal object ResponsesApi {
     @Volatile var noReasoning = false
     /** 服务说不认「极高」（xhigh）后，极高按「高」发。 */
     @Volatile var noXhigh = false
+
+    /** 服务端不认 prompt_cache_key：这次进程里不再发。 */
+    @Volatile var noCacheKey = false
+
+    /**
+     * 缓存的路由键：OpenAI 按前缀自动缓存，但请求会被分到不同机器上，分散了就不命中。
+     * 同一套系统提示（前 4000 字）用同一个键，请求尽量落到同一台机器上（Codex 也是这么做的）。
+     */
+    fun cacheKey(instructions: String): String {
+        val md = java.security.MessageDigest.getInstance("SHA-1").digest(instructions.take(4000).toByteArray())
+        return "kavi-" + md.take(8).joinToString("") { "%02x".format(it) }
+    }
     /** 最近一次请求发的是不是 xhigh：报错说思考参数不对时，先怪它、降成高，不整个关掉思考。 */
     @Volatile private var sentXhigh = false
 
@@ -537,6 +549,7 @@ internal object ResponsesApi {
             put("store", false)
             put("stream", true)
             if (instructions.isNotBlank()) put("instructions", instructions)
+            if (!noCacheKey) put("prompt_cache_key", cacheKey(instructions))
             put("input", JsonArray(input))
             if (!tools.isNullOrEmpty()) put("tools", buildJsonArray {
                 tools.forEach { t ->
@@ -697,6 +710,10 @@ internal object ResponsesApi {
         val param = err?.get("param").str()
         // 思考参数不认：发的是极高就降成高再试；否则这次进程里不再发思考参数
         if (code == "subscription_sharing_usage_limit_exceeded") com.jack.ai.data.integrations.ChatGptUsage.limitHit()
+        if ("prompt_cache_key" in param || "prompt_cache_key" in message) {
+            noCacheKey = true
+            return ApiException("ChatGPT 不认缓存参数，已经去掉了，再发一次就行。", 400, code)
+        }
         val reasoningRejected = "reasoning" in param && (code == "subscription_sharing_unsupported_capability" || status == 400 || "unsupported" in code || "invalid" in code)
         if (reasoningRejected) {
             if (sentXhigh && !noXhigh) noXhigh = true else noReasoning = true
@@ -725,6 +742,10 @@ internal object ResponsesApi {
         val err = o?.get("error").obj() ?: o
         if (err?.get("code").str().isNotEmpty()) return errorOf(err, status)
         val detail = err?.get("message").str().ifBlank { o?.get("detail").str() }.ifBlank { body.orEmpty().take(200) }
+        if (status == 400 && "prompt_cache_key" in detail) {
+            noCacheKey = true
+            return ApiException("ChatGPT 不认缓存参数，已经去掉了，再发一次就行。", 400)
+        }
         val text = when (status) {
             401 -> "ChatGPT 不认这次登录（401），到 设置 → 模型服务 里重新登录试试。"
             403 -> "ChatGPT 拒绝了这次请求（403）：${detail.ifBlank { "多半是代理节点所在的地区 OpenAI 不支持（比如香港），到 设置 → Kavi 专用代理 把「GPT / ChatGPT 走」换成美国、日本、新加坡等地的节点" }}"

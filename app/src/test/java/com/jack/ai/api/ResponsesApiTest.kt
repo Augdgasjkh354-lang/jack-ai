@@ -198,5 +198,22 @@ class ResponsesApiTest {
         assertEquals(mapOf("x-ratelimit-remaining-requests" to "42"), u.headers)
         u.reset()
     }
-}
 
+    @Test
+    fun cacheKeyFollowsInstructionsAndCanBeDropped() {
+        val msgs = listOf(
+            kotlinx.serialization.json.buildJsonObject { put("role", kotlinx.serialization.json.JsonPrimitive("system")); put("content", kotlinx.serialization.json.JsonPrimitive("你是 Kavi")) },
+            kotlinx.serialization.json.buildJsonObject { put("role", kotlinx.serialization.json.JsonPrimitive("user")); put("content", kotlinx.serialization.json.JsonPrimitive("你好")) },
+        )
+        ResponsesApi.noCacheKey = false
+        val a = ResponsesApi.request(ep, "t", msgs, com.jack.ai.data.ThinkLevel.OFF, null).body
+        val b = ResponsesApi.request(ep, "t", msgs, com.jack.ai.data.ThinkLevel.OFF, null).body
+        org.junit.Assert.assertTrue(a.contains("\"prompt_cache_key\":\"kavi-"))
+        org.junit.Assert.assertEquals(a, b)
+        val e = ResponsesApi.httpError(400, """{"detail":"Unsupported parameter: prompt_cache_key"}""")
+        org.junit.Assert.assertTrue(ResponsesApi.noCacheKey)
+        org.junit.Assert.assertTrue(e.message!!.contains("再发一次"))
+        org.junit.Assert.assertFalse(ResponsesApi.request(ep, "t", msgs, com.jack.ai.data.ThinkLevel.OFF, null).body.contains("prompt_cache_key"))
+        ResponsesApi.noCacheKey = false
+    }
+}
