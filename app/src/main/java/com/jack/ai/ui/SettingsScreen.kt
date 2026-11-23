@@ -1,5 +1,14 @@
 package com.jack.ai.ui
 
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.animation.core.tween
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.foundation.layout.offset
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -95,6 +104,7 @@ fun SettingsScreen(
     onOpenSkills: () -> Unit,
     onOpenUsage: () -> Unit,
     canLock: () -> Boolean,
+    startLook: Boolean = false,
 ) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -111,7 +121,7 @@ fun SettingsScreen(
     }
 
     // null 是首页（分组列表）；还没填任何 Key 时直接打开 Key 那页
-    var page by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(if (settings.hasAnyKey()) null else SettingsPage.KEY) }
+    var page by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(if (startLook) SettingsPage.LOOK else if (settings.hasAnyKey()) null else SettingsPage.KEY) }
     androidx.activity.compose.BackHandler(enabled = page != null) { page = null }
     val homeScroll = rememberScrollState()
     val pageScroll = remember(page) { androidx.compose.foundation.ScrollState(0) }
@@ -325,16 +335,31 @@ fun SettingsScreen(
             }
 
             // ---- 外观 ----
+            if (page == SettingsPage.LOOK) {
+                // 上面一台小手机：点下面的颜色，它（和整个 App）跟着变
+                LookPreview(settings.bubbleAccent)
+                SectionTitle("主题色")
+                Section {
+                    AccentDots(settings.accent) { id -> vm.updateSettings { it.copy(accent = id) } }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("我的气泡用主题色", Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                        Switch(settings.bubbleAccent, { on -> vm.updateSettings { it.copy(bubbleAccent = on) } })
+                    }
+                }
+                SectionTitle("模式")
+                CheckList(ThemeMode.entries.map { it.label }, ThemeMode.entries.indexOf(settings.themeMode)) { i ->
+                    vm.updateSettings { it.copy(themeMode = ThemeMode.entries[i]) }
+                }
+                SectionTitle("桌面图标")
+            }
             if (page == SettingsPage.LOOK) Section {
-                ThemeTiles(settings.themeMode) { m -> vm.updateSettings { it.copy(themeMode = m) } }
-                Text("桌面图标", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     AppIcon.OPTIONS.forEach { o ->
                         val on = settings.appIcon == o.id
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier.weight(1f).clip(Radii.m)
-                                .border(if (on) 2.dp else 1.dp, if (on) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outlineVariant,
+                                .border(if (on) 2.dp else 1.dp, if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
                                     Radii.m)
                                 .clickable { if (!on) vm.updateSettings { it.copy(appIcon = o.id) } }
                                 .padding(vertical = 10.dp),
@@ -346,28 +371,6 @@ fun SettingsScreen(
                 }
                 Text("换了以后，桌面上的图标要过几秒才变；有的手机会把它挪到最后一页，或者要重新拖回原来的位置。",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("主题色", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ACCENTS.forEach { a ->
-                        val sel = settings.accent == a.id
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.clickable { vm.updateSettings { it.copy(accent = a.id) } },
-                        ) {
-                            Box(
-                                Modifier
-                                    .size(36.dp)
-                                    .clip(androidx.compose.foundation.shape.CircleShape)
-                                    .background(androidx.compose.ui.graphics.Color(a.light.first))
-                                    .then(
-                                        if (sel) Modifier.border(3.dp, MaterialTheme.colorScheme.onSurface,
-                                            androidx.compose.foundation.shape.CircleShape) else Modifier,
-                                    ),
-                            )
-                            Text(a.label, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 4.dp))
-                        }
-                    }
-                }
                 Text("字体大小（${(settings.fontScale * 100).toInt()}%）", style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 var scale by remember { mutableStateOf(settings.fontScale) }
@@ -527,37 +530,6 @@ private fun Section(hint: String? = null, content: @Composable () -> Unit) {
         hint?.let {
             Text(it, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
                 modifier = Modifier.padding(start = 6.dp, end = 6.dp, top = 6.dp))
-        }
-    }
-}
-
-/** 外观里的主题：三个小预览块（浅色、深色、跟随系统），点哪个用哪个。 */
-@Composable
-private fun ThemeTiles(selected: ThemeMode, onPick: (ThemeMode) -> Unit) {
-    val colors = MaterialTheme.colorScheme
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        ThemeMode.entries.forEach { m ->
-            val on = m == selected
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.weight(1f).clip(Radii.m)
-                    .border(if (on) 2.dp else 1.dp, if (on) colors.onSurface else colors.outlineVariant, Radii.m)
-                    .clickable { onPick(m) }.padding(10.dp),
-            ) {
-                // 小预览：一张「页面」上两道「文字」
-                val light = androidx.compose.ui.graphics.Color(0xFFF3F4F6) to androidx.compose.ui.graphics.Color(0xFFD1D5DB)
-                val darkC = androidx.compose.ui.graphics.Color(0xFF1C1C1E) to androidx.compose.ui.graphics.Color(0xFF3A3A3C)
-                Row(Modifier.fillMaxWidth().height(44.dp).clip(Radii.xs)) {
-                    listOfNotNull(if (m != ThemeMode.DARK) light else null, if (m != ThemeMode.LIGHT) darkC else null).forEach { (bg, line) ->
-                        Column(Modifier.weight(1f).fillMaxSize().background(bg).padding(8.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                            Box(Modifier.fillMaxWidth(0.8f).height(4.dp).clip(androidx.compose.foundation.shape.CircleShape).background(line))
-                            Box(Modifier.fillMaxWidth(0.55f).height(4.dp).clip(androidx.compose.foundation.shape.CircleShape).background(line))
-                        }
-                    }
-                }
-                Text(m.label, style = MaterialTheme.typography.labelMedium, fontWeight = if (on) androidx.compose.ui.text.font.FontWeight.SemiBold else null,
-                    modifier = Modifier.padding(top = 8.dp))
-            }
         }
     }
 }
@@ -861,3 +833,85 @@ private fun LinuxSandboxSection(vm: ChatViewModel) {
     )
 }
 
+/** 外观页顶上的小手机：屏幕里一个 Kavi 头像、一段对方的话、两条自己的气泡，边框和气泡跟着主题色变（颜色渐变过去）。 */
+@Composable
+private fun LookPreview(bubbleAccent: Boolean) {
+    val colors = MaterialTheme.colorScheme
+    val accent by androidx.compose.animation.animateColorAsState(colors.primary, tween(Motion.PAGE), label = "accent")
+    val mine = if (bubbleAccent) accent else colors.surfaceContainerHighest
+    val gray = colors.surfaceContainerHigh
+    Box(Modifier.fillMaxWidth().padding(top = 4.dp), contentAlignment = Alignment.TopCenter) {
+        // 手机下半截藏起来，只露上面，像从卡片里探出头
+        Box(Modifier.size(width = 150.dp, height = 176.dp).clipToBounds()) {
+            Column(
+                Modifier.size(width = 150.dp, height = 220.dp)
+                    .border(2.5.dp, accent, RoundedCornerShape(30.dp))
+                    .padding(6.dp).clip(RoundedCornerShape(25.dp)).background(colors.background)
+                    .padding(horizontal = 10.dp, vertical = 10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                AppIconTile(LocalAppIcon.current, 26.dp)
+                Text("Kavi", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+                Box(Modifier.fillMaxWidth(0.82f).height(12.dp).clip(CircleShape).background(gray).align(Alignment.Start))
+                Box(Modifier.fillMaxWidth(0.7f).height(26.dp).clip(Radii.bubbleMine).background(mine).align(Alignment.End))
+                Box(Modifier.fillMaxWidth(0.6f).height(12.dp).clip(CircleShape).background(gray).align(Alignment.Start))
+                Box(Modifier.fillMaxWidth(0.5f).height(18.dp).clip(Radii.bubbleMine).background(mine).align(Alignment.End))
+            }
+        }
+    }
+}
+
+/** 主题色：一排可以横着滑的圆点，选中的外面套一圈。 */
+@Composable
+private fun AccentDots(selected: String, onPick: (String) -> Unit) {
+    val dark = isDarkSurface
+    val haptics = rememberHaptics()
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        ACCENTS.forEach { a ->
+            val on = a.id == selected
+            val ring by androidx.compose.animation.animateColorAsState(if (on) MaterialTheme.colorScheme.onSurface else Color.Transparent, tween(Motion.QUICK), label = "ring")
+            Box(
+                Modifier.size(44.dp).clip(CircleShape).border(2.dp, ring, CircleShape)
+                    .clickable { if (!on) { haptics.tick(); onPick(a.id) } }.padding(5.dp)
+                    .clip(CircleShape).background(Color(if (dark) a.dark.first else a.light.first))
+                    .semantics { contentDescription = a.label },
+            )
+        }
+    }
+}
+
+/** 分组上面的小标题（卡片外面、灰色小字）。 */
+@Composable
+private fun SectionTitle(text: String) {
+    Text(text, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 6.dp).offset(y = 6.dp))
+}
+
+/** 一张卡片里几行单选，选中的那行末尾打勾。 */
+@Composable
+private fun CheckList(labels: List<String>, selected: Int, onPick: (Int) -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    androidx.compose.material3.Surface(
+        shape = Radii.l,
+        color = if (isDarkSurface) colors.surfaceContainerHigh else colors.surfaceContainerLowest,
+        border = androidx.compose.foundation.BorderStroke(0.8.dp, glassEdge()),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column {
+            labels.forEachIndexed { i, label ->
+                if (i > 0) androidx.compose.material3.HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = colors.outlineVariant.copy(alpha = 0.6f))
+                Row(
+                    Modifier.fillMaxWidth().clickable { if (i != selected) onPick(i) }.heightIn(min = 52.dp).padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                    androidx.compose.animation.AnimatedVisibility(i == selected, enter = androidx.compose.animation.scaleIn() + androidx.compose.animation.fadeIn(),
+                        exit = androidx.compose.animation.fadeOut()) {
+                        Icon(Icons.Default.Check, "已选", Modifier.size(20.dp), tint = colors.primary)
+                    }
+                }
+            }
+        }
+    }
+}

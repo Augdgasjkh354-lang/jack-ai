@@ -1,5 +1,7 @@
 package com.jack.ai.ui
 
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.WindowInsets
 import com.jack.ai.api.webReady
 import androidx.compose.foundation.border
 import androidx.compose.material3.OutlinedTextField
@@ -190,7 +192,7 @@ private fun RecordBar(session: com.jack.ai.RecordService.Session) {
     )
 }
 
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 internal fun InputBar(
     vm: ChatViewModel,
@@ -202,6 +204,7 @@ internal fun InputBar(
     editing: com.jack.ai.data.ChatMessage? = null,
     onCancelEdit: () -> Unit = {},
     onSubmitEdit: () -> Unit = {},
+    tabs: (@Composable () -> Unit)? = null,
 ) {
     var attachMenu by remember { mutableStateOf(false) }
     // 「@技能」「@邮箱」选择框：null 不显示
@@ -583,6 +586,12 @@ internal fun InputBar(
                 }
             }
         }
+        // 输入框下面的标签栏：打字时（键盘弹出）收起来，屏幕留给消息
+        if (tabs != null) androidx.compose.animation.AnimatedVisibility(
+            WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) == 0,
+            enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.expandVertically(),
+            exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.shrinkVertically(),
+        ) { Box(Modifier.padding(top = 8.dp)) { tabs() } }
     }
 }
 

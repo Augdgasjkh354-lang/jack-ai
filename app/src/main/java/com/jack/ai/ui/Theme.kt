@@ -123,6 +123,8 @@ val ACCENTS = listOf(
     Accent("plum", "紫", Triple(0xFF6E4BE8, 0xFFECE6FF, 0xFF2A1670), Triple(0xFFA894FF, 0xFF241A4D, 0xFFE8E2FF)),
     Accent("clay", "橙", Triple(0xFFE2552B, 0xFFFDE5DC, 0xFF5A1C08), Triple(0xFFFF8A5C, 0xFF3D1A0E, 0xFFFFDDCF)),
     Accent("rose", "红", Triple(0xFFE0345A, 0xFFFDE2E8, 0xFF5C0A1E), Triple(0xFFFF6B8A, 0xFF3D0F1A, 0xFFFFDDE4)),
+    Accent("pink", "粉", Triple(0xFFE0338E, 0xFFFCE3F0, 0xFF5C0A33), Triple(0xFFFF6FB5, 0xFF3D0F27, 0xFFFFDDEE)),
+    Accent("cocoa", "可可", Triple(0xFF8A6A4F, 0xFFF1E8DF, 0xFF3A2816), Triple(0xFFB8946F, 0xFF33261A, 0xFFF1E3D3)),
 )
 
 @Composable

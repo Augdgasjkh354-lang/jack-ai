@@ -1,5 +1,6 @@
 package com.jack.ai.ui
 
+import androidx.compose.material.icons.filled.Notifications
 import com.jack.ai.api.webReady
 import androidx.compose.foundation.border
 import androidx.compose.material3.OutlinedTextField
@@ -243,7 +244,7 @@ fun ChatScreen(
     ) {
         // 毛玻璃：消息那一层是被模糊的底，顶栏、输入框和上面的圆按钮从它取模糊
         val glass = remember { dev.chrisbanes.haze.HazeState() }
-        androidx.compose.runtime.CompositionLocalProvider(LocalGlass provides glass) {
+        androidx.compose.runtime.CompositionLocalProvider(LocalGlass provides glass, LocalBubbleAccent provides state.settings.bubbleAccent) {
         Scaffold(
             containerColor = bg,
             snackbarHost = { androidx.compose.material3.SnackbarHost(snackbar) },
@@ -296,6 +297,16 @@ fun ChatScreen(
                     onNeedTavily = {
                         Toast.makeText(ctx, "请先在 设置 → 连接 → 联网搜索 里填 Exa 或 Tavily 的 Key", Toast.LENGTH_LONG).show()
                         onOpenSettings()
+                    },
+                    // 标签栏：聊天（就是这里）、资料库、记忆、浏览器、提醒，一点就过去
+                    tabs = {
+                        GlassTabBar(listOfNotNull(
+                            TabItem(AppIcons.Chat, "聊天", selected = true) { focusInput++ },
+                            TabItem(AppIcons.Folder, "资料库", onClick = onOpenLibrary),
+                            TabItem(AppIcons.Moon, "记忆", onClick = onOpenMemory),
+                            if (com.jack.ai.Edition.browser) TabItem(AppIcons.Globe, "浏览器") { ctx.startActivity(Intent(ctx, BrowserActivity::class.java)) } else null,
+                            TabItem(androidx.compose.material.icons.Icons.Default.Notifications, "提醒和任务", onClick = onOpenRoutines),
+                        ))
                     },
                 ) }
             },

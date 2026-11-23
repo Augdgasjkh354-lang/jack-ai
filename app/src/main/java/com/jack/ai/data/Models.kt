@@ -355,6 +355,8 @@ data class Settings(
     /** 字体缩放、主题色、应用锁。 */
     val fontScale: Float = 1f,
     val accent: String = "mono",
+    /** 自己发的消息气泡用主题色（关了是灰色气泡）。 */
+    val bubbleAccent: Boolean = true,
     val appLock: Boolean = false,
     /** 用户自己加的模型服务（Kimi、通义、OpenRouter 等 OpenAI 兼容的，和 Claude、Gemini 原生接口）。 */
     val providers: List<Provider> = emptyList(),

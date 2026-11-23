@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.offset
@@ -240,6 +241,9 @@ fun Switch(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?, modifier: Mo
  */
 val LocalGlass = androidx.compose.runtime.staticCompositionLocalOf<dev.chrisbanes.haze.HazeState?> { null }
 
+/** 关掉就全部退成半透明，不做模糊（本地截图测试用：Robolectric 编不了模糊用的着色器）。 */
+object GlassConfig { @Volatile var blur = true }
+
 /** 玻璃片的颜色：浅色是带一点灰的白，深色是比纯黑亮几档的灰；再撒一点颗粒，像磨砂而不是糊开。 */
 @Composable
 fun glassStyle(): dev.chrisbanes.haze.HazeStyle {
@@ -287,7 +291,7 @@ fun GlassSource(state: dev.chrisbanes.haze.HazeState, modifier: Modifier = Modif
 
 /** 一片玻璃：裁成 [shape]、模糊后面的内容、描一道上亮下淡的边。 */
 fun Modifier.glass(shape: Shape): Modifier = composed {
-    val haze = LocalGlass.current
+    val haze = LocalGlass.current?.takeIf { GlassConfig.blur }
     val clipped = clip(shape)
     (if (haze != null) clipped.hazeEffect(haze, glassStyle()) else clipped.background(glassFill))
         .border(0.8.dp, glassEdge(), shape)
@@ -298,7 +302,11 @@ fun Modifier.glass(shape: Shape): Modifier = composed {
  * [top] 为 true 时是顶栏（上糊下清），否则是底栏（下糊上清）。
  */
 fun Modifier.glassBar(top: Boolean): Modifier = composed {
-    val haze = LocalGlass.current ?: return@composed this
+    val bg = MaterialTheme.colorScheme.background
+    val haze = LocalGlass.current?.takeIf { GlassConfig.blur }
+        // 没有模糊时退成一条从底色渐渐变透明的渐变，标题和消息照样不叠在一起
+        ?: return@composed background(Brush.verticalGradient(
+            if (top) listOf(bg, bg.copy(alpha = 0.92f), bg.copy(alpha = 0f)) else listOf(bg.copy(alpha = 0f), bg.copy(alpha = 0.92f), bg)))
     hazeEffect(haze, barStyle()) {
         progressive = dev.chrisbanes.haze.HazeProgressive.verticalGradient(
             startIntensity = if (top) 1f else 0f, endIntensity = if (top) 0f else 1f,
@@ -306,6 +314,9 @@ fun Modifier.glassBar(top: Boolean): Modifier = composed {
         )
     }
 }
+
+/** 自己发的消息气泡用不用主题色（设置 → 外观）。聊天页按设置提供。 */
+val LocalBubbleAccent = androidx.compose.runtime.compositionLocalOf { true }
 
 /** 浮在底色上面的那一层（圆按钮、胶囊、输入框、弹出菜单）用的颜色：深色是比纯黑亮一档的灰，浅色是很浅的灰。 */
 val raisedColor: Color
@@ -429,6 +440,31 @@ fun GlassTabs(labels: List<String>, selected: Int, modifier: Modifier = Modifier
                     Text(label, style = MaterialTheme.typography.labelLarge, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
                         color = if (on) colors.onSurface else colors.onSurfaceVariant)
                 }
+            }
+        }
+    }
+}
+
+/** 底部标签栏的一格。 */
+class TabItem(val icon: ImageVector, val label: String, val selected: Boolean = false, val onClick: () -> Unit)
+
+/**
+ * 聊天页输入框下面那条标签栏：一条玻璃胶囊，一格一个图标；当前所在的那格垫一块圆的底。
+ */
+@Composable
+fun GlassTabBar(items: List<TabItem>, modifier: Modifier = Modifier) {
+    val colors = MaterialTheme.colorScheme
+    val haptics = rememberHaptics()
+    Row(modifier.fillMaxWidth().glass(CircleShape).padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        items.forEach { t ->
+            val press = remember { MutableInteractionSource() }
+            Box(
+                Modifier.weight(1f).pressScale(press, 0.88f).height(46.dp).clip(CircleShape)
+                    .background(if (t.selected) (if (isDarkSurface) Color.White.copy(alpha = 0.14f) else Color.White) else Color.Transparent)
+                    .clickable(interactionSource = press, indication = androidx.compose.foundation.LocalIndication.current, onClickLabel = t.label) { haptics.tick(); t.onClick() },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(t.icon, t.label, Modifier.size(22.dp), tint = if (t.selected) colors.onSurface else colors.onSurfaceVariant)
             }
         }
     }

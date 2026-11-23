@@ -33,6 +33,8 @@ import java.io.File
 class ShotsTest {
     @get:Rule val rule = createAndroidComposeRule<androidx.activity.ComponentActivity>()
 
+    init { GlassConfig.blur = false }
+
     private fun save(name: String) {
         val dir = File(System.getenv("SHOTS_DIR") ?: return)
         dir.mkdirs()
@@ -277,5 +279,17 @@ class ShotsTest {
         val bmp = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
         root.draw(android.graphics.Canvas(bmp))
         File(System.getenv("SHOTS_DIR")!!, "widgets-$name.png").outputStream().use { bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+    }
+
+    @Test
+    fun look() {
+        Assume.assumeTrue(System.getenv("SHOTS_DIR") != null)
+        val vm = vm(emptyList())
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            val state by vm.state.collectAsState()
+            JackTheme(dark(), "pine") { SettingsScreen(vm, state.settings, {}, {}, {}, { false }, startLook = true) }
+        }
+        save("look-" + dark().name.lowercase())
     }
 }

@@ -1,5 +1,7 @@
 package com.jack.ai.ui
 
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.graphics.luminance
 
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -120,8 +122,6 @@ fun HistoryDrawer(
         ChatItem(c, c.id == state.currentId, { onSelect(c.id) }, { renaming = c }, { deleting = c }, onPin = { onPin(c.id) },
             onMemory = { onMemory(c) }, showMore = c.id == state.currentId, answering = c.id in state.streamingIds)
     }
-    // 搜索收在右上角的圆按钮里，点开才出现输入框
-    var searching by remember { mutableStateOf(false) }
     ModalDrawerSheet(drawerContainerColor = colors.background, drawerShape = RoundedCornerShape(topEnd = 30.dp, bottomEnd = 30.dp)) {
         Column(Modifier.fillMaxSize()) {
             Row(
@@ -131,15 +131,6 @@ fun HistoryDrawer(
                 LogoMark(32.dp)
                 Spacer(Modifier.size(10.dp))
                 Text("Kavi", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                CircleIconButton(if (searching) Icons.Default.Close else Icons.Default.Search, if (searching) "收起搜索" else "搜索对话") {
-                    searching = !searching
-                    if (!searching) query = ""
-                }
-            }
-            androidx.compose.animation.AnimatedVisibility(searching) {
-                val focus = remember { androidx.compose.ui.focus.FocusRequester() }
-                LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
-                SearchField(query, { query = it }, Modifier.padding(start = 16.dp, end = 16.dp, bottom = 6.dp), focus)
             }
             if (query.isNotBlank()) {
                 LazyColumn(Modifier.weight(1f).padding(top = 4.dp)) {
@@ -228,25 +219,14 @@ fun HistoryDrawer(
                 }
                 item { Spacer(Modifier.height(12.dp)) }
             }
-            // 底部：左边一个大药丸「新对话」，右边一个圆的设置按钮（填了名字就是名字的首字）
+            // 底部三件套：左边设置（填了名字就是名字的首字），中间搜索胶囊，右边新对话
             val name = state.settings.userName.trim()
             val haptics = rememberHaptics()
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(horizontal = 16.dp, vertical = 12.dp),
             ) {
-                val press = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-                Row(
-                    Modifier.pressScale(press, 0.95f).clip(androidx.compose.foundation.shape.CircleShape).background(colors.primary)
-                        .clickable(interactionSource = press, indication = androidx.compose.foundation.LocalIndication.current) { haptics.tick(); onNew() }
-                        .padding(horizontal = 20.dp, vertical = 13.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(AppIcons.NewChat, null, Modifier.size(20.dp), tint = colors.onPrimary)
-                    Spacer(Modifier.size(8.dp))
-                    Text("新对话", style = MaterialTheme.typography.titleSmall, color = colors.onPrimary)
-                }
-                Spacer(Modifier.weight(1f))
                 if (name.isEmpty()) CircleIconButton(Icons.Default.Settings, "设置", onClick = onSettings)
                 else {
                     val settingsPress = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
@@ -256,6 +236,8 @@ fun HistoryDrawer(
                         contentAlignment = Alignment.Center,
                     ) { Text(name.take(1), style = MaterialTheme.typography.titleSmall, color = colors.onSurface) }
                 }
+                SearchField(query, { query = it }, Modifier.weight(1f))
+                CircleIconButton(AppIcons.NewChat, "新对话", onClick = onNew)
             }
         }
     }
@@ -489,8 +471,8 @@ private fun SearchField(value: String, onChange: (String) -> Unit, modifier: Mod
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 16.dp)) {
             Icon(Icons.Default.Search, null, Modifier.size(20.dp), tint = colors.onSurfaceVariant)
             Spacer(Modifier.size(10.dp))
-            Box(Modifier.weight(1f).padding(vertical = 13.dp)) {
-                if (value.isEmpty()) Text("搜索对话", style = MaterialTheme.typography.bodyLarge, color = colors.outline)
+            Box(Modifier.weight(1f).padding(vertical = 11.dp)) {
+                if (value.isEmpty()) Text("搜索", style = MaterialTheme.typography.bodyLarge, color = colors.outline)
                 BasicTextField(
                     value = value,
                     onValueChange = onChange,

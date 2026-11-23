@@ -149,14 +149,19 @@ fun UserBubble(msg: ChatMessage, onDelete: () -> Unit, onEdit: (() -> Unit)? = n
             }
         }
         if (msg.content.isNotEmpty()) {
+            val tinted = LocalBubbleAccent.current
             Surface(
-                // 正在输入框里改这条：气泡换成浅陶土色，看得出改的是哪条
-                color = if (editing) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                // 自己的气泡默认是主题色（设置 → 外观可以关成灰色）；正在输入框里改这条时换成浅色，看得出改的是哪条
+                color = when {
+                    editing -> MaterialTheme.colorScheme.primaryContainer
+                    tinted -> MaterialTheme.colorScheme.primary
+                    else -> MaterialTheme.colorScheme.surfaceContainerHigh
+                },
                 shape = Radii.bubbleMine,
                 modifier = Modifier
                     .widthIn(max = 320.dp)
                     .clip(Radii.bubbleMine)
-                    .hairline(Radii.bubbleMine)
+                    .then(if (tinted && !editing) Modifier else Modifier.hairline(Radii.bubbleMine))
                     .combinedClickable(onClick = {}, onLongClick = {
                         haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                         menu = true

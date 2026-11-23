@@ -575,6 +575,7 @@ class Store(context: Context) {
             // 换成纯黑白风格时，以前的强调色一次性换成「黑白」（之后用户再选别的不动它）
             accent = if (!prefs.getBoolean("monoTheme", false)) { prefs.edit().putBoolean("monoTheme", true).putString("accent", "mono").apply(); "mono" }
                 else prefs.getString("accent", "mono") ?: "mono",
+            bubbleAccent = prefs.getBoolean("bubbleAccent", true),
             appLock = prefs.getBoolean("appLock", false),
             monthlyBudget = prefs.getFloat("monthlyBudget", 0f).toDouble(),
             fullAuthUntil = prefs.getLong("fullAuthUntil", 0L),
@@ -668,6 +669,7 @@ class Store(context: Context) {
             .putString("customSkills", json.encodeToString(ListSerializer(Skill.serializer()), s.customSkills))
             .putFloat("fontScale", s.fontScale)
             .putString("accent", s.accent)
+            .putBoolean("bubbleAccent", s.bubbleAccent)
             .putBoolean("appLock", s.appLock)
             .putString("providers", Secrets.seal(json.encodeToString(ListSerializer(Provider.serializer()), s.providers)))
             .putFloat("monthlyBudget", s.monthlyBudget.toFloat())
