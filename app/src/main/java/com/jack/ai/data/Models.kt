@@ -134,6 +134,8 @@ data class Conversation(
     /** 这个对话带不带全局记忆；参不参与每晚的「做梦」整理。 */
     val useGlobalMemory: Boolean = true,
     val inDream: Boolean = true,
+    /** 用哪个记忆空间（见 [MemorySpace]；空的是默认的「生活」）。 */
+    val memorySpace: String = "",
     /**
      * 一开工就必须列清单、按验收标准收尾（见 WorkGate）：只有后台任务跑的时候临时设。
      * 以前是用户选的 Work 模式；Chat 和 Work 合并后，用户的对话都是 false（读盘时旧的 Work 对话也改掉），要不要列清单由 Kavi 自己判断。
@@ -260,7 +262,28 @@ data class MemoryItem(
     val about: List<String> = emptyList(),
     /** 这件事是什么时候的（2026-11-20 / 2026-11 / 2026），不是记下的时间；不知道就空。 */
     val at: String = "",
+    /** 记忆空间（[MemorySpace.id]；空的是默认的「生活」）。 */
+    val space: String = "",
 )
+
+/**
+ * 记忆空间：按场景分开的几份全局记忆（生活、工作、生意……）。每个对话用一个，只带、只想起、只往里记这个空间的。
+ * 默认空间的 id 是空字符串，不在 [Settings.memorySpaces] 里，名字是 [DEFAULT_SPACE_NAME]。
+ */
+@Serializable
+data class MemorySpace(val id: String = newId(), val name: String)
+
+const val DEFAULT_SPACE_NAME = "生活"
+
+/** 这个空间的名字（找不到的按默认空间算）。 */
+fun Settings.spaceName(id: String): String = memorySpaces.firstOrNull { it.id == id }?.name ?: DEFAULT_SPACE_NAME
+
+/** 对话用的空间还在不在：删掉的空间按默认空间算。 */
+fun Settings.spaceOf(conv: Conversation): String = conv.memorySpace.takeIf { id -> memorySpaces.any { it.id == id } }.orEmpty()
+
+/** 这个空间里的记忆（空间被删了的旧记忆按默认空间算）。 */
+fun List<MemoryItem>.inSpace(space: String, settings: Settings): List<MemoryItem> =
+    filter { m -> (m.space.takeIf { id -> settings.memorySpaces.any { it.id == id } }.orEmpty()) == space }
 
 @Serializable
 data class MemEdit(val at: Long = System.currentTimeMillis(), val old: String, val new: String, val why: String = "", val source: String = "")
@@ -334,6 +357,8 @@ data class Settings(
     val temperature: Float = 1.0f,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val presets: List<Preset> = DEFAULT_PRESETS,
+    /** 除默认的「生活」以外的记忆空间。 */
+    val memorySpaces: List<MemorySpace> = emptyList(),
     val developerPrompt: String = DEFAULT_DEV_PROMPT,
     /** 后台任务的底层提示词（对话用 developerPrompt + TASK_RULES）。 */
     val workDeveloperPrompt: String = DEFAULT_WORK_PROMPT,

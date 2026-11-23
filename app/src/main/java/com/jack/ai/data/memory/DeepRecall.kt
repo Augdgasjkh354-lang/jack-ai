@@ -11,6 +11,7 @@ import java.io.File
 import com.jack.ai.data.Persona
 import com.jack.ai.data.Settings
 import com.jack.ai.data.MemoryItem
+import com.jack.ai.data.inSpace
 import com.jack.ai.data.Episode
 import com.jack.ai.data.Timeline
 
@@ -96,16 +97,17 @@ object DeepRecall {
     }
 
     /** 每轮附加说明里的那段。浮上来的算用到一次（做梦时它们能拿回常记）。 */
-    suspend fun note(ctx: Context, settings: Settings, query: String, now: Long = System.currentTimeMillis()): String {
+    suspend fun note(ctx: Context, settings: Settings, query: String, space: String, now: Long = System.currentTimeMillis()): String {
         if (!settings.memoryEnabled || query.isBlank()) return ""
         val ignore = MemoryOps.ignoreFor(settings)
-        val deep = MemoryOps.deep(ctx)
+        // 只想起这个对话用的记忆空间里的
+        val deep = MemoryOps.deep(ctx).inSpace(space, settings)
         val (sims, minSim) = similarities(ctx, settings, query, deep.map { key(it.id, it.text) to it.text })
         fun sim(id: String, text: String) = sims[key(id, text)] ?: 0f
 
         val byMeaning = (MemoryOps.recall(deep, query, ignore = ignore) + deep.filter { sim(it.id, it.text) >= minSim })
             .distinctBy { it.id }.sortedByDescending { sim(it.id, it.text) }.take(6)
-        val links = linked(ctx, query, deep, byMeaning, now)
+        val links = linked(ctx, query, deep, byMeaning, now, settings, space)
         val userHits = (byMeaning + links.memories).distinctBy { it.id }.take(10)
 
         val out = StringBuilder()
@@ -130,8 +132,8 @@ object DeepRecall {
     /** 顺着关系、时间想起来的：话里提到的人和事、和按意思想起的那几条相连的、话里说的那段时间的记忆和经历。 */
     class Linked(val memories: List<MemoryItem>, val span: MemoryGraph.Span?, val episodes: List<Episode>)
 
-    internal fun linked(ctx: Context, query: String, deep: List<MemoryItem>, seeds: List<MemoryItem>, now: Long): Linked {
-        val hot = runCatching { com.jack.ai.data.Store(ctx).loadMemories() }.getOrDefault(emptyList())
+    internal fun linked(ctx: Context, query: String, deep: List<MemoryItem>, seeds: List<MemoryItem>, now: Long, settings: Settings, space: String): Linked {
+        val hot = runCatching { com.jack.ai.data.Store(ctx).loadMemories().inSpace(space, settings) }.getOrDefault(emptyList())
         val named = MemoryGraph.mentioned(query, MemoryGraph.entities(hot + deep).keys).toSet()
         // 话里直接提到的（「小王」）：深处里关于它的都带出来，最近用过的在前
         val byName = if (named.isEmpty()) emptyList() else deep.filter { m -> m.about.any { MemoryGraph.norm(it) in named } }

@@ -992,7 +992,26 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun addMemory(text: String) { snapshots.clear(); knowledge.addMemory(text) }
     fun updateMemory(id: String, text: String) { snapshots.clear(); knowledge.updateMemory(id, text) }
     fun deleteMemory(id: String) { snapshots.clear(); knowledge.deleteMemory(id) }
-    fun clearMemories() { snapshots.clear(); knowledge.clearMemories() }
+    fun clearMemories(space: String) { snapshots.clear(); knowledge.clearMemories(space) }
+    fun addMemory(text: String, space: String) { snapshots.clear(); knowledge.addMemory(text, space) }
+    fun moveMemory(id: String, space: String) { snapshots.clear(); knowledge.moveMemory(id, space) }
+
+    /** 记忆空间：新建（返回 id）、改名、删掉（里面的记忆并回「生活」）。 */
+    fun addSpace(name: String): String {
+        val sp = com.jack.ai.data.MemorySpace(name = name.trim())
+        updateSettings { it.copy(memorySpaces = it.memorySpaces + sp) }
+        return sp.id
+    }
+    fun renameSpace(id: String, name: String) =
+        updateSettings { s -> s.copy(memorySpaces = s.memorySpaces.map { if (it.id == id) it.copy(name = name.trim()) else it }) }
+    fun deleteSpace(id: String) {
+        updateSettings { s -> s.copy(memorySpaces = s.memorySpaces.filterNot { it.id == id }) }
+        knowledge.mergeSpaceIntoDefault(id)
+    }
+    fun setMemorySpace(convId: String, space: String) {
+        updateConvQuiet(convId) { it.copy(memorySpace = space) }
+        persist()
+    }
     fun resetMemory(withChatFiles: Boolean) { snapshots.clear(); knowledge.resetMemory(withChatFiles) }
     fun restoreMemory() { snapshots.clear(); knowledge.restoreMemory() }
     fun promoteMemory(id: String) { snapshots.clear(); knowledge.promoteMemory(id) }

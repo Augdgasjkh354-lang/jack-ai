@@ -84,7 +84,7 @@ class MemoryBenchTest {
         val global = conv.globalAllowed(project)
         val query = conv.messages.lastOrNull { it.role == "user" }?.content.orEmpty()
         val hot = if (global) store.loadMemories() else emptyList()
-        val deep = if (global) DeepRecall.note(ctx, settings, query, at) else ""
+        val deep = if (global) DeepRecall.note(ctx, settings, query, "", at) else ""
         val timeline = runCatching {
             Timeline.noteFor(ctx, settings, store.loadConversations(), store.loadProjects(), conv)
         }.getOrDefault("")

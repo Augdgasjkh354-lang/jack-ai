@@ -540,6 +540,9 @@ class Store(context: Context) {
             themeMode = runCatching { ThemeMode.valueOf(prefs.getString("themeMode", "SYSTEM")!!) }
                 .getOrDefault(ThemeMode.SYSTEM),
             presets = presets,
+            memorySpaces = prefs.getString("memorySpaces", null)?.let {
+                runCatching { json.decodeFromString(ListSerializer(MemorySpace.serializer()), it) }.getOrNull()
+            }.orEmpty(),
             workTemplates = (prefs.getString("workTemplates", null)?.let {
                 runCatching { json.decodeFromString(ListSerializer(Preset.serializer()), it) }.getOrNull()
             } ?: DEFAULT_WORK_TEMPLATES).let { list ->
@@ -642,6 +645,7 @@ class Store(context: Context) {
             .putFloat("temperature", s.temperature)
             .putString("themeMode", s.themeMode.name)
             .putString("presets", json.encodeToString(ListSerializer(Preset.serializer()), s.presets))
+            .putString("memorySpaces", json.encodeToString(ListSerializer(MemorySpace.serializer()), s.memorySpaces))
             // 底层提示词固定用内置的，旧版本存过的清掉
             .remove("devPrompt2")
             .remove("workDevPrompt")

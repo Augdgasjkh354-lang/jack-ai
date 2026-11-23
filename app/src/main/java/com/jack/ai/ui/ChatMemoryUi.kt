@@ -1,5 +1,8 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 package com.jack.ai.ui
 
+import com.jack.ai.data.spaceOf
+import com.jack.ai.data.spaceName
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -87,6 +90,19 @@ fun ConversationMemoryDialog(vm: ChatViewModel, conv: Conversation, onDismiss: (
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("使用全局记忆", Modifier.weight(1f))
                     Switch(useGlobal && !isolated, { useGlobal = it; vm.setMemoryFlags(conv.id, it, inDream) }, enabled = !isolated)
+                }
+                // 记忆空间：有了别的空间才显示（在记忆页新建）
+                val settings = vm.state.value.settings
+                if (globalOn && settings.memorySpaces.isNotEmpty()) {
+                    var space by remember(conv.id) { mutableStateOf(settings.spaceOf(conv)) }
+                    Text("记忆空间", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 4.dp))
+                    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        (listOf("" to com.jack.ai.data.DEFAULT_SPACE_NAME) + settings.memorySpaces.map { it.id to it.name }).forEach { (id, name) ->
+                            Pill(name, space == id) { space = id; vm.setMemorySpace(conv.id, id) }
+                        }
+                    }
+                    Text("这个对话只用、只记「${settings.spaceName(space)}」的记忆。", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("参与夜间整理", Modifier.weight(1f))

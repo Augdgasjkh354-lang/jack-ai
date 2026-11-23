@@ -224,10 +224,29 @@ class KnowledgeFeature(core: AppCore) : Feature(core) {
         }
     }
 
-    fun addMemory(text: String) = editMemories { it + MemoryItem(text = text.trim()) }
+    fun addMemory(text: String, space: String = "") = editMemories { it + MemoryItem(text = text.trim(), space = space) }
     fun updateMemory(id: String, text: String) = editMemories { l -> l.map { if (it.id == id) it.copy(text = text.trim()) else it } }
     fun deleteMemory(id: String) = editMemories { l -> l.filterNot { it.id == id } }
-    fun clearMemories() = editMemories { emptyList() }
+    /** 清空一个记忆空间的常记（别的空间不动）。 */
+    fun clearMemories(space: String) = editMemories { l -> l.filterNot { it in l.inSpace(space, state.value.settings) } }
+
+    /** 一条记忆（常记或深处的）挪到别的空间。 */
+    fun moveMemory(id: String, space: String) {
+        scope.launch(ioSerial) {
+            val deep = MemoryOps.deep(app)
+            if (deep.any { it.id == id }) MemoryOps.saveDeep(app, deep.map { if (it.id == id) it.copy(space = space) else it })
+            val list = store.updateMemories { l -> if (l.none { it.id == id }) null else l.map { if (it.id == id) it.copy(space = space) else it } }
+            state.update { it.copy(memories = list) }
+        }
+    }
+
+    fun mergeSpaceIntoDefault(id: String) {
+        scope.launch(ioSerial) {
+            MemoryOps.saveDeep(app, MemoryOps.deep(app).map { if (it.space == id) it.copy(space = "") else it })
+            val list = store.updateMemories { l -> if (l.none { it.space == id }) null else l.map { if (it.space == id) it.copy(space = "") else it } }
+            state.update { it.copy(memories = list) }
+        }
+    }
 
     /** 重置记忆（见 [com.jack.ai.data.memory.MemoryReset]）：清完重新读，界面跟着变空。 */
     fun resetMemory(withChatFiles: Boolean) {
@@ -324,7 +343,7 @@ class KnowledgeFeature(core: AppCore) : Feature(core) {
     /** 把一条本对话记忆挪到全局记忆。 */
     fun moveToGlobal(conv: Conversation, item: String) {
         setChatMemory(conv, chatMemory(conv) - item)
-        addMemory(item)
+        addMemory(item, state.value.settings.spaceOf(conv))
     }
 
     fun deleteChatMemory(conv: Conversation) {

@@ -1,5 +1,8 @@
 package com.jack.ai.chat
 
+import com.jack.ai.data.inSpace
+import com.jack.ai.data.spaceOf
+import com.jack.ai.data.spaceName
 import com.jack.ai.data.slimTools
 import com.jack.ai.data.allowsPhone
 import com.jack.ai.data.endpoint
@@ -451,8 +454,12 @@ object PromptBuilder {
         settings: Settings, conv: Conversation, project: Project?, memories: List<MemoryItem>, workMemory: String, globalOn: Boolean, f: (String) -> String,
     ): List<Pair<String, String>> {
         val parts = mutableListOf<Pair<String, String>>()
+        // 记忆空间：只带这个对话用的那一份（工作的事不混进生活的聊天）
+        val space = settings.spaceOf(conv)
+        val memories = memories.inSpace(space, settings)
+        val spaceNote = if (settings.memorySpaces.isEmpty()) "" else " — memory space 「${settings.spaceName(space)}」; other spaces are kept apart and not shown here"
         if (globalOn && memories.isNotEmpty()) {
-            parts += "长期记忆" to f("【Long-term memories about {user}】(~${com.jack.ai.data.memory.MemoryOps.hotTokens(memories)} of ${com.jack.ai.data.memory.MemoryOps.HOT_BUDGET} tokens)\nThings you remembered about {user} earlier. Use them naturally; don't make a point of saying \"I remember\".\n") +
+            parts += "长期记忆" to f("【Long-term memories about {user}$spaceNote】(~${com.jack.ai.data.memory.MemoryOps.hotTokens(memories)} of ${com.jack.ai.data.memory.MemoryOps.HOT_BUDGET} tokens)\nThings you remembered about {user} earlier. Use them naturally; don't make a point of saying \"I remember\".\n") +
                 memories.joinToString("\n") { "- ${it.text}" }
         }
         if (settings.memoryEnabled && conv.workMemoryAllowed(project) && workMemory.isNotBlank()) {

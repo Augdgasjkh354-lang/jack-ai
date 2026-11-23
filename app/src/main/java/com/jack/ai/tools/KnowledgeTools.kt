@@ -76,8 +76,9 @@ private val SOURCE_NAMES = mapOf("chats" to "以前的聊天", "history" to "本
 
 /** 在记忆里找（常记 + 深处）：关键词、提到的人和事、时间（上周、10 月、去年国庆），再带上相连的；说到一段时间时附上那段时间的经历。 */
 private suspend fun ToolSession.findMemory(query: String): String = withContext(Dispatchers.IO) {
-    val hot = host.store.loadMemories()
-    val deep = MemoryOps.deep(app)
+    val space = settings.spaceOf(conv)
+    val hot = host.store.loadMemories().inSpace(space, settings)
+    val deep = MemoryOps.deep(app).inSpace(space, settings)
     val hits = com.jack.ai.data.memory.MemoryGraph.search(query, hot, deep)
     val span = com.jack.ai.data.memory.MemoryGraph.timeOf(query)
     val lines = hits.joinToString("\n") { f ->
@@ -154,28 +155,33 @@ internal suspend fun ToolSession.remember(args: JsonObject): String {
         when (scope) {
             // 读、改、写都在锁里（Store.updateMemories / ChatMemory.update）：别的对话同时在存记忆、回看，不会被这里的旧快照盖掉
             "global" -> withContext(Dispatchers.IO) {
+                // 只在这个对话用的记忆空间里改（别的空间的原样留着），新记的也记进这个空间
+                val space = settings.spaceOf(conv)
+                fun mine(m: MemoryItem) = listOf(m).inSpace(space, settings).isNotEmpty()
                 if (toDeep && old.isNotEmpty()) {
                     // 放到深处：常记里拿掉，深处留着，聊到相关的会浮上来
-                    val rest = host.store.updateMemories { list ->
+                    val rest = host.store.updateMemories { all ->
+                        val list = all.filter(::mine)
                         val keep = ChatMemory.replace(list.map { it.text }, old, "")
                         com.jack.ai.data.memory.MemoryOps.saveDeep(app, com.jack.ai.data.memory.MemoryOps.deep(app) + list.filter { it.text !in keep })
-                        list.filter { it.text in keep }
+                        all.filter { !mine(it) || it.text in keep }
                     }
                     host.setMemories(rest)
-                    return@withContext "已放到深处（常记现在约 ${com.jack.ai.data.memory.MemoryOps.hotTokens(rest)} / ${com.jack.ai.data.memory.MemoryOps.HOT_BUDGET}）。"
+                    return@withContext "已放到深处（常记现在约 ${com.jack.ai.data.memory.MemoryOps.hotTokens(rest.filter(::mine))} / ${com.jack.ai.data.memory.MemoryOps.HOT_BUDGET}）。"
                 }
                 var dup = false
-                val updated = host.store.updateMemories { list ->
+                val updated = host.store.updateMemories { all ->
+                    val list = all.filter(::mine)
                     if (old.isEmpty() && list.any { it.text == text }) { dup = true; return@updateMemories null }
-                    val next = if (old.isEmpty()) list + MemoryItem(text = text) else {
+                    val next = if (old.isEmpty()) list + MemoryItem(text = text, space = space) else {
                         // 按文字改，没动的条目保留原来的编号和时间
                         val texts = ChatMemory.replace(list.map { it.text }, old, text)
                         val byText = list.associateBy { it.text }
-                        texts.map { byText[it] ?: MemoryItem(text = it) }
+                        texts.map { byText[it] ?: MemoryItem(text = it, space = space) }
                     }
                     com.jack.ai.data.memory.MemoryOps.fullNote(list.map { it.text }, next.map { it.text }, com.jack.ai.data.memory.MemoryOps.HOT_BUDGET, where, canDeep = true)
                         ?.let { throw IllegalArgumentException(it) }
-                    next
+                    all.filterNot(::mine) + next
                 }
                 if (dup) return@withContext "已经有一模一样的这条，没有重复存。"
                 host.setMemories(updated)
@@ -203,7 +209,7 @@ internal suspend fun ToolSession.remember(args: JsonObject): String {
         // 存完重新读一遍：新内容在不在；删除的话，原来那条还在不在
         val now = withContext(Dispatchers.IO) {
             when (scope) {
-                "global" -> host.store.loadMemories().map { it.text }
+                "global" -> host.store.loadMemories().inSpace(settings.spaceOf(conv), settings).map { it.text }
                 "project" -> ChatMemory.items(ChatMemory.read(ChatMemory.projectFile(app, project!!.id)))
                 "work" -> ChatMemory.items(ChatMemory.read(ChatMemory.workFile(app)))
                 else -> ChatMemory.items(ChatMemory.read(ChatMemory.chatFile(app, conv)))

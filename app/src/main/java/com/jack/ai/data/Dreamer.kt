@@ -164,21 +164,61 @@ Output only one JSON object, in this format:
         val projects = store.loadProjects()
         // 关了「参与整理」的对话、隐私项目里的对话不整理
         val convs = store.loadConversations().filter { c -> c.inDream && !c.work && !c.isolatedIn(projects) }
-        val (transcript, cutoff) = transcript(convs, since, startedAt, user = Persona.ref(settings) ?: "User")
-        if (transcript.isBlank()) {
+        // 记忆空间各整理各的：工作的聊天只改工作空间的记忆
+        val bySpace = convs.groupBy { settings.spaceOf(it) }
+        val parts = bySpace.mapValues { (_, cs) -> transcript(cs, since, startedAt, user = Persona.ref(settings) ?: "User") }
+            .filterValues { it.first.isNotBlank() }
+        if (parts.isEmpty()) {
             store.lastDreamAt = startedAt
             fadeThreads(ctx)
             return null
         }
-        val memories = store.loadMemories()
         val held = heldNote(ctx)
+        val client = DeepSeekClient(store::addUsage)
+        val changes = mutableListOf<String>()
+        val heldNow = mutableListOf<String>()
+        // 默认空间先整理
+        for ((space, part) in parts.entries.sortedBy { it.key.isNotEmpty() }) {
+            val name = if (settings.memorySpaces.isEmpty()) "" else settings.spaceName(space)
+            when (val r = dreamSpace(ctx, store, settings, ep, client, space, part.first, since, startedAt, held)) {
+                null -> {}
+                is SpaceResult.Held -> heldNow += (if (name.isEmpty()) "" else "「$name」") + r.note
+                is SpaceResult.Done -> if (r.changes.isNotBlank()) changes += (if (name.isEmpty()) "" else "【$name】") + r.changes
+            }
+        }
+        setHeld(ctx, heldNow.joinToString(" "))
+        // 一个空间都没改成（全被拦下）：时间点不往后挪，第二天重新整理
+        if (heldNow.size == parts.size) return null
+        val entry = DreamEntry(journal = "", changes = changes.joinToString("\n"), createdAt = startedAt)
+        store.saveDreams(listOf(entry) + store.loadDreams().take(59))
+        fadeThreads(ctx)
+        // 没整理完的：下次从最早没整理到的那条之后接着，马上排一轮（别的空间重看的那点已有的不会重复记）
+        val cutoff = parts.values.mapNotNull { it.second }.minOrNull()
+        store.lastDreamAt = cutoff ?: startedAt
+        if (cutoff != null) runMore(ctx)
+        return entry
+    }
+
+    private sealed interface SpaceResult {
+        data class Done(val changes: String) : SpaceResult
+        data class Held(val note: String) : SpaceResult
+    }
+
+    /** 整理一个记忆空间：只给模型看、只改这个空间的记忆。 */
+    private suspend fun dreamSpace(
+        ctx: Context, store: Store, settings: Settings, ep: Endpoint, client: DeepSeekClient,
+        space: String, transcript: String, since: Long, startedAt: Long, held: String,
+    ): SpaceResult? {
+        val memories = store.loadMemories().inSpace(space, settings)
+        val spaceName = settings.spaceName(space)
         val input = buildString {
             if (held.isNotBlank()) append("【Note】Last time your memory changes were held back: $held Redo the look-back carefully, changing only what the chats clearly support.\n\n")
             append("Today is ${Timeline.day(startedAt)}.\n\n")
+            if (settings.memorySpaces.isNotEmpty()) append("These chats belong to the memory space 「$spaceName」; the memories below are that space's. Keep memories about other parts of ${Persona.ref(settings) ?: "the user"}'s life out of it.\n\n")
             append("【Current memories】\n")
             append(MemoryOps.listing(memories))
             append("(memory budget: ~${MemoryOps.hotTokens(memories)} of ${MemoryOps.HOT_BUDGET} tokens used" + (if (MemoryOps.hotTokens(memories) > MemoryOps.HOT_BUDGET) " — over budget, make room" else "") + ")\n")
-            val deepNow = MemoryOps.deep(ctx)
+            val deepNow = MemoryOps.deep(ctx).inSpace(space, settings)
             // 浮上来过的，加上和这段聊天沾边的：没浮上来的旧记忆（换了说法、没配向量模型）也能被这次的聊天改掉或作废
             val surfaced = deepNow.filter { it.lastUsedAt > since }.sortedByDescending { it.uses }.take(20)
             val touched = MemoryOps.touching(deepNow, transcript, ignore = MemoryOps.ignoreFor(settings))
@@ -194,7 +234,6 @@ Output only one JSON object, in this format:
             append("\n【Chats since the last look-back】")
             append(transcript)
         }
-        val client = DeepSeekClient(store::addUsage)
         val system = "You are Kavi, ${Persona.ref(settings) ?: "the user"}'s assistant. " +
             Persona.nameLine(settings).let { if (it.isEmpty()) "" else "$it\n\n" } + INSTRUCTIONS
         val messages = listOf(
@@ -213,28 +252,25 @@ Output only one JSON object, in this format:
         // 一次动到太多已有的记忆：这次整个不算，第二天重新整理（时间点不往后挪）
         if (MemoryOps.tooMany(memories.size, ops)) {
             val n = ops.count { it.op != "add" && it.op != "tag" }
-            setHeld(ctx, "the change list touched $n of ${memories.size} memories at once (the limit is ${MemoryOps.limit(memories.size)}).")
-            return null
+            return SpaceResult.Held("the change list touched $n of ${memories.size} memories at once (the limit is ${MemoryOps.limit(memories.size)}).")
         }
-        // 在现在的记忆上执行（整理要好一会，期间用户删掉、改过的照现在的算），改之前存一版
+        // 在现在的记忆上执行（整理要好一会，期间用户删掉、改过的照现在的算），改之前存一版；别的空间的原样留着
         lateinit var result: MemoryOps.Result
         store.updateMemories { current ->
             MemoryOps.snapshot(ctx, current)
-            result = MemoryOps.apply(current, ops, deepNow = MemoryOps.deep(ctx))
-            result.live
+            val mine = current.inSpace(space, settings).toSet()
+            val deepAll = MemoryOps.deep(ctx)
+            val deepMine = deepAll.inSpace(space, settings).toSet()
+            result = MemoryOps.apply(current.filter { it in mine }, ops, deepNow = deepAll.filter { it in deepMine })
+            // 新记的、拿回来的都归这个空间
+            val live = result.live.map { it.copy(space = space) }
+            result = result.copy(live = live, deep = deepAll.filter { it !in deepMine } + result.deep.map { it.copy(space = space) })
+            current.filter { it !in mine } + live
         }
         if (result.demoted + result.promoted + result.invalidated + result.tagged > 0) MemoryOps.saveDeep(ctx, result.deep)
         MemoryOps.addToArchive(ctx, result.archived)
-        setHeld(ctx, "")
-        val entry = DreamEntry(journal = "", changes = str("changes"), createdAt = startedAt)
-        store.saveDreams(listOf(entry) + store.loadDreams().take(59))
-        fadeThreads(ctx)
-        // 没整理完的：下次从最后整理到的那条之后接着，马上排一轮
-        store.lastDreamAt = cutoff ?: startedAt
-        if (cutoff != null) runMore(ctx)
-        return entry
+        return SpaceResult.Done(str("changes"))
     }
-
     /** 很久没碰的挂心事淡出（不删）。 */
     private fun fadeThreads(ctx: Context) {
         val (faded, gone) = Threads.fade(Threads.load(ctx))

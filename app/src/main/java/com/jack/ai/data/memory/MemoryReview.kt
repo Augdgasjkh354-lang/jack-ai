@@ -18,6 +18,8 @@ import com.jack.ai.data.Persona
 import com.jack.ai.data.Project
 import com.jack.ai.data.Retired
 import com.jack.ai.data.Settings
+import com.jack.ai.data.inSpace
+import com.jack.ai.data.spaceOf
 import com.jack.ai.data.Store
 import com.jack.ai.data.backgroundEndpoint
 import com.jack.ai.data.globalAllowed
@@ -100,8 +102,12 @@ object MemoryReview {
      * 不会因为先转成字符串、再按文字拼回去而丢掉身份，同文字的多条也不会被合并成一条。
      * 工作记忆是纯字符串文件，继续用 apply；全局记忆（带 id）用这个。
      */
-    fun applyItems(items: List<MemoryItem>, ops: List<Op>, budget: Int, source: String, now: Long = System.currentTimeMillis()): Pair<List<MemoryItem>, List<String>> {
-        var list = items
+    fun applyItems(items: List<MemoryItem>, ops: List<Op>, budget: Int, source: String, now: Long = System.currentTimeMillis(),
+                   /** 记忆空间：只改这个空间的，新记的记进这个空间；settings 为空时不分空间。 */
+                   space: String = "", settings: Settings? = null): Pair<List<MemoryItem>, List<String>> {
+        val mine = if (settings == null) items.toSet() else items.inSpace(space, settings).toSet()
+        val others = items.filter { it !in mine }
+        var list = items.filter { it in mine }
         val done = mutableListOf<String>()
         fun match(old: String): Int {
             val key = old.trim().removePrefix("- ").trim()
@@ -114,7 +120,7 @@ object MemoryReview {
         for (op in ops) {
             val next = runCatching {
                 when (op.op) {
-                    "add" -> if (list.any { it.text == op.text }) null else list + MemoryItem(text = op.text, createdAt = now, source = source, about = op.about, at = op.at)
+                    "add" -> if (list.any { it.text == op.text }) null else list + MemoryItem(text = op.text, createdAt = now, source = source, about = op.about, at = op.at, space = space)
                     "update" -> {
                         val i = match(op.old)
                         val m = list[i]
@@ -133,7 +139,7 @@ object MemoryReview {
             list = next
             done += when (op.op) { "add" -> "记下：${op.text}"; "update" -> "改成：${op.text}"; else -> "删掉：${op.old}" }
         }
-        return list to done
+        return (others + list) to done
     }
 
 
@@ -162,7 +168,7 @@ object MemoryReview {
         val ep = settings.backgroundEndpoint() ?: return null
         val workFile = ChatMemory.workFile(ctx)
         val budget = if (work) MemoryOps.FILE_BUDGET else MemoryOps.HOT_BUDGET
-        val before = if (work) ChatMemory.items(ChatMemory.read(workFile)) else store.loadMemories().map { it.text }
+        val before = if (work) ChatMemory.items(ChatMemory.read(workFile)) else store.loadMemories().inSpace(settings.spaceOf(conv), settings).map { it.text }
         val input = "Today is ${com.jack.ai.data.Timeline.day(System.currentTimeMillis())}.\n\n" +
             "【Current ${if (work) "work memory" else "memories"}】(~${MemoryOps.tokensOf(before)} of $budget tokens)\n" +
             before.ifEmpty { listOf("(none)") }.joinToString("\n") { "- $it" } +
@@ -187,7 +193,7 @@ object MemoryReview {
             }
         } else {
             store.updateMemories { live ->
-                val (next, changes) = applyItems(live, ops, budget, "聊天时回看：${conv.title}")
+                val (next, changes) = applyItems(live, ops, budget, "聊天时回看：${conv.title}", space = settings.spaceOf(conv), settings = settings)
                 done = changes
                 if (changes.isEmpty()) null else {
                     MemoryOps.snapshot(ctx, live)
@@ -211,7 +217,7 @@ object MemoryReview {
         val globalOn = conv.globalAllowed(project)
         val file = ChatMemory.projectFile(ctx, project.id)
         val before = ChatMemory.items(ChatMemory.read(file))
-        val globals = if (globalOn) store.loadMemories().map { it.text } else emptyList()
+        val globals = if (globalOn) store.loadMemories().inSpace(settings.spaceOf(conv), settings).map { it.text } else emptyList()
         val input = buildString {
             append("【Project】${project.name}\n")
             project.instructions.trim().takeIf { it.isNotEmpty() }?.let { append(it.take(800)).append("\n") }
@@ -243,7 +249,7 @@ object MemoryReview {
         var saved: List<MemoryItem>? = null
         val globalOps = ops.filter { it.scope == "global" }.take(MAX_OPS)
         if (globalOn && globalOps.isNotEmpty()) store.updateMemories { live ->
-            val (next, changes) = applyItems(live, globalOps, MemoryOps.HOT_BUDGET, "聊天时回看：${conv.title}")
+            val (next, changes) = applyItems(live, globalOps, MemoryOps.HOT_BUDGET, "聊天时回看：${conv.title}", space = settings.spaceOf(conv), settings = settings)
             done = changes
             if (changes.isEmpty()) null else {
                 MemoryOps.snapshot(ctx, live)

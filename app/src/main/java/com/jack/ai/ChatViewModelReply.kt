@@ -1,5 +1,6 @@
 package com.jack.ai
 
+import com.jack.ai.data.spaceOf
 import android.app.Application
 import androidx.lifecycle.viewModelScope
 import com.jack.ai.data.ChatMessage
@@ -54,7 +55,7 @@ internal suspend fun ChatViewModel.replyContextNote(
             // Kavi 的连续性：最近的经历、上次见用户是什么时候（每轮变，放这里不影响缓存）
             runCatching { com.jack.ai.data.Timeline.noteFor(getApplication(), settings, _state.value.conversations, _state.value.projects, conv) }.getOrDefault("") +
             // 深处的记忆：和这句话相关的浮上来（不常用的不再每轮都带着）
-            (if (conv.globalAllowed(project)) runCatching { com.jack.ai.data.memory.DeepRecall.note(getApplication(), settings, lastUser?.content.orEmpty()) }.getOrDefault("") else "") +
+            (if (conv.globalAllowed(project)) runCatching { com.jack.ai.data.memory.DeepRecall.note(getApplication(), settings, lastUser?.content.orEmpty(), settings.spaceOf(conv)) }.getOrDefault("") else "") +
             // 按意思推荐一两个技能（技能多了模型容易挑错）
             runCatching { com.jack.ai.data.SkillMatcher.note(getApplication(), settings, lastUser?.content.orEmpty(), skills) }.getOrDefault("") +
             // 语音对话：回答会被读出来，说短一点、别排版

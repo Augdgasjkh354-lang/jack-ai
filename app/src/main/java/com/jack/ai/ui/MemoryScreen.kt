@@ -51,6 +51,8 @@ import kotlinx.coroutines.launch
 import com.jack.ai.UiState
 import com.jack.ai.data.DreamEntry
 import com.jack.ai.data.MemoryItem
+import com.jack.ai.data.inSpace
+import com.jack.ai.data.spaceName
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -102,9 +104,22 @@ private fun MemoryPage(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
     var editing by remember { mutableStateOf<MemoryItem?>(null) }
     var adding by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
+    var moving by remember { mutableStateOf<MemoryItem?>(null) }
     // 刚删掉的那条：列表上方给个「撤销」，误点了能拿回来
     var undo by remember { mutableStateOf<String?>(null) }
     val settings = state.settings
+    // 看哪个记忆空间（删掉了就回到「生活」），按哪个人和事筛
+    var spacePick by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
+    val space = spacePick.takeIf { id -> settings.memorySpaces.any { it.id == id } }.orEmpty()
+    var aboutPick by remember(space) { mutableStateOf<String?>(null) }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val deepAll by androidx.compose.runtime.produceState(emptyList<MemoryItem>(), state.memories) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.jack.ai.data.memory.MemoryOps.deep(ctx) }
+    }
+    val hot = state.memories.inSpace(space, settings)
+    val deepHere = deepAll.inSpace(space, settings)
+    fun about(m: MemoryItem) = aboutPick?.let { a -> m.about.any { com.jack.ai.data.memory.MemoryGraph.norm(it) == com.jack.ai.data.memory.MemoryGraph.norm(a) } } ?: true
+    val shown = hot.filter(::about)
     LaunchedEffect(Unit) {
         vm.reloadMemory()
         vm.markDreamsSeen()
@@ -158,32 +173,35 @@ private fun MemoryPage(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
 
             item { NudgeCard(vm, settings) }
             item { FactsCard(vm) }
+            item { SpaceBar(vm, settings, space) { spacePick = it } }
             item {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 12.dp)) {
                     Text("关于你", style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
-                    Text("  ${state.memories.size} 条 · 约 ${com.jack.ai.data.memory.MemoryOps.hotTokens(state.memories)}/${com.jack.ai.data.memory.MemoryOps.HOT_BUDGET}", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium,
+                    Text("  ${hot.size} 条 · 约 ${com.jack.ai.data.memory.MemoryOps.hotTokens(hot)}/${com.jack.ai.data.memory.MemoryOps.HOT_BUDGET}", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     IconButton(onClick = { adding = true }) { Icon(Icons.Default.Add, "添加记忆") }
-                    if (state.memories.isNotEmpty()) TextButton(onClick = { confirmClear = true }) { Text("清空") }
+                    if (hot.isNotEmpty()) TextButton(onClick = { confirmClear = true }) { Text("清空") }
                 }
+                AboutBar(hot + deepHere, aboutPick) { aboutPick = it }
                 undo?.let { t ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("已删除「${t.take(16)}${if (t.length > 16) "…" else ""}」", Modifier.weight(1f),
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        TextButton(onClick = { vm.addMemory(t); undo = null }) { Text("撤销") }
+                        TextButton(onClick = { vm.addMemory(t, space); undo = null }) { Text("撤销") }
                     }
                 }
-                if (state.memories.isEmpty()) {
+                if (hot.isEmpty()) {
                     Text("还没有记忆。", color = MaterialTheme.colorScheme.outline)
                 }
             }
-            items(state.memories, key = { it.id }) { m ->
+            items(shown, key = { it.id }) { m ->
                 // 一条一张半透明的小卡
                 androidx.compose.material3.Surface(color = NIGHT_CARD, shape = Radii.m,
                     border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), modifier = Modifier.fillMaxWidth()) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 14.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
                         Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
                             Text(m.text, style = MaterialTheme.typography.bodyMedium)
+                            aboutLine(m)?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)) }
                             // 做梦记下的出处，改过的标一下
                             if (m.source.isNotBlank() || m.history.isNotEmpty()) Text(
                                 listOfNotNull(m.source.takeIf { it.isNotBlank() }?.let { "出处 $it" }, "改过 ${m.history.size} 次".takeIf { m.history.isNotEmpty() }).joinToString(" · "),
@@ -199,7 +217,7 @@ private fun MemoryPage(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                 }
             }
 
-            item { DeepMemories(vm, state.memories) }
+            item { DeepMemories(vm, state.memories, deepHere.filter(::about), aboutPick != null) }
 
             item {
                 Text("整理记录", style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
@@ -226,7 +244,7 @@ private fun MemoryPage(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
             confirmButton = {
                 TextButton(enabled = text.isNotBlank(), onClick = {
                     val e = editing
-                    if (e != null) vm.updateMemory(e.id, text) else vm.addMemory(text)
+                    if (e != null) vm.updateMemory(e.id, text) else vm.addMemory(text, space)
                     adding = false; editing = null
                 }) { Text("保存") }
             },
@@ -234,14 +252,31 @@ private fun MemoryPage(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                 Row {
                     // 还成立但不常用：放到深处，不占每次对话的篇幅
                     editing?.let { e -> TextButton(onClick = { vm.demoteMemory(e.id); editing = null }) { Text("放到深处") } }
+                    // 挪到别的空间
+                    if (editing != null && settings.memorySpaces.isNotEmpty()) TextButton(onClick = { moving = editing; editing = null }) { Text("挪到…") }
                     TextButton(onClick = { adding = false; editing = null }) { Text("取消") }
                 }
             },
         )
     }
+    moving?.let { m ->
+        AlertDialog(
+            onDismissRequest = { moving = null },
+            title = { Text("挪到哪个空间") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(m.text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    (listOf("" to com.jack.ai.data.DEFAULT_SPACE_NAME) + settings.memorySpaces.map { it.id to it.name }).filter { it.first != space }.forEach { (id, name) ->
+                        Pill(name, false) { vm.moveMemory(m.id, id); moving = null }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { moving = null }) { Text("取消") } },
+        )
+    }
     if (confirmClear) {
-        ConfirmDeleteDialog("清空全部记忆？", "所有记住的事都会被删除，无法恢复。", onDismiss = { confirmClear = false }) {
-            vm.clearMemories(); confirmClear = false
+        ConfirmDeleteDialog("清空「${settings.spaceName(space)}」的记忆？", "这个空间里常记的都会被删除，无法恢复（深处的和别的空间不动）。", onDismiss = { confirmClear = false }) {
+            vm.clearMemories(space); confirmClear = false
         }
     }
 }
@@ -322,14 +357,13 @@ internal fun FactsCard(vm: ChatViewModel) {
  * Kavi 做梦时放下去、拿回来；这里也能手动拿回常记或删掉。
  */
 @Composable
-internal fun DeepMemories(vm: ChatViewModel, hot: List<com.jack.ai.data.MemoryItem>) {
+internal fun DeepMemories(vm: ChatViewModel, hot: List<com.jack.ai.data.MemoryItem>, deepHere: List<com.jack.ai.data.MemoryItem>, filtered: Boolean = false) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
-    var open by remember { mutableStateOf(false) }
-    var rev by remember { mutableStateOf(0) }
+    // 按人和事筛的时候直接展开
+    var open by remember(filtered) { mutableStateOf(filtered) }
+    var gone by remember(hot) { mutableStateOf(emptySet<String>()) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
-    val deep by androidx.compose.runtime.produceState(emptyList<com.jack.ai.data.MemoryItem>(), hot, rev) {
-        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.jack.ai.data.memory.MemoryOps.deep(ctx) }
-    }
+    val deep = deepHere.filter { it.id !in gone }
     if (deep.isEmpty()) return
     Column(Modifier.padding(top = 8.dp)) {
         TextButton(onClick = { open = !open }) {
@@ -342,12 +376,13 @@ internal fun DeepMemories(vm: ChatViewModel, hot: List<com.jack.ai.data.MemoryIt
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp)) {
                     Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
                         Text(m.text, style = MaterialTheme.typography.bodySmall)
+                        aboutLine(m)?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)) }
                         if (m.lastUsedAt > 0) Text("上次浮上来 " + com.jack.ai.data.Timeline.day(m.lastUsedAt), style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.outline)
                     }
                     TextButton(onClick = { vm.promoteMemory(m.id) }) { Text("放回常记") }
                     IconButton(onClick = {
-                        scope.launch(kotlinx.coroutines.Dispatchers.IO) { com.jack.ai.data.memory.MemoryOps.saveDeep(ctx, com.jack.ai.data.memory.MemoryOps.deep(ctx).filterNot { it.id == m.id }); rev++ }
+                        scope.launch(kotlinx.coroutines.Dispatchers.IO) { com.jack.ai.data.memory.MemoryOps.saveDeep(ctx, com.jack.ai.data.memory.MemoryOps.deep(ctx).filterNot { it.id == m.id }); gone = gone + m.id }
                     }, modifier = Modifier.size(36.dp)) {
                         Icon(Icons.Default.Delete, "删除", Modifier.size(17.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -356,3 +391,89 @@ internal fun DeepMemories(vm: ChatViewModel, hot: List<com.jack.ai.data.MemoryIt
         }
     }
 }
+
+/** 一个小圆角标签：选中的用主题色。 */
+@Composable
+internal fun Pill(text: String, selected: Boolean, onClick: () -> Unit) {
+    val c = MaterialTheme.colorScheme
+    androidx.compose.material3.Surface(
+        onClick = onClick,
+        shape = androidx.compose.foundation.shape.CircleShape,
+        color = if (selected) c.primary.copy(alpha = 0.16f) else androidx.compose.ui.graphics.Color.Transparent,
+        border = androidx.compose.foundation.BorderStroke(1.dp, if (selected) c.primary.copy(alpha = 0.5f) else c.outlineVariant),
+    ) {
+        Text(text, style = MaterialTheme.typography.labelLarge, color = if (selected) c.primary else c.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), maxLines = 1)
+    }
+}
+
+/**
+ * 记忆空间那一排：生活、工作……，最后是「新空间」。选中别的空间时能改名、删掉（里面的记忆并回「生活」）。
+ */
+@Composable
+internal fun SpaceBar(vm: ChatViewModel, settings: com.jack.ai.data.Settings, selected: String, onSelect: (String) -> Unit) {
+    var naming by remember { mutableStateOf<String?>(null) }   // null 不显示；"" 新建；其他是改名的 id
+    var deleting by remember { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 12.dp)) {
+        androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            item { Pill(com.jack.ai.data.DEFAULT_SPACE_NAME, selected == "") { onSelect("") } }
+            items(settings.memorySpaces, key = { it.id }) { sp -> Pill(sp.name, selected == sp.id) { onSelect(sp.id) } }
+            item { Pill("＋ 新空间", false) { naming = "" } }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (settings.memorySpaces.isEmpty()) "可以按场景分开记（生活、工作、生意……）：每个对话选一个空间，只用、只记这个空间的。"
+                else "每个对话用一个空间（对话的「记忆」里选），只用、只记这个空间的；别的空间互不打扰。",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f),
+            )
+            if (selected.isNotEmpty()) {
+                TextButton(onClick = { naming = selected }) { Text("改名") }
+                TextButton(onClick = { deleting = true }) { Text("删除") }
+            }
+        }
+    }
+    naming?.let { id ->
+        var name by remember(id) { mutableStateOf(settings.memorySpaces.firstOrNull { it.id == id }?.name.orEmpty()) }
+        AlertDialog(
+            onDismissRequest = { naming = null },
+            title = { Text(if (id.isEmpty()) "新记忆空间" else "改名") },
+            text = { OutlinedTextField(name, { name = it.take(12) }, singleLine = true, placeholder = { Text("例如：工作") }) },
+            confirmButton = {
+                TextButton(enabled = name.isNotBlank() && name.trim() != com.jack.ai.data.DEFAULT_SPACE_NAME, onClick = {
+                    if (id.isEmpty()) onSelect(vm.addSpace(name)) else vm.renameSpace(id, name)
+                    naming = null
+                }) { Text("好") }
+            },
+            dismissButton = { TextButton(onClick = { naming = null }) { Text("取消") } },
+        )
+    }
+    if (deleting) {
+        ConfirmDeleteDialog("删除「${settings.spaceName(selected)}」？", "里面的记忆会并回「${com.jack.ai.data.DEFAULT_SPACE_NAME}」，用这个空间的对话也改用「${com.jack.ai.data.DEFAULT_SPACE_NAME}」。",
+            onDismiss = { deleting = false }) {
+            vm.deleteSpace(selected); onSelect(""); deleting = false
+        }
+    }
+}
+
+/** 按人和事看：这个空间里标得最多的几个（人、地方、项目……），点一个只看关于它的记忆（深处的也列出来）。 */
+@Composable
+internal fun AboutBar(all: List<MemoryItem>, selected: String?, onSelect: (String?) -> Unit) {
+    val top = remember(all) {
+        com.jack.ai.data.memory.MemoryGraph.entities(all).entries.sortedByDescending { it.value.size }.take(16)
+            .map { (k, v) -> (v.first().about.firstOrNull { com.jack.ai.data.memory.MemoryGraph.norm(it) == k } ?: k) to v.size }
+    }
+    if (top.isEmpty()) return
+    androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+        items(top, key = { it.first }) { (name, n) ->
+            Pill("$name $n", selected != null && com.jack.ai.data.memory.MemoryGraph.norm(selected) == com.jack.ai.data.memory.MemoryGraph.norm(name)) {
+                onSelect(if (selected != null && com.jack.ai.data.memory.MemoryGraph.norm(selected) == com.jack.ai.data.memory.MemoryGraph.norm(name)) null else name)
+            }
+        }
+    }
+}
+
+/** 记忆下面那行小字：涉及谁、什么时候。 */
+internal fun aboutLine(m: MemoryItem): String? = listOfNotNull(
+    m.about.takeIf { it.isNotEmpty() }?.joinToString("、", prefix = "涉及 "),
+    m.at.takeIf { it.isNotBlank() },
+).takeIf { it.isNotEmpty() }?.joinToString(" · ")
