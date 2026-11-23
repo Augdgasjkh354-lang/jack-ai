@@ -68,12 +68,16 @@ internal fun yuan(d: Double): String = when {
 private val List<UsageDay>.total get() = sumOf { it.prompt + it.completion }
 private val List<UsageDay>.money get() = sumOf { it.costYuan() ?: 0.0 }
 
-/** 缓存命中率；服务都没返回命中数时是 null。 */
+/** 命中率写成百分数，保留两位小数（99.87%）；整数除会把 99.9% 截成 99%。 */
+fun hitPercent(hit: Long, total: Long): String =
+    if (total <= 0) "0.00%" else String.format(java.util.Locale.US, "%.2f%%", hit * 100.0 / total)
+
+/** 缓存命中率；服务都没返回命中数时是「未提供」。 */
 private fun hitRate(l: List<UsageDay>): String {
     val known = l.filter { it.hitKnown || it.cacheHit > 0 }
     val prompt = known.sumOf { it.prompt }
     if (known.isEmpty() || prompt == 0L) return "未提供"
-    return "${known.sumOf { it.cacheHit } * 100 / prompt}%"
+    return hitPercent(known.sumOf { it.cacheHit }, prompt)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -456,12 +460,12 @@ private fun RecentRequestsCard() {
             Text("最近的请求", style = MaterialTheme.typography.titleSmall)
             Text("命中越高越省钱。同一个对话里接着聊，正常应该大部分命中。", style = MaterialTheme.typography.bodySmall, color = colors.outline)
             (if (all) list else list.take(10)).forEachIndexed { idx, r ->
-                val rate = r.hit?.let { h -> if (r.prompt > 0) h * 100 / r.prompt else 0 }
+                val rate = r.hit?.let { h -> if (r.prompt > 0) h * 100.0 / r.prompt else 0.0 }
                 // 命中低的：和同一个对话的上一次请求比开头，说清是哪一段变了
                 val why = if (rate == null || rate >= 60 || r.label.isBlank()) null else {
                     val prev = list.drop(idx + 1).firstOrNull { it.label == r.label }
                     when (val c = prev?.let { com.jack.ai.api.PrefixPrint.firstChange(it.prefix, r.prefix) }) {
-                        null -> if (prev == null) "这个对话的第一次请求" else "开头和上一次一样：DeepSeek 那边没找到缓存（缓存过期，或者被分到了别的服务器）"
+                        null -> if (prev == null) "这个对话的第一次请求" else "开头和上一次一样：${if (r.model.contains("gpt", ignoreCase = true)) "ChatGPT" else "服务"}那边没找到缓存（缓存过期，或者被分到了别的服务器）"
                         "" -> null
                         else -> "$c 和上一次不一样，从那里往后都没命中"
                     }
@@ -472,7 +476,7 @@ private fun RecentRequestsCard() {
                         Text(fmt.format(java.util.Date(r.at)) + " · " + modelLabel(r.model) + " · 输入 ${tokens(r.prompt.toLong())} · 输出 ${tokens(r.completion.toLong())}",
                             style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, maxLines = 1)
                     }
-                    Text(rate?.let { "命中 $it%" } ?: "未返回", style = MaterialTheme.typography.labelLarge,
+                    Text(r.hit?.let { "命中 " + hitPercent(it.toLong(), r.prompt.toLong()) } ?: "未返回", style = MaterialTheme.typography.labelLarge,
                         color = when { rate == null -> colors.outline; rate >= 60 -> colors.primary; else -> colors.error })
                 }
                 why?.let { Text("↳ $it", style = MaterialTheme.typography.bodySmall, color = colors.error) }
@@ -607,7 +611,7 @@ private fun ChatGptUsageCard() {
                     Text(w.label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                     Text(
                         "${w.requests} 次 · ${com.jack.ai.data.Quota.short(w.tokens)} token" +
-                            if (w.input > 0) " · 缓存 ${(w.cached * 100 / w.input)}%" else "",
+                            if (w.input > 0) " · 缓存 ${hitPercent(w.cached.toLong(), w.input.toLong())}" else "",
                         style = MaterialTheme.typography.bodySmall.tabular, color = colors.onSurfaceVariant,
                     )
                 }

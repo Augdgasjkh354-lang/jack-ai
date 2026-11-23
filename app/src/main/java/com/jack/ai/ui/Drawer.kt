@@ -425,7 +425,7 @@ private fun ConversationUsageDialog(c: Conversation, onDismiss: () -> Unit) {
                     if (c.requests > 0) {
                         line("请求次数", "${c.requests}")
                         line("输入", tokens(c.spentPrompt))
-                        line("其中缓存命中", if (c.spentPrompt > 0) "${tokens(c.spentHit)}（${c.spentHit * 100 / c.spentPrompt}%）" else "0")
+                        line("其中缓存命中", if (c.spentPrompt > 0) "${tokens(c.spentHit)}（${hitPercent(c.spentHit, c.spentPrompt)}）" else "0")
                         line("输出", tokens(c.spentCompletion))
                     }
                     line("合计 token", tokens(c.spentTokens))
