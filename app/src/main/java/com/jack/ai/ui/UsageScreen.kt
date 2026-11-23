@@ -138,6 +138,9 @@ fun UsageScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
             // ---- 用量额度：5 小时、每周（token） ----
             QuotaCard(state.settings) { editQuota = true }
 
+            // ---- ChatGPT 套餐：Kavi 花了多少 ----
+            if (state.settings.providers.any { it.baseUrl == com.jack.ai.data.CHATGPT_PROVIDER_URL }) ChatGptUsageCard()
+
             // ---- 预算 ----
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -582,3 +585,46 @@ private fun InjectionCard() {
         }
     }
 }
+
+/**
+ * ChatGPT 套餐：Kavi 最近 5 小时、7 天用了多少（OpenAI 不给查剩余额度，只能记自己这边的），
+ * 上次撞到上限的时间，服务响应头里要是有额度信息也列出来；底下链到 ChatGPT 的用量页看准确的百分比。
+ */
+@Composable
+private fun ChatGptUsageCard() {
+    val colors = MaterialTheme.colorScheme
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val now by androidx.compose.runtime.produceState(System.currentTimeMillis()) {
+        while (true) { kotlinx.coroutines.delay(15_000); value = System.currentTimeMillis() }
+    }
+    val usage = com.jack.ai.data.integrations.ChatGptUsage
+    val windows = remember(now) { usage.windows(now) }
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("ChatGPT 套餐", style = MaterialTheme.typography.titleSmall)
+            windows.forEach { w ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(w.label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    Text(
+                        "${w.requests} 次 · ${com.jack.ai.data.Quota.short(w.tokens)} token" +
+                            if (w.input > 0) " · 缓存 ${(w.cached * 100 / w.input)}%" else "",
+                        style = MaterialTheme.typography.bodySmall.tabular, color = colors.onSurfaceVariant,
+                    )
+                }
+            }
+            if (usage.limitHitAt > 0) Text(
+                "上次额度用完：" + com.jack.ai.data.Quota.resetText(usage.limitHitAt, now),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (now - usage.limitHitAt < 5 * 3600_000L) colors.error else colors.outline,
+            )
+            if (usage.headers.isNotEmpty()) Text(
+                "服务给的额度信息：\n" + usage.headers.entries.joinToString("\n") { "${it.key}: ${it.value}" },
+                style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant,
+            )
+            Text("OpenAI 不提供查剩余额度的接口，这里是 Kavi 自己记的用量。还剩百分之几、几点恢复，要在 ChatGPT 的用量页看。",
+                style = MaterialTheme.typography.bodySmall, color = colors.outline)
+            TextButton(onClick = { Links.open(ctx, com.jack.ai.data.integrations.ChatGptAuth.USAGE_URL) }) { Text("看剩余额度、设每周上限") }
+        }
+    }
+}
+

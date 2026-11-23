@@ -180,4 +180,23 @@ class ResponsesApiTest {
         assertEquals(200_000, gpt.compressLimit())
         assertEquals(800_000, gpt.copy(model = com.jack.ai.data.MODEL_FLASH).compressLimit())
     }
+
+    @Test fun planUsageIsTrackedLocally() {
+        val u = com.jack.ai.data.integrations.ChatGptUsage
+        u.reset()
+        val now = 10L * 24 * 3600_000
+        u.record(1000, 400, 200, now - 3600_000)          // 1 小时前
+        u.record(2000, 0, 100, now - 2 * 24 * 3600_000)   // 两天前
+        val (five, week) = u.windows(now)
+        assertEquals(1, five.requests); assertEquals(1200L, five.tokens); assertEquals(400L, five.cached)
+        assertEquals(2, week.requests); assertEquals(3300L, week.tokens)
+        // 额度用完的错误记下时间
+        ResponsesApi.errorOf(o("""{"code":"subscription_sharing_usage_limit_exceeded"}"""))
+        assertTrue(u.limitHitAt > 0)
+        // 响应头里只挑跟额度有关的
+        u.seeHeaders(mapOf("content-type" to "text/event-stream", "x-ratelimit-remaining-requests" to "42"))
+        assertEquals(mapOf("x-ratelimit-remaining-requests" to "42"), u.headers)
+        u.reset()
+    }
 }
+

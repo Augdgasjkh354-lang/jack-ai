@@ -682,7 +682,11 @@ internal object ResponsesApi {
 
         private fun usage(u: JsonObject?): StreamEvent.Usage? {
             val input = u?.get("input_tokens").int().takeIf { it > 0 } ?: return null
-            return StreamEvent.Usage(input, u?.get("output_tokens").int(), u?.get("input_tokens_details").obj()?.get("cached_tokens").int())
+            val cached = u?.get("input_tokens_details").obj()?.get("cached_tokens").int() ?: 0
+            val output = u?.get("output_tokens").int() ?: 0
+            // 统计页的「ChatGPT 套餐」：Kavi 自己记花了多少（OpenAI 不给查剩余额度）
+            com.jack.ai.data.integrations.ChatGptUsage.record(input, cached, output)
+            return StreamEvent.Usage(input, output, cached)
         }
     }
 
@@ -692,6 +696,7 @@ internal object ResponsesApi {
         val message = err?.get("message").str().ifBlank { err?.get("detail").str() }
         val param = err?.get("param").str()
         // 思考参数不认：发的是极高就降成高再试；否则这次进程里不再发思考参数
+        if (code == "subscription_sharing_usage_limit_exceeded") com.jack.ai.data.integrations.ChatGptUsage.limitHit()
         val reasoningRejected = "reasoning" in param && (code == "subscription_sharing_unsupported_capability" || status == 400 || "unsupported" in code || "invalid" in code)
         if (reasoningRejected) {
             if (sentXhigh && !noXhigh) noXhigh = true else noReasoning = true

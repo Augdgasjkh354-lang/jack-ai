@@ -211,6 +211,8 @@ class DeepSeekClient(
                 var generated = 0
                 try {
                     response.use { resp ->
+                        // ChatGPT 套餐：响应头里要是带了额度信息，记下来给统计页
+                        if (format == ApiFormat.RESPONSES) com.jack.ai.data.integrations.ChatGptUsage.seeHeaders(resp.headers.toMap())
                         if (!resp.isSuccessful) {
                             val body = resp.body?.string()
                             if (format == ApiFormat.RESPONSES) {
