@@ -368,6 +368,9 @@ class Store(context: Context) {
      * 记一笔用量（按天、按模型累加），并按请求发生的这一刻的价格算钱。
      * cacheHit 为 null 表示服务没返回缓存命中数。返回这次花了多少元，不知道价格时返回 null。
      */
+    /** 后台调模型的用量回调：记账时写明是干什么的（统计页「后台 · 聊天时回看」），不再只写「后台」。 */
+    fun usage(label: String): (Endpoint, Int, Int?, Int) -> Unit = { e, p, h, c -> addUsage(e, p, h, c, label = "后台 · $label") }
+
     fun addUsage(ep: Endpoint, prompt: Int, cacheHit: Int?, completion: Int, label: String = "", prefix: String = "", exact: Double? = null): Double? = synchronized(LOCK) {
         val now = System.currentTimeMillis()
         val date = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date(now))
@@ -566,6 +569,7 @@ class Store(context: Context) {
             compressTokens = prefs.getInt("compressTokens2", COMPRESS_MIN).coerceIn(COMPRESS_MIN, COMPRESS_MAX),
             memoryEnabled = prefs.getBoolean("memoryEnabled", true),
             dreamEnabled = prefs.getBoolean("dreamEnabled", true),
+            chatReview = prefs.getBoolean("chatReview", true),
             proactive = prefs.getBoolean("proactive", true),
             userName = prefs.getString("userName", "") ?: "",
             aboutMe = prefs.getString("aboutMe", "") ?: "",
@@ -665,6 +669,7 @@ class Store(context: Context) {
             .putInt("compressTokens2", s.compressTokens.coerceIn(COMPRESS_MIN, COMPRESS_MAX))
             .putBoolean("memoryEnabled", s.memoryEnabled)
             .putBoolean("dreamEnabled", s.dreamEnabled)
+            .putBoolean("chatReview", s.chatReview)
             .putBoolean("proactive", s.proactive)
             .putString("userName", s.userName)
             .putString("aboutMe", s.aboutMe)

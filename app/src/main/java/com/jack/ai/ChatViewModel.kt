@@ -74,7 +74,7 @@ import java.io.IOException
  */
 class ChatViewModel(app: Application) : AndroidViewModel(app) {
     internal val store = Store(app)
-    internal val client = DeepSeekClient(store::addUsage)
+    internal val client = DeepSeekClient(store.usage("其他"))
     private val tavily = TavilyClient()
     private val dsFiles = com.jack.ai.api.DeepSeekFiles(app.filesDir)
     private val web = com.jack.ai.api.WebClient(tavily, { store.addPaidCall(com.jack.ai.api.WebClient.USAGE_KEY, com.jack.ai.api.WebClient.PRICE) },
@@ -797,7 +797,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val result = com.jack.ai.data.memory.MemoryReview.review(
-                    app, store, conv, st.project(conv.projectId), st.settings, client, handoff = handoff,
+                    app, store, conv, st.project(conv.projectId), st.settings, DeepSeekClient(store.usage("聊天时回看")), handoff = handoff,
                 ) ?: return@launch
                 result.memories?.let { next -> _state.update { it.copy(memories = next) } }
                 val notes = listOfNotNull(

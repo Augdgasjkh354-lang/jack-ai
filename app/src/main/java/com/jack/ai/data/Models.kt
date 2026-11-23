@@ -390,6 +390,8 @@ data class Settings(
     /** 确认卡片上点过「以后都允许」的那几类事（只认这一类，比如「在微信里点发送」），不再问。设置 → 隐私和数据 里能撤销。 */
     val alwaysAllow: List<AllowRule> = emptyList(),
     val dreamEnabled: Boolean = true,
+    /** 聊天时顺手记：每聊几轮用后台模型看一眼刚聊的，有值得长期记的当场记下（见 MemoryReview）。 */
+    val chatReview: Boolean = true,
     /** Kavi 主动找你：每天早上、傍晚回看一次，有值得打扰的事才推送（一天最多两次，深夜不找）。 */
     val proactive: Boolean = true,
     val userName: String = "",

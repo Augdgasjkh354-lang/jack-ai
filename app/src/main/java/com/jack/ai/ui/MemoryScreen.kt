@@ -156,6 +156,17 @@ private fun MemoryPage(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                             Text("记忆", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
                             Switch(settings.memoryEnabled, { on -> vm.updateSettings { it.copy(memoryEnabled = on) } })
                         }
+                        // 这两样都在后台调模型（统计页记成「后台 · 聊天时回看」「后台 · 经历摘要」）：关了记忆就都不跑
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("聊天时顺手记", style = MaterialTheme.typography.titleSmall)
+                                Text("每聊 3 轮用后台模型看一眼，有值得长期记的当场记下", style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Switch(settings.chatReview && settings.memoryEnabled, { on -> vm.updateSettings { it.copy(chatReview = on) } }, enabled = settings.memoryEnabled)
+                        }
+                        if (!settings.memoryEnabled) Text("记忆关着：聊天时顺手记、经历摘要、夜间整理都不会在后台跑。",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("夜间整理（每天 5:30）", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
                             Switch(settings.dreamEnabled, { on -> vm.updateSettings { it.copy(dreamEnabled = on) } })

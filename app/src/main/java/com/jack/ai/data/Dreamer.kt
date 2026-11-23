@@ -157,7 +157,8 @@ Output only one JSON object, in this format:
         val store = Store(ctx)
         val settings = store.loadSettings()
         val ep = settings.backgroundEndpoint() ?: return null
-        if (!force && !settings.dreamEnabled) return null
+        // 记忆总开关关着：夜里也不整理（「现在就整理」照样能手动跑）
+        if (!force && (!settings.dreamEnabled || !settings.memoryEnabled)) return null
         // 从开始整理的这一刻算：整理要好几分钟，期间新聊的下次再整理，不会被跳过
         val startedAt = now
         val since = store.lastDreamAt.takeIf { it > 0 } ?: (startedAt - TimeUnit.DAYS.toMillis(1))
@@ -174,7 +175,7 @@ Output only one JSON object, in this format:
             return null
         }
         val held = heldNote(ctx)
-        val client = DeepSeekClient(store::addUsage)
+        val client = DeepSeekClient(store.usage("夜间整理"))
         val changes = mutableListOf<String>()
         val heldNow = mutableListOf<String>()
         // 默认空间先整理

@@ -562,7 +562,7 @@ private suspend fun ToolSession.runSteps(args: JsonObject): String {
  */
 private suspend fun ToolSession.structure(rows: List<List<String>>, columns: List<String>): Pair<List<String>, List<List<String>>>? {
     val ep = settings.backgroundEndpoint() ?: return null
-    val client = com.jack.ai.api.DeepSeekClient(host.store::addUsage)
+    val client = com.jack.ai.api.DeepSeekClient(host.store.usage("网页整理成表"))
     val out = ArrayList<List<String>>()
     for (chunk in rows.chunked(40)) {
         val input = kotlinx.serialization.json.buildJsonArray {

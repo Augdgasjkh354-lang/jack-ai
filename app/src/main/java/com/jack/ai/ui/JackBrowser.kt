@@ -488,7 +488,7 @@ try{Object.defineProperty(window,n,{value:W,writable:true,configurable:true});}c
         val segs = BrowserTranslate.segments(raw)
         if (segs.isEmpty()) return "这一页没有需要翻译的外文"
         val batches = BrowserTranslate.batches(segs)
-        val client = com.jack.ai.api.DeepSeekClient(s.first::addUsage)
+        val client = com.jack.ai.api.DeepSeekClient(s.first.usage("网页翻译"))
         val gate = kotlinx.coroutines.sync.Semaphore(3)
         var done = 0
         var failed = 0

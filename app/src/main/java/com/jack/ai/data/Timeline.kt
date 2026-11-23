@@ -198,7 +198,7 @@ Write in {lang}. Output only one JSON object:
         val who = Persona.ref(s) ?: "User"
         val transcript = fresh.joinToString("\n") { m -> (if (m.role == "user") who else "Kavi") + ": " + Recap.clip(m.content, 600) }.takeLast(8000)
         val threads = Threads.load(ctx)
-        val raw = com.jack.ai.api.DeepSeekClient(store::addUsage).complete(
+        val raw = com.jack.ai.api.DeepSeekClient(store.usage("经历摘要")).complete(
             ep,
             listOf(
                 buildJsonObject { put("role", "system"); put("content", Persona.fill(SUMMARY_RULES, s)) },

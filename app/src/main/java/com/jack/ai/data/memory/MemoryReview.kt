@@ -158,7 +158,7 @@ object MemoryReview {
         handoff: Boolean = false,
     ): ReviewResult? {
         val ready = due(conv) || (handoff && project != null && unseen(conv).any { it.role == "user" })
-        if (!ready || !settings.memoryEnabled || !conv.inDream || conv.ownLife ||
+        if (!ready || !settings.memoryEnabled || !settings.chatReview || !conv.inDream || conv.ownLife ||
             conv.id == INBOX_ID || conv.id == Retired.FREE_TIME_CONV) return null
         if (project != null) return reviewProject(ctx, store, conv, project, settings, client)
         val unseen = unseen(conv)

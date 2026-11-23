@@ -68,7 +68,7 @@ Rules:
         com.jack.ai.data.Quota.blocked(ctx, s)?.let { error(com.jack.ai.data.Quota.message(it)) }
         val ep = s.endpoint(s.model)?.takeIf { it.apiKey.isNotBlank() } ?: s.backgroundEndpoint()
             ?: error("要用模型：先到设置里填好 DeepSeek Key")
-        return DeepSeekClient(store::addUsage).complete(
+        return DeepSeekClient(store.usage("设计")).complete(
             ep,
             listOf(
                 buildJsonObject { put("role", "system"); put("content", system) },

@@ -1,5 +1,6 @@
 package com.jack.ai
 
+import com.jack.ai.api.DeepSeekClient
 import com.jack.ai.data.spaceOf
 import android.app.Application
 import androidx.lifecycle.viewModelScope
@@ -195,7 +196,7 @@ internal fun ChatViewModel.launchThinkSummarizer(
                 if (localLlm != null) com.jack.ai.api.LocalLlm.generate(
                     com.jack.ai.data.LocalModels.dir(getApplication(), localLlm), localLlm.llm!!,
                     com.jack.ai.chat.ThinkSummary.SYSTEM, com.jack.ai.chat.ThinkSummary.input(previous, chunk.takeLast(1200)), maxNew = 32, maxPrompt = 900)
-                else client.complete(summaryEp!!, listOf(
+                else DeepSeekClient(store.usage("思考摘要")).complete(summaryEp!!, listOf(
                     buildJsonObject { put("role", "system"); put("content", com.jack.ai.chat.ThinkSummary.SYSTEM) },
                     buildJsonObject { put("role", "user"); put("content", com.jack.ai.chat.ThinkSummary.input(previous, chunk)) },
                 ), maxTokens = 60)

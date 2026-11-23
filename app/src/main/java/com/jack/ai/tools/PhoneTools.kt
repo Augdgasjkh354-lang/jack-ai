@@ -126,7 +126,7 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
     /** 请能看图的模型看截图（[k]：截图像素 × k = 屏幕像素），返回清单；没有能看图的模型、没认出东西是 null。 */
     suspend fun eyesLook(image: String, k: Float, screen: Pair<Int, Int>): String? {
         val ep = com.jack.ai.data.phone.ScreenEyes.eyes(settings) ?: return null
-        val spots = com.jack.ai.data.phone.ScreenEyes.look(com.jack.ai.api.DeepSeekClient(host.store::addUsage), ep, image,
+        val spots = com.jack.ai.data.phone.ScreenEyes.look(com.jack.ai.api.DeepSeekClient(host.store.usage("看屏幕")), ep, image,
             (screen.first / k).toInt(), (screen.second / k).toInt())
         return com.jack.ai.data.phone.ScreenEyes.format(spots, ep.model).takeIf { it.isNotEmpty() }
     }

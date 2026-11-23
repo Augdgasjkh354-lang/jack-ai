@@ -179,7 +179,7 @@ Output only one JSON object: {"send": true or false, "kind": "a two-or-three-wor
         val log = store.loadNudges()
         gate(log, now, hour)?.let { if (!force) return record(store, Nudge(now, sent = false, blocked = it)) }
         val time = SimpleDateFormat("yyyy-MM-dd EEEE HH:mm", Locale.ENGLISH).format(Date(now))
-        val raw = DeepSeekClient(store::addUsage).complete(
+        val raw = DeepSeekClient(store.usage("主动找你")).complete(
             ep,
             listOf(
                 buildJsonObject { put("role", "system"); put("content", Persona.fill(KaviSelf.text() + Persona.nameLine(s).let { if (it.isEmpty()) "" else "\n\n$it" } + "\n\n" + CONFIDENTIAL_PROMPT + "\n\n" + RULES, s)) },

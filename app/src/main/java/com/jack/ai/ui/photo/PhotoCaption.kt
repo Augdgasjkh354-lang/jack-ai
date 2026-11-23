@@ -30,7 +30,7 @@ Output only one JSON object: {"captions": ["...", "..."]}"""
         val small = PhotoOps.scaleDown(bmp, 768)
         val jpg = java.io.ByteArrayOutputStream().also { small.compress(Bitmap.CompressFormat.JPEG, 80, it) }.toByteArray()
         val url = "data:image/jpeg;base64," + Base64.encodeToString(jpg, Base64.NO_WRAP)
-        val raw = DeepSeekClient(store::addUsage).complete(
+        val raw = DeepSeekClient(store.usage("照片说明")).complete(
             ep,
             listOf(
                 buildJsonObject { put("role", "system"); put("content", RULES) },

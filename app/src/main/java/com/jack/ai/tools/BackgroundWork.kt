@@ -197,7 +197,7 @@ suspend fun runBackgroundWork(
     val agent = Agent({ msgs, t -> client.stream(ep, msgs, thinking, s.temperature, t) }, sendReasoning = ep.deepseek && thinking.effort != null)
     // 定时的 Work 任务也过收尾关卡；监控、微信这类按固定格式回话的（带 brief）不过
     val gate = if (brief == null) WorkGate(session, review = if (s.workReview) {
-        WorkGate.reviewer(session, DeepSeekClient(store::addUsage), s.backgroundEndpoint() ?: ep, r.prompt.ifBlank { r.title }, startedAt)
+        WorkGate.reviewer(session, DeepSeekClient(store.usage("交付前复核")), s.backgroundEndpoint() ?: ep, r.prompt.ifBlank { r.title }, startedAt)
     } else null) else null
     // 思路来自 deepseek-ai/deepseek-harness packages/goal/goal-round-driver/，MIT。只观察本次会话占用的手机端口。
     val goalMonitor = if (goalId != null) kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.currentCoroutineContext()).launch {
