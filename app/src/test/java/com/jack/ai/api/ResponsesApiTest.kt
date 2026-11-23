@@ -190,8 +190,8 @@ class ResponsesApiTest {
         val u = com.jack.ai.data.integrations.ChatGptUsage
         u.reset()
         val now = 10L * 24 * 3600_000
-        u.record(1000, 400, 200, now - 3600_000)          // 1 小时前
-        u.record(2000, 0, 100, now - 2 * 24 * 3600_000)   // 两天前
+        u.record(1000, 400, 200, now = now - 3600_000)          // 1 小时前
+        u.record(2000, 0, 100, now = now - 2 * 24 * 3600_000)   // 两天前
         val (five, week) = u.windows(now)
         assertEquals(1, five.requests); assertEquals(1200L, five.tokens); assertEquals(400L, five.cached)
         assertEquals(2, week.requests); assertEquals(3300L, week.tokens)

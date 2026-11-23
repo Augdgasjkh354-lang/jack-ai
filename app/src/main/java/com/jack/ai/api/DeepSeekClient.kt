@@ -154,7 +154,7 @@ class DeepSeekClient(
         val parser: SseParser? = when (format) {
             ApiFormat.ANTHROPIC -> AnthropicApi.Parser()
             ApiFormat.GEMINI -> GeminiApi.Parser()
-            ApiFormat.RESPONSES -> ResponsesApi.Parser()
+            ApiFormat.RESPONSES -> ResponsesApi.Parser(ep.model)
             ApiFormat.OPENAI -> null
         }
         val body = native?.body ?: buildJsonObject {

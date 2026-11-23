@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -631,11 +633,13 @@ private fun ChatGptUsageCard() {
                     }
                     Text(
                         "${w.requests} 次 · ${com.jack.ai.data.Quota.short(w.tokens)} token" +
-                            if (w.input > 0) " · 缓存 ${hitPercent(w.cached.toLong(), w.input.toLong())}" else "",
+                            (if (w.input > 0) " · 缓存 ${hitPercent(w.cached.toLong(), w.input.toLong())}" else "") +
+                            (if (w.usd > 0) " · 值 ${usdText(w.usd)}" else ""),
                         style = MaterialTheme.typography.bodySmall.tabular, color = colors.onSurfaceVariant,
                     )
                 }
             }
+            GptValue(usage.month(now), usage.since(), now)
             TextButton(onClick = { calibrating = true }) {
                 Text(if (usage.calibratedAt > 0) "重新校准百分比" else "显示百分比：照 ChatGPT 用量页校准一次")
             }
@@ -659,6 +663,43 @@ private fun ChatGptUsageCard() {
         onOpenUsage = { Links.open(ctx, com.jack.ai.data.integrations.ChatGptAuth.USAGE_URL) },
         onDismiss = { calibrating = false },
     ) { pcts -> usage.calibrate(pcts); refresh++; calibrating = false }
+}
+
+/** 美元金额，后面带约合人民币。 */
+private fun usdText(usd: Double): String {
+    val f = if (usd < 1) "%.3f" else "%.2f"
+    return "$" + String.format(java.util.Locale.US, f, usd) + "（约 ¥" + String.format(java.util.Locale.US, "%.2f", usd * com.jack.ai.data.Pricing.USD_TO_CNY) + "）"
+}
+
+/**
+ * 按 OpenAI API 官方价算，最近 30 天 Kavi 用的 GPT 值多少钱，和套餐月费比一比（看会员开得划不划算）。
+ * 只算 Kavi 这边的；网页版、手机 App 里用的不在内。
+ */
+@Composable
+private fun GptValue(m: com.jack.ai.data.integrations.ChatGptUsage.Window, since: Long?, now: Long) {
+    val colors = MaterialTheme.colorScheme
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(colors.primary.copy(alpha = 0.08f)).padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text("按 API 官方价算，最近 30 天值", style = MaterialTheme.typography.bodyMedium)
+        Text(usdText(m.usd), style = MaterialTheme.typography.titleMedium.tabular, color = colors.primary)
+        val plans = listOf("Plus" to 20, "Pro" to 200)
+        Text(
+            plans.joinToString("；") { (name, fee) ->
+                val r = m.usd / fee
+                "$name（月费 $fee 美元）的 " + if (r >= 1) String.format(java.util.Locale.US, "%.1f 倍", r) else String.format(java.util.Locale.US, "%.1f%%", r * 100)
+            },
+            style = MaterialTheme.typography.bodySmall.tabular, color = colors.onSurfaceVariant,
+        )
+        val days = since?.let { ((now - it) / 86_400_000L + 1).coerceAtMost(30) }
+        val notes = buildList {
+            if (days != null && days < 30) add("才记了 $days 天，按这个速度一个月约 ${usdText(m.usd * 30 / days)}")
+            if (m.unpriced > 0) add("${m.unpriced} 次没算进去（旧版本记的，或者模型不在价目表里）")
+            add("价格按 OpenAI API 标准档，命中缓存的输入按缓存价；只算 Kavi 这边用的")
+        }
+        Text(notes.joinToString("。") + "。", style = MaterialTheme.typography.labelSmall, color = colors.outline)
+    }
 }
 
 /** GPT 的请求没命中：Kavi 发的和上一步接不接得上（见 ResponsesApi.verdict）。 */

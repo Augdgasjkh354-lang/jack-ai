@@ -31,4 +31,23 @@ class ChatGptUsageTest {
         ChatGptUsage.calibrate(listOf(10.0, null), now = 5L)
         assertNull(ChatGptUsage.windows(5L)[0].percent)
     }
+
+    @Test fun valueFollowsOfficialApiPrices() {
+        // GPT-6.1 Sol：10 万输入（6 万命中）、1 万输出 = 4 万×2 + 6 万×0.1 + 1 万×10 = 0.186 美元
+        assertEquals(0.186, GptApiPrice.usd("gpt-6.1-sol", 100_000, 60_000, 10_000)!!, 1e-9)
+        // 超过 272K 按长上下文价
+        assertEquals(300_000 * 0.20 / 1e6, GptApiPrice.usd("gpt-6-luna", 300_000, 0, 0)!!, 1e-9)
+        // 带日期的名字认前缀；不认识的不算
+        assertEquals(GptApiPrice.rateOf("gpt-5.4-mini"), GptApiPrice.rateOf("gpt-5.4-mini-2026-03-01"))
+        assertNull(GptApiPrice.usd("o9", 1, 0, 1))
+        val t0 = 1_000_000_000_000L
+        ChatGptUsage.record(100_000, 60_000, 10_000, "gpt-6.1-sol", now = t0)
+        ChatGptUsage.record(1_000, 0, 0, "o9", now = t0 + 1)
+        // 10 天前的不在 7 天里，在 30 天里
+        ChatGptUsage.record(100_000, 60_000, 10_000, "gpt-6.1-sol", now = t0 - 10 * 86_400_000L)
+        assertEquals(0.186, ChatGptUsage.windows(t0 + 2)[1].usd, 1e-9)
+        val m = ChatGptUsage.month(t0 + 2)
+        assertEquals(0.372, m.usd, 1e-9)
+        assertEquals(1, m.unpriced)
+    }
 }

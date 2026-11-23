@@ -687,7 +687,8 @@ internal object ResponsesApi {
         return system.toString() to items
     }
 
-    class Parser : SseParser {
+    /** [model]：记套餐用量时按它算 API 价（见 GptApiPrice）。 */
+    class Parser(private val model: String = "") : SseParser {
         override var finished = false
         override var sawData = false
         /** 输出里第几项（output_index）→ 第几个工具调用。 */
@@ -760,7 +761,7 @@ internal object ResponsesApi {
             val cached = u?.get("input_tokens_details").obj()?.get("cached_tokens").int() ?: 0
             val output = u?.get("output_tokens").int() ?: 0
             // 统计页的「ChatGPT 套餐」：Kavi 自己记花了多少（OpenAI 不给查剩余额度）
-            com.jack.ai.data.integrations.ChatGptUsage.record(input, cached, output)
+            com.jack.ai.data.integrations.ChatGptUsage.record(input, cached, output, model)
             return StreamEvent.Usage(input, output, cached, prefix = lastVerdict.ifEmpty { null })
         }
     }

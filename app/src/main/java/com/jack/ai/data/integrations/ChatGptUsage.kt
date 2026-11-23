@@ -11,13 +11,18 @@ import android.content.SharedPreferences
 object ChatGptUsage {
     private const val FIVE_HOURS = 5 * 3600_000L
     private const val WEEK = 7 * 24 * 3600_000L
+    private const val MONTH = 30 * 24 * 3600_000L
 
-    /** 一次请求：时间、输入、其中命中缓存、输出。 */
-    data class Hit(val at: Long, val input: Int, val cached: Int, val output: Int)
+    /** 一次请求：时间、输入、其中命中缓存、输出、按 API 价值多少美元（不认识的模型、旧版本记的是 null）。 */
+    data class Hit(val at: Long, val input: Int, val cached: Int, val output: Int, val usd: Double? = null)
 
     data class Window(val label: String, val requests: Int, val input: Long, val cached: Long, val output: Long,
                       /** 按校准估算的已用百分比（没校准过是 null）。 */
-                      val percent: Double? = null) {
+                      val percent: Double? = null,
+                      /** 按 OpenAI API 官方价算值多少美元（见 [GptApiPrice]）。 */
+                      val usd: Double = 0.0,
+                      /** 其中没算上价的请求（不认识的模型、旧版本记的）。 */
+                      val unpriced: Int = 0) {
         val tokens: Long get() = input + output
         /** 折算成「额度单位」：没命中缓存的输入算 1，命中的算 0.1，输出算 8（大致按 GPT 的价格比例）。 */
         val units: Double get() = (input - cached).coerceAtLeast(0) + cached * 0.1 + output * 8.0
@@ -46,8 +51,9 @@ object ChatGptUsage {
         limitHitAt = p.getLong("limitHitAt", 0)
         synchronized(hits) {
             p.getString("hits", "").orEmpty().lineSequence().mapNotNull { line ->
-                val f = line.split(',').mapNotNull { it.toLongOrNull() }
-                if (f.size == 4) Hit(f[0], f[1].toInt(), f[2].toInt(), f[3].toInt()) else null
+                val f = line.split(',')
+                val n = f.take(4).mapNotNull { it.toLongOrNull() }
+                if (n.size == 4) Hit(n[0], n[1].toInt(), n[2].toInt(), n[3].toInt(), f.getOrNull(4)?.toDoubleOrNull()) else null
             }.forEach { hits.addLast(it) }
         }
         caps[0] = p.getFloat("cap5h", 0f).toDouble(); caps[1] = p.getFloat("cap7d", 0f).toDouble()
@@ -57,11 +63,12 @@ object ChatGptUsage {
     }
 
     /** 记一次请求的用量（回答结束时 Responses 接口给的）。 */
-    fun record(input: Int, cached: Int, output: Int, now: Long = System.currentTimeMillis()) {
+    fun record(input: Int, cached: Int, output: Int, model: String = "", now: Long = System.currentTimeMillis()) {
         synchronized(hits) {
-            hits.addLast(Hit(now, input, cached, output))
-            while (hits.isNotEmpty() && now - hits.first().at > WEEK) hits.removeFirst()
-            prefs?.edit()?.putString("hits", hits.joinToString("\n") { "${it.at},${it.input},${it.cached},${it.output}" })?.apply()
+            hits.addLast(Hit(now, input, cached, output, GptApiPrice.usd(model, input, cached, output)))
+            // 留 30 天：看一个月值多少钱
+            while (hits.isNotEmpty() && now - hits.first().at > MONTH) hits.removeFirst()
+            prefs?.edit()?.putString("hits", hits.joinToString("\n") { "${it.at},${it.input},${it.cached},${it.output}" + (it.usd?.let { u -> ",$u" } ?: "") })?.apply()
         }
     }
 
@@ -81,10 +88,21 @@ object ChatGptUsage {
 
     fun windows(now: Long = System.currentTimeMillis()): List<Window> = synchronized(hits) {
         listOf("最近 5 小时" to FIVE_HOURS, "最近 7 天" to WEEK).mapIndexed { i, (label, len) ->
-            val h = hits.filter { now - it.at <= len }
-            val w = Window(label, h.size, h.sumOf { it.input.toLong() }, h.sumOf { it.cached.toLong() }, h.sumOf { it.output.toLong() })
+            val w = window(label, len, now)
             if (caps[i] > 0) w.copy(percent = w.units * 100.0 / caps[i]) else w
         }
+    }
+
+    /** 最近 30 天：只看按 API 价值多少钱（套餐按月付）。 */
+    fun month(now: Long = System.currentTimeMillis()): Window = synchronized(hits) { window("最近 30 天", MONTH, now) }
+
+    /** 最早一条记录的时间（记了几天，30 天没满时说一声）。 */
+    fun since(): Long? = synchronized(hits) { hits.firstOrNull()?.at }
+
+    private fun window(label: String, len: Long, now: Long): Window {
+        val h = hits.filter { now - it.at <= len }
+        return Window(label, h.size, h.sumOf { it.input.toLong() }, h.sumOf { it.cached.toLong() }, h.sumOf { it.output.toLong() },
+            usd = h.sumOf { it.usd ?: 0.0 }, unpriced = h.count { it.usd == null })
     }
 
     /**

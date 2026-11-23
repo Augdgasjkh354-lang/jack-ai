@@ -126,7 +126,7 @@ internal object ResponsesSocket {
             if (delta != null) ResponsesApi.lastVerdict = "gpt:ws"
             synchronized(chains) { chains.remove(key) }
             if (!c.ws.send(msg.toString())) { drop(); throw IOException("和 ChatGPT 的连接断了") }
-            val parser = ResponsesApi.Parser()
+            val parser = ResponsesApi.Parser((head["model"] as? JsonPrimitive)?.content.orEmpty())
             var done = false
             try {
                 while (true) {
