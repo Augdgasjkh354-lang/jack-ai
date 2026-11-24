@@ -184,7 +184,8 @@ object PromptBuilder {
         val all = skills.map { it.id }.toSet()
         // 代码、写作项目开局只带相关的（见 ProjectKind），其余读过做法才带
         val lazy = com.jack.ai.data.lazySkills(project, settings)
-        val skillIds = all.filter { it !in lazy || it in unlocked }.toSet()
+        // 打开的技能要用到的插件一起算打开（见 SkillIds.COMPANIONS）
+        val skillIds = SkillIds.withCompanions(all.filter { it !in lazy || it in unlocked }.toSet(), all)
         val web = SkillIds.WEB in skillIds
         // 用 GPT 时精简：下面几个原本一直带着的大工具，只在用得上的技能打开后才带
         val slim = settings.slimTools()
@@ -247,13 +248,14 @@ object PromptBuilder {
             if (SkillIds.BROWSER in skillIds && com.jack.ai.Edition.browser) add(SkillTools.BROWSER)
             if (web) add(SkillTools.DOWNLOAD_FILE)
             if (SkillIds.DESIGN in skillIds) add(SkillTools.DESIGN)
-            if (!slim || office) add(SkillTools.CONVERT_FILE)
+            if (!slim || office || skillIds.any { it in SkillIds.NEEDS_CONVERT }) add(SkillTools.CONVERT_FILE)
             // 新工具加在最后（见上面）：改写别人的文章后核对数字和人称
             if (!slim || SkillIds.REPURPOSE in skillIds || SkillIds.NOVEL in skillIds) add(SkillTools.CHECK_REWRITE)
             // 发帖草稿卡片：和人聊的对话才有（后台没人看时工具自己回话）
             if (conv.id != com.jack.ai.data.Retired.FREE_TIME_CONV && conv.id != com.jack.ai.data.INBOX_ID && (!slim || drafts)) add(SkillTools.SHOW_DRAFT)
             // 代码动画短片：要设计插件（出图的那套 WebView 和字体）
-            if (SkillIds.DESIGN in skillIds) add(SkillTools.MAKE_ANIMATION)
+            // 「设计」插件被关掉时，打开了「动画短片」也要有（出片用的是同一套引擎，和开关无关）
+            if (SkillIds.DESIGN in skillIds || SkillIds.ANIMATION in skillIds) add(SkillTools.MAKE_ANIMATION)
             // 长任务的工作笔记（思路来自 planning-with-files，MIT）
             add(SkillTools.WORK_NOTE)
             // 做工具包：试跑、交给用户装

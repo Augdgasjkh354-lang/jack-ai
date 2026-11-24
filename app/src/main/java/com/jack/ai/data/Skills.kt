@@ -119,6 +119,21 @@ object SkillIds {
      * 整个对话里都一样；多出来的几千 token 几乎全命中缓存。机制留着，以后真要按需加再填回来。
      */
     val ON_DEMAND: Set<String> = emptySet()
+
+    /**
+     * 做法里要用别的插件工具的技能 → 那些插件。用 GPT 时工具按需带，只解锁技能本身的话，做法读到了工具却没有
+     * （读了「动画短片」没有 make_animation、读了「小红书视觉导演」没有 design）。解锁它时这些一起算打开。
+     */
+    val COMPANIONS: Map<String, Set<String>> = mapOf(
+        ANIMATION to setOf(DESIGN), XHS_VISUAL to setOf(DESIGN), DIAGRAM_DESIGN to setOf(DESIGN),
+    )
+
+    /** 做法靠 convert_file（转写、配音、看视频、合成、认字）的技能：用 GPT 精简工具时，打开它们也带上 convert_file。 */
+    val NEEDS_CONVERT = setOf(ANIMATION, LONG_CLIP, VIDEO_EDIT, DOUYIN, CONTRACT)
+
+    /** [ids] 加上它们的 [COMPANIONS]（只加 [available] 里有的，即用户开着的）。 */
+    fun withCompanions(ids: Set<String>, available: Set<String>): Set<String> =
+        ids + ids.flatMap { COMPANIONS[it].orEmpty() }.filter { it in available }
 }
 
 /** 正式版没有的技能：浏览器、浏览器流程、在招聘 App 上打招呼（都要操作浏览器或其他 App）。 */

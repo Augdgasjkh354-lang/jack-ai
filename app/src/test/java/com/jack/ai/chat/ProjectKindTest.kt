@@ -60,5 +60,12 @@ class ProjectKindTest {
         // 读过「PPT」的做法，PPT 和转换文件的工具就带上
         val opened = names(gpt, setOf(SkillIds.PPT)).map { it.jsonObject["function"]!!.jsonObject["name"]!!.jsonPrimitive.content }
         assertTrue("create_ppt" in opened && "convert_file" in opened)
+        // 读过「动画短片」：画面、配音合成的工具都要有（以前只解锁了技能本身，make_animation 卡在「设计」上）
+        val anim = names(gpt, setOf(SkillIds.ANIMATION)).map { it.jsonObject["function"]!!.jsonObject["name"]!!.jsonPrimitive.content }
+        assertTrue(anim.toString(), "make_animation" in anim && "convert_file" in anim && "design" in anim)
+        // 「设计」插件关了也照样能做动画
+        val noDesign = gpt.copy(disabledSkills = gpt.disabledSkills + SkillIds.DESIGN)
+        val anim2 = names(noDesign, setOf(SkillIds.ANIMATION)).map { it.jsonObject["function"]!!.jsonObject["name"]!!.jsonPrimitive.content }
+        assertTrue(anim2.toString(), "make_animation" in anim2 && "design" !in anim2)
     }
 }
