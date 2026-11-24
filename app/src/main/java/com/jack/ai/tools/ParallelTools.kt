@@ -6,6 +6,7 @@ import com.jack.ai.chat.PromptBuilder
 import com.jack.ai.data.SearchRecord
 import com.jack.ai.data.ThinkLevel
 import com.jack.ai.data.backgroundEndpoint
+import com.jack.ai.data.subagentEndpoint
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -37,12 +38,15 @@ internal suspend fun ToolSession.delegateTasks(args: JsonObject): String {
         if (title.isBlank() || what.isBlank()) null else title to what
     }.take(5)
     if (tasks.isEmpty()) return "没有子任务"
-    val fallback = settings.backgroundEndpoint()
+    // 用户在「模型和思考」里选了子 agent 模型：只用它，不走免费池
+    val chosen = settings.subagentEndpoint()
+    val fallback = chosen ?: settings.backgroundEndpoint()
     val pool = com.jack.ai.data.FreePool.load(app)
     return runTool("分头做 ${tasks.size} 件事") {
         val client = DeepSeekClient()
         // 池里的硅基流动模型探测时已经按价格页筛过是免费的，这里不用每次再抓一遍网页
-        fun getCandidates(state: com.jack.ai.data.FreePoolState, index: Int) = com.jack.ai.data.freeCandidates(state, settings, index)
+        fun getCandidates(state: com.jack.ai.data.FreePoolState, index: Int) =
+            if (chosen != null) emptyList() else com.jack.ai.data.freeCandidates(state, settings, index)
         val folder = ContextNote.files(wsDir)
         val tools = JsonArray(PromptBuilder.toolSet(settings, skills, conv, project, unlocked).orEmpty().filter { definition ->
             val fn = (definition as? JsonObject)?.get("function") as? JsonObject

@@ -294,6 +294,17 @@ fun SettingsScreen(
                         }
                     }
                 }
+                // 后台模型、子 agent 模型：不选时自动挑（有 DeepSeek Key 用 Flash）
+                ModelPick(
+                    title = "后台模型",
+                    hint = "夜间整理、压缩长对话、交付前复核、定时任务、微信消息、思考摘要这些后台活用它。自动：有 DeepSeek Key 用 V4.1 Flash，否则用主模型",
+                    auto = "自动", current = settings.backgroundModel, choices = settings.modelChoices(),
+                ) { k -> vm.updateSettings { it.copy(backgroundModel = k) } }
+                ModelPick(
+                    title = "子 agent 模型",
+                    hint = "分头做事时每个分身用它。自动：先用免费模型池，没有就用后台模型",
+                    auto = "自动", current = settings.subagentModel, choices = settings.modelChoices(),
+                ) { k -> vm.updateSettings { it.copy(subagentModel = k) } }
                 // 思考摘要：思考时一行行小标题；回答出来后展开还是折叠
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
@@ -916,6 +927,28 @@ private fun CheckList(labels: List<String>, selected: Int, onPick: (Int) -> Unit
                     }
                 }
             }
+        }
+    }
+}
+
+/** 选一个模型，第一个选项是「自动」（存成空字符串）。 */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ModelPick(title: String, hint: String, auto: String, current: String, choices: List<com.jack.ai.data.ModelChoice>, onPick: (String) -> Unit) {
+    val valid = current.isBlank() || choices.any { it.key == current }
+    Column {
+        Text(title)
+        Text(if (valid) hint else "$hint。之前选的模型已经不在了，现在用主模型",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FilterChip(selected = current.isBlank(), onClick = { onPick("") }, label = { Text(auto) })
+        choices.forEach { c ->
+            FilterChip(
+                selected = current == c.key,
+                onClick = { onPick(c.key) },
+                label = { Text(c.label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            )
         }
     }
 }

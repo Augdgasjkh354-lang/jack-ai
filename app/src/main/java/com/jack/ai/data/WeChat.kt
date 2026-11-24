@@ -164,7 +164,7 @@ class WeChatWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx
         val brief = "【Background: WeChat client messages】It is now $now. {User} turned on 「微信消息交给 Kavi」 in settings; you're going through the WeChat private messages they just received, in the background. " +
             "Record each client's situation, and push anything urgent to their phone. {User} isn't online and can't be asked anything. "
         val result = try {
-            com.jack.ai.tools.runBackgroundWork(ctx, r, allow = WeChat::allow, brief = brief, model = MODEL_FLASH)
+            com.jack.ai.tools.runBackgroundWork(ctx, r, allow = WeChat::allow, brief = brief, model = s.backgroundModelKey() ?: MODEL_FLASH)
         } catch (e: kotlinx.coroutines.CancellationException) {
             // 被系统停掉：消息放回去，WorkManager 会再排
             store.putBackWeChat(batch)

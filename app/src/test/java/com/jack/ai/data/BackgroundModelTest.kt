@@ -1,0 +1,30 @@
+package com.jack.ai.data
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Test
+
+/** 后台模型、子 agent 模型：用户选了就用选的，不再悄悄换成 DeepSeek Flash。 */
+class BackgroundModelTest {
+    private val gpt = Provider(id = "g", name = "ChatGPT", baseUrl = "http://x", apiKey = "k", models = listOf(ProviderModel("luna"), ProviderModel("sol")))
+    private val base = Settings(apiKey = "ds", model = customModelKey("g", "sol"), providers = listOf(gpt))
+
+    @Test fun autoKeepsTheOldBehaviour() {
+        assertEquals(MODEL_FLASH, base.backgroundEndpoint()!!.model)
+        assertEquals("sol", base.copy(apiKey = "").backgroundEndpoint()!!.model)
+        assertNull(base.subagentEndpoint())
+    }
+
+    @Test fun chosenModelsAreUsed() {
+        val s = base.copy(backgroundModel = customModelKey("g", "luna"), subagentModel = customModelKey("g", "sol"))
+        assertEquals("luna", s.backgroundEndpoint()!!.model)
+        assertEquals(customModelKey("g", "luna"), s.backgroundModelKey())
+        assertEquals("sol", s.subagentEndpoint()!!.model)
+    }
+
+    @Test fun aGoneChoiceFallsBackToTheMainModelNotDeepSeek() {
+        val s = base.copy(backgroundModel = customModelKey("gone", "x"), subagentModel = customModelKey("gone", "x"))
+        assertEquals("sol", s.backgroundEndpoint()!!.model)
+        assertNull(s.subagentEndpoint())
+    }
+}

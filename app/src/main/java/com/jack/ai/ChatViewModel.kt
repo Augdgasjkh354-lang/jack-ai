@@ -49,6 +49,7 @@ import com.jack.ai.data.ThinkLevel
 import com.jack.ai.data.MODEL_FLASH
 import com.jack.ai.data.endpoint
 import com.jack.ai.data.backgroundEndpoint
+import com.jack.ai.data.backgroundModelKey
 import com.jack.ai.data.Provider
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -457,7 +458,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         if (busy(conv.id) || tooMany(conv.id)) return
         if (conv.messages.lastOrNull()?.let { it.role == "assistant" && it.content.isNotBlank() } != true) return
         // 有 DeepSeek Key 时用 V4.1 Flash 复核（比现在的 Pro 强，也便宜），否则用当前模型
-        val model = if (_state.value.settings.apiKey.isNotBlank()) MODEL_FLASH else _state.value.settings.model
+        val st = _state.value.settings
+        val model = if (st.backgroundModel.isNotBlank()) st.backgroundModelKey() ?: st.model else if (st.apiKey.isNotBlank()) MODEL_FLASH else st.model
         startReply(conv.id, modelOverride = model, extraUser = REVIEW_PROMPT)
     }
 

@@ -415,6 +415,10 @@ data class Settings(
     val quietEnd: Int = 8,
     /** 备用模型（最多 2 个，按顺序）：主模型报错、限流、没余额时自动换着用，见 Failover。 */
     val fallbackModels: List<String> = emptyList(),
+    /** 后台模型：夜间整理、压缩、复核、定时任务、微信这类后台活用哪个。空 = 自动（有 DeepSeek Key 用 Flash，否则用主模型）。 */
+    val backgroundModel: String = "",
+    /** 子 agent（分头做）用哪个模型。空 = 先用免费池，没有再用后台模型。 */
+    val subagentModel: String = "",
     /** 每月预算（元），0 表示不设。 */
     val monthlyBudget: Double = 0.0,
     /** 邮箱账号（IMAP 收信、SMTP 发信），没设置时为空。 */
@@ -623,9 +627,24 @@ private fun Settings.rawEndpoint(key: String): Endpoint? {
     return Endpoint(p.baseUrl, p.apiKey, m.id, deepseek = false, vision = m.vision, reasoning = m.reasoning, key = key, price = m.price)
 }
 
-/** 压缩、做梦、定时任务这类后台活：有 DeepSeek Key 就用 Flash（便宜），否则用当前选的模型。 */
-fun Settings.backgroundEndpoint(): Endpoint? =
-    if (apiKey.isNotBlank()) endpoint(MODEL_FLASH) else endpoint(model)?.takeIf { it.apiKey.isNotBlank() }
+/** 压缩、做梦、定时任务这类后台活：用户选了后台模型就用它；没选时有 DeepSeek Key 用 Flash（便宜），否则用当前选的模型。 */
+fun Settings.backgroundEndpoint(): Endpoint? {
+    // 选了但用不了（服务删了、没 Key）：退回主模型，不悄悄换成 DeepSeek
+    if (backgroundModel.isNotBlank()) return usable(backgroundModel) ?: usable(model)
+    return if (apiKey.isNotBlank()) endpoint(MODEL_FLASH) else usable(model)
+}
+
+/** 子 agent 用的模型：用户选了就用它，没选返回 null（先走免费池，再用后台模型）。 */
+fun Settings.subagentEndpoint(): Endpoint? = subagentModel.takeIf { it.isNotBlank() }?.let { usable(it) }
+
+/** 后台模型的名字：选了的那个；没选就是自动挑的。 */
+fun Settings.backgroundModelKey(): String? = backgroundEndpoint()?.key
+
+private fun Settings.usable(key: String): Endpoint? {
+    if (key.startsWith("c:") && modelChoices().none { it.key == key }) return null
+    if (!key.startsWith("c:") && apiKey.isBlank()) return null
+    return endpoint(key)?.takeIf { it.apiKey.isNotBlank() }
+}
 
 /** 至少配好了一个能用的服务。 */
 fun Settings.hasAnyKey(): Boolean = apiKey.isNotBlank() || providers.any { it.apiKey.isNotBlank() && it.models.isNotEmpty() }

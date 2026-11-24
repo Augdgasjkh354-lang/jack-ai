@@ -112,7 +112,7 @@ suspend fun runBackgroundWork(
     val store = host.store
     val s = store.loadSettings()
     // 用当前选的模型；第三方的（c: 开头）多半是聊天时临时换的、没标价格，定时任务不跟着它跑
-    val ep = s.endpoint(model ?: s.model.takeIf { !it.startsWith("c:") } ?: com.jack.ai.data.MODEL_FLASH)?.takeIf { it.apiKey.isNotBlank() } ?: s.backgroundEndpoint()
+    val ep = s.endpoint(model ?: s.backgroundModel.ifBlank { null } ?: s.model.takeIf { !it.startsWith("c:") } ?: com.jack.ai.data.MODEL_FLASH)?.takeIf { it.apiKey.isNotBlank() } ?: s.backgroundEndpoint()
         ?: return TaskResult(NO_KEY, status = TaskStatus.NEEDS_SETUP)
     com.jack.ai.data.Quota.blocked(ctx, s)?.let { return TaskResult(com.jack.ai.data.Quota.message(it) + "，这次没跑。", status = TaskStatus.FAILED) }
     val stored = store.loadConversations().firstOrNull { it.id == r.convId }

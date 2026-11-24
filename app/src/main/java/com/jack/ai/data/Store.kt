@@ -639,6 +639,9 @@ class Store(context: Context) {
             remoteKey = secret("remoteKey", "") ?: "",
             remotePhone = prefs.getBoolean("remotePhone", false),
             phoneApps = prefs.getString("phoneApps", null)?.let { runCatching { json.decodeFromString(ListSerializer(String.serializer()), it) }.getOrNull() }.orEmpty(),
+            fallbackModels = prefs.getString("fallbackModels", null)?.let { runCatching { json.decodeFromString(ListSerializer(String.serializer()), it) }.getOrNull() }.orEmpty(),
+            backgroundModel = prefs.getString("backgroundModel", "") ?: "",
+            subagentModel = prefs.getString("subagentModel", "") ?: "",
         ).also { com.jack.ai.api.Net.apply(it) }
     }
 
@@ -687,6 +690,9 @@ class Store(context: Context) {
             .putBoolean("appLock", s.appLock)
             .putString("providers", Secrets.seal(json.encodeToString(ListSerializer(Provider.serializer()), s.providers)))
             .putFloat("monthlyBudget", s.monthlyBudget.toFloat())
+            .putString("fallbackModels", json.encodeToString(ListSerializer(String.serializer()), s.fallbackModels))
+            .putString("backgroundModel", s.backgroundModel)
+            .putString("subagentModel", s.subagentModel)
             .putLong("fullAuthUntil", s.fullAuthUntil)
             .remove("mail")
             .putString("mails", Secrets.seal(json.encodeToString(ListSerializer(MailAccount.serializer()), s.mails)))
