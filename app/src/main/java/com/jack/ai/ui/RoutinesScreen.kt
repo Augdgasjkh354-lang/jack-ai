@@ -47,6 +47,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -75,7 +76,7 @@ private const val MORNING_PROMPT = "给我写一段早安问候：1. 今天的�
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
+fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit, onOpenWorkflows: () -> Unit = {}) {
     val ctx = LocalContext.current
     var editing by remember { mutableStateOf<Routine?>(null) }
     var deleting by remember { mutableStateOf<Routine?>(null) }
@@ -114,6 +115,7 @@ fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                     modifier = Modifier.padding(start = 4.dp, bottom = 4.dp))
             }
             item { KindFilter(filter) { filter = it } }
+            item { WorkflowsEntry(onOpenWorkflows) }
             if (!canNotify && Build.VERSION.SDK_INT >= 33) {
                 item {
                     androidx.compose.material3.Surface(shape = Radii.l,
@@ -434,5 +436,25 @@ private fun RunHistory(routineId: String) {
                 else if (r.note.isNotBlank()) Text("    ${r.note}", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
             }
         }
+    }
+}
+
+/** 进工作流页的那一条：几个、几个在定时跑。 */
+@Composable
+private fun WorkflowsEntry(onClick: () -> Unit) {
+    val ctx = LocalContext.current
+    val flow = remember { com.jack.ai.data.workflow.Workflows.flow(ctx) }
+    val list by flow.collectAsState()
+    val all = list.orEmpty()
+    Row(Modifier.fillMaxWidth().clip(Radii.l).background(Hue.SKY.wash).clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        Text("↻", color = Hue.SKY.color, style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text("工作流", style = MaterialTheme.typography.titleSmall)
+            Text(if (all.isEmpty()) "排好的几步，到点或点一下就自己跑完" else "${all.size} 个 · ${all.count { it.enabled && it.trigger.type == "schedule" }} 个在定时跑",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Text("›", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

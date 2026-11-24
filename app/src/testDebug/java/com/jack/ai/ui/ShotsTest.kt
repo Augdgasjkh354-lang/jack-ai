@@ -238,6 +238,35 @@ class ShotsTest {
         save("packs-$which-" + dark().name.lowercase())
     }
 
+    /** 工作流：列表，和一个工作流的步骤树。 */
+    @Test
+    fun workflows() {
+        Assume.assumeTrue(System.getenv("SHOTS_DIR") != null)
+        val app = RuntimeEnvironment.getApplication() as Application
+        runCatching { androidx.work.WorkManager.initialize(app, androidx.work.Configuration.Builder().build()) }
+        val stocks = com.jack.ai.data.workflow.WorkflowFormat.parse("""{"id":"w1","name":"股票早报","description":"看三只股票，跌超 3% 单独提醒并点评","by":"kavi",
+            "trigger":{"type":"schedule","repeat":"weekdays","time":"08:00"},"steps":[
+            {"id":"s1","type":"tool","name":"行情","tool":"pack_stocks__quote","args":{"codes":"600519,000858,300750"}},
+            {"id":"s2","type":"forEach","name":"这一只","list":"{{行情}}","steps":[
+              {"id":"s3","type":"if","cond":{"left":"{{这一只.涨跌幅}}","op":"<","right":"-3"},"then":[
+                {"id":"s4","type":"ai","name":"点评","prompt":"用一句话点评 {{这一只.名字}} 今天跌了 {{这一只.涨跌幅}}%"},
+                {"id":"s5","type":"notify","title":"{{这一只.名字}} 跌了 {{这一只.涨跌幅}}%","body":"{{点评}}"}]}]},
+            {"id":"s6","type":"message","text":"今天看了 {{行情.length}} 只"}]}""").getOrThrow()
+        com.jack.ai.data.workflow.Workflows.save(app, stocks)
+        com.jack.ai.data.workflow.Workflows.save(app, com.jack.ai.data.workflow.Workflow(id = "w2", name = "每日一句", description = "让 Kavi 给今天写一句提神的话，发成通知。",
+            steps = listOf(com.jack.ai.data.workflow.WfStep(id = "a", type = "ai", prompt = "x"), com.jack.ai.data.workflow.WfStep(id = "b", type = "notify", title = "x"))))
+        val which = System.getenv("SHOTS_PACK") ?: "list"
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            JackTheme(dark()) {
+                if (which == "tree") androidx.compose.material3.Surface {
+                    androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.padding(20.dp)) { StepTree(stocks.steps) }
+                } else WorkflowsScreen {}
+            }
+        }
+        save("workflows-$which-" + dark().name.lowercase())
+    }
+
     @Test
     fun memoryGraph() {
         Assume.assumeTrue(System.getenv("SHOTS_DIR") != null)
@@ -296,7 +325,7 @@ class ShotsTest {
         rule.mainClock.autoAdvance = false
         rule.setContent {
             val state by vm.state.collectAsState()
-            JackTheme(dark()) { RoutinesScreen(vm, state) {} }
+            JackTheme(dark()) { RoutinesScreen(vm, state, onBack = {}) }
         }
         save("routines-" + dark().name.lowercase())
     }

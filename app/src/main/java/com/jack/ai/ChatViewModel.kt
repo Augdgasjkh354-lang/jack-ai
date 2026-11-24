@@ -142,6 +142,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(routines = store.loadRoutines(), library = store.loadLibrary(), kbs = store.loadKbs(), cards = store.loadCards()) }
         knowledge.startup()
         Routines.scheduleAll(app)
+        runCatching { com.jack.ai.data.workflow.Workflows.scheduleAll(app) }
         runCatching { com.jack.ai.data.Updater.schedule(app, _state.value.settings) }
         // 选了本地模型：开 App 后稍等一会在后台加载好，聊天时不用现等
         com.jack.ai.chat.LocalBrain.warmUp(app, _state.value.settings, delayMs = 5_000)

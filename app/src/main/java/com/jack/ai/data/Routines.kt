@@ -466,7 +466,11 @@ class AlarmReceiver : BroadcastReceiver() {
         when (intent.action) {
             Intent.ACTION_BOOT_COMPLETED, "android.intent.action.MY_PACKAGE_REPLACED",
             // 用户改系统时间、跨时区：原来只在开机和更新后重排，改时间后提醒会按旧时间跑偏
-            Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED -> Routines.scheduleAll(ctx)
+            Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED -> {
+                Routines.scheduleAll(ctx)
+                runCatching { com.jack.ai.data.workflow.Workflows.scheduleAll(ctx) }
+            }
+            com.jack.ai.data.workflow.Workflows.ACTION -> intent.getStringExtra("id")?.let { com.jack.ai.data.workflow.Workflows.fire(ctx, it) }
             else -> intent.getStringExtra("id")?.let { Routines.fire(ctx, it) }
         }
     }

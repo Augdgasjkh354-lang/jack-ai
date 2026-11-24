@@ -258,6 +258,8 @@ object PromptBuilder {
             add(SkillTools.WORK_NOTE)
             // 做工具包：试跑、交给用户装
             if (SkillIds.PACK_DEV in skillIds) { add(SkillTools.PACK_TEST); add(SkillTools.PACK_INSTALL) }
+            // 工作流：跟着「定时任务」插件
+            if (SkillIds.ROUTINE in skillIds) add(SkillTools.WORKFLOW)
             // 连接器的工具放最后：增删连接器时前面那一大段工具说明不变，缓存照样命中
             com.jack.ai.data.integrations.Mcp.toolDefs(com.jack.ai.data.integrations.Mcp.active(settings)).forEach { add(it) }
             // 工具包的工具排在最后，理由同上

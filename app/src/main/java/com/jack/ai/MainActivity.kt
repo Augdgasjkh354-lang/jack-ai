@@ -57,6 +57,7 @@ sealed interface Screen {
     data object Skills : Screen
     data object Usage : Screen
     data object Routines : Screen
+    data object Workflows : Screen
     data object Library : Screen
     data object Tables : Screen
     data object Review : Screen
@@ -328,7 +329,8 @@ class MainActivity : FragmentActivity() {
                             onOpenFiles = { stack.add(Screen.Files) },
                             onOpenTerminal = { stack.add(Screen.Terminal(it)) },
                         )
-                        Screen.Routines -> RoutinesScreen(vm = vm, state = state, onBack = back)
+                        Screen.Routines -> RoutinesScreen(vm = vm, state = state, onBack = back, onOpenWorkflows = { stack.add(Screen.Workflows) })
+                        Screen.Workflows -> com.jack.ai.ui.WorkflowsScreen(onBack = back)
                         Screen.Library -> LibraryScreen(vm = vm, state = state, onBack = back)
                         Screen.Tables -> TablesScreen(onBack = back)
                         Screen.Review -> ReviewScreen(vm = vm, state = state, onBack = back)
