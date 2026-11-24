@@ -759,10 +759,16 @@ fun Settings.compressLimit(): Int = if (endpoint()?.chatgpt == true) minOf(compr
 const val MODEL_FLASH = "deepseek-flash"
 const val MODEL_PRO = "deepseek-v4-pro"
 
+private val OLD_DEEPSEEK = Regex("^deepseek-v(\\d+(?:\\.\\d+)?)-([a-z]+)$")
+
 fun modelLabel(model: String): String = when {
     model == MODEL_FLASH -> "V4.1 Flash"
     // V4.1-Pro 发布前，官方把 deepseek-v4-pro 的请求转给 V4.1 Flash
     model == MODEL_PRO -> "Pro（暂为 Flash）"
+    // 旧消息里记的是当时的模型名：deepseek-v4-flash 显示成 V4 Flash
+    OLD_DEEPSEEK.matches(model) -> OLD_DEEPSEEK.matchEntire(model)!!.groupValues.let { g -> "V${g[1]} ${g[2].replaceFirstChar { it.uppercase() }}" }
+    model == "deepseek-chat" -> "DeepSeek V3"
+    model == "deepseek-reasoner" -> "DeepSeek R1"
     model == com.jack.ai.api.WebClient.USAGE_KEY -> "DeepSeek 联网"
     model == com.jack.ai.api.WebClient.EXA_KEY -> "Exa 搜索（免费额度）"
     model == com.jack.ai.api.WebClient.TAVILY_KEY -> "Tavily 搜索（免费额度）"

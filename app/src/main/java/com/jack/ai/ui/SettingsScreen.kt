@@ -633,8 +633,9 @@ private fun SettingsHome(
     }
     val quotaCtx = androidx.compose.ui.platform.LocalContext.current
     val quota = remember(settings) {
-        com.jack.ai.data.Quota.windows(quotaCtx, settings).filter { it.limit > 0 }
-            .joinToString(" · ") { (if (it.length == com.jack.ai.data.Quota.WEEK) "本周 " else "5 小时 ") + "${(it.fraction * 100).toInt()}%" }
+        // 只放用得最多的那个窗口，两个都放一行装不下
+        com.jack.ai.data.Quota.windows(quotaCtx, settings).filter { it.limit > 0 }.maxByOrNull { it.fraction }
+            ?.let { (if (it.length == com.jack.ai.data.Quota.WEEK) "本周 " else "5 小时 ") + "${(it.fraction * 100).toInt()}%" }
     }
     fun go(p: SettingsPage, icon: androidx.compose.ui.graphics.vector.ImageVector, value: String? = null, warn: Boolean = false) =
         SettingsEntry(icon, p.title, value, warn) { onPick(p) }
@@ -644,8 +645,8 @@ private fun SettingsHome(
         go(SettingsPage.PROFILE, Icons.Default.Person, settings.userName.ifBlank { "未设置" }),
     ))
     SettingsGroup("模型", listOf(
-        go(SettingsPage.KEY, AppIcons.Lock, if (settings.apiKey.isNotBlank()) "已填" else "未填", warn = noKey),
-        go(SettingsPage.PROVIDERS, AppIcons.Code, if (settings.providers.isEmpty()) "未添加" else "${settings.providers.size} 个"),
+        go(SettingsPage.KEY, AppIcons.Key, if (settings.apiKey.isNotBlank()) "已填" else "未填", warn = noKey),
+        go(SettingsPage.PROVIDERS, AppIcons.Cloud, if (settings.providers.isEmpty()) "未添加" else "${settings.providers.size} 个"),
         go(SettingsPage.MODEL, AppIcons.Brain, listOfNotNull(model, settings.thinking.labelFor(settings.endpoint())).joinToString(" · ")),
         go(SettingsPage.LOCAL, AppIcons.Chip),
         go(SettingsPage.COMPRESS, AppIcons.Compress, "${settings.compressTokens / 1000}k"),
@@ -654,7 +655,7 @@ private fun SettingsHome(
     SettingsGroup("Kavi 能用的", listOfNotNull(
         go(SettingsPage.CONNECT, AppIcons.Globe),
         SettingsEntry(Icons.Default.Build, "技能", onClick = onOpenSkills),
-        if (com.jack.ai.Edition.linux) go(SettingsPage.LINUX, AppIcons.Code, if (settings.linuxSandbox) "已装" else "未装") else null,
+        if (com.jack.ai.Edition.linux) go(SettingsPage.LINUX, AppIcons.Terminal, if (settings.linuxSandbox) "已装" else "未装") else null,
         go(SettingsPage.REMOTE, AppIcons.Share),
     ))
     SettingsGroup("手机", listOfNotNull(
@@ -665,7 +666,7 @@ private fun SettingsHome(
     ))
     SettingsGroup("应用", listOfNotNull(
         go(SettingsPage.LOOK, AppIcons.Moon, settings.themeMode.label),
-        SettingsEntry(Icons.Default.Info, "统计", listOfNotNull(monthSpent?.let { "本月 " + yuan(it) }, quota.ifEmpty { null }).joinToString(" · ").ifEmpty { null }, onClick = onOpenUsage),
+        SettingsEntry(AppIcons.Chart, "统计", listOfNotNull(monthSpent?.let { "本月 " + yuan(it) }, quota).joinToString(" · ").ifEmpty { null }, onClick = onOpenUsage),
         go(SettingsPage.PRIVACY, Icons.Default.Lock, when {
             settings.fullAuth -> "完全授权开着"
             settings.appLock -> "应用锁开着"
@@ -673,7 +674,7 @@ private fun SettingsHome(
         }, warn = settings.fullAuth),
         if (com.jack.ai.Edition.selfUpdate) go(SettingsPage.UPDATE, AppIcons.Download) else null,
         go(SettingsPage.ADVANCED, Icons.Default.Settings),
-        go(SettingsPage.LEGAL, Icons.Default.Info),
+        go(SettingsPage.LEGAL, AppIcons.File),
     ))
 }
 
@@ -882,17 +883,21 @@ private fun LookPreview(bubbleAccent: Boolean) {
 private fun AccentDots(selected: String, onPick: (String) -> Unit) {
     val dark = isDarkSurface
     val haptics = rememberHaptics()
-    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    // 一排放下全部颜色：屏幕窄就把圆点缩小，不让最后一个被切掉一半
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
+    val dot = minOf(44.dp, (maxWidth - 6.dp * (ACCENTS.size - 1)) / ACCENTS.size)
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         ACCENTS.forEach { a ->
             val on = a.id == selected
             val ring by androidx.compose.animation.animateColorAsState(if (on) MaterialTheme.colorScheme.onSurface else Color.Transparent, tween(Motion.QUICK), label = "ring")
             Box(
-                Modifier.size(44.dp).clip(CircleShape).border(2.dp, ring, CircleShape)
-                    .clickable { if (!on) { haptics.tick(); onPick(a.id) } }.padding(5.dp)
+                Modifier.size(dot).clip(CircleShape).border(2.dp, ring, CircleShape)
+                    .clickable { if (!on) { haptics.tick(); onPick(a.id) } }.padding(dot / 9)
                     .clip(CircleShape).background(Color(if (dark) a.dark.first else a.light.first))
                     .semantics { contentDescription = a.label },
             )
         }
+    }
     }
 }
 

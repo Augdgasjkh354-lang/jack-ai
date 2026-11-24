@@ -117,28 +117,10 @@ fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit, onOpen
             item { KindFilter(filter) { filter = it } }
             item { WorkflowsEntry(onOpenWorkflows) }
             if (!canNotify && Build.VERSION.SDK_INT >= 33) {
-                item {
-                    androidx.compose.material3.Surface(shape = Radii.l,
-                        color = MaterialTheme.colorScheme.surfaceContainerLow,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), modifier = Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("还没有通知权限", style = MaterialTheme.typography.titleSmall)
-                            OutlinedButton(onClick = { permission.launch(Manifest.permission.POST_NOTIFICATIONS) }) { Text("允许通知") }
-                        }
-                    }
-                }
+                item { PermissionRow("还没有通知权限", "提醒和任务结果要靠通知送到", "允许") { permission.launch(Manifest.permission.POST_NOTIFICATIONS) } }
             }
             if (!canCalendar) {
-                item {
-                    androidx.compose.material3.Surface(shape = Radii.l,
-                        color = MaterialTheme.colorScheme.surfaceContainerLow,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), modifier = Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("日历", style = MaterialTheme.typography.titleSmall)
-                            OutlinedButton(onClick = { calendarPermission.launch(CalendarTool.PERMISSIONS) }) { Text("允许读写日历") }
-                        }
-                    }
-                }
+                item { PermissionRow("日历", "允许后 Kavi 能查和加日程", "允许") { calendarPermission.launch(CalendarTool.PERMISSIONS) } }
             }
             item { QuietHoursCard(state.settings) { start, end -> vm.updateSettings { it.copy(quietStart = start, quietEnd = end) } } }
             if (state.routines.none { it.title == "早安问候" }) {
@@ -468,5 +450,21 @@ private fun WorkflowsEntry(onClick: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Text("›", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** 缺权限时的一行：左边说缺什么、有什么用，右边一个按钮。比一整张卡片省地方。 */
+@Composable
+private fun PermissionRow(title: String, hint: String, action: String, onClick: () -> Unit) {
+    androidx.compose.material3.Surface(shape = Radii.l,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(start = 16.dp, end = 12.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleSmall)
+                Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            OutlinedButton(onClick = onClick) { Text(action) }
+        }
     }
 }

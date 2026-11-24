@@ -95,14 +95,14 @@ object ResultKinds {
     }
 }
 
-/** 「接着做」一排按钮。 */
+/** 「下一步可以」一排按钮（和回答下面那个「接着做」按钮分开叫）。 */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun NextSteps(names: List<String>, onAsk: (String) -> Unit) {
     val steps = remember(names) { ResultKinds.nextSteps(names) }
     if (steps.isEmpty()) return
     Column(Modifier.padding(top = 6.dp).testTag("next-steps")) {
-        Text("接着做", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+        Text("下一步可以", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             steps.forEach { (label, ask) -> AssistChip(onClick = { onAsk(ask) }, label = { Text(label) }) }
         }
