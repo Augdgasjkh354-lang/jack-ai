@@ -69,7 +69,7 @@ import kotlinx.coroutines.withContext
  */
 
 /** 每种步骤的图标字和颜色。 */
-private fun stepLook(type: String): Pair<String, Hue> = when (type) {
+internal fun stepLook(type: String): Pair<String, Hue> = when (type) {
     "tool" -> "🔧" to Hue.BLUE
     "ai" -> "✦" to Hue.VIOLET
     "notify" -> "🔔" to Hue.AMBER
@@ -86,14 +86,14 @@ private fun stepLook(type: String): Pair<String, Hue> = when (type) {
 }
 
 @Composable
-private fun Glyph(text: String, hue: Hue, size: Int = 34) {
+internal fun Glyph(text: String, hue: Hue, size: Int = 34) {
     Box(Modifier.size(size.dp).clip(Radii.s).background(hue.wash), contentAlignment = Alignment.Center) {
         Text(text, color = hue.color, style = if (size >= 40) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
     }
 }
 
 @Composable
-private fun StatusChip(r: WfRun) {
+internal fun StatusChip(r: WfRun) {
     val (t, h) = when (r.status) {
         "ok" -> "跑完了" to Hue.GREEN
         "stopped" -> "停下了" to Hue.AMBER
@@ -128,10 +128,19 @@ fun WorkflowsScreen(onBack: () -> Unit) {
     val list by remember { Workflows.flow(ctx) }.collectAsState()
     val running by Workflows.running.collectAsState()
     var open by remember { mutableStateOf<String?>(null) }
+    // 编辑器：null 没开；Workflow(name = "") 当新建
+    var editing by remember { mutableStateOf<Workflow?>(null) }
+    var creating by remember { mutableStateOf(false) }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         LazyColumn(Modifier.fillMaxSize().statusBarsPadding(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 40.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            item { CircleIconButton(Icons.AutoMirrored.Filled.ArrowBack, "返回", onClick = onBack) }
+            item {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircleIconButton(Icons.AutoMirrored.Filled.ArrowBack, "返回", onClick = onBack)
+                    Spacer(Modifier.weight(1f))
+                    Button(onClick = { creating = true }, shape = CircleShape) { Text("＋ 新建") }
+                }
+            }
             item {
                 Column(Modifier.padding(start = 4.dp, top = 4.dp, bottom = 4.dp)) {
                     Text("工作流", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
@@ -146,12 +155,14 @@ fun WorkflowsScreen(onBack: () -> Unit) {
                     onToggle = { on -> Workflows.update(ctx, w.id) { it.copy(enabled = on) } })
             }
             if (all.isNotEmpty()) item {
-                Text("要新建或修改：在聊天里跟 Kavi 说，比如「每个工作日 8 点查一下上海天气，要下雨就提醒我带伞」。卡片编辑器马上就来。",
+                Text("也可以在聊天里跟 Kavi 说，比如「每个工作日 8 点查一下上海天气，要下雨就提醒我带伞」，它搭好给你看过再存。",
                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(8.dp))
             }
         }
     }
-    open?.let { id -> list.orEmpty().firstOrNull { it.id == id }?.let { w -> WorkflowDetail(w, w.id in running) { open = null } } }
+    open?.let { id -> list.orEmpty().firstOrNull { it.id == id }?.let { w -> WorkflowDetail(w, w.id in running, onEdit = { editing = w }) { open = null } } }
+    if (creating) WorkflowEditor(null) { creating = false }
+    editing?.let { w -> WorkflowEditor(w) { editing = null } }
 }
 
 @Composable
@@ -163,7 +174,7 @@ private fun WorkflowsEmpty(onSample: () -> Unit) {
             Text("还没有工作流", style = MaterialTheme.typography.titleMedium)
         }
         Text("工作流是排好的几步：调工具、让 Kavi 写点东西、如果……就……、对每一项……、发通知。到点自动跑，或者点一下就跑。\n" +
-            "在聊天里说「每天 8 点把我关注的几只股票行情发给我，跌超 3% 单独提醒」，Kavi 会帮你搭好，给你看过再存。",
+            "点右上角「＋ 新建」，一句话说要做什么，Kavi 会搭好卡片给你改；也可以在聊天里说。",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Button(onClick = onSample, shape = CircleShape, modifier = Modifier.padding(top = 4.dp)) { Text("装一个示例：每日一句") }
     }
@@ -205,7 +216,7 @@ private fun WorkflowCard(w: Workflow, running: Boolean, onOpen: () -> Unit, onRu
 // ---------- 详情 ----------
 
 @Composable
-private fun WorkflowDetail(w: Workflow, running: Boolean, onBack: () -> Unit) {
+private fun WorkflowDetail(w: Workflow, running: Boolean, onEdit: () -> Unit, onBack: () -> Unit) {
     val ctx = LocalContext.current
     val runs by produceState(emptyList<WfRun>(), w.id, running) { value = withContext(Dispatchers.IO) { Workflows.runs(ctx, w.id) } }
     var deleting by remember { mutableStateOf(false) }
@@ -217,7 +228,8 @@ private fun WorkflowDetail(w: Workflow, running: Boolean, onBack: () -> Unit) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     CircleIconButton(Icons.AutoMirrored.Filled.ArrowBack, "返回", onClick = onBack)
                     Spacer(Modifier.width(12.dp))
-                    Text("工作流", style = MaterialTheme.typography.titleMedium)
+                    Text("工作流", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                    OutlinedButton(onClick = onEdit) { Text("编辑") }
                 }
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
                     WorkflowHero(w)
@@ -297,7 +309,7 @@ internal fun StepTree(steps: List<WfStep>) {
 }
 
 @Composable
-private fun Branch(tag: String?, hue: Hue, content: @Composable () -> Unit) {
+internal fun Branch(tag: String?, hue: Hue, content: @Composable () -> Unit) {
     Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).padding(start = 16.dp)) {
         Box(Modifier.width(2.dp).fillMaxHeight().clip(CircleShape).background(hue.color.copy(alpha = 0.45f)))
         Column(Modifier.padding(start = 12.dp)) {
@@ -308,7 +320,7 @@ private fun Branch(tag: String?, hue: Hue, content: @Composable () -> Unit) {
 }
 
 /** {{变量}} 换个颜色、去掉花括号，一眼看出哪些是跑的时候才填进来的。 */
-private fun vars(text: String, ink: androidx.compose.ui.graphics.Color, bg: androidx.compose.ui.graphics.Color) = androidx.compose.ui.text.buildAnnotatedString {
+internal fun vars(text: String, ink: androidx.compose.ui.graphics.Color, bg: androidx.compose.ui.graphics.Color) = androidx.compose.ui.text.buildAnnotatedString {
     var i = 0
     Regex("\\{\\{\\s*([^{}]+?)\\s*\\}\\}").findAll(text).forEach { m ->
         append(text.substring(i, m.range.first))
@@ -318,7 +330,7 @@ private fun vars(text: String, ink: androidx.compose.ui.graphics.Color, bg: andr
     append(text.substring(i))
 }
 
-private fun detail(s: WfStep): String = when (s.type) {
+internal fun detail(s: WfStep): String = when (s.type) {
     "tool" -> s.tool + (if (s.args.isNotEmpty()) "  " + s.args.entries.joinToString("，") { "${it.key} = ${com.jack.ai.data.workflow.WfTemplate.text(it.value)}" } else "")
     "ai" -> s.prompt + if (s.json) "（按 JSON 回）" else ""
     "notify" -> listOf(s.title, s.body).filter { it.isNotBlank() }.joinToString(" · ")

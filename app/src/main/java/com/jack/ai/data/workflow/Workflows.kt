@@ -175,7 +175,8 @@ object Workflows {
             val files = mutableListOf<GeneratedFile>()
             val host = AppWfHost(ctx, settings, w, callTool, files)
             val r = WorkflowEngine(host).run(w, trigger, input, onStep)
-            withContext(Dispatchers.IO) {
+            // 编辑器里试跑：不记运行记录，结果不另外送（步骤里自己发的通知、收件箱照常发）
+            if (trigger != "test") withContext(Dispatchers.IO) {
                 addRun(ctx, r)
                 deliver(ctx, store, w, r, files)
             }
@@ -201,7 +202,7 @@ object Workflows {
         }
     }
 
-    fun triggerLabel(t: String) = when (t) { "schedule" -> "到点自动跑"; "chat" -> "在聊天里跑"; else -> "手动跑" }
+    fun triggerLabel(t: String) = when (t) { "schedule" -> "到点自动跑"; "chat" -> "在聊天里跑"; "test" -> "试跑"; else -> "手动跑" }
 }
 
 /**

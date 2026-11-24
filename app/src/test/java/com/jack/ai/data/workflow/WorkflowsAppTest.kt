@@ -81,4 +81,10 @@ class WorkflowsAppTest {
         assertTrue(session.execute("workflow", """{"action":"runs","id":"w1"}""").contains("在聊天里跑"))
         assertEquals(2, asked)
     }
+
+    @Test fun toolPickerListsUsableToolsOnly() {
+        val names = WorkflowBuilder.tools(Store(ctx).loadSettings()).map { it.name }
+        assertTrue(names.toString(), "save_memory" in names && "search_my_data" in names)
+        assertTrue(names.none { it in setOf("update_plan", "ask_user", "workflow", "use_skill") })
+    }
 }

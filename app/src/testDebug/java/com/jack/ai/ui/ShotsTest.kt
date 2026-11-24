@@ -253,13 +253,21 @@ class ShotsTest {
                 {"id":"s5","type":"notify","title":"{{这一只.名字}} 跌了 {{这一只.涨跌幅}}%","body":"{{点评}}"}]}]},
             {"id":"s6","type":"message","text":"今天看了 {{行情.length}} 只"}]}""").getOrThrow()
         com.jack.ai.data.workflow.Workflows.save(app, stocks)
+        packPagesInline = true
         com.jack.ai.data.workflow.Workflows.save(app, com.jack.ai.data.workflow.Workflow(id = "w2", name = "每日一句", description = "让 Kavi 给今天写一句提神的话，发成通知。",
             steps = listOf(com.jack.ai.data.workflow.WfStep(id = "a", type = "ai", prompt = "x"), com.jack.ai.data.workflow.WfStep(id = "b", type = "notify", title = "x"))))
         val which = System.getenv("SHOTS_PACK") ?: "list"
         rule.mainClock.autoAdvance = false
         rule.setContent {
             JackTheme(dark()) {
-                if (which == "tree") androidx.compose.material3.Surface {
+                if (which == "editor") {
+                    fun l(id: String, out: String, ok: Boolean = true, at: String = "") = com.jack.ai.data.workflow.WfStepLog(id, "", "", at, 0, 420, ok, input = "", output = if (ok) out else "", error = if (ok) "" else out)
+                    WorkflowEditor(stocks, preview = mapOf(
+                        "s1" to listOf(l("s1", "[{\"名字\":\"茅台\",\"涨跌幅\":-3.6},{\"名字\":\"五粮液\",\"涨跌幅\":1.2}]")),
+                        "s3" to listOf(l("s3", "是", at = "第 1 项"), l("s3", "否", at = "第 2 项")),
+                        "s4" to listOf(l("s4", "茅台回调明显，短线情绪偏弱，关注 1600 支撑。", at = "第 1 项")),
+                    ), open = "s3") {}
+                } else if (which == "tree") androidx.compose.material3.Surface {
                     androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.padding(20.dp)) { StepTree(stocks.steps) }
                 } else WorkflowsScreen {}
             }
