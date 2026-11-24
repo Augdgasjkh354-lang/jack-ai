@@ -1101,4 +1101,44 @@ val BUILTIN_SKILLS = listOf(
 6. 改的是对话文件夹里的文件：另存一份「原名-去AI味」，原文件不动。改完再跑一次 check_ai_tone，compare_file 填原文件（直接给的稿子就用 compare_text 填原稿），把前后各项的变化告诉用户；还剩的说明是有意留的还是改不掉。
 7. 命中多不等于一定是 AI 写的，人写的也会有。别跟用户说「这是 AI 写的」，只说哪些地方读着像。""",
     ),
+    Skill(
+        id = SkillIds.PACK_DEV, builtin = true, name = "做工具包",
+        description = "给自己做新工具：写一个工具包（说明文件 + 一段 JavaScript），试跑通过后交给用户装，装上以后就多了这些工具。查快递、查汇率、连用户自己的服务这类都能做。",
+        instructions = """做工具包的做法：
+用户要你「做个查 XX 的工具」「以后能直接帮我查 XX」，或者某件事要反复调同一个网络接口时，就做一个工具包。
+
+1. 先想清楚：要几个工具、每个工具的参数，要访问哪几个网站（具体到域名），要不要用户填 Key。
+   - 用的接口要真实存在：不确定的先用 web_search / read_webpage 查它的文档，看清网址、参数和返回的格式。
+   - 要 Key 的接口告诉用户去哪申请；Key 放进 config 让用户在工具包页面里填，不写死在代码里，也不要用户在聊天里发给你。
+2. 在对话文件夹里建一个文件夹（名字就用工具包的 id），写两个文件（write_file）：
+   - kavi-pack.json：
+     {"id": "kuaidi", "name": "快递查询", "version": "1.0.0", "description": "一句话说清能干什么", "author": "Kavi",
+      "permissions": {"net": ["api.example.com"]},
+      "config": [{"key": "apiKey", "label": "快递 API 的 Key", "secret": true, "required": true, "hint": "去 xxx 申请"}],
+      "tools": [{"name": "track", "description": "给模型看的说明：干什么、什么时候用", "timeout": 30,
+                 "parameters": {"number": {"type": "string", "description": "快递单号", "required": true}}}]}
+     - id 只用小写字母、数字、- 和 _；工具名用英文字母、数字、_。
+     - 参数 type 只能是 string、number、integer、boolean、array、object；可以加 enum。
+     - permissions 只要真用得到的：net（网站列表，*.example.com 表示它和所有子域名）、files（pack 只碰自己的数据文件夹，workspace 还能读写对话文件夹）、notify（发通知）、ai（用后台模型）、tools（能调的 Kavi 工具，只有 web_search、read_webpage）。要得越少，用户越放心。
+   - main.js：每个工具导出一个同名函数，第一个参数是模型给的参数，第二个是 kavi：
+     export async function track({ number }, kavi) {
+       const r = await kavi.http.get("https://api.example.com/track", { query: { no: number }, headers: { Authorization: kavi.config.apiKey } });
+       if (!r.ok) throw new Error("查不到：HTTP " + r.status);
+       return r.json();
+     }
+3. kavi 能用的（只给声明过的权限，没声明的一调就报错）：
+   - kavi.http.get(url, {query, headers})、post(url, body, {query, headers})、put、delete、request({url, method, query, headers, body})。body 是对象就按 JSON 发。返回 {status, ok, headers, body}，r.json() 解析、r.text() 原文。
+   - kavi.files.read(路径)、write(路径, 文字)、list(文件夹)、exists、remove：路径默认在工具包自己的数据文件夹；以 workspace/ 开头的是对话文件夹。
+   - kavi.store.get(键, 默认值)、set(键, 值)、remove、keys()：小量数据（最多 256KB），不用声明。
+   - kavi.config.xxx：用户填的配置。kavi.notify(标题, 正文)。await kavi.ai(提示词, {system, json: true})：问后台模型，返回文字。await kavi.tool("web_search", {query})。await kavi.sleep(毫秒)。console.log(…)：试跑时能看到。
+   - 这是 QuickJS，不是浏览器也不是 Node：没有 fetch、require、import 外部库、DOM、setTimeout，用上面这些。现代语法（async/await、可选链、解构）都能用。
+   - 返回字符串原样交给模型；返回对象会转成 JSON。出错就 throw new Error("用人话写原因")，模型会看到。结果别太长（超过 2 万字会被截断），只留有用的字段。
+4. 用 test_pack 试跑：folder 填文件夹名，tool 和 args 填一个真实的例子。它会先检查说明文件，再真的跑一次，把结果、日志和用时给你。
+   - 报错就照着改（edit_file），再跑，直到每个工具都跑通、返回的内容是你想要的。
+   - 要 Key 的工具包：用户还没装、没填 Key 时，试跑会拿不到 kavi.config 里的值。可以先让用户把 Key 填进装好的工具包，再用 test_pack 加 installed=true 用装好的配置跑；或者先只验证不需要 Key 的部分。
+5. 跑通了用 install_pack 交给用户：会弹出一页给用户看它要的权限和工具，用户点「装」才装上。装上以后它的工具下一轮就能用（名字是 pack_工具包id__工具名）。
+   - 改已经装好的工具包：改对话文件夹里那份，版本号加一，再 install_pack，用户会看到是更新，多要的权限会标出来。
+6. 装好后用一两句话告诉用户能怎么用（直接说「查一下 XXX」就行），要填 Key 的提醒他去 技能 → 工具包 里填。
+7. 不做这些：绕过网站的登录或付费、爬用户没权利拿的数据、偷偷往外发用户的东西。工具包能做的事都写在权限里给用户看，别在说明里藏东西。""",
+    ),
 )

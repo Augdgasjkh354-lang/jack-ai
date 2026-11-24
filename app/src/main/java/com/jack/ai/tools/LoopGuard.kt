@@ -9,7 +9,7 @@ import kotlinx.serialization.json.JsonObject
  * 防原地打转（1017 版偶尔会反复调同一个工具却不往前走）：同样的工具、同样的参数连着调 3 次，
  * 或者一次回答里一共调 5 次（读文件除外，改完再读很正常），结果不会变，就不执行，让模型停下换方法。
  *
- * 操作手机、浏览器和连接器不一样：「往下翻」「读屏幕」「后退」每次参数都相同，结果却每次不同，
+ * 操作手机、浏览器、连接器、工具包（还有试跑、装工具包）不一样：「往下翻」「读屏幕」「后退」每次参数都相同，结果却每次不同，
  * 按参数算会把正常的连续翻页拦掉。这几样只在连着两次结果一模一样（翻到底了、点了没反应）之后，
  * 第三次才拦；中间做了别的就重新算，不会一直拦下去。
  */
@@ -48,7 +48,9 @@ class LoopGuard {
         lastResult = result
     }
 
-    private fun stateful(name: String) = name == "phone" || name == "browser" || name.startsWith(com.jack.ai.data.integrations.Mcp.PREFIX)
+    // 试跑、装工具包：中间改了文件再用同样的参数跑很正常；工具包的工具和连接器一样，结果随外面变
+    private fun stateful(name: String) = name == "phone" || name == "browser" || name.startsWith(com.jack.ai.data.integrations.Mcp.PREFIX) ||
+        name == "test_pack" || name == "install_pack" || name.startsWith(com.jack.ai.data.packs.Packs.PREFIX)
 
     private fun canonicalArgs(argsText: String): String {
         val trimmed = argsText.trim()

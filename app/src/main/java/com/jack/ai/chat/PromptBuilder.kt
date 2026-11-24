@@ -256,6 +256,8 @@ object PromptBuilder {
             if (SkillIds.DESIGN in skillIds) add(SkillTools.MAKE_ANIMATION)
             // 长任务的工作笔记（思路来自 planning-with-files，MIT）
             add(SkillTools.WORK_NOTE)
+            // 做工具包：试跑、交给用户装
+            if (SkillIds.PACK_DEV in skillIds) { add(SkillTools.PACK_TEST); add(SkillTools.PACK_INSTALL) }
             // 连接器的工具放最后：增删连接器时前面那一大段工具说明不变，缓存照样命中
             com.jack.ai.data.integrations.Mcp.toolDefs(com.jack.ai.data.integrations.Mcp.active(settings)).forEach { add(it) }
             // 工具包的工具排在最后，理由同上

@@ -32,6 +32,9 @@ class AppPackHost(
     private val pack: InstalledPack,
     private val workspace: File?,
     private val callTool: (suspend (String, String) -> String)?,
+    /** 试跑时换成单独的文件夹，不动装好的那份的数据。 */
+    private val dataDir: File = Packs.dataDir(ctx, pack.id),
+    private val storeFile: File = Packs.storeFile(ctx, pack.id),
 ) : PackHost {
     private val m = pack.manifest
     private val perm = m.permissions
@@ -60,7 +63,7 @@ class AppPackHost(
                 if (v == null || v is JsonNull) all.remove(a.s("key")) else all[a.s("key")] = v
                 val text = json.encodeToString(JsonObject.serializer(), JsonObject(all))
                 if (text.length > 256 * 1024) error("kavi.store 最多存 256KB，大的东西用 kavi.files")
-                Packs.storeFile(ctx, m.id).apply { parentFile?.mkdirs() }.writeText(text)
+                storeFile.apply { parentFile?.mkdirs() }.writeText(text)
                 JsonNull
             }
             "store.keys" -> JsonArray(loadStore().keys.map { JsonPrimitive(it) })
@@ -155,7 +158,7 @@ class AppPackHost(
         val (root, sub) = if (clean == "workspace" || clean.startsWith("workspace/")) {
             if (perm.files != "workspace") error("这个工具包只能用自己的数据文件夹（声明 files: workspace 才能碰对话文件夹）")
             (workspace ?: error("这里没有对话文件夹")) to clean.removePrefix("workspace").trimStart('/')
-        } else Packs.dataDir(ctx, m.id).apply { mkdirs() } to clean
+        } else dataDir.apply { mkdirs() } to clean
         if (sub.isEmpty() && !allowRoot) error("要写文件名")
         val f = File(root, sub).canonicalFile
         val r = root.canonicalFile
@@ -164,7 +167,7 @@ class AppPackHost(
     }
 
     private fun loadStore(): Map<String, JsonElement> =
-        runCatching { json.parseToJsonElement(Packs.storeFile(ctx, m.id).readText()).jsonObject }.getOrNull().orEmpty()
+        runCatching { json.parseToJsonElement(storeFile.readText()).jsonObject }.getOrNull().orEmpty()
 
     private fun JsonObject.s(k: String) = (this[k] as? JsonPrimitive)?.content.orEmpty()
 

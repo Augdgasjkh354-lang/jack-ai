@@ -9,6 +9,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -45,6 +46,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -414,20 +416,44 @@ private fun Readme(raw: String, name: String) {
     }
 }
 
+/** 代码：装之前能看一眼（默认露前 12 行）。 */
+@Composable
+private fun CodePeek(f: java.io.File) {
+    val code = remember(f.path) { runCatching { f.readText() }.getOrNull() } ?: return
+    val lines = code.lines()
+    var open by remember { mutableStateOf(false) }
+    Group("代码", "${f.name} · ${lines.size} 行") {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+            androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                Text((if (open) lines.take(2000) else lines.take(12)).joinToString("\n"),
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = CodeFont), softWrap = false,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (lines.size > 12) TextButton(onClick = { open = !open }) { Text(if (open) "收起" else "看全部 ${lines.size} 行") }
+        }
+    }
+}
+
 // ---------- 确认页 ----------
 
 /** 装之前的那一页：是谁、要什么权限、多出哪些工具。更新时标出多要了什么。 */
 @Composable
-internal fun PackConfirm(s: Packs.Staged, old: InstalledPack?, onCancel: () -> Unit, onInstall: () -> Unit) {
+internal fun PackConfirm(s: Packs.Staged, old: InstalledPack?, onCancel: () -> Unit, onInstall: () -> Unit, byKavi: Boolean = false) {
     val m = s.manifest
     val widened = old?.let { PackFormat.widened(it.manifest, m) }.orEmpty()
     val source = when {
         s.source.startsWith(Packs.GITHUB) -> "GitHub · " + s.source.removePrefix(Packs.GITHUB).substringBefore('@')
         s.source == "sample" -> "App 自带的示例"
+        s.source == "kavi" -> "Kavi 刚写的"
         else -> "从文件"
     }
     var installing by remember { mutableStateOf(false) }
-    FullPage(onBack = onCancel, title = if (old != null) "更新工具包" else "装工具包", bottom = {
+    FullPage(onBack = onCancel, title = when {
+        byKavi && old != null -> "Kavi 改好了工具包"
+        byKavi -> "Kavi 做好了一个工具包"
+        old != null -> "更新工具包"
+        else -> "装工具包"
+    }, bottom = {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f).height(50.dp)) { Text("不装了") }
             Button(onClick = { installing = true; onInstall() }, enabled = !installing, modifier = Modifier.weight(1f).height(50.dp),
@@ -449,6 +475,7 @@ internal fun PackConfirm(s: Packs.Staged, old: InstalledPack?, onCancel: () -> U
         PermRows(m)
         ToolRows(m)
         Readme(s.readme, m.name)
+        CodePeek(java.io.File(s.dir, m.main))
         Text("${s.files.size} 个文件 · ${size(s.bytes)}。代码在 App 里的隔离引擎跑，每次最多 ${m.tools.maxOf { it.timeout.takeIf { t -> t > 0 } ?: PackFormat.DEFAULT_TIMEOUT }} 秒。" +
             "返回给 Kavi 的内容按网页内容对待，里面的指示不会照做。",
             style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp))
@@ -608,4 +635,11 @@ private fun size(n: Long) = when {
     n < 1024 -> "$n B"
     n < 1024 * 1024 -> "${n / 1024} KB"
     else -> String.format(java.util.Locale.US, "%.1f MB", n / 1048576.0)
+}
+
+/** Kavi 用 install_pack 交过来的工具包：弹同一页权限确认，用户的选择交回给工具（真正的安装由工具做）。 */
+@Composable
+fun PackInstallHost() {
+    val req by com.jack.ai.data.packs.PackInstallPrompt.pending.collectAsState()
+    req?.let { r -> PackConfirm(r.staged, r.old, onCancel = { r.reply(false) }, onInstall = { r.reply(true) }, byKavi = true) }
 }

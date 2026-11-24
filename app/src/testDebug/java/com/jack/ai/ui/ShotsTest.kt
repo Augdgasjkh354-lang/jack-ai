@@ -1,5 +1,6 @@
 package com.jack.ai.ui
 
+
 import androidx.compose.ui.unit.dp
 
 import androidx.compose.foundation.layout.padding
@@ -222,6 +223,9 @@ class ShotsTest {
                 androidx.compose.material3.Surface {
                     when (which) {
                         "confirm" -> PackConfirm(s, null, {}, {})
+                        "kavi" -> androidx.compose.foundation.layout.Box {
+                            PackConfirm(s.copy(source = "kavi"), null, {}, {}, byKavi = true)
+                        }
                         "empty" -> androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.padding(16.dp)) { PacksEmptyCard({}, {}) }
                         else -> androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.padding(16.dp),
                             verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {

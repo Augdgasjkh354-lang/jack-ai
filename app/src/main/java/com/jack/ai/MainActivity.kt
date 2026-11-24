@@ -295,6 +295,8 @@ class MainActivity : FragmentActivity() {
                 if (locked && state.settings.appLock) {
                     LockScreen(onUnlock = ::unlock)
                 } else {
+                // Kavi 写好工具包要装时弹的权限确认页（在哪一页都能弹）
+                com.jack.ai.ui.PackInstallHost()
                 val top = stack.lastOrNull()
                 val lastDepth = remember { intArrayOf(stack.size) }
                 val back: () -> Unit = { if (stack.isNotEmpty()) stack.removeAt(stack.lastIndex) }

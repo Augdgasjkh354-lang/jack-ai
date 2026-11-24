@@ -87,6 +87,8 @@ object SkillIds {
     const val CONTRACT = "builtin-contract"
     const val XIANYU = "builtin-xianyu"
     const val AESTHETIC = "builtin-aesthetic"
+    /** 做工具包：Kavi 写 kavi-pack.json + main.js，test_pack 试跑，install_pack 交给用户装。 */
+    const val PACK_DEV = "builtin-pack-dev"
 
     /**
      * 这些技能的工具不在开场就给，等模型用 use_skill 读了做法才加进来（本对话之后一直带着）：
@@ -99,7 +101,7 @@ object SkillIds {
      * 剩下的是「技能」：一类活的做法（小红书运营、合同挑坑……），加上从 GitHub 装的、用户写的、Kavi 自己存的。
      */
     val PLUGINS = setOf(WEB, WORD, PPT, EXCEL, PDF, CHATS, ROUTINE, APP, DESIGN, TRAIN, GITHUB, BROWSER, FLOWS, NOTION,
-        CALENDAR, MAIL, TABLES, CALC, PYTHON, CODE, LIBRARY, RECEIPTS)
+        CALENDAR, MAIL, TABLES, CALC, PYTHON, CODE, LIBRARY, RECEIPTS, PACK_DEV)
 
     /** 一直带着的插件工具 → 插件：第一次调用时把插件的用法附在结果后面（每个对话一次）。 */
     val TOOL_PLUGIN = mapOf(
@@ -108,6 +110,7 @@ object SkillIds {
         "add_rows" to TABLES, "query_table" to TABLES, "edit_table" to TABLES,
         "run_python" to PYTHON, "run_shell" to PYTHON,
         "knowledge_base" to LIBRARY,
+        "test_pack" to PACK_DEV, "install_pack" to PACK_DEV,
     )
 
     /**
