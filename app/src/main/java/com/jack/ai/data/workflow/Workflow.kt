@@ -29,11 +29,27 @@ data class Workflow(
     val updatedAt: Long = 0,
     /** 上次到点跑的时间（排下一次、防重复用）。 */
     val lastFiredAt: Long = 0,
+    /** 保存时用户同意的「往外做的事」：后台跑时只要和这里的一样就不再问。 */
+    val grants: List<WfGrant> = emptyList(),
+)
+
+/** 一项授权：哪一步、哪个工具、范围（收件人、App……），给人看的说法。 */
+@Serializable
+data class WfGrant(
+    val stepId: String,
+    val tool: String,
+    /** 范围：工具参数里关键的那几项连起来；里面有 {{变量}} 的表示每次可能不一样。 */
+    val scope: String = "",
+    val label: String = "",
+    val at: Long = 0,
 )
 
 /**
- * 什么时候开始。type：manual 手动；schedule 定时。
- * 定时的 repeat：daily 每天、weekdays 工作日、weekly 每周（days 里 1=周一 … 7=周日）、interval 每隔 everyMin 分钟、once 某天一次（date）。
+ * 什么时候开始。type：manual 手动；schedule 定时；notify 收到通知；share 从别的 App 分享过来。
+ * 定时的 repeat：daily 每天、weekdays 工作日、weekly 每周（days 里 1=周一 … 7=周日）、interval 每隔 everyMin 分钟、once 某天一次（date）、
+ * watch 监控（和 interval 一样隔一阵跑一次；跑完了没「停下」就算满足了，满足一次就关掉）。
+ * 收到通知的：app（App 名字或包名里有这几个字）、keyword（标题或正文里有这几个字），至少写一个；{{输入}} 是 {app, title, text}。
+ * 分享过来的：{{输入}} 是分享的文字或链接。
  */
 @Serializable
 data class WfTrigger(
@@ -43,6 +59,8 @@ data class WfTrigger(
     val days: List<Int> = emptyList(),
     val everyMin: Int = 60,
     val date: String = "",
+    val app: String = "",
+    val keyword: String = "",
 )
 
 @Serializable
@@ -153,7 +171,8 @@ data class WfStepLog(
 object WorkflowFormat {
     val TYPES = setOf("tool", "ai", "notify", "message", "file", "code", "set", "extract", "if", "forEach", "wait", "stop")
     val OPS = setOf("==", "!=", ">", ">=", "<", "<=", "contains", "notContains", "empty", "notEmpty", "matches")
-    private val REPEATS = setOf("daily", "weekdays", "weekly", "interval", "once")
+    private val REPEATS = setOf("daily", "weekdays", "weekly", "interval", "once", "watch")
+    val TRIGGERS = setOf("manual", "schedule", "notify", "share")
     val json = Json { ignoreUnknownKeys = true; isLenient = true; encodeDefaults = false; explicitNulls = false }
     val pretty = Json { prettyPrint = true; encodeDefaults = false; explicitNulls = false; ignoreUnknownKeys = true }
 
@@ -171,12 +190,13 @@ object WorkflowFormat {
         if (w.name.isBlank()) add("name 不能空")
         if (w.steps.isEmpty()) add("至少要有一步")
         val t = w.trigger
-        if (t.type !in setOf("manual", "schedule")) add("trigger.type 只能是 manual 或 schedule")
+        if (t.type !in TRIGGERS) add("trigger.type 只能是 ${TRIGGERS.joinToString()}")
+        if (t.type == "notify" && t.app.isBlank() && t.keyword.isBlank()) add("收到通知时跑的，要在 trigger 里写 app（哪个 App）或 keyword（通知里有什么字），至少一个")
         if (t.type == "schedule") {
             if (t.repeat !in REPEATS) add("trigger.repeat 只能是 ${REPEATS.joinToString()}")
-            if (t.repeat != "interval" && hm(t.time) == null) add("trigger.time 要写成 08:00 这样")
+            if (t.repeat != "interval" && t.repeat != "watch" && hm(t.time) == null) add("trigger.time 要写成 08:00 这样")
             if (t.repeat == "weekly" && (t.days.isEmpty() || t.days.any { it !in 1..7 })) add("每周的要在 trigger.days 里写星期几（1=周一 … 7=周日）")
-            if (t.repeat == "interval" && t.everyMin < 15) add("每隔几分钟的最少 15 分钟")
+            if ((t.repeat == "interval" || t.repeat == "watch") && t.everyMin < 15) add("每隔几分钟的最少 15 分钟")
             if (t.repeat == "once" && !Regex("^\\d{4}-\\d{2}-\\d{2}$").matches(t.date)) add("一次的要在 trigger.date 写日期，比如 2026-12-01")
         }
         if (w.limits.timeoutMin !in 1..120) add("limits.timeoutMin 要在 1 到 120 之间")
@@ -221,11 +241,21 @@ object WorkflowFormat {
     }
 
     /** 给人看的「什么时候开始」。 */
-    fun describe(t: WfTrigger): String = if (t.type != "schedule") "手动" else when (t.repeat) {
+    fun describe(t: WfTrigger): String = when (t.type) {
+        "notify" -> "收到" + (if (t.app.isNotBlank()) "「${t.app}」的" else "") + "通知" + (if (t.keyword.isNotBlank()) "、里面有「${t.keyword}」" else "") + "时"
+        "share" -> "从别的 App 分享过来时"
+        "schedule" -> describeSchedule(t)
+        else -> "手动"
+    }
+
+    private fun every(min: Int) = if (min % 60 == 0) "${min / 60} 小时" else "$min 分钟"
+
+    private fun describeSchedule(t: WfTrigger): String = when (t.repeat) {
         "daily" -> "每天 ${t.time}"
         "weekdays" -> "工作日 ${t.time}"
         "weekly" -> "每周" + t.days.sorted().joinToString("、") { "一二三四五六日"[(it - 1).coerceIn(0, 6)].toString() } + " ${t.time}"
-        "interval" -> "每 " + (if (t.everyMin % 60 == 0) "${t.everyMin / 60} 小时" else "${t.everyMin} 分钟")
+        "interval" -> "每 " + every(t.everyMin)
+        "watch" -> "监控：每 " + every(t.everyMin) + "查一次，满足就停"
         "once" -> "${t.date} ${t.time}"
         else -> t.repeat
     }
@@ -234,7 +264,7 @@ object WorkflowFormat {
     fun nextAt(w: Workflow, now: Long, zone: java.util.TimeZone = java.util.TimeZone.getDefault()): Long? {
         val t = w.trigger
         if (!w.enabled || t.type != "schedule") return null
-        if (t.repeat == "interval") {
+        if (t.repeat == "interval" || t.repeat == "watch") {
             val step = t.everyMin.coerceAtLeast(15) * 60_000L
             return if (w.lastFiredAt <= 0) now + step else maxOf(now + 1_000, w.lastFiredAt + step)
         }

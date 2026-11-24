@@ -131,7 +131,8 @@ class WfStepError(message: String) : Exception(message)
 
 /** 工作流做事要用的本事，App 里接上真的工具、模型、通知；测试里换成假的。出错就抛异常。 */
 interface WfHost {
-    suspend fun tool(name: String, args: JsonObject): String
+    /** [step] 是正在跑的那一步（看有没有保存时的授权）。 */
+    suspend fun tool(name: String, args: JsonObject, step: WfStep): String
     /** 返回模型的回答和花了多少钱（元）。 */
     suspend fun ai(prompt: String, system: String, json: Boolean): Pair<String, Double>
     suspend fun notify(title: String, body: String)
@@ -178,7 +179,7 @@ class WorkflowEngine(private val host: WfHost, private val clock: () -> Long = S
         suspend fun exec(s: WfStep, at: String): JsonElement? = when (s.type) {
             "tool" -> {
                 val args = WfTemplate.resolveJson(s.args, vars) as JsonObject
-                WfTemplate.parseLoose(stripNote(host.tool(s.tool, args)))
+                WfTemplate.parseLoose(stripNote(host.tool(s.tool, args, s)))
             }
             "ai" -> {
                 if (cost >= w.limits.maxCostYuan) throw Limit("花钱到上限了（¥${fmt(w.limits.maxCostYuan)}），没再调模型")

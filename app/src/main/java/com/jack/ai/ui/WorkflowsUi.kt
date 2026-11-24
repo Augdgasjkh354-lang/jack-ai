@@ -85,6 +85,15 @@ internal fun stepLook(type: String): Pair<String, Hue> = when (type) {
     else -> "·" to Hue.GRAY
 }
 
+/** 「什么时候跑」的图标字和颜色。 */
+internal fun triggerLook(t: WfTrigger): Pair<String, Hue> = when {
+    t.type == "notify" -> "🔔" to Hue.AMBER
+    t.type == "share" -> "↗" to Hue.GREEN
+    t.type == "schedule" && t.repeat == "watch" -> "◎" to Hue.ORANGE
+    t.type == "schedule" -> "⏰" to Hue.SKY
+    else -> "▶" to Hue.VIOLET
+}
+
 @Composable
 internal fun Glyph(text: String, hue: Hue, size: Int = 34) {
     Box(Modifier.size(size.dp).clip(Radii.s).background(hue.wash), contentAlignment = Alignment.Center) {
@@ -189,14 +198,14 @@ private fun WorkflowCard(w: Workflow, running: Boolean, onOpen: () -> Unit, onRu
     androidx.compose.material3.Card(Modifier.fillMaxWidth().clickable(onClick = onOpen), shape = Radii.l) {
         Column(Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Glyph(if (scheduled) "⏰" else "▶", if (scheduled) Hue.SKY else Hue.VIOLET, 42)
+                triggerLook(w.trigger).let { (g, h) -> Glyph(g, h, 42) }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(w.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(listOfNotNull(WorkflowFormat.describe(w.trigger), "${WorkflowFormat.count(w.steps)} 步", if (w.enabled) nextText(w) else "关着").joinToString(" · "),
                         style = MaterialTheme.typography.labelSmall.tabular, color = colors.onSurfaceVariant, maxLines = 1)
                 }
-                if (scheduled) Switch(w.enabled, onToggle)
+                if (w.trigger.type != "manual") Switch(w.enabled, onToggle)
             }
             if (w.description.isNotBlank()) Text(w.description, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, maxLines = 2,
                 overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp))
@@ -234,6 +243,7 @@ private fun WorkflowDetail(w: Workflow, running: Boolean, onEdit: () -> Unit, on
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
                     WorkflowHero(w)
                     Section("步骤") { StepTree(w.steps) }
+                    GrantsSection(w)
                     Section("运行记录", if (runs.isEmpty()) "还没跑过" else "最近 ${runs.size} 次，点开看每一步拿到了什么") {
                         runs.forEach { r ->
                             RunRow(r, open = openRun == r.id) { openRun = if (openRun == r.id) null else r.id }
@@ -260,7 +270,7 @@ private fun WorkflowHero(w: Workflow) {
     val colors = MaterialTheme.colorScheme
     val scheduled = w.trigger.type == "schedule"
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-        Glyph(if (scheduled) "⏰" else "▶", if (scheduled) Hue.SKY else Hue.VIOLET, 64)
+        triggerLook(w.trigger).let { (g, h) -> Glyph(g, h, 64) }
         Spacer(Modifier.height(10.dp))
         Text(w.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
         Text(listOfNotNull(WorkflowFormat.describe(w.trigger), nextText(w)?.takeIf { w.enabled }, if (w.by == "kavi") "Kavi 搭的" else null).joinToString(" · "),
@@ -383,5 +393,71 @@ private fun StepLogRow(l: WfStepLog) {
                 color = if (l.ok) colors.onSurfaceVariant else colors.error, maxLines = 4, overflow = TextOverflow.Ellipsis)
         }
         Text("${l.ms} ms", style = MaterialTheme.typography.labelSmall.tabular, color = colors.outline)
+    }
+}
+
+/** 分享菜单「交给 Kavi 工作流」进来：挑一个「分享时跑」的工作流，分享的文字当 {{输入}}，放到后台跑。 */
+@Composable
+fun WorkflowSharePicker(text: String, onDone: () -> Unit) {
+    val ctx = LocalContext.current
+    val targets = remember { Workflows.shareTargets(ctx) }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDone,
+        title = { Text("交给哪个工作流？") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(text.take(200), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 4,
+                    overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth().clip(Radii.s).background(raisedColor).padding(10.dp))
+                if (targets.isEmpty()) Text("没有「分享时跑」的工作流了。", style = MaterialTheme.typography.bodyMedium)
+                targets.forEach { w ->
+                    Row(Modifier.fillMaxWidth().clip(Radii.m).clickable {
+                        Workflows.enqueue(ctx, w.id, "share", text); Toast.makeText(ctx, "交给「${w.name}」了，跑完结果在收件箱或通知里", Toast.LENGTH_SHORT).show(); onDone()
+                    }.padding(vertical = 10.dp, horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Glyph("↗", Hue.GREEN, 34)
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(w.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                            if (w.description.isNotBlank()) Text(w.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDone) { Text("取消") } },
+    )
+}
+
+/** 详情页「后台授权」：保存时同意过的往外做的事，能一条条撤销。 */
+@Composable
+private fun GrantsSection(w: Workflow) {
+    val ctx = LocalContext.current
+    val needs = remember(w) { com.jack.ai.data.workflow.WfGrants.needed(w) }
+    if (needs.isEmpty()) return
+    val missing = remember(w) { com.jack.ai.data.workflow.WfGrants.missing(w) }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.padding(start = 4.dp)) {
+            Text("后台授权", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("后台跑时，这些往外做的事照这里的授权做，不再问你", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+        }
+        Column(Modifier.fillMaxWidth().clip(Radii.l).background(raisedColor).padding(vertical = 6.dp, horizontal = 12.dp)) {
+            needs.forEach { n ->
+                val ok = missing.none { it.stepId == n.stepId }
+                Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Glyph(if (ok) "✓" else "!", if (ok) Hue.GREEN else Hue.ORANGE, 30)
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(n.label, style = MaterialTheme.typography.bodyMedium)
+                        Text(if (ok) "已授权" else "没授权：后台跑到这一步会停下", style = MaterialTheme.typography.labelSmall,
+                            color = if (ok) MaterialTheme.colorScheme.outline else Hue.ORANGE.color)
+                    }
+                    if (ok) TextButton(onClick = {
+                        Workflows.update(ctx, w.id) { it.copy(grants = it.grants.filterNot { g -> com.jack.ai.data.workflow.WfGrants.covers(g, n) }) }
+                    }) { Text("撤销") }
+                    else TextButton(onClick = {
+                        Workflows.update(ctx, w.id) { com.jack.ai.data.workflow.WfGrants.apply(it, approved = true) }
+                    }) { Text("授权") }
+                }
+            }
+        }
     }
 }

@@ -73,6 +73,38 @@ object Workflows {
         tmp.writeText(WorkflowFormat.json.encodeToString(ListSerializer(Workflow.serializer()), list))
         tmp.renameTo(f)
         _all.value = list
+        shareEntry(ctx, list)
+    }
+
+    // ---------- 分享、通知触发 ----------
+
+    /** 分享菜单里的「交给 Kavi 工作流」：有开着的「分享时跑」的工作流才出现，免得平时多一项。 */
+    private fun shareEntry(ctx: Context, list: List<Workflow>) = runCatching {
+        val on = list.any { it.enabled && it.trigger.type == "share" }
+        ctx.packageManager.setComponentEnabledSetting(android.content.ComponentName(ctx, ctx.packageName + ".WorkflowShare"),
+            if (on) android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED else android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+            android.content.pm.PackageManager.DONT_KILL_APP)
+    }
+
+    fun shareTargets(ctx: Context) = load(ctx).filter { it.enabled && it.trigger.type == "share" }
+
+    /** 通知里写的 App 名字或包名、关键字对不对得上（不分大小写）。 */
+    fun matches(t: WfTrigger, pkg: String, app: String, title: String, text: String): Boolean {
+        if (t.type != "notify") return false
+        val okApp = t.app.isBlank() || listOf(app, pkg).any { it.contains(t.app.trim(), ignoreCase = true) }
+        val okWord = t.keyword.isBlank() || t.keyword.split(Regex("[,，|]")).map { it.trim() }.filter { it.isNotEmpty() }
+            .any { k -> (title + "\n" + text).contains(k, ignoreCase = true) }
+        return okApp && okWord
+    }
+
+    /** 读通知那里每来一条就问一下：有对得上的「收到通知时跑」的工作流就放进后台跑（同一个工作流一分钟最多一次）。 */
+    fun onNotification(ctx: Context, pkg: String, app: String, title: String, text: String, now: Long = System.currentTimeMillis()) {
+        if (pkg == ctx.packageName) return
+        load(ctx).filter { it.enabled && matches(it.trigger, pkg, app, title, text) && now - it.lastFiredAt > 60_000 }.forEach { w ->
+            val input = kotlinx.serialization.json.buildJsonObject { put("app", app); put("title", title); put("text", text.take(2000)) }
+            enqueue(ctx, w.id, "notify", input.toString())
+            update(ctx, w.id) { it.copy(lastFiredAt = now) }
+        }
     }
 
     fun get(ctx: Context, id: String) = load(ctx).firstOrNull { it.id == id }
@@ -179,6 +211,11 @@ object Workflows {
             if (trigger != "test") withContext(Dispatchers.IO) {
                 addRun(ctx, r)
                 deliver(ctx, store, w, r, files)
+                // 监控：这次没「停下」就是满足了，满足一次就关掉，不再查
+                if (trigger == "schedule" && w.trigger.type == "schedule" && w.trigger.repeat == "watch" && r.status == "ok") {
+                    update(ctx, w.id) { it.copy(enabled = false) }
+                    Routines.notify(ctx, "wf_${w.id}_hit", "⚙ 「${w.name}」等到了", r.output.take(200).ifBlank { "监控的条件满足了，已经停止监控" })
+                }
             }
             return r
         } finally {
@@ -202,7 +239,9 @@ object Workflows {
         }
     }
 
-    fun triggerLabel(t: String) = when (t) { "schedule" -> "到点自动跑"; "chat" -> "在聊天里跑"; "test" -> "试跑"; else -> "手动跑" }
+    fun triggerLabel(t: String) = when (t) {
+        "schedule" -> "到点自动跑"; "chat" -> "在聊天里跑"; "test" -> "试跑"; "notify" -> "收到通知"; "share" -> "分享过来"; else -> "手动跑"
+    }
 }
 
 /**
@@ -218,23 +257,36 @@ private class AppWfHost(
 ) : WfHost {
     private val store = Store(ctx)
     private val conv by lazy { Conversation(id = Workflows.convId(w.id), title = "⚙ ${w.name}") }
+    /** 正在跑的这一步保存时授权过：它要问用户的，照授权放行。 */
+    @Volatile private var granted = false
+    /** 这一步问过、没放行的那句（报错时告诉用户）。 */
+    @Volatile private var refused: String? = null
     private val session by lazy {
         val ui = object : com.jack.ai.tools.ToolUi {
             override fun started(label: String) {}
             override fun finished(label: String, record: SearchRecord) {}
             override fun attach(file: File) { files += GeneratedFile(file.name, file.path, mime(file.name), file.length()) }
-            // 后台没人看着：要问用户的一律不做
-            override suspend fun confirm(title: String, body: String, action: String) = false
+            // 后台没人看着：保存时授权过的放行（付款、密码这类除外），别的一律不做
+            override suspend fun confirm(title: String, body: String, action: String): Boolean {
+                val ok = granted && !WfGrants.NEVER.containsMatchIn(title + body)
+                if (!ok) refused = title
+                return ok
+            }
         }
         com.jack.ai.tools.ToolSession(com.jack.ai.tools.BackgroundToolHost(ctx), settings, conv, null, settings.allSkills().filter { it.enabled }, ui)
     }
 
-    override suspend fun tool(name: String, args: JsonObject): String {
+    override suspend fun tool(name: String, args: JsonObject, step: WfStep): String {
         callTool?.let { return it(name, args) }
-        val out = session.perform(name, args.toString())
+        granted = WfGrants.allowed(w, step); refused = null
+        val out = try { session.perform(name, args.toString()) } finally { granted = false }
         if (out.status != com.jack.ai.tools.ToolStatus.OK) {
             val why = out.text.lineSequence().firstOrNull().orEmpty().take(300)
-            throw IllegalStateException(if (out.status == com.jack.ai.tools.ToolStatus.REJECTED) "这一步要你确认才能做，后台跑时不做（以后在保存时授权）：$why" else why)
+            throw IllegalStateException(when {
+                out.status != com.jack.ai.tools.ToolStatus.REJECTED -> why
+                WfGrants.allowed(w, step) -> "这一步碰到了付款、密码这类，授权了也不做：${refused ?: why}"
+                else -> "这一步要你确认（${refused ?: why}），后台跑时不做。在工作流页编辑后保存时同意授权，以后就不用问"
+            })
         }
         return out.text
     }
@@ -286,7 +338,10 @@ class WorkflowWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
     override suspend fun doWork(): Result {
         val id = inputData.getString("id") ?: return Result.failure()
         val w = Workflows.get(applicationContext, id) ?: return Result.success()
-        val input = inputData.getString("input").orEmpty().takeIf { it.isNotBlank() }?.let { JsonPrimitive(it) }
+        // 通知触发的是 JSON（app、title、text），分享的是文字
+        val input = inputData.getString("input").orEmpty().takeIf { it.isNotBlank() }?.let { s ->
+            if (s.startsWith("{")) WfTemplate.parseLoose(s) else JsonPrimitive(s)
+        }
         runCatching { setForeground(foreground(w.name)) }
         Workflows.run(applicationContext, w, inputData.getString("trigger") ?: "manual", input)
         return Result.success()

@@ -20,7 +20,7 @@ class WorkflowEngineTest {
         val calls = mutableListOf<String>()
         val notes = mutableListOf<String>()
         var failTimes = 0
-        override suspend fun tool(name: String, args: JsonObject): String {
+        override suspend fun tool(name: String, args: JsonObject, step: WfStep): String {
             calls += "$name $args"
             if (failTimes > 0) { failTimes--; throw IllegalStateException("网络断了") }
             return when (name) {

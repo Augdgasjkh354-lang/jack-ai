@@ -78,6 +78,8 @@ class MainActivity : FragmentActivity() {
     /** 开了应用锁时，是否需要解锁。 */
     private var locked by mutableStateOf(false)
     private val stack = mutableStateListOf<Screen>()
+    /** 从分享菜单「交给 Kavi 工作流」进来的文字：等用户挑一个工作流。 */
+    private var workflowShare by mutableStateOf<String?>(null)
 
     override fun onStart() {
         super.onStart()
@@ -122,6 +124,12 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
+        // 从分享菜单的「交给 Kavi 工作流」进来：挑一个「分享时跑」的工作流，分享的内容当 {{输入}}
+        if (intent?.component?.className?.endsWith(".WorkflowShare") == true && intent.action == Intent.ACTION_SEND) {
+            workflowShare = listOfNotNull(intent.getStringExtra(Intent.EXTRA_SUBJECT), intent.getStringExtra(Intent.EXTRA_TEXT))
+                .joinToString("\n").ifBlank { null }
+            return
+        }
         // 从分享菜单的「存进 Kavi 收件箱」进来：直接交给收件箱自动归档
         if (intent?.component?.className?.endsWith(".InboxShare") == true &&
             (intent.action == Intent.ACTION_SEND || intent.action == Intent.ACTION_SEND_MULTIPLE)) {
@@ -298,6 +306,7 @@ class MainActivity : FragmentActivity() {
                 } else {
                 // Kavi 写好工具包要装时弹的权限确认页（在哪一页都能弹）
                 com.jack.ai.ui.PackInstallHost()
+                workflowShare?.let { text -> com.jack.ai.ui.WorkflowSharePicker(text) { workflowShare = null } }
                 val top = stack.lastOrNull()
                 val lastDepth = remember { intArrayOf(stack.size) }
                 val back: () -> Unit = { if (stack.isNotEmpty()) stack.removeAt(stack.lastIndex) }

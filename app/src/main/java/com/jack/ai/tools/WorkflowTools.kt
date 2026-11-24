@@ -24,7 +24,11 @@ internal const val WORKFLOW_HELP = """工作流：固定的几步，到点或手
     {"id": "s3", "type": "if", "cond": {"left": "{{这一只.涨跌幅}}", "op": "<", "right": "-3"}, "then": [
       {"id": "s4", "type": "ai", "name": "点评", "prompt": "用一句话点评 {{这一只.名字}} 今天跌了 {{这一只.涨跌幅}}%"},
       {"id": "s5", "type": "notify", "title": "{{这一只.名字}} 跌了 {{这一只.涨跌幅}}%", "body": "{{点评}}"}]}]}]}
-- trigger：type 是 manual（手动）或 schedule。schedule 的 repeat：daily、weekdays、weekly（days：1=周一 … 7=周日）、interval（everyMin，最少 15）、once（date：2026-12-01）；time 写 08:00。
+- trigger：type 是 manual（手动）、schedule（定时）、notify（收到通知时）、share（从别的 App 分享过来时）。
+  schedule 的 repeat：daily、weekdays、weekly（days：1=周一 … 7=周日）、interval（everyMin，最少 15）、once（date：2026-12-01）、
+  watch（监控：每 everyMin 分钟跑一次，用 if + stop 表示「还没等到」；哪次没停下跑完了就算等到，发通知并不再查）；time 写 08:00。
+  notify 写 app（App 名字，比如 微信）和/或 keyword（通知里有的字，几个用逗号隔开），{{输入.app}}、{{输入.title}}、{{输入.text}} 是那条通知；要用户给过通知使用权。
+  share：{{输入}} 是分享过来的文字或链接。
 - 步骤 type：
   tool 调工具（tool 是工具名，你能调的任何工具，包括 pack_ 开头的工具包工具；args 里能写 {{变量}}）；
   ai 让模型做（prompt，可选 system；json=true 要它按 JSON 回，后面好取字段）；
@@ -37,7 +41,7 @@ internal const val WORKFLOW_HELP = """工作流：固定的几步，到点或手
 - 出错：每步可写 onError：stop（默认，停下）、skip（跳过接着做）、retry（加 retries 次数，最多 5）。
 - deliver：结果送哪，inbox（默认，收件箱）、notify、none；自己写了 message / notify 步骤的就不另外送。
 - 花钱上限默认一次 ¥1，只算 ai 步骤和调模型的工具；总时限默认 10 分钟。
-- 后台跑时，要用户确认的事（发邮件、发消息、改东西）现在一律不做，那一步会报错：先只用查、算、通知、存文件、发到收件箱这些。
+- 往外做的事（发邮件、操作手机、改 GitHub/Notion、连接器……）：save 时会列给用户，用户同意就算授权，后台跑到时照授权做、不再问；做的事和授权的不一样（换了收件人、App）那一步会停下。付款、密码这类授权了也不做。收件人这些尽量写死，写成 {{变量}} 的要跟用户说清楚每次可能不一样。
 做法：先想清楚每一步，工具名和参数要对（工具包的工具名是 pack_工具包id__工具名）。save 会给用户看一遍再存；存好用 run 试跑一次，看每一步的结果对不对，不对就改了再 save（同一个 id 就是更新）。"""
 
 /** 工作流：看、存（用户确认）、跑、看运行记录、开关、删。 */
@@ -66,10 +70,13 @@ internal suspend fun ToolSession.workflow(args: JsonObject): String {
             }
             val old = withContext(Dispatchers.IO) { Workflows.get(app, parsed.id) }
             val w = parsed.copy(by = old?.by ?: "kavi", enabled = old?.enabled ?: parsed.enabled, lastFiredAt = old?.lastFiredAt ?: 0)
-            if (!approve(if (old != null) "更新工作流「${w.name}」？" else "存下工作流「${w.name}」？", outline(w), if (old != null) "更新" else "存下")) {
+            val needs = com.jack.ai.data.workflow.WfGrants.needed(w)
+            val body = outline(w) + if (needs.isEmpty()) "" else "\n\n后台跑时会往外做这些事（同意就算授权，以后到这些步骤不再问你；付款、密码这类授权了也不做）：\n" +
+                needs.joinToString("\n") { "· " + it.label }
+            if (!approve(if (old != null) "更新工作流「${w.name}」？" else "存下工作流「${w.name}」？", body, if (old != null) "更新" else "存下", strict = needs.isNotEmpty())) {
                 return@runTool "用户没有同意，没存。问问哪里要改。" to SearchRecord("工作流「${w.name}」：用户没同意")
             }
-            val saved = withContext(Dispatchers.IO) { Workflows.save(app, w) }
+            val saved = withContext(Dispatchers.IO) { Workflows.save(app, com.jack.ai.data.workflow.WfGrants.apply(w.copy(grants = old?.grants.orEmpty()), approved = true)) }
             val next = WorkflowFormat.nextAt(saved, System.currentTimeMillis())?.let { "，下次 " + java.text.SimpleDateFormat("M月d日 HH:mm", java.util.Locale.CHINA).format(java.util.Date(it)) }.orEmpty()
             "${if (old != null) "已更新" else "已存好"}「${saved.name}」（id ${saved.id}，${WorkflowFormat.describe(saved.trigger)}$next）。用 action=run 试跑一次，看看每一步对不对。" to
                 SearchRecord("${if (old != null) "更新" else "存好"}工作流「${saved.name}」")

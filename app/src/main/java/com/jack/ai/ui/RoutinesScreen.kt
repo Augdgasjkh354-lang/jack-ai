@@ -172,7 +172,14 @@ fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit, onOpen
         }
     }
     editing?.let { r ->
-        RoutineDialog(r, isNew = state.routines.none { it.id == r.id }, onDismiss = { editing = null }) { saved ->
+        RoutineDialog(r, isNew = state.routines.none { it.id == r.id }, onDismiss = { editing = null }, onUpgrade = {
+            // 照它的时间和要做的事搭一个工作流，原来的定时任务关掉（不删，想回去还能开）
+            val w = com.jack.ai.data.workflow.Workflows.save(ctx, com.jack.ai.data.workflow.WorkflowUpgrade.from(r))
+            vm.saveRoutine(r.copy(enabled = false))
+            editing = null
+            android.widget.Toast.makeText(ctx, "升级成工作流「${w.name}」了，原来的定时任务已关掉。可以在工作流里接着加步骤", android.widget.Toast.LENGTH_LONG).show()
+            onOpenWorkflows()
+        }) { saved ->
             vm.saveRoutine(saved)
             editing = null
             if (!canNotify && Build.VERSION.SDK_INT >= 33) permission.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -297,7 +304,7 @@ private fun RoutineCard(r: Routine, onClick: () -> Unit, onToggle: (Boolean) -> 
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-private fun RoutineDialog(r: Routine, isNew: Boolean, onDismiss: () -> Unit, onSave: (Routine) -> Unit) {
+private fun RoutineDialog(r: Routine, isNew: Boolean, onDismiss: () -> Unit, onUpgrade: (() -> Unit)? = null, onSave: (Routine) -> Unit) {
     val dayFmt = remember { SimpleDateFormat("yyyy-MM-dd", Locale.US) }
     var kind by remember { mutableStateOf(r.kind) }
     var title by remember { mutableStateOf(r.title) }
@@ -361,7 +368,12 @@ private fun RoutineDialog(r: Routine, isNew: Boolean, onDismiss: () -> Unit, onS
                 onClick = { onSave(draft) },
             ) { Text("保存") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        dismissButton = {
+            Row {
+                if (!isNew && onUpgrade != null) TextButton(onClick = onUpgrade) { Text("升级成工作流") }
+                TextButton(onClick = onDismiss) { Text("取消") }
+            }
+        },
     )
 
     if (pickTime) {

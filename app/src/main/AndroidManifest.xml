@@ -220,6 +220,19 @@
                 <data android:mimeType="*/*" />
             </intent-filter>
         </activity-alias>
+        <!-- 分享菜单里的「交给 Kavi 工作流」：有开着的「分享时跑」的工作流才打开（Workflows.shareEntry） -->
+        <activity-alias
+            android:name=".WorkflowShare"
+            android:enabled="false"
+            android:exported="true"
+            android:label="交给 Kavi 工作流"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/*" />
+            </intent-filter>
+        </activity-alias>
         <!-- 分享菜单里的「用 Kavi 下载」：抖音、B 站、小红书分享出来的链接，Kavi 直接把视频或文件存到手机 -->
         <activity-alias
             android:name=".DownloadShare"

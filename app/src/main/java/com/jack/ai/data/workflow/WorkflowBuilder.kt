@@ -68,7 +68,8 @@ object WorkflowBuilder {
                 val text = raw.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
                 val r = WorkflowFormat.parse(text)
                 r.getOrNull()?.let { w ->
-                    return@runCatching w.copy(id = current?.id ?: w.id, by = current?.by ?: "kavi", enabled = current?.enabled ?: true)
+                    // 授权只能由用户在确认时给：模型写进 JSON 的一律不认
+                    return@runCatching w.copy(id = current?.id ?: w.id, by = current?.by ?: "kavi", enabled = current?.enabled ?: true, grants = current?.grants.orEmpty())
                 }
                 problems = (r.exceptionOrNull() as? WorkflowError)?.problems ?: listOf(r.exceptionOrNull()?.message.orEmpty())
                 if (round == 0) {

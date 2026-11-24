@@ -267,7 +267,10 @@ class ShotsTest {
         rule.mainClock.autoAdvance = false
         rule.setContent {
             JackTheme(dark()) {
-                if (which == "editor") {
+                if (which == "trigger") {
+                    WorkflowEditor(com.jack.ai.data.workflow.Workflow(name = "", trigger = com.jack.ai.data.workflow.WfTrigger("notify", app = "淘宝", keyword = "快递，取件"),
+                        steps = listOf(com.jack.ai.data.workflow.WfStep(id = "s1", type = "notify", title = "📦 {{输入.title}}", body = "{{输入.text}}")))) {}
+                } else if (which == "editor") {
                     fun l(id: String, out: String, ok: Boolean = true, at: String = "") = com.jack.ai.data.workflow.WfStepLog(id, "", "", at, 0, 420, ok, input = "", output = if (ok) out else "", error = if (ok) "" else out)
                     WorkflowEditor(stocks, preview = mapOf(
                         "s1" to listOf(l("s1", "[{\"名字\":\"茅台\",\"涨跌幅\":-3.6},{\"名字\":\"五粮液\",\"涨跌幅\":1.2}]")),

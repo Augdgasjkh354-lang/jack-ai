@@ -21,6 +21,7 @@ class WeChatListener : NotificationListenerService() {
     private val lastText = HashMap<String, String>()
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
+        workflows(sbn)
         if (sbn.packageName != WeChat.PACKAGE) { logOther(sbn); return }
         val n = sbn.notification ?: return
         if (n.flags and (Notification.FLAG_ONGOING_EVENT or Notification.FLAG_GROUP_SUMMARY) != 0) return
@@ -36,6 +37,21 @@ class WeChatListener : NotificationListenerService() {
                 val s = Store(this).loadSettings()
                 if (!s.wechatWatch) return@runCatching
                 WeChat.parse(title, text, at, WeChat.skipSet(s))?.let { WeChat.add(this, it) }
+            }
+        }
+    }
+
+    /** 「收到通知时跑」的工作流：每条新通知都对一下（不管微信那两个开关开没开）。 */
+    private fun workflows(sbn: StatusBarNotification) {
+        val n = sbn.notification ?: return
+        if (n.flags and (Notification.FLAG_ONGOING_EVENT or Notification.FLAG_GROUP_SUMMARY or Notification.FLAG_FOREGROUND_SERVICE) != 0) return
+        val title = n.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
+        val text = (n.extras.getCharSequence(Notification.EXTRA_BIG_TEXT) ?: n.extras.getCharSequence(Notification.EXTRA_TEXT))?.toString().orEmpty()
+        val pkg = sbn.packageName
+        worker.execute {
+            runCatching {
+                val app = runCatching { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg)
+                com.jack.ai.data.workflow.Workflows.onNotification(this, pkg, app, title, text)
             }
         }
     }

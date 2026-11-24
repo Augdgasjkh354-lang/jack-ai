@@ -135,13 +135,21 @@ fun WorkflowEditor(initial: Workflow?, preview: Map<String, List<WfStepLog>> = e
         }
     }
 
+    var granting by remember { mutableStateOf<List<com.jack.ai.data.workflow.WfGrants.Need>?>(null) }
+
+    fun commit(w: Workflow, approved: Boolean) {
+        Workflows.save(ctx, com.jack.ai.data.workflow.WfGrants.apply(w, approved))
+        Toast.makeText(ctx, "存好了", Toast.LENGTH_SHORT).show()
+        onClose()
+    }
+
     fun save() {
         val w = draft.copy(name = draft.name.trim())
         val p = WorkflowFormat.check(w)
         if (p.isNotEmpty()) { problems = p; return }
-        Workflows.save(ctx, w)
-        Toast.makeText(ctx, "存好了", Toast.LENGTH_SHORT).show()
-        onClose()
+        // 有新的、或者改过的「往外做的事」：先给用户看，同意了才在后台放行
+        if (com.jack.ai.data.workflow.WfGrants.missing(w).isNotEmpty()) { granting = com.jack.ai.data.workflow.WfGrants.needed(w); return }
+        commit(w, approved = false)
     }
 
     val page: @Composable () -> Unit = {
@@ -220,6 +228,31 @@ fun WorkflowEditor(initial: Workflow?, preview: Map<String, List<WfStepLog>> = e
         }
     }
 
+    granting?.let { needs ->
+        val w = draft.copy(name = draft.name.trim())
+        val missing = com.jack.ai.data.workflow.WfGrants.missing(w)
+        AlertDialog(onDismissRequest = { granting = null }, title = { Text("后台跑时会往外做这些事") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    needs.forEach { n ->
+                        val (g, hue) = stepLook("tool")
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Glyph(if (n.tool == "send_email") "✉" else if (n.tool == "phone") "📱" else g, if (missing.any { it.stepId == n.stepId }) Hue.ORANGE else hue, 30)
+                            Spacer(Modifier.width(10.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(n.label, style = MaterialTheme.typography.bodyMedium)
+                                if (missing.none { it.stepId == n.stepId }) Text("之前同意过", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                            }
+                        }
+                    }
+                    Text("同意后，后台跑到这些步骤时不再问你；做的事和这里不一样（换了收件人、换了 App）的那一步会停下来通知你。" +
+                        "付款、转账、密码这类授权了也不做。随时能在工作流页撤销。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            confirmButton = { TextButton(onClick = { granting = null; commit(w, approved = true) }) { Text("同意并保存") } },
+            dismissButton = { TextButton(onClick = { granting = null; commit(w, approved = false) }) { Text("先不授权") } })
+    }
+
     problems?.let { list ->
         AlertDialog(onDismissRequest = { problems = null }, title = { Text("还有这些要改") },
             text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) { list.forEach { Text("· $it", style = MaterialTheme.typography.bodyMedium) } } },
@@ -271,7 +304,7 @@ private fun BasicsCard(w: Workflow, onChange: (Workflow) -> Unit) {
     if (!open) {
         val scheduled = t.type == "schedule"
         Row(Modifier.fillMaxWidth().clip(Radii.l).background(raisedColor).clickable { open = true }.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Glyph(if (scheduled) "⏰" else "▶", if (scheduled) Hue.SKY else Hue.VIOLET, 40)
+            triggerLook(t).let { (g, h) -> Glyph(g, h, 40) }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(w.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -287,17 +320,40 @@ private fun BasicsCard(w: Workflow, onChange: (Workflow) -> Unit) {
             placeholder = { Text("比如：股票早报") })
         OutlinedTextField(w.description, { onChange(w.copy(description = it)) }, Modifier.fillMaxWidth(), maxLines = 3, shape = Radii.m, label = { Text("一句话说明（可不填）") })
         Text("什么时候跑", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        val kinds = listOf("manual" to "手动", "daily" to "每天", "weekdays" to "工作日", "weekly" to "每周", "interval" to "每隔", "once" to "某天一次")
-        val cur = if (t.type == "manual") "manual" else t.repeat
+        val kinds = listOf("manual" to "手动", "daily" to "每天", "weekdays" to "工作日", "weekly" to "每周", "interval" to "每隔", "once" to "某天一次",
+            "watch" to "监控", "notify" to "收到通知", "share" to "分享过来")
+        val cur = if (t.type == "schedule") t.repeat else t.type
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             kinds.forEach { (k, l) ->
                 Pill(l, k == cur) {
-                    onChange(w.copy(trigger = if (k == "manual") t.copy(type = "manual") else t.copy(type = "schedule", repeat = k,
+                    onChange(w.copy(trigger = if (k in setOf("manual", "notify", "share")) t.copy(type = k) else t.copy(type = "schedule", repeat = k,
                         days = if (k == "weekly" && t.days.isEmpty()) listOf(1) else t.days,
                         date = if (k == "once" && t.date.isBlank()) java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date(System.currentTimeMillis() + 86_400_000)) else t.date)))
                 }
             }
         }
+        if (t.type == "notify") {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(t.app, { onChange(w.copy(trigger = t.copy(app = it))) }, Modifier.weight(1f), singleLine = true, shape = Radii.m,
+                    label = { Text("哪个 App") }, placeholder = { Text("微信、淘宝…") })
+                OutlinedTextField(t.keyword, { onChange(w.copy(trigger = t.copy(keyword = it))) }, Modifier.weight(1f), singleLine = true, shape = Radii.m,
+                    label = { Text("通知里有") }, placeholder = { Text("快递，取件") })
+            }
+            Text("两个至少填一个；几个词用逗号隔开，有一个就算。步骤里用 {{输入.app}}、{{输入.title}}、{{输入.text}} 拿到这条通知。同一个工作流一分钟最多跑一次。",
+                style = MaterialTheme.typography.labelSmall, color = if (t.app.isBlank() && t.keyword.isBlank()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline)
+            val ctx = LocalContext.current
+            val granted = remember { androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(ctx).contains(ctx.packageName) }
+            if (!granted) Row(Modifier.fillMaxWidth().clip(Radii.m).background(Hue.ORANGE.wash).padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Kavi 还没有「通知使用权」，收不到通知", style = MaterialTheme.typography.bodySmall, color = Hue.ORANGE.color, modifier = Modifier.weight(1f))
+                TextButton(onClick = {
+                    runCatching { ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                }) { Text("去给") }
+            }
+        }
+        if (t.type == "share") Text("在别的 App 里点分享，选「交给 Kavi 工作流」，再挑这个。分享的文字或链接用 {{输入}} 拿到。",
+            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+        if (t.type == "schedule" && t.repeat == "watch") Text("每隔一阵跑一次。步骤里用「如果……就停下」表示还没等到；哪次一路跑完没停下，就算等到了：发通知，然后不再查。",
+            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
         if (t.type == "schedule") {
             if (t.repeat == "weekly") FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 "一二三四五六日".forEachIndexed { i, c ->
@@ -306,7 +362,7 @@ private fun BasicsCard(w: Workflow, onChange: (Workflow) -> Unit) {
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (t.repeat == "interval") OutlinedTextField(t.everyMin.toString(), { v -> v.filter(Char::isDigit).take(5).toIntOrNull()?.let { onChange(w.copy(trigger = t.copy(everyMin = it))) } },
+                if (t.repeat == "interval" || t.repeat == "watch") OutlinedTextField(t.everyMin.toString(), { v -> v.filter(Char::isDigit).take(5).toIntOrNull()?.let { onChange(w.copy(trigger = t.copy(everyMin = it))) } },
                     Modifier.weight(1f), singleLine = true, shape = Radii.m, label = { Text("每隔几分钟") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     isError = t.everyMin < 15, supportingText = { Text("最少 15 分钟") })
                 else {
