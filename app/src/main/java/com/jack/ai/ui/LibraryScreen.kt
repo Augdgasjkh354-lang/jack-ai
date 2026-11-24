@@ -228,7 +228,8 @@ private fun NewKbDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
             Column {
                 Text("建好后在它的菜单里「导入文件」往里放资料。", style = MaterialTheme.typography.bodySmall)
                 Spacer(Modifier.size(8.dp))
-                OutlinedTextField(name, { name = it.take(40) }, label = { Text("名字") }, singleLine = true)
+                OutlinedTextField(name, { name = it.take(40) }, label = { Text("名字") }, singleLine = true, modifier = Modifier.focusOnShow(),
+                    keyboardOptions = DoneKeyboard, keyboardActions = doneAction(name.isNotBlank()) { onCreate(name) })
             }
         },
         confirmButton = { TextButton(onClick = { onCreate(name) }, enabled = name.isNotBlank()) { Text("建") } },

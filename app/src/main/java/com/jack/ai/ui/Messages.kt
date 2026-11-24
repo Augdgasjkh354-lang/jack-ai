@@ -102,6 +102,7 @@ fun UserBubble(msg: ChatMessage, onDelete: () -> Unit, onEdit: (() -> Unit)? = n
     val clipboard = LocalClipboardManager.current
     val ctx = LocalContext.current
     var menu by remember { mutableStateOf(false) }
+    var selecting by remember { mutableStateOf(false) }
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     var viewing by remember { mutableStateOf<String?>(null) }
     val ctxOuter = LocalContext.current
@@ -186,6 +187,9 @@ fun UserBubble(msg: ChatMessage, onDelete: () -> Unit, onEdit: (() -> Unit)? = n
                     copiedToast(ctx)
                     menu = false
                 })
+                // 只想复制其中一句：打开全文，长按拖着选
+                if (msg.content.isNotEmpty()) DropdownMenuItem(text = { Text("选择文字") }, leadingIcon = { Icon(AppIcons.File, null) },
+                    onClick = { menu = false; selecting = true })
                 if (onEdit != null) DropdownMenuItem(text = { Text("编辑后重发") }, leadingIcon = { Icon(Icons.Default.Edit, null) },
                     onClick = { menu = false; onEdit() })
                 // 不再先确认：删了底下会出「撤销」
@@ -198,6 +202,7 @@ fun UserBubble(msg: ChatMessage, onDelete: () -> Unit, onEdit: (() -> Unit)? = n
         }
     }
     viewing?.let { ImageViewer(it) { viewing = null } }
+    if (selecting) TextViewer("选择文字", load = { msg.content to false }, onDismiss = { selecting = false })
 }
 
 /** 分支切换：「‹ 2/3 ›」，[index] 从 0 起。 */

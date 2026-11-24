@@ -105,6 +105,8 @@ fun SettingsScreen(
     onOpenUsage: () -> Unit,
     canLock: () -> Boolean,
     startLook: Boolean = false,
+    /** 直接打开的那一页（SettingsPage 的名字）。 */
+    startPage: String? = null,
     onOpenTerminal: () -> Unit = {},
 ) {
     val ctx = LocalContext.current
@@ -112,6 +114,9 @@ fun SettingsScreen(
     var keyInput by remember { mutableStateOf(settings.apiKey) }
     var showKey by remember { mutableStateOf(false) }
     var balance by remember { mutableStateOf<String?>(null) }
+    // 自动查过余额的那把 Key（一开始就填着的不查）
+    var checkedKey by remember { mutableStateOf(settings.apiKey) }
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     var confirmClear by remember { mutableStateOf(false) }
     var confirmRestore by remember { mutableStateOf<android.net.Uri?>(null) }
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
@@ -122,8 +127,11 @@ fun SettingsScreen(
     }
 
     // null 是首页（分组列表）；还没填任何 Key 时直接打开 Key 那页
-    var page by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(if (startLook) SettingsPage.LOOK else if (settings.hasAnyKey()) null else SettingsPage.KEY) }
-    androidx.activity.compose.BackHandler(enabled = page != null) { page = null }
+    var page by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(startPage?.let { n -> SettingsPage.entries.firstOrNull { it.name == n } }
+        ?: if (startLook) SettingsPage.LOOK else if (settings.hasAnyKey()) null else SettingsPage.KEY) }
+    // 从别处直接跳进某一页的：返回就回原来的地方，不先绕到设置首页
+    val leave: () -> Unit = { if (page == null || (startPage != null && page?.name == startPage)) onBack() else page = null }
+    androidx.activity.compose.BackHandler(enabled = page != null) { leave() }
     val homeScroll = rememberScrollState()
     val pageScroll = remember(page) { androidx.compose.foundation.ScrollState(0) }
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
@@ -140,7 +148,7 @@ fun SettingsScreen(
                     containerColor = androidx.compose.ui.graphics.Color.Transparent, scrolledContainerColor = androidx.compose.ui.graphics.Color.Transparent),
                 modifier = Modifier.glassBar(top = true),
                 navigationIcon = {
-                    CircleIconButton(Icons.AutoMirrored.Filled.ArrowBack, "返回", Modifier.padding(start = 12.dp)) { if (page != null) page = null else onBack() }
+                    CircleIconButton(Icons.AutoMirrored.Filled.ArrowBack, "返回", Modifier.padding(start = 12.dp)) { leave() }
                 },
             )
         },
@@ -182,10 +190,24 @@ fun SettingsScreen(
                     visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     trailingIcon = {
-                        TextButton(onClick = { showKey = !showKey }) { Text(if (showKey) "隐藏" else "显示") }
+                        // 还没填：右边是「粘贴」，刚从 DeepSeek 网页复制回来点一下就好，不用长按输入框
+                        if (keyInput.isEmpty()) TextButton(onClick = {
+                            val clip = clipboard.getText()?.text?.trim().orEmpty()
+                            if (clip.isEmpty()) android.widget.Toast.makeText(ctx, "剪贴板里没有文字", android.widget.Toast.LENGTH_SHORT).show()
+                            else { keyInput = clip; vm.updateSettings { s -> s.copy(apiKey = clip) } }
+                        }) { Text("粘贴") }
+                        else TextButton(onClick = { showKey = !showKey }) { Text(if (showKey) "隐藏" else "显示") }
                     },
                     modifier = Modifier.fillMaxWidth(),
                 )
+                // 填好（或粘贴）Key 停一会儿就自动查一次余额：马上知道这把 Key 能不能用，不用再去点「查余额」
+                LaunchedEffect(keyInput) {
+                    if (keyInput.length < 20 || keyInput == checkedKey) return@LaunchedEffect
+                    kotlinx.coroutines.delay(800)
+                    checkedKey = keyInput
+                    balance = "正在检查这把 Key…"
+                    balance = vm.checkBalance()
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     OutlinedButton(onClick = {
                         Links.open(ctx, "https://platform.deepseek.com/api_keys")

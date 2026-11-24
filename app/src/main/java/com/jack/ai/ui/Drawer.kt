@@ -573,17 +573,41 @@ fun LogoMark(size: Dp) {
 
 @Composable
 fun RenameDialog(initial: String, title: String = "重命名", onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
-    var text by remember { mutableStateOf(initial) }
+    // 弹出来就全选好、键盘也起来：直接打新名字，回车就改好
+    var field by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(initial, androidx.compose.ui.text.TextRange(0, initial.length))) }
+    val text = field.text
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
-        text = { OutlinedTextField(value = text, onValueChange = { text = it }, singleLine = true) },
+        text = {
+            OutlinedTextField(value = field, onValueChange = { field = it }, singleLine = true, modifier = Modifier.focusOnShow(),
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { if (text.isNotBlank()) onConfirm(text.trim()) }))
+        },
         confirmButton = {
             TextButton(enabled = text.isNotBlank(), onClick = { onConfirm(text.trim()) }) { Text("确定") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
     )
 }
+
+/** 弹窗里的输入框：一弹出来就拿到焦点、键盘起来，不用再点一下输入框。 */
+@Composable
+internal fun Modifier.focusOnShow(): Modifier {
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        // 等弹窗的窗口挂上再要焦点，太早要了键盘不出来
+        kotlinx.coroutines.delay(120)
+        runCatching { focus.requestFocus() }
+        keyboard?.show()
+    }
+    return this.then(Modifier.focusRequester(focus))
+}
+
+/** 单行输入框回车就提交（[ok] 为假时不动）。 */
+internal fun doneAction(ok: Boolean, submit: () -> Unit) = androidx.compose.foundation.text.KeyboardActions(onDone = { if (ok) submit() })
+internal val DoneKeyboard = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done)
 
 @Composable
 fun ConfirmDeleteDialog(title: String, body: String, onDismiss: () -> Unit, onConfirm: () -> Unit) {

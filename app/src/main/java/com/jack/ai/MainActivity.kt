@@ -52,7 +52,8 @@ import com.jack.ai.ui.UsageScreen
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 
 sealed interface Screen {
-    data object Settings : Screen
+    /** page：直接打开设置里的哪一页（SettingsPage 的名字），null 是首页。 */
+    data class Settings(val page: String? = null) : Screen
     data object Memory : Screen
     data object Skills : Screen
     data object Usage : Screen
@@ -273,7 +274,7 @@ class MainActivity : FragmentActivity() {
         val lastCrash = CrashLog.take(this)
         PDFBoxResourceLoader.init(applicationContext)
         enableEdgeToEdge()
-        if (!vm.state.value.settings.hasAnyKey() && savedInstanceState == null) stack.add(Screen.Settings)
+        if (!vm.state.value.settings.hasAnyKey() && savedInstanceState == null) stack.add(Screen.Settings())
         if (savedInstanceState == null) handleIntent(intent)
         setContent {
             val state by vm.state.collectAsStateWithLifecycle()
@@ -329,7 +330,8 @@ class MainActivity : FragmentActivity() {
                         null -> ChatScreen(
                             vm = vm,
                             state = state,
-                            onOpenSettings = { stack.add(Screen.Settings) },
+                            onOpenSettings = { stack.add(Screen.Settings()) },
+                            onOpenSettingsPage = { stack.add(Screen.Settings(it)) },
                             onOpenProject = { stack.add(Screen.ProjectPage(it)) },
                             onNewProject = { creatingProject = true },
                             onOpenMemory = { stack.add(Screen.Memory) },
@@ -354,8 +356,9 @@ class MainActivity : FragmentActivity() {
                         Screen.Memory -> MemoryScreen(vm = vm, state = state, onBack = back)
                         Screen.Skills -> SkillsScreen(vm = vm, settings = state.settings, onBack = back)
                         Screen.Usage -> UsageScreen(vm = vm, state = state, onBack = back)
-                        Screen.Settings -> SettingsScreen(
+                        is Screen.Settings -> SettingsScreen(
                             vm = vm,
+                            startPage = screen.page,
                             settings = state.settings,
                             onBack = back,
                             onOpenSkills = { stack.add(Screen.Skills) },

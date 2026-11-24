@@ -459,7 +459,11 @@ internal fun SpaceBar(vm: ChatViewModel, settings: com.jack.ai.data.Settings, se
         AlertDialog(
             onDismissRequest = { naming = null },
             title = { Text(if (id.isEmpty()) "新记忆空间" else "改名") },
-            text = { OutlinedTextField(name, { name = it.take(12) }, singleLine = true, placeholder = { Text("例如：工作") }) },
+            text = { OutlinedTextField(name, { name = it.take(12) }, singleLine = true, placeholder = { Text("例如：工作") }, modifier = Modifier.focusOnShow(),
+                keyboardOptions = DoneKeyboard, keyboardActions = doneAction(name.isNotBlank() && name.trim() != com.jack.ai.data.DEFAULT_SPACE_NAME) {
+                    if (id.isEmpty()) onSelect(vm.addSpace(name)) else vm.renameSpace(id, name)
+                    naming = null
+                }) },
             confirmButton = {
                 TextButton(enabled = name.isNotBlank() && name.trim() != com.jack.ai.data.DEFAULT_SPACE_NAME, onClick = {
                     if (id.isEmpty()) onSelect(vm.addSpace(name)) else vm.renameSpace(id, name)

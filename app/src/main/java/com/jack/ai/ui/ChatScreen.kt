@@ -154,6 +154,8 @@ fun ChatScreen(
     onOpenFiles: () -> Unit = {},
     /** 打开终端，参数是对话文件夹的 key（Workspace.key）。 */
     onOpenTerminal: (String) -> Unit = {},
+    /** 直接打开设置里的某一页（比如缺搜索 Key 时打开「连接」）。 */
+    onOpenSettingsPage: (String) -> Unit = { onOpenSettings() },
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -223,7 +225,7 @@ fun ChatScreen(
         drawerContent = {
             HistoryDrawer(
                 state = state,
-                onNew = { vm.newChat(); scope.launch { drawerState.close() } },
+                onNew = { vm.newChat(); focusInput++; scope.launch { drawerState.close() } },
                 onSelect = { vm.select(it); scope.launch { drawerState.close() } },
                 onDelete = vm::delete,
                 onUndoDelete = vm::undoDeleteConversation,
@@ -269,7 +271,8 @@ fun ChatScreen(
                     },
                     actions = {
                         Row(Modifier.padding(end = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            CircleIconButton(AppIcons.NewChat, "新对话") { vm.newChat(state.currentProjectId) }
+                            // 开了新对话就是要打字：光标放进输入框、键盘起来
+                            CircleIconButton(AppIcons.NewChat, "新对话") { vm.newChat(state.currentProjectId); focusInput++ }
                             // 文件夹收在「更多」里（做出了文件时，「更多」上标个数），顶栏右边只留两个圆按钮，标题胶囊才居中
                             if (conv != null && conv.messages.isNotEmpty()) ExportMenu(vm,
                                 made = conv.messages.flatMap { it.files }.distinctBy { it.path }.size,
@@ -287,7 +290,7 @@ fun ChatScreen(
                 if (conv != null && conv.closedReason.isNotEmpty()) Surface(color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.navigationBarsPadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Kavi 结束了这个对话：${conv.closedReason}", style = MaterialTheme.typography.bodyMedium)
-                        OutlinedButton(onClick = { vm.newChat(state.currentProjectId) }) { Text("开一个新对话") }
+                        OutlinedButton(onClick = { vm.newChat(state.currentProjectId); focusInput++ }) { Text("开一个新对话") }
                     }
                 } else Box(if (conv == null || conv.messages.isEmpty()) Modifier else Modifier.glassBar(top = false)) { InputBar(
                     vm = vm,
@@ -299,8 +302,9 @@ fun ChatScreen(
                     onCancelEdit = { stopEditing() },
                     onSubmitEdit = { editing?.let { m -> vm.editMessage(m.id, text) }; stopEditing() },
                     onNeedTavily = {
-                        Toast.makeText(ctx, "请先在 设置 → 连接 → 联网搜索 里填 Exa 或 Tavily 的 Key", Toast.LENGTH_LONG).show()
-                        onOpenSettings()
+                        // 直接打开「连接」那页，不用自己从设置首页找
+                        Toast.makeText(ctx, "在「联网搜索」里填 Exa 或 Tavily 的 Key 就能用", Toast.LENGTH_LONG).show()
+                        onOpenSettingsPage("CONNECT")
                     },
                     // 标签栏：聊天（就是这里）、资料库、记忆、浏览器、提醒，一点就过去
                     tabs = {

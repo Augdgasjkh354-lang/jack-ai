@@ -150,6 +150,25 @@ private fun startVoiceIntent(ctx: android.content.Context, launcher: androidx.ac
     }
 }
 
+/**
+ * 没给麦克风权限。以前只说「去系统设置里打开」，要自己去找；
+ * 选过「不再询问」（系统不会再弹）时直接打开 Kavi 的应用信息页，点「权限」就能开。只拒绝了一次的照旧提示，下次还会问。
+ */
+private fun micDenied(ctx: android.content.Context, what: String) {
+    var c: android.content.Context? = ctx
+    while (c is android.content.ContextWrapper && c !is android.app.Activity) c = c.baseContext
+    val act = c as? android.app.Activity
+    val forever = act != null && !androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale(act, android.Manifest.permission.RECORD_AUDIO)
+    if (!forever) {
+        Toast.makeText(ctx, "没有麦克风权限，$what", Toast.LENGTH_LONG).show()
+        return
+    }
+    Toast.makeText(ctx, "麦克风权限关着，$what。在这页点「权限 → 麦克风」打开", Toast.LENGTH_LONG).show()
+    runCatching {
+        ctx.startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.fromParts("package", ctx.packageName, null)))
+    }
+}
+
 /** 正在录音时输入框上面的一条：时长、声音大小，暂停 / 继续、停止并整理、放弃。 */
 @Composable
 private fun RecordBar(session: com.jack.ai.RecordService.Session) {
@@ -222,6 +241,8 @@ internal fun InputBar(
         vm.addFiles(it)
     }
     val ctx = LocalContext.current
+    // 点附件是看它（贴进来的长文字、选的文件），删要点右边的叉
+    val openFile = rememberFileOpener()
     // 拍照：相机 App 把照片写进缓存目录里的这个文件
     var photoUri by rememberSaveable { mutableStateOf<android.net.Uri?>(null) }
     val takePhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
@@ -261,11 +282,11 @@ internal fun InputBar(
     fun startVoice() = startVoiceIntent(ctx, speech)
     // 录音纪要：先要麦克风权限，再开录（录在前台服务里）
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
-        if (ok) com.jack.ai.RecordService.start(ctx) else Toast.makeText(ctx, "没有麦克风权限，录不了音。可以在系统设置里给 Kavi 打开", Toast.LENGTH_LONG).show()
+        if (ok) com.jack.ai.RecordService.start(ctx) else micDenied(ctx, "录不了音")
     }
     // 语音对话：同样先要麦克风权限
     val voiceChatPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
-        if (ok) VoiceChat.start(ctx, vm) else Toast.makeText(ctx, "没有麦克风权限，没法语音对话。可以在系统设置里给 Kavi 打开", Toast.LENGTH_LONG).show()
+        if (ok) VoiceChat.start(ctx, vm) else micDenied(ctx, "没法语音对话")
     }
     fun startVoiceChat() {
         if (androidx.core.content.ContextCompat.checkSelfPermission(ctx, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED)
@@ -416,7 +437,7 @@ internal fun InputBar(
                                 },
                             )
                         }
-                        items(state.pending, key = { it.id }) { att -> PendingChip(att) { vm.removePending(att.id) } }
+                        items(state.pending, key = { it.id }) { att -> PendingChip(att, onOpen = openFile) { vm.removePending(att.id) } }
                         if (state.importing) {
                             item { CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) }
                         }
@@ -598,7 +619,7 @@ internal fun InputBar(
 private enum class SendAction { MIC, SEND, STOP, EDIT }
 
 @Composable
-private fun PendingChip(att: Attachment, onRemove: () -> Unit) {
+private fun PendingChip(att: Attachment, onOpen: (com.jack.ai.data.GeneratedFile) -> Unit, onRemove: () -> Unit) {
     if (att.kind == "image") {
         Box {
             Thumbnail(att.path, 56.dp)
@@ -620,12 +641,17 @@ private fun PendingChip(att: Attachment, onRemove: () -> Unit) {
             }
         }
     } else {
+        // 以前点整块就删掉了（贴长文字时还提示「点开能看」，一点反而没了）：现在点名字打开看，点叉才删
         InputChip(
             selected = false,
-            onClick = onRemove,
+            onClick = { if (att.path.isNotEmpty()) onOpen(com.jack.ai.data.GeneratedFile(att.name, att.path, com.jack.ai.tools.ToolSession.mimeOf(att.name))) },
             label = { Text(att.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
             leadingIcon = { Icon(AppIcons.File, null, Modifier.size(18.dp)) },
-            trailingIcon = { Icon(Icons.Default.Close, "移除", Modifier.size(16.dp)) },
+            trailingIcon = {
+                Box(Modifier.size(24.dp).clip(CircleShape).clickable(onClickLabel = "移除", onClick = onRemove), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.Close, "移除", Modifier.size(16.dp))
+                }
+            },
         )
     }
 }

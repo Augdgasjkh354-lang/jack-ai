@@ -1,5 +1,9 @@
 package com.jack.ai.ui
 
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.graphicsLayer
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -187,15 +191,52 @@ internal fun ImageViewer(path: String, onDismiss: () -> Unit) {
             Toast.makeText(ctx, if (n > 0) "已存 $n 张到相册（Pictures/Kavi）" else "没存成，看看是不是没给存储权限", Toast.LENGTH_LONG).show()
         }
     }
+    // 双指缩放、拖着看细节（截图里的小字、图表）；双击放大 / 还原；没放大时点一下关掉
+    var scale by remember(path) { mutableStateOf(1f) }
+    var offset by remember(path) { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(
-            Modifier.fillMaxSize().background(Color.Black).clickable(onClick = onDismiss),
+            Modifier.fillMaxSize().background(Color.Black)
+                .pointerInput(path) {
+                    detectTapGestures(
+                        onTap = { if (scale <= 1.01f) onDismiss() },
+                        onDoubleTap = { at ->
+                            if (scale > 1.01f) { scale = 1f; offset = androidx.compose.ui.geometry.Offset.Zero }
+                            else {
+                                // 以点的地方为中心放大
+                                scale = 2.5f
+                                offset = (androidx.compose.ui.geometry.Offset(size.width / 2f, size.height / 2f) - at) * 1.5f
+                            }
+                        },
+                    )
+                }
+                .pointerInput(path) {
+                    detectTransformGestures { _, pan, zoom, _ ->
+                        scale = (scale * zoom).coerceIn(1f, 6f)
+                        offset = if (scale <= 1.01f) androidx.compose.ui.geometry.Offset.Zero else {
+                            val o = offset + pan
+                            val mx = size.width * (scale - 1) / 2f
+                            val my = size.height * (scale - 1) / 2f
+                            androidx.compose.ui.geometry.Offset(o.x.coerceIn(-mx, mx), o.y.coerceIn(-my, my))
+                        }
+                    }
+                },
             contentAlignment = Alignment.Center,
         ) {
-            bmp?.let { Image(it.asImageBitmap(), null, Modifier.fillMaxWidth(), contentScale = ContentScale.Fit) }
+            bmp?.let {
+                Image(it.asImageBitmap(), null, Modifier.fillMaxWidth().graphicsLayer {
+                    scaleX = scale; scaleY = scale; translationX = offset.x; translationY = offset.y
+                }, contentScale = ContentScale.Fit)
+            }
             Row(Modifier.align(Alignment.TopCenter).fillMaxWidth().statusBarsPadding().padding(12.dp)) {
                 ViewerButton({ onDismiss() }) { Icon(Icons.Default.Close, "关闭", tint = Color.White) }
                 Spacer(Modifier.weight(1f))
+                // 直接发给别人，不用先存相册再去找
+                ViewerButton({
+                    val f = File(path)
+                    shareFile(ctx, GeneratedFile(f.name, f.absolutePath, com.jack.ai.tools.ToolSession.mimeOf(f.name).takeIf { m -> m.startsWith("image/") } ?: "image/*"))
+                }) { Icon(AppIcons.Share, "分享", tint = Color.White) }
+                Spacer(Modifier.width(12.dp))
                 ViewerButton({ com.jack.ai.ui.photo.PhotoEditorActivity.open(ctx, File(path)) }) { Icon(Icons.Default.Edit, "修图", tint = Color.White) }
                 Spacer(Modifier.width(12.dp))
                 Box {
@@ -369,8 +410,9 @@ internal fun openFile(ctx: Context, f: GeneratedFile) {
     val intent = Intent(Intent.ACTION_VIEW)
         .setDataAndType(uri, f.mime)
         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    // 不再每次都弹「用什么打开」：交给系统，选过「始终」的直接打开，没选过的系统自己会问
     try {
-        ctx.startActivity(Intent.createChooser(intent, "用什么打开").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+        ctx.startActivity(intent)
     } catch (e: ActivityNotFoundException) {
         Toast.makeText(ctx, "手机上没有能打开这种文件的应用，可以装个 WPS 或微软 Office", Toast.LENGTH_LONG).show()
     }
@@ -381,9 +423,13 @@ internal fun shareFile(ctx: Context, f: GeneratedFile) {
         Toast.makeText(ctx, "文件已被删除", Toast.LENGTH_SHORT).show()
         return
     }
+    val uri = runCatching { fileUri(ctx, f) }.getOrElse {
+        Toast.makeText(ctx, "这个文件分享不了：${f.name}", Toast.LENGTH_SHORT).show()
+        return
+    }
     val intent = Intent(Intent.ACTION_SEND)
         .setType(f.mime)
-        .putExtra(Intent.EXTRA_STREAM, fileUri(ctx, f))
+        .putExtra(Intent.EXTRA_STREAM, uri)
         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     ctx.startActivity(Intent.createChooser(intent, "分享到"))
 }

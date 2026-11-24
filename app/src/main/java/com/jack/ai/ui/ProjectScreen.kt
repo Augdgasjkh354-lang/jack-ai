@@ -380,12 +380,15 @@ private fun ProjectMemoryTab(vm: ChatViewModel, project: Project, bars: PaddingV
         Spacer(Modifier.size(4.dp))
         GlassTabs(ChatMemory.SECTIONS, ChatMemory.SECTIONS.indexOf(section).coerceAtLeast(0)) { section = ChatMemory.SECTIONS[it] }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(adding, { adding = it }, placeholder = { Text("加一条$section") }, singleLine = true, modifier = Modifier.weight(1f))
-            TextButton(enabled = adding.isNotBlank(), onClick = {
+            fun add() {
                 val entry = "【$section】" + adding.trim()
                 if (entry !in items) save(items + entry)
                 adding = ""
-            }) { Text("添加") }
+            }
+            // 回车就加上，键盘不收，接着打下一条
+            OutlinedTextField(adding, { adding = it }, placeholder = { Text("加一条$section") }, singleLine = true, modifier = Modifier.weight(1f),
+                keyboardOptions = DoneKeyboard, keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { if (adding.isNotBlank()) add() }))
+            TextButton(enabled = adding.isNotBlank(), onClick = { add() }) { Text("添加") }
         }
     }
 }
@@ -428,7 +431,10 @@ fun ProjectDialog(initial: Project?, onDismiss: () -> Unit, onSave: (Project) ->
                         }
                     }
                     Spacer(Modifier.size(10.dp))
-                    OutlinedTextField(name, { name = it }, placeholder = { Text("项目名称") }, singleLine = true, modifier = Modifier.weight(1f))
+                    // 新建时一弹出来就能打名字
+                    OutlinedTextField(name, { name = it }, placeholder = { Text("项目名称") }, singleLine = true,
+                        modifier = Modifier.weight(1f).then(if (initial == null) Modifier.focusOnShow() else Modifier),
+                        keyboardOptions = DoneKeyboard)
                 }
                 Text("类型", style = MaterialTheme.typography.titleSmall)
                 com.jack.ai.data.ProjectKind.entries.forEach { k ->
