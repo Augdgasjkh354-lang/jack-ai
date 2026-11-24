@@ -217,11 +217,18 @@ class ShotsTest {
         )
         packPagesInline = true
         val which = System.getenv("SHOTS_PACK") ?: "list"
+        val op = if (which == "operit") kotlinx.coroutines.runBlocking {
+            com.jack.ai.data.packs.OperitImport.stage(app, "/* METADATA\n{ name: bili, display_name: { zh: \"B站助手\" }, description: { zh: \"搜视频、看字幕、自动点赞\" }, author: \"某位作者\", env: [\"BILIBILI_SESSDATA\"],\n" +
+                "tools: [ { name: search, description: 搜视频, parameters: [ { name: keyword, type: string, required: true } ] }, { name: like, description: 给视频点赞, parameters: [] } ] }\n*/\n" +
+                "const c = OkHttp.newClient(); exports.search = async (p) => (await c.get('https://api.bilibili.com/x/web-interface/search?keyword=' + p.keyword)).json();\n" +
+                "exports.like = async () => { await Tools.UI.tap(1, 2); await Tools.System.startApp('tv.danmaku.bili'); return { success: true }; };", "bili.js")
+        } else null
         rule.mainClock.autoAdvance = false
         rule.setContent {
             JackTheme(dark()) {
                 androidx.compose.material3.Surface {
                     when (which) {
+                        "operit" -> PackConfirm(op!!, null, {}, {})
                         "confirm" -> PackConfirm(s, null, {}, {})
                         "kavi" -> androidx.compose.foundation.layout.Box {
                             PackConfirm(s.copy(source = "kavi"), null, {}, {}, byKavi = true)

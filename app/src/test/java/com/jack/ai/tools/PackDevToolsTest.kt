@@ -99,4 +99,16 @@ class PackDevToolsTest {
         assertEquals("计数器", seen.await().staged.manifest.name)
         assertEquals(0, asked)
     }
+
+    @Test fun operitScriptIsConvertedOnInstall() = runBlocking {
+        val s = session()
+        s.wsDir.mkdirs()
+        java.io.File(s.wsDir, "hello.js").writeText("/* METADATA\n{ name: hello, description: 打招呼, tools: [ { name: hi, description: 说你好, parameters: [] } ] }\n*/\n" +
+            "exports.hi = async () => ({ success: true, message: '你好' });")
+        val r = s.execute("install_pack", """{"folder":"hello.js"}""")
+        assertTrue(r, r.contains("已装好") && r.contains("pack_op_hello__hi"))
+        val p = Store(ctx).loadSettings().packs.single()
+        assertEquals("operit", p.source)
+        assertTrue(File(com.jack.ai.data.packs.Packs.dir(ctx, p.id), "original.js").isFile)
+    }
 }

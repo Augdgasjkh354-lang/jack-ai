@@ -30,6 +30,17 @@ private fun ToolSession.packFolder(rel: String): java.io.File? {
     return f.takeIf { (it == root || it.path.startsWith(root.path + java.io.File.separator)) && it.isDirectory }
 }
 
+/** 指向一个 Operit 脚本（.js，开头有 METADATA），或者文件夹里没有 kavi-pack.json、只有一个这样的脚本。 */
+private fun ToolSession.operitScript(rel: String): java.io.File? {
+    val root = wsDir.canonicalFile
+    val f = java.io.File(root, rel.trim().trimStart('/').removePrefix("workspace/").ifBlank { "." }).canonicalFile
+    if (f != root && !f.path.startsWith(root.path + java.io.File.separator)) return null
+    fun isOperit(x: java.io.File) = x.isFile && x.extension == "js" && x.length() < 2_000_000 && com.jack.ai.data.packs.OperitImport.looksLikeOperit(x.readText().take(20_000))
+    if (f.isFile) return f.takeIf(::isOperit)
+    if (!f.isDirectory || java.io.File(f, com.jack.ai.data.packs.PackFormat.FILE).isFile) return null
+    return f.listFiles().orEmpty().filter(::isOperit).singleOrNull()
+}
+
 /** 试跑对话文件夹里正在写的工具包：先查说明文件，再真的跑一次。数据放在单独的试跑文件夹里，不动装好的那份。 */
 internal suspend fun ToolSession.packTest(args: JsonObject): String {
     val folder = args["folder"].text().trim()
@@ -69,9 +80,13 @@ internal suspend fun ToolSession.packTest(args: JsonObject): String {
 internal suspend fun ToolSession.packInstall(args: JsonObject): String {
     val folder = args["folder"].text().trim()
     return runTool("交给你装工具包：$folder") {
-        val dir = packFolder(folder) ?: error("对话文件夹里没有「$folder」这个文件夹")
+        // Operit 的单文件脚本：指向那个 .js，或者文件夹里只有它（没有 kavi-pack.json），先转换
+        val operit = operitScript(folder)
+        val dir = if (operit != null) null else packFolder(folder) ?: error("对话文件夹里没有「$folder」这个文件夹")
         val staged = withContext(Dispatchers.IO) {
-            runCatching { Packs.stageDir(app, dir, "kavi") }.getOrElse { e ->
+            runCatching {
+                if (operit != null) com.jack.ai.data.packs.OperitImport.stage(app, operit.readText(), operit.name) else Packs.stageDir(app, dir!!, "kavi")
+            }.getOrElse { e ->
                 error("装不了：\n" + ((e as? com.jack.ai.data.packs.PackError)?.problems ?: listOf(e.message.orEmpty())).joinToString("\n") { "- $it" })
             }
         }

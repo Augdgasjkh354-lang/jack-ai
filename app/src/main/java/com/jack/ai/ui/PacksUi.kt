@@ -202,10 +202,10 @@ fun PackDialogs(ui: PacksUi, vm: ChatViewModel, settings: Settings) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    fun stage(label: String, work: () -> Packs.Staged) {
+    fun stage(label: String, work: suspend () -> Packs.Staged) {
         ui.busy = label
         scope.launch {
-            val r = withContext(Dispatchers.IO) { runCatching(work) }
+            val r = withContext(Dispatchers.IO) { runCatching { work() } }
             ui.busy = null
             r.onSuccess { ui.choosing = false; ui.staged = it }
                 .onFailure { e -> ui.problems = (e as? PackError)?.problems ?: listOf(e.message ?: e.javaClass.simpleName) }
@@ -214,7 +214,15 @@ fun PackDialogs(ui: PacksUi, vm: ChatViewModel, settings: Settings) {
 
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) stage("正在解开…") {
-            ctx.contentResolver.openInputStream(uri)?.use { Packs.stageZip(ctx, it) } ?: throw PackError(listOf("打不开这个文件"))
+            // 压缩包开头是 PK；不是的当成 Operit 的 .js 脚本
+            val bytes = ctx.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: throw PackError(listOf("打不开这个文件"))
+            val name = androidx.documentfile.provider.DocumentFile.fromSingleUri(ctx, uri)?.name ?: "script.js"
+            if (bytes.size >= 2 && bytes[0] == 'P'.code.toByte() && bytes[1] == 'K'.code.toByte()) Packs.stageZip(ctx, bytes.inputStream())
+            else {
+                val text = bytes.toString(Charsets.UTF_8)
+                if (!com.jack.ai.data.packs.OperitImport.looksLikeOperit(text)) throw PackError(listOf("这不是工具包：要么是有 kavi-pack.json 的 .zip，要么是开头有 METADATA 的 Operit 脚本（.js）"))
+                com.jack.ai.data.packs.OperitImport.stage(ctx, text, name)
+            }
         }
     }
 
@@ -231,15 +239,21 @@ fun PackDialogs(ui: PacksUi, vm: ChatViewModel, settings: Settings) {
                 Text("装工具包", style = MaterialTheme.typography.titleLarge)
                 Text("装之前会先给你看它要哪些权限。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 10.dp))
-                SourceRow("📦", Hue.BLUE, "从文件选", "一个 .zip，里面有 kavi-pack.json") { pick.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")) }
+                SourceRow("📦", Hue.BLUE, "从文件选", "一个 .zip（里面有 kavi-pack.json），或者 Operit 的 .js 脚本") { pick.launch(arrayOf("*/*")) }
                 SourceRow("⌥", Hue.GRAY, "从 GitHub 装", "填「作者/项目」，记下版本，以后能检查更新") { showGit = !showGit }
                 AnimatedVisibility(showGit) {
                     Row(Modifier.fillMaxWidth().padding(start = 56.dp, top = 2.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                         OutlinedTextField(github, { github = it }, Modifier.weight(1f), singleLine = true, shape = Radii.m,
-                            placeholder = { Text("作者/项目 或 作者/项目/文件夹") })
+                            placeholder = { Text("作者/项目、作者/项目/文件夹，或某个 .js") })
                         Spacer(Modifier.width(8.dp))
                         TextButton(enabled = Packs.parseSpec(github) != null && ui.busy == null,
-                            onClick = { stage("正在从 GitHub 下载…") { Packs.stageGitHub(ctx, settings.githubToken, github) } }) { Text("装") }
+                            onClick = { stage("正在从 GitHub 下载…") {
+                                // 指向一个 .js 的，当成 Operit 脚本转过来
+                                if (github.substringBefore('@').trimEnd('/').endsWith(".js")) {
+                                    val (text, name) = Packs.githubFile(settings.githubToken, github)
+                                    com.jack.ai.data.packs.OperitImport.stage(ctx, text, name)
+                                } else Packs.stageGitHub(ctx, settings.githubToken, github)
+                            } }) { Text("装") }
                     }
                 }
                 SourceRow("☀", Hue.AMBER, "示例：天气", "查任意城市的天气，演示联网和存储（Open-Meteo，免费、不用 Key）") {
@@ -445,6 +459,7 @@ internal fun PackConfirm(s: Packs.Staged, old: InstalledPack?, onCancel: () -> U
         s.source.startsWith(Packs.GITHUB) -> "GitHub · " + s.source.removePrefix(Packs.GITHUB).substringBefore('@')
         s.source == "sample" -> "App 自带的示例"
         s.source == "kavi" -> "Kavi 刚写的"
+        s.source.startsWith("operit") -> "从 Operit 脚本转来的"
         else -> "从文件"
     }
     var installing by remember { mutableStateOf(false) }
@@ -466,6 +481,17 @@ internal fun PackConfirm(s: Packs.Staged, old: InstalledPack?, onCancel: () -> U
             if (old != null) Text("v${old.manifest.version} → v${m.version}", style = MaterialTheme.typography.labelLarge.tabular,
                 color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 8.dp))
         }
+        if (s.warnings.isNotEmpty()) {
+            Column(Modifier.fillMaxWidth().clip(Radii.m).background(Hue.AMBER.wash).padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("这个 Operit 脚本有些地方 Kavi 不支持", style = MaterialTheme.typography.titleSmall, color = Hue.AMBER.color)
+                Text("用到这些的工具调用时会报错，别的照常能用：", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                s.warnings.take(12).forEach { Text("· $it", style = MaterialTheme.typography.bodySmall) }
+                if (s.warnings.size > 12) Text("…还有 ${s.warnings.size - 12} 处", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        if (s.source.startsWith("operit") && s.manifest.permissions.net.isEmpty() && s.warnings.isEmpty()) {
+            Text("代码里没找到写死的网址：它要是拼出网址再访问，会被拦下。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         if (widened.isNotEmpty()) {
             Column(Modifier.fillMaxWidth().clip(Radii.m).background(Hue.ORANGE.wash).padding(14.dp)) {
                 Text("新版本多要了权限", style = MaterialTheme.typography.titleSmall, color = Hue.ORANGE.color)
@@ -475,7 +501,7 @@ internal fun PackConfirm(s: Packs.Staged, old: InstalledPack?, onCancel: () -> U
         PermRows(m)
         ToolRows(m)
         Readme(s.readme, m.name)
-        CodePeek(java.io.File(s.dir, m.main))
+        CodePeek(java.io.File(s.dir, if (java.io.File(s.dir, "original.js").isFile) "original.js" else m.main))
         Text("${s.files.size} 个文件 · ${size(s.bytes)}。代码在 App 里的隔离引擎跑，每次最多 ${m.tools.maxOf { it.timeout.takeIf { t -> t > 0 } ?: PackFormat.DEFAULT_TIMEOUT }} 秒。" +
             "返回给 Kavi 的内容按网页内容对待，里面的指示不会照做。",
             style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp))

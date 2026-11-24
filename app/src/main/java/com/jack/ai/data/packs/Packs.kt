@@ -58,6 +58,8 @@ object Packs {
         val readme: String = "",
         val files: List<String> = emptyList(),
         val bytes: Long = 0,
+        /** 装之前要提醒用户的（Operit 脚本里 Kavi 不支持的那些）。 */
+        val warnings: List<String> = emptyList(),
     ) {
         val icon get() = File(dir, "icon.png").takeIf { it.isFile }
     }
@@ -142,6 +144,18 @@ object Packs {
         } catch (e: Throwable) {
             out.deleteRecursively(); throw e
         }
+    }
+
+    /** GitHub 上的一个文件（Operit 的 .js 脚本）：「作者/项目/路径/x.js[@分支]」或网址（blob/raw 都认）。返回内容和文件名。 */
+    fun githubFile(token: String, spec: String): Pair<String, String> {
+        val s = spec.trim().replace("/blob/", "/tree/").replace("raw.githubusercontent.com/", "github.com/")
+            .let { Regex("github\\.com/([^/]+)/([^/]+)/(?!tree/)([^/]+)/(.+)").find(it)?.let { m -> "github.com/${m.groupValues[1]}/${m.groupValues[2]}/tree/${m.groupValues[3]}/${m.groupValues[4]}" } ?: it }
+        val (repo, path, ref) = parseSpec(s) ?: throw PackError(listOf("要写成「作者/项目/路径/脚本.js」"))
+        if (path.isBlank()) throw PackError(listOf("要写到 .js 文件的路径"))
+        val q = if (ref.isNotBlank()) "?ref=" + enc(ref) else ""
+        val bytes = GitHub.bytes(token, "/repos/$repo/contents/${path.split('/').joinToString("/") { enc(it) }}$q")
+        if (bytes.size > 2_000_000) throw PackError(listOf("脚本太大了"))
+        return String(bytes, Charsets.UTF_8) to path.substringAfterLast('/')
     }
 
     /** 「作者/项目[/文件夹][@分支]」，也认 GitHub 网址。 */
@@ -257,6 +271,7 @@ object Packs {
         p.fromGitHub -> "GitHub · " + p.source.removePrefix(GITHUB).substringBefore('@')
         p.source == "sample" -> "App 自带的示例"
         p.source == "kavi" -> "Kavi 写的"
+        p.source == "operit" || p.source.startsWith("operit:") -> "Operit 脚本"
         else -> "从文件装的"
     }
 

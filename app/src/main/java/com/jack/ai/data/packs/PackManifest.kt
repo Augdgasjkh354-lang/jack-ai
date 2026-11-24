@@ -88,6 +88,9 @@ object PackFormat {
     private val TYPES = setOf("string", "number", "integer", "boolean", "array", "object")
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
+    private val out = Json { prettyPrint = true; encodeDefaults = false }
+    fun encode(m: PackManifest): String = out.encodeToString(PackManifest.serializer(), m)
+
     /** 解析说明文件：成功给出说明，不对就给出用户看得懂的原因（一条条列出来）。 */
     fun parse(text: String): Result<PackManifest> {
         val m = runCatching { json.decodeFromString(PackManifest.serializer(), text) }.getOrElse { e ->
