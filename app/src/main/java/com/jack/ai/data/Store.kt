@@ -23,7 +23,7 @@ class Store(context: Context) {
         /** 这次启动时从副本恢复（或清空）过的文件，「文件名:prev」或「文件名:empty」。 */
         val recovered = java.util.concurrent.ConcurrentLinkedQueue<String>()
         /** 用量页列出最近多少次请求。 */
-        const val RECENT_REQUESTS = 60
+        const val RECENT_REQUESTS = 300
         const val CONV_DIR = "conversations"
         const val LEGACY_CONVS = "conversations.json"
         /** 拆分前的旧对话文件留几天。 */

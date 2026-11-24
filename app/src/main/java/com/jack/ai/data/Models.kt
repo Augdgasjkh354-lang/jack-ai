@@ -646,6 +646,14 @@ private fun Settings.usable(key: String): Endpoint? {
     return endpoint(key)?.takeIf { it.apiKey.isNotBlank() }
 }
 
+/** 当前模型看不了图时，临时借来看图的模型：先后台模型、再备用模型、再随便一个能看图的；都不行返回 null。 */
+fun Settings.visionModelKey(): String? {
+    val keys = listOf(backgroundModel) + fallbackModels + modelChoices().map { it.key }
+    return keys.filter { it.isNotBlank() && it != model }.distinct().firstOrNull { k ->
+        modelChoices().any { it.key == k } && endpoint(k)?.let { it.vision && it.apiKey.isNotBlank() } == true
+    }
+}
+
 /** 至少配好了一个能用的服务。 */
 fun Settings.hasAnyKey(): Boolean = apiKey.isNotBlank() || providers.any { it.apiKey.isNotBlank() && it.models.isNotEmpty() }
 

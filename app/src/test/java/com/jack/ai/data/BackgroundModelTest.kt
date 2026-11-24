@@ -27,4 +27,13 @@ class BackgroundModelTest {
         assertEquals("sol", s.backgroundEndpoint()!!.model)
         assertNull(s.subagentEndpoint())
     }
+
+    @Test fun visionStandInPrefersTheBackgroundModel() {
+        val blind = Provider(id = "b", name = "B", baseUrl = "http://y", apiKey = "k", models = listOf(ProviderModel("txt", vision = false)))
+        val eyes = gpt.copy(models = listOf(ProviderModel("luna", vision = true), ProviderModel("sol", vision = true)))
+        val s = Settings(apiKey = "", model = customModelKey("b", "txt"), providers = listOf(blind, eyes), backgroundModel = customModelKey("g", "sol"))
+        assertEquals(customModelKey("g", "sol"), s.visionModelKey())
+        assertEquals(customModelKey("g", "luna"), s.copy(backgroundModel = "").visionModelKey())
+        assertNull(s.copy(providers = listOf(blind)).visionModelKey())
+    }
 }

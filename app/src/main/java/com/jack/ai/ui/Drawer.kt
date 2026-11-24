@@ -1,5 +1,6 @@
 package com.jack.ai.ui
 
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.graphics.luminance
@@ -99,10 +100,21 @@ fun HistoryDrawer(
     onOpenDownloads: () -> Unit,
     onSettings: () -> Unit,
     onOpenFiles: () -> Unit = {},
+    onUndoDelete: () -> Boolean = { false },
 ) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     var renaming by remember { mutableStateOf<Conversation?>(null) }
-    var deleting by remember { mutableStateOf<Conversation?>(null) }
+    // 删对话不再先弹确认框：直接删，抽屉底下出一条「撤销」
+    val undoBar = remember { androidx.compose.material3.SnackbarHostState() }
+    val undoScope = androidx.compose.runtime.rememberCoroutineScope()
+    fun deleteNow(c: Conversation) {
+        onDelete(c.id)
+        undoScope.launch {
+            undoBar.currentSnackbarData?.dismiss()
+            val r = undoBar.showSnackbar("删除了「${c.title.take(12)}」", actionLabel = "撤销", duration = androidx.compose.material3.SnackbarDuration.Short)
+            if (r == androidx.compose.material3.SnackbarResult.ActionPerformed) onUndoDelete()
+        }
+    }
     var query by remember { mutableStateOf("") }
     var showAllProjects by remember { mutableStateOf(false) }
     var showMoreTools by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
@@ -119,7 +131,7 @@ fun HistoryDrawer(
     val colors = MaterialTheme.colorScheme
     fun chatRow(c: Conversation): @Composable () -> Unit = {
         // 「⋯」只在当前对话上显示，其他的长按出菜单，列表看着清爽些
-        ChatItem(c, c.id == state.currentId, { onSelect(c.id) }, { renaming = c }, { deleting = c }, onPin = { onPin(c.id) },
+        ChatItem(c, c.id == state.currentId, { onSelect(c.id) }, { renaming = c }, { deleteNow(c) }, onPin = { onPin(c.id) },
             onMemory = { onMemory(c) }, showMore = c.id == state.currentId, answering = c.id in state.streamingIds)
     }
     ModalDrawerSheet(drawerContainerColor = colors.background, drawerShape = RoundedCornerShape(topEnd = 30.dp, bottomEnd = 30.dp)) {
@@ -219,6 +231,7 @@ fun HistoryDrawer(
                 }
                 item { Spacer(Modifier.height(12.dp)) }
             }
+            androidx.compose.material3.SnackbarHost(undoBar, Modifier.padding(horizontal = 8.dp))
             // 底部三件套：左边设置（填了名字就是名字的首字），中间搜索胶囊，右边新对话
             val name = state.settings.userName.trim()
             val haptics = rememberHaptics()
@@ -244,11 +257,6 @@ fun HistoryDrawer(
 
     renaming?.let { c ->
         RenameDialog(c.title, onDismiss = { renaming = null }) { onRename(c.id, it); renaming = null }
-    }
-    deleting?.let { c ->
-        ConfirmDeleteDialog("删除对话？", "「${c.title}」会被永久删除。", onDismiss = { deleting = null }) {
-            onDelete(c.id); deleting = null
-        }
     }
 }
 

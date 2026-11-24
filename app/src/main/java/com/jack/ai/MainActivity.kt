@@ -172,6 +172,11 @@ class MainActivity : FragmentActivity() {
             ACTION_CAMERA -> { stack.clear(); vm.newChat(); vm.requestCamera() }
             ACTION_DOWNLOADS -> { stack.clear(); stack.add(Screen.Downloads) }
             ACTION_OPEN_CHAT -> { stack.clear(); vm.mergeInbox(intent.getStringExtra("convId")) }
+            // 工作流的通知：直接打开那个工作流，看是哪一步出的事
+            ACTION_OPEN_WORKFLOW -> {
+                stack.clear(); stack.add(Screen.Routines); stack.add(Screen.Workflows)
+                com.jack.ai.data.workflow.Workflows.openRequest.value = intent.getStringExtra("wfId")
+            }
             ACTION_VOICE -> { stack.clear(); vm.newChat(); vm.requestVoice() }
             ACTION_RECORD -> { stack.clear(); if (RecordService.current == null) { vm.newChat(); vm.requestRecord() } }
             // 通知栏点了「停止并整理」：停下，录好的由聊天页交给 Kavi
@@ -419,5 +424,6 @@ class MainActivity : FragmentActivity() {
         const val ACTION_CAMERA = "com.jack.ai.CAMERA"
         const val ACTION_DOWNLOADS = "com.jack.ai.DOWNLOADS"
         const val ACTION_OPEN_CHAT = "com.jack.ai.OPEN_CHAT"
+        const val ACTION_OPEN_WORKFLOW = "com.jack.ai.OPEN_WORKFLOW"
     }
 }

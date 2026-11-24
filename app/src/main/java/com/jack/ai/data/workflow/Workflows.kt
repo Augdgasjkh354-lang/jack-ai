@@ -214,7 +214,7 @@ object Workflows {
                 // 监控：这次没「停下」就是满足了，满足一次就关掉，不再查
                 if (trigger == "schedule" && w.trigger.type == "schedule" && w.trigger.repeat == "watch" && r.status == "ok") {
                     update(ctx, w.id) { it.copy(enabled = false) }
-                    Routines.notify(ctx, "wf_${w.id}_hit", "⚙ 「${w.name}」等到了", r.output.take(200).ifBlank { "监控的条件满足了，已经停止监控" })
+                    Routines.notify(ctx, "wf_${w.id}_hit", "⚙ 「${w.name}」等到了", r.output.take(200).ifBlank { "监控的条件满足了，已经停止监控" }, open = openIntent(ctx, w))
                 }
             }
             return r
@@ -223,10 +223,17 @@ object Workflows {
         }
     }
 
+    /** 点了工作流的通知：工作流页打开后直接展开这一个。 */
+    val openRequest = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+
+    private fun openIntent(ctx: Context, w: Workflow) = android.content.Intent(ctx, com.jack.ai.MainActivity::class.java)
+        .setAction(com.jack.ai.MainActivity.ACTION_OPEN_WORKFLOW).putExtra("wfId", w.id)
+        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP)
+
     private fun deliver(ctx: Context, store: Store, w: Workflow, r: WfRun, files: List<GeneratedFile>) {
         val bad = r.status == "failed" || r.status == "limit"
         if (bad) {
-            Routines.notify(ctx, "wf_${w.id}", "⚙ 工作流「${w.name}」没跑完", r.error.take(200))
+            Routines.notify(ctx, "wf_${w.id}", "⚙ 工作流「${w.name}」没跑完", r.error.take(200) + "\n点开看是哪一步", open = openIntent(ctx, w))
             return
         }
         // 自己写了「发到收件箱」「发通知」的步骤，就不再额外送一份
@@ -235,7 +242,7 @@ object Workflows {
         val text = (if (r.status == "stopped") "停下了：${r.error}\n\n" else "") + r.output.ifBlank { "跑完了，没有要说的结果。" }
         when (w.deliver) {
             "inbox" -> store.addInbox(InboxItem(w.id, convId(w.id), "⚙ ${w.name}", "工作流 · ${triggerLabel(r.trigger)}", text, files = files, work = true))
-            "notify" -> Routines.notify(ctx, "wf_${w.id}", "⚙ ${w.name}", text.take(300))
+            "notify" -> Routines.notify(ctx, "wf_${w.id}", "⚙ ${w.name}", text.take(300), open = openIntent(ctx, w))
         }
     }
 

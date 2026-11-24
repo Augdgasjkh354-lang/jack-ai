@@ -49,4 +49,14 @@ class UndoDeleteTest {
         // 只能撤销最近一次：回到删第二次之前（三条）
         assertEquals(msgs.take(3).map { it.id }, vm.state.value.current!!.messages.map { it.id })
     }
+
+    @Test fun deletedConversationComesBackInPlace() {
+        val c = Conversation(title = "t", messages = msgs)
+        val vm = vm(c)
+        vm.delete(c.id)
+        assertTrue(vm.state.value.conversations.none { it.id == c.id })
+        assertTrue(vm.undoDeleteConversation())
+        assertEquals(listOf(c.id), vm.state.value.conversations.map { it.id })
+        assertFalse(vm.undoDeleteConversation())
+    }
 }

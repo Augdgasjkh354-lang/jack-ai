@@ -226,6 +226,7 @@ fun ChatScreen(
                 onNew = { vm.newChat(); scope.launch { drawerState.close() } },
                 onSelect = { vm.select(it); scope.launch { drawerState.close() } },
                 onDelete = vm::delete,
+                onUndoDelete = vm::undoDeleteConversation,
                 onRename = vm::rename,
                 onPin = vm::togglePin,
                 onMemory = { memoryOf = it },

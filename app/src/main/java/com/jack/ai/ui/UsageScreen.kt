@@ -450,19 +450,29 @@ private fun ContextCard(vm: ChatViewModel, conv: Conversation?) {
 /** 每个工具调了几次、失败几次，失败多的排前面：用来看哪个工具不好用。 */
 /** 最近每一次请求：输入多少、缓存命中多少。看哪里的缓存没命中。 */
 @Composable
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 private fun RecentRequestsCard() {
     val ctx = androidx.compose.ui.platform.LocalContext.current
-    val list by produceState(emptyList<com.jack.ai.data.UsageRecord>()) {
+    val all0 by produceState(emptyList<com.jack.ai.data.UsageRecord>()) {
         value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.jack.ai.data.Store(ctx).recentRequests().reversed() }
     }
-    if (list.isEmpty()) return
+    if (all0.isEmpty()) return
     val colors = MaterialTheme.colorScheme
     var all by remember { mutableStateOf(false) }
+    // 按来源筛：后台活、子 agent 一多就把聊天的请求挤没了，反过来也一样
+    var kind by remember { mutableStateOf(0) }
+    val list = remember(all0, kind) { all0.filter { kind == 0 || requestKind(it.label) == kind } }
     val fmt = remember { java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.US) }
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("最近的请求", style = MaterialTheme.typography.titleSmall)
             Text("命中越高越省钱。同一个对话里接着聊，正常应该大部分命中。", style = MaterialTheme.typography.bodySmall, color = colors.outline)
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("全部", "对话", "后台", "子 agent").forEachIndexed { i, name ->
+                    val n = if (i == 0) all0.size else all0.count { requestKind(it.label) == i }
+                    androidx.compose.material3.FilterChip(selected = kind == i, onClick = { kind = i; all = false }, label = { Text("$name $n") })
+                }
+            }
             (if (all) list else list.take(10)).forEachIndexed { idx, r ->
                 val rate = r.hit?.let { h -> if (r.prompt > 0) h * 100.0 / r.prompt else 0.0 }
                 // 命中低的：和同一个对话的上一次请求比开头，说清是哪一段变了
@@ -749,3 +759,10 @@ private fun ChatGptCalibrateDialog(current: List<Double?>, onOpenUsage: () -> Un
     )
 }
 
+
+/** 请求从哪来：1 对话，2 后台（夜间整理、复核、定时任务、工作流……），3 子 agent。 */
+private fun requestKind(label: String): Int = when {
+    label.startsWith("子 agent") -> 3
+    label.isBlank() || label.startsWith("后台") || label.startsWith("任务") || "交付前复核" in label -> 2
+    else -> 1
+}

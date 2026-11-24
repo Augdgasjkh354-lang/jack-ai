@@ -50,6 +50,7 @@ import com.jack.ai.data.MODEL_FLASH
 import com.jack.ai.data.endpoint
 import com.jack.ai.data.backgroundEndpoint
 import com.jack.ai.data.backgroundModelKey
+import com.jack.ai.data.visionModelKey
 import com.jack.ai.data.Provider
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -189,21 +190,50 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         if (conv.projectId != null && leaving !in _state.value.streamingIds) maybeReviewMemory(conv.id, handoff = true)
     }
 
+    /** 刚删的对话：[UNDO_MS] 内能撤销，文件过了这段时间才真删。 */
+    private class DeletedConv(val conv: Conversation, val index: Int) { var cleanup: Job? = null }
+    private var deletedConv: DeletedConv? = null
+
+    /** 删对话：先从列表拿掉，文件等撤销时间过了再删。 */
     fun delete(id: String) {
         if (busy(id)) stop(id)
-        val conv = _state.value.conversations.firstOrNull { it.id == id }
+        val list = _state.value.conversations
+        val index = list.indexOfFirst { it.id == id }
+        val conv = list.getOrNull(index)
         _state.update { s ->
             s.copy(
                 conversations = s.conversations.filterNot { it.id == id },
                 currentId = if (s.currentId == id) null else s.currentId,
             )
         }
-        conv?.let {
-            files.cleanup(it.messages)
-            // 普通对话整个文件夹删掉；项目里的对话只删它自己的记忆文件
-            if (it.projectId == null) files.deleteWorkspace(it.id) else knowledge.deleteChatMemory(it)
+        // 上一个删的不等了，现在就清掉
+        deletedConv?.let { d -> d.cleanup?.cancel(); purge(d.conv) }
+        deletedConv = conv?.let { c ->
+            DeletedConv(c, index).also { d ->
+                d.cleanup = viewModelScope.launch {
+                    kotlinx.coroutines.delay(UNDO_MS)
+                    if (deletedConv === d) deletedConv = null
+                    purge(c)
+                }
+            }
         }
         persist()
+    }
+
+    /** 把刚删的对话放回原来的位置。过了撤销时间就放不回去了。 */
+    fun undoDeleteConversation(): Boolean {
+        val d = deletedConv ?: return false
+        deletedConv = null
+        d.cleanup?.cancel()
+        _state.update { s -> s.copy(conversations = s.conversations.toMutableList().apply { add(d.index.coerceIn(0, size), d.conv) }) }
+        persist()
+        return true
+    }
+
+    private fun purge(c: Conversation) {
+        files.cleanup(c.messages)
+        // 普通对话整个文件夹删掉；项目里的对话只删它自己的记忆文件
+        if (c.projectId == null) files.deleteWorkspace(c.id) else knowledge.deleteChatMemory(c)
     }
 
     fun rename(id: String, title: String) {
@@ -270,6 +300,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
+        // 等着撤销的对话：页面没了就不等了，文件现在删
+        deletedConv?.let { d -> d.cleanup?.cancel(); purge(d.conv); deletedConv = null }
         com.jack.ai.data.BackgroundReports.listener = null
         super.onCleared()
     }
@@ -289,19 +321,24 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             return true
         }
         if ((trimmed.isEmpty() && atts.isEmpty()) || (here != null && busy(here)) || _state.value.importing) return false
-        // Kavi 结束了这个对话：不能再发，新开一个
-        if (_state.value.current?.closedReason?.isNotEmpty() == true) {
-            _state.update { it.copy(toast = "这个对话已经结束了，开一个新对话吧") }
-            return false
-        }
         if (tooMany(here)) return false
         com.jack.ai.data.Quota.blocked(getApplication(), _state.value.settings)?.let { w ->
             _state.update { it.copy(toast = com.jack.ai.data.Quota.message(w) + "。在「设置 → 统计」里能看用量、改额度") }
             return false
         }
+        // 带图但当前模型看不了：这一条临时换一个能看图的来答，不用自己去换模型再回来
+        var visionModel: String? = null
         if (atts.any { it.kind == "image" } && _state.value.settings.endpoint()?.vision == false) {
-            _state.update { it.copy(toast = "当前模型看不了图片，请点顶部的模型名换一个能看图的") }
-            return false
+            visionModel = _state.value.settings.visionModelKey() ?: run {
+                _state.update { it.copy(toast = "当前模型看不了图片，也没有别的能看图的模型。去「设置 → 其他模型服务」加一个") }
+                return false
+            }
+            _state.update { it.copy(toast = "当前模型看不了图片，这一条换成 ${com.jack.ai.data.modelLabel(visionModel!!)} 来看") }
+        }
+        // 前面的检查都过了才换（没发出去时，输入框的字还留在原对话）。Kavi 结束了这个对话：不再让人自己去点新对话，直接新开一个（同一个项目里）接着发
+        _state.value.current?.takeIf { it.closedReason.isNotEmpty() }?.let { closed ->
+            handoff(closed.id)
+            _state.update { it.copy(currentId = null, draftProjectId = closed.projectId, toast = "上一个对话已经结束，新开了一个") }
         }
         var conv = _state.value.current
         if (conv == null) {
@@ -324,7 +361,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(pending = emptyList()) }
         autoResumes.remove(id)
         taskSpend.remove(id)
-        startReply(id)
+        startReply(id, modelOverride = visionModel)
         return true
     }
 

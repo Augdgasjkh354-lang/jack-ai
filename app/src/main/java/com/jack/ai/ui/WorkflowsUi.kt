@@ -35,6 +35,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -137,6 +138,9 @@ fun WorkflowsScreen(onBack: () -> Unit) {
     val list by remember { Workflows.flow(ctx) }.collectAsState()
     val running by Workflows.running.collectAsState()
     var open by remember { mutableStateOf<String?>(null) }
+    // 从通知点进来：展开那一个
+    val asked by Workflows.openRequest.collectAsState()
+    LaunchedEffect(asked) { asked?.let { open = it; Workflows.openRequest.value = null } }
     // 编辑器：null 没开；Workflow(name = "") 当新建
     var editing by remember { mutableStateOf<Workflow?>(null) }
     var creating by remember { mutableStateOf(false) }
