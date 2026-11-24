@@ -62,6 +62,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 import com.jack.ai.ChatViewModel
 import com.jack.ai.UiState
 import com.jack.ai.data.Attachment
@@ -99,16 +100,26 @@ fun ProjectScreen(
     var editingInstructions by remember { mutableStateOf(false) }
     var deletingProject by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf<Conversation?>(null) }
-    var deleting by remember { mutableStateOf<Conversation?>(null) }
     var memoryOf by remember { mutableStateOf<Conversation?>(null) }
     var draft by remember { mutableStateOf("") }
     val chats = state.conversations.filter { it.projectId == projectId && it.messages.isNotEmpty() }
+    // 删对话、移除资料都不先问：直接做，底下出一条「撤销」（和侧边栏一样）
+    val undoBar = remember { androidx.compose.material3.SnackbarHostState() }
+    val undoScope = androidx.compose.runtime.rememberCoroutineScope()
+    fun offerUndo(label: String, undo: () -> Unit) {
+        undoScope.launch {
+            undoBar.currentSnackbarData?.dismiss()
+            val r = undoBar.showSnackbar(label, actionLabel = "撤销", duration = androidx.compose.material3.SnackbarDuration.Short)
+            if (r == androidx.compose.material3.SnackbarResult.ActionPerformed) undo()
+        }
+    }
 
     // 和聊天页一样：内容从毛玻璃的顶栏、底栏后面滚过去
     val glass = remember { dev.chrisbanes.haze.HazeState() }
     androidx.compose.runtime.CompositionLocalProvider(LocalGlass provides glass) {
     Scaffold(
         containerColor = colors.background,
+        snackbarHost = { androidx.compose.material3.SnackbarHost(undoBar) },
         topBar = {
             Column(Modifier.glassBar(top = true)) {
                 TopAppBar(
@@ -192,7 +203,7 @@ fun ProjectScreen(
                                     c, false,
                                     onClick = { vm.select(c.id); onOpenChat() },
                                     onRename = { renaming = c },
-                                    onDelete = { deleting = c },
+                                    onDelete = { vm.delete(c.id); offerUndo("删除了「${c.title.take(12)}」") { vm.undoDeleteConversation() } },
                                     onPin = { vm.togglePin(c.id) },
                                     onMemory = { memoryOf = c },
                                 )
@@ -200,7 +211,7 @@ fun ProjectScreen(
                         }
                     }
                     ProjectTab.FILES -> ProjectFiles(project, padding, onOpenTerminal)
-                    ProjectTab.SOURCES -> ProjectSources(vm, state, project, padding)
+                    ProjectTab.SOURCES -> ProjectSources(vm, state, project, padding, ::offerUndo)
                     ProjectTab.MEMORY -> ProjectMemoryTab(vm, project, padding)
                 }
             }
@@ -213,9 +224,10 @@ fun ProjectScreen(
         ProjectDialog(project, onDismiss = { editingProject = false }) { vm.saveProject(it); editingProject = false }
     }
     if (editingInstructions) {
-        var text by remember { mutableStateOf(project.instructions) }
+        var text by remember { mutableStateOf(atEnd(project.instructions)) }
         AlertDialog(
             onDismissRequest = { editingInstructions = false },
+            properties = keepIfEdited(text.text != project.instructions),
             title = { Text("指令") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -224,12 +236,12 @@ fun ProjectScreen(
                     OutlinedTextField(
                         value = text, onValueChange = { text = it },
                         placeholder = { Text("例如：这是我的小说，主角叫林舟，风格偏冷峻；每章三千字左右，对话多一些。") },
-                        minLines = 6, maxLines = 12, modifier = Modifier.fillMaxWidth(),
+                        minLines = 6, maxLines = 12, modifier = Modifier.fillMaxWidth().focusOnShow(),
                     )
                 }
             },
             confirmButton = {
-                TextButton(onClick = { vm.saveProject(project.copy(instructions = text.trim())); editingInstructions = false }) { Text("保存") }
+                TextButton(onClick = { vm.saveProject(project.copy(instructions = text.text.trim())); editingInstructions = false }) { Text("保存") }
             },
             dismissButton = { TextButton(onClick = { editingInstructions = false }) { Text("取消") } },
         )
@@ -248,11 +260,6 @@ fun ProjectScreen(
     renaming?.let { c ->
         RenameDialog(c.title, onDismiss = { renaming = null }) { vm.rename(c.id, it); renaming = null }
     }
-    deleting?.let { c ->
-        ConfirmDeleteDialog("删除对话？", "「${c.title}」会被永久删除。", onDismiss = { deleting = null }) {
-            vm.delete(c.id); deleting = null
-        }
-    }
 }
 
 @Composable
@@ -270,9 +277,11 @@ private fun EmptyHint(title: String, body: String, action: (@Composable () -> Un
 
 /** 资料：项目里每个对话都能用的背景材料。可以加文件，也可以直接贴一段文字。 */
 @Composable
-private fun ProjectSources(vm: ChatViewModel, state: UiState, project: Project, bars: PaddingValues) {
+private fun ProjectSources(vm: ChatViewModel, state: UiState, project: Project, bars: PaddingValues,
+                           offerUndo: (String, () -> Unit) -> Unit) {
     val colors = MaterialTheme.colorScheme
     var adding by remember { mutableStateOf(false) }
+    var viewing by remember { mutableStateOf<Attachment?>(null) }
     var pasting by remember { mutableStateOf(false) }
     val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) vm.addProjectFile(project.id, uri)
@@ -296,14 +305,25 @@ private fun ProjectSources(vm: ChatViewModel, state: UiState, project: Project, 
         start = 16.dp, end = 16.dp, top = bars.calculateTopPadding() + 12.dp, bottom = bars.calculateBottomPadding() + 16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
         items(project.files, key = { it.id }) { f ->
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.animateItem().fillMaxWidth().glass(Radii.m).padding(start = 14.dp, end = 4.dp, top = 6.dp, bottom = 6.dp)) {
+            // 点一下看里面写了什么
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.animateItem().fillMaxWidth().glass(Radii.m).clip(Radii.m)
+                .clickable { viewing = f }.padding(start = 14.dp, end = 4.dp, top = 6.dp, bottom = 6.dp)) {
                 Icon(AppIcons.File, null, Modifier.size(20.dp), tint = colors.primary)
                 Spacer(Modifier.size(10.dp))
                 Column(Modifier.weight(1f)) {
                     Text(f.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text("${f.text.length} 字", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
                 }
-                IconButton(onClick = { vm.saveProject(project.copy(files = project.files.filterNot { it.id == f.id })) }) {
+                IconButton(onClick = {
+                    vm.saveProject(project.copy(files = project.files.filterNot { it.id == f.id }))
+                    // 撤销：放回原来的位置（按当时的项目找，期间别的改动不丢）
+                    val at = project.files.indexOfFirst { it.id == f.id }
+                    offerUndo("移除了「${f.name.take(12)}」") {
+                        vm.state.value.project(project.id)?.let { now ->
+                            if (now.files.none { it.id == f.id }) vm.saveProject(now.copy(files = now.files.toMutableList().apply { add(at.coerceIn(0, size), f) }))
+                        }
+                    }
+                }) {
                     Icon(Icons.Default.Close, "移除")
                 }
             }
@@ -315,11 +335,13 @@ private fun ProjectSources(vm: ChatViewModel, state: UiState, project: Project, 
             }
         }
     }
+    viewing?.let { f -> TextViewer(f.name, load = { f.text to false }, onDismiss = { viewing = null }) }
     if (pasting) {
         var name by remember { mutableStateOf("") }
         var text by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { pasting = false },
+            properties = keepIfEdited(text.isNotBlank()),
             title = { Text("添加文字") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

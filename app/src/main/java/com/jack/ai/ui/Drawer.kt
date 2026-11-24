@@ -148,7 +148,11 @@ fun HistoryDrawer(
                 LazyColumn(Modifier.weight(1f).padding(top = 4.dp)) {
                     item { SectionLabel(if (results.isEmpty()) "没有找到相关对话" else "找到 ${results.size} 个对话") }
                     items(results, key = { "s" + it.first.id }) { (c, snippet) ->
-                        SearchResultRow(c.title, snippet, query, state.project(c.projectId)?.name) { onSelect(c.id) }
+                        SearchResultRow(c.title, snippet, query, state.project(c.projectId)?.name) {
+                            // 是消息里搜到的：打开后直接滚到那条，不用自己往上翻
+                            ChatJump.target = searchHitId(c, query)?.let { c.id to it }
+                            onSelect(c.id)
+                        }
                     }
                 }
             } else LazyColumn(Modifier.weight(1f)) {
@@ -451,6 +455,13 @@ private fun ConversationUsageDialog(c: Conversation, onDismiss: () -> Unit) {
     )
 }
 
+/** 搜索命中的那条消息（最近的一条）；只有标题命中时返回 null。 */
+internal fun searchHitId(c: Conversation, query: String): String? {
+    val q = query.trim()
+    if (q.isEmpty()) return null
+    return c.messages.asReversed().firstOrNull { it.content.contains(q, ignoreCase = true) }?.id
+}
+
 /** 按标题和消息内容搜索对话，返回 (对话, 命中的一小段原文)。标题命中的排前面。 */
 internal fun searchConversations(all: List<Conversation>, query: String): List<Pair<Conversation, String>> {
     val q = query.trim()
@@ -481,10 +492,14 @@ private fun SearchField(value: String, onChange: (String) -> Unit, modifier: Mod
             Spacer(Modifier.size(10.dp))
             Box(Modifier.weight(1f).padding(vertical = 11.dp)) {
                 if (value.isEmpty()) Text("搜索", style = MaterialTheme.typography.bodyLarge, color = colors.outline)
+                val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
                 BasicTextField(
                     value = value,
                     onValueChange = onChange,
                     singleLine = true,
+                    // 键盘上是「搜索」键：按了收起键盘，下面的结果整屏露出来
+                    keyboardOptions = SearchKeyboard,
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { keyboard?.hide() }),
                     textStyle = MaterialTheme.typography.bodyLarge.copy(color = colors.onSurface),
                     cursorBrush = SolidColor(colors.primary),
                     modifier = Modifier.fillMaxWidth().let { if (focus != null) it.focusRequester(focus) else it },
@@ -605,8 +620,36 @@ internal fun Modifier.focusOnShow(): Modifier {
     return this.then(Modifier.focusRequester(focus))
 }
 
+/** 填了东西的弹窗：点外面不再关掉（手一碰写了半天的就没了），返回键和「取消」照常能关。 */
+internal fun keepIfEdited(edited: Boolean) = androidx.compose.ui.window.DialogProperties(dismissOnClickOutside = !edited)
+
+/** 改一段已有文字：光标放在最后，接着写就行（直接给 String 时光标在开头）。 */
+internal fun atEnd(text: String) = androidx.compose.ui.text.input.TextFieldValue(text, androidx.compose.ui.text.TextRange(text.length))
+
+/**
+ * 从网址起个名字：api.deepseek.com → Deepseek，mcp.notion.com/mcp → Notion。
+ * 去掉 api、www、mcp 这类前缀和最后的域名后缀，取剩下最后一段；认不出来返回空。
+ */
+internal fun nameFromUrl(url: String): String {
+    val host = runCatching { java.net.URI(url.trim()).host }.getOrNull()?.lowercase() ?: return ""
+    if (host.isBlank() || host.all { it.isDigit() || it == '.' }) return ""
+    val skip = setOf("api", "www", "mcp", "openai", "v1", "gateway", "server")
+    val parts = host.split('.').filter { it.isNotBlank() }
+    val core = (if (parts.size > 1) parts.dropLast(1) else parts).filterNot { it in skip }
+    // 二级后缀（com.cn、co.uk 这类）：去掉以后剩下的最后一段才是名字
+    val word = core.lastOrNull { it !in setOf("com", "co", "net", "org") } ?: return ""
+    return word.replaceFirstChar { it.uppercase() }
+}
+
+/** 搜索框右边的「清空」：有字时才出现。 */
+internal fun clearButton(value: String, onClear: () -> Unit): (@Composable () -> Unit)? =
+    if (value.isEmpty()) null else ({
+        IconButton(onClick = onClear) { Icon(Icons.Default.Close, "清空") }
+    })
+
 /** 单行输入框回车就提交（[ok] 为假时不动）。 */
 internal fun doneAction(ok: Boolean, submit: () -> Unit) = androidx.compose.foundation.text.KeyboardActions(onDone = { if (ok) submit() })
+internal val SearchKeyboard = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search)
 internal val DoneKeyboard = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done)
 
 @Composable

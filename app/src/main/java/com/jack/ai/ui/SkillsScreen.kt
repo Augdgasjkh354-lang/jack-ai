@@ -141,10 +141,12 @@ fun SkillsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit) {
         val isNew = settings.customSkills.none { it.id == s.id }
         AlertDialog(
             onDismissRequest = { editing = null },
+            properties = keepIfEdited(name != s.name || desc != s.description || ins != s.instructions),
             title = { Text(if (isNew) "新技能" else "编辑技能") },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(name, { name = it }, label = { Text("名字") }, singleLine = true,
+                        modifier = if (isNew) Modifier.focusOnShow() else Modifier,
                         placeholder = { Text("比如：写周报") })
                     OutlinedTextField(desc, { desc = it }, label = { Text("简介") },
                         placeholder = { Text("比如：把用户这周做的事整理成周报") }, minLines = 2, maxLines = 3)

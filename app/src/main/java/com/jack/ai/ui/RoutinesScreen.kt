@@ -98,7 +98,7 @@ fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit, onOpen
         },
         floatingActionButton = {
             androidx.compose.material3.FloatingActionButton(
-                onClick = { editing = Routine(title = "", hour = 9, minute = 0) },
+                onClick = { editing = newRoutineDraft() },
                 shape = androidx.compose.foundation.shape.CircleShape,
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -304,6 +304,7 @@ private fun RoutineDialog(r: Routine, isNew: Boolean, onDismiss: () -> Unit, onU
         repeat = repeat, date = date, enabled = true, offPeak = kind == "task" && offPeak, work = kind == "task" && work)
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = keepIfEdited(title != r.title || prompt != r.prompt),
         title = { Text(if (isNew) "添加" else "修改") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -312,6 +313,7 @@ private fun RoutineDialog(r: Routine, isNew: Boolean, onDismiss: () -> Unit, onU
                     FilterChip(kind == "task", { kind = "task" }, label = { Text("AI 定时任务") })
                 }
                 OutlinedTextField(title, { title = it }, singleLine = true,
+                    modifier = if (isNew) Modifier.focusOnShow() else Modifier,
                     label = { Text(if (kind == "reminder") "提醒内容" else "任务名") })
                 if (kind == "task") {
                     OutlinedTextField(prompt, { prompt = it }, minLines = 3, maxLines = 6,
@@ -341,7 +343,10 @@ private fun RoutineDialog(r: Routine, isNew: Boolean, onDismiss: () -> Unit, onU
                         OutlinedButton(onClick = { pickDate = true }) { Text(date) }
                     }
                 }
-                Text(draft.describe(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                // 「保存」灰着时说清楚为什么：多半是只提醒一次、时间已经过了
+                if (draft.nextAt() == null) Text("这个时间已经过了，改一下时间或日期", style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error)
+                else Text(draft.describe(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             }
         },
         confirmButton = {
@@ -467,4 +472,15 @@ private fun PermissionRow(title: String, hint: String, action: String, onClick: 
             OutlinedButton(onClick = onClick) { Text(action) }
         }
     }
+}
+
+/** 新建提醒的默认时间：下一个整点（23 点以后就是明天 0 点），不再固定早上 9 点——过了 9 点新建，「保存」一直是灰的。 */
+internal fun newRoutineDraft(now: Long = System.currentTimeMillis()): Routine {
+    val c = java.util.Calendar.getInstance().apply {
+        timeInMillis = now
+        add(java.util.Calendar.HOUR_OF_DAY, 1)
+        set(java.util.Calendar.MINUTE, 0); set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
+    }
+    return Routine(title = "", hour = c.get(java.util.Calendar.HOUR_OF_DAY), minute = 0,
+        date = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(c.time))
 }

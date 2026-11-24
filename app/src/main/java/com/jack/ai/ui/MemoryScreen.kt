@@ -255,12 +255,15 @@ private fun MemoryPage(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
     }
 
     if (adding || editing != null) {
-        var text by remember(editing?.id) { mutableStateOf(editing?.text ?: "") }
+        // 一打开就能打字；改的时候光标在最后
+        var field by remember(editing?.id) { mutableStateOf(atEnd(editing?.text ?: "")) }
+        val text = field.text
         AlertDialog(
             onDismissRequest = { adding = false; editing = null },
+            properties = keepIfEdited(text != (editing?.text ?: "")),
             title = { Text(if (editing != null) "修改记忆" else "添加记忆") },
             text = {
-                OutlinedTextField(text, { text = it }, minLines = 2, maxLines = 6, modifier = Modifier.fillMaxWidth(),
+                OutlinedTextField(field, { field = it }, minLines = 2, maxLines = 6, modifier = Modifier.fillMaxWidth().focusOnShow(),
                     placeholder = { Text("例如：用户喜欢简短直接的回答") })
             },
             confirmButton = {

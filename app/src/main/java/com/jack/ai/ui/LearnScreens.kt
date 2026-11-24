@@ -55,13 +55,18 @@ import java.util.Locale
 fun ReviewScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
     var reviewing by remember { mutableStateOf<String?>(null) } // 正在复习的卡组，"*" 表示全部
     var deletingDeck by remember { mutableStateOf<String?>(null) }
+    // 提前复习（卡组里还没到期）：开始时记下这组的卡，评过的不再出现
+    var ahead by remember { mutableStateOf<Set<String>?>(null) }
+    val done = remember { androidx.compose.runtime.mutableStateListOf<String>() }
     val now = System.currentTimeMillis()
+    // 系统返回键：复习中先回到卡组列表，不直接退出整页
+    androidx.activity.compose.BackHandler(enabled = reviewing != null) { reviewing = null; ahead = null }
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(if (reviewing == null) "复习卡片" else "复习中") },
                 navigationIcon = {
-                    IconButton(onClick = { if (reviewing != null) reviewing = null else onBack() }) {
+                    IconButton(onClick = { if (reviewing != null) { reviewing = null; ahead = null } else onBack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回")
                     }
                 },
@@ -70,7 +75,9 @@ fun ReviewScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
     ) { padding ->
         val deck = reviewing
         if (deck != null) {
-            val due = state.cards.filter { (deck == "*" || it.deck == deck) && it.due <= now }.sortedBy { it.due }
+            val pick = ahead
+            val due = if (pick != null) state.cards.filter { it.id in pick && it.id !in done }.sortedBy { it.due }
+                else state.cards.filter { (deck == "*" || it.deck == deck) && it.due <= now }.sortedBy { it.due }
             Box(Modifier.padding(padding).fillMaxSize().padding(20.dp)) {
                 val card = due.firstOrNull()
                 if (card == null) {
@@ -78,10 +85,10 @@ fun ReviewScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                         Text("🎉", style = MaterialTheme.typography.displaySmall)
                         Text("这一轮复习完了", style = MaterialTheme.typography.titleLarge, fontFamily = FontFamily.Serif)
                         Spacer(Modifier.size(16.dp))
-                        OutlinedButton(onClick = { reviewing = null }) { Text("返回") }
+                        OutlinedButton(onClick = { reviewing = null; ahead = null }) { Text("返回") }
                     }
                 } else {
-                    FlashcardView(card, remaining = due.size) { grade -> vm.reviewCard(card.id, grade) }
+                    FlashcardView(card, remaining = due.size) { grade -> done += card.id; vm.reviewCard(card.id, grade) }
                 }
             }
             return@Scaffold
@@ -95,7 +102,7 @@ fun ReviewScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
             item {
                 if (totalDue > 0) {
                     Spacer(Modifier.size(12.dp))
-                    Button(onClick = { reviewing = "*" }, modifier = Modifier.fillMaxWidth()) { Text("开始复习（$totalDue 张到期）") }
+                    Button(onClick = { ahead = null; reviewing = "*" }, modifier = Modifier.fillMaxWidth()) { Text("开始复习（$totalDue 张到期）") }
                 }
             }
             if (state.cards.isEmpty()) {
@@ -103,13 +110,18 @@ fun ReviewScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
             }
             items(state.cards.groupBy { it.deck }.toList(), key = { it.first }) { (name, cards) ->
                 val dueCount = cards.count { it.due <= now }
-                Card(onClick = { if (dueCount > 0) reviewing = name }, modifier = Modifier.fillMaxWidth()) {
+                // 没到期的卡组点进去也能提前过一遍，不再点了没反应
+                Card(onClick = {
+                    done.clear()
+                    ahead = if (dueCount > 0) null else cards.map { it.id }.toSet()
+                    reviewing = name
+                }, modifier = Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(start = 16.dp, top = 14.dp, bottom = 14.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(name, style = MaterialTheme.typography.titleSmall)
                             Text(
                                 "${cards.size} 张 · " + if (dueCount > 0) "$dueCount 张该复习了" else "下次复习：" +
-                                    SimpleDateFormat("M月d日", Locale.CHINA).format(Date(cards.minOf { it.due })),
+                                    SimpleDateFormat("M月d日", Locale.CHINA).format(Date(cards.minOf { it.due })) + " · 点一下提前复习",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = if (dueCount > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             )

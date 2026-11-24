@@ -256,6 +256,7 @@ fun AssistantMessage(
         var edited by remember { mutableStateOf(msg.content) }
         AlertDialog(
             onDismissRequest = { restyling = false },
+            properties = keepIfEdited(edited != msg.content),
             title = { Text("改成我想要的说法") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -391,7 +392,10 @@ fun AssistantMessage(
                 Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
                     Icon(Icons.Default.Warning, null, Modifier.padding(top = 2.dp).size(16.dp), tint = colors.error)
                     Spacer(Modifier.size(8.dp))
-                    Text(err, color = colors.onErrorContainer, style = MaterialTheme.typography.bodyMedium)
+                    // 报错能长按选中复制，拿去搜或者发给别人看
+                    androidx.compose.foundation.text.selection.SelectionContainer {
+                        Text(err, color = colors.onErrorContainer, style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
             }
         }

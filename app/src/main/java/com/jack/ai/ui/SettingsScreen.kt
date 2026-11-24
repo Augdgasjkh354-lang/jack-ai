@@ -438,7 +438,16 @@ fun SettingsScreen(
                         checked = settings.appLock,
                         onCheckedChange = { on ->
                             if (on && !canLock()) {
-                                Toast.makeText(ctx, "请先在手机设置里设置锁屏密码或指纹", Toast.LENGTH_LONG).show()
+                                // 直接打开系统里设锁屏密码的那页，设好回来再打开开关
+                                Toast.makeText(ctx, "先给手机设个锁屏密码或指纹，设好回来再打开", Toast.LENGTH_LONG).show()
+                                val go = if (android.os.Build.VERSION.SDK_INT >= 30)
+                                    android.content.Intent(android.provider.Settings.ACTION_BIOMETRIC_ENROLL).putExtra(
+                                        android.provider.Settings.EXTRA_BIOMETRIC_AUTHENTICATORS_ALLOWED,
+                                        androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_WEAK or androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL)
+                                else android.content.Intent(android.provider.Settings.ACTION_SECURITY_SETTINGS)
+                                runCatching { ctx.startActivity(go) }.onFailure {
+                                    runCatching { ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_SECURITY_SETTINGS)) }
+                                }
                             } else {
                                 vm.updateSettings { it.copy(appLock = on) }
                             }

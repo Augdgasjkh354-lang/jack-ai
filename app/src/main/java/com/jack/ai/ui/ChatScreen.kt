@@ -477,6 +477,17 @@ private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolea
     val lastId = conv.messages.last().id
     val lastUserId = conv.messages.lastOrNull { it.role == "user" }?.id
     val follow = rememberFollowBottom(listState, conv.id, lastUserId, moving = streaming || StreamReveal.pending)
+    // 从搜索点进来：等回到底部那一下过去，再滚到命中的那条，停在那里不跟着往下走
+    val jump = ChatJump.target?.takeIf { it.first == conv.id }
+    LaunchedEffect(conv.id, jump) {
+        val id = jump?.second ?: return@LaunchedEffect
+        ChatJump.target = null
+        val at = messageItemIndex(conv, id)
+        if (at < 0) return@LaunchedEffect
+        withFrameNanos { }; withFrameNanos { }
+        follow.on = false
+        listState.scrollToItem(at)
+    }
     // 往上翻看旧消息时收起键盘，屏幕留给消息（和微信一样）
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
@@ -584,6 +595,23 @@ private fun SummaryDivider(summary: String) {
 }
 
 /** 新对话顶部的 Chat / Work 切换。Work 不限工具轮数。 */
+/** 打开对话后要滚到的那条消息（侧边栏搜索点进来时设），用一次就清掉。 */
+internal object ChatJump {
+    /** (对话 id, 消息 id) */
+    var target by mutableStateOf<Pair<String, String>?>(null)
+}
+
+/** 列表里第几项是这条消息：已压缩分界线也占一项。找不到返回 -1。 */
+internal fun messageItemIndex(conv: Conversation, id: String): Int {
+    var i = 0
+    for (m in conv.messages) {
+        if (m.id == id) return i
+        i++
+        if (m.id == conv.summaryUntilId) i++
+    }
+    return -1
+}
+
 /** 聊天列表的「跟着往下走」：on 为真时内容一长就贴到底；用户往上翻就关掉，回到底部再打开。 */
 internal class FollowBottom {
     var on by mutableStateOf(true)

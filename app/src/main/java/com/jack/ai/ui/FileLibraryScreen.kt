@@ -71,8 +71,11 @@ fun FileLibraryScreen(state: UiState, onBack: () -> Unit, onOpenChat: (String) -
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             item {
+                // 右边一个清空；键盘上的「搜索」收起键盘，把结果露出来
+                val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
                 OutlinedTextField(value = query, onValueChange = { query = it }, placeholder = { Text("搜文件名或对话") },
-                    singleLine = true, modifier = Modifier.fillMaxWidth())
+                    singleLine = true, modifier = Modifier.fillMaxWidth(), trailingIcon = clearButton(query) { query = "" },
+                    keyboardOptions = SearchKeyboard, keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { keyboard?.hide() }))
             }
             item {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -235,7 +235,8 @@ object Routines {
      * 弹通知。important = false 的（定时任务、监控的结果）碰上免打扰时段就静音送达：通知栏里有，不响不亮屏；
      * 用户自己定的提醒传 important = true，照常响。
      */
-    fun notify(ctx: Context, id: String, title: String, text: String, openChat: String? = null, open: Intent? = null, important: Boolean = false) {
+    fun notify(ctx: Context, id: String, title: String, text: String, openChat: String? = null, open: Intent? = null, important: Boolean = false,
+               actions: List<NotificationCompat.Action> = emptyList()) {
         val nm = ctx.getSystemService(NotificationManager::class.java)
         if (nm.getNotificationChannel(CHANNEL) == null) {
             nm.createNotificationChannel(NotificationChannel(CHANNEL, "提醒和定时任务", NotificationManager.IMPORTANCE_HIGH))
@@ -263,11 +264,42 @@ object Routines {
             .setSilent(quiet)
             .setAutoCancel(true)
             .setContentIntent(open)
+            .apply { actions.forEach { addAction(it) } }
             .build()
         try {
             NotificationManagerCompat.from(ctx).notify(id.hashCode(), n)
         } catch (_: SecurityException) {
         }
+    }
+
+    /** 再提醒的间隔。 */
+    private const val SNOOZE_MIN = 10
+    internal const val ACTION_SNOOZE = "com.jack.ai.ROUTINE_SNOOZE"
+    internal const val ACTION_SNOOZED = "com.jack.ai.ROUTINE_SNOOZED"
+
+    /** 提醒的通知：带一个「10 分钟后再提醒」，手头忙的时候不用自己再去建一条。 */
+    fun notifyReminder(ctx: Context, id: String, title: String) {
+        val snooze = PendingIntent.getBroadcast(
+            ctx, ("snooze:$id").hashCode(),
+            Intent(ctx, AlarmReceiver::class.java).setAction(ACTION_SNOOZE).putExtra("id", id).putExtra("title", title),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        notify(ctx, id, "⏰ 提醒", title, important = true,
+            actions = listOf(NotificationCompat.Action.Builder(0, "${SNOOZE_MIN} 分钟后再提醒", snooze).build()))
+    }
+
+    /** 点了「稍后再提醒」：收起这条通知，[SNOOZE_MIN] 分钟后再弹一次（不改提醒本身的时间）。 */
+    fun snooze(ctx: Context, id: String, title: String) {
+        NotificationManagerCompat.from(ctx).cancel(id.hashCode())
+        val am = ctx.getSystemService(AlarmManager::class.java)
+        val pi = PendingIntent.getBroadcast(
+            ctx, ("snoozed:$id").hashCode(),
+            Intent(ctx, AlarmReceiver::class.java).setAction(ACTION_SNOOZED).putExtra("id", id).putExtra("title", title),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val at = System.currentTimeMillis() + SNOOZE_MIN * 60_000L
+        if (Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms()) am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
+        else am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
     }
 
     /** 到点了：提醒直接弹通知，任务交给后台去跑。然后排下一次。 */
@@ -279,7 +311,7 @@ object Routines {
         val r = list.firstOrNull { it.id == id } ?: return
         if (!r.enabled) return
         if (r.kind == "reminder") {
-            notify(ctx, r.id, "⏰ 提醒", r.title, important = true)
+            notifyReminder(ctx, r.id, r.title)
             if (canNotify(ctx)) RunLog.once(ctx, r, "ok", "已弹出通知")
             else RunLog.once(ctx, r, "failed", error = "App 没有通知权限，提醒没弹出来。下一步：打开左侧菜单「提醒和任务」授权通知")
         } else {
@@ -471,6 +503,8 @@ class AlarmReceiver : BroadcastReceiver() {
                 runCatching { com.jack.ai.data.workflow.Workflows.scheduleAll(ctx) }
             }
             com.jack.ai.data.workflow.Workflows.ACTION -> intent.getStringExtra("id")?.let { com.jack.ai.data.workflow.Workflows.fire(ctx, it) }
+            Routines.ACTION_SNOOZE -> intent.getStringExtra("id")?.let { Routines.snooze(ctx, it, intent.getStringExtra("title").orEmpty()) }
+            Routines.ACTION_SNOOZED -> intent.getStringExtra("id")?.let { Routines.notifyReminder(ctx, it, intent.getStringExtra("title").orEmpty()) }
             else -> intent.getStringExtra("id")?.let { Routines.fire(ctx, it) }
         }
     }

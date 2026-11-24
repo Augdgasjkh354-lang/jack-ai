@@ -164,6 +164,8 @@ private fun ProviderDialog(vm: ChatViewModel, initial: Provider, onDismiss: () -
     var error by remember { mutableStateOf<String?>(null) }
     var filter by remember { mutableStateOf("") }
     var manual by remember { mutableStateOf("") }
+    // 名字没自己填过：跟着接口地址自动起一个（api.deepseek.com → Deepseek）
+    var autoName by remember { mutableStateOf(initial.name.takeIf { it.isEmpty() }) }
 
     fun fetch() {
         loading = true
@@ -194,21 +196,34 @@ private fun ProviderDialog(vm: ChatViewModel, initial: Provider, onDismiss: () -
         }
     }
 
+    // 新加的服务：地址和 Key 都填好后停一下就自动获取模型列表，不用再去点「获取模型列表」
+    var autoFetched by remember { mutableStateOf("") }
+    androidx.compose.runtime.LaunchedEffect(url, key) {
+        if (initial.name.isNotEmpty() || available.isNotEmpty() || loading || !url.startsWith("http") || key.isBlank()) return@LaunchedEffect
+        kotlinx.coroutines.delay(900)
+        if (autoFetched == url + key) return@LaunchedEffect
+        autoFetched = url + key
+        fetch()
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = keepIfEdited(key != initial.apiKey || url != initial.baseUrl || chosen.toList() != initial.models),
         title = { Text(if (initial.name.isEmpty()) "添加模型服务" else "编辑「${initial.name}」") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (initial.name.isEmpty()) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         PROVIDER_PRESETS.forEach { (n, u) ->
-                            AssistChip(onClick = { name = n; url = u }, label = { Text(n) })
+                            AssistChip(onClick = { name = n; url = u; autoName = n }, label = { Text(n) })
                         }
                     }
                 }
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("名字") },
+                OutlinedTextField(value = name, onValueChange = { name = it; autoName = null }, label = { Text("名字") },
                     singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = url, onValueChange = { url = it.trim() }, label = { Text("接口地址") },
+                OutlinedTextField(value = url, onValueChange = { v ->
+                    url = v.trim()
+                    if (autoName != null && (name.isBlank() || name == autoName)) { autoName = nameFromUrl(url); name = autoName.orEmpty() }
+                }, label = { Text("接口地址") },
                     placeholder = { Text("https://…/v1") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(
                     value = key, onValueChange = { key = it.trim() }, label = { Text("API Key") },
@@ -254,7 +269,7 @@ private fun ProviderDialog(vm: ChatViewModel, initial: Provider, onDismiss: () -
                     )
                     if (available.size > 8) {
                         OutlinedTextField(value = filter, onValueChange = { filter = it }, placeholder = { Text("搜索模型") },
-                            singleLine = true, modifier = Modifier.fillMaxWidth())
+                            singleLine = true, modifier = Modifier.fillMaxWidth(), trailingIcon = clearButton(filter) { filter = "" })
                     }
                     // 已勾选的排前面
                     val shown = available.filter { filter.isBlank() || it.contains(filter.trim(), ignoreCase = true) }

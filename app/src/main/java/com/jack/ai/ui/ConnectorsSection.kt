@@ -83,14 +83,20 @@ private fun ConnectorDialog(vm: ChatViewModel, server: McpServer, isNew: Boolean
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var autoName by remember { mutableStateOf(server.name.takeIf { it.isEmpty() }) }
     val scope = rememberCoroutineScope()
     AlertDialog(
         onDismissRequest = { if (!busy) onDone() },
+        properties = keepIfEdited(url != server.url || key != server.key),
         title = { Text(if (isNew) "添加连接器" else "修改连接器") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(name, { name = it }, label = { Text("名字") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(url, { url = it.trim() }, label = { Text("网址") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                OutlinedTextField(name, { name = it; autoName = null }, label = { Text("名字") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                // 名字没自己填过：跟着网址自动起一个（mcp.notion.com → Notion），只贴网址就能保存
+                OutlinedTextField(url, { v ->
+                    url = v.trim()
+                    if (autoName != null && (name.isBlank() || name == autoName)) { autoName = nameFromUrl(url); name = autoName.orEmpty() }
+                }, label = { Text("网址") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
                     placeholder = { Text("https://…/mcp 或 …/sse") })
                 if (oauth.isNotBlank()) Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("已用账号登录", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
