@@ -11,7 +11,8 @@ object ToolTimeout {
         "download_file" to 600L, "phone" to 360L, "phone_files" to 180L,
         "run_python" to 360L, "run_shell" to 660L, "delegate_tasks" to 600L, "run_code" to 65L,
     )
-    fun secondsFor(name: String) = seconds[name] ?: 90L
+    // 工具包自己按说明文件里的时限停（最多 300 秒），这里多留一点
+    fun secondsFor(name: String) = seconds[name] ?: if (name.startsWith(com.jack.ai.data.packs.Packs.PREFIX)) 310L else 90L
     private class Expired : CancellationException()
 
     private class Clock(ms: Long, val parent: Clock?) : AbstractCoroutineContextElement(Key) {

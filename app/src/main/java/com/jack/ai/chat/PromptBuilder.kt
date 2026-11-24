@@ -258,6 +258,8 @@ object PromptBuilder {
             add(SkillTools.WORK_NOTE)
             // 连接器的工具放最后：增删连接器时前面那一大段工具说明不变，缓存照样命中
             com.jack.ai.data.integrations.Mcp.toolDefs(com.jack.ai.data.integrations.Mcp.active(settings)).forEach { add(it) }
+            // 工具包的工具排在最后，理由同上
+            com.jack.ai.data.packs.Packs.toolDefs(settings.packs).forEach { add(it) }
         }.takeIf { it.isNotEmpty() }
     }
 

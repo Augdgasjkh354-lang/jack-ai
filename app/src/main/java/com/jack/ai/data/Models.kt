@@ -424,6 +424,8 @@ data class Settings(
     val fullAuthUntil: Long = 0,
     /** 连接器（MCP 服务）。 */
     val mcpServers: List<McpServer> = emptyList(),
+    /** 装好的工具包（代码在 files/packs/ 里，这里是说明、开关、配置）。 */
+    val packs: List<com.jack.ai.data.packs.InstalledPack> = emptyList(),
     /** Kavi 专用代理：开没开、订阅地址、节点、选哪个（空 = 自动选最快）。订阅和节点不进备份。 */
     val proxyEnabled: Boolean = false,
     val proxySub: String = "",

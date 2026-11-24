@@ -1,0 +1,27 @@
+{
+  "id": "weather",
+  "name": "天气",
+  "version": "1.0.0",
+  "description": "查任意城市的实时天气和未来几天的预报",
+  "author": "Kavi 示例",
+  "permissions": {
+    "net": ["api.open-meteo.com", "geocoding-api.open-meteo.com"]
+  },
+  "tools": [
+    {
+      "name": "now",
+      "description": "查一个城市现在的天气：气温、体感、天气、风、湿度，和今天的最高最低温。不填城市就用上次查的那个。",
+      "parameters": {
+        "city": { "type": "string", "description": "城市名，中文英文都行，比如 北京、上海浦东、Tokyo" }
+      }
+    },
+    {
+      "name": "forecast",
+      "description": "查一个城市未来几天的天气预报（每天的天气、最高最低温、降水概率）。不填城市就用上次查的那个。",
+      "parameters": {
+        "city": { "type": "string", "description": "城市名" },
+        "days": { "type": "integer", "description": "查几天，1 到 14，默认 5" }
+      }
+    }
+  ]
+}

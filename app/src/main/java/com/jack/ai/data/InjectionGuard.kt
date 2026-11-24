@@ -99,6 +99,8 @@ object InjectionGuard {
     fun gated(name: String, action: String): Boolean = when {
         name in ALWAYS -> true
         name.startsWith(Mcp.PREFIX) -> true
+        // 工具包能联网、写文件：和连接器一样算往外做事
+        name.startsWith(com.jack.ai.data.packs.Packs.PREFIX) -> true
         name == "facts" -> action == "save"
         name == "browser" -> action in BROWSER_ACT
         name == "phone_files" -> action in setOf("export", "rename", "mkdir")

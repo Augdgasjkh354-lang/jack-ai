@@ -1,5 +1,7 @@
 package com.jack.ai.ui
 
+import androidx.compose.ui.unit.dp
+
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.background
@@ -192,6 +194,44 @@ class ShotsTest {
             JackTheme(dark()) { androidx.compose.material3.Surface { ProjectFiles(p, androidx.compose.foundation.layout.PaddingValues(), {}) } }
         }
         save("project-files-" + dark().name.lowercase())
+    }
+
+    /** 工具包：技能页上的卡片、装之前的确认页、详情页。 */
+    @Test
+    fun packs() {
+        Assume.assumeTrue(System.getenv("SHOTS_DIR") != null)
+        val app = RuntimeEnvironment.getApplication() as Application
+        val s = com.jack.ai.data.packs.Packs.stageAsset(app, "weather")
+        val kuaidi = com.jack.ai.data.packs.PackManifest("kuaidi", "快递查询", "1.2.0", "按单号查快递走到哪了，支持顺丰、中通、圆通等 30 多家", "Jack",
+            permissions = com.jack.ai.data.packs.PackPermissions(net = listOf("api.kuaidi100.com"), files = "pack", notify = true),
+            config = listOf(com.jack.ai.data.packs.PackConfigField("apiKey", "快递 100 的 Key", secret = true, required = true)),
+            tools = listOf(com.jack.ai.data.packs.PackToolSpec("track", "查一个快递单号的物流轨迹")))
+        val notes = com.jack.ai.data.packs.PackManifest("notes", "读书笔记", "0.3.0", "把对话文件夹里的读书笔记整理成卡片，用模型提炼要点",
+            permissions = com.jack.ai.data.packs.PackPermissions(files = "workspace", ai = true),
+            tools = listOf(com.jack.ai.data.packs.PackToolSpec("cards", "整理成卡片"), com.jack.ai.data.packs.PackToolSpec("quiz", "出几道题")))
+        val list = listOf(
+            com.jack.ai.data.packs.InstalledPack(s.manifest, source = "sample"),
+            com.jack.ai.data.packs.InstalledPack(kuaidi, source = "github:jack/kavi-packs@main:kuaidi"),
+            com.jack.ai.data.packs.InstalledPack(notes, enabled = false, source = "kavi"),
+        )
+        packPagesInline = true
+        val which = System.getenv("SHOTS_PACK") ?: "list"
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            JackTheme(dark()) {
+                androidx.compose.material3.Surface {
+                    when (which) {
+                        "confirm" -> PackConfirm(s, null, {}, {})
+                        "empty" -> androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.padding(16.dp)) { PacksEmptyCard({}, {}) }
+                        else -> androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.padding(16.dp),
+                            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
+                            list.forEach { PackCard(it, {}, {}) }
+                        }
+                    }
+                }
+            }
+        }
+        save("packs-$which-" + dark().name.lowercase())
     }
 
     @Test

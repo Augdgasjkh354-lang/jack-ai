@@ -51,6 +51,7 @@ fun SkillsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit) {
     var editing by remember { mutableStateOf<Skill?>(null) }
     var deleting by remember { mutableStateOf<Skill?>(null) }
     var flows by remember { mutableStateOf(false) }
+    val packsUi = remember { PacksUi() }
     val skills = settings.allSkills()
 
     fun toggle(s: Skill, on: Boolean) = vm.updateSettings { st ->
@@ -95,8 +96,29 @@ fun SkillsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit) {
             items(plugins, key = { it.id }) { s ->
                 SkillCard(s, settings, onOpen = { if (s.id == SkillIds.BROWSER) flows = true else viewing = s }, onToggle = { toggle(s, it) })
             }
+            item {
+                SectionHeader("工具包", "一小段代码加一份说明，装上以后 Kavi 多出几个工具。只能用说明里声明过的权限（访问哪些网站、碰不碰文件），装之前给你看。")
+            }
+            if (settings.packs.isEmpty()) item("packs-empty") {
+                PacksEmptyCard(onSample = { packsUi.sampleAsk++ }, onInstall = { packsUi.choosing = true })
+            } else {
+                items(settings.packs, key = { "pack:" + it.id }) { p ->
+                    PackCard(p, onOpen = { packsUi.openId = p.id }, onToggle = { on ->
+                        vm.updateSettings { st -> st.copy(packs = st.packs.map { if (it.id == p.id) it.copy(enabled = on) else it }) }
+                    })
+                }
+                item("packs-add") {
+                    OutlinedButton(onClick = { packsUi.choosing = true }) {
+                        Icon(Icons.Default.Add, null)
+                        Spacer(Modifier.padding(4.dp))
+                        Text("装工具包")
+                    }
+                }
+            }
         }
     }
+
+    PackDialogs(packsUi, vm, settings)
 
     if (flows) FlowsDialog(vm) { flows = false }
 

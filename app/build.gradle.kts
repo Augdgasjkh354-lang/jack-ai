@@ -196,6 +196,14 @@ dependencies {
     implementation("dev.rikka.shizuku:provider:13.1.5")
     // 本地向量模型（设置 → 本地模型）：ONNX Runtime 在手机上跑，模型文件另外下载，不打进安装包
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.31.1")
+    // 工具包的 JS 引擎：QuickJS（quickjs-kt，Apache-2.0），支持 async/await 和 ES 模块。
+    // 停在 alpha13：之后的版本要 Kotlin 2.3 以上，项目还是 2.0；升 Kotlin 时一起升。
+    implementation("io.github.dokar3:quickjs-kt-android:1.0.0-alpha13")
+    // 单测在电脑上跑，换成带 Linux/macOS 原生库的 JVM 版（两个版本的类一样，单测里去掉安卓版）
+    testImplementation("io.github.dokar3:quickjs-kt-jvm:1.0.0-alpha13")
+}
+configurations.matching { it.name.endsWith("UnitTestRuntimeClasspath") || it.name.endsWith("UnitTestCompileClasspath") }.configureEach {
+    exclude(group = "io.github.dokar3", module = "quickjs-kt-android")
 }
 
 // ---------- 文档查看器的前端库 ----------

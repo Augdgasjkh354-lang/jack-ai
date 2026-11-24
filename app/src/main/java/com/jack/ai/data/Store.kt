@@ -441,6 +441,8 @@ class Store(context: Context) {
                 val opened = if (raw is String) Secrets.open(raw) else raw
                 // 代理的订阅地址和节点里有密码，也不进备份
                 if (k == "apiKey" || k == "tavilyKey" || k == "exaKey" || k == "proxySub" || k == "proxyNodes" || k == "notionToken" || k == "githubToken" || k == "remoteKey") return@forEach
+                // 工具包的代码不在备份里（备份只有设置），带过去也用不了；它们的 Key 也不该进备份
+                if (k == "packs") return@forEach
                 // 其他服务的 Key 也不进备份
                 val v = if (k == "providers" && opened is String) runCatching {
                     val list = json.decodeFromString(ListSerializer(Provider.serializer()), opened).map { it.copy(apiKey = "") }
@@ -596,6 +598,9 @@ class Store(context: Context) {
             mcpServers = secret("mcpServers", null)?.let {
                 runCatching { json.decodeFromString(ListSerializer(McpServer.serializer()), it) }.getOrNull()
             } ?: emptyList(),
+            packs = secret("packs", null)?.let {
+                runCatching { json.decodeFromString(ListSerializer(com.jack.ai.data.packs.InstalledPack.serializer()), it) }.getOrNull()
+            } ?: emptyList(),
             proxyEnabled = prefs.getBoolean("proxyEnabled", false),
             proxySub = secret("proxySub", "") ?: "",
             proxyNodes = secret("proxyNodes", null)?.let {
@@ -687,6 +692,7 @@ class Store(context: Context) {
             .putString("mails", Secrets.seal(json.encodeToString(ListSerializer(MailAccount.serializer()), s.mails)))
             .putString("alwaysAllow", json.encodeToString(ListSerializer(AllowRule.serializer()), s.alwaysAllow))
             .putString("mcpServers", Secrets.seal(json.encodeToString(ListSerializer(McpServer.serializer()), s.mcpServers)))
+            .putString("packs", Secrets.seal(json.encodeToString(ListSerializer(com.jack.ai.data.packs.InstalledPack.serializer()), s.packs)))
             .putBoolean("proxyEnabled", s.proxyEnabled)
             .putString("proxySub", Secrets.seal(s.proxySub))
             .putString("proxyNodes", Secrets.seal(json.encodeToString(ListSerializer(ProxyNode.serializer()), s.proxyNodes)))
