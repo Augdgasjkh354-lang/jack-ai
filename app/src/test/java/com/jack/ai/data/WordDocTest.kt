@@ -74,7 +74,7 @@ budget = 800
         val bos = ByteArrayOutputStream()
         OfficeWriter.writeDocx(md, bos, o)
         File(System.getProperty("user.dir"), "build/office-samples").apply { mkdirs() }.resolve("report.docx").writeBytes(bos.toByteArray())
-        File(System.getProperty("user.dir"), "build/office-samples/simple.docx").outputStream().use { OfficeWriter.writeDocx(md, it) }
+        File(System.getProperty("user.dir"), "build/office-samples/simple.docx").apply { parentFile?.mkdirs() }.outputStream().use { OfficeWriter.writeDocx(md, it) }
         val p = parts(bos.toByteArray())
         val f = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
         listOf("word/document.xml", "word/styles.xml", "word/settings.xml", "word/header1.xml", "word/footer1.xml", "docProps/core.xml", "[Content_Types].xml")
@@ -131,7 +131,7 @@ budget = 800
 """
         val bos = ByteArrayOutputStream()
         val warnings = OfficeWriter.writeDocx(text, bos, WordDoc.Options(cover = WordDoc.Cover("带图的报告")), mapOf("office.png" to WordDoc.Image(png, "png", 200, 100)))
-        File(System.getProperty("user.dir"), "build/office-samples/figures.docx").writeBytes(bos.toByteArray())
+        File(System.getProperty("user.dir"), "build/office-samples/figures.docx").apply { parentFile?.mkdirs() }.writeBytes(bos.toByteArray())
         val p = parts(bos.toByteArray())
         val f = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
         f.newDocumentBuilder().parse(p.getValue("word/document.xml").byteInputStream())

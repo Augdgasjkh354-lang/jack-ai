@@ -81,7 +81,7 @@ class PptDeckTest {
         )
         val bos = ByteArrayOutputStream()
         val warnings = OfficeWriter.writePptx(extra, "city", bos)
-        File(System.getProperty("user.dir"), "build/office-samples/charts-extra.pptx").writeBytes(bos.toByteArray())
+        File(System.getProperty("user.dir"), "build/office-samples/charts-extra.pptx").apply { parentFile?.mkdirs() }.writeBytes(bos.toByteArray())
         assertTrue(warnings.toString(), warnings.isEmpty())
         val p = parts(bos.toByteArray())
         val f = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
@@ -102,7 +102,7 @@ class PptDeckTest {
         val all = deck.mapIndexed { i, s -> s.copy(notes = "第 ${i + 1} 页的演讲稿。\n第二句话。") }.take(3) + charts
         val bos = ByteArrayOutputStream()
         val warnings = OfficeWriter.writePptx(all, "blue", bos)
-        File(System.getProperty("user.dir"), "build/office-samples/charts.pptx").writeBytes(bos.toByteArray())
+        File(System.getProperty("user.dir"), "build/office-samples/charts.pptx").apply { parentFile?.mkdirs() }.writeBytes(bos.toByteArray())
         assertTrue(warnings.toString(), warnings.isEmpty())
         val p = parts(bos.toByteArray())
         val names = ZipInputStream(bos.toByteArray().inputStream()).use { z -> generateSequence { z.nextEntry?.name }.toList() }
@@ -164,7 +164,8 @@ class PptDeckTest {
     fun morphHasFallbackAndStableNames() {
         val bos = ByteArrayOutputStream()
         OfficeWriter.writePptx(deck, "blue", bos, transition = "morph")
-        File(System.getProperty("user.dir"), "build/office-samples/morph.pptx").writeBytes(bos.toByteArray())
+        // 样例存一份给 CI 的 Office 校验看；文件夹不一定已由别的测试建好（测试顺序不固定）
+        File(System.getProperty("user.dir"), "build/office-samples/morph.pptx").apply { parentFile?.mkdirs() }.writeBytes(bos.toByteArray())
         val p = parts(bos.toByteArray())
         val f = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
         val xml = p.getValue("ppt/slides/slide5.xml")
@@ -237,7 +238,7 @@ class PptDeckTest {
         val bytes = bos.toByteArray()
         File(System.getProperty("user.dir"), "build/office-samples").apply { mkdirs() }.resolve("showcase.pptx").writeBytes(bytes)
         PptDeck.THEMES.keys.forEach { name ->
-            File(System.getProperty("user.dir"), "build/office-samples/theme-$name.pptx").outputStream().use { OfficeWriter.writePptx(deck.take(6), name, it) }
+            File(System.getProperty("user.dir"), "build/office-samples/theme-$name.pptx").apply { parentFile?.mkdirs() }.outputStream().use { OfficeWriter.writePptx(deck.take(6), name, it) }
         }
         val p = parts(bytes)
         val f = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
