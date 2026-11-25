@@ -406,6 +406,8 @@ data class Settings(
     val fontChoice: String = "",
     /** 底部标签栏除了「聊天」以外放哪些页面、什么顺序（KaviTab 的 id）；null 是默认那几个。 */
     val tabBar: List<String>? = null,
+    /** 新手教学问过了（不管选的看不看）：不再自动问。 */
+    val tourAsked: Boolean = false,
     val accent: String = "mono",
     /** 自己发的消息气泡用主题色（关了是灰色气泡）。 */
     val bubbleAccent: Boolean = true,

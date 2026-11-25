@@ -271,15 +271,17 @@ fun ChatScreen(
                     modifier = if (conv == null || conv.messages.isEmpty()) Modifier else Modifier.glassBar(top = true),
                     title = {
                         // 中间一个胶囊：对话标题，下面是模型名，点一下换模型
-                        ModelPicker(conv?.takeIf { it.messages.isNotEmpty() }?.title ?: "Kavi", state.settings, project?.name) { m -> vm.updateSettings { it.copy(model = m) } }
+                        Box(Modifier.tourTarget("model")) {
+                            ModelPicker(conv?.takeIf { it.messages.isNotEmpty() }?.title ?: "Kavi", state.settings, project?.name) { m -> vm.updateSettings { it.copy(model = m) } }
+                        }
                     },
                     navigationIcon = {
-                        CircleIconButton(AppIcons.Menu, "菜单", Modifier.padding(start = 12.dp)) { scope.launch { drawerState.open() } }
+                        CircleIconButton(AppIcons.Menu, "菜单", Modifier.padding(start = 12.dp).tourTarget("menu")) { scope.launch { drawerState.open() } }
                     },
                     actions = {
                         Row(Modifier.padding(end = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                             // 开了新对话就是要打字：光标放进输入框、键盘起来
-                            CircleIconButton(AppIcons.NewChat, "新对话") { vm.newChat(state.currentProjectId); focusInput++ }
+                            CircleIconButton(AppIcons.NewChat, "新对话", Modifier.tourTarget("newchat")) { vm.newChat(state.currentProjectId); focusInput++ }
                             // 文件夹收在「更多」里（做出了文件时，「更多」上标个数），顶栏右边只留两个圆按钮，标题胶囊才居中
                             if (conv != null && conv.messages.isNotEmpty()) ExportMenu(vm,
                                 made = conv.messages.flatMap { it.files }.distinctBy { it.path }.size,
@@ -332,7 +334,7 @@ fun ChatScreen(
                                     KaviTab.DOWNLOADS -> onOpenDownloads()
                                 }
                             }
-                        }, selected = 0)
+                        }, selected = 0, tourKey = "tabs")
                     },
                 ) }
             },
@@ -361,6 +363,22 @@ fun ChatScreen(
     if (showFiles && conv != null) {
         FilesSheet(vm, conv, inProject = conv.projectId != null, onDismiss = { showFiles = false })
     }
+    // 新手教学：填过 DeepSeek Key 以后问一次（老用户也问一次），看不看都算问过；设置里能重看
+    val tourKeyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    val tourFocus = androidx.compose.ui.platform.LocalFocusManager.current
+    fun startTour() { tourKeyboard?.hide(); tourFocus.clearFocus(); scope.launch { drawerState.close() }; Tour.step = 0 }
+    if (state.settings.apiKey.isNotBlank() && !state.settings.tourAsked && Tour.step < 0) TourAsk { yes ->
+        vm.updateSettings { it.copy(tourAsked = true) }
+        if (yes) startTour()
+    }
+    LaunchedEffect(Tour.replay) {
+        if (!Tour.replay) return@LaunchedEffect
+        Tour.replay = false
+        kotlinx.coroutines.delay(350) // 等从设置页回来的动画走完、按钮都量好位置
+        startTour()
+    }
+    androidx.activity.compose.BackHandler(enabled = Tour.step >= 0) { Tour.step = -1 }
+    TourOverlay(onTry = { text = "你能帮我做什么？"; focusInput++ })
 }
 
 /**

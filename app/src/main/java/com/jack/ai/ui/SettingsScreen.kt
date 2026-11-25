@@ -501,6 +501,14 @@ fun SettingsScreen(
             }
 
             if (page == SettingsPage.ADVANCED) Section {
+                // 新手教学：回到聊天页再从头看一遍
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("新手教学")
+                        Text("回到聊天页，一步一步看常用的地方", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    OutlinedButton(onClick = { Tour.replay = true; onBack() }) { Text("再看一遍") }
+                }
                 var url by remember { mutableStateOf(settings.baseUrl) }
                 OutlinedTextField(
                     value = url,

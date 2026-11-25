@@ -384,6 +384,20 @@ class ShotsTest {
         save("details-" + dark().name.lowercase())
     }
 
+    /** 新手教学：SHOTS_TOUR=第几步（从 0 起）。 */
+    @Test
+    fun tour() {
+        Assume.assumeTrue(System.getenv("SHOTS_DIR") != null)
+        val k = System.getenv("SHOTS_TOUR")?.toIntOrNull() ?: 0
+        val vm = vm(emptyList())
+        vm.updateSettings { it.copy(apiKey = "sk-test", tourAsked = true) }
+        show(vm, dark())
+        rule.mainClock.advanceTimeBy(500)
+        Tour.step = k
+        save("tour$k-" + dark().name.lowercase())
+        Tour.step = -1
+    }
+
     @Test
     fun project() {
         Assume.assumeTrue(System.getenv("SHOTS_DIR") != null)

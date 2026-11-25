@@ -415,7 +415,7 @@ internal fun InputBar(
             shape = Radii.xl,
             // 浮在消息上面的一个毛玻璃大胶囊：左边加号，中间打字，右边一个圆按钮（话筒 / 发送 / 停止）
             color = Color.Transparent,
-            modifier = Modifier.fillMaxWidth().glass(Radii.xl),
+            modifier = Modifier.fillMaxWidth().glass(Radii.xl).tourTarget("input"),
         ) {
             // 加了附件、打字换行时胶囊平滑地长高，不是一下子跳上去
             Column(Modifier.animateContentSize(androidx.compose.animation.core.spring(stiffness = 700f)).padding(6.dp)) {
@@ -472,7 +472,7 @@ internal fun InputBar(
                         // 开着思考或联网时，加号用强调色，不点开也看得出来
                         val modeOn = settings.thinking != ThinkLevel.OFF && settings.endpoint()?.reasoning != false
                         Box(
-                            Modifier.pressScale(plusPress, 0.88f).size(42.dp).clip(CircleShape)
+                            Modifier.tourTarget("plus").pressScale(plusPress, 0.88f).size(42.dp).clip(CircleShape)
                                 .clickable(interactionSource = plusPress, indication = androidx.compose.foundation.LocalIndication.current) { haptics.tick(); attachMenu = true },
                             contentAlignment = Alignment.Center,
                         ) {

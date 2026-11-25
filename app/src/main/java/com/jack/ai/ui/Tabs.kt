@@ -102,7 +102,7 @@ internal object TabMemory { var last = 0 }
  * 选中的那块像一滴水：换格时弹着滑过去，滑的途中横向拉长、纵向压扁一点，到了再回弹成圆的。
  */
 @Composable
-fun LiquidTabBar(items: List<TabItem>, selected: Int, modifier: Modifier = Modifier) {
+fun LiquidTabBar(items: List<TabItem>, selected: Int, modifier: Modifier = Modifier, tourKey: String? = null) {
     if (items.size < 2) return
     val colors = MaterialTheme.colorScheme
     val haptics = rememberHaptics()
@@ -138,7 +138,7 @@ fun LiquidTabBar(items: List<TabItem>, selected: Int, modifier: Modifier = Modif
         // 离目标越远拉得越长：最多宽出 45%、矮 14%（手指拖着时不拉，跟着手指走）
         val stretch = if (scrubbing) 0f else (abs(x.value - target) / cellPx).coerceIn(0f, 1f)
         val lensW = cell * (1f + 0.45f * stretch)
-        Box(Modifier.width(cell * items.size + 8.dp).glass(CircleShape).padding(4.dp)
+        Box(Modifier.width(cell * items.size + 8.dp).then(if (tourKey != null) Modifier.tourTarget(tourKey) else Modifier).glass(CircleShape).padding(4.dp)
             .pointerInput(items.size, cellPx, selected) {
                 detectDragGesturesAfterLongPress(
                     onDragStart = { o ->
