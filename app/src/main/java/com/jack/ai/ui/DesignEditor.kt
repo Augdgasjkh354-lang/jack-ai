@@ -129,7 +129,7 @@ class DesignEditorActivity : ComponentActivity() {
         val src = sourceOf(this, intent.getStringExtra(EXTRA_PATH))
         val settings = Store(this).loadSettings()
         setContent {
-            JackTheme(settings.themeMode, settings.accent, settings.fontScale, settings.appIcon) {
+            JackTheme(settings.themeMode, settings.accent, settings.fontScale, settings.appIcon, settings.fontChoice) {
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     if (src == null) Text("找不到这张图的底稿（可能被删了或改了名），没法编辑。可以让 Kavi 重新做一张。", Modifier.padding(24.dp))
                     else DesignEditorScreen(src, onClose = { finish() })

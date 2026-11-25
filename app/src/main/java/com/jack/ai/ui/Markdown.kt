@@ -113,6 +113,7 @@ fun MarkdownText(
     val accent = androidx.compose.material3.MaterialTheme.colorScheme.primary.toArgb()
     val muted = androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant.toArgb()
     val px = with(androidx.compose.ui.platform.LocalDensity.current) { textSizeSp.sp.toPx() }
+    val face = AppFonts.LocalTypeface.current
     val markwon = remember(argb, bg, px, accent, muted) { buildMarkwon(ctx, argb, bg, px, accent, muted) }
     AndroidView(
         modifier = modifier,
@@ -129,6 +130,8 @@ fun MarkdownText(
             tv.setTextColor(argb)
             tv.setLinkTextColor(accent)
             tv.setTextSize(TypedValue.COMPLEX_UNIT_PX, px)
+            // 设置里换了字体，回答正文跟着换
+            if (tv.typeface != (face ?: android.graphics.Typeface.DEFAULT)) tv.typeface = face ?: android.graphics.Typeface.DEFAULT
             markwon.setMarkdown(tv, normalizeLatex(markdown))
         },
     )

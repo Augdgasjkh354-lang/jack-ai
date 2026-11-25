@@ -111,6 +111,15 @@ private val AppTypography = Typography().let { t ->
     )
 }
 
+/** 每一档字都换成同一个字体。 */
+private fun androidx.compose.material3.Typography.withFamily(f: androidx.compose.ui.text.font.FontFamily) = copy(
+    displayLarge = displayLarge.copy(fontFamily = f), displayMedium = displayMedium.copy(fontFamily = f), displaySmall = displaySmall.copy(fontFamily = f),
+    headlineLarge = headlineLarge.copy(fontFamily = f), headlineMedium = headlineMedium.copy(fontFamily = f), headlineSmall = headlineSmall.copy(fontFamily = f),
+    titleLarge = titleLarge.copy(fontFamily = f), titleMedium = titleMedium.copy(fontFamily = f), titleSmall = titleSmall.copy(fontFamily = f),
+    bodyLarge = bodyLarge.copy(fontFamily = f), bodyMedium = bodyMedium.copy(fontFamily = f), bodySmall = bodySmall.copy(fontFamily = f),
+    labelLarge = labelLarge.copy(fontFamily = f), labelMedium = labelMedium.copy(fontFamily = f), labelSmall = labelSmall.copy(fontFamily = f),
+)
+
 @Composable
 fun isDark(mode: ThemeMode): Boolean = when (mode) {
     ThemeMode.SYSTEM -> isSystemInDarkTheme()
@@ -133,7 +142,7 @@ val ACCENTS = listOf(
 )
 
 @Composable
-fun JackTheme(mode: ThemeMode, accent: String = "mono", fontScale: Float = 1f, appIcon: String = "k", content: @Composable () -> Unit) {
+fun JackTheme(mode: ThemeMode, accent: String = "mono", fontScale: Float = 1f, appIcon: String = "k", font: String = "", content: @Composable () -> Unit) {
     val dark = isDark(mode)
     val a = ACCENTS.firstOrNull { it.id == accent } ?: ACCENTS.first()
     val (p, c, on) = if (dark) a.dark else a.light
@@ -148,15 +157,21 @@ fun JackTheme(mode: ThemeMode, accent: String = "mono", fontScale: Float = 1f, a
     val density = LocalDensity.current
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val links = androidx.compose.runtime.remember(ctx) { JackUriHandler(ctx) }
+    // 换了字体：整套字号、字重都不变，只换字形；读不到字体文件就退回系统字体
+    val family = androidx.compose.runtime.remember(font) { if (font.isEmpty()) null else AppFonts.family(ctx, font) }
+    val typeface = androidx.compose.runtime.remember(font) { if (font.isEmpty()) null else AppFonts.typeface(ctx, font) }
+    val typography = androidx.compose.runtime.remember(family) { if (family == null) AppTypography else AppTypography.withFamily(family) }
     CompositionLocalProvider(
         LocalDensity provides Density(density.density, density.fontScale * fontScale),
         androidx.compose.ui.platform.LocalUriHandler provides links,
         LocalAppIcon provides appIcon,
+        AppFonts.LocalFamily provides family,
+        AppFonts.LocalTypeface provides typeface,
     ) {
         MaterialTheme(
             colorScheme = colors,
             shapes = AppShapes,
-            typography = AppTypography,
+            typography = typography,
             content = content,
         )
     }

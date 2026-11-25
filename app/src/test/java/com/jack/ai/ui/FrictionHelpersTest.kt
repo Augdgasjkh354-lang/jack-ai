@@ -73,3 +73,18 @@ class PolishHelpersTest {
         assertEquals("2024/1/9", shortWhen(c.timeInMillis, now))
     }
 }
+
+class AppFontsTest {
+    @Test
+    fun groupsWeightFilesIntoOneFamily() {
+        assertEquals("MiSans", AppFonts.familyOf("MiSans-Medium.ttf"))
+        assertEquals("MiSans", AppFonts.familyOf("MiSans-Bold.ttf"))
+        assertEquals("MiSans", AppFonts.familyOf("MiSansVF.ttf"))
+        assertEquals("HarmonyOS-Sans-SC", AppFonts.familyOf("HarmonyOS_Sans_SC_Regular.ttf"))
+        assertEquals("OPPOSans", AppFonts.familyOf("OPPOSans-SemiBold.otf"))
+        assertEquals(500, AppFonts.weightOf("MiSans-Medium.ttf"))
+        assertEquals(600, AppFonts.weightOf("OPPOSans-SemiBold.otf"))
+        assertEquals(700, AppFonts.weightOf("HarmonyOS_Sans_SC_Bold.ttf"))
+        assertNull(AppFonts.weightOf("MiSansVF.ttf"))
+    }
+}

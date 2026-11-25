@@ -60,7 +60,8 @@ class ShotsTest {
         rule.mainClock.autoAdvance = false
         rule.setContent {
             val state by vm.state.collectAsState()
-            JackTheme(mode) {
+            // SHOTS_FONT=serif 这类：看换了字体以后的样子
+            JackTheme(mode, font = System.getenv("SHOTS_FONT").orEmpty()) {
                 ChatScreen(vm, state, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})
             }
         }

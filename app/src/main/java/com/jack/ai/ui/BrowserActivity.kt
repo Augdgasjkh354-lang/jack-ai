@@ -312,7 +312,7 @@ class BrowserActivity : androidx.fragment.app.FragmentActivity() {
         JackBrowser.setDark(settings.themeMode != ThemeMode.LIGHT)
         addressAtBottom = getSharedPreferences("browser", MODE_PRIVATE).getBoolean("addressbottom", true)
         setContent {
-            JackTheme(settings.themeMode, settings.accent, settings.fontScale, settings.appIcon) {
+            JackTheme(settings.themeMode, settings.accent, settings.fontScale, settings.appIcon, settings.fontChoice) {
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     Screen()
                     // 上着锁：盖住网页，点了再解锁

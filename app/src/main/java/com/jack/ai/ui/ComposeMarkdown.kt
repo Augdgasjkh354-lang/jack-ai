@@ -156,7 +156,7 @@ internal fun itemTitle(text: String): Pair<String?, String> {
 internal fun ComposeMarkdown(block: String, color: Color, codeBackground: Color, modifier: Modifier = Modifier, textSizeSp: Float = 16f) {
     val colors = MaterialTheme.colorScheme
     val parts = remember(block) { parseParts(block) }
-    val body = TextStyle(color = color, fontSize = textSizeSp.sp, lineHeight = (textSizeSp * 1.6f).sp, letterSpacing = 0.02.em)
+    val body = TextStyle(color = color, fontSize = textSizeSp.sp, lineHeight = (textSizeSp * 1.6f).sp, letterSpacing = 0.02.em, fontFamily = AppFonts.LocalFamily.current)
     val accent = colors.primary
     Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         parts.forEach { p ->
@@ -180,7 +180,7 @@ internal fun ComposeMarkdown(block: String, color: Color, codeBackground: Color,
                                 .clip(androidx.compose.foundation.shape.CircleShape).background(colors.surfaceContainerHigh),
                             contentAlignment = androidx.compose.ui.Alignment.Center,
                         ) {
-                            Text(p.marker.trimEnd('.', ')'), style = TextStyle(color = color, fontSize = 12.sp, fontWeight = FontWeight.SemiBold))
+                            Text(p.marker.trimEnd('.', ')'), style = TextStyle(color = color, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, fontFamily = AppFonts.LocalFamily.current))
                         }
                         androidx.compose.foundation.layout.Spacer(Modifier.width(12.dp))
                     } else Text(

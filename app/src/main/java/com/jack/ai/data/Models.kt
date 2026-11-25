@@ -402,6 +402,8 @@ data class Settings(
     val customSkills: List<Skill> = emptyList(),
     /** 字体缩放、主题色、应用锁。 */
     val fontScale: Float = 1f,
+    /** 界面字体：空是跟随系统；"serif" 宋体；"sys:…" 手机里的字体；"file:…" 自己导入的（见 AppFonts）。 */
+    val fontChoice: String = "",
     val accent: String = "mono",
     /** 自己发的消息气泡用主题色（关了是灰色气泡）。 */
     val bubbleAccent: Boolean = true,

@@ -69,7 +69,7 @@ class ScreenPickActivity : ComponentActivity() {
         }
 
         val settings = com.jack.ai.data.Store(this).loadSettings()
-        setContent { com.jack.ai.ui.JackTheme(settings.themeMode, settings.accent, settings.fontScale, settings.appIcon) {
+        setContent { com.jack.ai.ui.JackTheme(settings.themeMode, settings.accent, settings.fontScale, settings.appIcon, settings.fontChoice) {
             // 手指画过的点（屏幕上显示的坐标）、圈完的框（截图上的像素）
             val points = remember { mutableStateListOf<Offset>() }
             var box by remember { mutableStateOf<android.graphics.Rect?>(null) }

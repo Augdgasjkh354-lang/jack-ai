@@ -31,7 +31,7 @@ class MiniAppActivity : ComponentActivity() {
         val file = safeFile(this, intent.getStringExtra(EXTRA_PATH))
         val settings = Store(this).loadSettings()
         setContent {
-            JackTheme(settings.themeMode, settings.accent, settings.fontScale, settings.appIcon) {
+            JackTheme(settings.themeMode, settings.accent, settings.fontScale, settings.appIcon, settings.fontChoice) {
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     if (file == null) Text("这个小工具找不到了（可能对话被删了或文件改了名）。可以回到 Kavi 里重新放一次。", Modifier.padding(androidx.compose.ui.unit.Dp(24f)))
                     else Scaffold(topBar = { TopAppBar(title = { Text(file.name.removeSuffix(".html")) }) }) { p ->

@@ -30,6 +30,7 @@ fun MemoryGraphView(all: List<MemoryItem>, selected: String?, onSelect: (String?
     val graph = remember(all) { layout(all) }
     if (graph.nodes.size < 2) return
     val measurer = rememberTextMeasurer()
+    val family = AppFonts.LocalFamily.current
     val c = MaterialTheme.colorScheme
     val sel = selected?.let(MemoryGraph::norm)
     Canvas(
@@ -57,7 +58,7 @@ fun MemoryGraphView(all: List<MemoryItem>, selected: String?, onSelect: (String?
             val r = (5 + 9f * n.count / maxN).dp.toPx()
             val center = Offset(n.x * w, n.y * h)
             drawCircle(if (n.key == sel) c.primary else c.primary.copy(alpha = if (on) 0.55f else 0.15f), r, center)
-            val text = measurer.measure(n.label, TextStyle(fontSize = 11.sp, color = c.onSurface.copy(alpha = if (on) 0.9f else 0.3f)))
+            val text = measurer.measure(n.label, TextStyle(fontSize = 11.sp, color = c.onSurface.copy(alpha = if (on) 0.9f else 0.3f), fontFamily = family))
             val tx = (center.x - text.size.width / 2f).coerceIn(0f, max(0f, w - text.size.width))
             val ty = min(center.y + r + 2.dp.toPx(), h - text.size.height)
             drawText(text, topLeft = Offset(tx, ty))

@@ -40,7 +40,7 @@ class BackgroundPhoneActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val settings = Store(this).loadSettings()
         setContent {
-            JackTheme(settings.themeMode, settings.accent, settings.fontScale, settings.appIcon) {
+            JackTheme(settings.themeMode, settings.accent, settings.fontScale, settings.appIcon, settings.fontChoice) {
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { BackgroundScreen() }
             }
         }

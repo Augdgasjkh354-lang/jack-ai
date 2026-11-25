@@ -306,7 +306,7 @@ class MainActivity : FragmentActivity() {
                 }
             }
 
-            JackTheme(state.settings.themeMode, state.settings.accent, state.settings.fontScale, state.settings.appIcon) {
+            JackTheme(state.settings.themeMode, state.settings.accent, state.settings.fontScale, state.settings.appIcon, state.settings.fontChoice) {
                 if (locked && state.settings.appLock) {
                     LockScreen(onUnlock = ::unlock)
                 } else {

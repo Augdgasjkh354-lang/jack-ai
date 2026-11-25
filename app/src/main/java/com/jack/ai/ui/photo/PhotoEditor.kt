@@ -118,7 +118,7 @@ class PhotoEditorActivity : ComponentActivity() {
         val forResult = intent.getBooleanExtra(EXTRA_RESULT, false)
         val settings = Store(this).loadSettings()
         setContent {
-            JackTheme(settings.themeMode, settings.accent, settings.fontScale, settings.appIcon) {
+            JackTheme(settings.themeMode, settings.accent, settings.fontScale, settings.appIcon, settings.fontChoice) {
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     val file = path?.let { File(it) }?.takeIf { it.isFile }
                     if (file == null) Text("找不到这张图（可能被删了）", Modifier.padding(24.dp))

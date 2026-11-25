@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.animation.core.tween
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.foundation.layout.offset
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -384,6 +385,8 @@ fun SettingsScreen(
                 CheckList(ThemeMode.entries.map { it.label }, ThemeMode.entries.indexOf(settings.themeMode)) { i ->
                     vm.updateSettings { it.copy(themeMode = ThemeMode.entries[i]) }
                 }
+                SectionTitle("字体")
+                Section { FontPicker(vm, settings.fontChoice) }
                 SectionTitle("桌面图标")
             }
             if (page == SettingsPage.LOOK) Section {
@@ -987,5 +990,62 @@ private fun ModelPick(title: String, hint: String, auto: String, current: String
                 label = { Text(c.label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
             )
         }
+    }
+}
+
+/**
+ * 选字体：每一项用它自己的字写一行样字，看着挑。跟随系统、宋体、手机里自带的（扫 /system/fonts 这些地方）、自己导入的。
+ */
+@Composable
+private fun FontPicker(vm: ChatViewModel, current: String) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var refresh by remember { mutableStateOf(0) }
+    val choices by androidx.compose.runtime.produceState(emptyList<AppFonts.Choice>(), refresh) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            listOf(AppFonts.Choice("", "跟随系统"), AppFonts.Choice("serif", "宋体")) + AppFonts.scanSystem() + AppFonts.scanImported(ctx)
+        }
+    }
+    val pick = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) scope.launch {
+            val id = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { AppFonts.import(ctx, uri) }
+            if (id == null) Toast.makeText(ctx, "这个文件不是能用的字体（要 .ttf 或 .otf）", Toast.LENGTH_LONG).show()
+            else { refresh++; vm.updateSettings { it.copy(fontChoice = id) } }
+        }
+    }
+    val colors = MaterialTheme.colorScheme
+    val haptics = rememberHaptics()
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        choices.forEach { c ->
+            val on = c.id == current
+            val family = remember(c.id) { if (c.id.isEmpty()) null else AppFonts.family(ctx, c.id) }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().clip(Radii.m)
+                    .background(if (on) colors.onSurface.copy(alpha = 0.06f) else androidx.compose.ui.graphics.Color.Transparent)
+                    .clickable { if (!on) { haptics.select(); vm.updateSettings { it.copy(fontChoice = c.id) } } }
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(c.label, style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant, maxLines = 1)
+                    // 样字用这个字体本身写
+                    Text("你好，今天想聊点什么？Aa 123", style = MaterialTheme.typography.bodyLarge.copy(fontFamily = family ?: androidx.compose.ui.text.font.FontFamily.Default),
+                        maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                }
+                if (c.id.startsWith("file:")) IconButton(onClick = {
+                    AppFonts.importedDir(ctx).resolve(c.id.removePrefix("file:")).delete()
+                    if (on) vm.updateSettings { it.copy(fontChoice = "") }
+                    refresh++
+                }) { Icon(Icons.Default.Close, "删掉这个字体", Modifier.size(18.dp), tint = colors.onSurfaceVariant) }
+                if (on) Icon(Icons.Default.Check, "正在用", Modifier.size(20.dp), tint = colors.primary)
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
+            OutlinedButton(onClick = { pick.launch(arrayOf("font/ttf", "font/otf", "application/x-font-ttf", "application/x-font-otf", "application/octet-stream", "*/*")) }) {
+                Text("导入字体文件")
+            }
+        }
+        Text("「跟随系统」在有些手机上和系统界面的字不一样（换字体主题只换了老式控件）；那就在上面选手机里自带的那款，比如 MiSans、HarmonyOS Sans、OPPO Sans。也可以导入下载的 .ttf / .otf。",
+            style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
     }
 }
