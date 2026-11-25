@@ -19,10 +19,14 @@ import java.util.concurrent.TimeUnit
  */
 object Transcriber {
     /** 用哪家：(服务, 模型)。 */
-    data class Engine(val name: String, val baseUrl: String, val apiKey: String, val model: String, val deepseek: Boolean = false) {
-        /** 一段最长多少秒：DeepSeek 接口只收 2 分钟以内的，别家 5 分钟一段。 */
-        val chunkSec: Int get() = if (deepseek) DeepSeekTools.ASR_MAX_SEC else 300
+    data class Engine(val name: String, val baseUrl: String, val apiKey: String, val model: String, val deepseek: Boolean = false,
+                      /** 手机上的离线模型（SenseVoice），不联网、不花钱。 */
+                      val local: Boolean = false) {
+        /** 一段最长多少秒：DeepSeek 接口只收 2 分钟以内的，离线模型 30 秒一段（再长内存吃紧），别家 5 分钟一段。 */
+        val chunkSec: Int get() = when { local -> LocalAsr.CHUNK_SEC; deepseek -> DeepSeekTools.ASR_MAX_SEC; else -> 300 }
     }
+
+    val LOCAL = Engine("手机上", "", "", "SenseVoice 离线", local = true)
 
     private val KNOWN = listOf(
         "siliconflow" to "FunAudioLLM/SenseVoiceSmall",
@@ -31,6 +35,8 @@ object Transcriber {
     )
 
     fun engine(providers: List<Provider>, deepseekKey: String = ""): Engine? {
+        // 手机上下好了离线模型：先用它，不联网、不花钱
+        if (LocalAsr.ready()) return LOCAL
         for ((host, model) in KNOWN) {
             val p = providers.firstOrNull { it.apiKey.isNotBlank() && host in it.baseUrl.lowercase() } ?: continue
             return Engine(p.name, p.baseUrl.trimEnd('/'), p.apiKey, model)
@@ -41,7 +47,7 @@ object Transcriber {
 
     fun engine(s: com.jack.ai.data.Settings): Engine? = engine(s.providers, s.apiKey)
 
-    const val NO_ENGINE = "转文字要用 DeepSeek Key（设置里填的那个就行），或者硅基流动（推荐，SenseVoice 中文准、几乎免费）、OpenAI、Groq 的 Key。" +
+    const val NO_ENGINE = "转文字可以下载离线语音识别（设置 → DeepSeek API Key 页下面，不联网不花钱），或者用 DeepSeek Key（设置里填的那个就行），或者硅基流动（推荐，SenseVoice 中文准、几乎免费）、OpenAI、Groq 的 Key。" +
         "请用户在 设置 → 其他模型服务 里添加「硅基流动」并填上 Key（cloud.siliconflow.cn 注册就有），填好再试。"
 
     /** SenseVoice 会在文字里带上语言、情绪的标记（<|zh|><|NEUTRAL|>），去掉。 */
@@ -49,6 +55,7 @@ object Transcriber {
 
     /** onSpent：用 DeepSeek 时每段花了多少元（按音频时长算），用来记进用量统计。 */
     fun transcribe(e: Engine, wav: File, onSpent: (Double) -> Unit = {}): String {
+        if (e.local) return LocalAsr.transcribeWav(wav)
         if (e.deepseek) {
             val (text, ms) = DeepSeekTools.asr(e.apiKey, wav)
             onSpent(maxOf(ms, 1000L) / 3_600_000.0 * DeepSeekTools.ASR_PRICE_PER_HOUR)

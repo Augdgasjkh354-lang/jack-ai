@@ -19,6 +19,8 @@ class KaviApp : Application() {
             override fun onActivityDestroyed(activity: Activity) = Unit
         })
         CrashLog.install(this)
+        // 离线语音识别要知道模型放在哪
+        com.jack.ai.api.LocalAsr.init(this)
         // ChatGPT 登录的令牌单独存，前台、后台任务发请求前都要现取
         com.jack.ai.data.integrations.ChatGptAuth.init(this)
         com.jack.ai.data.integrations.ChatGptUsage.init(this)

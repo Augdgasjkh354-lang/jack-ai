@@ -142,6 +142,24 @@ object LocalModels {
         "int8/model.onnx", 91_738_399, "97dd832a68fe8e637ce679bf2e66f6e0e04e66338da62b2894659a18c1040d9d")
     val CUTOUTS = listOf(CUTOUT_HD, CUTOUT_SMALL)
 
+    /**
+     * 离线语音识别：阿里开源的 SenseVoice-Small 量化版（魔搭 iic/SenseVoiceSmall-onnx）。下好以后语音输入、语音对话、
+     * 录音纪要、视频转文字都在手机上转，不联网、不花钱。见 api/LocalAsr。
+     */
+    val SENSEVOICE = LocalModel(
+        id = "sensevoice-small",
+        name = "SenseVoice 离线语音识别",
+        blurb = "阿里开源，中文准、自带标点，也认英文、粤语、日语、韩语。下好以后语音输入在手机上转文字，不联网、不花钱",
+        repo = "iic/SenseVoiceSmall-onnx",
+        hfRevision = "master",
+        files = listOf(
+            ModelFile("am.mvn", 11_203, "29b3c740a2c0cfc6b308126d31d7f265fa2be74f3bb095cd2f143ea970896ae5"),
+            ModelFile("tokens.json", 352_064, "a2594fc1474e78973149cba8cd1f603ebed8c39c7decb470631f66e70ce58e97"),
+            ModelFile("model_quant.onnx", 241_216_270, "21dc965f689a78d1604717bf561e40d5a236087c85a95584567835750549e822"),
+        ),
+        ramMb = 450,
+    )
+
     /** 已经下好的抠图模型（两个都有用高清版）。 */
     fun cutoutReady(ctx: Context): LocalModel? = CUTOUTS.firstOrNull { ready(ctx, it) }
 
@@ -149,6 +167,8 @@ object LocalModels {
     val ALL = listOf(GEMMA, BGE_SMALL)
     /** 生成模型。 */
     val LLMS = listOf(QWEN)
+    /** 语音识别模型。 */
+    val ASRS = listOf(SENSEVOICE)
 
     /** 下好了、设置里打开了「思考摘要用本地模型」的生成模型。 */
     fun activeLlm(ctx: Context, s: Settings): LocalModel? = QWEN.takeIf { s.localLlm && ready(ctx, it) }
@@ -204,6 +224,7 @@ object LocalModels {
         pause(m)
         if (LocalEmbed.isLoaded(dir(ctx, m))) LocalEmbed.release()
         if (com.jack.ai.api.LocalLlm.isLoaded(dir(ctx, m))) com.jack.ai.api.LocalLlm.release()
+        if (m == SENSEVOICE) com.jack.ai.api.LocalAsr.release()
         dir(ctx, m).deleteRecursively()
         _state.update { it - m.id }
     }
@@ -300,6 +321,14 @@ object LocalModels {
             val line = com.jack.ai.api.LocalLlm.generate(d, spec, "把用户给的一段思考压成一个小标题：不超过 12 个字，只输出标题。",
                 "用户问深圳到大阪的机票，我先查最近一周的航班价格，再比较直飞和转机，还要看行李额度。", maxNew = 24)
             return Triple(t1 - t0, System.currentTimeMillis() - t1, line)
+        }
+        // 语音识别：加载，再转 5 秒的一段（这里是轻微的噪声，只量速度）
+        if (m == SENSEVOICE) {
+            val t0 = System.currentTimeMillis()
+            val rnd = java.util.Random(1)
+            com.jack.ai.api.LocalAsr.transcribe(ShortArray(16000 * 5) { (rnd.nextGaussian() * 30).toInt().toShort() })
+            val t1 = System.currentTimeMillis()
+            return Triple(0, t1 - t0, "5 秒的语音大约要 ${"%.1f".format((t1 - t0) / 1000.0)} 秒转完（第一次含加载）")
         }
         val spec = m.spec!!
         val t0 = System.currentTimeMillis()

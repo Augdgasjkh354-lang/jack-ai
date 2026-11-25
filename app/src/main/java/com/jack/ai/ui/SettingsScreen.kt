@@ -240,12 +240,17 @@ fun SettingsScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("语音输入用 Kavi 转文字")
-                        Text(if (settings.voiceInput == "system") "关着：用手机系统的语音识别（有的手机是 Google 的，国内连不上）"
-                            else "Kavi 自己录音、用这把 Key 转文字，国内直连。约 0.4 元/小时，说一句不到 1 分钱",
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        val downloads by com.jack.ai.data.LocalModels.state.collectAsState()
+                        val offline = remember(downloads) { com.jack.ai.api.LocalAsr.ready() }
+                        Text(when {
+                            settings.voiceInput == "system" -> "关着：用手机系统的语音识别（有的手机是 Google 的，国内连不上）"
+                            offline -> "用手机上的离线模型转文字，不联网、不花钱"
+                            else -> "Kavi 自己录音、用这把 Key 转文字，国内直连。约 0.4 元/小时，说一句不到 1 分钱"
+                        }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(checked = settings.voiceInput != "system", onCheckedChange = { on -> vm.updateSettings { it.copy(voiceInput = if (on) "kavi" else "system") } })
                 }
+                OfflineAsrRow()
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("朗读用 DeepSeek 语音")
@@ -1136,5 +1141,44 @@ private fun UsageLine(label: String, value: String, fraction: Float, color: andr
         }
         SoftBar(fraction, color)
         if (note != null) Text(note, style = MaterialTheme.typography.labelSmall, color = colors.outline)
+    }
+}
+
+/**
+ * 离线语音识别（SenseVoice）：没下就给一个「下载」，下着显示进度，下好了说一声。
+ * 下好以后语音输入、语音对话、录音纪要都在手机上转文字（Transcriber 优先用它）。也能在 设置 → 本地模型 里管理。
+ */
+@Composable
+private fun OfflineAsrRow() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val downloads by com.jack.ai.data.LocalModels.state.collectAsState()
+    val m = com.jack.ai.data.LocalModels.SENSEVOICE
+    val d = downloads[m.id]
+    val ready = remember(downloads) { com.jack.ai.data.LocalModels.ready(ctx, m) }
+    val colors = MaterialTheme.colorScheme
+    Column(Modifier.fillMaxWidth().clip(Radii.m).background(colors.onSurface.copy(alpha = 0.04f)).padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("离线语音识别", fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+        when {
+            ready -> Text("已下载：语音输入、语音对话、录音纪要都在手机上转文字，不联网、不用 Key、不花钱。",
+                style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+            d?.running == true -> {
+                val p = if (d.total > 0) d.done.toFloat() / d.total else 0f
+                SoftBar(p, colors.primary)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("下载中 ${com.jack.ai.data.LocalModels.mb(d.done)} / ${com.jack.ai.data.LocalModels.mb(d.total)}",
+                        style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { com.jack.ai.data.LocalModels.pause(m) }) { Text("暂停") }
+                }
+            }
+            else -> {
+                Text("下一个 ${com.jack.ai.data.LocalModels.mb(m.bytes)} 的模型（阿里开源的 SenseVoice，中文准、带标点），以后转文字都在手机上做，不联网、不花钱。从魔搭下载，国内直连。",
+                    style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                if (d?.error?.isNotEmpty() == true) Text(d.error, style = MaterialTheme.typography.bodySmall, color = colors.error)
+                OutlinedButton(onClick = { com.jack.ai.data.LocalModels.start(ctx, m) }) {
+                    Text(if (com.jack.ai.data.LocalModels.partBytes(ctx, m) > 0) "接着下载" else "下载")
+                }
+            }
+        }
     }
 }

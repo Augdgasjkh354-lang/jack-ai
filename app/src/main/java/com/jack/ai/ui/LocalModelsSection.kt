@@ -48,7 +48,7 @@ fun LocalModelsSection(vm: ChatViewModel, settings: Settings) {
     val scope = rememberCoroutineScope()
     val downloads by LocalModels.state.collectAsState()
     // 下载状态变了（下完、删了）就重新看一眼文件
-    val ready = remember(downloads, settings.localModel) { (LocalModels.ALL + LocalModels.LLMS).associate { it.id to LocalModels.ready(ctx, it) } }
+    val ready = remember(downloads, settings.localModel) { (LocalModels.ALL + LocalModels.LLMS + LocalModels.ASRS).associate { it.id to LocalModels.ready(ctx, it) } }
     val used = remember(downloads) { LocalModels.usedBytes(ctx) }
     val ramGb = remember { totalRamGb(ctx) }
     val bench = remember { mutableStateMapOf<String, String>() }
@@ -69,8 +69,10 @@ fun LocalModelsSection(vm: ChatViewModel, settings: Settings) {
             Text("不用本地模型")
         }
 
-        (LocalModels.ALL + LocalModels.LLMS).forEach { m ->
+        (LocalModels.ALL + LocalModels.LLMS + LocalModels.ASRS).forEach { m ->
             if (m == LocalModels.LLMS.first()) Text("生成模型", style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
+            if (m == LocalModels.ASRS.first()) Text("语音识别", style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
             val d = downloads[m.id]
             val isReady = ready[m.id] == true
@@ -111,7 +113,8 @@ fun LocalModelsSection(vm: ChatViewModel, settings: Settings) {
                                     bench[m.id] = withContext(Dispatchers.IO) {
                                         runCatching { LocalModels.benchmark(ctx, m) }.fold(
                                             { (load, each, line) ->
-                                                (if (load > 50) "加载 ${"%.1f".format(load / 1000.0)} 秒，" else "") +
+                                                if (m in LocalModels.ASRS) line
+                                                else (if (load > 50) "加载 ${"%.1f".format(load / 1000.0)} 秒，" else "") +
                                                     if (line.isNotEmpty()) "写一行摘要 ${"%.1f".format(each / 1000.0)} 秒：「$line」" else "每条约 $each 毫秒"
                                             },
                                             { "跑不起来：${it.message?.take(80)}" },
