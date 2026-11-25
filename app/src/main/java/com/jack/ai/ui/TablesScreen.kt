@@ -1,6 +1,7 @@
 package com.jack.ai.ui
 
 import android.content.Intent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -60,6 +61,8 @@ fun TablesScreen(onBack: () -> Unit) {
     var deleting by remember { mutableStateOf<Table?>(null) }
     val tables by produceState(emptyList<Table>(), version) { value = withContext(Dispatchers.IO) { Tables.list(ctx) } }
     val current = tables.firstOrNull { it.name == open }
+    // 看着一张表时按系统返回键：回到表格列表（以前直接退出了整页）
+    androidx.activity.compose.BackHandler(enabled = open != null) { open = null }
     fun share(t: Table) {
         val uri = FileProvider.getUriForFile(ctx, ctx.packageName + ".files", Tables.file(ctx, t.name))
         val send = Intent(Intent.ACTION_SEND).setType("text/csv").putExtra(Intent.EXTRA_STREAM, uri)
@@ -121,14 +124,18 @@ fun TablesScreen(onBack: () -> Unit) {
 }
 
 /** 表格内容：左右能滑，第一列是行号，最新的在最下面。 */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun TableGrid(t: Table, modifier: Modifier) {
     val colors = MaterialTheme.colorScheme
     val h = rememberScrollState()
     val width = 120.dp
-    LazyColumn(modifier.fillMaxSize().horizontalScroll(h), contentPadding = PaddingValues(12.dp)) {
-        item {
-            Row(Modifier.border(0.5.dp, colors.outlineVariant)) {
+    // 最新的在最下面：一打开就停在底部（记账这类表，想看的多半是刚记的那几行）。第 0 项是表头
+    val list = androidx.compose.runtime.remember(t.name) { androidx.compose.foundation.lazy.LazyListState(firstVisibleItemIndex = t.rows.size.coerceAtLeast(0)) }
+    LazyColumn(modifier.fillMaxSize().horizontalScroll(h), state = list, contentPadding = PaddingValues(12.dp)) {
+        // 表头吸在顶上：翻到底看最新几行时也知道每列是什么
+        stickyHeader {
+            Row(Modifier.background(colors.surface).border(0.5.dp, colors.outlineVariant)) {
                 Text("#", Modifier.width(40.dp).padding(8.dp), style = MaterialTheme.typography.labelMedium, color = colors.outline)
                 t.columns.forEach { c ->
                     Text(c, Modifier.width(width).padding(8.dp), style = MaterialTheme.typography.labelMedium,

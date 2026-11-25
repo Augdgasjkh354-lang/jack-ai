@@ -67,6 +67,17 @@ fun DownloadsScreen(onBack: () -> Unit) {
     var query by remember { mutableStateOf("") }
     var deleting by remember { mutableStateOf<DownloadRecord?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
+    // 下载的图片在 App 里看大图（能缩放、分享、存相册），不用跳到别的 App
+    var viewingImage by remember { mutableStateOf<String?>(null) }
+    // 文件已经不在了的记录：删的时候不用再确认（没有文件可删），也能一下清掉
+    fun forget(records: List<DownloadRecord>) {
+        scope.launch {
+            withContext(Dispatchers.IO) {
+                Store(ctx).let { st -> st.saveDownloads(st.loadDownloads().filterNot { d -> records.any { it.at == d.at && it.uri == d.uri } }) }
+            }
+            version++
+        }
+    }
     val completed = com.jack.ai.data.browser.BrowserDownloads.tasks.count { it.state == com.jack.ai.api.BrowserQueue.State.COMPLETE }
     val list by produceState(emptyList<Pair<DownloadRecord, Boolean>>(), version, completed) {
         value = withContext(Dispatchers.IO) { Store(ctx).loadDownloads().asReversed().map { it to exists(ctx, it) } }
@@ -102,8 +113,12 @@ fun DownloadsScreen(onBack: () -> Unit) {
         },
     ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize()) {
-            if (list.size > 8) OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                placeholder = { Text("搜文件名或网址") }, singleLine = true)
+            // 和侧边栏、文件库同一个圆头搜索框（带清空、键盘搜索键）
+            if (list.size > 8 || query.isNotEmpty()) SearchField(query, { query = it }, Modifier.padding(horizontal = 16.dp, vertical = 4.dp), placeholder = "搜文件名或网址")
+            val gone = list.filter { !it.second }.map { it.first }
+            if (gone.isNotEmpty()) Text("清掉 ${gone.size} 条文件已经不在的记录",
+                Modifier.fillMaxWidth().clickable { forget(gone); message = "清掉了 ${gone.size} 条" }.padding(horizontal = 16.dp, vertical = 8.dp),
+                style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
             message?.let {
                 Text(it, Modifier.fillMaxWidth().clickable { message = null }.padding(horizontal = 16.dp, vertical = 8.dp),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
@@ -117,7 +132,11 @@ fun DownloadsScreen(onBack: () -> Unit) {
                 items(shown, key = { it.first.at.toString() + it.first.uri }) { (r, ok) ->
                     Row(
                         Modifier.fillMaxWidth().clickable(enabled = ok) {
-                            if (!inApp(r.name)) open(ctx, r) { message = it }
+                            if (isImage(r.name)) scope.launch {
+                                val f = withContext(Dispatchers.IO) { runCatching { localCopy(ctx, r) }.getOrNull() }
+                                if (f == null) open(ctx, r) { message = it } else viewingImage = f.absolutePath
+                            }
+                            else if (!inApp(r.name)) open(ctx, r) { message = it }
                             else scope.launch {
                                 val f = withContext(Dispatchers.IO) { runCatching { localCopy(ctx, r) }.getOrNull() }
                                 if (f == null) open(ctx, r) { message = it }
@@ -142,13 +161,14 @@ fun DownloadsScreen(onBack: () -> Unit) {
                         Row(horizontalArrangement = Arrangement.End) {
                             if (ok) IconButton(onClick = { share(ctx, r) }) { Icon(Icons.Default.Share, "分享") }
                             if (r.url.isNotBlank()) IconButton(onClick = { redo(r) }) { Icon(Icons.Default.Refresh, "重下") }
-                            IconButton(onClick = { deleting = r }) { Icon(Icons.Default.Delete, "删除") }
+                            IconButton(onClick = { if (ok) deleting = r else forget(listOf(r)) }) { Icon(Icons.Default.Delete, "删除") }
                         }
                     }
                 }
             }
         }
     }
+    viewingImage?.let { p -> ImageViewer(p) { viewingImage = null } }
     deleting?.let { r ->
         AlertDialog(
             onDismissRequest = { deleting = null },
@@ -179,6 +199,8 @@ private fun exists(ctx: Context, r: DownloadRecord): Boolean = runCatching {
 
 private fun uriOf(ctx: Context, r: DownloadRecord): Uri =
     r.path?.let { androidx.core.content.FileProvider.getUriForFile(ctx, ctx.packageName + ".files", File(it)) } ?: Uri.parse(r.uri)
+
+private fun isImage(name: String) = name.substringAfterLast('.').lowercase() in setOf("png", "jpg", "jpeg", "webp", "gif", "bmp", "heic")
 
 private fun inApp(name: String) =
     com.jack.ai.data.TextPreview.isText(name) || isViewableDoc(name) || name.endsWith(".html", true) || name.endsWith(".htm", true)

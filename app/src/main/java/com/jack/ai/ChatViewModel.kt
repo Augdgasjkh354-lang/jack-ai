@@ -1025,7 +1025,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun syncKbs() = knowledge.syncKbs()
     fun removeKb(id: String) = knowledge.removeKb(id)
     fun toggleKb(id: String, on: Boolean) = knowledge.toggleKb(id, on)
-    fun createKb(name: String) = knowledge.createKb(name)
+    fun createKb(name: String, onCreated: (String) -> Unit = {}) = knowledge.createKb(name, onCreated)
+    /** 资料库里一份文档的正文（交给 AI 的那份文字）。后台线程调。 */
+    fun libraryText(id: String) = store.libraryText(id)
     /** 按意思搜备好了多少段：(有向量的, 全部)；没有向量来源是 null。后台线程调。 */
     fun libraryCoverage() = knowledge.coverage()
     fun deleteLibraryDoc(id: String) = knowledge.deleteLibraryDoc(id)

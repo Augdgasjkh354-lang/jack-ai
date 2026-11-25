@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -43,13 +44,14 @@ import java.util.Locale
 /** 做过的所有小工具，按最近改动排；点开全屏用，也能删。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AppsScreen(state: UiState, onBack: () -> Unit) {
+fun AppsScreen(state: UiState, onBack: () -> Unit, onOpenChat: (String) -> Unit = {}) {
     val ctx = LocalContext.current
     var refresh by remember { mutableIntStateOf(0) }
     val apps by produceState(emptyList<File>(), refresh) {
         value = withContext(Dispatchers.IO) {
             Workspace.root(ctx).listFiles().orEmpty().filter { it.isDirectory }
-                .flatMap { dir -> Workspace.files(dir).filter { it.extension.equals("html", true) } }
+                // 设计图的底稿也是 .html，但不是小工具（聊天里也不显示它），不列
+                .flatMap { dir -> Workspace.files(dir).filter { it.extension.equals("html", true) && !com.jack.ai.data.design.DesignTemplates.isSource(it) } }
                 .sortedByDescending { it.lastModified() }
         }
     }
@@ -94,7 +96,23 @@ fun AppsScreen(state: UiState, onBack: () -> Unit) {
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        IconButton(onClick = { deleting = f }) { Icon(Icons.Default.Delete, "删除") }
+                        // 以前右边只有删除：放到桌面、分享要先点开；想回到做它的那个对话得自己去侧边栏找
+                        var menu by remember { mutableStateOf(false) }
+                        val convId = f.parentFile?.name?.takeIf { k -> !k.startsWith("p_") && state.conversations.any { it.id == k } }
+                        androidx.compose.foundation.layout.Box {
+                            IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "更多") }
+                            androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                                convId?.let { id -> androidx.compose.material3.DropdownMenuItem(text = { Text("去对话") }, onClick = { menu = false; onOpenChat(id) }) }
+                                androidx.compose.material3.DropdownMenuItem(text = { Text("放到桌面") }, onClick = {
+                                    menu = false
+                                    if (!MiniAppActivity.pin(ctx, f)) android.widget.Toast.makeText(ctx, "这个桌面不支持放快捷方式", android.widget.Toast.LENGTH_SHORT).show()
+                                })
+                                androidx.compose.material3.DropdownMenuItem(text = { Text("分享") }, onClick = {
+                                    menu = false; shareFile(ctx, com.jack.ai.data.GeneratedFile(f.name, f.absolutePath, "text/html"))
+                                })
+                                androidx.compose.material3.DropdownMenuItem(text = { Text("删除", color = MaterialTheme.colorScheme.error) }, onClick = { menu = false; deleting = f })
+                            }
+                        }
                     }
                 }
             }

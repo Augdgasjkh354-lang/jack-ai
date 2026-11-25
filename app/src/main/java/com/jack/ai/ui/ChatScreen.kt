@@ -190,6 +190,8 @@ fun ChatScreen(
     }
     // 点了建议、模板：光标放进输入框、弹出键盘，接着打字就行
     var focusInput by remember { mutableIntStateOf(0) }
+    // 从别的页面开了新对话回来（项目页的「新对话」）：同样光标进输入框、键盘起来
+    LaunchedEffect(ChatFocus.request) { if (ChatFocus.request) { ChatFocus.request = false; focusInput++ } }
     val snackbar = remember { androidx.compose.material3.SnackbarHostState() }
     // 删了消息：底下出一条「撤销」，不再先弹确认框
     fun onDeleted(n: Int) {
@@ -657,7 +659,11 @@ private fun SummaryDivider(summary: String) {
     }
 }
 
-/** 新对话顶部的 Chat / Work 切换。Work 不限工具轮数。 */
+/** 回到聊天页时要不要把光标放进输入框、弹出键盘（别的页面开了新对话时设），用一次就清掉。 */
+internal object ChatFocus {
+    var request by mutableStateOf(false)
+}
+
 /** 打开对话后要滚到的那条消息（侧边栏搜索点进来时设），用一次就清掉。 */
 internal object ChatJump {
     /** (对话 id, 消息 id) */

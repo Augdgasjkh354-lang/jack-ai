@@ -171,14 +171,21 @@ fun ProjectScreen(
                         },
                     )
                     val canSend = draft.isNotBlank()
+                    // 没打字时是「新对话」：先进空白的项目对话再发图、发文件、说话，不用先随便打两个字
                     Surface(
-                        onClick = { vm.newChat(projectId); if (vm.send(draft)) { draft = ""; onOpenChat() } },
-                        enabled = canSend, shape = CircleShape,
-                        color = if (canSend) colors.primary else colors.onSurface.copy(alpha = 0.08f),
+                        onClick = {
+                            vm.newChat(projectId)
+                            if (!canSend) { ChatFocus.request = true; onOpenChat() } else if (vm.send(draft)) { draft = ""; onOpenChat() }
+                        },
+                        shape = CircleShape,
+                        color = colors.primary,
                         modifier = Modifier.size(42.dp),
                     ) {
                         Box(contentAlignment = Alignment.Center) {
-                            Icon(AppIcons.ArrowUp, "发送", Modifier.size(20.dp), tint = if (canSend) colors.onPrimary else colors.outline)
+                            androidx.compose.animation.Crossfade(canSend, label = "projectSend") { send ->
+                                if (send) Icon(AppIcons.ArrowUp, "发送", Modifier.size(20.dp), tint = colors.onPrimary)
+                                else Icon(AppIcons.NewChat, "在项目里开新对话", Modifier.size(20.dp), tint = colors.onPrimary)
+                            }
                         }
                     }
                 }

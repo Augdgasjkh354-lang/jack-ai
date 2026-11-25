@@ -184,11 +184,11 @@ class KnowledgeFeature(core: AppCore) : Feature(core) {
         }
     }
 
-    fun createKb(name: String) {
+    fun createKb(name: String, onCreated: (String) -> Unit = {}) {
         if (name.isBlank()) return
         scope.launch(ioSerial) {
-            KnowledgeBases.create(store, name)
-            withContext(Dispatchers.Main) { libraryChanged() }
+            val kb = KnowledgeBases.create(store, name)
+            withContext(Dispatchers.Main) { libraryChanged(); onCreated(kb.id) }
         }
     }
 

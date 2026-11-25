@@ -400,7 +400,7 @@ class MainActivity : FragmentActivity() {
                         Screen.Library -> LibraryScreen(vm = vm, state = state, onBack = back)
                         Screen.Tables -> TablesScreen(onBack = back)
                         Screen.Review -> ReviewScreen(vm = vm, state = state, onBack = back)
-                        Screen.Apps -> com.jack.ai.ui.AppsScreen(state = state, onBack = back)
+                        Screen.Apps -> com.jack.ai.ui.AppsScreen(state = state, onBack = back, onOpenChat = { id -> vm.select(id); stack.clear() })
                         Screen.Downloads -> com.jack.ai.ui.DownloadsScreen(onBack = back)
                         Screen.Files -> com.jack.ai.ui.FileLibraryScreen(state = state, onBack = back, onOpenChat = { id -> vm.select(id); stack.clear() })
                         Screen.Memory -> MemoryScreen(vm = vm, state = state, onBack = back)

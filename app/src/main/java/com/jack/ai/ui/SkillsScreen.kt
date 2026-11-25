@@ -128,8 +128,10 @@ fun SkillsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit) {
             onDismissRequest = { viewing = null },
             title = { Text(s.name) },
             text = {
-                Text(s.instructions, Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
-                    style = MaterialTheme.typography.bodyMedium)
+                // 做法是 Markdown 写的：排好版看（以前一屏的「##」「**」「- 」原样摆着）
+                androidx.compose.foundation.layout.Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                    MarkdownBlocks(s.instructions, MaterialTheme.colorScheme.onSurface, MaterialTheme.colorScheme.surfaceVariant, textSizeSp = 14f)
+                }
             },
             confirmButton = { TextButton(onClick = { viewing = null }) { Text("好的") } },
         )

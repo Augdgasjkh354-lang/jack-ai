@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.ui.draw.clip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -70,6 +71,8 @@ fun LibraryScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
     var openKb by remember { mutableStateOf<String?>(null) }
     var catalog by remember { mutableStateOf(false) }
     var creating by remember { mutableStateOf(false) }
+    // 点一份文档看它的正文（Kavi 检索时读的就是这份）
+    var reading by remember { mutableStateOf<LibraryDoc?>(null) }
     val fmt = remember { SimpleDateFormat("M月d日", Locale.CHINA) }
     // 按意思搜备好了多少段（向量在后台慢慢补）
     var coverage by remember { mutableStateOf<Pair<Int, Int>?>(null) }
@@ -121,7 +124,8 @@ fun LibraryScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                     onImport = { importTo = kb.id; pick.launch(arrayOf("*/*")) },
                     onSync = { vm.syncKbs() },
                     onDelete = { deletingKb = kb },
-                    onDeleteDoc = { deleting = it })
+                    onDeleteDoc = { deleting = it },
+                    onReadDoc = { reading = it })
             }
             item {
                 Spacer(Modifier.size(6.dp))
@@ -135,7 +139,7 @@ fun LibraryScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
             if (mine.isEmpty()) {
                 item { EmptyNote(AppIcons.File, "还没有自己的资料", "导入文档后，Kavi 回答时会先在这里面找。", Modifier.padding(top = 0.dp)) }
             }
-            items(mine.sortedByDescending { it.addedAt }, key = { it.id }) { d -> DocRow(d, fmt) { deleting = d } }
+            items(mine.sortedByDescending { it.addedAt }, key = { it.id }) { d -> DocRow(d, fmt, onOpen = { reading = d }) { deleting = d } }
             coverage?.let { (have, all) ->
                 if (all > 0) item {
                     Text(if (have >= all) "按意思搜：全部 $all 段都备好了" else "按意思搜：已备好 $have / $all 段，其余在后台慢慢算（没备好的照样能按关键词搜到）",
@@ -153,7 +157,15 @@ fun LibraryScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
             vm.removeKb(kb.id); deletingKb = null
         }
     }
-    if (creating) NewKbDialog(onDismiss = { creating = false }) { vm.createKb(it); creating = false }
+    // 建好就要往里放东西：直接打开选文件，不用再去它的菜单里找「导入文件」
+    if (creating) NewKbDialog(onDismiss = { creating = false }) { name ->
+        creating = false
+        vm.createKb(name) { id -> importTo = id; openKb = id; runCatching { pick.launch(arrayOf("*/*")) } }
+    }
+    reading?.let { d ->
+        TextViewer(d.name, load = { withContext(Dispatchers.IO) { vm.libraryText(d.id) } to false },
+            onDismiss = { reading = null }, subtitle = "${d.chars} 字 · Kavi 检索时读的文字")
+    }
     if (catalog) CatalogDialog(vm, state) { catalog = false; vm.closeKbCatalog() }
 }
 
@@ -167,8 +179,8 @@ private fun BusyRow(text: String) {
 }
 
 @Composable
-private fun DocRow(d: LibraryDoc, fmt: SimpleDateFormat, onDelete: () -> Unit) {
-    Card(Modifier.fillMaxWidth()) {
+private fun DocRow(d: LibraryDoc, fmt: SimpleDateFormat, onOpen: () -> Unit, onDelete: () -> Unit) {
+    Card(onClick = onOpen, modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.padding(start = 16.dp, top = 10.dp, bottom = 10.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(AppIcons.File, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.size(12.dp))
@@ -186,6 +198,7 @@ private fun DocRow(d: LibraryDoc, fmt: SimpleDateFormat, onDelete: () -> Unit) {
 private fun KbCard(
     kb: KnowledgeBase, docs: List<LibraryDoc>, open: Boolean, fmt: SimpleDateFormat,
     onOpen: () -> Unit, onToggle: (Boolean) -> Unit, onImport: () -> Unit, onSync: () -> Unit, onDelete: () -> Unit, onDeleteDoc: (LibraryDoc) -> Unit,
+    onReadDoc: (LibraryDoc) -> Unit = {},
 ) {
     var menu by remember { mutableStateOf(false) }
     Card(Modifier.fillMaxWidth()) {
@@ -213,7 +226,7 @@ private fun KbCard(
                     if (docs.isEmpty()) Text("还没有文档。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
                     // 文档多的知识库只列前 100 份，免得列表太长
                     docs.sortedBy { it.name }.take(100).forEach { d ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clip(Radii.xs).clickable { onReadDoc(d) }.padding(start = 4.dp)) {
                             Text(d.name, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                             Text("${d.chars} 字", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
                             IconButton(onClick = { onDeleteDoc(d) }, modifier = Modifier.size(36.dp)) { Icon(Icons.Default.Delete, "删除", Modifier.size(18.dp)) }
