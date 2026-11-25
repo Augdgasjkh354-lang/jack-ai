@@ -87,5 +87,7 @@ class ComposeMarkdownTest {
         assertEquals(MdPart.Rule, p[5])
         // 输出中代码块还没写完：照样当代码块画，不会把 ``` 露出来
         assertEquals(MdPart.Code("没写完的代码"), p[6])
+        // 开头写了语言的：记下来，代码块顶上标出来
+        assertEquals(MdPart.Code("print(1)", "python"), parseParts("```python\nprint(1)\n```")[0])
     }
 }

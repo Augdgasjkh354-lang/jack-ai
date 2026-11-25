@@ -367,6 +367,23 @@ class ShotsTest {
         save("error-" + dark().name.lowercase())
     }
 
+    /** 小细节：长消息折叠、代码块的语言和复制、隔了一阵的时间分隔。 */
+    @Test
+    fun details() {
+        Assume.assumeTrue(System.getenv("SHOTS_DIR") != null)
+        val now = System.currentTimeMillis()
+        val long = (1..30).joinToString("\n") { "第 $it 行：这是从别处粘贴过来的一大段日志内容" }
+        val c = Conversation(title = "看日志", messages = listOf(
+            ChatMessage(role = "user", content = "帮我看看这段代码", createdAt = now - 86_400_000L),
+            ChatMessage(role = "assistant", content = "可以这样写：\n\n```python\nfor i in range(3):\n    print(i)\n```", model = "deepseek-v4-flash", createdAt = now - 86_400_000L + 5000),
+            ChatMessage(role = "user", content = long, createdAt = now - 60_000L),
+        ))
+        val vm = vm(listOf(c))
+        vm.select(c.id)
+        show(vm, dark())
+        save("details-" + dark().name.lowercase())
+    }
+
     @Test
     fun project() {
         Assume.assumeTrue(System.getenv("SHOTS_DIR") != null)

@@ -41,8 +41,8 @@ class FrictionHelpersTest {
         val c = Conversation(title = "闲聊", messages = ms, summaryUntilId = ms[0].id)
         assertEquals(ms[1].id, searchHitId(c, "爬山"))
         assertNull(searchHitId(Conversation(title = "爬山", messages = ms.take(1)), "爬山"))
-        // 第一条后面有压缩分界线，第二条在列表里是第 2 项
-        assertEquals(2, messageItemIndex(c, ms[1].id))
+        // 第一条前面有时间、后面有压缩分界线，第二条在列表里是第 3 项（同一时间发的，中间不再标时间）
+        assertEquals(3, messageItemIndex(c, ms[1].id))
         assertEquals(-1, messageItemIndex(c, "nope"))
     }
 }
@@ -86,5 +86,23 @@ class AppFontsTest {
         assertEquals(600, AppFonts.weightOf("OPPOSans-SemiBold.otf"))
         assertEquals(700, AppFonts.weightOf("HarmonyOS_Sans_SC_Bold.ttf"))
         assertNull(AppFonts.weightOf("MiSansVF.ttf"))
+    }
+}
+
+class TimeStampTest {
+    @Test
+    fun breaksAfterTenMinutesAndFormatsInChinese() {
+        val a = ChatMessage(role = "user", content = "a", createdAt = 1_000_000L)
+        val b = a.copy(id = "b", createdAt = a.createdAt + 9 * 60_000L)
+        val c = a.copy(id = "c", createdAt = a.createdAt + 20 * 60_000L)
+        assertTrue(timeBreak(null, a))
+        assertTrue(!timeBreak(a, b))
+        assertTrue(timeBreak(b, c))
+        val cal = java.util.Calendar.getInstance().apply { set(2026, 10, 25, 19, 29, 0) }
+        val now = cal.timeInMillis
+        assertEquals("19:29", stampWhen(now, now))
+        assertEquals("昨天 19:29", stampWhen(now - 86_400_000L, now))
+        cal.set(2026, 2, 3, 8, 5, 0)
+        assertEquals("3月3日 08:05", stampWhen(cal.timeInMillis, now))
     }
 }

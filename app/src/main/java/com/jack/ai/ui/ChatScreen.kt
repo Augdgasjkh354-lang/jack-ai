@@ -259,7 +259,7 @@ fun ChatScreen(
         androidx.compose.runtime.CompositionLocalProvider(LocalGlass provides glass, LocalBubbleAccent provides state.settings.bubbleAccent) {
         Scaffold(
             containerColor = bg,
-            snackbarHost = { androidx.compose.material3.SnackbarHost(snackbar) },
+            snackbarHost = { KaviSnackbarHost(snackbar) },
             topBar = {
                 Column {
                 // 顶栏是一条渐变的毛玻璃：靠屏幕顶的地方最糊，往下渐渐变清楚，滚上来的消息不和标题、模型名叠在一起看不清
@@ -540,7 +540,9 @@ private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolea
             ),
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
-            conv.messages.forEach { msg ->
+            conv.messages.forEachIndexed { mi, msg ->
+                // 隔了一阵的消息前面：居中一行灰色小字的时间（第一条也有，知道是哪天聊的）
+                if (timeBreak(conv.messages.getOrNull(mi - 1), msg)) item(key = "t" + msg.id) { TimeStamp(msg.createdAt) }
                 item(key = msg.id) {
                     // 刚发出去、刚开始回的消息：从下面浮上来；打开对话时已有的、滑出去再滑回来的都不播
                     val fresh = remember { msg.id !in seen }.also { seen += msg.id }
@@ -580,15 +582,25 @@ private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolea
                 }
             }
         }
-        // 翻上去了：给一个回到底部的按钮
+        // 翻上去了：给一个回到底部的按钮。翻上去以后回答又写了新内容，按钮右上角亮一个小点
+        val sig = conv.messages.size to conv.messages.last().content.length + conv.messages.last().files.size
+        var leftAt by remember(conv.id) { mutableStateOf(sig) }
+        LaunchedEffect(follow.on) { if (!follow.on) leftAt = sig }
+        val fresh = !follow.on && sig != leftAt
         androidx.compose.animation.AnimatedVisibility(
             visible = !follow.on && listState.canScrollForward,
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = bars.calculateBottomPadding() + 12.dp),
             enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.scaleIn(initialScale = 0.7f),
             exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.scaleOut(targetScale = 0.7f),
         ) {
-            CircleIconButton(Icons.Default.KeyboardArrowDown, "回到底部", size = 40.dp) {
-                follow.on = true; scope.launch { val n = listState.layoutInfo.totalItemsCount; if (n > 0) listState.animateScrollToItem(n - 1, Int.MAX_VALUE) }
+            Box {
+                CircleIconButton(Icons.Default.KeyboardArrowDown, if (fresh) "回到底部（有新内容）" else "回到底部", size = 40.dp) {
+                    follow.on = true; scope.launch { val n = listState.layoutInfo.totalItemsCount; if (n > 0) listState.animateScrollToItem(n - 1, Int.MAX_VALUE) }
+                }
+                androidx.compose.animation.AnimatedVisibility(fresh, Modifier.align(Alignment.TopEnd),
+                    enter = androidx.compose.animation.scaleIn(Springs.fastSpatial()), exit = androidx.compose.animation.scaleOut()) {
+                    Box(Modifier.size(10.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary))
+                }
             }
         }
     }
@@ -634,7 +646,10 @@ internal object ChatJump {
 /** 列表里第几项是这条消息：已压缩分界线也占一项。找不到返回 -1。 */
 internal fun messageItemIndex(conv: Conversation, id: String): Int {
     var i = 0
+    var prev: com.jack.ai.data.ChatMessage? = null
     for (m in conv.messages) {
+        if (timeBreak(prev, m)) i++
+        prev = m
         if (m.id == id) return i
         i++
         if (m.id == conv.summaryUntilId) i++
@@ -705,4 +720,23 @@ internal fun rememberFollowBottom(listState: androidx.compose.foundation.lazy.La
         }
     }
     return f
+}
+
+/** 两条消息隔了多久才在中间标时间：10 分钟。第一条消息前面总是标。 */
+private const val TIME_GAP_MS = 10 * 60_000L
+
+internal fun timeBreak(prev: com.jack.ai.data.ChatMessage?, msg: com.jack.ai.data.ChatMessage): Boolean =
+    msg.createdAt > 0 && (prev == null || msg.createdAt - prev.createdAt >= TIME_GAP_MS)
+
+/** 时间分隔的字：今天「19:29」、昨天「昨天 19:29」、今年「11月3日 19:29」、更早「2025/11/3 19:29」。 */
+internal fun stampWhen(at: Long, now: Long = System.currentTimeMillis()): String {
+    val hm = java.text.SimpleDateFormat("HH:mm", java.util.Locale.CHINA).format(java.util.Date(at))
+    val day = shortWhen(at, now)
+    return if (day.contains(':')) hm else "$day $hm"
+}
+
+@Composable
+private fun TimeStamp(at: Long) {
+    Text(stampWhen(at), Modifier.fillMaxWidth().padding(top = 4.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
 }

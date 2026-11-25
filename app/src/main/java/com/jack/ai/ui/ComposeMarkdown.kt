@@ -20,6 +20,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -51,7 +56,8 @@ internal sealed interface MdPart {
     data class Heading(val level: Int, val text: String) : MdPart
     data class Item(val marker: String, val ordered: Boolean, val depth: Int, val text: String) : MdPart
     data class Quote(val text: String) : MdPart
-    data class Code(val code: String) : MdPart
+    /** lang：开头 ``` 后面写的语言（python、kotlin……），没写是空。 */
+    data class Code(val code: String, val lang: String = "") : MdPart
     data object Rule : MdPart
 }
 
@@ -78,10 +84,11 @@ internal fun parseParts(block: String): List<MdPart> {
         if (t.startsWith("```") || t.startsWith("~~~")) {
             flushPara(); flushQuote()
             val fence = t.take(3)
+            val lang = t.drop(3).trim().substringBefore(' ').take(20)
             val code = StringBuilder()
             i++
             while (i < lines.size && !lines[i].trim().startsWith(fence)) { code.append(lines[i]).append('\n'); i++ }
-            out += MdPart.Code(code.toString().trimEnd('\n'))
+            out += MdPart.Code(code.toString().trimEnd('\n'), lang)
             i++ // 跳过结尾的 ```
             continue
         }
@@ -200,12 +207,32 @@ internal fun ComposeMarkdown(block: String, color: Color, codeBackground: Color,
                     Text(inlineMarkdown(p.text, codeBackground, accent), style = body.copy(color = color.copy(alpha = 0.8f)),
                         modifier = Modifier.padding(start = 12.dp))
                 }
-                is MdPart.Code -> Box(
-                    Modifier.fillMaxWidth().clip(Radii.s).background(codeBackground)
-                        .horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 10.dp),
-                ) {
-                    Text(p.code, style = body.copy(fontFamily = CodeFont, fontSize = (textSizeSp * 0.86f).sp,
-                        lineHeight = (textSizeSp * 1.35f).sp, letterSpacing = 0.sp), softWrap = false)
+                is MdPart.Code -> Column(Modifier.fillMaxWidth().clip(Radii.s).background(codeBackground)) {
+                    // 顶上一条：左边写是什么语言，右边一键复制整段（复制后图标弹成对勾一会儿）
+                    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+                    val haptics = rememberHaptics()
+                    var copied by remember { androidx.compose.runtime.mutableStateOf(false) }
+                    androidx.compose.runtime.LaunchedEffect(copied) { if (copied) { kotlinx.coroutines.delay(1500); copied = false } }
+                    androidx.compose.foundation.layout.Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 2.dp, top = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Text(p.lang.lowercase(), Modifier.weight(1f), style = MaterialTheme.typography.labelSmall.copy(fontFamily = CodeFont),
+                            color = colors.onSurfaceVariant)
+                        Box(Modifier.size(32.dp).clip(androidx.compose.foundation.shape.CircleShape)
+                            .clickable(onClickLabel = "复制代码") {
+                                clipboard.setText(androidx.compose.ui.text.AnnotatedString(p.code))
+                                if (!copied) haptics.tick()
+                                copied = true
+                            }, contentAlignment = Alignment.Center) {
+                            PopSwap(copied) { done ->
+                                androidx.compose.material3.Icon(if (done) androidx.compose.material.icons.Icons.Default.Check else AppIcons.Copy,
+                                    if (done) "已复制" else "复制代码", Modifier.size(15.dp), tint = colors.onSurfaceVariant)
+                            }
+                        }
+                    }
+                    Box(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 12.dp, end = 12.dp, bottom = 10.dp)) {
+                        Text(p.code, style = body.copy(fontFamily = CodeFont, fontSize = (textSizeSp * 0.86f).sp,
+                            lineHeight = (textSizeSp * 1.35f).sp, letterSpacing = 0.sp), softWrap = false)
+                    }
                 }
                 MdPart.Rule -> HorizontalDivider(Modifier.padding(vertical = 10.dp), color = colors.outlineVariant)
             }

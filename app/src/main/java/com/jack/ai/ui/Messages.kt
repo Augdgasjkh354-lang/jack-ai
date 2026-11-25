@@ -151,18 +151,23 @@ fun UserBubble(msg: ChatMessage, onDelete: () -> Unit, onEdit: (() -> Unit)? = n
                 }
             }
         }
+        // 很长的消息（粘贴了一大段）：先只露前 12 行，底下渐隐，点「展开」看全文
+        var expanded by remember(msg.id) { mutableStateOf(false) }
+        var overflow by remember(msg.id) { mutableStateOf(false) }
         if (msg.content.isNotEmpty()) {
             val tinted = LocalBubbleAccent.current
+            // 自己的气泡默认是主题色（设置 → 外观可以关成灰色）；正在输入框里改这条时换成浅色，看得出改的是哪条
+            val bubble = when {
+                editing -> MaterialTheme.colorScheme.primaryContainer
+                tinted -> MaterialTheme.colorScheme.primary
+                else -> MaterialTheme.colorScheme.surfaceContainerHigh
+            }
             Surface(
-                // 自己的气泡默认是主题色（设置 → 外观可以关成灰色）；正在输入框里改这条时换成浅色，看得出改的是哪条
-                color = when {
-                    editing -> MaterialTheme.colorScheme.primaryContainer
-                    tinted -> MaterialTheme.colorScheme.primary
-                    else -> MaterialTheme.colorScheme.surfaceContainerHigh
-                },
+                color = bubble,
                 shape = Radii.bubbleMine,
                 modifier = Modifier
                     .widthIn(max = 320.dp)
+                    .animateContentSize(Springs.defaultSpatial())
                     .clip(Radii.bubbleMine)
                     .then(if (tinted && !editing) Modifier else Modifier.hairline(Radii.bubbleMine))
                     .combinedClickable(onClick = {}, onLongClick = {
@@ -170,12 +175,21 @@ fun UserBubble(msg: ChatMessage, onDelete: () -> Unit, onEdit: (() -> Unit)? = n
                         menu = true
                     }),
             ) {
-                Text(
-                    msg.content,
-                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
-                    style = MaterialTheme.typography.bodyLarge,
-                )
+                Box {
+                    Text(
+                        msg.content,
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                        style = MaterialTheme.typography.bodyLarge,
+                        maxLines = if (expanded) Int.MAX_VALUE else LONG_LINES,
+                        onTextLayout = { if (!expanded) overflow = it.hasVisualOverflow },
+                    )
+                    if (overflow && !expanded) Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(40.dp)
+                        .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(bubble.copy(alpha = 0f), bubble))))
+                }
             }
+            if (overflow) Text(if (expanded) "收起" else "展开全文",
+                style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(top = 2.dp).clip(Radii.s).clickable { expanded = !expanded }.padding(horizontal = 8.dp, vertical = 4.dp))
         } else {
             TextButton(onClick = { menu = true }) { Text("…", color = MaterialTheme.colorScheme.outline) }
         }
@@ -507,3 +521,6 @@ internal fun CollapsiblePill(expanded: Boolean, content: @Composable () -> Unit)
             .animateContentSize(androidx.compose.animation.core.tween(Motion.NORMAL)),
     ) { content() }
 }
+
+/** 自己发的消息超过这么多行就先折起来。 */
+private const val LONG_LINES = 12

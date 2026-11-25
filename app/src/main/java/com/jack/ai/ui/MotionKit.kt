@@ -30,6 +30,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.height
 import androidx.compose.ui.draw.clip
 import kotlinx.coroutines.delay
 
@@ -195,4 +196,38 @@ fun tidyBreaks(s: String, tail: Int = 3): String {
     if (count < 2) return dated
     val glued = end.substring(i).filter { it != WJ }.toList().joinToString(WJ.toString())
     return end.substring(0, i) + glued + dated.substring(end.length)
+}
+
+/**
+ * 「删除了…  撤销」这类提示条：和 App 一样的圆角胶囊，深色底白字，「撤销」用主题色；从下面弹上来。
+ * 用法和 SnackbarHost 一样。
+ */
+@Composable
+fun KaviSnackbarHost(state: androidx.compose.material3.SnackbarHostState, modifier: Modifier = Modifier) {
+    androidx.compose.material3.SnackbarHost(state, modifier) { data ->
+        val colors = androidx.compose.material3.MaterialTheme.colorScheme
+        val dark = isDarkSurface
+        androidx.compose.material3.Surface(
+            shape = androidx.compose.foundation.shape.CircleShape,
+            color = if (dark) colors.surfaceContainerHighest else androidx.compose.ui.graphics.Color(0xF2202124),
+            shadowElevation = 6.dp,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).appear(rise = 16),
+        ) {
+            androidx.compose.foundation.layout.Row(
+                Modifier.padding(start = 20.dp, end = 6.dp).height(48.dp),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            ) {
+                Text(data.visuals.message, Modifier.weight(1f, fill = false).padding(end = 12.dp), maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                    color = if (dark) colors.onSurface else androidx.compose.ui.graphics.Color.White)
+                data.visuals.actionLabel?.let { label ->
+                    androidx.compose.material3.TextButton(onClick = { data.performAction() }) {
+                        Text(label, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                            color = if (dark) colors.primary else androidx.compose.ui.graphics.Color(0xFF8AB4F8))
+                    }
+                }
+            }
+        }
+    }
 }

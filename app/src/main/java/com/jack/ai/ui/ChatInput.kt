@@ -546,6 +546,11 @@ internal fun InputBar(
                         },
                     )
                     Row(Modifier.padding(bottom = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // 打了很多字（粘贴了一大段）：发送键旁边显示字数
+                    androidx.compose.animation.AnimatedVisibility(text.length > 500,
+                        enter = androidx.compose.animation.fadeIn(), exit = androidx.compose.animation.fadeOut()) {
+                        Text("%,d 字".format(text.length), style = MaterialTheme.typography.labelSmall.tabular, color = colors.outline)
+                    }
                     val sendPress = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
                     // 回答进行中也能发：作为插话，下一步就会看到。打了字才从停止键旁边弹出来
                     androidx.compose.animation.AnimatedVisibility(

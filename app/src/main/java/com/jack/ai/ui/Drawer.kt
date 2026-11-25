@@ -251,7 +251,7 @@ fun HistoryDrawer(
                 }
                 item { Spacer(Modifier.height(12.dp)) }
             }
-            androidx.compose.material3.SnackbarHost(undoBar, Modifier.padding(horizontal = 8.dp))
+            KaviSnackbarHost(undoBar)
             // 底部三件套：左边设置（填了名字就是名字的首字），中间搜索胶囊，右边新对话
             val name = state.settings.userName.trim()
             val haptics = rememberHaptics()

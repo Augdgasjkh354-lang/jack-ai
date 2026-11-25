@@ -119,7 +119,7 @@ fun ProjectScreen(
     androidx.compose.runtime.CompositionLocalProvider(LocalGlass provides glass) {
     Scaffold(
         containerColor = colors.background,
-        snackbarHost = { androidx.compose.material3.SnackbarHost(undoBar) },
+        snackbarHost = { KaviSnackbarHost(undoBar) },
         topBar = {
             Column(Modifier.glassBar(top = true)) {
                 TopAppBar(
