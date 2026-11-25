@@ -1,5 +1,7 @@
 package com.jack.ai.ui
 
+import kotlinx.coroutines.launch
+
 import android.Manifest
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -77,10 +79,22 @@ private const val MORNING_PROMPT = "给我写一段早安问候：1. 今天的�
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit, onOpenWorkflows: () -> Unit = {}) {
+fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit, onOpenWorkflows: () -> Unit = {},
+                   /** 打开任务、监控结果所在的那个对话。 */
+                   onOpenChat: (String) -> Unit = {}) {
     val ctx = LocalContext.current
     var editing by remember { mutableStateOf<Routine?>(null) }
-    var deleting by remember { mutableStateOf<Routine?>(null) }
+    // 删了不再先确认：直接删，底下出「撤销」（连同上次跑的记录一起拿回来）
+    val undoBar = remember { androidx.compose.material3.SnackbarHostState() }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    fun deleteNow(r: Routine) {
+        vm.deleteRoutine(r.id)
+        scope.launch {
+            undoBar.currentSnackbarData?.dismiss()
+            val res = undoBar.showSnackbar("删除了「${r.title.take(12)}」", actionLabel = "撤销", duration = androidx.compose.material3.SnackbarDuration.Short)
+            if (res == androidx.compose.material3.SnackbarResult.ActionPerformed) vm.saveRoutine(r)
+        }
+    }
     var canNotify by remember { mutableStateOf(Routines.canNotify(ctx)) }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { canNotify = it }
     var canCalendar by remember { mutableStateOf(CalendarTool.canWrite(ctx)) }
@@ -91,6 +105,7 @@ fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit, onOpen
     // 按种类筛：全部 / 提醒 / 定时任务 / 监控
     var filter by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("all") }
     Scaffold(
+        snackbarHost = { KaviSnackbarHost(undoBar) },
         topBar = {
             TopAppBar(
                 title = {},
@@ -99,7 +114,8 @@ fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit, onOpen
         },
         floatingActionButton = {
             androidx.compose.material3.FloatingActionButton(
-                onClick = { editing = newRoutineDraft() },
+                // 筛着「定时任务」时点加号，新建的就是定时任务，不用再在框里切一次
+                onClick = { editing = newRoutineDraft().let { d -> if (filter == "task") d.copy(kind = "task") else d } },
                 shape = androidx.compose.foundation.shape.CircleShape,
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -141,19 +157,17 @@ fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit, onOpen
             }
             items(shown.sortedBy { it.nextAt() ?: Long.MAX_VALUE }, key = { it.id }) { r ->
                 // 监控在聊天里让 AI 设，这里只能开关和删除
-                RoutineCard(r, onClick = { if (r.kind != "watch") editing = r }, onToggle = { on -> vm.saveRoutine(r.copy(enabled = on)) },
-                    onDelete = { deleting = r },
+                // 跑过的任务、监控能直接打开结果所在的对话；监控点卡片就是看结果（以前点了没反应）
+                val chat = r.convId.takeIf { r.kind != "reminder" && state.conversations.any { c -> c.id == r.convId && c.messages.isNotEmpty() } }
+                RoutineCard(r, onClick = { if (r.kind != "watch") editing = r else chat?.let(onOpenChat) }, onToggle = { on -> vm.saveRoutine(r.copy(enabled = on)) },
+                    onDelete = { deleteNow(r) },
+                    onOpenChat = chat?.let { id -> { onOpenChat(id) } },
                     // 复制一份：新的 id 和对话，先打开编辑框改时间、改内容再存
                     onCopy = { editing = r.copy(id = com.jack.ai.data.newId(), convId = com.jack.ai.data.newId(), title = r.title + "（副本）", lastRunAt = 0, enabled = true) })
             }
         }
     }
 
-    deleting?.let { r ->
-        ConfirmDeleteDialog("删除「${r.title}」？", "删掉后不会再提醒，运行记录也看不到了。", onDismiss = { deleting = null }) {
-            vm.deleteRoutine(r.id); deleting = null
-        }
-    }
     editing?.let { r ->
         RoutineDialog(r, isNew = state.routines.none { it.id == r.id }, onDismiss = { editing = null }, onUpgrade = {
             // 照它的时间和要做的事搭一个工作流，原来的定时任务关掉（不删，想回去还能开）
@@ -235,7 +249,8 @@ private fun KindFilter(value: String, onChange: (String) -> Unit) {
 
 /** 一条提醒 / 任务 / 监控：左边彩色圆图标和种类，中间时间和标题，右边开关；下面一行是上次跑得怎么样。 */
 @Composable
-private fun RoutineCard(r: Routine, onClick: () -> Unit, onToggle: (Boolean) -> Unit, onDelete: () -> Unit, onCopy: () -> Unit) {
+private fun RoutineCard(r: Routine, onClick: () -> Unit, onToggle: (Boolean) -> Unit, onDelete: () -> Unit, onCopy: () -> Unit,
+                        onOpenChat: (() -> Unit)? = null) {
     val colors = MaterialTheme.colorScheme
     val (kindName, icon, tintLong) = kindLook(r.kind)
     val tint = androidx.compose.ui.graphics.Color(tintLong)
@@ -282,6 +297,7 @@ private fun RoutineCard(r: Routine, onClick: () -> Unit, onToggle: (Boolean) -> 
                 androidx.compose.foundation.layout.Box {
                     IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "更多", tint = colors.outline) }
                     androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        onOpenChat?.let { open -> androidx.compose.material3.DropdownMenuItem(text = { Text("看结果") }, onClick = { menu = false; open() }) }
                         if (r.kind != "watch") androidx.compose.material3.DropdownMenuItem(text = { Text("修改") }, onClick = { menu = false; onClick() })
                         if (r.kind != "watch") androidx.compose.material3.DropdownMenuItem(text = { Text("复制一份") }, onClick = { menu = false; onCopy() })
                         androidx.compose.material3.DropdownMenuItem(text = { Text("删除", color = colors.error) }, onClick = { menu = false; onDelete() })

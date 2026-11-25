@@ -220,6 +220,8 @@ internal fun InputBar(
     text: String,
     onTextChange: (String) -> Unit,
     onNeedTavily: () -> Unit,
+    /** 语音对话要转文字、还没有能转文字的办法：打开能下离线识别的那页。 */
+    onNeedSpeech: () -> Unit = {},
     focusRequest: Int = 0,
     editing: com.jack.ai.data.ChatMessage? = null,
     onCancelEdit: () -> Unit = {},
@@ -300,6 +302,12 @@ internal fun InputBar(
         if (ok) VoiceChat.start(ctx, vm) else micDenied(ctx, "没法语音对话")
     }
     fun startVoiceChat() {
+        // 以前只弹一长段字说去哪设置；现在直接打开那页（下离线语音识别，或者填 Key）
+        if (!VoiceInput.available(vm)) {
+            Toast.makeText(ctx, "语音对话要先能转文字：下载离线语音识别，或者填一个能转文字的 Key", Toast.LENGTH_LONG).show()
+            onNeedSpeech()
+            return
+        }
         if (androidx.core.content.ContextCompat.checkSelfPermission(ctx, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED)
             VoiceChat.start(ctx, vm)
         else voiceChatPermission.launch(android.Manifest.permission.RECORD_AUDIO)
@@ -367,6 +375,9 @@ internal fun InputBar(
         if (uris.isEmpty()) Toast.makeText(ctx, "没读到剪贴板里的图片", Toast.LENGTH_SHORT).show() else vm.addImages(uris)
     }
     val showClip = clipShown != null && editing == null
+    // 输入框上面点开的待发图片：(几张图, 从第几张看)
+    var viewingPending by remember { mutableStateOf<Pair<List<String>, Int>?>(null) }
+    viewingPending?.let { (list, at) -> ImageViewer(list, at) { viewingPending = null } }
     // 打「@」就地列出技能、邮箱，点一下补全
     val mentionNames = remember(settings) {
         settings.activeSkills().map { it.name } +
@@ -451,7 +462,11 @@ internal fun InputBar(
                         // 加进来的附件弹进来、移掉的让出位置时旁边的滑过去
                         items(state.pending, key = { it.id }) { att ->
                             Box(Modifier.animateItem(fadeInSpec = Springs.defaultEffects(), placementSpec = Springs.defaultSpatial(), fadeOutSpec = Springs.fastEffects())) {
-                                PendingChip(att, onOpen = openFile) { vm.removePending(att.id) }
+                                PendingChip(att, onOpen = openFile, onView = {
+                                    // 点缩略图看大图（发之前确认选对了），几张图左右滑
+                                    val imgs = state.pending.filter { it.kind == "image" && it.path.isNotEmpty() }
+                                    viewingPending = imgs.map { it.path } to imgs.indexOfFirst { it.id == att.id }.coerceAtLeast(0)
+                                }) { vm.removePending(att.id) }
                             }
                         }
                         if (state.importing) {
@@ -661,10 +676,12 @@ internal fun InputBar(
 private enum class SendAction { MIC, SEND, STOP, EDIT, VOICE }
 
 @Composable
-private fun PendingChip(att: Attachment, onOpen: (com.jack.ai.data.GeneratedFile) -> Unit, onRemove: () -> Unit) {
+private fun PendingChip(att: Attachment, onOpen: (com.jack.ai.data.GeneratedFile) -> Unit, onView: () -> Unit, onRemove: () -> Unit) {
+    val ctx = LocalContext.current
     if (att.kind == "image") {
         Box {
-            Thumbnail(att.path, 56.dp)
+            // 以前点缩略图没反应：现在点开看大图，叉还是删
+            Thumbnail(att.path, 56.dp, onClick = onView)
             IconButton(onClick = onRemove, modifier = Modifier.size(22.dp).align(Alignment.TopEnd)) {
                 Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.inverseSurface) {
                     Icon(Icons.Default.Close, "移除", Modifier.size(16.dp),
@@ -674,7 +691,7 @@ private fun PendingChip(att: Attachment, onOpen: (com.jack.ai.data.GeneratedFile
         }
     } else if (com.jack.ai.data.Attachments.isVideo(att.name) && att.path.isNotEmpty()) {
         Box {
-            VideoThumb(att.path, 56.dp, 56.dp)
+            VideoThumb(att.path, 56.dp, 56.dp) { playVideo(ctx, java.io.File(att.path)) }
             IconButton(onClick = onRemove, modifier = Modifier.size(22.dp).align(Alignment.TopEnd)) {
                 Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.inverseSurface) {
                     Icon(Icons.Default.Close, "移除", Modifier.size(16.dp),

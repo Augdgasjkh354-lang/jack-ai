@@ -1,7 +1,11 @@
 package com.jack.ai.ui
 
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.graphicsLayer
 import android.content.ActivityNotFoundException
@@ -174,17 +178,27 @@ internal fun playVideo(ctx: android.content.Context, f: File) {
 }
 
 @Composable
-internal fun ImageViewer(path: String, onDismiss: () -> Unit) {
-    val bmp by produceState<Bitmap?>(null, path) {
-        value = withContext(Dispatchers.IO) { Attachments.thumbnail(path, 2000) }
-    }
+internal fun ImageViewer(path: String, onDismiss: () -> Unit) = ImageViewer(listOf(path), 0, onDismiss)
+
+/**
+ * 看大图。[paths] 有几张时左右滑着翻（一条消息里发了好几张图，不用关了再点下一张），上面标「2 / 5」；
+ * 放大了的那张拖着看细节，还原了才能翻页。
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+internal fun ImageViewer(paths: List<String>, start: Int, onDismiss: () -> Unit) {
+    if (paths.isEmpty()) return
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
+    val pager = androidx.compose.foundation.pager.rememberPagerState(initialPage = start.coerceIn(0, paths.lastIndex)) { paths.size }
+    val path = paths[pager.currentPage.coerceIn(0, paths.lastIndex)]
     // 成组的设计图（名字-01、-02……）可以整组存
     val group by produceState(emptyList<File>(), path) {
         value = withContext(Dispatchers.IO) { groupOf(File(path)) }
     }
     var menu by remember { mutableStateOf(false) }
+    // 当前这张放大着：不翻页，手指拖的是图
+    var zoomed by remember { mutableStateOf(false) }
     fun save(files: List<File>) {
         menu = false
         scope.launch {
@@ -194,56 +208,25 @@ internal fun ImageViewer(path: String, onDismiss: () -> Unit) {
             Toast.makeText(ctx, if (n > 0) "已存 $n 张到相册（Pictures/Kavi）" else "没存成，看看是不是没给存储权限", Toast.LENGTH_LONG).show()
         }
     }
-    // 双指缩放、拖着看细节（截图里的小字、图表）；双击放大 / 还原；没放大时点一下关掉
-    var scale by remember(path) { mutableStateOf(1f) }
-    var offset by remember(path) { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
-    var zoomJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     // 打开时黑底淡入、图从 92% 放大到满屏，像从缩略图「展开」出来
-    val opening = remember(path) { androidx.compose.animation.core.Animatable(if (animationsOff(ctx)) 1f else 0f) }
-    LaunchedEffect(path) { opening.animateTo(1f, Springs.defaultSpatial()) }
+    val opening = remember { androidx.compose.animation.core.Animatable(if (animationsOff(ctx)) 1f else 0f) }
+    LaunchedEffect(Unit) { opening.animateTo(1f, Springs.defaultSpatial()) }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Box(
-            Modifier.fillMaxSize().graphicsLayer { alpha = opening.value.coerceIn(0f, 1f) }.background(Color.Black)
-                .pointerInput(path) {
-                    detectTapGestures(
-                        onTap = { if (scale <= 1.01f) onDismiss() },
-                        onDoubleTap = { at ->
-                            // 放大、还原都是弹簧过渡，看得出是从哪里放大的
-                            val (toScale, toOffset) = if (scale > 1.01f) 1f to androidx.compose.ui.geometry.Offset.Zero
-                                else 2.5f to (androidx.compose.ui.geometry.Offset(size.width / 2f, size.height / 2f) - at) * 1.5f
-                            val fromScale = scale
-                            val fromOffset = offset
-                            zoomJob?.cancel()
-                            zoomJob = scope.launch {
-                                androidx.compose.animation.core.animate(0f, 1f, animationSpec = Springs.defaultSpatial()) { t, _ ->
-                                    scale = fromScale + (toScale - fromScale) * t
-                                    offset = fromOffset + (toOffset - fromOffset) * t
-                                }
-                            }
-                        },
-                    )
-                }
-                .pointerInput(path) {
-                    detectTransformGestures { _, pan, zoom, _ ->
-                        scale = (scale * zoom).coerceIn(1f, 6f)
-                        offset = if (scale <= 1.01f) androidx.compose.ui.geometry.Offset.Zero else {
-                            val o = offset + pan
-                            val mx = size.width * (scale - 1) / 2f
-                            val my = size.height * (scale - 1) / 2f
-                            androidx.compose.ui.geometry.Offset(o.x.coerceIn(-mx, mx), o.y.coerceIn(-my, my))
-                        }
-                    }
-                },
-            contentAlignment = Alignment.Center,
-        ) {
-            bmp?.let {
-                Image(it.asImageBitmap(), null, Modifier.fillMaxWidth().graphicsLayer {
-                    val open = 0.92f + 0.08f * opening.value
-                    scaleX = scale * open; scaleY = scale * open; translationX = offset.x; translationY = offset.y
-                }, contentScale = ContentScale.Fit)
+        Box(Modifier.fillMaxSize().graphicsLayer { alpha = opening.value.coerceIn(0f, 1f) }.background(Color.Black)) {
+            androidx.compose.foundation.pager.HorizontalPager(
+                state = pager,
+                userScrollEnabled = !zoomed && paths.size > 1,
+                pageSpacing = 16.dp,
+                key = { paths[it] + "#" + it },
+                modifier = Modifier.fillMaxSize(),
+            ) { page ->
+                ZoomableImage(paths[page], opening.value, onDismiss) { z -> if (page == pager.currentPage) zoomed = z }
             }
-            Row(Modifier.align(Alignment.TopCenter).fillMaxWidth().statusBarsPadding().padding(12.dp)) {
+            Row(Modifier.align(Alignment.TopCenter).fillMaxWidth().statusBarsPadding().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 ViewerButton({ onDismiss() }) { Icon(Icons.Default.Close, "关闭", tint = Color.White) }
+                Spacer(Modifier.weight(1f))
+                if (paths.size > 1) Text("${pager.currentPage + 1} / ${paths.size}", color = Color.White,
+                    style = MaterialTheme.typography.labelLarge.tabular)
                 Spacer(Modifier.weight(1f))
                 // 直接发给别人，不用先存相册再去找
                 ViewerButton({
@@ -261,6 +244,75 @@ internal fun ImageViewer(path: String, onDismiss: () -> Unit) {
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * 大图里的一张：双指缩放、放大后拖着看细节；双击放大 / 还原；没放大时点一下关掉。
+ * 没放大时单指拖动不吃掉，留给外面翻页。
+ */
+@Composable
+private fun ZoomableImage(path: String, opening: Float, onDismiss: () -> Unit, onZoomed: (Boolean) -> Unit) {
+    val bmp by produceState<Bitmap?>(null, path) {
+        value = withContext(Dispatchers.IO) { Attachments.thumbnail(path, 2000) }
+    }
+    val scope = rememberCoroutineScope()
+    var scale by remember(path) { mutableStateOf(1f) }
+    var offset by remember(path) { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+    var zoomJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    val isZoomed = scale > 1.01f
+    LaunchedEffect(isZoomed) { onZoomed(isZoomed) }
+    Box(
+        Modifier.fillMaxSize()
+            .pointerInput(path) {
+                detectTapGestures(
+                    onTap = { if (scale <= 1.01f) onDismiss() },
+                    onDoubleTap = { at ->
+                        // 放大、还原都是弹簧过渡，看得出是从哪里放大的
+                        val (toScale, toOffset) = if (scale > 1.01f) 1f to androidx.compose.ui.geometry.Offset.Zero
+                            else 2.5f to (androidx.compose.ui.geometry.Offset(size.width / 2f, size.height / 2f) - at) * 1.5f
+                        val fromScale = scale
+                        val fromOffset = offset
+                        zoomJob?.cancel()
+                        zoomJob = scope.launch {
+                            androidx.compose.animation.core.animate(0f, 1f, animationSpec = Springs.defaultSpatial()) { t, _ ->
+                                scale = fromScale + (toScale - fromScale) * t
+                                offset = fromOffset + (toOffset - fromOffset) * t
+                            }
+                        }
+                    },
+                )
+            }
+            .pointerInput(path) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    do {
+                        val event = awaitPointerEvent()
+                        val fingers = event.changes.count { it.pressed }
+                        // 两根手指在缩放，或者已经放大了在拖：自己处理；一根手指、没放大：不管，外面翻页
+                        if (fingers >= 2 || scale > 1.01f) {
+                            val zoom = event.calculateZoom()
+                            val pan = event.calculatePan()
+                            scale = (scale * zoom).coerceIn(1f, 6f)
+                            offset = if (scale <= 1.01f) androidx.compose.ui.geometry.Offset.Zero else {
+                                val o = offset + pan
+                                val mx = size.width * (scale - 1) / 2f
+                                val my = size.height * (scale - 1) / 2f
+                                androidx.compose.ui.geometry.Offset(o.x.coerceIn(-mx, mx), o.y.coerceIn(-my, my))
+                            }
+                            event.changes.forEach { if (it.positionChanged()) it.consume() }
+                        }
+                    } while (event.changes.any { it.pressed })
+                }
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        bmp?.let {
+            Image(it.asImageBitmap(), null, Modifier.fillMaxWidth().graphicsLayer {
+                val open = 0.92f + 0.08f * opening
+                scaleX = scale * open; scaleY = scale * open; translationX = offset.x; translationY = offset.y
+            }, contentScale = ContentScale.Fit)
         }
     }
 }

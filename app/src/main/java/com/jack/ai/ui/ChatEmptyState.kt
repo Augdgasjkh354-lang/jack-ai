@@ -161,6 +161,7 @@ internal fun EmptyState(
     state: UiState,
     conv: Conversation?,
     onOpenMemory: () -> Unit,
+    onOpenRoutines: () -> Unit = {},
 ) {
     val project = state.project(state.currentProjectId)
     val colors = MaterialTheme.colorScheme
@@ -183,12 +184,15 @@ internal fun EmptyState(
             modifier = Modifier.padding(horizontal = 4.dp),
         )
         Spacer(Modifier.height(8.dp))
+        // 「今天还有 2 个提醒」点一下就去看是哪两个
+        val today = if (project == null) todayLine(state.routines) else null
         Text(
             if (project != null) "在项目「${project.name}」里，想做点什么？"
-            else todayLine(state.routines) ?: "今天想聊点什么？",
+            else today?.let { "$it ›" } ?: "今天想聊点什么？",
             style = MaterialTheme.typography.bodyLarge,
             color = colors.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 4.dp),
+            modifier = (if (today != null) Modifier.clip(Radii.s).clickable(onClickLabel = "看提醒和任务", onClick = onOpenRoutines) else Modifier)
+                .padding(horizontal = 4.dp, vertical = 2.dp),
         )
         Spacer(Modifier.weight(1f))
         // 写文案这些：点一下直接发出去，Kavi 用问题卡片把要知道的问清楚

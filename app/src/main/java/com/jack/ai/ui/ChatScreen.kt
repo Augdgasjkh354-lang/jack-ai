@@ -315,6 +315,7 @@ fun ChatScreen(
                         Toast.makeText(ctx, "在「联网搜索」里填 Exa 或 Tavily 的 Key 就能用", Toast.LENGTH_LONG).show()
                         onOpenSettingsPage("CONNECT")
                     },
+                    onNeedSpeech = { onOpenSettingsPage("KEY") },
                     // 标签栏：聊天（就是这里）、资料库、记忆、浏览器、提醒，一点就过去
                     // 放哪几个、什么顺序，在侧边栏里长按拖动改（见 TabArranger）
                     tabs = {
@@ -346,9 +347,10 @@ fun ChatScreen(
                 if (conv == null || conv.messages.isEmpty()) {
                     // 和记忆页同一片天：右上角一轮跟着钟点变色的光，深色模式下有星星
                     SkyBackdrop(Modifier.fillMaxWidth().height(320.dp), key = conv?.id)
-                    Box(Modifier.padding(padding)) { EmptyState(vm, state, conv, onOpenMemory) }
+                    Box(Modifier.padding(padding)) { EmptyState(vm, state, conv, onOpenMemory, onOpenRoutines = { if (onOpenTab != null) onOpenTab(KaviTab.ROUTINES) else onOpenRoutines() }) }
                 } else {
-                    MessageList(vm, conv, state.streamingHere, padding, editingId = editing?.id, onDeleted = ::onDeleted, summaryCollapsed = state.settings.summaryCollapsed, onEdit = { m ->
+                    MessageList(vm, conv, state.streamingHere, padding, editingId = editing?.id, onDeleted = ::onDeleted, summaryCollapsed = state.settings.summaryCollapsed,
+                        onOpenSettingsPage = onOpenSettingsPage, onEdit = { m ->
                         if (editing == null) editBackup = text
                         editing = m
                         text = m.content
@@ -514,7 +516,7 @@ private fun ModelPicker(title: String, settings: Settings, projectName: String?,
 @Composable
 private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolean, bars: PaddingValues,
                         editingId: String?, onDeleted: (Int) -> Unit, onEdit: (com.jack.ai.data.ChatMessage) -> Unit,
-                        summaryCollapsed: Boolean = false) {
+                        summaryCollapsed: Boolean = false, onOpenSettingsPage: (String) -> Unit = {}) {
     // 一打开就停在最后一条附近，不先闪一下最顶上
     val ctx = LocalContext.current
     val listState = remember(conv.id) { androidx.compose.foundation.lazy.LazyListState(firstVisibleItemIndex = (conv.messages.size - 1).coerceAtLeast(0)) }
@@ -583,6 +585,7 @@ private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolea
                                 onReport = { note -> vm.reportIssue(msg.id, note) },
                                 onFixApp = { text -> vm.send(text) },
                                 onAnswer = { text -> vm.send(text) },
+                                onOpenSettings = onOpenSettingsPage,
                                 // 列了清单的（在做任务）工具步骤按时间线显示
                                 work = msg.plan.isNotEmpty(),
                                 stepsCollapsed = summaryCollapsed,

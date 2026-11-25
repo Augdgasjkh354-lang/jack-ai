@@ -106,7 +106,8 @@ fun UserBubble(msg: ChatMessage, onDelete: () -> Unit, onEdit: (() -> Unit)? = n
     var menu by remember { mutableStateOf(false) }
     var selecting by remember { mutableStateOf(false) }
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
-    var viewing by remember { mutableStateOf<String?>(null) }
+    // 看第几张图（一条消息里几张图能左右滑着翻）
+    var viewing by remember { mutableStateOf<Int?>(null) }
     val ctxOuter = LocalContext.current
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
         val images = msg.attachments.filter { it.kind == "image" }
@@ -114,7 +115,7 @@ fun UserBubble(msg: ChatMessage, onDelete: () -> Unit, onEdit: (() -> Unit)? = n
         if (images.isNotEmpty()) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
                 verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                images.forEach { img -> Thumbnail(img.path, 96.dp) { viewing = img.path } }
+                images.forEachIndexed { i, img -> Thumbnail(img.path, 96.dp) { viewing = i } }
             }
             Spacer(Modifier.height(6.dp))
         }
@@ -217,7 +218,7 @@ fun UserBubble(msg: ChatMessage, onDelete: () -> Unit, onEdit: (() -> Unit)? = n
             }
         }
     }
-    viewing?.let { ImageViewer(it) { viewing = null } }
+    viewing?.let { i -> ImageViewer(msg.attachments.filter { it.kind == "image" }.map { it.path }, i) { viewing = null } }
     if (selecting) TextViewer("选择文字", load = { msg.content to false }, onDismiss = { selecting = false })
 }
 
@@ -269,6 +270,8 @@ fun AssistantMessage(
     convId: String = "",
     /** 问题卡片上选好的答案：当成用户的下一条消息发出去。 */
     onAnswer: ((String) -> Unit)? = null,
+    /** 报错是 Key 不对、余额不足这类要去设置里改的：打开设置的某一页（SettingsPage 的名字）。 */
+    onOpenSettings: ((String) -> Unit)? = null,
 ) {
     var restyling by remember { mutableStateOf(false) }
     if (restyling && onRestyle != null) {
@@ -418,8 +421,15 @@ fun AssistantMessage(
                     Icon(Icons.Default.Warning, null, Modifier.padding(top = 2.dp).size(16.dp), tint = colors.error)
                     Spacer(Modifier.size(8.dp))
                     // 报错能长按选中复制，拿去搜或者发给别人看
-                    androidx.compose.foundation.text.selection.SelectionContainer {
-                        Text(err, color = colors.onErrorContainer, style = MaterialTheme.typography.bodyMedium)
+                    Column {
+                        androidx.compose.foundation.text.selection.SelectionContainer {
+                            Text(err, color = colors.onErrorContainer, style = MaterialTheme.typography.bodyMedium)
+                        }
+                        // 报错说「Key 不对」「余额不足」：以前要自己退出去、找设置、找那一页；现在点一下就到
+                        val fix = onOpenSettings?.let { errorSettingsPage(err, msg.model) }
+                        if (fix != null) Text(if (fix == "KEY") "去设置检查 DeepSeek Key ›" else "去设置检查模型服务 ›",
+                            style = MaterialTheme.typography.labelLarge, color = colors.error,
+                            modifier = Modifier.padding(top = 6.dp).clip(Radii.xs).clickable { onOpenSettings(fix) }.padding(vertical = 2.dp))
                     }
                 }
             }
@@ -457,6 +467,16 @@ fun AssistantMessage(
                                 onClick = { more = false; Speaker.toggle(ctx, msg.id, msg.content) },
                             )
                         }
+                        // 复制键复制的是原文（带 Markdown 符号，贴到笔记软件里格式还在）；贴微信、短信用这个
+                        if (msg.content.isNotEmpty()) DropdownMenuItem(
+                            text = { Text("复制纯文字") },
+                            leadingIcon = { Icon(AppIcons.Copy, null) },
+                            onClick = {
+                                more = false
+                                clipboard.setText(AnnotatedString(markdownToPlain(msg.content)))
+                                copiedToast(ctx)
+                            },
+                        )
                         if (onRestyle != null && msg.content.isNotEmpty()) DropdownMenuItem(
                             text = { Text("改成我想要的说法") },
                             leadingIcon = { Icon(Icons.Default.Edit, null) },
@@ -524,3 +544,13 @@ internal fun CollapsiblePill(expanded: Boolean, content: @Composable () -> Unit)
 
 /** 自己发的消息超过这么多行就先折起来。 */
 private const val LONG_LINES = 12
+
+/**
+ * 回答的报错要去设置里哪一页才改得了：Key 不对、没权限、余额不足、登录失效。
+ * 用的是内置 DeepSeek（模型名不是 "c:" 开头）去「DeepSeek API Key」页（那里能查余额），别的服务去「其他模型服务」。别的错返回 null。
+ */
+internal fun errorSettingsPage(error: String, model: String): String? {
+    val keyIssue = listOf("Key 不对", "没有权限", "余额不足", "重新登录", "登录失效").any { it in error }
+    if (!keyIssue) return null
+    return if (model.startsWith("c:")) "PROVIDERS" else "KEY"
+}

@@ -394,7 +394,8 @@ class MainActivity : FragmentActivity() {
                             onOpenTab = { openTab(it) },
                             onOpenTerminal = { stack.add(Screen.Terminal(it)) },
                         )
-                        Screen.Routines -> RoutinesScreen(vm = vm, state = state, onBack = back, onOpenWorkflows = { stack.add(Screen.Workflows) })
+                        Screen.Routines -> RoutinesScreen(vm = vm, state = state, onBack = back, onOpenWorkflows = { stack.add(Screen.Workflows) },
+                            onOpenChat = { id -> vm.select(id); stack.clear() })
                         Screen.Workflows -> com.jack.ai.ui.WorkflowsScreen(onBack = back)
                         Screen.Library -> LibraryScreen(vm = vm, state = state, onBack = back)
                         Screen.Tables -> TablesScreen(onBack = back)
@@ -451,6 +452,8 @@ class MainActivity : FragmentActivity() {
                 state.confirm?.let { req ->
                     AlertDialog(
                         onDismissRequest = { vm.answerConfirm(req.id, false) },
+                        // 点外面不算「取消」：手指碰一下空白处，Kavi 就当被拒了、白干一场。返回键和「取消」照常拒绝
+                        properties = androidx.compose.ui.window.DialogProperties(dismissOnClickOutside = false),
                         title = { Text(req.title) },
                         text = {
                             Text(req.body, Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),

@@ -106,3 +106,58 @@ class TimeStampTest {
         assertEquals("3月3日 08:05", stampWhen(cal.timeInMillis, now))
     }
 }
+
+class FrictionRoundThreeTest {
+    @Test
+    fun plainCopyDropsMarkdownMarks() {
+        val md = """
+            ## 标题
+            这是**重点**和`代码`，还有[链接](https://a.com)。
+
+            - 第一条
+            * [x] 做完的
+
+            | 名字 | 价格 |
+            |---|---:|
+            | 苹果 | 3 |
+
+            ```kotlin
+            val a = 1 * 2
+            ```
+        """.trimIndent()
+        val plain = markdownToPlain(md)
+        assertEquals("""
+            标题
+            这是重点和代码，还有链接（https://a.com）。
+
+            • 第一条
+            • 做完的
+
+            名字  价格
+            苹果  3
+
+            val a = 1 * 2
+        """.trimIndent(), plain)
+        // 乘号、单个星号不当斜体吃掉
+        assertEquals("3 * 4 = 12", markdownToPlain("3 * 4 = 12"))
+        assertEquals("要斜体", markdownToPlain("要*斜体*"))
+    }
+
+    @Test
+    fun memorySearchMatchesEveryWordInTextOrTags() {
+        val m = com.jack.ai.data.MemoryItem(text = "用户喜欢喝 Latte", about = listOf("咖啡店"))
+        assertTrue(memoryMatches(m, ""))
+        assertTrue(memoryMatches(m, "latte"))
+        assertTrue(memoryMatches(m, "喜欢  咖啡"))
+        assertTrue(!memoryMatches(m, "喜欢 茶"))
+    }
+
+    @Test
+    fun keyErrorsPointToTheRightSettingsPage() {
+        assertEquals("KEY", errorSettingsPage("API Key 不对或没有权限，请到设置里检查（401）", "deepseek-flash"))
+        assertEquals("KEY", errorSettingsPage("账户余额不足，请先充值（402）", ""))
+        assertEquals("PROVIDERS", errorSettingsPage("API Key 不对或没有权限，请到设置里检查（401）", "c:p1:gpt-5"))
+        assertEquals("PROVIDERS", errorSettingsPage("ChatGPT 登录失效了，到 设置 → 模型服务 里重新登录。", "c:p2:gpt-6.2-sol"))
+        assertNull(errorSettingsPage("服务器繁忙，稍后再试（503）", "deepseek-flash"))
+    }
+}

@@ -97,7 +97,8 @@ fun AskCards(msgId: String, cards: List<AskCard>, active: Boolean, onAnswer: (St
                         OutlinedTextField(
                             value = others[i], onValueChange = { others[i] = it },
                             placeholder = { Text("想怎么说都行") },
-                            modifier = Modifier.fillMaxWidth().padding(top = 6.dp).testTag("ask-other-$i"),
+                            // 点了「其他」就是要自己写：光标放进去、键盘弹起来，不用再点一下输入框
+                            modifier = Modifier.fillMaxWidth().padding(top = 6.dp).testTag("ask-other-$i").focusOnShow(),
                             keyboardOptions = KeyboardOptions(imeAction = if (instant) ImeAction.Send else ImeAction.Done),
                             keyboardActions = KeyboardActions(onSend = { send() }),
                             singleLine = false, maxLines = 4,

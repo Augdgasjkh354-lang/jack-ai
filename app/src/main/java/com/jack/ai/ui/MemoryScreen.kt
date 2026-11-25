@@ -119,7 +119,10 @@ private fun MemoryPage(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
     val hot = state.memories.inSpace(space, settings)
     val deepHere = deepAll.inSpace(space, settings)
     fun about(m: MemoryItem) = aboutPick?.let { a -> m.about.any { com.jack.ai.data.memory.MemoryGraph.norm(it) == com.jack.ai.data.memory.MemoryGraph.norm(a) } } ?: true
-    val shown = hot.filter(::about)
+    // 记忆多了一条条往下翻着找太累：搜一下，正文和标的人、事都算
+    var query by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
+    fun hit(m: MemoryItem) = memoryMatches(m, query)
+    val shown = hot.filter(::about).filter(::hit)
     LaunchedEffect(Unit) {
         vm.reloadMemory()
         vm.markDreamsSeen()
@@ -193,6 +196,9 @@ private fun MemoryPage(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                     IconButton(onClick = { adding = true }) { Icon(Icons.Default.Add, "添加记忆") }
                     if (hot.isNotEmpty()) TextButton(onClick = { confirmClear = true }) { Text("清空") }
                 }
+                if (hot.size + deepHere.size > 8 || query.isNotEmpty()) {
+                    SearchField(query, { query = it }, Modifier.padding(top = 4.dp, bottom = 8.dp), placeholder = "搜记忆")
+                }
                 AboutBar(hot + deepHere, aboutPick) { aboutPick = it }
                 // 关系图：标过的人和事、谁和谁出现在同一条记忆里
                 var showGraph by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
@@ -214,6 +220,8 @@ private fun MemoryPage(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                 }
                 if (hot.isEmpty()) {
                     Text("还没有记忆。", color = MaterialTheme.colorScheme.outline)
+                } else if (query.isNotBlank() && shown.isEmpty()) {
+                    Text("常记的里没有「${query.trim()}」" + if (deepHere.any(::hit)) "，深处有" else "", color = MaterialTheme.colorScheme.outline)
                 }
             }
             items(shown, key = { it.id }) { m ->
@@ -240,7 +248,7 @@ private fun MemoryPage(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                 }
             }
 
-            item { DeepMemories(vm, state.memories, deepHere.filter(::about), aboutPick != null) }
+            item { DeepMemories(vm, state.memories, deepHere.filter(::about).filter(::hit), aboutPick != null || query.isNotBlank()) }
 
             item {
                 Text("整理记录", style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
@@ -510,3 +518,11 @@ internal fun aboutLine(m: MemoryItem): String? = listOfNotNull(
 
 /** 至少有两个标过的人和事才画关系图。 */
 internal fun MemoryGraphHas(all: List<MemoryItem>): Boolean = com.jack.ai.data.memory.MemoryGraph.entities(all).size >= 2
+
+/** 记忆搜索：空格隔开的每个词都要在正文或标的人、事里出现（不分大小写）。没输入算都命中。 */
+internal fun memoryMatches(m: MemoryItem, query: String): Boolean {
+    val words = query.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+    if (words.isEmpty()) return true
+    val hay = (listOf(m.text) + m.about).joinToString("\n")
+    return words.all { hay.contains(it, ignoreCase = true) }
+}

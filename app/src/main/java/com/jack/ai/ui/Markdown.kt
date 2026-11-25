@@ -186,3 +186,41 @@ internal fun splitBlocks(md: String): List<String> {
     if (cur.isNotBlank()) out += cur.toString().trimEnd('\n')
     return out
 }
+
+/**
+ * 回答去掉 Markdown 符号后的纯文字，贴到微信、短信里不带一堆「**」「##」「|」。
+ * 代码块留里面的代码（去掉 ``` 那两行），链接留文字和网址，列表换成「• 」，表格一行一行用空格隔开。
+ */
+internal fun markdownToPlain(md: String): String {
+    val out = mutableListOf<String>()
+    var fence = false
+    for (raw in md.lines()) {
+        val line = raw.trimEnd()
+        if (line.trimStart().startsWith("```")) { fence = !fence; continue }
+        if (fence) { out += raw; continue }
+        // 表格分隔行（|---|:--:|）不要
+        if (Regex("^\\s*\\|?\\s*:?-{2,}:?\\s*(\\|\\s*:?-{2,}:?\\s*)*\\|?\\s*$").matches(line)) continue
+        // 分割线
+        if (Regex("^\\s*([-*_])(\\s*\\1){2,}\\s*$").matches(line)) continue
+        var t = line
+        // 表格行：| a | b | → a  b
+        if (t.trimStart().startsWith("|") && t.trimEnd().endsWith("|") && t.count { it == '|' } >= 2) {
+            t = t.trim().removePrefix("|").removeSuffix("|").split("|").joinToString("  ") { it.trim() }
+        }
+        t = t.replace(Regex("^(\\s*)#{1,6}\\s+"), "$1")            // 标题
+            .replace(Regex("^(\\s*)>\\s?"), "$1")                  // 引用
+            .replace(Regex("^(\\s*)[-*+]\\s+\\[( |x|X)]\\s+"), "$1• ") // 任务列表
+            .replace(Regex("^(\\s*)[-*+]\\s+"), "$1• ")            // 无序列表
+            .replace(Regex("!\\[([^\\]]*)]\\([^)]*\\)"), "$1")      // 图片
+            .replace(Regex("\\[([^\\]]+)]\\(([^)\\s]+)[^)]*\\)")) { m ->
+                val (text, url) = m.destructured
+                if (text == url) url else "$text（$url）"
+            }
+            .replace(Regex("(\\*\\*|__)(.+?)\\1"), "$2")            // 粗体
+            .replace(Regex("~~(.+?)~~"), "$1")                       // 删除线
+            .replace(Regex("(?<![\\w*])\\*(?!\\s)(.+?)(?<!\\s)\\*(?![\\w*])"), "$1") // 斜体
+            .replace(Regex("`([^`]+)`"), "$1")                       // 行内代码
+        out += t
+    }
+    return out.joinToString("\n").replace(Regex("\\n{3,}"), "\n\n").trim()
+}
