@@ -45,6 +45,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Build
@@ -135,6 +136,9 @@ fun SettingsScreen(
     androidx.activity.compose.BackHandler(enabled = page != null) { leave() }
     val homeScroll = rememberScrollState()
     val pageScroll = remember(page) { androidx.compose.foundation.ScrollState(0) }
+    // 大标题收起的进度：0 是大标题完整露着，1 是滑到顶栏后面了（这时顶栏中间的小标题完全出来）
+    val titlePx = with(androidx.compose.ui.platform.LocalDensity.current) { 40.dp.toPx() }
+    val collapse = { ((if (page == null) homeScroll else pageScroll).value / titlePx).coerceIn(0f, 1f) }
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     // 和聊天页一样：内容从毛玻璃顶栏后面滚过去
     val glass = remember { dev.chrisbanes.haze.HazeState() }
@@ -144,7 +148,9 @@ fun SettingsScreen(
         containerColor = if (dark) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.surfaceContainerLow,
         topBar = {
             androidx.compose.material3.CenterAlignedTopAppBar(
-                title = { Text(page?.title ?: "设置", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
+                // 小标题：往下翻、大标题滑到顶栏后面时才淡出来（iOS 的大标题那样）
+                title = { Text(page?.title ?: "设置", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                    modifier = Modifier.graphicsLayer { alpha = collapse() }) },
                 colors = androidx.compose.material3.TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = androidx.compose.ui.graphics.Color.Transparent, scrolledContainerColor = androidx.compose.ui.graphics.Color.Transparent),
                 modifier = Modifier.glassBar(top = true),
@@ -164,6 +170,15 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            // 大标题：往下翻时淡出、轻轻往上收，顶栏里的小标题接着淡出来
+            Text(page?.title ?: "设置", style = MaterialTheme.typography.headlineLarge,
+                modifier = Modifier.padding(start = 4.dp).graphicsLayer {
+                    val c = collapse()
+                    alpha = 1f - c
+                    val s = 1f - 0.08f * c
+                    scaleX = s; scaleY = s
+                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f)
+                })
             if (page == null) SettingsHome(vm, settings, onPick = { page = it }, onOpenSkills = onOpenSkills, onOpenUsage = onOpenUsage)
             // ---- 个性化 ----
             if (page == SettingsPage.PROFILE) Section {
@@ -665,16 +680,12 @@ private fun SettingsHome(
         val month = java.text.SimpleDateFormat("yyyy-MM", Locale.US).format(java.util.Date())
         value = vm.loadUsage().filter { it.date.startsWith(month) }.sumOf { it.costYuan() ?: 0.0 }
     }
-    val quotaCtx = androidx.compose.ui.platform.LocalContext.current
-    val quota = remember(settings) {
-        // 只放用得最多的那个窗口，两个都放一行装不下
-        com.jack.ai.data.Quota.windows(quotaCtx, settings).filter { it.limit > 0 }.maxByOrNull { it.fraction }
-            ?.let { (if (it.length == com.jack.ai.data.Quota.WEEK) "本周 " else "5 小时 ") + "${(it.fraction * 100).toInt()}%" }
-    }
     fun go(p: SettingsPage, icon: androidx.compose.ui.graphics.vector.ImageVector, value: String? = null, warn: Boolean = false) =
         SettingsEntry(icon, p.title, value, warn) { onPick(p) }
     val noKey = !settings.hasAnyKey()
     val model = settings.modelChoices().firstOrNull { it.key == settings.model }?.label
+    // 最上面一张用量卡：本月花了多少、预算和额度用到哪了，点进统计
+    UsageSummaryCard(settings, monthSpent, onOpenUsage)
     SettingsGroup(order = 1, title = "关于你", listOf(
         go(SettingsPage.PROFILE, Icons.Default.Person, settings.userName.ifBlank { "未设置" }),
     ))
@@ -700,7 +711,8 @@ private fun SettingsHome(
     ))
     SettingsGroup(order = 5, title = "应用", listOfNotNull(
         go(SettingsPage.LOOK, AppIcons.Moon, settings.themeMode.label),
-        SettingsEntry(AppIcons.Chart, "统计", listOfNotNull(monthSpent?.let { "本月 " + yuan(it) }, quota).joinToString(" · ").ifEmpty { null }, onClick = onOpenUsage),
+        // 花费和额度已经在最上面的用量卡里了，这一行不再重复
+        SettingsEntry(AppIcons.Chart, "统计", onClick = onOpenUsage),
         go(SettingsPage.PRIVACY, Icons.Default.Lock, when {
             settings.fullAuth -> "完全授权开着"
             settings.appLock -> "应用锁开着"
@@ -710,6 +722,10 @@ private fun SettingsHome(
         go(SettingsPage.ADVANCED, Icons.Default.Settings),
         go(SettingsPage.LEGAL, AppIcons.File),
     ))
+    // 最底下：版本号，灰色小字居中
+    Text("Kavi v${com.jack.ai.BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.outline, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp))
 }
 
 /** 一组入口：灰色粗体小标题，下面一张大圆角卡片，行和行之间一道从文字起头的细线。图标是素色线条，和聊天页一样克制。 */
@@ -1047,5 +1063,60 @@ private fun FontPicker(vm: ChatViewModel, current: String) {
         }
         Text("「跟随系统」在有些手机上和系统界面的字不一样（换字体主题只换了老式控件）；那就在上面选手机里自带的那款，比如 MiSans、HarmonyOS Sans、OPPO Sans。也可以导入下载的 .ttf / .otf。",
             style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+    }
+}
+
+/**
+ * 设置首页最上面的用量卡：本月花了多少（大字），设了预算和额度的各一条细进度条、多久后恢复；右上角「统计」点进去看明细。
+ */
+@Composable
+private fun UsageSummaryCard(settings: Settings, monthSpent: Double?, onOpenUsage: () -> Unit) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val colors = MaterialTheme.colorScheme
+    val dark = colors.background.luminance() < 0.5f
+    val now = System.currentTimeMillis()
+    val windows = remember(settings) { com.jack.ai.data.Quota.windows(ctx, settings).filter { it.limit > 0 } }
+    androidx.compose.material3.Surface(
+        onClick = onOpenUsage,
+        shape = Radii.xl,
+        color = if (dark) colors.surfaceContainerHigh else colors.surfaceContainerLowest,
+        border = androidx.compose.foundation.BorderStroke(0.8.dp, glassEdge()),
+        modifier = Modifier.fillMaxWidth().appear(0, rise = 8),
+    ) {
+        Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.Bottom) {
+                Column(Modifier.weight(1f)) {
+                    Text("本月", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
+                    Text(monthSpent?.let { yuan(it) } ?: "…", style = MaterialTheme.typography.headlineSmall.tabular)
+                }
+                Text("统计 ›", style = MaterialTheme.typography.labelLarge, color = colors.primary)
+            }
+            val budget = settings.monthlyBudget
+            if (budget > 0 && monthSpent != null) {
+                val f = (monthSpent / budget).toFloat()
+                UsageLine("预算 ${yuan(budget)}", "${(f * 100).toInt().coerceAtMost(999)}%", f,
+                    if (f >= 1f) colors.error else colors.primary, null)
+            }
+            windows.forEach { w ->
+                UsageLine(w.label, "${(w.fraction * 100).toInt()}%", w.fraction,
+                    if (w.over) colors.error else if (w.fraction >= 0.8f) Hue.AMBER.color else colors.primary,
+                    if (w.start <= 0) "还没开始计时" else com.jack.ai.data.Quota.resetText(w.resetAt, now) + "恢复")
+            }
+            if (budget <= 0 && windows.isEmpty()) Text("还没设预算和额度，点这里去统计页设置。",
+                style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun UsageLine(label: String, value: String, fraction: Float, color: androidx.compose.ui.graphics.Color, note: String?) {
+    val colors = MaterialTheme.colorScheme
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row {
+            Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+            Text(value, style = MaterialTheme.typography.bodyMedium.tabular, color = colors.onSurfaceVariant)
+        }
+        SoftBar(fraction, color)
+        if (note != null) Text(note, style = MaterialTheme.typography.labelSmall, color = colors.outline)
     }
 }

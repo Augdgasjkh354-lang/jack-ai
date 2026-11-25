@@ -766,7 +766,7 @@ private fun requestKind(label: String): Int = when {
 
 /** 细圆头的进度条：轨道淡，进度为 0 时什么都不画（M3 默认会在末端留一个孤零零的小点）。 */
 @Composable
-private fun SoftBar(fraction: Float, color: androidx.compose.ui.graphics.Color, modifier: Modifier = Modifier) {
+internal fun SoftBar(fraction: Float, color: androidx.compose.ui.graphics.Color, modifier: Modifier = Modifier) {
     LinearProgressIndicator(
         progress = { fraction.coerceIn(0f, 1f) },
         modifier = modifier.fillMaxWidth().height(6.dp).clip(CircleShape),
