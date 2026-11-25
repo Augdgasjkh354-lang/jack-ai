@@ -70,14 +70,11 @@ fun FileLibraryScreen(state: UiState, onBack: () -> Unit, onOpenChat: (String) -
                 Text("所有对话里你发的文件、Kavi 做的文件都在这里", style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            item {
-                // 右边一个清空；键盘上的「搜索」收起键盘，把结果露出来
-                val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
-                OutlinedTextField(value = query, onValueChange = { query = it }, placeholder = { Text("搜文件名或对话") },
-                    singleLine = true, modifier = Modifier.fillMaxWidth(), trailingIcon = clearButton(query) { query = "" },
-                    keyboardOptions = SearchKeyboard, keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { keyboard?.hide() }))
-            }
-            item {
+            // 一个文件都没有：搜索框和筛选都不摆，只留空状态
+            val none = list != null && list.isEmpty()
+            // 和侧边栏同一个圆头搜索框（带放大镜、清空、键盘搜索键）
+            if (!none) item { SearchField(query, { query = it }, placeholder = "搜文件名或对话") }
+            if (!none) item {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(kind == null, { kind = null }, label = { Text("全部") })
                     FileLibrary.Kind.entries.forEach { k ->
@@ -91,7 +88,8 @@ fun FileLibraryScreen(state: UiState, onBack: () -> Unit, onOpenChat: (String) -
                 return@LazyColumn
             }
             val shown = FileLibrary.filter(list, kind?.let { FileLibrary.Kind.valueOf(it) }, query)
-            if (shown.isEmpty()) item {
+            if (none) item { EmptyNote(AppIcons.Folder, "还没有文件", "发给 Kavi 的附件、它做出来的文件都会出现在这里。") }
+            else if (shown.isEmpty()) item {
                 Text(if (list.isEmpty()) "还没有文件。发给 Kavi 的附件、它做出来的文件都会出现在这里。" else "没有符合的文件。",
                     color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(top = 24.dp))
             }

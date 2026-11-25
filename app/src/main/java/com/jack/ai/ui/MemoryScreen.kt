@@ -160,7 +160,7 @@ private fun MemoryPage(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text("聊天时顺手记", style = MaterialTheme.typography.titleSmall)
-                                Text("每聊 3 轮用后台模型看一眼，有值得长期记的当场记下", style = MaterialTheme.typography.bodySmall,
+                                Text(tidyBreaks("每聊 3 轮用后台模型看一眼，有值得长期记的当场记下"), style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             Switch(settings.chatReview && settings.memoryEnabled, { on -> vm.updateSettings { it.copy(chatReview = on) } }, enabled = settings.memoryEnabled)

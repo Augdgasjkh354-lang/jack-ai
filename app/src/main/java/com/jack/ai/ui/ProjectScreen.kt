@@ -206,6 +206,9 @@ fun ProjectScreen(
                                     onDelete = { vm.delete(c.id); offerUndo("删除了「${c.title.take(12)}」") { vm.undoDeleteConversation() } },
                                     onPin = { vm.togglePin(c.id) },
                                     onMemory = { memoryOf = c },
+                                    // 项目里的对话多半标题相近：下面带一行最后说了什么、多久前
+                                    subtitle = listOf(shortWhen(c.updatedAt), preview(c))
+                                        .filter { it.isNotBlank() }.joinToString(" · "),
                                 )
                             }
                         }

@@ -269,7 +269,7 @@ private fun RoutineCard(r: Routine, onClick: () -> Unit, onToggle: (Boolean) -> 
                 Spacer(Modifier.size(10.dp))
                 Column(Modifier.weight(1f).padding(top = 2.dp)) {
                     Text(
-                        r.describe() + (if (r.then.isNotBlank()) " · 满足后接着做" else "") + (if (r.work) " · 做事模式" else "") + (if (r.offPeak) " · 避开高峰" else ""),
+                        tidyBreaks(r.describe() + (if (r.then.isNotBlank()) " · 满足后接着做" else "") + (if (r.work) " · 做事模式" else "") + (if (r.offPeak) " · 避开高峰" else "")),
                         style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
                     )
                     Text(r.title, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,

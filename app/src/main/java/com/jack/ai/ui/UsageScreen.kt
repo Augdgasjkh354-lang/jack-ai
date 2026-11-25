@@ -14,6 +14,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -116,7 +118,9 @@ fun UsageScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                     Card(Modifier.weight(1f)) {
                         Column(Modifier.padding(14.dp)) {
                             Text(label, style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
-                            Text(yuan(l.money), style = MaterialTheme.typography.titleLarge.tabular, fontFamily = FontFamily.Serif)
+                            // 和全 App 一样用无衬线；数字等宽，三格对得齐
+                            Text(yuan(l.money), style = MaterialTheme.typography.titleLarge.tabular, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                                maxLines = 1, softWrap = false)
                             Text(tokens(l.total) + " token", style = MaterialTheme.typography.labelMedium.tabular, color = colors.onSurfaceVariant)
                         }
                     }
@@ -184,11 +188,7 @@ fun UsageScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                     }
                     if (budget > 0) {
                         val spent = monthList.money
-                        LinearProgressIndicator(
-                            progress = { (spent / budget).toFloat().coerceIn(0f, 1f) },
-                            color = if (spent >= budget) colors.error else colors.primary,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
+                        SoftBar((spent / budget).toFloat(), if (spent >= budget) colors.error else colors.primary)
                         Text("本月已花 ${yuan(spent)} / ${yuan(budget)}",
                             style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                     } else {
@@ -197,11 +197,16 @@ fun UsageScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
             }
 
             // ---- DeepSeek 时段 ----
+            // 一行状态，不是警告：高峰用琥珀色的小点，空闲用绿色，不再整行红字
             val peak = Pricing.isPeak(System.currentTimeMillis())
+            val hue = if (peak) Hue.AMBER else Hue.GREEN
             Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(if (peak) "现在是 DeepSeek 高峰时段" else "现在是 DeepSeek 空闲时段（5 折）",
-                        style = MaterialTheme.typography.titleSmall, color = if (peak) colors.error else colors.primary)
+                Row(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(8.dp).clip(CircleShape).background(hue.color))
+                    Spacer(Modifier.width(10.dp))
+                    Text(if (peak) "DeepSeek 高峰时段" else "DeepSeek 空闲时段", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                    Text(if (peak) "原价" else "5 折", style = MaterialTheme.typography.labelLarge, color = hue.color,
+                        modifier = Modifier.clip(CircleShape).background(hue.color.copy(alpha = 0.12f)).padding(horizontal = 10.dp, vertical = 3.dp))
                 }
             }
 
@@ -388,11 +393,7 @@ private fun QuotaCard(settings: com.jack.ai.data.Settings, onEdit: () -> Unit) {
                         style = MaterialTheme.typography.bodySmall.tabular, color = colors.onSurfaceVariant,
                     )
                 }
-                if (w.limit > 0) LinearProgressIndicator(
-                    progress = { w.fraction },
-                    color = if (w.over) colors.error else if (w.fraction >= 0.8f) colors.tertiary else colors.primary,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                if (w.limit > 0) SoftBar(w.fraction, if (w.over) colors.error else if (w.fraction >= 0.8f) Hue.AMBER.color else colors.primary)
                 Text(
                     when {
                         w.start <= 0 -> "还没开始计时，下次用时开始算"
@@ -424,11 +425,7 @@ private fun ContextCard(vm: ChatViewModel, conv: Conversation?) {
                         Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
                         Text("约 ${tokens(n.toLong())}", style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
                     }
-                    LinearProgressIndicator(
-                        progress = { n.toFloat() / total },
-                        modifier = Modifier.fillMaxWidth().padding(top = 3.dp),
-                        trackColor = colors.surfaceVariant,
-                    )
+                    SoftBar(n.toFloat() / total, colors.primary, Modifier.padding(top = 4.dp))
                 }
             }
             val real = conv?.lastPromptTokens ?: 0
@@ -765,4 +762,17 @@ private fun requestKind(label: String): Int = when {
     label.startsWith("子 agent") -> 3
     label.isBlank() || label.startsWith("后台") || label.startsWith("任务") || "交付前复核" in label -> 2
     else -> 1
+}
+
+/** 细圆头的进度条：轨道淡，进度为 0 时什么都不画（M3 默认会在末端留一个孤零零的小点）。 */
+@Composable
+private fun SoftBar(fraction: Float, color: androidx.compose.ui.graphics.Color, modifier: Modifier = Modifier) {
+    LinearProgressIndicator(
+        progress = { fraction.coerceIn(0f, 1f) },
+        modifier = modifier.fillMaxWidth().height(6.dp).clip(CircleShape),
+        color = color,
+        trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+        gapSize = 0.dp,
+        drawStopIndicator = {},
+    )
 }

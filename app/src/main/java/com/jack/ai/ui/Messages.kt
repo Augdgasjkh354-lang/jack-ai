@@ -42,6 +42,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -211,18 +213,19 @@ private fun BranchSwitch(index: Int, total: Int, onSwitch: (Int) -> Unit) {
     val colors = MaterialTheme.colorScheme
     val haptics = rememberHaptics()
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
+        // 用矢量箭头，不用「‹ ›」字符：字符又细又小，在不同字体里粗细还不一样
         @Composable
-        fun arrow(label: String, desc: String, enabled: Boolean, to: Int) {
+        fun arrow(left: Boolean, desc: String, enabled: Boolean, to: Int) {
             Box(contentAlignment = Alignment.Center, modifier = Modifier.size(32.dp).clip(CircleShape)
                 .then(if (enabled) Modifier.clickable(onClickLabel = desc) { haptics.select(); onSwitch(to) } else Modifier)) {
-                Text(label, style = MaterialTheme.typography.titleMedium,
-                    color = if (enabled) colors.onSurfaceVariant else colors.outlineVariant)
+                Icon(if (left) Icons.AutoMirrored.Filled.KeyboardArrowLeft else Icons.AutoMirrored.Filled.KeyboardArrowRight, desc,
+                    Modifier.size(20.dp), tint = if (enabled) colors.onSurfaceVariant else colors.onSurface.copy(alpha = 0.18f))
             }
         }
-        arrow("‹", "上一个版本", index > 0, index - 1)
+        arrow(true, "上一个版本", index > 0, index - 1)
         // 第几版跟着翻：往后翻数字从下面顶上来，往前翻从上面落下去
         RollingText(index + 1, MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant, format = { "$it / $total" })
-        arrow("›", "下一个版本", index < total - 1, index + 1)
+        arrow(false, "下一个版本", index < total - 1, index + 1)
     }
 }
 
@@ -473,8 +476,10 @@ private fun SmallAction(icon: ImageVector, desc: String, onClick: () -> Unit) {
     val press = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     Surface(onClick = onClick, shape = androidx.compose.foundation.shape.CircleShape, interactionSource = press,
         color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.size(34.dp).pressScale(press, 0.9f)) {
-        // 图标换了（复制 → 对勾）：弹一下换过去
-        PopSwap(icon) { ic -> Icon(ic, desc, Modifier.size(17.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+        // 图标换了（复制 → 对勾）：弹一下换过去。外面垫一层 Box：Surface 会把最小尺寸传给里面，不垫的话图标被撑满整个圆
+        Box(contentAlignment = Alignment.Center) {
+            PopSwap(icon) { ic -> Icon(ic, desc, Modifier.size(17.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
     }
 }
 

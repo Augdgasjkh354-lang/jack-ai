@@ -79,7 +79,8 @@ fun SkillsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit) {
             val (plugins, playbooks) = skills.partition { it.id in SkillIds.PLUGINS }
             val ordered = playbooks.sortedBy { if (it.builtin) 1 else 0 }
             item {
-                SectionHeader("技能", "做某一类活的方法（小红书运营、合同挑坑……）。你说要做什么，Kavi 会按意思挑出合适的技能照着做；" +
+                // 顶栏已经写了「技能」，这里不再重复一个同名标题，只留说明
+                SectionHeader(null, "做某一类活的方法（小红书运营、合同挑坑……）。你说要做什么，Kavi 会按意思挑出合适的技能照着做；" +
                     "也能在输入框「+」里直接点名。从 GitHub 装：在对话里说「从 GitHub 装技能 作者/项目」。")
             }
             items(ordered, key = { it.id }) { s -> SkillCard(s, settings, onOpen = { if (s.builtin) viewing = s else editing = s }, onToggle = { toggle(s, it) }) }
@@ -187,9 +188,9 @@ fun SkillsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit) {
 }
 
 @Composable
-private fun SectionHeader(title: String, hint: String) {
-    Column(Modifier.padding(top = 8.dp, bottom = 2.dp)) {
-        Text(title, style = MaterialTheme.typography.titleMedium)
+private fun SectionHeader(title: String?, hint: String) {
+    Column(Modifier.padding(top = if (title == null) 0.dp else 8.dp, bottom = 2.dp)) {
+        if (title != null) Text(title, style = MaterialTheme.typography.titleMedium)
         Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

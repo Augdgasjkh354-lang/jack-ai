@@ -26,6 +26,11 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.draw.clip
 import kotlinx.coroutines.delay
 
 /*
@@ -138,3 +143,56 @@ fun Modifier.popOn(trigger: Any?): Modifier = composed {
     graphicsLayer { scaleX = s.value; scaleY = s.value }
 }
 
+
+/**
+ * 空状态：一个圆底图标、一行标题、一两行说明，居中。比一段灰字醒目，也不像出错。
+ * [action] 给了就在下面放一个按钮。
+ */
+@Composable
+fun EmptyNote(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, body: String, modifier: Modifier = Modifier,
+              action: (@Composable () -> Unit)? = null) {
+    val colors = androidx.compose.material3.MaterialTheme.colorScheme
+    androidx.compose.foundation.layout.Column(
+        modifier.fillMaxWidth().appear().padding(horizontal = 24.dp, vertical = 40.dp),
+        horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp),
+    ) {
+        androidx.compose.foundation.layout.Box(
+            Modifier.size(56.dp).clip(androidx.compose.foundation.shape.CircleShape).background(colors.onSurface.copy(alpha = 0.06f)),
+            contentAlignment = androidx.compose.ui.Alignment.Center,
+        ) { androidx.compose.material3.Icon(icon, null, Modifier.size(26.dp), tint = colors.onSurfaceVariant) }
+        androidx.compose.foundation.layout.Spacer(Modifier.size(6.dp))
+        Text(title, style = androidx.compose.material3.MaterialTheme.typography.titleSmall)
+        Text(body, style = androidx.compose.material3.MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        if (action != null) { androidx.compose.foundation.layout.Spacer(Modifier.size(8.dp)); action() }
+    }
+}
+
+
+/** 不可见的「不许在这里断行」（WORD JOINER），显示时没有宽度。 */
+private const val WJ = '⁠'
+
+/**
+ * 排版用：句尾最后 [tail] 个字粘在一起（不会只剩一两个字掉到下一行），「11月28日 08:01」这种日期时间整体不拆开。
+ * 只用在显示上，别拿处理过的字去存或发给模型。
+ */
+fun tidyBreaks(s: String, tail: Int = 3): String {
+    if (s.isEmpty()) return s
+    val dated = Regex("""\d{1,2}月\d{1,2}日(\s\d{1,2}:\d{2})?|\d{1,2}:\d{2}""").replace(s) { m ->
+        m.value.replace(' ', ' ').toList().joinToString(WJ.toString())
+    }
+    // 句尾：从最后往前数 tail 个可见字，中间插连接符
+    val end = dated.trimEnd()
+    var count = 0
+    var i = end.length
+    while (i > 0 && count < tail) {
+        val c = end[i - 1]
+        if (c.isWhitespace()) break
+        if (c != WJ) count++
+        i--
+    }
+    if (count < 2) return dated
+    val glued = end.substring(i).filter { it != WJ }.toList().joinToString(WJ.toString())
+    return end.substring(0, i) + glued + dated.substring(end.length)
+}

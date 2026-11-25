@@ -93,16 +93,24 @@ fun LibraryScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
             item {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text("知识库", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { creating = true }) { Text("新建") }
+                    // 有知识库时，新建、下载、检查更新都收成标题右边的小按钮；没有时放到下面的空状态里
+                    if (state.kbs.isNotEmpty()) {
+                        TextButton(onClick = { creating = true }) { Text("新建") }
+                        TextButton(onClick = { catalog = true }) { Text("下载") }
+                    }
                     if (state.kbs.any { it.source.isNotEmpty() }) TextButton(onClick = { vm.syncKbs() }, enabled = state.kbBusy == null) { Text("检查更新") }
                 }
-                FilledTonalButton(onClick = { catalog = true }, modifier = Modifier.fillMaxWidth()) { Text("从 GitHub 下载") }
                 state.kbBusy?.let { BusyRow(it) }
             }
             if (state.kbs.isEmpty()) {
                 item {
-                    Text("还没有知识库。可以新建一个往里放文件，或者把 GitHub 项目装成知识库；也可以跟 Kavi 说「帮我整理一个 XX 的知识库」，它自己建、自己往里写。",
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                    EmptyNote(AppIcons.Folder, "还没有知识库",
+                        "新建一个往里放文件，或者从 GitHub 下载现成的；也可以跟 Kavi 说「帮我整理一个 XX 的知识库」。") {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = { creating = true }) { Text("新建") }
+                            OutlinedButton(onClick = { catalog = true }) { Text("从 GitHub 下载") }
+                        }
+                    }
                 }
             }
             items(state.kbs.sortedByDescending { it.addedAt }, key = { "kb-" + it.id }) { kb ->
@@ -125,7 +133,7 @@ fun LibraryScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
             }
             val mine = state.library.filter { it.kb.isEmpty() || state.kbs.none { k -> k.id == it.kb } }
             if (mine.isEmpty()) {
-                item { Text("还没有自己导入的资料。", color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall) }
+                item { EmptyNote(AppIcons.File, "还没有自己的资料", "导入文档后，Kavi 回答时会先在这里面找。", Modifier.padding(top = 0.dp)) }
             }
             items(mine.sortedByDescending { it.addedAt }, key = { it.id }) { d -> DocRow(d, fmt) { deleting = d } }
             coverage?.let { (have, all) ->

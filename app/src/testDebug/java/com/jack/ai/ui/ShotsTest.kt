@@ -348,6 +348,93 @@ class ShotsTest {
         save("routines-" + dark().name.lowercase())
     }
 
+    /** 一轮出错的对话：用户气泡（改过、有两个版本）、带图片的消息、报错卡片。 */
+    @Test
+    fun errorChat() {
+        Assume.assumeTrue(System.getenv("SHOTS_DIR") != null)
+        val u = ChatMessage(role = "user", content = "帮我把这张图里的表格整理成 Excel，再写一段两百字的分析")
+        val c = Conversation(title = "整理表格", messages = listOf(
+            ChatMessage(role = "user", content = "你好"),
+            ChatMessage(role = "assistant", content = "你好！有什么可以帮你？", model = "deepseek-v4-flash"),
+            u.copy(alts = listOf(listOf(u.copy(content = "旧的问法")))),
+            ChatMessage(role = "assistant", content = "", model = "deepseek-v4-flash",
+                error = "ChatGPT 登录服务返回错误（403）：unsupported_country_region_territory"),
+        ))
+        val vm = vm(listOf(c))
+        vm.select(c.id)
+        show(vm, dark())
+        save("error-" + dark().name.lowercase())
+    }
+
+    @Test
+    fun project() {
+        Assume.assumeTrue(System.getenv("SHOTS_DIR") != null)
+        val now = System.currentTimeMillis()
+        val p = com.jack.ai.data.Project(id = "pj", name = "小说《林舟》", instructions = "风格冷峻")
+        val convs = listOf(
+            Conversation(title = "第一章大纲", projectId = "pj", updatedAt = now, messages = listOf(ChatMessage(role = "user", content = "写大纲"))),
+            Conversation(title = "人物小传：林舟", projectId = "pj", pinned = true, updatedAt = now - 5000, messages = listOf(ChatMessage(role = "user", content = "x"))),
+        )
+        val vm = vm(convs)
+        vm.saveProject(p)
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            val state by vm.state.collectAsState()
+            JackTheme(dark()) { ProjectScreen(vm, state, "pj", {}, {}) }
+        }
+        save("project-" + dark().name.lowercase())
+    }
+
+    @Test
+    fun usage() {
+        Assume.assumeTrue(System.getenv("SHOTS_DIR") != null)
+        val vm = vm(emptyList())
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            val state by vm.state.collectAsState()
+            JackTheme(dark()) { UsageScreen(vm, state) {} }
+        }
+        Thread.sleep(300)
+        save("usage-" + dark().name.lowercase())
+    }
+
+    @Test
+    fun library() {
+        Assume.assumeTrue(System.getenv("SHOTS_DIR") != null)
+        val vm = vm(emptyList())
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            val state by vm.state.collectAsState()
+            JackTheme(dark()) { LibraryScreen(vm, state) {} }
+        }
+        save("library-" + dark().name.lowercase())
+    }
+
+    @Test
+    fun skills() {
+        Assume.assumeTrue(System.getenv("SHOTS_DIR") != null)
+        val vm = vm(emptyList())
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            val state by vm.state.collectAsState()
+            JackTheme(dark()) { SkillsScreen(vm, state.settings) {} }
+        }
+        save("skills-" + dark().name.lowercase())
+    }
+
+    @Test
+    fun files() {
+        Assume.assumeTrue(System.getenv("SHOTS_DIR") != null)
+        val vm = vm(emptyList())
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            val state by vm.state.collectAsState()
+            JackTheme(dark()) { FileLibraryScreen(state, {}, {}) }
+        }
+        Thread.sleep(300)
+        save("files-" + dark().name.lowercase())
+    }
+
     @Test
     @Config(qualifiers = "w400dp-h2400dp-xhdpi")
     fun settings() {

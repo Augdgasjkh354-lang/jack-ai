@@ -6,6 +6,7 @@ import com.jack.ai.data.nextAt
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class FrictionHelpersTest {
@@ -43,5 +44,32 @@ class FrictionHelpersTest {
         // 第一条后面有压缩分界线，第二条在列表里是第 2 项
         assertEquals(2, messageItemIndex(c, ms[1].id))
         assertEquals(-1, messageItemIndex(c, "nope"))
+    }
+}
+
+class PolishHelpersTest {
+    private val wj = '⁠'
+
+    @Test
+    fun tidyBreaksGluesTheTailAndDates() {
+        val t = tidyBreaks("有值得长期记的当场记下")
+        assertEquals("有值得长期记的当场记下", t.filter { it != wj })
+        assertTrue(t.endsWith("记${wj}记${wj}下") || t.endsWith("场${wj}记${wj}下"))
+        val d = tidyBreaks("每 30 分钟查一次，盯到 11月28日 07:56")
+        assertTrue(d.contains("1${wj}1${wj}月${wj}2${wj}8${wj}日${wj} ${wj}0${wj}7"))
+        assertEquals("", tidyBreaks(""))
+        assertEquals("ab", tidyBreaks("ab").filter { it != wj })
+    }
+
+    @Test
+    fun shortWhenIsChineseAndShort() {
+        val c = java.util.Calendar.getInstance().apply { set(2026, 10, 25, 14, 5, 0) }
+        val now = c.timeInMillis
+        assertEquals("14:05", shortWhen(now, now))
+        assertEquals("昨天", shortWhen(now - 86_400_000L, now))
+        c.set(2026, 2, 3, 9, 0, 0)
+        assertEquals("3月3日", shortWhen(c.timeInMillis, now))
+        c.set(2024, 0, 9, 9, 0, 0)
+        assertEquals("2024/1/9", shortWhen(c.timeInMillis, now))
     }
 }

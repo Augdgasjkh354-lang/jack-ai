@@ -189,15 +189,18 @@ fun HistoryDrawer(
                     )
                     Column {
                         (if (showMoreTools) main + more else main).forEach { NavRow(it) }
+                        // 和上面几行同一个样子：左边图标、同样的高度和缩进，不再是一行孤零零的灰字
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.padding(horizontal = 12.dp).fillMaxWidth().clip(Radii.m)
-                                .clickable { showMoreTools = !showMoreTools }.padding(horizontal = 16.dp, vertical = 10.dp),
+                                .clickable { showMoreTools = !showMoreTools }.heightIn(min = 48.dp).padding(horizontal = 16.dp, vertical = 8.dp),
                         ) {
+                            Icon(Icons.Default.MoreVert, null, Modifier.size(24.dp).graphicsLayer { rotationZ = 90f }, tint = colors.onSurfaceVariant)
+                            Spacer(Modifier.size(14.dp))
                             Text(if (showMoreTools) "收起" else "更多", Modifier.weight(1f),
-                                style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant, maxLines = 1)
+                                style = MaterialTheme.typography.bodyLarge, color = colors.onSurfaceVariant, maxLines = 1)
                             if (!showMoreTools && due > 0) Box(Modifier.padding(end = 6.dp).size(6.dp).clip(RoundedCornerShape(3.dp)).background(colors.primary))
-                            Chevron(showMoreTools, Modifier.size(20.dp))
+                            Chevron(showMoreTools, Modifier.size(22.dp))
                         }
                     }
                 }
@@ -329,6 +332,27 @@ private fun NavRow(t: Tool) {
     }
 }
 
+/** 列表里的短时间：今天「14:05」、昨天「昨天」、今年「11月3日」、更早「2025/11/3」。不跟系统语言走，全中文。 */
+internal fun shortWhen(at: Long, now: Long = System.currentTimeMillis()): String {
+    val days = dayDiff(at, now)
+    val same = { p: String -> java.text.SimpleDateFormat(p, java.util.Locale.CHINA).format(java.util.Date(at)) }
+    return when {
+        days <= 0 -> same("HH:mm")
+        days == 1 -> "昨天"
+        same("yyyy") == java.text.SimpleDateFormat("yyyy", java.util.Locale.CHINA).format(java.util.Date(now)) -> same("M月d日")
+        else -> same("yyyy/M/d")
+    }
+}
+
+private fun dayDiff(at: Long, now: Long): Int {
+    fun start(ms: Long) = java.util.Calendar.getInstance().apply {
+        timeInMillis = ms
+        set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0)
+        set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
+    }.timeInMillis
+    return ((start(now) - start(at)) / 86_400_000L).toInt()
+}
+
 /** 对话按最后活动时间分组。 */
 internal fun dayGroup(at: Long, now: Long = System.currentTimeMillis()): String {
     fun start(ms: Long) = java.util.Calendar.getInstance().apply {
@@ -378,6 +402,8 @@ fun ChatItem(
     showMore: Boolean = true,
     /** 这个对话正在后台写回答：标题后面转个小圈。 */
     answering: Boolean = false,
+    /** 标题下面一行小字（项目页里放最后一条消息和时间）；空的就只有一行标题。 */
+    subtitle: String? = null,
 ) {
     var menu by remember { mutableStateOf(false) }
     var showUsage by remember { mutableStateOf(false) }
@@ -406,12 +432,15 @@ fun ChatItem(
                 exit = androidx.compose.animation.scaleOut(targetScale = 0.3f) + androidx.compose.animation.fadeOut()) {
                 Icon(AppIcons.Pin, null, Modifier.padding(end = 6.dp).size(14.dp), tint = colors.primary)
             }
-            Text(
-                c.title, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.bodyLarge,
-                color = if (selected) colors.onSecondaryContainer else colors.onSurface,
-                modifier = Modifier.weight(1f).padding(vertical = 10.dp),
-            )
+            Column(Modifier.weight(1f).padding(vertical = if (subtitle.isNullOrBlank()) 10.dp else 8.dp)) {
+                Text(
+                    c.title, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (selected) colors.onSecondaryContainer else colors.onSurface,
+                )
+                if (!subtitle.isNullOrBlank()) Text(subtitle, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp))
+            }
             if (answering) {
                 // 「回答中」的小点慢慢一明一暗，看得出还在动
                 val still = reduceMotion()
@@ -512,14 +541,15 @@ internal fun searchConversations(all: List<Conversation>, query: String): List<P
 }
 
 @Composable
-private fun SearchField(value: String, onChange: (String) -> Unit, modifier: Modifier = Modifier, focus: androidx.compose.ui.focus.FocusRequester? = null) {
+internal fun SearchField(value: String, onChange: (String) -> Unit, modifier: Modifier = Modifier, focus: androidx.compose.ui.focus.FocusRequester? = null,
+                         placeholder: String = "搜索") {
     val colors = MaterialTheme.colorScheme
     Surface(shape = androidx.compose.foundation.shape.CircleShape, color = Color.Transparent, modifier = modifier.fillMaxWidth().glass(androidx.compose.foundation.shape.CircleShape)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 16.dp)) {
             Icon(Icons.Default.Search, null, Modifier.size(20.dp), tint = colors.onSurfaceVariant)
             Spacer(Modifier.size(10.dp))
             Box(Modifier.weight(1f).padding(vertical = 11.dp)) {
-                if (value.isEmpty()) Text("搜索", style = MaterialTheme.typography.bodyLarge, color = colors.outline)
+                if (value.isEmpty()) Text(placeholder, style = MaterialTheme.typography.bodyLarge, color = colors.outline, maxLines = 1)
                 val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
                 BasicTextField(
                     value = value,

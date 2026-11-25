@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.LineBreak
 import com.jack.ai.data.ThemeMode
 
 // 纯白 / 纯黑底，灰阶分层，颜色只留给强调色（默认「黑白」：浅色用黑、深色用白）
@@ -90,16 +91,20 @@ private val AppShapes = Shapes(
 // 层级靠字重和字距拉开：大标题粗、字距收紧；正文和小字的行高按中文放宽（默认的行高是给英文定的，中文挤）；
 // 小标签的字距收回来（默认给英文大写加的宽字距，用在中文上显得散）
 private val AppTypography = Typography().let { t ->
+    // 断行：标题用「均衡」（两行差不多长，不会剩一两个字掉到第二行），说明文字用「整段优化」（避免最后一行只剩一个字）。
+    // 聊天正文（bodyLarge）不改：回答边写边排，整段优化的算法每来一个字都要重排整段，长回答会卡
+    val heading = LineBreak.Heading
+    val para = LineBreak.Paragraph
     t.copy(
-        headlineLarge = t.headlineLarge.copy(fontWeight = FontWeight.Bold, letterSpacing = (-0.4).sp),
-        headlineMedium = t.headlineMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = (-0.3).sp),
-        headlineSmall = t.headlineSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = (-0.2).sp),
-        titleLarge = t.titleLarge.copy(fontWeight = FontWeight.Bold, letterSpacing = (-0.1).sp),
-        titleMedium = t.titleMedium.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 0.sp),
-        titleSmall = t.titleSmall.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 0.sp),
+        headlineLarge = t.headlineLarge.copy(fontWeight = FontWeight.Bold, letterSpacing = (-0.4).sp, lineBreak = heading),
+        headlineMedium = t.headlineMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = (-0.3).sp, lineBreak = heading),
+        headlineSmall = t.headlineSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = (-0.2).sp, lineBreak = heading),
+        titleLarge = t.titleLarge.copy(fontWeight = FontWeight.Bold, letterSpacing = (-0.1).sp, lineBreak = heading),
+        titleMedium = t.titleMedium.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 0.sp, lineBreak = heading),
+        titleSmall = t.titleSmall.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 0.sp, lineBreak = heading),
         bodyLarge = t.bodyLarge.copy(fontSize = 16.sp, lineHeight = 26.sp, letterSpacing = 0.1.sp),
-        bodyMedium = t.bodyMedium.copy(lineHeight = 22.sp, letterSpacing = 0.1.sp),
-        bodySmall = t.bodySmall.copy(lineHeight = 18.sp, letterSpacing = 0.1.sp),
+        bodyMedium = t.bodyMedium.copy(lineHeight = 22.sp, letterSpacing = 0.1.sp, lineBreak = para),
+        bodySmall = t.bodySmall.copy(lineHeight = 18.sp, letterSpacing = 0.1.sp, lineBreak = para),
         labelLarge = t.labelLarge.copy(letterSpacing = 0.sp),
         labelMedium = t.labelMedium.copy(letterSpacing = 0.1.sp),
         labelSmall = t.labelSmall.copy(letterSpacing = 0.1.sp),
