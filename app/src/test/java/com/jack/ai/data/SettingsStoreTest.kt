@@ -41,7 +41,10 @@ class SettingsStoreTest {
         store.saveSettings(store.loadSettings().copy(tabBar = null))
         assertNull(Store(app).loadSettings().tabBar)
     }
+}
 
+/** 不用 Robolectric：只读源码和反射，跑得快，也不受模拟器启动的影响。 */
+class SettingsFieldsStoredTest {
     /** 每个设置字段都要在 Store 里读、写各出现一次；故意不存的列在这里。 */
     @Test
     fun everySettingsFieldIsSavedAndLoaded() {
