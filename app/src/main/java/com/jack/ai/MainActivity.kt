@@ -25,6 +25,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -68,6 +75,34 @@ sealed interface Screen {
     data class ProjectPage(val id: String) : Screen
     /** 终端：folder 是对话文件夹的 key（Workspace.key），空的是终端自己的「主目录」。 */
     data class Terminal(val folder: String = "") : Screen
+}
+
+/** 这一页是底栏上的哪一个（聊天是 null 那页）；不是底栏能放的页面返回 null。 */
+internal fun tabOf(s: Screen?): com.jack.ai.ui.KaviTab? = when (s) {
+    null -> com.jack.ai.ui.KaviTab.CHAT
+    Screen.Library -> com.jack.ai.ui.KaviTab.LIBRARY
+    Screen.Memory -> com.jack.ai.ui.KaviTab.MEMORY
+    Screen.Routines -> com.jack.ai.ui.KaviTab.ROUTINES
+    Screen.Files -> com.jack.ai.ui.KaviTab.FILES
+    Screen.Skills -> com.jack.ai.ui.KaviTab.SKILLS
+    Screen.Apps -> com.jack.ai.ui.KaviTab.APPS
+    Screen.Review -> com.jack.ai.ui.KaviTab.REVIEW
+    Screen.Tables -> com.jack.ai.ui.KaviTab.TABLES
+    Screen.Downloads -> com.jack.ai.ui.KaviTab.DOWNLOADS
+    else -> null
+}
+
+internal fun screenOf(t: com.jack.ai.ui.KaviTab): Screen? = when (t) {
+    com.jack.ai.ui.KaviTab.LIBRARY -> Screen.Library
+    com.jack.ai.ui.KaviTab.MEMORY -> Screen.Memory
+    com.jack.ai.ui.KaviTab.ROUTINES -> Screen.Routines
+    com.jack.ai.ui.KaviTab.FILES -> Screen.Files
+    com.jack.ai.ui.KaviTab.SKILLS -> Screen.Skills
+    com.jack.ai.ui.KaviTab.APPS -> Screen.Apps
+    com.jack.ai.ui.KaviTab.REVIEW -> Screen.Review
+    com.jack.ai.ui.KaviTab.TABLES -> Screen.Tables
+    com.jack.ai.ui.KaviTab.DOWNLOADS -> Screen.Downloads
+    com.jack.ai.ui.KaviTab.CHAT, com.jack.ai.ui.KaviTab.BROWSER -> null
 }
 
 class MainActivity : FragmentActivity() {
@@ -315,17 +350,24 @@ class MainActivity : FragmentActivity() {
                 workflowShare?.let { text -> com.jack.ai.ui.WorkflowSharePicker(text) { workflowShare = null } }
                 val top = stack.lastOrNull()
                 val lastDepth = remember { intArrayOf(stack.size) }
+                val tabJump = remember { booleanArrayOf(false) }
                 val back: () -> Unit = { if (stack.isNotEmpty()) stack.removeAt(stack.lastIndex) }
                 if (top != null) BackHandler(onBack = back)
                 // 进一页：新页从右边滑进来；返回：往右滑出去。底下垫一层背景色，交替的那一下不透出窗口的白底
                 val forward = stack.size >= lastDepth[0]
                 androidx.compose.runtime.SideEffect { lastDepth[0] = stack.size }
-                androidx.compose.animation.AnimatedContent(
-                    targetState = top,
-                    transitionSpec = { com.jack.ai.ui.pageTransition(forward) },
-                    modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
-                    label = "page",
-                ) { screen ->
+                // 底栏：放哪几个在侧边栏里拖着改。点底栏换页不是「进一页」：淡入淡出，底栏那块玻璃自己流过去
+                val tabs = com.jack.ai.ui.KaviTab.bar(state.settings.tabBar)
+                fun openTab(t: com.jack.ai.ui.KaviTab) {
+                    if (t == com.jack.ai.ui.KaviTab.BROWSER) { startActivity(Intent(this@MainActivity, com.jack.ai.ui.BrowserActivity::class.java)); return }
+                    if (tabOf(top) == t) return
+                    tabJump[0] = true
+                    stack.clear()
+                    screenOf(t)?.let { stack.add(it) }
+                }
+                val jump = tabJump[0]
+                androidx.compose.runtime.SideEffect { tabJump[0] = false }
+                val page: @Composable (Screen?) -> Unit = { screen ->
                     when (screen) {
                         null -> ChatScreen(
                             vm = vm,
@@ -377,6 +419,26 @@ class MainActivity : FragmentActivity() {
                             onOpenTerminal = { stack.add(Screen.Terminal(it)) },
                         )
                     }
+                }
+                androidx.compose.animation.AnimatedContent(
+                    targetState = top,
+                    transitionSpec = {
+                        if (jump) androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(220)) togetherWith
+                            androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(160))
+                        else com.jack.ai.ui.pageTransition(forward)
+                    },
+                    modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+                    label = "page",
+                ) { screen ->
+                    // 底栏里放了的页面（资料库、记忆……）：底栏常驻在下面，点一下直接换，不用先返回聊天
+                    val tab = tabOf(screen)
+                    if (screen != null && tab != null && tab in tabs && tabs.size > 1) androidx.compose.foundation.layout.Column(Modifier.fillMaxSize()) {
+                        androidx.compose.foundation.layout.Box(Modifier.weight(1f).consumeWindowInsets(androidx.compose.foundation.layout.WindowInsets.navigationBars)) { page(screen) }
+                        androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)
+                            .navigationBarsPadding().padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 8.dp)) {
+                            com.jack.ai.ui.LiquidTabBar(tabs.map { t -> com.jack.ai.ui.TabItem(t.icon, t.label, selected = t == tab) { openTab(t) } }, tabs.indexOf(tab))
+                        }
+                    } else page(screen)
                 }
                 // 工具执行前的确认（发邮件之类），在哪个页面都能弹出来
                 state.confirm?.let { req ->

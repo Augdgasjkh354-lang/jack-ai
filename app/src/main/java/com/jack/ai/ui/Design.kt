@@ -465,26 +465,3 @@ fun GlassTabs(labels: List<String>, selected: Int, modifier: Modifier = Modifier
 /** 底部标签栏的一格。 */
 class TabItem(val icon: ImageVector, val label: String, val selected: Boolean = false, val onClick: () -> Unit)
 
-/**
- * 聊天页输入框下面那条标签栏：一条玻璃胶囊，一格一个图标；当前所在的那格垫一块圆的底。
- */
-@Composable
-fun GlassTabBar(items: List<TabItem>, modifier: Modifier = Modifier) {
-    val colors = MaterialTheme.colorScheme
-    val haptics = rememberHaptics()
-    Row(modifier.fillMaxWidth().glass(CircleShape).padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
-        items.forEach { t ->
-            val press = remember { MutableInteractionSource() }
-            val on = if (isDarkSurface) Color.White.copy(alpha = 0.14f) else Color.White
-            val bg by androidx.compose.animation.animateColorAsState(if (t.selected) on else on.copy(alpha = 0f), Springs.defaultEffects(), label = "tabBg")
-            Box(
-                Modifier.weight(1f).pressScale(press, 0.88f).height(46.dp).clip(CircleShape)
-                    .background(bg)
-                    .clickable(interactionSource = press, indication = androidx.compose.foundation.LocalIndication.current, onClickLabel = t.label) { haptics.tick(); t.onClick() },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(t.icon, t.label, Modifier.size(22.dp), tint = if (t.selected) colors.onSurface else colors.onSurfaceVariant)
-            }
-        }
-    }
-}

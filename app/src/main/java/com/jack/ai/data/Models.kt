@@ -404,6 +404,8 @@ data class Settings(
     val fontScale: Float = 1f,
     /** 界面字体：空是跟随系统；"serif" 宋体；"sys:…" 手机里的字体；"file:…" 自己导入的（见 AppFonts）。 */
     val fontChoice: String = "",
+    /** 底部标签栏除了「聊天」以外放哪些页面、什么顺序（KaviTab 的 id）；null 是默认那几个。 */
+    val tabBar: List<String>? = null,
     val accent: String = "mono",
     /** 自己发的消息气泡用主题色（关了是灰色气泡）。 */
     val bubbleAccent: Boolean = true,

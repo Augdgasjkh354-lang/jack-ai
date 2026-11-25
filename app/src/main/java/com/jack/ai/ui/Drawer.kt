@@ -103,6 +103,10 @@ fun HistoryDrawer(
     onSettings: () -> Unit,
     onOpenFiles: () -> Unit = {},
     onUndoDelete: () -> Boolean = { false },
+    /** 点了「聊天」：就是关上侧边栏。 */
+    onCloseDrawer: () -> Unit = {},
+    /** 在侧边栏里拖动改了底栏。 */
+    onSaveTabs: (List<String>) -> Unit = {},
 ) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     var renaming by remember { mutableStateOf<Conversation?>(null) }
@@ -121,7 +125,6 @@ fun HistoryDrawer(
     }
     var query by remember { mutableStateOf("") }
     var showAllProjects by remember { mutableStateOf(false) }
-    var showMoreTools by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     // 置顶的对话（包括项目里的）放最上面；其余项目里的对话放在项目页面里，这里只列普通对话
     val pinned = state.conversations.filter { it.messages.isNotEmpty() && it.pinned }
     val chats = state.conversations.filter { it.messages.isNotEmpty() && it.projectId == null && !it.pinned }
@@ -169,40 +172,37 @@ fun HistoryDrawer(
                     }
                 }
             } else LazyColumn(Modifier.weight(1f)) {
-                // 常用功能：和 ChatGPT 一样是一行行「图标 + 名字」，最常用的四个露在外面，其余的收进「更多」，侧边栏主要留给对话
+                // 页面入口分两组：「底栏」里的就是输入框下面那排标签，「其他」的只在这里。长按拖动排顺序、换组（像 iOS 的选项卡）
                 item {
                     val now = System.currentTimeMillis()
                     val due = state.cards.count { it.due <= now }
-                    val main = listOfNotNull(
-                        Tool(Icons.Default.Notifications, "提醒和任务", badge = state.routines.count { it.enabled }.takeIf { it > 0 }?.toString(), onClick = onOpenRoutines),
-                        Tool(AppIcons.Moon, "记忆", dot = state.dreams.any { !it.seen }, onClick = onOpenMemory),
-                        Tool(AppIcons.Folder, "资料库", onClick = onOpenLibrary),
-                        if (com.jack.ai.Edition.browser) Tool(AppIcons.Globe, "浏览器", onClick = { ctx.startActivity(android.content.Intent(ctx, BrowserActivity::class.java)) }) else null,
+                    TabArranger(
+                        saved = state.settings.tabBar,
+                        badge = { t ->
+                            when (t) {
+                                KaviTab.ROUTINES -> state.routines.count { it.enabled }.takeIf { it > 0 }?.toString()
+                                KaviTab.REVIEW -> due.takeIf { it > 0 }?.toString()
+                                else -> null
+                            }
+                        },
+                        dot = { t -> t == KaviTab.MEMORY && state.dreams.any { !it.seen } },
+                        onOpen = { t ->
+                            when (t) {
+                                KaviTab.CHAT -> onCloseDrawer()
+                                KaviTab.LIBRARY -> onOpenLibrary()
+                                KaviTab.MEMORY -> onOpenMemory()
+                                KaviTab.BROWSER -> ctx.startActivity(android.content.Intent(ctx, BrowserActivity::class.java))
+                                KaviTab.ROUTINES -> onOpenRoutines()
+                                KaviTab.FILES -> onOpenFiles()
+                                KaviTab.SKILLS -> onOpenSkills()
+                                KaviTab.APPS -> onOpenApps()
+                                KaviTab.REVIEW -> onOpenReview()
+                                KaviTab.TABLES -> onOpenTables()
+                                KaviTab.DOWNLOADS -> onOpenDownloads()
+                            }
+                        },
+                        onSave = onSaveTabs,
                     )
-                    val more = listOf(
-                        Tool(Icons.Default.List, "表格", onClick = onOpenTables),
-                        Tool(Icons.Default.Star, "复习卡片", badge = due.takeIf { it > 0 }?.toString(), onClick = onOpenReview),
-                        Tool(Icons.Default.Build, "技能", onClick = onOpenSkills),
-                        Tool(AppIcons.Code, "小工具", onClick = onOpenApps),
-                        Tool(AppIcons.Folder, "文件库", onClick = onOpenFiles),
-                        Tool(AppIcons.Download, "下载", onClick = onOpenDownloads),
-                    )
-                    Column {
-                        (if (showMoreTools) main + more else main).forEach { NavRow(it) }
-                        // 和上面几行同一个样子：左边图标、同样的高度和缩进，不再是一行孤零零的灰字
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 12.dp).fillMaxWidth().clip(Radii.m)
-                                .clickable { showMoreTools = !showMoreTools }.heightIn(min = 48.dp).padding(horizontal = 16.dp, vertical = 8.dp),
-                        ) {
-                            Icon(Icons.Default.MoreVert, null, Modifier.size(24.dp).graphicsLayer { rotationZ = 90f }, tint = colors.onSurfaceVariant)
-                            Spacer(Modifier.size(14.dp))
-                            Text(if (showMoreTools) "收起" else "更多", Modifier.weight(1f),
-                                style = MaterialTheme.typography.bodyLarge, color = colors.onSurfaceVariant, maxLines = 1)
-                            if (!showMoreTools && due > 0) Box(Modifier.padding(end = 6.dp).size(6.dp).clip(RoundedCornerShape(3.dp)).background(colors.primary))
-                            Chevron(showMoreTools, Modifier.size(22.dp))
-                        }
-                    }
                 }
                 if (pinned.isNotEmpty()) {
                     item { SectionLabel("置顶") }
@@ -302,33 +302,6 @@ private fun ProjectRow(name: String, selected: Boolean, icon: String = "", onCli
         else Icon(AppIcons.Folder, null, Modifier.size(24.dp), tint = colors.onSurface)
         Spacer(Modifier.size(14.dp))
         Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-    }
-}
-
-private class Tool(val icon: ImageVector, val label: String, val badge: String? = null, val dot: Boolean = false, val onClick: () -> Unit)
-
-/** 常用功能的一行：左边图标、中间名字；有待办的右边标数字或一个小点。 */
-@Composable
-private fun NavRow(t: Tool) {
-    val colors = MaterialTheme.colorScheme
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .padding(horizontal = 12.dp)
-            .fillMaxWidth()
-            .clip(Radii.m)
-            .clickable(onClick = t.onClick)
-            .heightIn(min = 48.dp)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-    ) {
-        Icon(t.icon, null, Modifier.size(24.dp), tint = colors.onSurface)
-        Spacer(Modifier.size(14.dp))
-        Text(t.label, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
-        when {
-            t.badge != null -> Text(t.badge, style = MaterialTheme.typography.labelMedium, color = colors.onPrimary,
-                modifier = Modifier.clip(androidx.compose.foundation.shape.CircleShape).background(colors.primary).padding(horizontal = 8.dp, vertical = 1.dp))
-            t.dot -> Box(Modifier.size(8.dp).clip(androidx.compose.foundation.shape.CircleShape).background(colors.primary))
-        }
     }
 }
 

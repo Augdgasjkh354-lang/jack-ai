@@ -247,6 +247,8 @@ fun ChatScreen(
                 onOpenDownloads = { scope.launch { drawerState.close() }; onOpenDownloads() },
                 onOpenFiles = { scope.launch { drawerState.close() }; onOpenFiles() },
                 onSettings = { scope.launch { drawerState.close() }; onOpenSettings() },
+                onCloseDrawer = { scope.launch { drawerState.close() } },
+                onSaveTabs = { ids -> vm.updateSettings { it.copy(tabBar = ids) } },
             )
         },
     ) {
@@ -310,14 +312,25 @@ fun ChatScreen(
                         onOpenSettingsPage("CONNECT")
                     },
                     // 标签栏：聊天（就是这里）、资料库、记忆、浏览器、提醒，一点就过去
+                    // 放哪几个、什么顺序，在侧边栏里长按拖动改（见 TabArranger）
                     tabs = {
-                        GlassTabBar(listOfNotNull(
-                            TabItem(AppIcons.Chat, "聊天", selected = true) { focusInput++ },
-                            TabItem(AppIcons.Folder, "资料库", onClick = onOpenLibrary),
-                            TabItem(AppIcons.Moon, "记忆", onClick = onOpenMemory),
-                            if (com.jack.ai.Edition.browser) TabItem(AppIcons.Globe, "浏览器") { ctx.startActivity(Intent(ctx, BrowserActivity::class.java)) } else null,
-                            TabItem(androidx.compose.material.icons.Icons.Default.Notifications, "提醒和任务", onClick = onOpenRoutines),
-                        ))
+                        LiquidTabBar(KaviTab.bar(state.settings.tabBar).map { t ->
+                            TabItem(t.icon, t.label, selected = t == KaviTab.CHAT) {
+                                when (t) {
+                                    KaviTab.CHAT -> focusInput++
+                                    KaviTab.LIBRARY -> onOpenLibrary()
+                                    KaviTab.MEMORY -> onOpenMemory()
+                                    KaviTab.BROWSER -> ctx.startActivity(Intent(ctx, BrowserActivity::class.java))
+                                    KaviTab.ROUTINES -> onOpenRoutines()
+                                    KaviTab.FILES -> onOpenFiles()
+                                    KaviTab.SKILLS -> onOpenSkills()
+                                    KaviTab.APPS -> onOpenApps()
+                                    KaviTab.REVIEW -> onOpenReview()
+                                    KaviTab.TABLES -> onOpenTables()
+                                    KaviTab.DOWNLOADS -> onOpenDownloads()
+                                }
+                            }
+                        }, selected = 0)
                     },
                 ) }
             },

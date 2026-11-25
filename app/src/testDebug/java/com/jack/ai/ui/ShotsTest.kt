@@ -436,6 +436,29 @@ class ShotsTest {
         save("files-" + dark().name.lowercase())
     }
 
+    /** 底栏：五格的、两格的小胶囊，还有侧边栏里「底栏 / 其他」两组。 */
+    @Test
+    fun tabs() {
+        Assume.assumeTrue(System.getenv("SHOTS_DIR") != null)
+        val vm = vm(listOf(Conversation(title = "保持高效", messages = listOf(ChatMessage(role = "user", content = "你好")))))
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            val state by vm.state.collectAsState()
+            JackTheme(dark()) {
+                androidx.compose.material3.Surface {
+                    androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.padding(vertical = 12.dp),
+                        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp)) {
+                        fun items(ts: List<KaviTab>) = ts.map { TabItem(it.icon, it.label) {} }
+                        LiquidTabBar(items(KaviTab.bar(null)), 2, androidx.compose.ui.Modifier.padding(horizontal = 12.dp))
+                        LiquidTabBar(items(KaviTab.bar(listOf("library"))), 0, androidx.compose.ui.Modifier.padding(horizontal = 12.dp))
+                        TabArranger(listOf("memory", "routines"), onOpen = {}, onSave = {})
+                    }
+                }
+            }
+        }
+        save("tabs-" + dark().name.lowercase())
+    }
+
     @Test
     @Config(qualifiers = "w400dp-h2400dp-xhdpi")
     fun settings() {
