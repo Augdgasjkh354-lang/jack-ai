@@ -125,6 +125,12 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         Dreamer.schedule(app, _state.value.settings.dreamEnabled)
+        // Linux 沙箱装没装看手机上的文件：启动时核对一次，设置里的标记跟着走（模型要靠它知道能不能跑命令），
+        // 不用等用户进一次沙箱那页
+        if (com.jack.ai.Edition.linux) viewModelScope.launch {
+            val ready = withContext(Dispatchers.IO) { runCatching { com.jack.ai.data.phone.LinuxSandbox.ready(app) }.getOrDefault(false) }
+            if (_state.value.settings.linuxSandbox != ready) updateSettings { it.copy(linuxSandbox = ready) }
+        }
         // 上次录音中途被系统杀掉：救回录到的，放进输入框等用户发（不自动发，免得隔了几天突然开始整理花钱）
         viewModelScope.launch {
             val saved = withContext(Dispatchers.IO) { runCatching { com.jack.ai.RecordService.recover(app) }.getOrDefault(emptyList()) }
