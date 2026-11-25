@@ -590,6 +590,7 @@ class Store(context: Context) {
             dsVoice = prefs.getBoolean("dsVoice", false),
             dsVoiceId = prefs.getString("dsVoiceId", "stella") ?: "stella",
             tourAsked = prefs.getBoolean("tourAsked", false),
+            voiceInput = prefs.getString("voiceInput", "kavi") ?: "kavi",
             // 底栏：没存过是 null（用默认那几个）；存过空列表就是只留「聊天」
             tabBar = prefs.getString("tabBar", null)?.let { raw ->
                 runCatching { json.decodeFromString(ListSerializer(String.serializer()), raw) }.getOrNull()
@@ -706,6 +707,7 @@ class Store(context: Context) {
             .putBoolean("dsVoice", s.dsVoice)
             .putString("dsVoiceId", s.dsVoiceId)
             .putBoolean("tourAsked", s.tourAsked)
+            .putString("voiceInput", s.voiceInput)
             .apply { if (s.tabBar == null) remove("tabBar") else putString("tabBar", json.encodeToString(ListSerializer(String.serializer()), s.tabBar)) }
             .putString("accent", s.accent)
             .putBoolean("bubbleAccent", s.bubbleAccent)

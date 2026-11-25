@@ -98,6 +98,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.animation.togetherWith
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -273,13 +274,23 @@ internal fun InputBar(
             startCamera()
         }
     }
+    // 话筒：默认 Kavi 自己录、自己转文字（系统的语音识别在很多手机上是 Google 的，国内连不上）；
+    // 设置里选了「手机系统」或者没有能转文字的 Key 时才用系统的
+    val voiceInputPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+        if (ok) VoiceInput.start(ctx, vm) else micDenied(ctx, "没法语音输入")
+    }
+    fun startVoice() {
+        if (state.settings.voiceInput == "system" || !VoiceInput.available(vm)) { startVoiceIntent(ctx, speech); return }
+        if (androidx.core.content.ContextCompat.checkSelfPermission(ctx, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED)
+            VoiceInput.start(ctx, vm)
+        else voiceInputPermission.launch(android.Manifest.permission.RECORD_AUDIO)
+    }
     LaunchedEffect(state.voiceRequest) {
         if (state.voiceRequest) {
             vm.consumeVoiceRequest()
-            startVoiceIntent(ctx, speech)
+            startVoice()
         }
     }
-    fun startVoice() = startVoiceIntent(ctx, speech)
     // 录音纪要：先要麦克风权限，再开录（录在前台服务里）
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
         if (ok) com.jack.ai.RecordService.start(ctx) else micDenied(ctx, "录不了音")
@@ -525,7 +536,9 @@ internal fun InputBar(
                             }
                         }
                     }
-                    androidx.compose.foundation.text.BasicTextField(
+                    // 录着音 / 在转文字：输入框换成录音条
+                    if (VoiceInput.on) VoiceBar(Modifier.weight(1f).padding(start = 4.dp, end = 8.dp))
+                    else androidx.compose.foundation.text.BasicTextField(
                         value = field,
                         onValueChange = {
                             // 一下子贴进来一大段：存成附件，输入框保持原样（改消息时不算，附件跟不过去）
@@ -568,6 +581,7 @@ internal fun InputBar(
                     }
                     // 右下角的圆按钮：话筒、发送、停止之间换的时候缩放淡入，不生硬地闪一下；按下去缩一下
                     val action = when {
+                        VoiceInput.on -> SendAction.VOICE
                         editing != null -> SendAction.EDIT
                         state.streamingHere -> SendAction.STOP
                         text.isBlank() && state.pending.isEmpty() -> SendAction.MIC
@@ -585,6 +599,14 @@ internal fun InputBar(
                         label = "send",
                     ) { a ->
                         when (a) {
+                            // 录音中：对勾是「说完了」；转文字时转个圈
+                            SendAction.VOICE -> Surface(onClick = { haptics.tick(); VoiceInput.finish() }, enabled = VoiceInput.phase == VoiceInput.Phase.LISTENING,
+                                shape = CircleShape, color = colors.primary, modifier = Modifier.size(42.dp), interactionSource = sendPress) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    if (VoiceInput.phase == VoiceInput.Phase.TRANSCRIBING) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = colors.onPrimary)
+                                    else Icon(Icons.Default.Check, "说完了", Modifier.size(20.dp), tint = colors.onPrimary)
+                                }
+                            }
                             SendAction.STOP -> Surface(onClick = { haptics.tick(); vm.stop() }, shape = CircleShape, color = colors.onSurface, modifier = Modifier.size(42.dp), interactionSource = sendPress) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(AppIcons.Stop, "停止", Modifier.size(16.dp), tint = colors.surface)
@@ -636,7 +658,7 @@ internal fun InputBar(
     }
 }
 
-private enum class SendAction { MIC, SEND, STOP, EDIT }
+private enum class SendAction { MIC, SEND, STOP, EDIT, VOICE }
 
 @Composable
 private fun PendingChip(att: Attachment, onOpen: (com.jack.ai.data.GeneratedFile) -> Unit, onRemove: () -> Unit) {
@@ -687,4 +709,45 @@ private fun withMention(text: String, name: String): String {
     if ("@$name" in text) return text
     val sep = if (text.isEmpty() || text.last().isWhitespace()) "" else " "
     return "$text$sep@$name "
+}
+
+/**
+ * 录音条（话筒点了以后输入框的位置）：左边「取消」，一个一明一暗的红点、跟着声音跳的几根竖条、走秒；
+ * 转文字时换成「正在转文字…」。
+ */
+@Composable
+private fun VoiceBar(modifier: Modifier) {
+    val colors = MaterialTheme.colorScheme
+    val listening = VoiceInput.phase == VoiceInput.Phase.LISTENING
+    val secs by androidx.compose.runtime.produceState(0L, VoiceInput.startedAt) {
+        while (true) { value = (System.currentTimeMillis() - VoiceInput.startedAt) / 1000; kotlinx.coroutines.delay(250) }
+    }
+    val pulse by androidx.compose.animation.core.rememberInfiniteTransition(label = "rec").animateFloat(0.35f, 1f,
+        androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.tween(700), androidx.compose.animation.core.RepeatMode.Reverse), label = "dot")
+    Row(modifier.heightIn(min = 44.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(32.dp).clip(CircleShape).clickable(onClickLabel = "不要了") { VoiceInput.cancel() }, contentAlignment = Alignment.Center) {
+            Icon(Icons.Default.Close, "取消", Modifier.size(18.dp), tint = colors.onSurfaceVariant)
+        }
+        Spacer(Modifier.width(6.dp))
+        if (listening) {
+            Box(Modifier.size(8.dp).graphicsLayer { alpha = pulse }.clip(CircleShape).background(Color(0xFFE5484D)))
+            Spacer(Modifier.width(8.dp))
+            // 五根竖条，中间高两边低，跟着音量一起动
+            val lv by androidx.compose.animation.core.animateFloatAsState(VoiceInput.level, Springs.fastEffects(), label = "lv")
+            Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
+                listOf(0.5f, 0.8f, 1f, 0.8f, 0.5f).forEach { k ->
+                    Box(Modifier.width(3.dp).height((4f + 18f * (lv * k).coerceIn(0f, 1f)).dp).clip(CircleShape).background(colors.onSurface.copy(alpha = 0.7f)))
+                }
+            }
+            Spacer(Modifier.width(10.dp))
+            Text("%d:%02d".format(secs / 60, secs % 60), style = MaterialTheme.typography.bodyMedium.tabular, color = colors.onSurface)
+            Spacer(Modifier.width(10.dp))
+            Text("停一下自动结束", style = MaterialTheme.typography.labelSmall, color = colors.outline, maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        } else {
+            BreathingStar(size = 16.dp)
+            Spacer(Modifier.width(8.dp))
+            Text("正在转文字…", style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
+        }
+    }
 }

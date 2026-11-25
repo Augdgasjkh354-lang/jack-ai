@@ -234,8 +234,18 @@ fun SettingsScreen(
                     }) { Text("查余额") }
                 }
                 balance?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
-                Text("这把 Key 也用来：录音和视频转文字（没配硅基流动时）、认扫描件和图片里的字（1.5 元/1000 页）。",
+                Text("这把 Key 也用来：语音输入、录音和视频转文字（没配硅基流动时）、认扫描件和图片里的字（1.5 元/1000 页）。",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                // 话筒用谁转文字：手机系统的语音识别很多是 Google 的，国内连不上
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("语音输入用 Kavi 转文字")
+                        Text(if (settings.voiceInput == "system") "关着：用手机系统的语音识别（有的手机是 Google 的，国内连不上）"
+                            else "Kavi 自己录音、用这把 Key 转文字，国内直连。约 0.4 元/小时，说一句不到 1 分钱",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(checked = settings.voiceInput != "system", onCheckedChange = { on -> vm.updateSettings { it.copy(voiceInput = if (on) "kavi" else "system") } })
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("朗读用 DeepSeek 语音")

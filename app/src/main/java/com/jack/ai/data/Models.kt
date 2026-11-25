@@ -408,6 +408,8 @@ data class Settings(
     val tabBar: List<String>? = null,
     /** 新手教学问过了（不管选的看不看）：不再自动问。 */
     val tourAsked: Boolean = false,
+    /** 话筒点一下的语音输入："kavi" Kavi 自己录音转文字（默认）；"system" 用手机系统的语音识别。 */
+    val voiceInput: String = "kavi",
     val accent: String = "mono",
     /** 自己发的消息气泡用主题色（关了是灰色气泡）。 */
     val bubbleAccent: Boolean = true,

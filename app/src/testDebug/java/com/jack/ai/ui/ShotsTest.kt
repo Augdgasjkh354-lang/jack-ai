@@ -398,6 +398,17 @@ class ShotsTest {
         Tour.step = -1
     }
 
+    /** 话筒点了以后的录音条（SHOTS_PACK=t 是转文字中）。 */
+    @Test
+    fun voiceBar() {
+        Assume.assumeTrue(System.getenv("SHOTS_DIR") != null)
+        val vm = vm(emptyList())
+        VoiceInput.pretend(if (System.getenv("SHOTS_PACK") == "t") VoiceInput.Phase.TRANSCRIBING else VoiceInput.Phase.LISTENING)
+        show(vm, dark())
+        save("voice-" + (System.getenv("SHOTS_PACK") ?: "l") + "-" + dark().name.lowercase())
+        VoiceInput.pretend(VoiceInput.Phase.OFF)
+    }
+
     @Test
     fun project() {
         Assume.assumeTrue(System.getenv("SHOTS_DIR") != null)
