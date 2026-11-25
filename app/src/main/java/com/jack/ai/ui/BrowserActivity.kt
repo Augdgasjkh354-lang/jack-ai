@@ -122,7 +122,22 @@ import kotlinx.coroutines.launch
  * Kavi 浏览器的完整页面：用户自己翻网页，或者看着 Kavi 操作、随时接手。网页窗口和 Kavi 用的是同一个（JackBrowser）。
  * 不能用来登录 Google（Google 不许在 App 内嵌的网页里登录）。
  */
-class BrowserActivity : androidx.fragment.app.FragmentActivity() {
+open class BrowserActivity : androidx.fragment.app.FragmentActivity() {
+    /** 从 Kavi 的底栏、侧边栏点进来的（[BrowserTabActivity]）：留在 Kavi 里，底下带底栏。桌面上单独的浏览器图标进来的是 false。 */
+    protected open val inKaviTabs = false
+    /** 点底栏去了别的页面：这不是「关掉浏览器」，网页里在放的声音接着放。 */
+    private var leavingForTab = false
+
+    /** 底栏上点了别的格子：回到 Kavi 的那一页，淡入淡出。 */
+    private fun goTab(t: KaviTab) {
+        if (t == KaviTab.BROWSER) return
+        leavingForTab = true
+        startActivity(Intent(this, com.jack.ai.MainActivity::class.java).setAction(com.jack.ai.MainActivity.ACTION_OPEN_TAB).putExtra("tab", t.id)
+            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            android.app.ActivityOptions.makeCustomAnimation(this, android.R.anim.fade_in, android.R.anim.fade_out).toBundle())
+        finish()
+    }
+
     private lateinit var settings: Settings
     internal var editing by mutableStateOf("")
     /** 标签页列表开着。 */
@@ -378,6 +393,10 @@ class BrowserActivity : androidx.fragment.app.FragmentActivity() {
         if (locked) unlock()
         JackBrowser.userViewing = true
         JackBrowser.reclaim(this)
+        // 两个浏览器入口都开着时，眼前这个接管选文件、权限这些回调（另一个关掉时会清空它们）
+        JackBrowser.chooser = ::chooseFiles
+        JackBrowser.systemPerms = ::systemPerms
+        JackBrowser.askSelection = ::askAboutSelection
     }
 
     /** 手机内存紧：看不见的标签页先休眠，免得系统把整个 App 杀掉。 */
@@ -434,7 +453,7 @@ class BrowserActivity : androidx.fragment.app.FragmentActivity() {
 
     override fun onDestroy() {
         // 用户自己关掉浏览器：网页里在放的声音也停（只是切到后台时接着放）
-        if (isFinishing) { JackBrowser.pauseAll(); PageReader.stop() }
+        if (isFinishing && !leavingForTab) { JackBrowser.pauseAll(); PageReader.stop() }
         JackBrowser.userViewing = false
         if (JackBrowser.chooser == ::chooseFiles) JackBrowser.chooser = null
         if (JackBrowser.systemPerms == ::systemPerms) JackBrowser.systemPerms = null
@@ -630,6 +649,13 @@ class BrowserActivity : androidx.fragment.app.FragmentActivity() {
                 AnimatedVisibility(bars) { AddressRow() }
             }
             AnimatedVisibility(bars && !(bottom && typing)) { NavBar() }
+            // 从 Kavi 里点进来的：底下也是那条底栏，和别的页面一样点一下就换
+            val tabs = KaviTab.bar(settings.tabBar)
+            if (inKaviTabs && KaviTab.BROWSER in tabs) AnimatedVisibility(bars && !typing) {
+                Box(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 6.dp)) {
+                    LiquidTabBar(tabs.map { t -> TabItem(t.icon, t.label, selected = t == KaviTab.BROWSER) { goTab(t) } }, tabs.indexOf(KaviTab.BROWSER))
+                }
+            }
         }
         if (menu) MenuSheet()
         if (showTabs) Box(Modifier.fillMaxSize().safeDrawingPadding()) { TabsPanel() }
@@ -1023,5 +1049,28 @@ class BrowserActivity : androidx.fragment.app.FragmentActivity() {
 
     companion object {
         const val EXTRA_URL = "url"
+    }
+}
+
+/**
+ * 留在 Kavi 里的浏览器：和 [BrowserActivity] 一样，只是不单独开一个任务（不会像切到另一个 App 那样跳走），
+ * 进出淡入淡出，底下带 Kavi 的底栏。桌面上单独的「Kavi 浏览器」图标、别的 App 点进来的链接还是用 [BrowserActivity]。
+ */
+class BrowserTabActivity : BrowserActivity() {
+    override val inKaviTabs = true
+
+    @Suppress("DEPRECATION")
+    override fun finish() {
+        super.finish()
+        overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+    }
+
+    companion object {
+        fun open(ctx: android.content.Context) {
+            val i = Intent(ctx, BrowserTabActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            val opts = android.app.ActivityOptions.makeCustomAnimation(ctx, android.R.anim.fade_in, android.R.anim.fade_out).toBundle()
+            if (ctx !is android.app.Activity) i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            ctx.startActivity(i, opts)
+        }
     }
 }

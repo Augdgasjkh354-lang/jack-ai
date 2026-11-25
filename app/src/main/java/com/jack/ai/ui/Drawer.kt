@@ -191,7 +191,7 @@ fun HistoryDrawer(
                                 KaviTab.CHAT -> onCloseDrawer()
                                 KaviTab.LIBRARY -> onOpenLibrary()
                                 KaviTab.MEMORY -> onOpenMemory()
-                                KaviTab.BROWSER -> ctx.startActivity(android.content.Intent(ctx, BrowserActivity::class.java))
+                                KaviTab.BROWSER -> BrowserTabActivity.open(ctx)
                                 KaviTab.ROUTINES -> onOpenRoutines()
                                 KaviTab.FILES -> onOpenFiles()
                                 KaviTab.SKILLS -> onOpenSkills()

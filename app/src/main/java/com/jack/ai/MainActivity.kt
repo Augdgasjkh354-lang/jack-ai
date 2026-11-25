@@ -114,6 +114,8 @@ class MainActivity : FragmentActivity() {
     /** 开了应用锁时，是否需要解锁。 */
     private var locked by mutableStateOf(false)
     private val stack = mutableStateListOf<Screen>()
+    /** 下一次换页是点底栏换的：淡入淡出，不是「进一页」的滑动。 */
+    private val tabJump = booleanArrayOf(false)
     /** 从分享菜单「交给 Kavi 工作流」进来的文字：等用户挑一个工作流。 */
     private var workflowShare by mutableStateOf<String?>(null)
 
@@ -207,6 +209,11 @@ class MainActivity : FragmentActivity() {
             }
             ACTION_CAMERA -> { stack.clear(); vm.newChat(); vm.requestCamera() }
             ACTION_DOWNLOADS -> { stack.clear(); stack.add(Screen.Downloads) }
+            // 在浏览器底下的底栏点了别的格子：换到那一页
+            ACTION_OPEN_TAB -> com.jack.ai.ui.KaviTab.of(intent.getStringExtra("tab").orEmpty())?.let { t ->
+                tabJump[0] = true
+                stack.clear(); screenOf(t)?.let { stack.add(it) }
+            }
             ACTION_OPEN_CHAT -> { stack.clear(); vm.mergeInbox(intent.getStringExtra("convId")) }
             // 工作流的通知：直接打开那个工作流，看是哪一步出的事
             ACTION_OPEN_WORKFLOW -> {
@@ -350,7 +357,6 @@ class MainActivity : FragmentActivity() {
                 workflowShare?.let { text -> com.jack.ai.ui.WorkflowSharePicker(text) { workflowShare = null } }
                 val top = stack.lastOrNull()
                 val lastDepth = remember { intArrayOf(stack.size) }
-                val tabJump = remember { booleanArrayOf(false) }
                 val back: () -> Unit = { if (stack.isNotEmpty()) stack.removeAt(stack.lastIndex) }
                 if (top != null) BackHandler(onBack = back)
                 // 进一页：新页从右边滑进来；返回：往右滑出去。底下垫一层背景色，交替的那一下不透出窗口的白底
@@ -359,7 +365,7 @@ class MainActivity : FragmentActivity() {
                 // 底栏：放哪几个在侧边栏里拖着改。点底栏换页不是「进一页」：淡入淡出，底栏那块玻璃自己流过去
                 val tabs = com.jack.ai.ui.KaviTab.bar(state.settings.tabBar)
                 fun openTab(t: com.jack.ai.ui.KaviTab) {
-                    if (t == com.jack.ai.ui.KaviTab.BROWSER) { startActivity(Intent(this@MainActivity, com.jack.ai.ui.BrowserActivity::class.java)); return }
+                    if (t == com.jack.ai.ui.KaviTab.BROWSER) { com.jack.ai.ui.BrowserTabActivity.open(this@MainActivity); return }
                     if (tabOf(top) == t) return
                     tabJump[0] = true
                     stack.clear()
@@ -385,6 +391,7 @@ class MainActivity : FragmentActivity() {
                             onOpenApps = { stack.add(Screen.Apps) },
                             onOpenDownloads = { stack.add(Screen.Downloads) },
                             onOpenFiles = { stack.add(Screen.Files) },
+                            onOpenTab = { openTab(it) },
                             onOpenTerminal = { stack.add(Screen.Terminal(it)) },
                         )
                         Screen.Routines -> RoutinesScreen(vm = vm, state = state, onBack = back, onOpenWorkflows = { stack.add(Screen.Workflows) })
@@ -488,6 +495,7 @@ class MainActivity : FragmentActivity() {
         const val ACTION_NEW_WORK = "com.jack.ai.NEW_WORK"
         const val ACTION_CAMERA = "com.jack.ai.CAMERA"
         const val ACTION_DOWNLOADS = "com.jack.ai.DOWNLOADS"
+        const val ACTION_OPEN_TAB = "com.jack.ai.OPEN_TAB"
         const val ACTION_OPEN_CHAT = "com.jack.ai.OPEN_CHAT"
         const val ACTION_OPEN_WORKFLOW = "com.jack.ai.OPEN_WORKFLOW"
     }

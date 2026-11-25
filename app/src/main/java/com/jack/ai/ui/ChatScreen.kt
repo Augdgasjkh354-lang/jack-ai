@@ -155,6 +155,8 @@ fun ChatScreen(
     onOpenApps: () -> Unit,
     onOpenDownloads: () -> Unit = {},
     onOpenFiles: () -> Unit = {},
+    /** 点底栏：主界面给了就交给它（淡入淡出地换页）；没给就按各自的入口打开。 */
+    onOpenTab: ((KaviTab) -> Unit)? = null,
     /** 打开终端，参数是对话文件夹的 key（Workspace.key）。 */
     onOpenTerminal: (String) -> Unit = {},
     /** 直接打开设置里的某一页（比如缺搜索 Key 时打开「连接」）。 */
@@ -316,11 +318,11 @@ fun ChatScreen(
                     tabs = {
                         LiquidTabBar(KaviTab.bar(state.settings.tabBar).map { t ->
                             TabItem(t.icon, t.label, selected = t == KaviTab.CHAT) {
-                                when (t) {
+                                if (t != KaviTab.CHAT && onOpenTab != null) onOpenTab(t) else when (t) {
                                     KaviTab.CHAT -> focusInput++
                                     KaviTab.LIBRARY -> onOpenLibrary()
                                     KaviTab.MEMORY -> onOpenMemory()
-                                    KaviTab.BROWSER -> ctx.startActivity(Intent(ctx, BrowserActivity::class.java))
+                                    KaviTab.BROWSER -> BrowserTabActivity.open(ctx)
                                     KaviTab.ROUTINES -> onOpenRoutines()
                                     KaviTab.FILES -> onOpenFiles()
                                     KaviTab.SKILLS -> onOpenSkills()

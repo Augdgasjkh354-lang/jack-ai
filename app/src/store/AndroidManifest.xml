@@ -16,6 +16,7 @@
         <meta-data android:name="moe.shizuku.client.V3_SUPPORT" tools:node="remove" />
         <activity android:name=".ui.BackgroundPhoneActivity" tools:node="remove" />
         <activity android:name=".ui.BrowserActivity" tools:node="remove" />
+        <activity android:name=".ui.BrowserTabActivity" tools:node="remove" />
         <activity-alias android:name=".LauncherBrowser" tools:node="remove" />
         <activity android:name=".ui.LinkActivity" tools:node="remove" />
         <service android:name=".vpn.KaviVpnService" tools:node="remove" />

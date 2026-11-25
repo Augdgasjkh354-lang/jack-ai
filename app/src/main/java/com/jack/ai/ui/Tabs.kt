@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
 /**
  * 底部标签栏能放的页面。chat 一直在第一个、拿不掉；其余的在侧边栏里长按拖进「底栏」或拖出去。
@@ -118,15 +119,54 @@ fun LiquidTabBar(items: List<TabItem>, selected: Int, modifier: Modifier = Modif
             TabMemory.last = selected
             x.animateTo(target, spring(dampingRatio = 0.62f, stiffness = 420f))
         }
-        // 离目标越远拉得越长：最多宽出 45%、矮 14%
-        val stretch = (abs(x.value - target) / cellPx).coerceIn(0f, 1f)
+        // 长按底栏再左右滑：那块玻璃跟着手指走（放大一点，像放大镜），滑过一格震一下，松手就换到手指下那一页
+        val scope = androidx.compose.runtime.rememberCoroutineScope()
+        var scrubbing by remember { mutableStateOf(false) }
+        var hover by remember { androidx.compose.runtime.mutableIntStateOf(selected) }
+        var finger by remember { mutableFloatStateOf(0f) }
+        val lift by animateFloatAsState(if (scrubbing) 1f else 0f, Springs.fastSpatial(), label = "lens")
+        fun cellAt(px: Float) = (px / cellPx).toInt().coerceIn(0, items.lastIndex)
+        fun endScrub() {
+            if (!scrubbing) return
+            scrubbing = false
+            val i = hover
+            TabMemory.last = i
+            scope.launch { x.animateTo(i * cellPx, spring(dampingRatio = 0.62f, stiffness = 420f)) }
+            if (i != selected) items[i].onClick()
+        }
+        fun follow(px: Float) { scope.launch { x.snapTo((px - cellPx / 2f).coerceIn(0f, items.lastIndex * cellPx)) } }
+        // 离目标越远拉得越长：最多宽出 45%、矮 14%（手指拖着时不拉，跟着手指走）
+        val stretch = if (scrubbing) 0f else (abs(x.value - target) / cellPx).coerceIn(0f, 1f)
         val lensW = cell * (1f + 0.45f * stretch)
-        Box(Modifier.width(cell * items.size + 8.dp).glass(CircleShape).padding(4.dp)) {
+        Box(Modifier.width(cell * items.size + 8.dp).glass(CircleShape).padding(4.dp)
+            .pointerInput(items.size, cellPx, selected) {
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { o ->
+                        haptics.longPress(); scrubbing = true
+                        finger = o.x; hover = cellAt(finger)
+                        scope.launch { x.animateTo((finger - cellPx / 2f).coerceIn(0f, items.lastIndex * cellPx), Springs.fastSpatial()) }
+                    },
+                    onDrag = { change, amount ->
+                        change.consume()
+                        finger += amount.x
+                        follow(finger)
+                        val h = cellAt(finger)
+                        if (h != hover) { hover = h; haptics.select() }
+                    },
+                    onDragEnd = { endScrub() },
+                    // 长按不动就松手时，松手那一下被格子自己的「点」先收走了，这边收到的是取消：照样按松手处理
+                    onDragCancel = { endScrub() },
+                )
+            }) {
             Box(
                 Modifier
                     .offset { androidx.compose.ui.unit.IntOffset((x.value - (lensW.toPx() - cellPx) / 2f).roundToInt(), 0) }
                     .width(lensW).height(46.dp)
-                    .graphicsLayer { scaleY = 1f - 0.14f * stretch }
+                    .graphicsLayer {
+                        scaleY = (1f - 0.14f * stretch) * (1f + 0.14f * lift)
+                        scaleX = 1f + 0.14f * lift
+                        alpha = 1f - 0.25f * lift
+                    }
                     .shadow(if (isDarkSurface) 0.dp else 3.dp, CircleShape, clip = false)
                     .clip(CircleShape)
                     .background(if (isDarkSurface) Color.White.copy(alpha = 0.16f) else Color.White)
@@ -135,13 +175,15 @@ fun LiquidTabBar(items: List<TabItem>, selected: Int, modifier: Modifier = Modif
             Row {
                 items.forEachIndexed { i, t ->
                     val press = remember { MutableInteractionSource() }
-                    val on = i == selected
+                    val on = if (scrubbing) i == hover else i == selected
                     val ink by androidx.compose.animation.animateColorAsState(if (on) colors.onSurface else colors.onSurfaceVariant,
                         Springs.defaultEffects(), label = "tabInk")
                     Box(
                         Modifier.width(cell).height(46.dp).pressScale(press, 0.86f).clip(CircleShape)
                             .clickable(interactionSource = press, indication = null, onClickLabel = t.label) {
-                                if (on) t.onClick() else { haptics.select(); t.onClick() }
+                                // 长按滑动松手时这里也会收到一次「点」：那次交给滑动处理，不重复打开
+                                if (scrubbing) return@clickable
+                                if (i == selected) t.onClick() else { haptics.select(); t.onClick() }
                             },
                         contentAlignment = Alignment.Center,
                     ) { Icon(t.icon, t.label, Modifier.size(22.dp), tint = ink) }

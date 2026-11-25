@@ -3,6 +3,8 @@ package com.jack.ai.ui
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import org.junit.Assert.assertEquals
@@ -61,5 +63,44 @@ class TabArrangerTest {
         rule.setContent { JackTheme(com.jack.ai.data.ThemeMode.LIGHT) { TabArranger(null, onOpen = { opened = it }, onSave = {}) } }
         rule.onNodeWithText("技能").performClick()
         assertEquals(KaviTab.SKILLS, opened)
+    }
+}
+
+/** 长按底栏左右滑：松手换到手指下面那一格，只打开一次。 */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34], qualifiers = "w400dp-h800dp")
+class LiquidScrubTest {
+    @get:Rule val rule = createComposeRule()
+
+    private fun bar(clicks: MutableList<Int>) {
+        rule.setContent {
+            JackTheme(com.jack.ai.data.ThemeMode.LIGHT) {
+                LiquidTabBar(KaviTab.bar(null).mapIndexed { i, t -> TabItem(t.icon, t.label) { clicks += i } }, 0,
+                    androidx.compose.ui.Modifier.testTag("bar"))
+            }
+        }
+    }
+
+    @Test
+    fun longPressAndSlideOpensTheTabUnderTheFinger() {
+        val clicks = mutableListOf<Int>()
+        bar(clicks)
+        rule.onNodeWithContentDescription("聊天").performTouchInput {
+            down(center); advanceEventTime(800)
+            val step = width.toFloat() // 一格的宽度
+            repeat(30) { moveBy(Offset(3 * step / 30f, 0f)); advanceEventTime(16) }
+            up()
+        }
+        rule.waitForIdle()
+        assertEquals(listOf(3), clicks)
+    }
+
+    @Test
+    fun longPressWithoutMovingOpensOnce() {
+        val clicks = mutableListOf<Int>()
+        bar(clicks)
+        rule.onNodeWithContentDescription("记忆").performTouchInput { down(center); advanceEventTime(800); up() }
+        rule.waitForIdle()
+        assertEquals(listOf(2), clicks)
     }
 }
