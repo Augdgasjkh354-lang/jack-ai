@@ -581,6 +581,18 @@ class Store(context: Context) {
                 runCatching { json.decodeFromString(ListSerializer(Skill.serializer()), it) }.getOrNull()
             } ?: emptyList(),
             fontScale = prefs.getFloat("fontScale", 1f),
+            fontChoice = prefs.getString("fontChoice", "") ?: "",
+            // 以前这几个只改在内存里、没存：App 一重开就回到默认
+            bizStarts = prefs.getBoolean("bizStarts", true),
+            linuxSandbox = prefs.getBoolean("linuxSandbox", false),
+            quietStart = prefs.getInt("quietStart", -1),
+            quietEnd = prefs.getInt("quietEnd", 8),
+            dsVoice = prefs.getBoolean("dsVoice", false),
+            dsVoiceId = prefs.getString("dsVoiceId", "stella") ?: "stella",
+            // 底栏：没存过是 null（用默认那几个）；存过空列表就是只留「聊天」
+            tabBar = prefs.getString("tabBar", null)?.let { raw ->
+                runCatching { json.decodeFromString(ListSerializer(String.serializer()), raw) }.getOrNull()
+            },
             // 换成纯黑白风格时，以前的强调色一次性换成「黑白」（之后用户再选别的不动它）
             accent = if (!prefs.getBoolean("monoTheme", false)) { prefs.edit().putBoolean("monoTheme", true).putString("accent", "mono").apply(); "mono" }
                 else prefs.getString("accent", "mono") ?: "mono",
@@ -685,6 +697,14 @@ class Store(context: Context) {
             .putStringSet("disabledSkills", s.disabledSkills)
             .putString("customSkills", json.encodeToString(ListSerializer(Skill.serializer()), s.customSkills))
             .putFloat("fontScale", s.fontScale)
+            .putString("fontChoice", s.fontChoice)
+            .putBoolean("bizStarts", s.bizStarts)
+            .putBoolean("linuxSandbox", s.linuxSandbox)
+            .putInt("quietStart", s.quietStart)
+            .putInt("quietEnd", s.quietEnd)
+            .putBoolean("dsVoice", s.dsVoice)
+            .putString("dsVoiceId", s.dsVoiceId)
+            .apply { if (s.tabBar == null) remove("tabBar") else putString("tabBar", json.encodeToString(ListSerializer(String.serializer()), s.tabBar)) }
             .putString("accent", s.accent)
             .putBoolean("bubbleAccent", s.bubbleAccent)
             .putBoolean("appLock", s.appLock)
