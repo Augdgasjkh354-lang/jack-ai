@@ -182,7 +182,7 @@ fun Modifier.hairline(shape: Shape): Modifier = composed {
 /** 展开 / 收起的小箭头：转过去，不是换一个图标。 */
 @Composable
 fun Chevron(expanded: Boolean, modifier: Modifier = Modifier, tint: Color = MaterialTheme.colorScheme.onSurfaceVariant) {
-    val turn by animateFloatAsState(if (expanded) 180f else 0f, tween(Motion.NORMAL), label = "chevron")
+    val turn by animateFloatAsState(if (expanded) 180f else 0f, Springs.defaultSpatial(), label = "chevron")
     Icon(Icons.Default.KeyboardArrowDown, if (expanded) "收起" else "展开", modifier.graphicsLayer { rotationZ = turn }, tint = tint)
 }
 
@@ -193,7 +193,9 @@ fun Chevron(expanded: Boolean, modifier: Modifier = Modifier, tint: Color = Mate
 @Composable
 fun BreathingStar(modifier: Modifier = Modifier, size: Dp = 18.dp, color: Color = MaterialTheme.colorScheme.onSurface) {
     val t = rememberInfiniteTransition(label = "star")
-    val beat by t.animateFloat(0f, 1f, infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "beat")
+    val pulse by t.animateFloat(0f, 1f, infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "beat")
+    // 系统关了动画：停在亮着的样子，不一直闪
+    val beat = if (reduceMotion()) 0.7f else pulse
     Canvas(modifier.size(size)) {
         val c = Offset(this.size.width / 2, this.size.height / 2)
         val r = this.size.minDimension / 2
@@ -206,6 +208,19 @@ fun BreathingStar(modifier: Modifier = Modifier, size: Dp = 18.dp, color: Color 
 class Haptics(private val view: View) {
     /** 轻轻一下：发送、切换开关。 */
     fun tick() { view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK) }
+
+    /** 挑了一个（换页签、换版本、选模型）：比 tick 更轻更脆，像拨盘的一格。 */
+    fun select() {
+        view.performHapticFeedback(if (android.os.Build.VERSION.SDK_INT >= 34) HapticFeedbackConstants.SEGMENT_TICK else HapticFeedbackConstants.CLOCK_TICK)
+    }
+
+    /** 长按出菜单。 */
+    fun longPress() { view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS) }
+
+    /** 出错、做不了：和「做完了」区分开的一下。老系统用长按那下代替。 */
+    fun reject() {
+        view.performHapticFeedback(if (android.os.Build.VERSION.SDK_INT >= 30) HapticFeedbackConstants.REJECT else HapticFeedbackConstants.LONG_PRESS)
+    }
 
     /** 做完了：回答写完。老系统没有这一种，用轻的那下代替。 */
     fun done() {
@@ -434,11 +449,13 @@ fun GlassTabs(labels: List<String>, selected: Int, modifier: Modifier = Modifier
                 val on = i == selected
                 Box(
                     Modifier.width(cell).heightIn(min = 36.dp).clip(CircleShape)
-                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { if (!on) { haptics.tick(); onSelect(i) } },
+                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { if (!on) { haptics.select(); onSelect(i) } },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(label, style = MaterialTheme.typography.labelLarge, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
-                        color = if (on) colors.onSurface else colors.onSurfaceVariant)
+                    // 字的颜色跟着那块底一起过渡，不是一下跳过去
+                    val ink by androidx.compose.animation.animateColorAsState(if (on) colors.onSurface else colors.onSurfaceVariant,
+                        Springs.defaultEffects(), label = "tabInk")
+                    Text(label, style = MaterialTheme.typography.labelLarge, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal, color = ink)
                 }
             }
         }
@@ -458,9 +475,11 @@ fun GlassTabBar(items: List<TabItem>, modifier: Modifier = Modifier) {
     Row(modifier.fillMaxWidth().glass(CircleShape).padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
         items.forEach { t ->
             val press = remember { MutableInteractionSource() }
+            val on = if (isDarkSurface) Color.White.copy(alpha = 0.14f) else Color.White
+            val bg by androidx.compose.animation.animateColorAsState(if (t.selected) on else on.copy(alpha = 0f), Springs.defaultEffects(), label = "tabBg")
             Box(
                 Modifier.weight(1f).pressScale(press, 0.88f).height(46.dp).clip(CircleShape)
-                    .background(if (t.selected) (if (isDarkSurface) Color.White.copy(alpha = 0.14f) else Color.White) else Color.Transparent)
+                    .background(bg)
                     .clickable(interactionSource = press, indication = androidx.compose.foundation.LocalIndication.current, onClickLabel = t.label) { haptics.tick(); t.onClick() },
                 contentAlignment = Alignment.Center,
             ) {

@@ -165,7 +165,8 @@ internal fun EmptyState(
     val project = state.project(state.currentProjectId)
     val colors = MaterialTheme.colorScheme
     // 新对话的空白页轻轻浮上来，不是一下子蹦出来
-    val enter = remember(conv?.id) { androidx.compose.animation.core.Animatable(0f) }
+    val still = reduceMotion()
+    val enter = remember(conv?.id) { androidx.compose.animation.core.Animatable(if (still) 1f else 0f) }
     LaunchedEffect(conv?.id) { enter.animateTo(1f, androidx.compose.animation.core.tween(320, easing = androidx.compose.animation.core.FastOutSlowInEasing)) }
     Column(
         Modifier.fillMaxSize()
@@ -192,7 +193,12 @@ internal fun EmptyState(
         Spacer(Modifier.weight(1f))
         // 写文案这些：点一下直接发出去，Kavi 用问题卡片把要知道的问清楚
         if (state.settings.bizStarts) {
-            com.jack.ai.data.BizStarts.ALL.forEach { b -> SuggestionRow(startIcon(b.key), Hue.of(b.tint).color, b.title) { vm.send(b.prompt) } }
+            // 一行接一行地浮上来（换一个新对话重新排一次）
+            androidx.compose.runtime.key(conv?.id) {
+                com.jack.ai.data.BizStarts.ALL.forEachIndexed { i, b ->
+                    Box(Modifier.appear(order = i + 2)) { SuggestionRow(startIcon(b.key), Hue.of(b.tint).color, b.title) { vm.send(b.prompt) } }
+                }
+            }
         }
         Spacer(Modifier.height(8.dp))
     }
@@ -202,9 +208,10 @@ internal fun EmptyState(
 @Composable
 private fun SuggestionRow(icon: ImageVector, tint: Color, title: String, onClick: () -> Unit) {
     val press = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val haptics = rememberHaptics()
     Row(
         Modifier.fillMaxWidth().pressScale(press, 0.98f).clip(Radii.m)
-            .clickable(interactionSource = press, indication = androidx.compose.foundation.LocalIndication.current, onClick = onClick)
+            .clickable(interactionSource = press, indication = androidx.compose.foundation.LocalIndication.current) { haptics.tick(); onClick() }
             .heightIn(min = 52.dp).padding(horizontal = 4.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

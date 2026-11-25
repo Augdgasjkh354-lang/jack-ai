@@ -115,8 +115,9 @@ fun Thumbnail(path: String, size: Dp, onClick: (() -> Unit)? = null) {
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .let { if (onClick != null) it.clickable(onClick = onClick) else it },
     ) {
-        bmp?.let {
-            Image(it.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        // 读出来以后淡入，不是从灰块一下跳成图
+        androidx.compose.animation.AnimatedVisibility(bmp != null, enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(Motion.NORMAL))) {
+            bmp?.let { Image(it.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
         }
     }
 }
@@ -151,7 +152,9 @@ internal fun VideoThumb(path: String, maxW: Dp, maxH: Dp, modifier: Modifier = M
             .let { if (onClick != null) it.clickable(onClick = onClick) else it },
         contentAlignment = Alignment.Center,
     ) {
-        bmp?.let { Image(it.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
+        androidx.compose.animation.AnimatedVisibility(bmp != null, enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(Motion.NORMAL))) {
+            bmp?.let { Image(it.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
+        }
         Box(Modifier.size(if (maxW < 80.dp) 22.dp else 44.dp).background(Color.Black.copy(alpha = 0.45f), androidx.compose.foundation.shape.CircleShape), contentAlignment = Alignment.Center) {
             Icon(Icons.Default.PlayArrow, "播放", tint = Color.White, modifier = Modifier.size(if (maxW < 80.dp) 16.dp else 30.dp))
         }
@@ -194,18 +197,28 @@ internal fun ImageViewer(path: String, onDismiss: () -> Unit) {
     // 双指缩放、拖着看细节（截图里的小字、图表）；双击放大 / 还原；没放大时点一下关掉
     var scale by remember(path) { mutableStateOf(1f) }
     var offset by remember(path) { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+    var zoomJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    // 打开时黑底淡入、图从 92% 放大到满屏，像从缩略图「展开」出来
+    val opening = remember(path) { androidx.compose.animation.core.Animatable(if (animationsOff(ctx)) 1f else 0f) }
+    LaunchedEffect(path) { opening.animateTo(1f, Springs.defaultSpatial()) }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(
-            Modifier.fillMaxSize().background(Color.Black)
+            Modifier.fillMaxSize().graphicsLayer { alpha = opening.value.coerceIn(0f, 1f) }.background(Color.Black)
                 .pointerInput(path) {
                     detectTapGestures(
                         onTap = { if (scale <= 1.01f) onDismiss() },
                         onDoubleTap = { at ->
-                            if (scale > 1.01f) { scale = 1f; offset = androidx.compose.ui.geometry.Offset.Zero }
-                            else {
-                                // 以点的地方为中心放大
-                                scale = 2.5f
-                                offset = (androidx.compose.ui.geometry.Offset(size.width / 2f, size.height / 2f) - at) * 1.5f
+                            // 放大、还原都是弹簧过渡，看得出是从哪里放大的
+                            val (toScale, toOffset) = if (scale > 1.01f) 1f to androidx.compose.ui.geometry.Offset.Zero
+                                else 2.5f to (androidx.compose.ui.geometry.Offset(size.width / 2f, size.height / 2f) - at) * 1.5f
+                            val fromScale = scale
+                            val fromOffset = offset
+                            zoomJob?.cancel()
+                            zoomJob = scope.launch {
+                                androidx.compose.animation.core.animate(0f, 1f, animationSpec = Springs.defaultSpatial()) { t, _ ->
+                                    scale = fromScale + (toScale - fromScale) * t
+                                    offset = fromOffset + (toOffset - fromOffset) * t
+                                }
                             }
                         },
                     )
@@ -225,7 +238,8 @@ internal fun ImageViewer(path: String, onDismiss: () -> Unit) {
         ) {
             bmp?.let {
                 Image(it.asImageBitmap(), null, Modifier.fillMaxWidth().graphicsLayer {
-                    scaleX = scale; scaleY = scale; translationX = offset.x; translationY = offset.y
+                    val open = 0.92f + 0.08f * opening.value
+                    scaleX = scale * open; scaleY = scale * open; translationX = offset.x; translationY = offset.y
                 }, contentScale = ContentScale.Fit)
             }
             Row(Modifier.align(Alignment.TopCenter).fillMaxWidth().statusBarsPadding().padding(12.dp)) {

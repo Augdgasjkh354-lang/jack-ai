@@ -219,7 +219,8 @@ private fun MemoryPage(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
             items(shown, key = { it.id }) { m ->
                 // 一条一张半透明的小卡
                 androidx.compose.material3.Surface(color = NIGHT_CARD, shape = Radii.m,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), modifier = Modifier.fillMaxWidth()) {
+                    // 删掉的那条淡出、下面的补上来；撤销时淡回来
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), modifier = Modifier.animateItem().fillMaxWidth()) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 14.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
                         Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
                             Text(m.text, style = MaterialTheme.typography.bodyMedium)
@@ -249,7 +250,7 @@ private fun MemoryPage(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                 }
             }
             items(state.dreams, key = { it.id }) { d ->
-                DreamCard(d, onDelete = { vm.deleteDream(d.id) })
+                androidx.compose.foundation.layout.Box(Modifier.animateItem()) { DreamCard(d, onDelete = { vm.deleteDream(d.id) }) }
             }
         }
     }

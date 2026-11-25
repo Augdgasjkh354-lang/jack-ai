@@ -30,6 +30,8 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
@@ -107,7 +109,9 @@ fun HistoryDrawer(
     // 删对话不再先弹确认框：直接删，抽屉底下出一条「撤销」
     val undoBar = remember { androidx.compose.material3.SnackbarHostState() }
     val undoScope = androidx.compose.runtime.rememberCoroutineScope()
+    val drawerHaptics = rememberHaptics()
     fun deleteNow(c: Conversation) {
+        drawerHaptics.tick()
         onDelete(c.id)
         undoScope.launch {
             undoBar.currentSnackbarData?.dismiss()
@@ -146,7 +150,16 @@ fun HistoryDrawer(
             }
             if (query.isNotBlank()) {
                 LazyColumn(Modifier.weight(1f).padding(top = 4.dp)) {
-                    item { SectionLabel(if (results.isEmpty()) "没有找到相关对话" else "找到 ${results.size} 个对话") }
+                    item {
+                        // 结果数跟着打字滚动变化
+                        if (results.isEmpty()) SectionLabel("没有找到相关对话")
+                        else Row(Modifier.padding(start = 28.dp, end = 16.dp, top = 22.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            val st = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold)
+                            Text("找到 ", style = st, color = colors.onSurfaceVariant)
+                            RollingText(results.size, st, color = colors.onSurfaceVariant)
+                            Text(" 个对话", style = st, color = colors.onSurfaceVariant)
+                        }
+                    }
                     items(results, key = { "s" + it.first.id }) { (c, snippet) ->
                         SearchResultRow(c.title, snippet, query, state.project(c.projectId)?.name) {
                             // 是消息里搜到的：打开后直接滚到那条，不用自己往上翻
@@ -369,18 +382,28 @@ fun ChatItem(
     var menu by remember { mutableStateOf(false) }
     var showUsage by remember { mutableStateOf(false) }
     val colors = MaterialTheme.colorScheme
+    val haptics = rememberHaptics()
+    val press = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    // 选中的底色渐变过去；按住微微缩一下；长按震一下再出菜单
+    val bg by androidx.compose.animation.animateColorAsState(if (selected) colors.secondaryContainer else colors.secondaryContainer.copy(alpha = 0f),
+        Springs.defaultEffects(), label = "chatBg")
     Box(Modifier.padding(horizontal = 12.dp)) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
+                .pressScale(press, 0.98f)
                 .clip(Radii.m)
-                .background(if (selected) colors.secondaryContainer else Color.Transparent)
-                .combinedClickable(onClick = onClick, onLongClick = { menu = true })
+                .background(bg)
+                .combinedClickable(interactionSource = press, indication = androidx.compose.foundation.LocalIndication.current,
+                    onClick = onClick, onLongClick = { haptics.longPress(); menu = true })
                 .heightIn(min = 48.dp)
                 .padding(start = 16.dp, end = if (showMore) 4.dp else 16.dp, top = 2.dp, bottom = 2.dp),
         ) {
-            if (c.pinned) {
+            // 置顶的图钉：弹着出来、缩着收走
+            androidx.compose.animation.AnimatedVisibility(c.pinned,
+                enter = androidx.compose.animation.scaleIn(Springs.fastSpatial(), initialScale = 0.3f) + androidx.compose.animation.fadeIn(Springs.fastEffects()),
+                exit = androidx.compose.animation.scaleOut(targetScale = 0.3f) + androidx.compose.animation.fadeOut()) {
                 Icon(AppIcons.Pin, null, Modifier.padding(end = 6.dp).size(14.dp), tint = colors.primary)
             }
             Text(
@@ -390,7 +413,12 @@ fun ChatItem(
                 modifier = Modifier.weight(1f).padding(vertical = 10.dp),
             )
             if (answering) {
-                Box(Modifier.padding(start = 8.dp).size(7.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Hue.BLUE.color))
+                // 「回答中」的小点慢慢一明一暗，看得出还在动
+                val still = reduceMotion()
+                val glow by androidx.compose.animation.core.rememberInfiniteTransition(label = "answering").animateFloat(0.35f, 1f,
+                    androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.tween(800), androidx.compose.animation.core.RepeatMode.Reverse), label = "dot")
+                Box(Modifier.padding(start = 8.dp).size(7.dp).then(Modifier.graphicsLayer { alpha = if (still) 1f else glow })
+                    .clip(androidx.compose.foundation.shape.CircleShape).background(Hue.BLUE.color))
                 Text("回答中", style = MaterialTheme.typography.labelSmall, color = Hue.BLUE.color, modifier = Modifier.padding(start = 4.dp))
             }
             if (showMore) {

@@ -43,6 +43,11 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
 import com.jack.ai.ChatViewModel
 import com.jack.ai.UiState
 import com.jack.ai.data.Flashcard
@@ -142,42 +147,59 @@ fun ReviewScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
 @Composable
 private fun FlashcardView(card: Flashcard, remaining: Int, onGrade: (Int) -> Unit) {
     var shown by remember(card.id) { mutableStateOf(false) }
+    val haptics = rememberHaptics()
+    // 翻牌：卡片绕竖轴转半圈，转过一半时换成背面（背面反着转回来，字是正的）
+    val turn by androidx.compose.animation.core.animateFloatAsState(if (shown) 180f else 0f,
+        androidx.compose.animation.core.spring(dampingRatio = 0.8f, stiffness = 300f), label = "flip")
+    val density = androidx.compose.ui.platform.LocalDensity.current.density
+    fun flip() { if (!shown) { haptics.tick(); shown = true } }
     Column(Modifier.fillMaxSize()) {
-        Text("${card.deck} · 还剩 $remaining 张", style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            val st = MaterialTheme.typography.labelMedium
+            val ink = MaterialTheme.colorScheme.onSurfaceVariant
+            Text("${card.deck} · 还剩 ", style = st, color = ink)
+            RollingText(remaining, st, color = ink)
+            Text(" 张", style = st, color = ink)
+        }
         Spacer(Modifier.size(12.dp))
-        Card(onClick = { shown = true }, modifier = Modifier.fillMaxWidth().weight(1f)) {
-            Column(
-                Modifier.fillMaxSize().padding(24.dp),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Text(card.front, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
-                AnimatedVisibility(shown) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        // 每张新卡淡入
+        androidx.compose.runtime.key(card.id) {
+            Card(onClick = { flip() }, modifier = Modifier.fillMaxWidth().weight(1f).appear(rise = 0)
+                .graphicsLayer { rotationY = turn; cameraDistance = 14f * density }) {
+                Column(
+                    Modifier.fillMaxSize().padding(24.dp).graphicsLayer { if (turn > 90f) rotationY = 180f },
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    if (turn <= 90f) {
+                        Text(card.front, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
+                        Spacer(Modifier.size(24.dp))
+                    } else {
+                        Text(card.front, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
                         HorizontalDivider(Modifier.padding(vertical = 20.dp))
                         Text(card.back, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center,
                             modifier = Modifier.heightIn(max = 320.dp))
                     }
                 }
-                if (!shown) {
-                    Spacer(Modifier.size(24.dp))
-                }
             }
         }
         Spacer(Modifier.size(16.dp))
-        if (shown) {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Button(onClick = { onGrade(0) }, modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer)) { Text("忘了") }
-                Button(onClick = { onGrade(1) }, modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer)) { Text("模糊") }
-                Button(onClick = { onGrade(2) }, modifier = Modifier.weight(1f)) { Text("记得") }
+        androidx.compose.animation.AnimatedContent(shown, label = "grade",
+            transitionSpec = { (fadeIn(Springs.defaultEffects()) + slideInVertically(Springs.defaultSpatial()) { it / 2 }) togetherWith fadeOut(Springs.fastEffects()) }) { open ->
+            if (open) {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Button(onClick = { haptics.tick(); onGrade(0) }, modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer)) { Text("忘了") }
+                    Button(onClick = { haptics.tick(); onGrade(1) }, modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer)) { Text("模糊") }
+                    Button(onClick = { haptics.done(); onGrade(2) }, modifier = Modifier.weight(1f)) { Text("记得") }
+                }
+            } else {
+                Button(onClick = { flip() }, modifier = Modifier.fillMaxWidth()) { Text("显示答案") }
             }
-        } else {
-            Button(onClick = { shown = true }, modifier = Modifier.fillMaxWidth()) { Text("显示答案") }
         }
     }
 }

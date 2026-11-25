@@ -97,6 +97,9 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.animateContentSize
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
@@ -421,6 +424,7 @@ private fun ModelPicker(title: String, settings: Settings, projectName: String?,
     var open by remember { mutableStateOf(false) }
     val colors = MaterialTheme.colorScheme
     val press = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val haptics = rememberHaptics()
     Box {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -429,18 +433,26 @@ private fun ModelPicker(title: String, settings: Settings, projectName: String?,
                 .padding(horizontal = 18.dp, vertical = 4.dp),
             verticalArrangement = Arrangement.Center,
         ) {
-            Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall,
-                modifier = Modifier.widthIn(max = 150.dp))
+            // 标题（第一轮答完自动起名）和模型名换了：淡入淡出换过去，胶囊宽度跟着平滑变
+            androidx.compose.animation.AnimatedContent(title, modifier = Modifier.animateContentSize(Springs.defaultSpatial()),
+                transitionSpec = { fadeIn(Springs.defaultEffects()) togetherWith fadeOut(Springs.fastEffects()) }, label = "title") { t ->
+                Text(t, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.widthIn(max = 150.dp))
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    (projectName?.let { "$it · " } ?: "") + modelLabel(model),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = colors.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.widthIn(max = 136.dp),
-                )
-                Icon(Icons.Default.KeyboardArrowDown, null, Modifier.size(14.dp), tint = colors.onSurfaceVariant)
+                androidx.compose.animation.AnimatedContent((projectName?.let { "$it · " } ?: "") + modelLabel(model),
+                    transitionSpec = { fadeIn(Springs.defaultEffects()) togetherWith fadeOut(Springs.fastEffects()) }, label = "model") { label ->
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.widthIn(max = 136.dp),
+                    )
+                }
+                // 菜单开着时小箭头转上去
+                Chevron(open, Modifier.size(14.dp))
             }
         }
         RoundMenu(expanded = open, onDismiss = { open = false }, modifier = Modifier.heightIn(max = 460.dp)) {
@@ -453,7 +465,7 @@ private fun ModelPicker(title: String, settings: Settings, projectName: String?,
                         modifier = Modifier.padding(start = 20.dp, top = if (i > 0) 14.dp else 8.dp, bottom = 2.dp))
                 }
                 Row(
-                    Modifier.fillMaxWidth().clickable { onPick(c.key); open = false }.heightIn(min = 48.dp).padding(horizontal = 20.dp, vertical = 8.dp),
+                    Modifier.fillMaxWidth().clickable { if (c.key != model) haptics.select(); onPick(c.key); open = false }.heightIn(min = 48.dp).padding(horizontal = 20.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(c.label, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
@@ -477,6 +489,7 @@ private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolea
     val lastId = conv.messages.last().id
     val lastUserId = conv.messages.lastOrNull { it.role == "user" }?.id
     val follow = rememberFollowBottom(listState, conv.id, lastUserId, moving = streaming || StreamReveal.pending)
+    val seen = remember(conv.id) { conv.messages.mapTo(HashSet()) { it.id } }
     // 从搜索点进来：等回到底部那一下过去，再滚到命中的那条，停在那里不跟着往下走
     val jump = ChatJump.target?.takeIf { it.first == conv.id }
     LaunchedEffect(conv.id, jump) {
@@ -514,7 +527,9 @@ private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolea
         ) {
             conv.messages.forEach { msg ->
                 item(key = msg.id) {
-                    Box(Modifier.animateItem()) {
+                    // 刚发出去、刚开始回的消息：从下面浮上来；打开对话时已有的、滑出去再滑回来的都不播
+                    val fresh = remember { msg.id !in seen }.also { seen += msg.id }
+                    Box(Modifier.animateItem().then(if (fresh) Modifier.appear(rise = if (msg.role == "user") 28 else 10) else Modifier)) {
                         if (msg.role == "user") {
                             UserBubble(msg, onDelete = { vm.deleteFrom(msg.id).let { if (it > 0) onDeleted(it) } }, onEdit = { onEdit(msg) },
                                 editing = msg.id == editingId, onSwitch = { k -> vm.switchBranch(msg.id, k) })

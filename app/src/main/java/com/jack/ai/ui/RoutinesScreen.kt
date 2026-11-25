@@ -56,6 +56,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.graphicsLayer
 import com.jack.ai.ChatViewModel
 import com.jack.ai.UiState
 import com.jack.ai.data.CalendarTool
@@ -239,12 +240,20 @@ private fun RoutineCard(r: Routine, onClick: () -> Unit, onToggle: (Boolean) -> 
     val (kindName, icon, tintLong) = kindLook(r.kind)
     val tint = androidx.compose.ui.graphics.Color(tintLong)
     var menu by remember { mutableStateOf(false) }
+    // 关掉的那张整体淡一点、退一点，一眼看出哪些不在跑；开关拨回去又亮起来
+    val live by androidx.compose.animation.core.animateFloatAsState(if (r.enabled) 1f else 0f, Springs.defaultSpatial(), label = "live")
+    val press = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     androidx.compose.material3.Surface(
         onClick = onClick,
         shape = Radii.l,
         color = colors.surfaceContainerLowest,
         border = androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant),
-        modifier = Modifier.fillMaxWidth(),
+        interactionSource = press,
+        modifier = Modifier.fillMaxWidth().pressScale(press, 0.98f).graphicsLayer {
+            alpha = 0.55f + 0.45f * live
+            val s = 0.98f + 0.02f * live
+            scaleX = s; scaleY = s
+        },
     ) {
         Column {
             Row(Modifier.padding(start = 16.dp, top = 16.dp, end = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.Top) {

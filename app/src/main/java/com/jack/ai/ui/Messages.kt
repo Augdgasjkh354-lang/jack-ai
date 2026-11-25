@@ -209,17 +209,19 @@ fun UserBubble(msg: ChatMessage, onDelete: () -> Unit, onEdit: (() -> Unit)? = n
 @Composable
 private fun BranchSwitch(index: Int, total: Int, onSwitch: (Int) -> Unit) {
     val colors = MaterialTheme.colorScheme
+    val haptics = rememberHaptics()
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
         @Composable
         fun arrow(label: String, desc: String, enabled: Boolean, to: Int) {
             Box(contentAlignment = Alignment.Center, modifier = Modifier.size(32.dp).clip(CircleShape)
-                .then(if (enabled) Modifier.clickable(onClickLabel = desc) { onSwitch(to) } else Modifier)) {
+                .then(if (enabled) Modifier.clickable(onClickLabel = desc) { haptics.select(); onSwitch(to) } else Modifier)) {
                 Text(label, style = MaterialTheme.typography.titleMedium,
                     color = if (enabled) colors.onSurfaceVariant else colors.outlineVariant)
             }
         }
         arrow("‹", "上一个版本", index > 0, index - 1)
-        Text("${index + 1} / $total", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
+        // 第几版跟着翻：往后翻数字从下面顶上来，往前翻从上面落下去
+        RollingText(index + 1, MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant, format = { "$it / $total" })
         arrow("›", "下一个版本", index < total - 1, index + 1)
     }
 }
@@ -294,6 +296,10 @@ fun AssistantMessage(
     val clipboard = LocalClipboardManager.current
     val ctx = LocalContext.current
     val colors = MaterialTheme.colorScheme
+    val haptics = rememberHaptics()
+    // 这条是眼看着写出来的（不是翻旧对话）：写着写着出错了要抖一下提醒
+    val wasLive = remember(msg.id) { booleanArrayOf(false) }
+    if (streaming) wasLive[0] = true
     Column(Modifier.fillMaxWidth()) {
         if (msg.plan.isNotEmpty()) {
             PlanCard(msg.plan, msg.cost, msg.criteria)
@@ -388,7 +394,9 @@ fun AssistantMessage(
         }
         msg.error?.let { err ->
             Spacer(Modifier.height(6.dp))
-            Surface(color = colors.errorContainer.copy(alpha = 0.6f), shape = Radii.m) {
+            var nudge by remember(msg.id) { androidx.compose.runtime.mutableIntStateOf(0) }
+            LaunchedEffect(err) { if (wasLive[0]) { nudge++; haptics.reject() } }
+            Surface(color = colors.errorContainer.copy(alpha = 0.6f), shape = Radii.m, modifier = Modifier.appear().shake(nudge)) {
                 Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
                     Icon(Icons.Default.Warning, null, Modifier.padding(top = 2.dp).size(16.dp), tint = colors.error)
                     Spacer(Modifier.size(8.dp))
@@ -412,6 +420,7 @@ fun AssistantMessage(
                     LaunchedEffect(copied) { if (copied) { kotlinx.coroutines.delay(1500); copied = false } }
                     SmallAction(if (copied) Icons.Default.Check else AppIcons.Copy, if (copied) "已复制" else "复制") {
                         clipboard.setText(AnnotatedString(msg.content))
+                        if (!copied) haptics.tick()
                         copied = true
                     }
                 }
@@ -464,9 +473,8 @@ private fun SmallAction(icon: ImageVector, desc: String, onClick: () -> Unit) {
     val press = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     Surface(onClick = onClick, shape = androidx.compose.foundation.shape.CircleShape, interactionSource = press,
         color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.size(34.dp).pressScale(press, 0.9f)) {
-        Box(contentAlignment = Alignment.Center) {
-            Icon(icon, desc, Modifier.size(17.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+        // 图标换了（复制 → 对勾）：弹一下换过去
+        PopSwap(icon) { ic -> Icon(ic, desc, Modifier.size(17.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
 }
 

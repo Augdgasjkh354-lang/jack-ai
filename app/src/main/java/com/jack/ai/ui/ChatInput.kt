@@ -437,7 +437,12 @@ internal fun InputBar(
                                 },
                             )
                         }
-                        items(state.pending, key = { it.id }) { att -> PendingChip(att, onOpen = openFile) { vm.removePending(att.id) } }
+                        // 加进来的附件弹进来、移掉的让出位置时旁边的滑过去
+                        items(state.pending, key = { it.id }) { att ->
+                            Box(Modifier.animateItem(fadeInSpec = Springs.defaultEffects(), placementSpec = Springs.defaultSpatial(), fadeOutSpec = Springs.fastEffects())) {
+                                PendingChip(att, onOpen = openFile) { vm.removePending(att.id) }
+                            }
+                        }
                         if (state.importing) {
                             item { CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) }
                         }
@@ -542,10 +547,15 @@ internal fun InputBar(
                     )
                     Row(Modifier.padding(bottom = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     val sendPress = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-                    if (editing == null && state.streamingHere && text.isNotBlank()) {
-                        // 回答进行中也能发：作为插话，下一步就会看到
+                    // 回答进行中也能发：作为插话，下一步就会看到。打了字才从停止键旁边弹出来
+                    androidx.compose.animation.AnimatedVisibility(
+                        editing == null && state.streamingHere && text.isNotBlank(),
+                        enter = androidx.compose.animation.scaleIn(Springs.fastSpatial(), initialScale = 0.5f) + androidx.compose.animation.fadeIn(Springs.fastEffects()),
+                        exit = androidx.compose.animation.scaleOut(androidx.compose.animation.core.tween(120), targetScale = 0.5f) + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(120)),
+                    ) {
+                        val press = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
                         Surface(onClick = { if (vm.send(text)) { haptics.tick(); onTextChange("") } }, shape = CircleShape, color = colors.primary,
-                            modifier = Modifier.size(42.dp)) {
+                            modifier = Modifier.size(42.dp).pressScale(press, 0.88f), interactionSource = press) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(AppIcons.ArrowUp, "插话", Modifier.size(20.dp), tint = colors.onPrimary)
                             }
@@ -587,17 +597,22 @@ internal fun InputBar(
                                 val edit = a == SendAction.EDIT
                                 val canSend = if (edit) text.isNotBlank() || editing?.attachments?.isNotEmpty() == true
                                     else (text.isNotBlank() || state.pending.isNotEmpty()) && !state.importing
+                                // 能发 / 不能发之间颜色渐变（附件读完、打了字时亮起来），不是一下跳
+                                val fill by androidx.compose.animation.animateColorAsState(
+                                    if (canSend) colors.primary else colors.onSurface.copy(alpha = 0.08f), Springs.defaultEffects(), label = "sendFill")
+                                val ink by androidx.compose.animation.animateColorAsState(
+                                    if (canSend) colors.onPrimary else colors.outline, Springs.defaultEffects(), label = "sendInk")
                                 Surface(
                                     onClick = { haptics.tick(); if (edit) onSubmitEdit() else if (vm.send(text)) onTextChange("") },
                                     enabled = canSend,
                                     shape = CircleShape,
-                                    color = if (canSend) colors.primary else colors.onSurface.copy(alpha = 0.08f),
+                                    color = fill,
                                     modifier = Modifier.size(42.dp),
                                     interactionSource = sendPress,
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
                                         Icon(if (edit) Icons.Default.Check else AppIcons.ArrowUp, if (edit) "改好发送" else "发送", Modifier.size(20.dp),
-                                            tint = if (canSend) colors.onPrimary else colors.outline)
+                                            tint = ink)
                                     }
                                 }
                             }

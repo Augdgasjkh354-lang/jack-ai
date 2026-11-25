@@ -264,8 +264,9 @@ fun ProjectScreen(
 
 @Composable
 private fun EmptyHint(title: String, body: String, action: (@Composable () -> Unit)? = null) {
+    // 空页提示轻轻浮上来
     Column(
-        Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 64.dp),
+        Modifier.fillMaxWidth().appear().padding(horizontal = 32.dp, vertical = 64.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {

@@ -672,10 +672,10 @@ private fun SettingsHome(
         SettingsEntry(icon, p.title, value, warn) { onPick(p) }
     val noKey = !settings.hasAnyKey()
     val model = settings.modelChoices().firstOrNull { it.key == settings.model }?.label
-    SettingsGroup("关于你", listOf(
+    SettingsGroup(order = 1, title = "关于你", listOf(
         go(SettingsPage.PROFILE, Icons.Default.Person, settings.userName.ifBlank { "未设置" }),
     ))
-    SettingsGroup("模型", listOf(
+    SettingsGroup(order = 2, title = "模型", listOf(
         go(SettingsPage.KEY, AppIcons.Key, if (settings.apiKey.isNotBlank()) "已填" else "未填", warn = noKey),
         go(SettingsPage.PROVIDERS, AppIcons.Cloud, if (settings.providers.isEmpty()) "未添加" else "${settings.providers.size} 个"),
         go(SettingsPage.MODEL, AppIcons.Brain, listOfNotNull(model, settings.thinking.labelFor(settings.endpoint())).joinToString(" · ")),
@@ -683,19 +683,19 @@ private fun SettingsHome(
         go(SettingsPage.COMPRESS, AppIcons.Compress, "${settings.compressTokens / 1000}k"),
     ))
     // 正式版没有的功能不显示入口（见 Edition）
-    SettingsGroup("Kavi 能用的", listOfNotNull(
+    SettingsGroup(order = 3, title = "Kavi 能用的", listOfNotNull(
         go(SettingsPage.CONNECT, AppIcons.Globe),
         SettingsEntry(Icons.Default.Build, "技能", onClick = onOpenSkills),
         if (com.jack.ai.Edition.linux) go(SettingsPage.LINUX, AppIcons.Terminal, if (settings.linuxSandbox) "已装" else "未装") else null,
         go(SettingsPage.REMOTE, AppIcons.Share),
     ))
-    SettingsGroup("手机", listOfNotNull(
+    SettingsGroup(order = 4, title = "手机", listOfNotNull(
         if (com.jack.ai.Edition.phoneControl) go(SettingsPage.PHONE, AppIcons.Phone, if (settings.phoneApps.isEmpty()) "未开启" else "${settings.phoneApps.size} 个 App") else null,
         go(SettingsPage.ASK, Icons.Default.Search),
         go(SettingsPage.PHONEDATA, Icons.AutoMirrored.Filled.List, if (settings.phoneDataOn) "已开" else "全关"),
         go(SettingsPage.FOLDERS, AppIcons.Folder, if (settings.phoneFolders.isEmpty()) "未授权" else "${settings.phoneFolders.size} 个"),
     ))
-    SettingsGroup("应用", listOfNotNull(
+    SettingsGroup(order = 5, title = "应用", listOfNotNull(
         go(SettingsPage.LOOK, AppIcons.Moon, settings.themeMode.label),
         SettingsEntry(AppIcons.Chart, "统计", listOfNotNull(monthSpent?.let { "本月 " + yuan(it) }, quota).joinToString(" · ").ifEmpty { null }, onClick = onOpenUsage),
         go(SettingsPage.PRIVACY, Icons.Default.Lock, when {
@@ -711,10 +711,11 @@ private fun SettingsHome(
 
 /** 一组入口：灰色粗体小标题，下面一张大圆角卡片，行和行之间一道从文字起头的细线。图标是素色线条，和聊天页一样克制。 */
 @Composable
-private fun SettingsGroup(title: String, entries: List<SettingsEntry>) {
+private fun SettingsGroup(order: Int = 0, title: String, entries: List<SettingsEntry>) {
     val colors = MaterialTheme.colorScheme
     val dark = colors.background.luminance() < 0.5f
-    Column(Modifier.fillMaxWidth()) {
+    // 设置首页的几组一组接一组浮上来
+    Column(Modifier.fillMaxWidth().appear(order, rise = 8)) {
         Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
             color = colors.onSurfaceVariant, modifier = Modifier.padding(start = 10.dp, bottom = 8.dp))
         androidx.compose.material3.Surface(

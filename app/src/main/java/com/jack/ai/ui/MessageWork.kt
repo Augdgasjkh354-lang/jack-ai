@@ -285,8 +285,10 @@ internal fun PlanCard(items: List<com.jack.ai.data.PlanItem>, cost: Double = 0.0
     WorkCard {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 6.dp)) {
             Text("任务清单", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            // 做完的条数往上滚
+            RollingText(items.count { it.status == "done" || it.status == "skipped" }, MaterialTheme.typography.labelMedium.tabular, color = colors.onSurfaceVariant)
             Text(
-                "${items.count { it.status == "done" || it.status == "skipped" }}/${items.size}" + if (cost > 0) " · 已花 ¥%.2f".format(cost) else "",
+                "/${items.size}" + if (cost > 0) " · 已花 ¥%.2f".format(cost) else "",
                 style = MaterialTheme.typography.labelMedium.tabular, color = colors.onSurfaceVariant,
             )
         }
@@ -305,7 +307,8 @@ internal fun PlanCard(items: List<com.jack.ai.data.PlanItem>, cost: Double = 0.0
                         .background(rowBg)
                         .padding(horizontal = 8.dp, vertical = 7.dp),
                 ) {
-                    Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) {
+                    // 一条做完时那个勾弹一下
+                    Box(Modifier.size(22.dp).popOn(item.status), contentAlignment = Alignment.Center) {
                         when {
                             done -> Box(Modifier.size(20.dp).clip(androidx.compose.foundation.shape.CircleShape).background(colors.outline),
                                 contentAlignment = Alignment.Center) {
