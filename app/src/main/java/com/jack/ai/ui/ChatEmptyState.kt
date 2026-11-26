@@ -105,6 +105,17 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.runtime.mutableFloatStateOf
+import kotlin.math.roundToInt
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -128,13 +139,6 @@ import kotlinx.coroutines.launch
 import java.util.Calendar
 
 // 新对话的空白页：问候、今日概览、建议入口（从 ChatScreen.kt 拆出来）。
-
-/** 空白页那几行入口各用什么图标。 */
-private fun startIcon(key: String): ImageVector = when (key) {
-    "xhs" -> AppIcons.Image
-    "intro" -> AppIcons.File
-    else -> AppIcons.Chat
-}
 
 private fun greeting(): String = when (Calendar.getInstance().get(Calendar.HOUR_OF_DAY)) {
     in 5..10 -> "早上好"
@@ -195,12 +199,16 @@ internal fun EmptyState(
                 .padding(horizontal = 4.dp, vertical = 2.dp),
         )
         Spacer(Modifier.weight(1f))
-        // 写文案这些：点一下直接发出去，Kavi 用问题卡片把要知道的问清楚
+        // 一大堆建议像弹幕一样从右往左慢慢飘，点哪条就把哪条发出去；Kavi 用问题卡片把要知道的问清楚
         if (state.settings.bizStarts) {
-            // 一行接一行地浮上来（换一个新对话重新排一次）
             androidx.compose.runtime.key(conv?.id) {
-                com.jack.ai.data.BizStarts.ALL.forEachIndexed { i, b ->
-                    Box(Modifier.appear(order = i + 2)) { SuggestionRow(startIcon(b.key), Hue.of(b.tint).color, b.title) { vm.send(b.prompt) } }
+                Box(Modifier.appear(order = 2).layout { m, c ->
+                    // 弹幕铺满屏幕宽，不受外面左右留白的限制
+                    val extra = 40.dp.roundToPx()
+                    val p = m.measure(c.copy(minWidth = c.maxWidth + extra, maxWidth = c.maxWidth + extra))
+                    layout(c.maxWidth, p.height) { p.place(-extra / 2, 0) }
+                }) {
+                    Danmaku(remember(conv?.id) { danmakuLanes(com.jack.ai.data.BizStarts.DRIFT, (conv?.id ?: "").hashCode()) }) { b -> vm.send(b.prompt) }
                 }
             }
         }
@@ -208,20 +216,106 @@ internal fun EmptyState(
     }
 }
 
-/** 空白页的一行建议：一个彩色图标加一行字，不带框；按下去微微缩一下。 */
+/** 把建议打乱、轮流分到几条弹幕轨道上；[seed] 一样排法就一样（换个新对话换一种）。 */
+internal fun danmakuLanes(
+    pool: List<com.jack.ai.data.BizStarts.Start>,
+    seed: Int,
+    lanes: Int = 4,
+): List<List<com.jack.ai.data.BizStarts.Start>> {
+    val shuffled = pool.shuffled(kotlin.random.Random(seed))
+    return List(lanes) { lane -> shuffled.filterIndexed { i, _ -> i % lanes == lane } }.filter { it.isNotEmpty() }
+}
+
+/**
+ * 弹幕：几条轨道各自从右往左匀速飘，速度、起点错开；手指按在上面时全部停住，好点准。
+ * 系统关了动画就不飘，每条轨道改成能左右划的一行。两头淡出，不是硬生生切断。
+ */
 @Composable
-private fun SuggestionRow(icon: ImageVector, tint: Color, title: String, onClick: () -> Unit) {
-    val press = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-    val haptics = rememberHaptics()
-    Row(
-        Modifier.fillMaxWidth().pressScale(press, 0.98f).clip(Radii.m)
-            .clickable(interactionSource = press, indication = androidx.compose.foundation.LocalIndication.current) { haptics.tick(); onClick() }
-            .heightIn(min = 52.dp).padding(horizontal = 4.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+private fun Danmaku(lanes: List<List<com.jack.ai.data.BizStarts.Start>>, onPick: (com.jack.ai.data.BizStarts.Start) -> Unit) {
+    val still = reduceMotion()
+    var held by remember { mutableStateOf(false) }
+    Column(
+        Modifier.fillMaxWidth()
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    held = true
+                    do { val e = awaitPointerEvent(PointerEventPass.Initial) } while (e.changes.any { it.pressed })
+                    held = false
+                }
+            }
+            .graphicsLayer(compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen)
+            .drawWithContent {
+                drawContent()
+                drawRect(
+                    Brush.horizontalGradient(0f to Color.Transparent, 0.08f to Color.Black, 0.92f to Color.Black, 1f to Color.Transparent),
+                    blendMode = androidx.compose.ui.graphics.BlendMode.DstIn,
+                )
+            },
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Icon(icon, null, Modifier.size(24.dp), tint = tint)
-        Spacer(Modifier.width(16.dp))
-        Text(title, style = MaterialTheme.typography.bodyLarge, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        lanes.forEachIndexed { i, lane ->
+            // 每条轨道速度不一样（每秒 22～34dp），起点也错开，看着不像一排排齐步走
+            DanmakuLane(lane, speed = 22f + (i * 7) % 13, start = 0.37f * i, still = still, held = { held }, onPick = onPick)
+        }
     }
 }
 
+@Composable
+private fun DanmakuLane(
+    items: List<com.jack.ai.data.BizStarts.Start>,
+    speed: Float,
+    start: Float,
+    still: Boolean,
+    held: () -> Boolean,
+    onPick: (com.jack.ai.data.BizStarts.Start) -> Unit,
+) {
+    if (still) {
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
+            items.forEach { DanmakuChip(it, onPick) }
+        }
+        return
+    }
+    // 同一串排两遍，飘过半程就无缝接回开头
+    var half by remember { mutableFloatStateOf(0f) }
+    var shift by remember { mutableFloatStateOf(0f) }
+    val speedPx = with(LocalDensity.current) { speed.dp.toPx() }
+    LaunchedEffect(half) {
+        if (half <= 0f) return@LaunchedEffect
+        shift = (start % 1f) * half
+        var last = 0L
+        while (true) {
+            withFrameNanos { t ->
+                if (last != 0L && !held()) shift = (shift + speedPx * (t - last) / 1e9f) % half
+                last = t
+            }
+        }
+    }
+    Box(Modifier.fillMaxWidth().clipToBounds()) {
+        Row(
+            Modifier.wrapContentWidth(Alignment.Start, unbounded = true)
+                .onSizeChanged { half = it.width / 2f }
+                .offset { IntOffset(-shift.roundToInt(), 0) },
+        ) {
+            repeat(2) { items.forEach { DanmakuChip(it, onPick) } }
+        }
+    }
+}
+
+/** 一条弹幕：浅色底的胶囊，前面一个小色点；按下去微微缩一下。 */
+@Composable
+private fun DanmakuChip(b: com.jack.ai.data.BizStarts.Start, onPick: (com.jack.ai.data.BizStarts.Start) -> Unit) {
+    val press = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val haptics = rememberHaptics()
+    val hue = Hue.of(b.tint)
+    Row(
+        Modifier.padding(end = 10.dp).pressScale(press, 0.94f).clip(CircleShape).background(hue.wash)
+            .clickable(interactionSource = press, indication = androidx.compose.foundation.LocalIndication.current) { haptics.tick(); onPick(b) }
+            .heightIn(min = 36.dp).padding(horizontal = 12.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(7.dp).clip(CircleShape).background(hue.color))
+        Spacer(Modifier.width(8.dp))
+        Text(b.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1, softWrap = false)
+    }
+}

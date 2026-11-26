@@ -161,3 +161,20 @@ class FrictionRoundThreeTest {
         assertNull(errorSettingsPage("服务器繁忙，稍后再试（503）", "deepseek-flash"))
     }
 }
+
+class DanmakuLanesTest {
+    @org.junit.Test fun everySuggestionLandsInExactlyOneLane() {
+        val pool = com.jack.ai.data.BizStarts.DRIFT
+        val lanes = danmakuLanes(pool, 42)
+        org.junit.Assert.assertEquals(4, lanes.size)
+        org.junit.Assert.assertEquals(pool.map { it.key }.sorted(), lanes.flatten().map { it.key }.sorted())
+        // 种子一样排法一样，换个种子换一种
+        org.junit.Assert.assertEquals(lanes, danmakuLanes(pool, 42))
+        org.junit.Assert.assertNotEquals(lanes, danmakuLanes(pool, 7))
+    }
+
+    @org.junit.Test fun keysAreUnique() {
+        val keys = com.jack.ai.data.BizStarts.DRIFT.map { it.key }
+        org.junit.Assert.assertEquals(keys.size, keys.toSet().size)
+    }
+}
