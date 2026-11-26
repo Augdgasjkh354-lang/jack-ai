@@ -712,6 +712,7 @@ private fun gptMissReason(v: String): String? {
         "ws" -> "常连接：只发了新内容，前面的对话留在 ChatGPT 那边；这里没命中是 ChatGPT 没算缓存"
         "wslost" -> "和 ChatGPT 的常连接" + when (p.getOrNull(1)) {
             "token" -> "因为登录令牌到期换了"; "age" -> "连满了一小时"; "stopped" -> "因为上一步被停下或出错"
+            "swap" -> "让给了别的对话（同时开着的对话、子 agent 太多，连接不够用）"
             else -> "被断开了（切到后台、网络切换或手机省电）"
         } + "，重新连上后只能从头发一遍，这一次没命中；接下来的会接着命中"
         "edit" -> "Kavi 改动了上一步发过的第 ${p.getOrNull(1)} 项（共 ${p.getOrNull(2)} 项，多半是压缩了旧的工具结果），从那里往后没命中"

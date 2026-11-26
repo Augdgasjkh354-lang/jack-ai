@@ -562,13 +562,26 @@ internal object ResponsesApi {
     @Volatile var noCacheKey = false
 
     /**
-     * 缓存的路由键：OpenAI 按前缀自动缓存，但请求会被分到不同机器上，分散了就不命中。
-     * 同一套系统提示（前 4000 字）用同一个键，请求尽量落到同一台机器上（Codex 也是这么做的）。
+     * 缓存的路由键，一个对话一个：系统提示（前 4000 字）加对话的第一项。同一个对话每一步都一样，
+     * 不同对话、子 agent、后台调用（第一项不同）各用各的。
+     *
+     * 以前整个 App 共用一个（只看系统提示）：OpenAI 文档说一个键每分钟大约 15 次，超了就分到别的机器；
+     * 子 agent、后台调用一起跑时很容易超。Codex 也是一个对话一个键（它用对话 id）。
      */
-    fun cacheKey(instructions: String): String {
-        val md = java.security.MessageDigest.getInstance("SHA-1").digest(instructions.take(4000).toByteArray())
+    fun cacheKey(instructions: String, first: String = ""): String {
+        val md = java.security.MessageDigest.getInstance("SHA-1").digest((instructions.take(4000) + "\u0000" + first).toByteArray())
         return "kavi-" + md.take(8).joinToString("") { "%02x".format(it) }
     }
+
+    /**
+     * ChatGPT 套餐这条线按请求头 session-id 决定请求落到哪台机器（Codex 源码 client.rs 的注释原话：
+     * 「ChatGPT derives cache affinity from the Responses session-id header」），只在请求体里放 prompt_cache_key 基本不管用。
+     * 别人实测：不带几乎不命中，带上九成五以上（OpenHands #6363、clodex #324）。值和 prompt_cache_key 一样。
+     */
+    const val SESSION_HEADER = "session-id"
+
+    /** 请求方：OpenAI 文档说接入方的名字会当作 originator（Codex 发的是它自己的名字）。 */
+    const val ORIGINATOR = "kavi"
     /** 最近一次请求发的是不是 xhigh：报错说思考参数不对时，先怪它、降成高，不整个关掉思考。 */
     @Volatile private var sentXhigh = false
 
@@ -585,12 +598,13 @@ internal object ResponsesApi {
 
     fun request(ep: Endpoint, token: String, messages: List<JsonObject>, thinking: ThinkLevel, tools: JsonArray?): NativeRequest {
         val (instructions, input) = convert(messages)
+        val session = cacheKey(instructions, input.firstOrNull()?.toString().orEmpty())
         val body = buildJsonObject {
             put("model", ep.model)
             put("store", false)
             put("stream", true)
             if (instructions.isNotBlank() && useInstructions) put("instructions", instructions)
-            if (!noCacheKey) put("prompt_cache_key", cacheKey(instructions))
+            if (!noCacheKey) put("prompt_cache_key", session)
             put("input", JsonArray(if (instructions.isNotBlank() && !useInstructions) listOf(developer(instructions)) + input else input))
             if (!tools.isNullOrEmpty()) put("tools", buildJsonArray {
                 tools.forEach { t ->
@@ -619,7 +633,7 @@ internal object ResponsesApi {
         val items = sent.drop(if (instructions.isNotBlank() && !useInstructions) 1 else 0).map { it.toString().hashCode() }
         val head = listOf(ep.model, body["reasoning"].toString(), body["tools"].toString(), instructions).hashCode()
         lastVerdict = verdict(head, items, ep.model)
-        val headers = mapOf("Authorization" to "Bearer $token")
+        val headers = mapOf("Authorization" to "Bearer $token", SESSION_HEADER to session, "originator" to ORIGINATOR)
         return NativeRequest(ep.baseUrl.trimEnd('/') + "/responses", headers, body.toString())
     }
 

@@ -40,7 +40,9 @@ internal object ResponsesSocket {
     private const val MAX_CONNS = 6
 
     private class Conn(val ws: WebSocket, val auth: String, val opened: Long, val inbox: Channel<String>,
-                       private val gone: java.util.concurrent.atomic.AtomicBoolean) {
+                       private val gone: java.util.concurrent.atomic.AtomicBoolean,
+                       /** 握手时带的 session-id：ChatGPT 按它把这条连接分到一台机器，之后不能改。 */
+                       val session: String = "") {
         /** 连接已经被断开（切到后台、网络切换、服务端关掉）。 */
         val closed get() = gone.get()
         /** 正在跑一个回答。 */
@@ -122,8 +124,10 @@ internal object ResponsesSocket {
     }
 
     /**
-     * 挑一条空着的连接并占上：先找记着这个对话上一步的，再找同一令牌、没过期的任意一条，都没有就新开一条（不超过上限）。
-     * 断了、过期了、令牌换了的空闲连接顺手清掉。满了抛 [Unavailable]，调用方走 HTTP。
+     * 挑一条空着的连接并占上：先找记着这个对话上一步的，再找握手时 session-id 就是这个对话的；
+     * 都没有就新开一条（session-id 是这个对话的）。到了上限就把一条空着的、别的对话的换掉重连——
+     * session-id 只在握手时发，用别的对话的连接等于没带，缓存很难命中。全忙抛 [Unavailable]，调用方走 HTTP。
+     * 断了、过期了、令牌换了的空闲连接顺手清掉。
      */
     private suspend fun acquire(client: OkHttpClient, req: NativeRequest, key: Int): Conn {
         val auth = req.headers["Authorization"].orEmpty()
@@ -132,10 +136,15 @@ internal object ResponsesSocket {
             pool.filter { !it.busy && (it.closed || it.auth != auth || now - it.opened >= MAX_AGE_MS) }.forEach { stale ->
                 dropLocked(stale, when { stale.closed -> "closed"; stale.auth != auth -> "token"; else -> "age" })
             }
+            val session = req.headers[ResponsesApi.SESSION_HEADER].orEmpty()
             val free = pool.filter { !it.busy }
-            val pick = free.firstOrNull { key in it.chains } ?: free.minByOrNull { it.chains.size }
+            val pick = free.firstOrNull { key in it.chains } ?: free.firstOrNull { it.session == session }
             if (pick != null) { pick.busy = true; return pick }
-            if (pool.size + opening >= MAX_CONNS) throw Unavailable("busy")
+            if (pool.size + opening >= MAX_CONNS) {
+                // 满了：换掉一条空着的（记的链最少的那条），给这个对话开一条带对的 session-id 的
+                val spare = free.minByOrNull { it.chains.size } ?: throw Unavailable("busy")
+                dropLocked(spare, "swap")
+            }
             opening++
         }
         val c = try { connect(client, req) } finally { synchronized(pool) { opening-- } }
@@ -256,6 +265,6 @@ internal object ResponsesSocket {
             ws.cancel()
             throw Unavailable(r?.exceptionOrNull()?.message ?: "handshake timeout")
         }
-        return Conn(ws, auth, System.currentTimeMillis(), inbox, gone)
+        return Conn(ws, auth, System.currentTimeMillis(), inbox, gone, req.headers[ResponsesApi.SESSION_HEADER].orEmpty())
     }
 }

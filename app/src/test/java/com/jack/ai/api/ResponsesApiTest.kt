@@ -222,6 +222,30 @@ class ResponsesApiTest {
         ResponsesApi.noCacheKey = false
     }
 
+    @Test
+    fun eachConversationGetsItsOwnSessionHeader() {
+        fun msgs(first: String) = listOf(
+            kotlinx.serialization.json.buildJsonObject { put("role", kotlinx.serialization.json.JsonPrimitive("system")); put("content", kotlinx.serialization.json.JsonPrimitive("你是 Kavi")) },
+            kotlinx.serialization.json.buildJsonObject { put("role", kotlinx.serialization.json.JsonPrimitive("user")); put("content", kotlinx.serialization.json.JsonPrimitive(first)) },
+        )
+        ResponsesApi.noCacheKey = false
+        val a = ResponsesApi.request(ep, "t", msgs("你好"), com.jack.ai.data.ThinkLevel.OFF, null)
+        val b = ResponsesApi.request(ep, "t", msgs("帮我写首诗"), com.jack.ai.data.ThinkLevel.OFF, null)
+        val sa = a.headers[ResponsesApi.SESSION_HEADER]!!
+        org.junit.Assert.assertTrue(sa.startsWith("kavi-"))
+        org.junit.Assert.assertNotEquals(sa, b.headers[ResponsesApi.SESSION_HEADER])
+        // 请求体里的 prompt_cache_key 和请求头是同一个值
+        org.junit.Assert.assertTrue(a.body.contains("\"prompt_cache_key\":\"$sa\""))
+        // 同一个对话接着问：第一项没变，键不变
+        val more = msgs("你好") + kotlinx.serialization.json.buildJsonObject { put("role", kotlinx.serialization.json.JsonPrimitive("assistant")); put("content", kotlinx.serialization.json.JsonPrimitive("你好呀")) } +
+            kotlinx.serialization.json.buildJsonObject { put("role", kotlinx.serialization.json.JsonPrimitive("user")); put("content", kotlinx.serialization.json.JsonPrimitive("再说一句")) }
+        org.junit.Assert.assertEquals(sa, ResponsesApi.request(ep, "t", more, com.jack.ai.data.ThinkLevel.OFF, null).headers[ResponsesApi.SESSION_HEADER])
+        // 服务不认 prompt_cache_key 时请求头照发
+        ResponsesApi.noCacheKey = true
+        org.junit.Assert.assertEquals(sa, ResponsesApi.request(ep, "t", msgs("你好"), com.jack.ai.data.ThinkLevel.OFF, null).headers[ResponsesApi.SESSION_HEADER])
+        ResponsesApi.noCacheKey = false
+    }
+
     @Test fun fallsBackToInstructionsWhenDeveloperIsRejected() {
         ResponsesApi.useInstructions = false
         val e = ResponsesApi.httpError(400, """{"detail":"Unsupported role: developer"}""")
