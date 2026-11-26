@@ -57,6 +57,8 @@ fun AppsScreen(state: UiState, onBack: () -> Unit, onOpenChat: (String) -> Unit 
     }
     var open by remember { mutableStateOf<File?>(null) }
     var deleting by remember { mutableStateOf<File?>(null) }
+    // 做得多了一页翻不完：和下载页一样，多于 8 个出搜索框（按名字和来自哪个对话搜）
+    var query by remember { mutableStateOf("") }
     /** 文件夹名是对话编号，或者 p_项目编号。 */
     fun from(f: File): String {
         val key = f.parentFile?.name.orEmpty()
@@ -84,7 +86,9 @@ fun AppsScreen(state: UiState, onBack: () -> Unit, onOpenChat: (String) -> Unit 
                     )
                 }
             }
-            items(apps, key = { it.absolutePath }) { f ->
+            if (apps.size > 8 || query.isNotEmpty()) item { SearchField(query, { query = it }, placeholder = "搜小工具名字或对话") }
+            val q = query.trim()
+            items(apps.filter { q.isEmpty() || it.name.contains(q, true) || from(it).contains(q, true) }, key = { it.absolutePath }) { f ->
                 Card(onClick = { open = f }, modifier = Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {

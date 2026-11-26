@@ -67,6 +67,10 @@ fun DownloadsScreen(onBack: () -> Unit) {
     var query by remember { mutableStateOf("") }
     var deleting by remember { mutableStateOf<DownloadRecord?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
+    // 提示条以前要点一下才消失：结果类的几秒后自己收起，「正在…」的留着等结果
+    androidx.compose.runtime.LaunchedEffect(message) {
+        if (message != null && message?.startsWith("正在") != true) { kotlinx.coroutines.delay(6000); message = null }
+    }
     // 下载的图片在 App 里看大图（能缩放、分享、存相册），不用跳到别的 App
     var viewingImage by remember { mutableStateOf<String?>(null) }
     // 文件已经不在了的记录：删的时候不用再确认（没有文件可删），也能一下清掉

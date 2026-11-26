@@ -88,8 +88,11 @@ fun TerminalScreen(folder: String, title: String, onBack: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
     var ctrl by remember { mutableStateOf(false) }
     var alt by remember { mutableStateOf(false) }
-    var font by remember { mutableStateOf(13) }
+    // 字号记住：以前每次进来都回到 13，调大的人每次都要再点几下
+    val termPrefs = remember { ctx.getSharedPreferences("terminal", Context.MODE_PRIVATE) }
+    var font by remember { mutableStateOf(termPrefs.getInt("font", 13)) }
     val handle = remember { mutableStateOf<TerminalHandle?>(null) }
+    fun setFont(v: Int) { font = v; termPrefs.edit().putInt("font", v).apply(); handle.value?.js("kvFont($v)") }
     val scope = rememberCoroutineScope()
     val ready = remember { LinuxSandbox.ready(ctx) }
 
@@ -127,8 +130,8 @@ fun TerminalScreen(folder: String, title: String, onBack: () -> Unit) {
                         val text = ctx.getSystemService(ClipboardManager::class.java)?.primaryClip?.getItemAt(0)?.coerceToText(ctx)?.toString().orEmpty()
                         if (text.isNotEmpty()) handle.value?.js("kvPaste('${Base64.encodeToString(text.toByteArray(), Base64.NO_WRAP)}')")
                     }
-                    MenuRow("字大一点", glyph = "A+") { font = (font + 1).coerceAtMost(22); handle.value?.js("kvFont($font)") }
-                    MenuRow("字小一点", glyph = "A−") { font = (font - 1).coerceAtLeast(9); handle.value?.js("kvFont($font)") }
+                    MenuRow("字大一点", glyph = "A+", sub = "现在 $font") { setFont((font + 1).coerceAtMost(22)) }
+                    MenuRow("字小一点", glyph = "A−") { setFont((font - 1).coerceAtLeast(9)) }
                     current?.let { s -> MenuRow("关掉这个终端", glyph = "✕", danger = true) { menu = false; TerminalHub.close(s.id); selected = null } }
                 }
             }

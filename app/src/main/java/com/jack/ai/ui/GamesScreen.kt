@@ -181,27 +181,28 @@ fun GamesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit, onOpenCha
     if (asking) {
         var idea by remember { mutableStateOf("") }
         val ideas = listOf("贪吃蛇", "2048", "五子棋，Kavi 当对手", "你画我猜，Kavi 来猜", "成语接龙", "打砖块")
+        fun make(what: String) {
+            asking = false
+            vm.newChat()
+            vm.send("帮我做一个能在手机上直接玩的小游戏：${what.trim()}。")
+            onOpenChat()
+        }
         AlertDialog(
             onDismissRequest = { asking = false },
             title = { Text("想玩什么？") },
             text = {
                 Column {
-                    OutlinedTextField(idea, { idea = it }, placeholder = { Text("比如：五子棋，Kavi 当对手") }, modifier = Modifier.fillMaxWidth().focusOnShow())
+                    OutlinedTextField(idea, { idea = it }, placeholder = { Text("比如：五子棋，Kavi 当对手") }, modifier = Modifier.fillMaxWidth().focusOnShow(),
+                        keyboardOptions = DoneKeyboard, keyboardActions = doneAction(idea.isNotBlank()) { make(idea) })
                     Spacer(Modifier.height(8.dp))
                     @OptIn(ExperimentalLayoutApi::class)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        ideas.forEach { t -> androidx.compose.material3.SuggestionChip(onClick = { idea = t }, label = { Text(t) }) }
+                        // 点建议直接开做：以前只是填进框里，还要再点一下「做」
+                        ideas.forEach { t -> androidx.compose.material3.SuggestionChip(onClick = { make(t) }, label = { Text(t) }) }
                     }
                 }
             },
-            confirmButton = {
-                TextButton(enabled = idea.isNotBlank(), onClick = {
-                    asking = false
-                    vm.newChat()
-                    vm.send("帮我做一个能在手机上直接玩的小游戏：${idea.trim()}。")
-                    onOpenChat()
-                }) { Text("做") }
-            },
+            confirmButton = { TextButton(enabled = idea.isNotBlank(), onClick = { make(idea) }) { Text("做") } },
             dismissButton = { TextButton(onClick = { asking = false }) { Text("取消") } },
         )
     }

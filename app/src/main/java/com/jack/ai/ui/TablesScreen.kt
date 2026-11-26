@@ -8,6 +8,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -96,10 +97,14 @@ fun TablesScreen(onBack: () -> Unit) {
                 }
                 items(tables, key = { it.name }) { t ->
                     Card(Modifier.fillMaxWidth().clickable { open = t.name }) {
-                        Column(Modifier.padding(16.dp)) {
-                            Text(t.name, style = MaterialTheme.typography.titleSmall)
-                            Text("${t.rows.size} 行 · " + t.columns.joinToString("、"), style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Row(Modifier.padding(start = 16.dp, top = 6.dp, bottom = 6.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f).padding(vertical = 10.dp)) {
+                                Text(t.name, style = MaterialTheme.typography.titleSmall)
+                                Text("${t.rows.size} 行 · " + t.columns.joinToString("、"), style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                            // 发给别人不用先点开：列表上直接分享成 CSV
+                            IconButton(onClick = { share(t) }) { Icon(Icons.Default.Share, "分享") }
                         }
                     }
                 }
@@ -128,6 +133,8 @@ fun TablesScreen(onBack: () -> Unit) {
 @Composable
 private fun TableGrid(t: Table, modifier: Modifier) {
     val colors = MaterialTheme.colorScheme
+    val ctx = LocalContext.current
+    val clip = androidx.compose.ui.platform.LocalClipboardManager.current
     val h = rememberScrollState()
     val width = 120.dp
     // 最新的在最下面：一打开就停在底部（记账这类表，想看的多半是刚记的那几行）。第 0 项是表头
@@ -147,7 +154,11 @@ private fun TableGrid(t: Table, modifier: Modifier) {
             Row(Modifier.border(0.5.dp, colors.outlineVariant), verticalAlignment = Alignment.Top) {
                 Text("${i + 1}", Modifier.width(40.dp).padding(8.dp), style = MaterialTheme.typography.bodySmall, color = colors.outline)
                 t.rows[i].forEach { v ->
-                    Text(v, Modifier.width(width).padding(8.dp), style = MaterialTheme.typography.bodySmall, maxLines = 3,
+                    // 格子只显示三行：长按复制整格（看全文、贴到别处都方便）
+                    Text(v, Modifier.width(width).combinedClickable(onClick = {}, onLongClick = {
+                        clip.setText(androidx.compose.ui.text.AnnotatedString(v))
+                        android.widget.Toast.makeText(ctx, "已复制这一格", android.widget.Toast.LENGTH_SHORT).show()
+                    }).padding(8.dp), style = MaterialTheme.typography.bodySmall, maxLines = 3,
                         overflow = TextOverflow.Ellipsis)
                 }
             }

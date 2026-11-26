@@ -199,8 +199,10 @@ fun ProjectScreen(
                     ProjectTab.CHATS -> if (chats.isEmpty()) Box(Modifier.padding(padding)) {
                         EmptyHint(
                             com.jack.ai.data.ProjectKind.of(project.kind).let { "${it.label} · 还没有聊天" },
-                            if (project.instructions.isBlank()) "在下面直接说。想让 Kavi 在这个项目里一直按某种方式做，右上角「编辑指令」写下来。"
+                            if (project.instructions.isBlank()) "在下面直接说。想让 Kavi 在这个项目里一直按某种方式做，先写个指令。"
                             else "在下面直接说，项目指令、资料和记忆每个对话都会带上。",
+                            // 以前要去右上角菜单里找「编辑指令」：空页上直接给个按钮
+                            action = if (project.instructions.isBlank()) ({ OutlinedButton(onClick = { editingInstructions = true }) { Text("写项目指令") } }) else null,
                         )
                     } else LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(
                         start = 8.dp, end = 8.dp, top = padding.calculateTopPadding() + 8.dp, bottom = padding.calculateBottomPadding() + 8.dp)) {

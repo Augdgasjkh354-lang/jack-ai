@@ -233,6 +233,8 @@ private fun KbCard(
                         }
                     }
                     if (docs.size > 100) Text("……还有 ${docs.size - 100} 份", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                    // 自己建的知识库：展开就能接着往里加，不用再去 ⋮ 菜单里找
+                    if (kb.source.isEmpty()) TextButton(onClick = onImport) { Text("＋ 导入文件") }
                 }
             }
         }
@@ -247,7 +249,7 @@ private fun NewKbDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
         title = { Text("新建知识库") },
         text = {
             Column {
-                Text("建好后在它的菜单里「导入文件」往里放资料。", style = MaterialTheme.typography.bodySmall)
+                Text("建好会直接让你选文件放进去；以后要加，展开它点「＋ 导入文件」。", style = MaterialTheme.typography.bodySmall)
                 Spacer(Modifier.size(8.dp))
                 OutlinedTextField(name, { name = it.take(40) }, label = { Text("名字") }, singleLine = true, modifier = Modifier.focusOnShow(),
                     keyboardOptions = DoneKeyboard, keyboardActions = doneAction(name.isNotBlank()) { onCreate(name) })
@@ -271,7 +273,10 @@ private fun CatalogDialog(vm: ChatViewModel, state: UiState, onDismiss: () -> Un
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(repo, { repo = it }, modifier = Modifier.weight(1f), singleLine = true,
-                        label = { Text("GitHub 项目") }, placeholder = { Text("作者/项目名 或 网址") })
+                        label = { Text("GitHub 项目") }, placeholder = { Text("作者/项目名 或 网址") },
+                        // 填完按键盘上的「前往」就读，不用再去点旁边的「读取」
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Go),
+                        keyboardActions = androidx.compose.foundation.text.KeyboardActions(onGo = { if (state.kbBusy == null && repo.isNotBlank()) vm.loadKbCatalog(repo) }))
                     TextButton(onClick = { vm.loadKbCatalog(repo) }, enabled = state.kbBusy == null && repo.isNotBlank()) { Text("读取") }
                 }
                 state.kbBusy?.let { BusyRow(it) }

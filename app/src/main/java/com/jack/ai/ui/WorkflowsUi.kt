@@ -114,9 +114,16 @@ internal fun StatusChip(r: WfRun) {
     Text(t, style = MaterialTheme.typography.labelSmall, color = h.color, modifier = Modifier.clip(Radii.xs).background(h.wash).padding(horizontal = 8.dp, vertical = 2.dp))
 }
 
-private fun whenText(t: Long, now: Long = System.currentTimeMillis()): String {
-    val f = java.text.SimpleDateFormat(if (now - t < 86_400_000L * 300) "M月d日 HH:mm" else "yyyy-MM-dd HH:mm", java.util.Locale.CHINA)
-    return f.format(java.util.Date(t))
+/** 时间：近三天说「昨天 / 今天 / 明天 / 后天 08:00」，别的「11月28日 08:00」，不是今年的带年份。 */
+internal fun whenText(t: Long, now: Long = System.currentTimeMillis()): String {
+    val day = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+    val a = day.parse(day.format(java.util.Date(t)))!!.time
+    val b = day.parse(day.format(java.util.Date(now)))!!.time
+    val clock = java.text.SimpleDateFormat("HH:mm", java.util.Locale.CHINA).format(java.util.Date(t))
+    val word = when (Math.round((a - b) / 86_400_000.0).toInt()) { -1 -> "昨天"; 0 -> "今天"; 1 -> "明天"; 2 -> "后天"; else -> null }
+    if (word != null) return "$word $clock"
+    val sameYear = day.format(java.util.Date(t)).take(4) == day.format(java.util.Date(now)).take(4)
+    return java.text.SimpleDateFormat(if (sameYear) "M月d日 HH:mm" else "yyyy年M月d日 HH:mm", java.util.Locale.CHINA).format(java.util.Date(t))
 }
 
 private fun nextText(w: Workflow): String? = WorkflowFormat.nextAt(w, System.currentTimeMillis())?.let { "下次 " + whenText(it) }

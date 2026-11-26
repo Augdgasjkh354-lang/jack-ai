@@ -298,23 +298,20 @@ fun UsageScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
 
     if (editBudget) {
         var text by remember { mutableStateOf(if (state.settings.monthlyBudget > 0) state.settings.monthlyBudget.toString() else "") }
+        fun saveBudget() { vm.updateSettings { it.copy(monthlyBudget = (text.toDoubleOrNull() ?: 0.0).coerceAtLeast(0.0)) }; editBudget = false }
         AlertDialog(
             onDismissRequest = { editBudget = false },
             title = { Text("每月预算") },
             text = {
                 OutlinedTextField(
                     value = text, onValueChange = { text = it.filter { ch -> ch.isDigit() || ch == '.' } },
-                    label = { Text("金额（元），留空表示不设") }, singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    label = { Text("金额（元），留空表示不设") }, singleLine = true, modifier = Modifier.focusOnShow(),
+                    // 数字键盘上的「完成」直接保存
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+                    keyboardActions = doneAction(true) { saveBudget() },
                 )
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    val v = text.toDoubleOrNull() ?: 0.0
-                    vm.updateSettings { it.copy(monthlyBudget = v.coerceAtLeast(0.0)) }
-                    editBudget = false
-                }) { Text("保存") }
-            },
+            confirmButton = { TextButton(onClick = { saveBudget() }) { Text("保存") } },
             dismissButton = { TextButton(onClick = { editBudget = false }) { Text("取消") } },
         )
     }
@@ -327,8 +324,8 @@ fun UsageScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("单位是百万 token（M），输入加输出都算。留空表示不限。", style = MaterialTheme.typography.bodySmall)
-                    OutlinedTextField(five, { five = it.filter { ch -> ch.isDigit() || ch == '.' } }, label = { Text("5 小时额度（M）") }, singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+                    OutlinedTextField(five, { five = it.filter { ch -> ch.isDigit() || ch == '.' } }, label = { Text("5 小时额度（M）") }, singleLine = true, modifier = Modifier.focusOnShow(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = androidx.compose.ui.text.input.ImeAction.Next))
                     OutlinedTextField(week, { week = it.filter { ch -> ch.isDigit() || ch == '.' } }, label = { Text("每周额度（M）") }, singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
                 }
@@ -345,22 +342,19 @@ fun UsageScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
     }
     if (editWorkLimit) {
         var text by remember { mutableStateOf(state.settings.workCostLimit.takeIf { it > 0 }?.toString().orEmpty()) }
+        fun saveLimit() { vm.updateSettings { it.copy(workCostLimit = (text.toDoubleOrNull() ?: 0.0).coerceAtLeast(0.0)) }; editWorkLimit = false }
         AlertDialog(
             onDismissRequest = { editWorkLimit = false },
             title = { Text("单次回答花费上限") },
             text = {
                 OutlinedTextField(
                     value = text, onValueChange = { text = it.filter { ch -> ch.isDigit() || ch == '.' } },
-                    label = { Text("花到这么多先停下问你（元），留空不限") }, singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    label = { Text("花到这么多先停下问你（元），留空不限") }, singleLine = true, modifier = Modifier.focusOnShow(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+                    keyboardActions = doneAction(true) { saveLimit() },
                 )
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    vm.updateSettings { it.copy(workCostLimit = (text.toDoubleOrNull() ?: 0.0).coerceAtLeast(0.0)) }
-                    editWorkLimit = false
-                }) { Text("保存") }
-            },
+            confirmButton = { TextButton(onClick = { saveLimit() }) { Text("保存") } },
             dismissButton = { TextButton(onClick = { editWorkLimit = false }) { Text("取消") } },
         )
     }
