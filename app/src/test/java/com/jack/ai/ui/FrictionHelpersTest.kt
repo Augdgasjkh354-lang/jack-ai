@@ -173,6 +173,14 @@ class DanmakuLanesTest {
         org.junit.Assert.assertNotEquals(lanes, danmakuLanes(pool, 7))
     }
 
+    @org.junit.Test fun fadesOnlyNearTheEdges() {
+        org.junit.Assert.assertEquals(1f, edgeAlpha(500f, 1000f, 50f), 0f)
+        org.junit.Assert.assertEquals(0.5f, edgeAlpha(25f, 1000f, 50f), 0.001f)
+        org.junit.Assert.assertEquals(0.5f, edgeAlpha(975f, 1000f, 50f), 0.001f)
+        org.junit.Assert.assertEquals(0f, edgeAlpha(-10f, 1000f, 50f), 0f)
+        org.junit.Assert.assertEquals(0f, edgeAlpha(1100f, 1000f, 50f), 0f)
+    }
+
     @org.junit.Test fun keysAreUnique() {
         val keys = com.jack.ai.data.BizStarts.DRIFT.map { it.key }
         org.junit.Assert.assertEquals(keys.size, keys.toSet().size)

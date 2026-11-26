@@ -107,6 +107,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.platform.LocalDensity
@@ -243,16 +245,8 @@ private fun Danmaku(lanes: List<List<com.jack.ai.data.BizStarts.Start>>, onPick:
                     do { val e = awaitPointerEvent(PointerEventPass.Initial) } while (e.changes.any { it.pressed })
                     held = false
                 }
-            }
-            .graphicsLayer(compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen)
-            .drawWithContent {
-                drawContent()
-                drawRect(
-                    Brush.horizontalGradient(0f to Color.Transparent, 0.08f to Color.Black, 0.92f to Color.Black, 1f to Color.Transparent),
-                    blendMode = androidx.compose.ui.graphics.BlendMode.DstIn,
-                )
             },
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         lanes.forEachIndexed { i, lane ->
             // 每条轨道速度不一样（每秒 22～34dp），起点也错开，看着不像一排排齐步走
@@ -291,31 +285,51 @@ private fun DanmakuLane(
             }
         }
     }
-    Box(Modifier.fillMaxWidth().clipToBounds()) {
+    var laneW by remember { mutableFloatStateOf(0f) }
+    val edge = with(LocalDensity.current) { 56.dp.toPx() }
+    Box(Modifier.fillMaxWidth().clipToBounds().onSizeChanged { laneW = it.width.toFloat() }) {
         Row(
             Modifier.wrapContentWidth(Alignment.Start, unbounded = true)
                 .onSizeChanged { half = it.width / 2f }
                 .offset { IntOffset(-shift.roundToInt(), 0) },
         ) {
-            repeat(2) { items.forEach { DanmakuChip(it, onPick) } }
+            repeat(2) { items.forEach { b -> EdgeFaded({ shift }, { laneW }, edge) { DanmakuChip(b, onPick) } } }
         }
     }
 }
 
-/** 一条弹幕：浅色底的胶囊，前面一个小色点；按下去微微缩一下。 */
+/** 弹幕飘到两头时慢慢变淡：按它中心离轨道两边多远算透明度，只重画不重排。 */
+@Composable
+private fun EdgeFaded(shift: () -> Float, laneW: () -> Float, edge: Float, content: @Composable () -> Unit) {
+    var x by remember { mutableFloatStateOf(0f) }
+    var w by remember { mutableFloatStateOf(0f) }
+    Box(Modifier.onPlaced { x = it.positionInParent().x; w = it.size.width.toFloat() }
+        .graphicsLayer { alpha = edgeAlpha(x - shift() + w / 2, laneW(), edge) }) { content() }
+}
+
+/** 离两边 [edge] 以内线性变淡，出了轨道就全透明。 */
+internal fun edgeAlpha(center: Float, laneW: Float, edge: Float): Float =
+    if (laneW <= 0f) 1f else (minOf(center, laneW - center) / edge).coerceIn(0f, 1f)
+
+/**
+ * 一条弹幕：统一的浅灰胶囊加一圈细边，不用一堆颜色抢眼；彼此的间距按名字错开（12～36dp），
+ * 几行之间不会排成整齐的竖列。按下去微微缩一下。
+ */
 @Composable
 private fun DanmakuChip(b: com.jack.ai.data.BizStarts.Start, onPick: (com.jack.ai.data.BizStarts.Start) -> Unit) {
     val press = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     val haptics = rememberHaptics()
-    val hue = Hue.of(b.tint)
-    Row(
-        Modifier.padding(end = 10.dp).pressScale(press, 0.94f).clip(CircleShape).background(hue.wash)
+    val colors = MaterialTheme.colorScheme
+    val gap = (12 + Math.floorMod(b.key.hashCode(), 4) * 8).dp
+    Text(
+        b.title,
+        style = MaterialTheme.typography.bodyMedium,
+        color = colors.onSurface.copy(alpha = 0.78f),
+        maxLines = 1, softWrap = false,
+        modifier = Modifier.padding(end = gap).pressScale(press, 0.94f).clip(CircleShape)
+            .background(colors.onSurface.copy(alpha = if (isDarkSurface) 0.08f else 0.045f))
+            .border(0.5.dp, colors.onSurface.copy(alpha = 0.08f), CircleShape)
             .clickable(interactionSource = press, indication = androidx.compose.foundation.LocalIndication.current) { haptics.tick(); onPick(b) }
-            .heightIn(min = 36.dp).padding(horizontal = 12.dp, vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(Modifier.size(7.dp).clip(CircleShape).background(hue.color))
-        Spacer(Modifier.width(8.dp))
-        Text(b.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1, softWrap = false)
-    }
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+    )
 }
