@@ -37,6 +37,7 @@
   `data/` 按领域分了子包：`design/`、`office/`、`media/`、`memory/`、`browser/`、`integrations/`、`phone/`，新文件放进对应的子包；存储、模型、设置这些通用的留在 `data/` 根上。WorkManager 的 Worker 类别换包（手机上排好的任务按类全名存着）。见 `docs/架构优化.md`。
 - 三个 Gradle 模块：`app`；`mika/`（Mika 移植来的手机和网页操作，包名 `com.wangzan101.mika`）；`studio/`（Office、设计、音视频的生成引擎，`data/office`、`data/design`、`data/media`）。这两个模块不能引用 `app` 的代码，App 要用的声明别写成 `internal`。
 - 注释、界面文字都是中文，跟周围代码的风格保持一致。
+- 按钮用 `ui/SmartButtons.kt` 和 `Design.kt` 里同名的 `Button`、`TextButton`、`IconButton`、`OutlinedButton`、`Switch`（按下缩、震一下，支持 `busy`、`whyDisabled`）。ui 包里别 import material3 的这几个，否则会盖掉；`ui/photo` 这类子包要显式 import `com.jack.ai.ui.*` 里的。等结果的按钮用 `ActionButton`。
 - 单测在 `app/src/test`（纯逻辑和 Robolectric），界面测试在 `app/src/testDebug`。
 - 根目录只放工程文件。方案和说明放 `docs/`，给其他模型的提示词放 `docs/建议/`，审计、修复这类过程记录放 `docs/records/`。
 

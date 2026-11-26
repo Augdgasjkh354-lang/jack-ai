@@ -22,12 +22,10 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -166,7 +164,8 @@ fun DownloadsScreen(onBack: () -> Unit) {
                         }
                         Row(horizontalArrangement = Arrangement.End) {
                             if (ok) IconButton(onClick = { share(ctx, r) }) { Icon(Icons.Default.Share, "分享") }
-                            if (r.url.isNotBlank()) IconButton(onClick = { redo(r) }, enabled = message?.startsWith("正在重下") != true) { Icon(Icons.Default.Refresh, "重下") }
+                            if (r.url.isNotBlank()) IconButton(onClick = { redo(r) }, enabled = message?.startsWith("正在重下") != true || message == "正在重下「${r.name}」…",
+                                busy = message == "正在重下「${r.name}」…") { Icon(Icons.Default.Refresh, "重下") }
                             IconButton(onClick = { if (ok) deleting = r else forget(listOf(r)) }) { Icon(Icons.Default.Delete, "删除") }
                         }
                     }

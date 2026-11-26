@@ -351,7 +351,8 @@ fun CircleIconButton(icon: ImageVector, label: String, modifier: Modifier = Modi
             .clickable(interactionSource = press, indication = androidx.compose.foundation.LocalIndication.current, enabled = enabled) { haptics.tick(); onClick() },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, label, Modifier.size(iconSize), tint = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else 0.4f))
+        // 图标换了（菜单 ↔ 关闭、播放 ↔ 暂停）弹着换，不是一下跳过去
+        PopSwap(icon) { ic -> Icon(ic, label, Modifier.size(iconSize), tint = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else 0.4f)) }
     }
 }
 
@@ -414,21 +415,27 @@ fun OutlinedButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     colors: androidx.compose.material3.ButtonColors? = null,
+    /** 在做：字前面转个小圈，点了不重复触发。 */
+    busy: Boolean = false,
+    /** 灰着时点一下说为什么（见 SmartButtons.kt）。 */
+    whyDisabled: String? = null,
     content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit,
 ) {
     val press = remember { MutableInteractionSource() }
+    val haptics = rememberHaptics()
     val base = colors ?: androidx.compose.material3.ButtonDefaults.outlinedButtonColors()
     val fill = glassFill
-    androidx.compose.material3.OutlinedButton(
-        onClick = onClick,
-        modifier = modifier.pressScale(press, 0.95f),
-        enabled = enabled,
-        shape = CircleShape,
-        colors = base.copy(containerColor = fill, disabledContainerColor = fill.copy(alpha = fill.alpha * 0.5f)),
-        border = androidx.compose.foundation.BorderStroke(0.8.dp, glassEdge()),
-        interactionSource = press,
-        content = content,
-    )
+    DisabledReason(modifier, enabled && !busy, whyDisabled) { inner ->
+        androidx.compose.material3.OutlinedButton(
+            onClick = { if (!busy) { haptics.tick(); onClick() } },
+            modifier = inner.pressScale(press, 0.95f),
+            enabled = enabled,
+            shape = CircleShape,
+            colors = base.copy(containerColor = fill, disabledContainerColor = fill.copy(alpha = fill.alpha * 0.5f)),
+            border = androidx.compose.foundation.BorderStroke(0.8.dp, glassEdge()),
+            interactionSource = press,
+        ) { BusyMark(busy); content() }
+    }
 }
 
 /**

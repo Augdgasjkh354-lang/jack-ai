@@ -29,7 +29,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -37,15 +36,12 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -202,7 +198,7 @@ fun GamesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit, onOpenCha
                     }
                 }
             },
-            confirmButton = { TextButton(enabled = idea.isNotBlank(), onClick = { make(idea) }) { Text("做") } },
+            confirmButton = { TextButton(enabled = idea.isNotBlank(), whyDisabled = "先说想玩什么，或者点一个下面的", onClick = { make(idea) }) { Text("做") } },
             dismissButton = { TextButton(onClick = { asking = false }) { Text("取消") } },
         )
     }

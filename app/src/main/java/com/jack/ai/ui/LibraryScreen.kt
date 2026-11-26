@@ -30,13 +30,11 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -103,7 +101,7 @@ fun LibraryScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                         TextButton(onClick = { creating = true }) { Text("新建") }
                         TextButton(onClick = { catalog = true }) { Text("下载") }
                     }
-                    if (state.kbs.any { it.source.isNotEmpty() }) TextButton(onClick = { vm.syncKbs() }, enabled = state.kbBusy == null) { Text("检查更新") }
+                    if (state.kbs.any { it.source.isNotEmpty() }) TextButton(onClick = { vm.syncKbs() }, busy = state.kbBusy != null) { Text("检查更新") }
                 }
                 state.kbBusy?.let { BusyRow(it) }
             }
@@ -133,7 +131,7 @@ fun LibraryScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                 Spacer(Modifier.size(6.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("我的资料", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                    OutlinedButton(onClick = { importTo = ""; pick.launch(arrayOf("*/*")) }, enabled = !state.importing) { Text("导入文档") }
+                    OutlinedButton(onClick = { importTo = ""; pick.launch(arrayOf("*/*")) }, busy = state.importing) { Text(if (state.importing) "正在读取" else "导入文档") }
                 }
                 if (state.importing) BusyRow("正在读取…")
             }
@@ -260,7 +258,7 @@ private fun NewKbDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
                     keyboardOptions = DoneKeyboard, keyboardActions = doneAction(name.isNotBlank()) { onCreate(name) })
             }
         },
-        confirmButton = { TextButton(onClick = { onCreate(name) }, enabled = name.isNotBlank()) { Text("建") } },
+        confirmButton = { TextButton(onClick = { onCreate(name) }, enabled = name.isNotBlank(), whyDisabled = "先起个名字") { Text("建") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
     )
 }
@@ -282,7 +280,7 @@ private fun CatalogDialog(vm: ChatViewModel, state: UiState, onDismiss: () -> Un
                         // 填完按键盘上的「前往」就读，不用再去点旁边的「读取」
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Go),
                         keyboardActions = androidx.compose.foundation.text.KeyboardActions(onGo = { if (state.kbBusy == null && repo.isNotBlank()) vm.loadKbCatalog(repo) }))
-                    TextButton(onClick = { vm.loadKbCatalog(repo) }, enabled = state.kbBusy == null && repo.isNotBlank()) { Text("读取") }
+                    TextButton(onClick = { vm.loadKbCatalog(repo) }, enabled = repo.isNotBlank(), busy = state.kbBusy != null, whyDisabled = "先填 GitHub 项目") { Text("读取") }
                 }
                 state.kbBusy?.let { BusyRow(it) }
                 listing?.let {

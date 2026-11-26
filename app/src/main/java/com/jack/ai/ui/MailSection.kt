@@ -7,7 +7,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -108,7 +107,7 @@ private fun MailEditor(vm: ChatViewModel, initial: MailAccount, onSave: (MailAcc
         }
     }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton(enabled = acc.ready && result != "…", onClick = { onSave(acc) }) { Text("保存") }
+        OutlinedButton(enabled = acc.ready && result != "…", whyDisabled = if (result == "…") null else mailMissing(acc), onClick = { onSave(acc) }) { Text("保存") }
         TextButton(enabled = acc.ready && result != "…", onClick = {
             result = "…"
             scope.launch { result = vm.testMail(acc) }
@@ -117,4 +116,12 @@ private fun MailEditor(vm: ChatViewModel, initial: MailAccount, onSave: (MailAcc
         onCancel?.let { TextButton(onClick = it) { Text("取消") } }
     }
     result?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+}
+
+/** 邮箱还差什么没填（保存按钮灰着时点一下告诉你）。 */
+private fun mailMissing(a: MailAccount): String = when {
+    a.address.isBlank() -> "先填邮箱地址"
+    a.password.isBlank() -> "先填授权码"
+    a.imapHost.isBlank() || a.smtpHost.isBlank() -> "收信、发信服务器还没填，展开「服务器」填一下"
+    else -> "还有没填的"
 }

@@ -1,5 +1,7 @@
 package com.jack.ai.ui.photo
 
+import com.jack.ai.ui.TextButton
+import com.jack.ai.ui.IconButton
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
@@ -47,13 +49,11 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState

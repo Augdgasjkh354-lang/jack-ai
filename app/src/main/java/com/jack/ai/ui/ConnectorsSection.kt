@@ -10,7 +10,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -106,6 +105,7 @@ private fun ConnectorDialog(vm: ChatViewModel, server: McpServer, isNew: Boolean
                 // 支持账号登录的服务（Notion 这类）：不用找 Key，浏览器里点同意就行
                 if (oauth.isBlank()) OutlinedButton(
                     enabled = !busy && name.isNotBlank() && url.startsWith("https"),
+                    whyDisabled = if (busy) null else if (name.isBlank()) "先起个名字" else "账号登录要 https 开头的网址",
                     onClick = {
                         busy = true; error = null
                         scope.launch {
@@ -147,7 +147,9 @@ private fun ConnectorDialog(vm: ChatViewModel, server: McpServer, isNew: Boolean
         },
         confirmButton = {
             TextButton(
-                enabled = !busy && name.isNotBlank() && url.startsWith("http") && (Mcp.KEY_SLOT !in url || key.isNotBlank()),
+                enabled = name.isNotBlank() && url.startsWith("http") && (Mcp.KEY_SLOT !in url || key.isNotBlank()),
+                busy = busy,
+                whyDisabled = when { name.isBlank() -> "先起个名字"; !url.startsWith("http") -> "网址要以 http 开头"; else -> "这个网址要填 Key" },
                 onClick = {
                     busy = true
                     error = null

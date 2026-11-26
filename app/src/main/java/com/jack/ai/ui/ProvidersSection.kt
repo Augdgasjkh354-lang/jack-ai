@@ -28,7 +28,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -238,12 +237,8 @@ private fun ProviderDialog(vm: ChatViewModel, initial: Provider, onDismiss: () -
                         style = MaterialTheme.typography.bodySmall)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedButton(onClick = { fetch() }, enabled = url.isNotBlank() && !loading) {
-                        Text(if (available.isEmpty()) "获取模型列表" else "刷新模型列表")
-                    }
-                    if (loading) {
-                        Spacer(Modifier.size(12.dp))
-                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    OutlinedButton(onClick = { fetch() }, enabled = url.isNotBlank(), busy = loading, whyDisabled = "先填接口地址") {
+                        Text(if (loading) "正在获取…" else if (available.isEmpty()) "获取模型列表" else "刷新模型列表")
                     }
                 }
                 error?.let { Text(it, color = colors.error, style = MaterialTheme.typography.bodySmall) }
@@ -310,6 +305,7 @@ private fun ProviderDialog(vm: ChatViewModel, initial: Provider, onDismiss: () -
             TextButton(
                 // 不选模型、只填 Key 也能存（转文字、向量检索只要 Key）
                 enabled = name.isNotBlank() && url.isNotBlank() && (chosen.isNotEmpty() || key.isNotBlank()),
+                whyDisabled = when { name.isBlank() -> "先起个名字"; url.isBlank() -> "先填接口地址"; else -> "填 API Key，或者勾选至少一个模型" },
                 onClick = {
                     // 保持服务上的顺序
                     val order = available.withIndex().associate { it.value to it.index }
@@ -539,7 +535,7 @@ private fun ChatGptDialog(vm: ChatViewModel, initial: Provider, onDismiss: () ->
             }
         },
         confirmButton = {
-            TextButton(enabled = chosen.isNotEmpty(), onClick = {
+            TextButton(enabled = chosen.isNotEmpty(), whyDisabled = "至少勾选一个模型", onClick = {
                 val order = available.withIndex().associate { it.value to it.index }
                 onSave(initial.copy(apiKey = CHATGPT_API_KEY, models = chosen.sortedBy { order[it.id] ?: Int.MAX_VALUE }))
             }) { Text("保存") }

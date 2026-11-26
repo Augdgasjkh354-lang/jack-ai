@@ -53,12 +53,10 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -414,6 +412,10 @@ fun AssistantMessage(
         // 最后一条回答做出了东西：给几个「接着做」，点一下就发给 Kavi
         if (isLast && !streaming && onAnswer != null && shownFiles.isNotEmpty() && msg.asks.isEmpty()) {
             NextSteps(remember(shownFiles) { shownFiles.map { it.name } }) { onAnswer(it) }
+        }
+        // 只有文字：看内容猜下一步（表格 → 导出 Excel、代码 → 存成文件、一串步骤 → 清单或提醒……）
+        if (isLast && !streaming && onAnswer != null && shownFiles.isEmpty() && msg.asks.isEmpty() && msg.drafts.isEmpty() && msg.error == null) {
+            TextNextSteps(msg.content) { onAnswer(it) }
         }
         msg.error?.let { err ->
             Spacer(Modifier.height(6.dp))

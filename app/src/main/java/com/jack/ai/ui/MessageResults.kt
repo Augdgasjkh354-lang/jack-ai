@@ -16,12 +16,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -95,11 +93,57 @@ object ResultKinds {
     }
 }
 
+/**
+ * 只有文字的回答也猜下一步：看回答里有什么（表格、代码、一串步骤、很长），给最多 3 个顺手的按钮。
+ * 都不像就不给，不硬凑。
+ */
+object TextSteps {
+    private val TABLE_RULE = Regex("""(?m)^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$""")
+    private val FENCE = Regex("(?m)^\\s*```")
+    private val NUMBERED = Regex("(?m)^\\s*(\\d{1,2})[.、)）]\\s+\\S")
+    private val TIME_WORDS = Regex("(每天|每周|明天|早上|晚上|点前|截止|提醒|到期|\\d{1,2}[:：]\\d{2})")
+
+    fun of(text: String): List<Pair<String, String>> {
+        val t = text.trim()
+        if (t.length < 40) return emptyList()
+        val out = mutableListOf<Pair<String, String>>()
+        if (TABLE_RULE.containsMatchIn(t)) {
+            out += "导出 Excel" to "把上面的表格做成 Excel 文件给我"
+            out += "做成图表" to "把上面表格里的数据画成图表"
+        }
+        if (FENCE.findAll(t).count() >= 2) {
+            out += "存成文件" to "把上面的代码存成文件给我"
+            out += "逐行解释" to "把上面的代码逐行解释一下，说说每部分在做什么"
+        }
+        val steps = NUMBERED.findAll(t).count()
+        if (steps >= 3) {
+            if (TIME_WORDS.containsMatchIn(t)) out += "设成提醒" to "把上面这些按时间设成提醒"
+            else out += "做成清单" to "把上面这几条做成一张能打勾的待办清单"
+        }
+        if (t.length > 1500) out += "总结成三句" to "把上面的回答压缩成三句话"
+        return out.distinctBy { it.first }.take(3)
+    }
+}
+
+/** 只有文字的回答下面的「下一步可以」。 */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun TextNextSteps(text: String, onAsk: (String) -> Unit) {
+    val steps = remember(text) { TextSteps.of(text) }
+    StepChips(steps, onAsk)
+}
+
 /** 「下一步可以」一排按钮（和回答下面那个「接着做」按钮分开叫）。 */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun NextSteps(names: List<String>, onAsk: (String) -> Unit) {
     val steps = remember(names) { ResultKinds.nextSteps(names) }
+    StepChips(steps, onAsk)
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun StepChips(steps: List<Pair<String, String>>, onAsk: (String) -> Unit) {
     if (steps.isEmpty()) return
     Column(Modifier.padding(top = 6.dp).testTag("next-steps")) {
         Text("下一步可以", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)

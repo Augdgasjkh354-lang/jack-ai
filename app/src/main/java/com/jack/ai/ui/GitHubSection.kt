@@ -7,7 +7,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -65,7 +64,7 @@ fun GitHubSection(vm: ChatViewModel, s: Settings) {
         modifier = Modifier.fillMaxWidth(),
     )
     if (input.isNotBlank()) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton(enabled = !busy, onClick = {
+        OutlinedButton(busy = busy, onClick = {
             busy = true
             scope.launch {
                 status = withContext(Dispatchers.IO) {
