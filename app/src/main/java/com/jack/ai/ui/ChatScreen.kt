@@ -227,6 +227,8 @@ fun ChatScreen(
 
     // 侧边栏开着时按返回键先收起侧边栏
     androidx.activity.compose.BackHandler(enabled = drawerState.isOpen) { scope.launch { drawerState.close() } }
+    // 正在改一条发过的消息：返回键就是「取消」，原来没写完的草稿放回输入框（以前一按返回直接退出了）
+    androidx.activity.compose.BackHandler(enabled = editing != null && !drawerState.isOpen) { stopEditing() }
     ModalNavigationDrawer(
         drawerState = drawerState,
         // 关着时由 swipeToOpen 负责打开：抽屉自带的拖动碰到消息气泡会失灵，两个一起开还会互相拉扯（刚打开又被拉回去）。

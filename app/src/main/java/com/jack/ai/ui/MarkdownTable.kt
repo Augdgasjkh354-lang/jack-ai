@@ -2,6 +2,8 @@ package com.jack.ai.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -16,6 +18,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.AnnotatedString
@@ -154,6 +159,22 @@ internal fun MarkdownTable(t: Table, modifier: Modifier = Modifier) {
             }
         }
     }
+    // 整张表一键复制：格子之间是 Tab，贴进 Excel、WPS 表格自动分好格；复制后变成对勾一会儿
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    var copied by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(copied) { if (copied) { kotlinx.coroutines.delay(1500); copied = false } }
+    Row(Modifier.padding(top = 4.dp).clip(Radii.xs).clickable(onClickLabel = "复制表格") {
+        clipboard.setText(AnnotatedString(tableTsv(t))); copied = true
+    }.padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        androidx.compose.material3.Icon(if (copied) androidx.compose.material.icons.Icons.Default.Check else AppIcons.Copy, null,
+            Modifier.size(14.dp), tint = colors.onSurfaceVariant)
+        Text(if (copied) " 已复制，可以贴进表格" else " 复制表格", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+    }
+}
+
+/** 表格转成 Tab 分隔的文字（表头在第一行），去掉格子里的 Markdown 记号；贴进表格软件就是一格一格的。 */
+internal fun tableTsv(t: Table): String = (listOf(t.header) + t.rows).joinToString("\n") { row ->
+    row.joinToString("\t") { c -> inline(c, androidx.compose.ui.graphics.Color.Unspecified).text.replace(Regex("[\t\n]+"), " ").trim() }
 }
 
 @Composable

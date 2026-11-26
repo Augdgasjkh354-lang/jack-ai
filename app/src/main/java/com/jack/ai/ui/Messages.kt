@@ -208,6 +208,8 @@ fun UserBubble(msg: ChatMessage, onDelete: () -> Unit, onEdit: (() -> Unit)? = n
                 // 只想复制其中一句：打开全文，长按拖着选
                 if (msg.content.isNotEmpty()) DropdownMenuItem(text = { Text("选择文字") }, leadingIcon = { Icon(AppIcons.File, null) },
                     onClick = { menu = false; selecting = true })
+                if (msg.content.isNotEmpty()) DropdownMenuItem(text = { Text("分享") }, leadingIcon = { Icon(AppIcons.Share, null) },
+                    onClick = { menu = false; shareText(ctx, msg.content) })
                 if (onEdit != null) DropdownMenuItem(text = { Text("编辑后重发") }, leadingIcon = { Icon(Icons.Default.Edit, null) },
                     onClick = { menu = false; onEdit() })
                 // 不再先确认：删了底下会出「撤销」

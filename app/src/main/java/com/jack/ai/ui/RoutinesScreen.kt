@@ -217,6 +217,23 @@ private fun HourPicker(label: String, hour: Int, onPick: (Int) -> Unit) {
     }
 }
 
+/** 日期按钮上的说法：今天、明天、后天，别的写「11月28日 周六」，不是明年的不写年份。认不出原样返回。 */
+internal fun friendlyDay(day: String, now: Long = System.currentTimeMillis()): String {
+    val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+    val d = runCatching { fmt.parse(day) }.getOrNull() ?: return day
+    val today = fmt.parse(fmt.format(Date(now)))!!
+    val diff = Math.round((d.time - today.time) / 86_400_000.0).toInt()
+    return when (diff) {
+        0 -> "今天"
+        1 -> "明天"
+        2 -> "后天"
+        else -> {
+            val sameYear = day.take(4) == fmt.format(Date(now)).take(4)
+            SimpleDateFormat(if (sameYear) "M月d日 EEE" else "yyyy年M月d日 EEE", Locale.CHINA).format(d).replace("星期", "周")
+        }
+    }
+}
+
 /** 提醒一次时的快捷时间：(说法, 时刻毫秒)。整分钟；「今晚 8 点」过了 19 点就不给了。 */
 internal fun quickTimes(now: Long = System.currentTimeMillis()): List<Pair<String, Long>> {
     fun cal() = java.util.Calendar.getInstance().apply { timeInMillis = now; set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0) }
@@ -389,7 +406,7 @@ private fun RoutineDialog(r: Routine, isNew: Boolean, onDismiss: () -> Unit, onU
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = { pickTime = true }) { Text(String.format(Locale.US, "%02d:%02d", hour, minute)) }
                     if (repeat == "none" || repeat == "weekly") {
-                        OutlinedButton(onClick = { pickDate = true }) { Text(date) }
+                        OutlinedButton(onClick = { pickDate = true }) { Text(friendlyDay(date)) }
                     }
                 }
                 // 「保存」灰着时说清楚为什么：多半是只提醒一次、时间已经过了

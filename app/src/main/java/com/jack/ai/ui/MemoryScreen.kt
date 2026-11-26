@@ -211,6 +211,8 @@ private fun MemoryPage(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                         }
                     }
                 }
+                // 撤销条放 8 秒自己收起，不一直挂在列表上面
+                LaunchedEffect(undo) { if (undo != null) { kotlinx.coroutines.delay(8000); undo = null } }
                 undo?.let { t ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("已删除「${t.take(16)}${if (t.length > 16) "…" else ""}」", Modifier.weight(1f),

@@ -141,10 +141,14 @@ fun HistoryDrawer(
         value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { searchConversations(convs, query) }
     }
     val colors = MaterialTheme.colorScheme
+    // 写了一半没发的对话：像微信那样标一行红色的「草稿」
+    val draftStore = remember { DraftStore(ctx) }
+    val draftTick = DraftStore.changes
     fun chatRow(c: Conversation): @Composable () -> Unit = {
+        val draft = remember(c.id, draftTick) { draftStore.get(c.id).replace(Regex("""\s+"""), " ").trim() }
         // 「⋯」只在当前对话上显示，其他的长按出菜单，列表看着清爽些
         ChatItem(c, c.id == state.currentId, { onSelect(c.id) }, { renaming = c }, { deleteNow(c) }, onPin = { onPin(c.id) },
-            onMemory = { onMemory(c) }, showMore = c.id == state.currentId, answering = c.id in state.streamingIds)
+            onMemory = { onMemory(c) }, showMore = c.id == state.currentId, answering = c.id in state.streamingIds, draft = draft)
     }
     ModalDrawerSheet(drawerContainerColor = colors.background, drawerShape = RoundedCornerShape(topEnd = 30.dp, bottomEnd = 30.dp)) {
         Column(Modifier.fillMaxSize()) {
@@ -407,6 +411,8 @@ fun ChatItem(
     answering: Boolean = false,
     /** 标题下面一行小字（项目页里放最后一条消息和时间）；空的就只有一行标题。 */
     subtitle: String? = null,
+    /** 没发出去的草稿：标题下面一行红色「草稿」加开头几个字。 */
+    draft: String = "",
 ) {
     var menu by remember { mutableStateOf(false) }
     var showUsage by remember { mutableStateOf(false) }
@@ -435,13 +441,18 @@ fun ChatItem(
                 exit = androidx.compose.animation.scaleOut(targetScale = 0.3f) + androidx.compose.animation.fadeOut()) {
                 Icon(AppIcons.Pin, null, Modifier.padding(end = 6.dp).size(14.dp), tint = colors.primary)
             }
-            Column(Modifier.weight(1f).padding(vertical = if (subtitle.isNullOrBlank()) 10.dp else 8.dp)) {
+            Column(Modifier.weight(1f).padding(vertical = if (subtitle.isNullOrBlank() && draft.isEmpty()) 10.dp else 8.dp)) {
                 Text(
                     c.title, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodyLarge,
                     color = if (selected) colors.onSecondaryContainer else colors.onSurface,
                 )
-                if (!subtitle.isNullOrBlank()) Text(subtitle, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                if (draft.isNotEmpty()) Text(buildAnnotatedString {
+                    withStyle(SpanStyle(color = colors.error)) { append("[草稿] ") }
+                    append(draft)
+                }, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp))
+                else if (!subtitle.isNullOrBlank()) Text(subtitle, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp))
             }
             if (answering) {
