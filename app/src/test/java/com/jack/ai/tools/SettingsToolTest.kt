@@ -57,4 +57,15 @@ class SettingsToolTest {
         assertTrue(Store(ctx).loadSettings().memoryEnabled)
         assertTrue(s.execute("settings", """{"action":"set","changes":{"font_scale":"3"}}""").contains("0.85 到 1.3"))
     }
+
+    @Test fun pinsAMiniAppIntoTheDrawer() = runBlocking {
+        val s = session()
+        val f = File(s.wsDir.apply { mkdirs() }, "记账.html").apply { writeText("<html><head></head><body>记账</body></html>") }
+        assertTrue(s.execute("settings", """{"action":"pin_page","name":"记账.html"}""").contains("已放进侧边栏"))
+        val rel = com.jack.ai.data.PinnedPages.rel(ctx, f)
+        assertEquals(listOf(rel), Store(ctx).loadSettings().pinnedPages)
+        assertEquals(f.canonicalPath, com.jack.ai.data.PinnedPages.file(ctx, rel)!!.canonicalPath)
+        assertTrue(s.execute("settings", """{"action":"unpin_page","name":"记账.html"}""").contains("已移出"))
+        assertEquals(emptyList<String>(), Store(ctx).loadSettings().pinnedPages)
+    }
 }

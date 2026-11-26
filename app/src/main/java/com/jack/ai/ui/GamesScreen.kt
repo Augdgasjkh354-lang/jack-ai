@@ -124,9 +124,12 @@ fun GamesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit, onOpenCha
                             Text(game.title, style = MaterialTheme.typography.titleMedium)
                             Text(game.blurb, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
+                        val gameFile = java.io.File(Workspace.dir(ctx, game.convId), game.title + ".html")
                         GameMenu(
                             onEdit = { vm.ensureGame(game); editIn(game.convId, "把${game.title}改成：") },
                             onReset = { resetting = game },
+                            inDrawer = gameFile.exists() && com.jack.ai.data.PinnedPages.rel(ctx, gameFile) in state.settings.pinnedPages,
+                            onTogglePage = { vm.togglePage(vm.ensureGame(game)) },
                         )
                     }
                 }
@@ -149,6 +152,8 @@ fun GamesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit, onOpenCha
                             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                                 val convId = f.parentFile?.name?.takeIf { k -> state.conversations.any { it.id == k } }
                                 convId?.let { id -> DropdownMenuItem(text = { Text("让 Kavi 改") }, onClick = { menu = false; editIn(id, "把「${f.name.removeSuffix(".html")}」改成：") }) }
+                                val inDrawer = com.jack.ai.data.PinnedPages.rel(ctx, f) in state.settings.pinnedPages
+                                DropdownMenuItem(text = { Text(if (inDrawer) "移出侧边栏" else "放进侧边栏") }, onClick = { menu = false; vm.togglePage(f) })
                                 DropdownMenuItem(text = { Text("放到桌面") }, onClick = {
                                     menu = false
                                     if (!MiniAppActivity.pin(ctx, f)) android.widget.Toast.makeText(ctx, "这个桌面不支持放快捷方式", android.widget.Toast.LENGTH_SHORT).show()
@@ -203,12 +208,13 @@ fun GamesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit, onOpenCha
 }
 
 @Composable
-private fun GameMenu(onEdit: () -> Unit, onReset: () -> Unit) {
+private fun GameMenu(onEdit: () -> Unit, onReset: () -> Unit, inDrawer: Boolean, onTogglePage: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "更多") }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
             DropdownMenuItem(text = { Text("让 Kavi 改") }, onClick = { menu = false; onEdit() })
+            DropdownMenuItem(text = { Text(if (inDrawer) "移出侧边栏" else "放进侧边栏") }, onClick = { menu = false; onTogglePage() })
             DropdownMenuItem(text = { Text("恢复原版") }, onClick = { menu = false; onReset() })
         }
     }

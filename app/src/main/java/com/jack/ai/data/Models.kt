@@ -406,6 +406,8 @@ data class Settings(
     val fontChoice: String = "",
     /** 底部标签栏除了「聊天」以外放哪些页面、什么顺序（KaviTab 的 id）；null 是默认那几个。 */
     val tabBar: List<String>? = null,
+    /** 放进侧边栏「我的页面」的小工具网页（相对对话文件夹根目录的路径，「对话id/名字.html」），按放进去的顺序。 */
+    val pinnedPages: List<String> = emptyList(),
     /** 新手教学问过了（不管选的看不看）：不再自动问。 */
     val tourAsked: Boolean = false,
     /** 话筒点一下的语音输入："kavi" Kavi 自己录音转文字（默认）；"system" 用手机系统的语音识别。 */

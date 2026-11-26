@@ -71,6 +71,8 @@ sealed interface Screen {
     data object Review : Screen
     data object Apps : Screen
     data object Games : Screen
+    /** 侧边栏「我的页面」里的一个小工具网页，rel 见 PinnedPages。 */
+    data class Page(val rel: String) : Screen
     data object Downloads : Screen
     data object Files : Screen
     data class ProjectPage(val id: String) : Screen
@@ -395,6 +397,7 @@ class MainActivity : FragmentActivity() {
                             onOpenDownloads = { stack.add(Screen.Downloads) },
                             onOpenFiles = { stack.add(Screen.Files) },
                             onOpenGames = { stack.add(Screen.Games) },
+                            onOpenPage = { stack.add(Screen.Page(it)) },
                             onOpenTab = { openTab(it) },
                             onOpenTerminal = { stack.add(Screen.Terminal(it)) },
                         )
@@ -404,9 +407,10 @@ class MainActivity : FragmentActivity() {
                         Screen.Library -> LibraryScreen(vm = vm, state = state, onBack = back)
                         Screen.Tables -> TablesScreen(onBack = back)
                         Screen.Review -> ReviewScreen(vm = vm, state = state, onBack = back)
-                        Screen.Apps -> com.jack.ai.ui.AppsScreen(state = state, onBack = back, onOpenChat = { id -> vm.select(id); stack.clear() })
+                        Screen.Apps -> com.jack.ai.ui.AppsScreen(state = state, onBack = back, onOpenChat = { id -> vm.select(id); stack.clear() }, onTogglePage = vm::togglePage)
                         Screen.Downloads -> com.jack.ai.ui.DownloadsScreen(onBack = back)
                         Screen.Games -> com.jack.ai.ui.GamesScreen(vm = vm, state = state, onBack = back, onOpenChat = { stack.clear() })
+                        is Screen.Page -> com.jack.ai.ui.PageScreen(vm = vm, state = state, rel = screen.rel, onBack = back, onOpenChat = { stack.clear() })
                         Screen.Files -> com.jack.ai.ui.FileLibraryScreen(state = state, onBack = back, onOpenChat = { id -> vm.select(id); stack.clear() })
                         Screen.Memory -> MemoryScreen(vm = vm, state = state, onBack = back)
                         Screen.Skills -> SkillsScreen(vm = vm, settings = state.settings, onBack = back)

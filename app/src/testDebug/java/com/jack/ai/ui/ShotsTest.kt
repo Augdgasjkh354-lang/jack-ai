@@ -145,6 +145,12 @@ class ShotsTest {
             Conversation(title = "比较几款笔记软件", updatedAt = now - 86_400_000L * 3, messages = listOf(ChatMessage(role = "user", content = "从功能、价格、同步方面对比 Notion 和 Obsidian"))),
         )
         val vm = vm(convs)
+        // 「我的页面」里放两个小工具
+        val app = RuntimeEnvironment.getApplication() as Application
+        val pages = listOf("记账本", "习惯打卡").map { n ->
+            java.io.File(com.jack.ai.data.Workspace.dir(app, convs[0].id).apply { mkdirs() }, "$n.html").apply { writeText("<html></html>") }
+        }
+        vm.updateSettings { it.copy(pinnedPages = pages.map { f -> com.jack.ai.data.PinnedPages.rel(app, f) }) }
         rule.mainClock.autoAdvance = false
         rule.setContent {
             val state by vm.state.collectAsState()

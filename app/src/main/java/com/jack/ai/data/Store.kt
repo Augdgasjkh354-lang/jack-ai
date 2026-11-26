@@ -595,6 +595,9 @@ class Store(context: Context) {
             tabBar = prefs.getString("tabBar", null)?.let { raw ->
                 runCatching { json.decodeFromString(ListSerializer(String.serializer()), raw) }.getOrNull()
             },
+            pinnedPages = prefs.getString("pinnedPages", null)?.let { raw ->
+                runCatching { json.decodeFromString(ListSerializer(String.serializer()), raw) }.getOrNull()
+            }.orEmpty(),
             // 换成纯黑白风格时，以前的强调色一次性换成「黑白」（之后用户再选别的不动它）
             accent = if (!prefs.getBoolean("monoTheme", false)) { prefs.edit().putBoolean("monoTheme", true).putString("accent", "mono").apply(); "mono" }
                 else prefs.getString("accent", "mono") ?: "mono",
@@ -709,6 +712,7 @@ class Store(context: Context) {
             .putBoolean("tourAsked", s.tourAsked)
             .putString("voiceInput", s.voiceInput)
             .apply { if (s.tabBar == null) remove("tabBar") else putString("tabBar", json.encodeToString(ListSerializer(String.serializer()), s.tabBar)) }
+            .putString("pinnedPages", json.encodeToString(ListSerializer(String.serializer()), s.pinnedPages))
             .putString("accent", s.accent)
             .putBoolean("bubbleAccent", s.bubbleAccent)
             .putBoolean("appLock", s.appLock)

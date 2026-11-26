@@ -103,6 +103,8 @@ fun HistoryDrawer(
     onSettings: () -> Unit,
     onOpenFiles: () -> Unit = {},
     onOpenGames: () -> Unit = {},
+    /** 点了「我的页面」里的一项，参数是它的相对路径（见 PinnedPages）。 */
+    onOpenPage: (String) -> Unit = {},
     onUndoDelete: () -> Boolean = { false },
     /** 点了「聊天」：就是关上侧边栏。 */
     onCloseDrawer: () -> Unit = {},
@@ -206,6 +208,12 @@ fun HistoryDrawer(
                         onSave = onSaveTabs,
                     )
                 }
+                // 我的页面：放进侧边栏的小工具网页（文件删了的不显示）
+                val pages = state.settings.pinnedPages.filter { com.jack.ai.data.PinnedPages.file(ctx, it) != null }
+                if (pages.isNotEmpty()) {
+                    item { SectionLabel("我的页面") }
+                    items(pages, key = { "page$it" }) { rel -> PageRow(com.jack.ai.data.PinnedPages.title(rel)) { onOpenPage(rel) } }
+                }
                 if (pinned.isNotEmpty()) {
                     item { SectionLabel("置顶") }
                     items(pinned, key = { "pin" + it.id }) { c -> chatRow(c)() }
@@ -285,6 +293,20 @@ fun HistoryDrawer(
 private const val PROJECTS_SHOWN = 3
 
 /** 抽屉里的一个项目：文件夹图标加名字，不带框；当前项目有一层淡底。 */
+/** 「我的页面」的一行：小工具图标加名字。 */
+@Composable
+private fun PageRow(name: String, onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(horizontal = 12.dp).fillMaxWidth().clip(Radii.m).clickable(onClick = onClick)
+            .heightIn(min = 48.dp).padding(horizontal = 16.dp, vertical = 8.dp),
+    ) {
+        Icon(AppIcons.Code, null, Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurface)
+        Spacer(Modifier.size(14.dp))
+        Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+    }
+}
+
 @Composable
 private fun ProjectRow(name: String, selected: Boolean, icon: String = "", onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme

@@ -216,6 +216,18 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         return file
     }
 
+    /** 小工具网页放进或移出侧边栏「我的页面」；返回放进去以后的状态（满了放不进去返回 false 并提示）。 */
+    fun togglePage(file: java.io.File): Boolean {
+        val app = getApplication<Application>()
+        val rel = com.jack.ai.data.PinnedPages.rel(app, file)
+        val cur = _state.value.settings.pinnedPages
+        if (rel in cur) { updateSettings { it.copy(pinnedPages = it.pinnedPages - rel) }; return false }
+        val next = com.jack.ai.data.PinnedPages.add(cur, rel)
+            ?: run { core.toast("侧边栏最多放 ${com.jack.ai.data.PinnedPages.MAX} 个页面，先移出一个"); return false }
+        updateSettings { it.copy(pinnedPages = next) }
+        return true
+    }
+
     fun select(id: String) {
         if (id != _state.value.currentId) handoff(_state.value.currentId)
         _state.update { it.copy(currentId = id, pending = emptyList()) }

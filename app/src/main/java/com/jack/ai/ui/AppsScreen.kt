@@ -44,7 +44,7 @@ import java.util.Locale
 /** 做过的所有小工具，按最近改动排；点开全屏用，也能删。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AppsScreen(state: UiState, onBack: () -> Unit, onOpenChat: (String) -> Unit = {}) {
+fun AppsScreen(state: UiState, onBack: () -> Unit, onOpenChat: (String) -> Unit = {}, onTogglePage: (File) -> Unit = {}) {
     val ctx = LocalContext.current
     var refresh by remember { mutableIntStateOf(0) }
     val apps by produceState(emptyList<File>(), refresh) {
@@ -103,6 +103,8 @@ fun AppsScreen(state: UiState, onBack: () -> Unit, onOpenChat: (String) -> Unit 
                             IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "更多") }
                             androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                                 convId?.let { id -> androidx.compose.material3.DropdownMenuItem(text = { Text("去对话") }, onClick = { menu = false; onOpenChat(id) }) }
+                                val inDrawer = com.jack.ai.data.PinnedPages.rel(ctx, f) in state.settings.pinnedPages
+                                androidx.compose.material3.DropdownMenuItem(text = { Text(if (inDrawer) "移出侧边栏" else "放进侧边栏") }, onClick = { menu = false; onTogglePage(f) })
                                 androidx.compose.material3.DropdownMenuItem(text = { Text("放到桌面") }, onClick = {
                                     menu = false
                                     if (!MiniAppActivity.pin(ctx, f)) android.widget.Toast.makeText(ctx, "这个桌面不支持放快捷方式", android.widget.Toast.LENGTH_SHORT).show()

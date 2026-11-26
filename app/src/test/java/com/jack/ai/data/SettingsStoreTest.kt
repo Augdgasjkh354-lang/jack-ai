@@ -21,6 +21,7 @@ class SettingsStoreTest {
         store.saveSettings(store.loadSettings().copy(
             tabBar = listOf("memory", "files"), fontChoice = "serif",
             bizStarts = false, linuxSandbox = true, quietStart = 22, quietEnd = 7, dsVoice = true, dsVoiceId = "alex",
+            pinnedPages = listOf("c1/记账.html"),
         ))
         val back = Store(app).loadSettings()
         assertEquals(listOf("memory", "files"), back.tabBar)
@@ -31,6 +32,7 @@ class SettingsStoreTest {
         assertEquals(7, back.quietEnd)
         assertEquals(true, back.dsVoice)
         assertEquals("alex", back.dsVoiceId)
+        assertEquals(listOf("c1/记账.html"), back.pinnedPages)
     }
 
     @Test
