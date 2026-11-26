@@ -293,6 +293,11 @@ class KnowledgeFeature(core: AppCore) : Feature(core) {
 
     fun deleteDream(id: String) = changeDreams { list -> list.filterNot { it.id == id } }
 
+    /** 撤销删除一条整理记录：放回去，按时间排（新的在前）。 */
+    fun restoreDream(d: com.jack.ai.data.DreamEntry) = changeDreams { list ->
+        if (list.any { it.id == d.id }) list else (list + d).sortedByDescending { it.createdAt }
+    }
+
     private fun changeDreams(transform: (List<com.jack.ai.data.DreamEntry>) -> List<com.jack.ai.data.DreamEntry>) {
         scope.launch(ioSerial) {
             val list = transform(store.loadDreams())

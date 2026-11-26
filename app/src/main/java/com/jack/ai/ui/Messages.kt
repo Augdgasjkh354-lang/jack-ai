@@ -273,10 +273,15 @@ fun AssistantMessage(
     onAnswer: ((String) -> Unit)? = null,
     /** 报错是 Key 不对、余额不足这类要去设置里改的：打开设置的某一页（SettingsPage 的名字）。 */
     onOpenSettings: ((String) -> Unit)? = null,
+    /** 「换个模型重答」能选的模型（key, 名字）；空的就不显示。 */
+    models: List<Pair<String, String>> = emptyList(),
+    onRegenerateWith: (String) -> Unit = {},
 ) {
     var restyling by remember { mutableStateOf(false) }
     if (restyling && onRestyle != null) {
-        var edited by remember { mutableStateOf(msg.content) }
+        // 一打开光标就在最后、键盘起来，直接改
+        var field by remember { mutableStateOf(atEnd(msg.content)) }
+        val edited = field.text
         AlertDialog(
             onDismissRequest = { restyling = false },
             properties = keepIfEdited(edited != msg.content),
@@ -285,8 +290,8 @@ fun AssistantMessage(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("直接在下面改：删掉绕的话、换成你会说的句子。Kavi 会对比两版，把规律记进它的「说话方式」。",
                         style = MaterialTheme.typography.bodySmall)
-                    OutlinedTextField(value = edited, onValueChange = { edited = it }, minLines = 6, maxLines = 14,
-                        modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = field, onValueChange = { field = it }, minLines = 6, maxLines = 14,
+                        modifier = Modifier.fillMaxWidth().focusOnShow())
                 }
             },
             confirmButton = {
@@ -297,6 +302,9 @@ fun AssistantMessage(
         )
     }
     var more by remember { mutableStateOf(false) }
+    var pickModel by remember { mutableStateOf(false) }
+    var selecting by remember { mutableStateOf(false) }
+    if (selecting) TextViewer("选择文字", load = { markdownToPlain(msg.content) to false }, onDismiss = { selecting = false })
     var reporting by remember { mutableStateOf(false) }
     if (reporting && onReport != null) {
         var note by remember { mutableStateOf("") }
@@ -307,7 +315,7 @@ fun AssistantMessage(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("会存下这一轮的问题、回答和工具调用过程，之后在「统计」页最下面导出。", style = MaterialTheme.typography.bodySmall)
                     OutlinedTextField(value = note, onValueChange = { note = it }, placeholder = { Text("哪里不对？可以不填") },
-                        minLines = 2, modifier = Modifier.fillMaxWidth())
+                        minLines = 2, modifier = Modifier.fillMaxWidth().focusOnShow())
                 }
             },
             confirmButton = { TextButton(onClick = { onReport(note); reporting = false }) { Text("记下") } },
@@ -452,7 +460,16 @@ fun AssistantMessage(
                         copied = true
                     }
                 }
-                if (isLast) SmallAction(Icons.Default.Refresh, "重新回答", onRegenerate)
+                if (isLast) Box {
+                    SmallAction(Icons.Default.Refresh, "重新回答", onRegenerate)
+                    // 「⋯」里点「换个模型重答」：在重答键下面列出别的模型，点一个就换上并重答
+                    DropdownMenu(expanded = pickModel, onDismissRequest = { pickModel = false }) {
+                        models.forEach { (key, label) ->
+                            DropdownMenuItem(text = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                onClick = { pickModel = false; onRegenerateWith(key) })
+                        }
+                    }
+                }
                 if (isLast && msg.truncated && onContinueWriting != null) ActionPill("接着写", onContinueWriting)
                 if (isLast && onContinue != null) ActionPill("接着做", onContinue)
                 if (isLast && onReview != null && msg.content.isNotEmpty()) ActionPill("复核", onReview)
@@ -473,6 +490,17 @@ fun AssistantMessage(
                             text = { Text("分享") },
                             leadingIcon = { Icon(AppIcons.Share, null) },
                             onClick = { more = false; shareText(ctx, markdownToPlain(msg.content)) },
+                        )
+                        if (isLast && models.isNotEmpty()) DropdownMenuItem(
+                            text = { Text("换个模型重答") },
+                            leadingIcon = { Icon(Icons.Default.Refresh, null) },
+                            onClick = { more = false; pickModel = true },
+                        )
+                        // 只想复制其中一句：打开全文，长按拖着选（和自己发的消息一样）
+                        if (msg.content.isNotEmpty()) DropdownMenuItem(
+                            text = { Text("选择文字") },
+                            leadingIcon = { Icon(AppIcons.File, null) },
+                            onClick = { more = false; selecting = true },
                         )
                         // 复制键复制的是原文（带 Markdown 符号，贴到笔记软件里格式还在）；贴微信、短信用这个
                         if (msg.content.isNotEmpty()) DropdownMenuItem(

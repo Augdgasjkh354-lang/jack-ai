@@ -105,6 +105,7 @@ private fun MemoryPage(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
     var moving by remember { mutableStateOf<MemoryItem?>(null) }
     // 刚删掉的那条：列表上方给个「撤销」，误点了能拿回来
     var undo by remember { mutableStateOf<String?>(null) }
+    var dreamUndo by remember { mutableStateOf<DreamEntry?>(null) }
     val settings = state.settings
     // 看哪个记忆空间（删掉了就回到「生活」），按哪个人和事筛
     var spacePick by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
@@ -259,8 +260,19 @@ private fun MemoryPage(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                     Text("还没有整理过。", color = MaterialTheme.colorScheme.outline)
                 }
             }
+            // 删整理记录不再先确认：直接删，标题下面出「撤销」，8 秒后自己收起
+            item {
+                LaunchedEffect(dreamUndo) { if (dreamUndo != null) { kotlinx.coroutines.delay(8000); dreamUndo = null } }
+                dreamUndo?.let { d ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("已删除 ${dreamDate.format(Date(d.createdAt))} 的记录", Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        TextButton(onClick = { vm.restoreDream(d); dreamUndo = null }) { Text("撤销") }
+                    }
+                }
+            }
             items(state.dreams, key = { it.id }) { d ->
-                androidx.compose.foundation.layout.Box(Modifier.animateItem()) { DreamCard(d, onDelete = { vm.deleteDream(d.id) }) }
+                androidx.compose.foundation.layout.Box(Modifier.animateItem()) { DreamCard(d, onDelete = { vm.deleteDream(d.id); dreamUndo = d }) }
             }
         }
     }
@@ -287,9 +299,13 @@ private fun MemoryPage(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
             dismissButton = {
                 Row {
                     // 还成立但不常用：放到深处，不占每次对话的篇幅
-                    editing?.let { e -> TextButton(onClick = { vm.demoteMemory(e.id); editing = null }) { Text("放到深处") } }
+                    // 框里改过的字先存上，再放到深处 / 挪走（以前改了再点这两个，改的就丢了）
+                    fun keepEdit(e: com.jack.ai.data.MemoryItem) { if (text.isNotBlank() && text != e.text) vm.updateMemory(e.id, text) }
+                    editing?.let { e -> TextButton(onClick = { keepEdit(e); vm.demoteMemory(e.id); editing = null }) { Text("放到深处") } }
                     // 挪到别的空间
-                    if (editing != null && settings.memorySpaces.isNotEmpty()) TextButton(onClick = { moving = editing; editing = null }) { Text("挪到…") }
+                    editing?.takeIf { settings.memorySpaces.isNotEmpty() }?.let { e ->
+                        TextButton(onClick = { keepEdit(e); moving = e.copy(text = text.ifBlank { e.text }); editing = null }) { Text("挪到…") }
+                    }
                     TextButton(onClick = { adding = false; editing = null }) { Text("取消") }
                 }
             },
@@ -324,7 +340,6 @@ private val dreamDate = SimpleDateFormat("M月d日 EEEE", Locale.CHINA)
 
 @Composable
 fun DreamCard(d: DreamEntry, onDelete: () -> Unit) {
-    var deleting by remember { mutableStateOf(false) }
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
@@ -335,14 +350,9 @@ fun DreamCard(d: DreamEntry, onDelete: () -> Unit) {
                 Icon(AppIcons.Moon, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.size(6.dp))
                 Text(dreamDate.format(Date(d.createdAt)), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                TextButton(onClick = { deleting = true }) { Text("删除") }
+                TextButton(onClick = onDelete) { Text("删除") }
             }
             Text(d.changes.ifBlank { "这次没有改动。" }, style = MaterialTheme.typography.bodyMedium)
-        }
-    }
-    if (deleting) {
-        ConfirmDeleteDialog("删除这条记录？", "只删记录，记忆本身不变。", onDismiss = { deleting = false }) {
-            onDelete(); deleting = false
         }
     }
 }

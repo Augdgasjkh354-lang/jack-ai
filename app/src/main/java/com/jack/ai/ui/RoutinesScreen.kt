@@ -95,10 +95,28 @@ fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit, onOpen
         }
     }
     var canNotify by remember { mutableStateOf(Routines.canNotify(ctx)) }
-    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { canNotify = it }
+    // 以前拒绝过、选了「不再询问」：系统不弹框直接回「拒绝」，点「允许」像没反应。
+    // 回得这么快就是没弹框，直接打开系统里这一项的设置页；从设置回来再看一眼开没开
+    var askedAt by remember { mutableStateOf(0L) }
+    fun deniedSilently() = android.os.SystemClock.elapsedRealtime() - askedAt < 400
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+        canNotify = ok
+        if (!ok && deniedSilently()) runCatching {
+            ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, ctx.packageName))
+        }
+    }
     var canCalendar by remember { mutableStateOf(CalendarTool.canWrite(ctx)) }
     val calendarPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         canCalendar = CalendarTool.canWrite(ctx)
+        if (!canCalendar && deniedSilently()) runCatching {
+            ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.fromParts("package", ctx.packageName, null)))
+        }
+    }
+    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
+        canNotify = Routines.canNotify(ctx)
+        canCalendar = CalendarTool.canWrite(ctx)
+        onPauseOrDispose { }
     }
 
     // 按种类筛：全部 / 提醒 / 定时任务 / 监控
@@ -134,10 +152,10 @@ fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit, onOpen
             item { Box(Modifier.tourTarget("r-filter")) { KindFilter(filter) { filter = it } } }
             item { Box(Modifier.tourTarget("r-workflows")) { WorkflowsEntry(onOpenWorkflows) } }
             if (!canNotify && Build.VERSION.SDK_INT >= 33) {
-                item { PermissionRow("还没有通知权限", "提醒和任务结果要靠通知送到", "允许") { permission.launch(Manifest.permission.POST_NOTIFICATIONS) } }
+                item { PermissionRow("还没有通知权限", "提醒和任务结果要靠通知送到", "允许") { askedAt = android.os.SystemClock.elapsedRealtime(); permission.launch(Manifest.permission.POST_NOTIFICATIONS) } }
             }
             if (!canCalendar) {
-                item { PermissionRow("日历", "允许后 Kavi 能查和加日程", "允许") { calendarPermission.launch(CalendarTool.PERMISSIONS) } }
+                item { PermissionRow("日历", "允许后 Kavi 能查和加日程", "允许") { askedAt = android.os.SystemClock.elapsedRealtime(); calendarPermission.launch(CalendarTool.PERMISSIONS) } }
             }
             item { Box(Modifier.tourTarget("r-quiet")) { QuietHoursCard(state.settings) { start, end -> vm.updateSettings { it.copy(quietStart = start, quietEnd = end) } } } }
             if (state.routines.none { it.title == "早安问候" }) {
@@ -365,7 +383,9 @@ private fun RoutineDialog(r: Routine, isNew: Boolean, onDismiss: () -> Unit, onU
     var pickTime by remember { mutableStateOf(false) }
     var pickDate by remember { mutableStateOf(false) }
 
-    val draft = r.copy(kind = kind, title = title.trim(), prompt = prompt.trim(), hour = hour, minute = minute,
+    // AI 定时任务不填名字也能存：拿「要做什么」的头一句当名字
+    val name = title.trim().ifEmpty { if (kind == "task") autoTaskName(prompt) else "" }
+    val draft = r.copy(kind = kind, title = name, prompt = prompt.trim(), hour = hour, minute = minute,
         repeat = repeat, date = date, enabled = true, offPeak = kind == "task" && offPeak, work = kind == "task" && work)
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -379,7 +399,7 @@ private fun RoutineDialog(r: Routine, isNew: Boolean, onDismiss: () -> Unit, onU
                 }
                 OutlinedTextField(title, { title = it }, singleLine = true,
                     modifier = if (isNew) Modifier.focusOnShow() else Modifier,
-                    label = { Text(if (kind == "reminder") "提醒内容" else "任务名") })
+                    label = { Text(if (kind == "reminder") "提醒内容" else "任务名（可不填）") })
                 if (kind == "task") {
                     OutlinedTextField(prompt, { prompt = it }, minLines = 3, maxLines = 6,
                         label = { Text("到时候让 AI 做什么") },
@@ -426,7 +446,7 @@ private fun RoutineDialog(r: Routine, isNew: Boolean, onDismiss: () -> Unit, onU
         },
         confirmButton = {
             TextButton(
-                enabled = title.isNotBlank() && (kind == "reminder" || prompt.isNotBlank()) && draft.nextAt() != null,
+                enabled = name.isNotBlank() && (kind == "reminder" || prompt.isNotBlank()) && draft.nextAt() != null,
                 onClick = { onSave(draft) },
             ) { Text("保存") }
         },
@@ -558,4 +578,10 @@ internal fun newRoutineDraft(now: Long = System.currentTimeMillis()): Routine {
     }
     return Routine(title = "", hour = c.get(java.util.Calendar.HOUR_OF_DAY), minute = 0,
         date = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(c.time))
+}
+
+/** 没起名的 AI 定时任务：取「要做什么」的第一句，最多 20 个字。 */
+internal fun autoTaskName(prompt: String): String {
+    val first = prompt.trim().lineSequence().firstOrNull().orEmpty().split('。', '，', ',', '；', ';', '！', '？').first().trim()
+    return if (first.length > 20) first.take(20) + "…" else first
 }

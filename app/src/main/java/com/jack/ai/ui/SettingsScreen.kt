@@ -476,6 +476,12 @@ fun SettingsScreen(
 
             // ---- 隐私和数据 ----
             if (page == SettingsPage.PRIVACY) Section {
+                // 为开应用锁去设了锁屏：回来时已经能锁了，就替他把开关打开，不用再点一次
+                var lockPending by remember { mutableStateOf(false) }
+                androidx.lifecycle.compose.LifecycleResumeEffect(lockPending) {
+                    if (lockPending && canLock()) { lockPending = false; vm.updateSettings { it.copy(appLock = true) } }
+                    onPauseOrDispose { }
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("应用锁")
@@ -485,7 +491,8 @@ fun SettingsScreen(
                         onCheckedChange = { on ->
                             if (on && !canLock()) {
                                 // 直接打开系统里设锁屏密码的那页，设好回来再打开开关
-                                Toast.makeText(ctx, "先给手机设个锁屏密码或指纹，设好回来再打开", Toast.LENGTH_LONG).show()
+                                Toast.makeText(ctx, "先给手机设个锁屏密码或指纹，设好回来就自动打开", Toast.LENGTH_LONG).show()
+                                lockPending = true
                                 val go = if (android.os.Build.VERSION.SDK_INT >= 30)
                                     android.content.Intent(android.provider.Settings.ACTION_BIOMETRIC_ENROLL).putExtra(
                                         android.provider.Settings.EXTRA_BIOMETRIC_AUTHENTICATORS_ALLOWED,

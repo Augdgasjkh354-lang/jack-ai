@@ -44,6 +44,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Close
@@ -206,6 +207,15 @@ fun ChatScreen(
             }
         }
     }
+    // 从顶栏「更多」删掉眼前的对话：回到空白页，底下出「撤销」，撤销了再切回来
+    fun deleteChat(c: Conversation) {
+        vm.delete(c.id)
+        scope.launch {
+            snackbar.currentSnackbarData?.dismiss()
+            val r = snackbar.showSnackbar("删除了「${c.title.take(12)}」", actionLabel = "撤销", duration = androidx.compose.material3.SnackbarDuration.Short)
+            if (r == androidx.compose.material3.SnackbarResult.ActionPerformed && vm.undoDeleteConversation()) vm.select(c.id)
+        }
+    }
     var showFiles by remember { mutableStateOf(false) }
     var memoryOf by remember { mutableStateOf<Conversation?>(null) }
     val bg = MaterialTheme.colorScheme.background
@@ -282,7 +292,8 @@ fun ChatScreen(
                     title = {
                         // 中间一个胶囊：对话标题，下面是模型名，点一下换模型
                         Box(Modifier.tourTarget("model")) {
-                            ModelPicker(conv?.takeIf { it.messages.isNotEmpty() }?.title ?: "Kavi", state.settings, project?.name) { m -> vm.updateSettings { it.copy(model = m) } }
+                            ModelPicker(conv?.takeIf { it.messages.isNotEmpty() }?.title ?: "Kavi", state.settings, project?.name,
+                                onManage = { onOpenSettingsPage("PROVIDERS") }) { m -> vm.updateSettings { it.copy(model = m) } }
                         }
                     },
                     navigationIcon = {
@@ -296,6 +307,7 @@ fun ChatScreen(
                             if (conv != null && conv.messages.isNotEmpty()) ExportMenu(vm, conv,
                                 made = conv.messages.flatMap { it.files }.distinctBy { it.path }.size,
                                 onFiles = { showFiles = true }, onMemory = { memoryOf = conv },
+                                onDelete = { deleteChat(conv) },
                                 onTerminal = if (com.jack.ai.Edition.linux) { { onOpenTerminal(com.jack.ai.data.Workspace.key(conv)) } } else null)
                         }
                     },
@@ -361,7 +373,7 @@ fun ChatScreen(
                     Box(Modifier.padding(padding)) { EmptyState(vm, state, conv, onOpenMemory, onOpenRoutines = { if (onOpenTab != null) onOpenTab(KaviTab.ROUTINES) else onOpenRoutines() }, onOpenGuide = onOpenGuide) }
                 } else {
                     MessageList(vm, conv, state.streamingHere, padding, editingId = editing?.id, onDeleted = ::onDeleted, summaryCollapsed = state.settings.summaryCollapsed,
-                        onOpenSettingsPage = onOpenSettingsPage, onEdit = { m ->
+                        onOpenSettingsPage = onOpenSettingsPage, settings = state.settings, onEdit = { m ->
                         if (editing == null) editBackup = text
                         editing = m
                         text = m.content
@@ -431,7 +443,7 @@ internal fun Modifier.swipeToOpen(open: () -> Unit): Modifier = pointerInput(Uni
 }
 
 @Composable
-private fun ExportMenu(vm: ChatViewModel, conv: Conversation, made: Int, onFiles: () -> Unit, onMemory: () -> Unit, onTerminal: (() -> Unit)? = null) {
+private fun ExportMenu(vm: ChatViewModel, conv: Conversation, made: Int, onFiles: () -> Unit, onMemory: () -> Unit, onDelete: () -> Unit, onTerminal: (() -> Unit)? = null) {
     var open by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
     if (renaming) RenameDialog(conv.title, onDismiss = { renaming = false }) { vm.rename(conv.id, it); renaming = false }
@@ -460,6 +472,8 @@ private fun ExportMenu(vm: ChatViewModel, conv: Conversation, made: Int, onFiles
                     vm.exportChat(fmt) { file -> shareExport(ctx, file, fmt.mime) }
                 }
             }
+            // 删掉眼前这个对话：以前要打开侧边栏找到它再长按。不先确认，底下出「撤销」
+            MenuRow("删除对话", icon = Icons.Default.Delete, danger = true) { open = false; onDelete() }
         }
     }
 }
@@ -474,7 +488,7 @@ private fun shareExport(ctx: android.content.Context, file: java.io.File, mime: 
 }
 
 @Composable
-private fun ModelPicker(title: String, settings: Settings, projectName: String?, onPick: (String) -> Unit) {
+private fun ModelPicker(title: String, settings: Settings, projectName: String?, onManage: () -> Unit, onPick: (String) -> Unit) {
     val model = settings.model
     var open by remember { mutableStateOf(false) }
     val colors = MaterialTheme.colorScheme
@@ -529,6 +543,16 @@ private fun ModelPicker(title: String, settings: Settings, projectName: String?,
                     if (c.key == model) { Spacer(Modifier.width(12.dp)); Icon(Icons.Default.Check, "当前", Modifier.size(20.dp), tint = colors.primary) }
                 }
             }
+            // 想要的模型不在里面：直接去加服务、勾模型，不用退出去从设置首页找
+            HorizontalDivider(Modifier.padding(horizontal = 20.dp, vertical = 6.dp), color = colors.onSurface.copy(alpha = 0.08f))
+            Row(
+                Modifier.fillMaxWidth().clickable { open = false; onManage() }.heightIn(min = 48.dp).padding(horizontal = 20.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Default.Add, null, Modifier.size(18.dp), tint = colors.onSurfaceVariant)
+                Spacer(Modifier.width(10.dp))
+                Text("添加模型…", color = colors.onSurfaceVariant)
+            }
         }
     }
 }
@@ -536,7 +560,7 @@ private fun ModelPicker(title: String, settings: Settings, projectName: String?,
 @Composable
 private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolean, bars: PaddingValues,
                         editingId: String?, onDeleted: (Int) -> Unit, onEdit: (com.jack.ai.data.ChatMessage) -> Unit,
-                        summaryCollapsed: Boolean = false, onOpenSettingsPage: (String) -> Unit = {}) {
+                        summaryCollapsed: Boolean = false, onOpenSettingsPage: (String) -> Unit = {}, settings: Settings? = null) {
     // 一打开就停在最后一条附近，不先闪一下最顶上
     val ctx = LocalContext.current
     val listState = remember(conv.id) { androidx.compose.foundation.lazy.LazyListState(firstVisibleItemIndex = (conv.messages.size - 1).coerceAtLeast(0)) }
@@ -544,6 +568,13 @@ private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolea
     val lastId = conv.messages.last().id
     val lastUserId = conv.messages.lastOrNull { it.role == "user" }?.id
     val follow = rememberFollowBottom(listState, conv.id, lastUserId, moving = streaming || StreamReveal.pending)
+    // 回答还在写时点了「改成我想要的说法」：先存着，这条答完自动交给 Kavi，不用等着再点一次
+    var restyleLater by remember(conv.id) { mutableStateOf<String?>(null) }
+    LaunchedEffect(streaming, restyleLater) {
+        val r = restyleLater ?: return@LaunchedEffect
+        if (!streaming && vm.send(r)) restyleLater = null
+    }
+    val models = settings?.modelChoices().orEmpty()
     val seen = remember(conv.id) { conv.messages.mapTo(HashSet()) { it.id } }
     // 从搜索点进来：等回到底部那一下过去，再滚到命中的那条，停在那里不跟着往下走
     val jump = ChatJump.target?.takeIf { it.first == conv.id }
@@ -598,6 +629,9 @@ private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolea
                                 streaming = streaming && isLast,
                                 isLast = isLast,
                                 onRegenerate = vm::regenerate,
+                                // 换个模型重答：选好就换上并重新回答，不用先去顶上换模型再回来点重答
+                                models = if (isLast && models.size > 1) models.filter { it.key != settings?.model }.map { it.key to it.label } else emptyList(),
+                                onRegenerateWith = { key -> vm.updateSettings { it.copy(model = key) }; vm.regenerate() },
                                 onDelete = { vm.deleteFrom(msg.id).let { if (it > 0) onDeleted(it) } },
                                 onReview = vm::reviewLast,
                                 onContinue = if (isLast && !msg.truncated && vm.canContinue(msg)) ({ vm.continueWork() }) else null,
@@ -610,8 +644,10 @@ private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolea
                                 work = msg.plan.isNotEmpty(),
                                 stepsCollapsed = summaryCollapsed,
                                 onRestyle = if (msg.plan.isNotEmpty()) null else { edited ->
-                                    if (streaming) Toast.makeText(ctx, "等这条答完再交给 Kavi", Toast.LENGTH_SHORT).show()
-                                    else vm.send(restyleRequest(msg.content, edited))
+                                    if (streaming) {
+                                        restyleLater = restyleRequest(msg.content, edited)
+                                        Toast.makeText(ctx, "记下了，这条答完就交给 Kavi", Toast.LENGTH_SHORT).show()
+                                    } else vm.send(restyleRequest(msg.content, edited))
                                 },
                             )
                         }

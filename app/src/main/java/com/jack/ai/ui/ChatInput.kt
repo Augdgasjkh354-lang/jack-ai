@@ -372,6 +372,15 @@ internal fun InputBar(
         if (uris.isEmpty()) Toast.makeText(ctx, "没读到剪贴板里的图片", Toast.LENGTH_SHORT).show() else vm.addImages(uris)
     }
     val showClip = clipShown != null && editing == null
+    // 附件还在读就点了发送：先记下，读完自动发出去，不用盯着等它亮了再点一次
+    var sendWhenReady by remember { mutableStateOf(false) }
+    LaunchedEffect(state.importing, sendWhenReady) {
+        if (sendWhenReady && !state.importing) {
+            sendWhenReady = false
+            if (editing == null && vm.send(text)) onTextChange("")
+        }
+    }
+    if (editing != null && sendWhenReady) sendWhenReady = false
     // 输入框上面点开的待发图片：(几张图, 从第几张看)
     var viewingPending by remember { mutableStateOf<Pair<List<String>, Int>?>(null) }
     viewingPending?.let { (list, at) -> ImageViewer(list, at) { viewingPending = null } }
@@ -630,14 +639,17 @@ internal fun InputBar(
                             else -> {
                                 val edit = a == SendAction.EDIT
                                 val canSend = if (edit) text.isNotBlank() || editing?.attachments?.isNotEmpty() == true
-                                    else (text.isNotBlank() || state.pending.isNotEmpty()) && !state.importing
+                                    else (text.isNotBlank() || state.pending.isNotEmpty() || state.importing) && !sendWhenReady
                                 // 能发 / 不能发之间颜色渐变（附件读完、打了字时亮起来），不是一下跳
                                 val fill by androidx.compose.animation.animateColorAsState(
                                     if (canSend) colors.primary else colors.onSurface.copy(alpha = 0.08f), Springs.defaultEffects(), label = "sendFill")
                                 val ink by androidx.compose.animation.animateColorAsState(
                                     if (canSend) colors.onPrimary else colors.outline, Springs.defaultEffects(), label = "sendInk")
                                 Surface(
-                                    onClick = { haptics.tick(); if (edit) onSubmitEdit() else if (vm.send(text)) onTextChange("") },
+                                    onClick = {
+                                        haptics.tick()
+                                        if (edit) onSubmitEdit() else if (state.importing) sendWhenReady = true else if (vm.send(text)) onTextChange("")
+                                    },
                                     enabled = canSend,
                                     shape = CircleShape,
                                     color = fill,
@@ -645,7 +657,8 @@ internal fun InputBar(
                                     interactionSource = sendPress,
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
-                                        Icon(if (edit) Icons.Default.Check else AppIcons.ArrowUp, if (edit) "改好发送" else "发送", Modifier.size(20.dp),
+                                        if (sendWhenReady) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = colors.outline)
+                                        else Icon(if (edit) Icons.Default.Check else AppIcons.ArrowUp, if (edit) "改好发送" else "发送", Modifier.size(20.dp),
                                             tint = ink)
                                     }
                                 }

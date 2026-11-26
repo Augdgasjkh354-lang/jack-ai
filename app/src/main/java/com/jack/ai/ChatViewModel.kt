@@ -1079,6 +1079,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun markDreamsSeen() = knowledge.markDreamsSeen()
     fun dreamNow() = knowledge.dreamNow()
     fun deleteDream(id: String) { snapshots.clear(); knowledge.deleteDream(id) }
+    fun restoreDream(d: com.jack.ai.data.DreamEntry) = knowledge.restoreDream(d)
 
     // 对话记忆和项目记忆（存在文件夹里的 Markdown 文件）
     fun chatMemory(conv: Conversation) = knowledge.chatMemory(conv)
