@@ -284,6 +284,8 @@ object PromptBuilder {
         "history".takeIf { conv.summary.isNotBlank() },
         "library".takeIf { SkillIds.LIBRARY in skillIds },
         "project".takeIf { project?.files?.any { it.text.length > PROJECT_INLINE_CHARS } == true },
+        // 所有对话里的文件一直能找（读、改用 @文件夹/文件名，见 ToolSession.wsFile）
+        "files",
     )
 
     /** 估算 token：中文约 0.6 个一字，其他字符约 0.3 个。 */

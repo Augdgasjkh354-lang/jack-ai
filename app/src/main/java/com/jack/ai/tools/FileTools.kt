@@ -85,6 +85,19 @@ internal suspend fun ToolSession.createDocument(args: JsonObject): String {
 
 internal fun ToolSession.wsFile(name: String, exact: Boolean = false): File {
     val games = com.jack.ai.data.games.GameFiles
+    // 「@文件夹/文件名」：别的对话（或项目）里的文件，search_my_data where=files 找出来的；能读能改，不能删
+    val ref = name.trim()
+    if (ref.startsWith("@") && '/' in ref) {
+        val key = ref.substring(1).substringBefore('/')
+        val file = ref.substringAfter('/')
+        if (key == wsDir.name) return wsFile(file, exact)
+        if (exact) throw TextEdit.EditException("别的对话里的文件不能在这里删，只能读和改")
+        val dir = Workspace.dir(app, key)
+        if (key.isBlank() || key.contains("..") || !dir.isDirectory || !crossAllowed(key))
+            throw TextEdit.EditException("找不到「$ref」所在的文件夹（可能对话删了，或者是隐私项目里的）。用 search_my_data where=files 重新找")
+        return Workspace.find(dir, file) ?: throw TextEdit.EditException("「$key」里没有「$file」。现有文件：" +
+            Workspace.files(dir).joinToString("、") { it.name }.ifEmpty { "（空的）" })
+    }
     // 「游戏/名字.html」：任何对话里的游戏都能读、能改（删不行：exact 是删除、发附件这类收不回的操作用的）
     if (name.trim().startsWith(games.PREFIX)) {
         if (exact) throw TextEdit.EditException("别的对话里的游戏不能在这里删，只能读和改")
@@ -97,7 +110,8 @@ internal fun ToolSession.wsFile(name: String, exact: Boolean = false): File {
         ?: throw TextEdit.EditException(
             "对话文件夹里没有「$name」。" + Workspace.files(wsDir).let { l ->
                 if (l.isEmpty()) "文件夹是空的。" else "现有文件：" + l.joinToString("、") { it.name }
-            } + games.note(app).let { if (it.isEmpty()) "" else "\n$it" })
+            } + games.note(app).let { if (it.isEmpty()) "" else "\n$it" } +
+            "\n别的对话里的文件用 search_my_data where=files 找，名字写成它给的「@文件夹/文件名」。")
 }
 
 internal suspend fun ToolSession.listFiles() = runTool("查看文件夹") {

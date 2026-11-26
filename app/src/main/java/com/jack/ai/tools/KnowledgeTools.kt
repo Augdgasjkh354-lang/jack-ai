@@ -1,5 +1,6 @@
 package com.jack.ai.tools
 
+import com.jack.ai.data.Workspace
 import android.content.Intent
 import android.provider.AlarmClock
 import com.jack.ai.api.formatResultsForModel
@@ -72,7 +73,7 @@ private fun ToolSession.libraryDocs(): String {
     return parts.joinToString("\n\n")
 }
 
-private val SOURCE_NAMES = mapOf("chats" to "以前的聊天", "history" to "本对话较早的原话", "library" to "资料库", "project" to "项目资料", "memory" to "记忆")
+private val SOURCE_NAMES = mapOf("chats" to "以前的聊天", "history" to "本对话较早的原话", "library" to "资料库", "project" to "项目资料", "memory" to "记忆", "files" to "所有对话里的文件")
 
 /** 在记忆里找（常记 + 深处）：关键词、提到的人和事、时间（上周、10 月、去年国庆），再带上相连的；说到一段时间时附上那段时间的经历。 */
 private suspend fun ToolSession.findMemory(query: String): String = withContext(Dispatchers.IO) {
@@ -113,6 +114,7 @@ internal suspend fun ToolSession.searchMyData(args: JsonObject): String {
             val text = when {
                 query.isEmpty() && w == "library" -> libraryDocs()
                 query.isEmpty() && w == "project" -> project!!.files.joinToString("\n") { "《${it.name}》${it.text.length} 字" }
+                w == "files" -> if (query.isEmpty() && where.size > 1) null else findFiles(query)
                 query.isEmpty() -> null
                 w == "chats" -> findChats(query)
                 w == "history" -> findOld(query)
@@ -124,6 +126,36 @@ internal suspend fun ToolSession.searchMyData(args: JsonObject): String {
         }
         (parts.joinToString("\n\n").ifBlank { "要给出搜索关键词 query。" }) to SearchRecord(label)
     }
+}
+
+/**
+ * 所有对话（和项目）文件夹里的文件，按文件名、所在对话的标题找；没有关键词就列最近的。
+ * 返回「@文件夹/文件名」，读和改都认这个写法（见 [ToolSession.wsFile]）。隐私项目里的只在那个项目里能找到。
+ */
+private suspend fun ToolSession.findFiles(query: String): String = withContext(Dispatchers.IO) {
+    val words = query.split(Regex("\\s+")).filter { it.isNotBlank() }
+    val store = host.store
+    val projects = store.loadProjects()
+    val all = com.jack.ai.data.FileLibrary.scan(Workspace.root(app), store.loadConversations(), projects)
+        .filter { e -> crossAllowed(e.file.parentFile?.name.orEmpty(), projects) }
+    val hits = if (words.isEmpty()) all else all.filter { e -> words.all { w -> e.file.name.contains(w, true) || e.place.contains(w, true) } }
+    if (hits.isEmpty()) return@withContext "没找到名字或所在对话里带「$query」的文件。"
+    val fmt = java.text.SimpleDateFormat("M-d HH:mm", java.util.Locale.CHINA)
+    val here = wsDir.name
+    hits.take(30).joinToString("\n") { e ->
+        val key = e.file.parentFile?.name.orEmpty()
+        val ref = if (key == here) e.file.name else "@$key/${e.file.name}"
+        "$ref｜${ToolSession.sizeText(e.file.length())}｜${Workspace.editKind(e.file)}｜在${e.place}｜${fmt.format(java.util.Date(e.modified))}"
+    } + (if (hits.size > 30) "\n……还有 ${hits.size - 30} 个，关键词写具体些" else "") +
+        "\n（名字前面带 @ 的在别的对话里：把整串当文件名给 read_file、edit_file、revise_file 就能读和改；删不了，也不会挪过来）"
+}
+
+/** 别的文件夹能不能从这个对话碰：隐私项目的只有项目里的对话能碰。 */
+internal fun ToolSession.crossAllowed(key: String, projects: List<com.jack.ai.data.Project> = host.store.loadProjects()): Boolean {
+    if (key == wsDir.name) return true
+    if (!key.startsWith("p_")) return true
+    val p = projects.firstOrNull { it.id == key.removePrefix("p_") } ?: return false
+    return !p.isolated
 }
 
 /**
