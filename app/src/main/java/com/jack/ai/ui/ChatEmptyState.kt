@@ -211,7 +211,10 @@ internal fun EmptyState(
                     val p = m.measure(c.copy(minWidth = c.maxWidth + extra, maxWidth = c.maxWidth + extra))
                     layout(c.maxWidth, p.height) { p.place(-extra / 2, 0) }
                 }) {
-                    Danmaku(remember(conv?.id) { danmakuLanes(com.jack.ai.data.BizStarts.DRIFT, (conv?.id ?: "").hashCode()) }) { b -> vm.send(b.prompt) }
+                    // 每次打开空白页都重新随机：固定的那些加上 Kavi 自己想的，打乱了分到几行
+                    val ai by com.jack.ai.data.AiStarts.items.collectAsState()
+                    val seed = remember(conv?.id) { kotlin.random.Random.nextInt() }
+                    Danmaku(remember(seed, ai) { danmakuLanes(com.jack.ai.data.BizStarts.DRIFT + ai, seed) }) { b -> vm.send(b.prompt) }
                 }
             }
         }
@@ -268,7 +271,7 @@ private fun DanmakuLane(
 ) {
     if (still) {
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
-            items.forEach { DanmakuChip(it, onPick) }
+            items.forEach { DanmakuChip(it, 12.dp, onPick) }
         }
         return
     }
@@ -297,6 +300,8 @@ private fun DanmakuLane(
         }
     }
     var laneW by remember { mutableFloatStateOf(0f) }
+    // 弹幕之间的空隙每次随机（12～36dp）；两遍用同一组，接缝处才对得上
+    val gaps = remember(items) { items.map { (12 + kotlin.random.Random.nextInt(4) * 8).dp } }
     val edge = with(LocalDensity.current) { 56.dp.toPx() }
     Box(Modifier.fillMaxWidth().clipToBounds().onSizeChanged { laneW = it.width.toFloat() }
         .pointerInput(Unit) {
@@ -317,7 +322,7 @@ private fun DanmakuLane(
                 .onSizeChanged { half = it.width / 2f }
                 .offset { IntOffset(-shift.roundToInt(), 0) },
         ) {
-            repeat(2) { items.forEach { b -> EdgeFaded({ shift }, { laneW }, edge) { DanmakuChip(b, onPick) } } }
+            repeat(2) { items.forEachIndexed { k, b -> EdgeFaded({ shift }, { laneW }, edge) { DanmakuChip(b, gaps[k], onPick) } } }
         }
     }
 }
@@ -339,15 +344,14 @@ internal fun edgeAlpha(center: Float, laneW: Float, edge: Float): Float =
     if (laneW <= 0f) 1f else (minOf(center, laneW - center) / edge).coerceIn(0f, 1f)
 
 /**
- * 一条弹幕：统一的浅灰胶囊加一圈细边，不用一堆颜色抢眼；彼此的间距按名字错开（12～36dp），
+ * 一条弹幕：统一的浅灰胶囊加一圈细边，不用一堆颜色抢眼；后面空多少由 [gap] 定（随机的），
  * 几行之间不会排成整齐的竖列。按下去微微缩一下。
  */
 @Composable
-private fun DanmakuChip(b: com.jack.ai.data.BizStarts.Start, onPick: (com.jack.ai.data.BizStarts.Start) -> Unit) {
+private fun DanmakuChip(b: com.jack.ai.data.BizStarts.Start, gap: androidx.compose.ui.unit.Dp, onPick: (com.jack.ai.data.BizStarts.Start) -> Unit) {
     val press = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     val haptics = rememberHaptics()
     val colors = MaterialTheme.colorScheme
-    val gap = (12 + Math.floorMod(b.key.hashCode(), 4) * 8).dp
     Text(
         b.title,
         style = MaterialTheme.typography.bodyMedium,
