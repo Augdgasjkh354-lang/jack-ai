@@ -166,7 +166,7 @@ class DanmakuLanesTest {
     @org.junit.Test fun everySuggestionLandsInExactlyOneLane() {
         val pool = com.jack.ai.data.BizStarts.DRIFT
         val lanes = danmakuLanes(pool, 42)
-        org.junit.Assert.assertEquals(4, lanes.size)
+        org.junit.Assert.assertEquals(3, lanes.size)
         org.junit.Assert.assertEquals(pool.map { it.key }.sorted(), lanes.flatten().map { it.key }.sorted())
         // 种子一样排法一样，换个种子换一种
         org.junit.Assert.assertEquals(lanes, danmakuLanes(pool, 42))
@@ -179,6 +179,12 @@ class DanmakuLanesTest {
         org.junit.Assert.assertEquals(0.5f, edgeAlpha(975f, 1000f, 50f), 0.001f)
         org.junit.Assert.assertEquals(0f, edgeAlpha(-10f, 1000f, 50f), 0f)
         org.junit.Assert.assertEquals(0f, edgeAlpha(1100f, 1000f, 50f), 0f)
+    }
+
+    @org.junit.Test fun dragWrapsBothWays() {
+        org.junit.Assert.assertEquals(90f, wrapShift(-10f, 100f), 0.001f)
+        org.junit.Assert.assertEquals(10f, wrapShift(110f, 100f), 0.001f)
+        org.junit.Assert.assertEquals(0f, wrapShift(5f, 0f), 0f)
     }
 
     @org.junit.Test fun keysAreUnique() {

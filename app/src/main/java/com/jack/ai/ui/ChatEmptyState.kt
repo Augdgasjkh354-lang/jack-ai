@@ -68,6 +68,7 @@ import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -222,14 +223,15 @@ internal fun EmptyState(
 internal fun danmakuLanes(
     pool: List<com.jack.ai.data.BizStarts.Start>,
     seed: Int,
-    lanes: Int = 4,
+    lanes: Int = 3,
 ): List<List<com.jack.ai.data.BizStarts.Start>> {
     val shuffled = pool.shuffled(kotlin.random.Random(seed))
     return List(lanes) { lane -> shuffled.filterIndexed { i, _ -> i % lanes == lane } }.filter { it.isNotEmpty() }
 }
 
 /**
- * 弹幕：几条轨道各自从右往左匀速飘，速度、起点错开；手指按在上面时全部停住，好点准。
+ * 弹幕：几条轨道各自从右往左匀速慢飘，速度、起点错开；手指按在上面时全部停住，好点准。
+ * 点一下发出去；按住左右拖，那一行跟着手走，松手顺着甩的劲儿滑一段再接着飘。
  * 系统关了动画就不飘，每条轨道改成能左右划的一行。两头淡出，不是硬生生切断。
  */
 @Composable
@@ -249,8 +251,8 @@ private fun Danmaku(lanes: List<List<com.jack.ai.data.BizStarts.Start>>, onPick:
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         lanes.forEachIndexed { i, lane ->
-            // 每条轨道速度不一样（每秒 22～34dp），起点也错开，看着不像一排排齐步走
-            DanmakuLane(lane, speed = 22f + (i * 7) % 13, start = 0.37f * i, still = still, held = { held }, onPick = onPick)
+            // 每条轨道速度不一样（每秒 12～18dp），起点也错开，看着不像一排排齐步走
+            DanmakuLane(lane, speed = 12f + (i * 5) % 7, start = 0.37f * i, still = still, held = { held }, onPick = onPick)
         }
     }
 }
@@ -273,6 +275,8 @@ private fun DanmakuLane(
     // 同一串排两遍，飘过半程就无缝接回开头
     var half by remember { mutableFloatStateOf(0f) }
     var shift by remember { mutableFloatStateOf(0f) }
+    var fling by remember { mutableFloatStateOf(0f) }
+    var dragging by remember { mutableStateOf(false) }
     val speedPx = with(LocalDensity.current) { speed.dp.toPx() }
     LaunchedEffect(half) {
         if (half <= 0f) return@LaunchedEffect
@@ -280,14 +284,34 @@ private fun DanmakuLane(
         var last = 0L
         while (true) {
             withFrameNanos { t ->
-                if (last != 0L && !held()) shift = (shift + speedPx * (t - last) / 1e9f) % half
+                if (last != 0L && !dragging) {
+                    val dt = (t - last) / 1e9f
+                    // 松手后甩出去的速度慢慢衰减（大约半秒停下），再回到平常的飘速
+                    val drift = if (held()) 0f else speedPx
+                    shift = wrapShift(shift + (drift + fling) * dt, half)
+                    fling *= kotlin.math.exp(-dt * 5f)
+                    if (kotlin.math.abs(fling) < 1f) fling = 0f
+                }
                 last = t
             }
         }
     }
     var laneW by remember { mutableFloatStateOf(0f) }
     val edge = with(LocalDensity.current) { 56.dp.toPx() }
-    Box(Modifier.fillMaxWidth().clipToBounds().onSizeChanged { laneW = it.width.toFloat() }) {
+    Box(Modifier.fillMaxWidth().clipToBounds().onSizeChanged { laneW = it.width.toFloat() }
+        .pointerInput(Unit) {
+            // 左右拖这一行：超过手指抖动的距离才算拖，没超过还是点击
+            val tracker = androidx.compose.ui.input.pointer.util.VelocityTracker()
+            detectHorizontalDragGestures(
+                onDragStart = { tracker.resetTracking(); dragging = true; fling = 0f },
+                onDragEnd = { fling = -tracker.calculateVelocity().x.coerceIn(-4000f, 4000f); dragging = false },
+                onDragCancel = { dragging = false },
+            ) { change, dx ->
+                change.consume()
+                tracker.addPosition(change.uptimeMillis, change.position)
+                if (half > 0f) shift = wrapShift(shift - dx, half)
+            }
+        }) {
         Row(
             Modifier.wrapContentWidth(Alignment.Start, unbounded = true)
                 .onSizeChanged { half = it.width / 2f }
@@ -297,6 +321,9 @@ private fun DanmakuLane(
         }
     }
 }
+
+/** 让偏移量落在 [0, half) 里：往哪边拖都能无缝接上。 */
+internal fun wrapShift(x: Float, half: Float): Float = if (half <= 0f) 0f else ((x % half) + half) % half
 
 /** 弹幕飘到两头时慢慢变淡：按它中心离轨道两边多远算透明度，只重画不重排。 */
 @Composable
