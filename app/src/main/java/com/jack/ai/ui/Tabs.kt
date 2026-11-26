@@ -66,6 +66,7 @@ enum class KaviTab(val id: String, val label: String, val icon: ImageVector) {
     FILES("files", "文件库", AppIcons.File),
     SKILLS("skills", "技能", Icons.Default.Build),
     APPS("apps", "小工具", AppIcons.Code),
+    GAMES("games", "游戏", AppIcons.Game),
     REVIEW("review", "复习卡片", Icons.Default.Star),
     TABLES("tables", "表格", Icons.AutoMirrored.Filled.List),
     DOWNLOADS("downloads", "下载", AppIcons.Download);

@@ -102,6 +102,7 @@ fun HistoryDrawer(
     onOpenDownloads: () -> Unit,
     onSettings: () -> Unit,
     onOpenFiles: () -> Unit = {},
+    onOpenGames: () -> Unit = {},
     onUndoDelete: () -> Boolean = { false },
     /** 点了「聊天」：就是关上侧边栏。 */
     onCloseDrawer: () -> Unit = {},
@@ -196,6 +197,7 @@ fun HistoryDrawer(
                                 KaviTab.FILES -> onOpenFiles()
                                 KaviTab.SKILLS -> onOpenSkills()
                                 KaviTab.APPS -> onOpenApps()
+                                KaviTab.GAMES -> onOpenGames()
                                 KaviTab.REVIEW -> onOpenReview()
                                 KaviTab.TABLES -> onOpenTables()
                                 KaviTab.DOWNLOADS -> onOpenDownloads()

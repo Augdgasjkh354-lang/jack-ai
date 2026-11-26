@@ -70,6 +70,8 @@ sealed interface Screen {
     data object Tables : Screen
     data object Review : Screen
     data object Apps : Screen
+    data object Games : Screen
+    data object Poker : Screen
     data object Downloads : Screen
     data object Files : Screen
     data class ProjectPage(val id: String) : Screen
@@ -86,6 +88,7 @@ internal fun tabOf(s: Screen?): com.jack.ai.ui.KaviTab? = when (s) {
     Screen.Files -> com.jack.ai.ui.KaviTab.FILES
     Screen.Skills -> com.jack.ai.ui.KaviTab.SKILLS
     Screen.Apps -> com.jack.ai.ui.KaviTab.APPS
+    Screen.Games -> com.jack.ai.ui.KaviTab.GAMES
     Screen.Review -> com.jack.ai.ui.KaviTab.REVIEW
     Screen.Tables -> com.jack.ai.ui.KaviTab.TABLES
     Screen.Downloads -> com.jack.ai.ui.KaviTab.DOWNLOADS
@@ -99,6 +102,7 @@ internal fun screenOf(t: com.jack.ai.ui.KaviTab): Screen? = when (t) {
     com.jack.ai.ui.KaviTab.FILES -> Screen.Files
     com.jack.ai.ui.KaviTab.SKILLS -> Screen.Skills
     com.jack.ai.ui.KaviTab.APPS -> Screen.Apps
+    com.jack.ai.ui.KaviTab.GAMES -> Screen.Games
     com.jack.ai.ui.KaviTab.REVIEW -> Screen.Review
     com.jack.ai.ui.KaviTab.TABLES -> Screen.Tables
     com.jack.ai.ui.KaviTab.DOWNLOADS -> Screen.Downloads
@@ -391,6 +395,7 @@ class MainActivity : FragmentActivity() {
                             onOpenApps = { stack.add(Screen.Apps) },
                             onOpenDownloads = { stack.add(Screen.Downloads) },
                             onOpenFiles = { stack.add(Screen.Files) },
+                            onOpenGames = { stack.add(Screen.Games) },
                             onOpenTab = { openTab(it) },
                             onOpenTerminal = { stack.add(Screen.Terminal(it)) },
                         )
@@ -402,6 +407,9 @@ class MainActivity : FragmentActivity() {
                         Screen.Review -> ReviewScreen(vm = vm, state = state, onBack = back)
                         Screen.Apps -> com.jack.ai.ui.AppsScreen(state = state, onBack = back, onOpenChat = { id -> vm.select(id); stack.clear() })
                         Screen.Downloads -> com.jack.ai.ui.DownloadsScreen(onBack = back)
+                        Screen.Games -> com.jack.ai.ui.GamesScreen(vm = vm, state = state, onBack = back,
+                            onOpenPoker = { stack.add(Screen.Poker) }, onOpenChat = { stack.clear() })
+                        Screen.Poker -> com.jack.ai.ui.PokerScreen(state = state, onBack = back)
                         Screen.Files -> com.jack.ai.ui.FileLibraryScreen(state = state, onBack = back, onOpenChat = { id -> vm.select(id); stack.clear() })
                         Screen.Memory -> MemoryScreen(vm = vm, state = state, onBack = back)
                         Screen.Skills -> SkillsScreen(vm = vm, settings = state.settings, onBack = back)

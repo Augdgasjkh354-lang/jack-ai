@@ -53,6 +53,9 @@ import com.jack.ai.data.SafeFile
 import com.jack.ai.data.Verify
 import java.io.ByteArrayInputStream
 import java.io.File
+import com.jack.ai.data.backgroundEndpoint
+import kotlinx.coroutines.launch
+import kotlinx.serialization.json.put
 
 /** 手指正按在小工具的网页上：这时横着划是在拖滑块，不是要开侧边栏。 */
 object AppTouch {
@@ -66,8 +69,58 @@ private fun dataFile(app: File) = File(app.parentFile, ".appdata/${app.name}.jso
  * 网页里能调用的 jack.save / jack.load，以及上报高度和报错。
  * 这些方法在 WebView 的后台线程上被调用，改界面状态要切回主线程。
  */
-private class AppBridge(private val app: File, private val onHeight: (Int) -> Unit, private val onError: (String) -> Unit) {
+private class AppBridge(
+    private val app: File,
+    private val onHeight: (Int) -> Unit,
+    private val onError: (String) -> Unit,
+    private val ctx: android.content.Context? = null,
+    /** 把一段 JS 放回网页里跑（回 jack.ask 的结果）。 */
+    private val eval: (String) -> Unit = {},
+) {
     private val main = Handler(Looper.getMainLooper())
+    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
+    /** jack.ask 的上下文：网页里的游戏和 Kavi 来回说的，只往后加（缓存接得上）；system 换了就重来。 */
+    private var mind: com.jack.ai.data.games.GameMind? = null
+    private var mindSystem = ""
+    private val inFlight = java.util.concurrent.atomic.AtomicInteger()
+
+    /**
+     * 网页里的 jack.ask(话, {system, keep}) → 后台模型回一段话。小游戏里 Kavi 当对手、出题、猜词用它。
+     * 不开思考、输出限短；同时最多两个在问，再多的直接回「太快了」。用量记在「游戏 · 小游戏」。
+     */
+    @JavascriptInterface
+    fun ask(id: String, prompt: String, opts: String) {
+        val c = ctx ?: return done(id, false, "这里不能问 Kavi")
+        if (inFlight.incrementAndGet() > 2) { inFlight.decrementAndGet(); return done(id, false, "问得太快了，等上一个回完") }
+        scope.launch {
+            try {
+                val o = runCatching { org.json.JSONObject(opts) }.getOrNull() ?: org.json.JSONObject()
+                val system = o.optString("system").take(4000).ifBlank { "你在一个手机小游戏里陪用户玩。回答简短，照游戏要的格式回。" }
+                val keep = o.optBoolean("keep", true)
+                val max = o.optInt("max", 300).coerceIn(16, 800)
+                val ep = com.jack.ai.data.Store(c).loadSettings().let { it.backgroundEndpoint() }
+                    ?: return@launch done(id, false, "还没设置能用的模型")
+                val m = synchronized(this@AppBridge) {
+                    if (!keep) null else mind?.takeIf { mindSystem == system } ?: com.jack.ai.data.games.GameMind(c, ep, system, "游戏 · 小游戏").also { mind = it; mindSystem = system }
+                }
+                val text = if (m != null) m.ask(prompt.take(6000), maxTokens = max, json = o.optBoolean("json", false))
+                else com.jack.ai.api.DeepSeekClient(com.jack.ai.data.Store(c).usage("游戏 · 小游戏")).complete(ep,
+                    listOf(kotlinx.serialization.json.buildJsonObject { put("role", "system"); put("content", system) },
+                        kotlinx.serialization.json.buildJsonObject { put("role", "user"); put("content", prompt.take(6000)) }),
+                    maxTokens = max, jsonMode = o.optBoolean("json", false))
+                done(id, true, text.trim())
+            } catch (e: Exception) {
+                done(id, false, e.message ?: "出错了")
+            } finally {
+                inFlight.decrementAndGet()
+            }
+        }
+    }
+
+    private fun done(id: String, ok: Boolean, text: String) {
+        val js = "window.jack&&jack._done(${org.json.JSONObject.quote(id)},$ok,${org.json.JSONObject.quote(text)})"
+        main.post { eval(js) }
+    }
 
     @JavascriptInterface
     fun save(json: String) {
@@ -87,7 +140,9 @@ private class AppBridge(private val app: File, private val onHeight: (Int) -> Un
 
 /** 放在网页最前面：提供 jack.save / jack.load，报错和内容高度报给 App。 */
 private const val SHIM = """<script>
-window.jack={save:function(o){try{JackBridge.save(JSON.stringify(o))}catch(e){}},load:function(){try{var s=JackBridge.load();return s?JSON.parse(s):null}catch(e){return null}}};
+window.jack={save:function(o){try{JackBridge.save(JSON.stringify(o))}catch(e){}},load:function(){try{var s=JackBridge.load();return s?JSON.parse(s):null}catch(e){return null}},
+_n:0,_cb:{},ask:function(p,o){return new Promise(function(res,rej){var id='q'+(++jack._n);jack._cb[id]=[res,rej];try{JackBridge.ask(id,String(p),JSON.stringify(o||{}))}catch(e){delete jack._cb[id];rej(e)}})},
+_done:function(id,ok,t){var c=jack._cb[id];if(!c)return;delete jack._cb[id];if(ok)c[0](t);else c[1](new Error(t))}};
 window.addEventListener('error',function(e){try{JackBridge.error((e.message||'出错了')+(e.lineno?'（第 '+e.lineno+' 行）':''))}catch(_){}});
 (function(){var last=0;function h(){try{var v=Math.ceil(document.documentElement.scrollHeight);if(v!==last){last=v;JackBridge.height(v)}}catch(e){}}
 window.addEventListener('load',h);setInterval(h,700);})();
@@ -125,7 +180,8 @@ fun AppWebView(file: File, modifier: Modifier = Modifier, inline: Boolean = true
                 settings.setGeolocationEnabled(false)
                 settings.mediaPlaybackRequiresUserGesture = true
                 setBackgroundColor(android.graphics.Color.TRANSPARENT)
-                addJavascriptInterface(AppBridge(file, { heightPx = it }, onError), "JackBridge")
+                val web = this
+                addJavascriptInterface(AppBridge(file, { heightPx = it }, onError, ctx.applicationContext) { js -> web.evaluateJavascript(js, null) }, "JackBridge")
                 webChromeClient = object : WebChromeClient() {
                     override fun onConsoleMessage(m: ConsoleMessage): Boolean {
                         if (m.messageLevel() == ConsoleMessage.MessageLevel.ERROR) onError("${m.message()}（第 ${m.lineNumber()} 行）".take(300))

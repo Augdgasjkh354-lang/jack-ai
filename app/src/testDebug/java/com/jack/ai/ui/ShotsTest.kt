@@ -442,6 +442,45 @@ class ShotsTest {
     }
 
     @Test
+    fun games() {
+        Assume.assumeTrue(System.getenv("SHOTS_DIR") != null)
+        val vm = vm(emptyList())
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            val state by vm.state.collectAsState()
+            JackTheme(dark()) { GamesScreen(vm, state, {}, {}, {}) }
+        }
+        save("games-" + dark().name.lowercase())
+    }
+
+    @Test
+    fun poker() {
+        Assume.assumeTrue(System.getenv("SHOTS_DIR") != null)
+        val vm = vm(emptyList())
+        val app = RuntimeEnvironment.getApplication() as Application
+        // 4 个规则机器人，打到轮到你为止
+        val t = com.jack.ai.data.games.PokerTable(app, vm.state.value.settings,
+            com.jack.ai.data.games.PokerTable.NAMES.mapIndexed { i, n -> com.jack.ai.data.games.Opponent(n, com.jack.ai.data.games.PokerTable.STYLES[i]) })
+        com.jack.ai.data.games.PokerTable.current = t
+        t.startHand()
+        var guard = 0
+        while (guard++ < 200) {
+            org.robolectric.shadows.ShadowLooper.idleMainLooper(1, java.util.concurrent.TimeUnit.SECONDS)
+            val g = t.game
+            if (g.result != null) t.startHand()
+            else if (g.toAct == 0 && g.board.size >= 3) break
+            else if (g.toAct == 0) t.play(com.jack.ai.data.games.Act.Call)
+        }
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            val state by vm.state.collectAsState()
+            JackTheme(dark()) { PokerScreen(state) {} }
+        }
+        save("poker-" + dark().name.lowercase())
+        t.close(); com.jack.ai.data.games.PokerTable.current = null
+    }
+
+    @Test
     fun library() {
         Assume.assumeTrue(System.getenv("SHOTS_DIR") != null)
         val vm = vm(emptyList())

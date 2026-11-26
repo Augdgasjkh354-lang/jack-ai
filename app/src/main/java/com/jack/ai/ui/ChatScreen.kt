@@ -155,6 +155,7 @@ fun ChatScreen(
     onOpenApps: () -> Unit,
     onOpenDownloads: () -> Unit = {},
     onOpenFiles: () -> Unit = {},
+    onOpenGames: () -> Unit = {},
     /** 点底栏：主界面给了就交给它（淡入淡出地换页）；没给就按各自的入口打开。 */
     onOpenTab: ((KaviTab) -> Unit)? = null,
     /** 打开终端，参数是对话文件夹的 key（Workspace.key）。 */
@@ -250,6 +251,7 @@ fun ChatScreen(
                 onOpenApps = { scope.launch { drawerState.close() }; onOpenApps() },
                 onOpenDownloads = { scope.launch { drawerState.close() }; onOpenDownloads() },
                 onOpenFiles = { scope.launch { drawerState.close() }; onOpenFiles() },
+                onOpenGames = { scope.launch { drawerState.close() }; onOpenGames() },
                 onSettings = { scope.launch { drawerState.close() }; onOpenSettings() },
                 onCloseDrawer = { scope.launch { drawerState.close() } },
                 onSaveTabs = { ids -> vm.updateSettings { it.copy(tabBar = ids) } },
@@ -332,6 +334,7 @@ fun ChatScreen(
                                     KaviTab.FILES -> onOpenFiles()
                                     KaviTab.SKILLS -> onOpenSkills()
                                     KaviTab.APPS -> onOpenApps()
+                                    KaviTab.GAMES -> onOpenGames()
                                     KaviTab.REVIEW -> onOpenReview()
                                     KaviTab.TABLES -> onOpenTables()
                                     KaviTab.DOWNLOADS -> onOpenDownloads()
