@@ -1,5 +1,6 @@
 package com.jack.ai.api
 
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -57,6 +58,12 @@ class ResponsesSocketTest {
             override fun onMessage(webSocket: WebSocket, text: String) {
                 val m = o(text); got += m
                 n++
+                // 带「慢」字的：半秒后才回，模拟一个还在跑的回答
+                if ("慢" in text) {
+                    val id = "r$n"
+                    Thread { Thread.sleep(500); webSocket.send("""{"type":"response.completed","response":{"id":"$id","usage":{"input_tokens":1,"output_tokens":1}}}""") }.start()
+                    return
+                }
                 val prev = m["previous_response_id"]?.jsonPrimitive?.content
                 if (prev == "gone") {
                     webSocket.send("""{"type":"error","status":400,"error":{"type":"invalid_request_error","code":"previous_response_not_found","message":"x"}}""")
@@ -137,5 +144,26 @@ class ResponsesSocketTest {
         send(r)
         assertEquals(4, got.last()["input"]!!.jsonArray.size)
         assertEquals("gpt:wslost:token", ResponsesApi.lastVerdict)
+    }
+
+    @Test fun parallelRequestsEachGetTheirOwnConnection() {
+        // 第一条连接被一个慢的回答占着（服务端半秒后才回）；这时另一个请求新开第二条，不退回 HTTP
+        server.enqueue(MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
+            override fun onMessage(webSocket: WebSocket, text: String) {
+                got += o(text)
+                webSocket.send("""{"type":"response.completed","response":{"id":"b1","usage":{"input_tokens":10,"output_tokens":1}}}""")
+            }
+        }))
+        val slow = o("""{"type":"message","role":"user","content":[{"type":"input_text","text":"慢"}]}""")
+        val u2 = o("""{"type":"message","role":"user","content":[{"type":"input_text","text":"写周报"}]}""")
+        send(req(dev, u2))
+        runBlocking {
+            val a = async(kotlinx.coroutines.Dispatchers.IO) { ResponsesSocket.send(OkHttpClient(), req(dev, slow), 5_000) {} }
+            Thread.sleep(100)
+            ResponsesSocket.send(OkHttpClient(), req(dev, u1), 5_000) {}
+            a.await()
+        }
+        assertEquals(2, ResponsesSocket.size())
+        assertEquals(3, got.size)
     }
 }

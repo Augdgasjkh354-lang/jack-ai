@@ -2,7 +2,6 @@ package com.jack.ai.api
 
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -23,7 +22,8 @@ import java.util.concurrent.TimeUnit
  * 不用每步重发、也不靠缓存碰运气。HTTP 每步都发全量，实测前缀一字不差也几乎不命中。
  *
  * - store=false 时上一步只在这条连接里记着：连接断了、到了 60 分钟、换了令牌，就从头发全量（新的一条链）。
- * - 一条连接一次只跑一个回答；同时有别的请求（起标题、子任务）就让它走 HTTP，不排队。
+ * - 一条连接一次只跑一个回答；同时有几个请求（子 agent 分头做、后台任务、起标题）就各开一条，最多 [MAX_CONNS] 条，
+ *   再多的走 HTTP，不排队。上一步只记在跑它的那条连接里，下一步优先回到那条连接上。
  * - 连不上（服务不支持、被拒）就退回 HTTP；4xx 拒绝的这次进程里不再试。
  * 文档：developers.openai.com/api/docs/guides/websocket-mode。
  */
@@ -37,10 +37,18 @@ internal object ResponsesSocket {
     private const val MAX_AGE_MS = 55 * 60_000L
     private val json = Json { ignoreUnknownKeys = true }
 
+    private const val MAX_CONNS = 6
+
     private class Conn(val ws: WebSocket, val auth: String, val opened: Long, val inbox: Channel<String>,
                        private val gone: java.util.concurrent.atomic.AtomicBoolean) {
         /** 连接已经被断开（切到后台、网络切换、服务端关掉）。 */
         val closed get() = gone.get()
+        /** 正在跑一个回答。 */
+        var busy = false
+        /** 按对话（第一条消息）记链；只留最近几条，连接里的缓存也只记得最近的。 */
+        val chains = object : LinkedHashMap<Int, Chain>(8, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Int, Chain>?) = size > 4
+        }
     }
 
     /** 连接断了、链跟着没了的对话 → 为什么（统计页说明这一次为什么从头发、没命中）。 */
@@ -49,12 +57,10 @@ internal object ResponsesSocket {
     /** 一条链：上一步的回答 id、那一步的开头（除 input 外的参数）和发过的全部 input。 */
     internal data class Chain(val id: String, val head: JsonObject, val input: List<JsonElement>)
 
-    private val busy = Mutex()
-    private var conn: Conn? = null
-    /** 按对话（第一条消息）记链；只留最近几条，连接里的缓存也只记得最近的。 */
-    private val chains = object : LinkedHashMap<Int, Chain>(8, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Int, Chain>?) = size > 4
-    }
+    /** 连接池（全部读写都锁着它）。 */
+    private val pool = mutableListOf<Conn>()
+    /** 正在握手、还没进池的连接数：算进上限里。 */
+    private var opening = 0
 
     private fun JsonElement?.o() = this as? JsonObject
     private fun JsonElement?.s() = (this as? JsonPrimitive)?.takeIf { it.isString }?.content.orEmpty()
@@ -86,10 +92,13 @@ internal object ResponsesSocket {
         return rest.takeIf { output > 0 && it.isNotEmpty() }
     }
 
-    internal fun forTest(key: Int, chain: Chain) = synchronized(chains) { chains[key] = chain }
+    internal fun forTest(key: Int, chain: Chain) = synchronized(pool) { pool.first().chains[key] = chain }
 
     /** 测试用：清掉连接和链。 */
-    internal fun reset() { conn?.ws?.cancel(); conn = null; synchronized(chains) { chains.clear() } }
+    internal fun reset() = synchronized(pool) { pool.forEach { it.ws.cancel() }; pool.clear(); opening = 0; lost.clear() }
+
+    /** 有几条连接（测试用）。 */
+    internal fun size() = synchronized(pool) { pool.size }
 
     /**
      * 发一次请求，事件交给 [emit]。走不了常连接抛 [Unavailable]（这时什么都没发出去）。
@@ -102,26 +111,50 @@ internal object ResponsesSocket {
         emit: suspend (StreamEvent) -> Unit,
     ) {
         if (!enabled) throw Unavailable("off")
-        if (!busy.tryLock()) throw Unavailable("busy")
+        val body = json.parseToJsonElement(req.body).o() ?: throw Unavailable("body")
+        val c = acquire(client, req, keyOf((body["input"] as? JsonArray).orEmpty()))
+        var used = c
         try {
-            run(client, req, idleMs, emit)
+            used = run(client, req, c, body, idleMs, emit)
         } finally {
-            busy.unlock()
+            synchronized(pool) { used.busy = false; c.busy = false }
         }
     }
 
-    private suspend fun run(client: OkHttpClient, req: NativeRequest, idleMs: Long, emit: suspend (StreamEvent) -> Unit) {
-        val body = json.parseToJsonElement(req.body).o() ?: throw Unavailable("body")
+    /**
+     * 挑一条空着的连接并占上：先找记着这个对话上一步的，再找同一令牌、没过期的任意一条，都没有就新开一条（不超过上限）。
+     * 断了、过期了、令牌换了的空闲连接顺手清掉。满了抛 [Unavailable]，调用方走 HTTP。
+     */
+    private suspend fun acquire(client: OkHttpClient, req: NativeRequest, key: Int): Conn {
+        val auth = req.headers["Authorization"].orEmpty()
+        val now = System.currentTimeMillis()
+        synchronized(pool) {
+            pool.filter { !it.busy && (it.closed || it.auth != auth || now - it.opened >= MAX_AGE_MS) }.forEach { stale ->
+                dropLocked(stale, when { stale.closed -> "closed"; stale.auth != auth -> "token"; else -> "age" })
+            }
+            val free = pool.filter { !it.busy }
+            val pick = free.firstOrNull { key in it.chains } ?: free.minByOrNull { it.chains.size }
+            if (pick != null) { pick.busy = true; return pick }
+            if (pool.size + opening >= MAX_CONNS) throw Unavailable("busy")
+            opening++
+        }
+        val c = try { connect(client, req) } finally { synchronized(pool) { opening-- } }
+        synchronized(pool) { c.busy = true; pool += c }
+        return c
+    }
+
+    /** 跑一个回答；中途连接到了 60 分钟换了一条的话，返回最后用的那条（调用方把它也放开）。 */
+    private suspend fun run(client: OkHttpClient, req: NativeRequest, first: Conn, body: JsonObject, idleMs: Long, emit: suspend (StreamEvent) -> Unit): Conn {
         val input = (body["input"] as? JsonArray).orEmpty()
         val head = JsonObject(body - "input" - "stream")
         val key = keyOf(input)
-        var c = connect(client, req)
+        var c = first
         // 这个对话上一步还接着、这次因为连接换了只能从头发：记下原因
-        synchronized(chains) { lost.remove(key) }?.let { why -> if (synchronized(chains) { chains[key] } == null) ResponsesApi.lastVerdict = "gpt:wslost:$why" }
+        synchronized(pool) { lost.remove(key) }?.let { why -> if (synchronized(pool) { pool.none { key in it.chains } }) ResponsesApi.lastVerdict = "gpt:wslost:$why" }
         var emitted = false
         var retried = false
         while (true) {
-            val chain = synchronized(chains) { chains[key] }
+            val chain = synchronized(pool) { c.chains[key] }
             val delta = delta(chain, head, input)
             val msg = JsonObject(buildMap {
                 put("type", JsonPrimitive("response.create"))
@@ -133,8 +166,9 @@ internal object ResponsesSocket {
             })
             // 统计页：接着上一步发的标一下（命不命中照样看 ChatGPT 报的数）
             if (delta != null) ResponsesApi.lastVerdict = "gpt:ws"
-            synchronized(chains) { chains.remove(key) }
-            if (!c.ws.send(msg.toString())) { drop("closed"); throw IOException("和 ChatGPT 的连接断了") }
+            // 同一个对话的旧链（可能在别的连接上）都作废：这一步做完只在这条连接上记新的
+            synchronized(pool) { pool.forEach { it.chains.remove(key) } }
+            if (!c.ws.send(msg.toString())) { drop(c, "closed"); throw IOException("和 ChatGPT 的连接断了") }
             val parser = ResponsesApi.Parser((head["model"] as? JsonPrimitive)?.content.orEmpty())
             var done = false
             try {
@@ -148,37 +182,44 @@ internal object ResponsesSocket {
                         val code = o["error"].o()?.get("code").s()
                         // 上一步不在连接的缓存里了：发全量再来一次
                         if (code == "previous_response_not_found") { retried = true; done = true; break }
-                        // 连接到了 60 分钟：重连、发全量
-                        if (code == "websocket_connection_limit_reached") { retried = true; done = true; drop("age"); c = connect(client, req); break }
+                        // 连接到了 60 分钟：换一条新的、发全量
+                        if (code == "websocket_connection_limit_reached") {
+                            retried = true; done = true
+                            drop(c, "age")
+                            c = connect(client, req)
+                            synchronized(pool) { c.busy = true; pool += c }
+                            break
+                        }
                     }
                     for (ev in parser.feed("data: $text")) { emitted = true; emit(ev) }
                     if (parser.finished) {
                         val id = o["response"].o()?.get("id").s()
-                        if (type == "response.completed" && id.isNotEmpty()) synchronized(chains) { chains[key] = Chain(id, head, input) }
+                        if (type == "response.completed" && id.isNotEmpty()) synchronized(pool) { c.chains[key] = Chain(id, head, input) }
                         done = true
-                        return
+                        return c
                     }
                 }
             } finally {
                 // 没收完就停了（用户停下、出错）：连接里还在跑的那个回答会把事件塞进来，扔掉这条连接
-                if (!done) drop("stopped")
+                if (!done) drop(c, "stopped")
             }
             // 到这里是要重试一次全量（链已经删了，下一圈 delta 为 null）
         }
     }
 
-    private fun drop(why: String) {
-        conn?.ws?.cancel()
-        conn = null
-        synchronized(chains) { chains.keys.forEach { lost[it] = why }; chains.clear() }
+    private fun drop(c: Conn, why: String) = synchronized(pool) { dropLocked(c, why) }
+
+    /** 关掉一条连接，它记着的链都没了：记下原因。只影响这一条，别的连接上的对话照常接着。 */
+    private fun dropLocked(c: Conn, why: String) {
+        c.ws.cancel()
+        pool.remove(c)
+        c.chains.keys.forEach { lost[it] = why }
+        c.chains.clear()
+        while (lost.size > 32) lost.remove(lost.keys.first())
     }
 
     private suspend fun connect(client: OkHttpClient, req: NativeRequest): Conn {
         val auth = req.headers["Authorization"].orEmpty()
-        conn?.let {
-            if (!it.closed && it.auth == auth && System.currentTimeMillis() - it.opened < MAX_AGE_MS) return it
-            drop(when { it.closed -> "closed"; it.auth != auth -> "token"; else -> "age" })
-        }
         val url = req.url.replaceFirst("https://", "wss://").replaceFirst("http://", "ws://")
         val inbox = Channel<String>(Channel.UNLIMITED)
         val gone = java.util.concurrent.atomic.AtomicBoolean()
@@ -215,6 +256,6 @@ internal object ResponsesSocket {
             ws.cancel()
             throw Unavailable(r?.exceptionOrNull()?.message ?: "handshake timeout")
         }
-        return Conn(ws, auth, System.currentTimeMillis(), inbox, gone).also { conn = it }
+        return Conn(ws, auth, System.currentTimeMillis(), inbox, gone)
     }
 }
