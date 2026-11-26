@@ -217,6 +217,20 @@ private fun HourPicker(label: String, hour: Int, onPick: (Int) -> Unit) {
     }
 }
 
+/** 提醒一次时的快捷时间：(说法, 时刻毫秒)。整分钟；「今晚 8 点」过了 19 点就不给了。 */
+internal fun quickTimes(now: Long = System.currentTimeMillis()): List<Pair<String, Long>> {
+    fun cal() = java.util.Calendar.getInstance().apply { timeInMillis = now; set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0) }
+    fun later(min: Int) = cal().apply { add(java.util.Calendar.MINUTE, min) }.timeInMillis
+    fun at(dayOffset: Int, h: Int) = cal().apply { add(java.util.Calendar.DAY_OF_YEAR, dayOffset); set(java.util.Calendar.HOUR_OF_DAY, h); set(java.util.Calendar.MINUTE, 0) }.timeInMillis
+    val hourNow = cal().get(java.util.Calendar.HOUR_OF_DAY)
+    return listOfNotNull(
+        "10 分钟后" to later(10),
+        "1 小时后" to later(60),
+        ("今晚 8 点" to at(0, 20)).takeIf { hourNow < 19 },
+        "明早 9 点" to at(1, 9),
+    )
+}
+
 /** 一种提醒的样子：名字、图标、颜色。 */
 private fun kindLook(kind: String): Triple<String, androidx.compose.ui.graphics.vector.ImageVector, Long> = when (kind) {
     "reminder" -> Triple("提醒", Icons.Default.Notifications, 0xFFEF5A5A)
@@ -361,6 +375,16 @@ private fun RoutineDialog(r: Routine, isNew: Boolean, onDismiss: () -> Unit, onU
                 }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     REPEAT_LABELS.forEach { (k, label) -> FilterChip(repeat == k, { repeat = k }, label = { Text(label) }) }
+                }
+                // 只提醒一次：常用的几个时间点一下就好，不用开时钟和日历去拨
+                if (repeat == "none") FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    remember { quickTimes() }.forEach { (label, at) ->
+                        val c = java.util.Calendar.getInstance().apply { timeInMillis = at }
+                        val picked = hour == c.get(java.util.Calendar.HOUR_OF_DAY) && minute == c.get(java.util.Calendar.MINUTE) && date == dayFmt.format(Date(at))
+                        FilterChip(picked, {
+                            hour = c.get(java.util.Calendar.HOUR_OF_DAY); minute = c.get(java.util.Calendar.MINUTE); date = dayFmt.format(Date(at))
+                        }, label = { Text(label) })
+                    }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = { pickTime = true }) { Text(String.format(Locale.US, "%02d:%02d", hour, minute)) }

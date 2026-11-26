@@ -231,7 +231,6 @@ internal fun InputBar(
     var attachMenu by remember { mutableStateOf(false) }
     // 「@技能」「@邮箱」选择框：null 不显示
     var mentionPick by remember { mutableStateOf<List<String>?>(null) }
-    var thinkMenu by remember { mutableStateOf(false) }
     val settings = state.settings
     val colors = MaterialTheme.colorScheme
     val haptics = rememberHaptics()
@@ -517,7 +516,11 @@ internal fun InputBar(
                             MenuRow("语音对话", icon = AppIcons.Mic, enabled = !VoiceChat.on && com.jack.ai.RecordService.current == null) { attachMenu = false; startVoiceChat() }
                             MenuRow("录音纪要", icon = AppIcons.Mic, enabled = com.jack.ai.RecordService.current == null) { attachMenu = false; startRecord() }
                             val skillNames = settings.activeSkills().map { it.name }
-                            if (skillNames.isNotEmpty()) MenuRow("@技能", glyph = "@") { attachMenu = false; mentionPick = skillNames }
+                            // 只有一个技能就直接插进去，不再弹一个只有一项的选择框
+                            if (skillNames.isNotEmpty()) MenuRow("@技能", glyph = "@", sub = skillNames.singleOrNull()) {
+                                attachMenu = false
+                                if (skillNames.size == 1) onTextChange(withMention(text, skillNames[0])) else mentionPick = skillNames
+                            }
                             val mailNames = settings.readyMails.map { it.address }
                             if (mailNames.isNotEmpty() && settings.activeSkills().any { it.id == com.jack.ai.data.SkillIds.MAIL }) MenuRow("@邮箱", icon = Icons.Default.Email) {
                                 attachMenu = false
@@ -525,14 +528,14 @@ internal fun InputBar(
                                 if (mailNames.size == 1) onTextChange(withMention(text, mailNames[0])) else mentionPick = mailNames
                             }
                             HorizontalDivider(Modifier.padding(horizontal = 20.dp, vertical = 6.dp), color = colors.onSurface.copy(alpha = 0.08f))
-                            // 不支持深度思考的模型不显示思考开关
-                            if (settings.endpoint()?.reasoning != false) MenuRow(settings.thinking.labelFor(settings.endpoint()), icon = AppIcons.Brain, checked = settings.thinking != ThinkLevel.OFF) {
-                                attachMenu = false; thinkMenu = true
+                            // 不支持深度思考的模型不显示思考档位。以前点「思考」还要再开一个菜单选档位，现在档位就排在这一行里，点一下就换
+                            if (settings.endpoint()?.reasoning != false) ThinkLevelRow(settings.thinking, settings.endpoint()) { lv ->
+                                haptics.select(); vm.updateSettings { it.copy(thinking = lv) }
                             }
+                            // 开关联网不关菜单：常常是思考、联网一起调
                             MenuRow("联网搜索", icon = AppIcons.Globe, checked = settings.webSearch && settings.webReady()) {
-                                attachMenu = false
-                                if (!settings.webReady()) onNeedTavily()
-                                else vm.updateSettings { it.copy(webSearch = !it.webSearch) }
+                                if (!settings.webReady()) { attachMenu = false; onNeedTavily() }
+                                else { haptics.select(); vm.updateSettings { it.copy(webSearch = !it.webSearch) } }
                             }
                             val conv = state.current
                             if (conv != null && conv.messages.size >= 4) MenuRow(
@@ -540,15 +543,6 @@ internal fun InputBar(
                                 sub = "${conv.lastPromptTokens / 1000}k / ${settings.compressLimit() / 1000}k",
                                 enabled = !state.streamingHere && state.compressingId == null,
                             ) { attachMenu = false; vm.compress() }
-                        }
-                        // 思考档位：从上面那一行点进来
-                        RoundMenu(expanded = thinkMenu, onDismiss = { thinkMenu = false }) {
-                            val ep = settings.endpoint()
-                            ThinkLevel.entries.forEach { lv ->
-                                MenuRow(lv.labelFor(ep), icon = AppIcons.Brain, checked = lv == settings.thinking) {
-                                    vm.updateSettings { it.copy(thinking = lv) }; thinkMenu = false
-                                }
-                            }
                         }
                     }
                     // 录着音 / 在转文字：输入框换成录音条
@@ -674,6 +668,29 @@ internal fun InputBar(
 }
 
 private enum class SendAction { MIC, SEND, STOP, EDIT, VOICE }
+
+/** 加号菜单里的思考档位：左边脑子图标，右边一排小胶囊（不思考 / 低 / 高 / 最高），选中的用强调色。 */
+@Composable
+private fun ThinkLevelRow(current: ThinkLevel, ep: com.jack.ai.data.Endpoint?, onPick: (ThinkLevel) -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Row(Modifier.fillMaxWidth().heightIn(min = 54.dp).padding(horizontal = 14.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(38.dp).clip(CircleShape).background(colors.onSurface.copy(alpha = 0.08f)), contentAlignment = Alignment.Center) {
+            Icon(AppIcons.Brain, "思考", Modifier.size(20.dp), tint = if (current != ThinkLevel.OFF) colors.primary else colors.onSurface)
+        }
+        Spacer(Modifier.width(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            ThinkLevel.entries.forEach { lv ->
+                val on = lv == current
+                Surface(onClick = { if (!on) onPick(lv) }, shape = CircleShape,
+                    color = if (on) colors.primary else colors.onSurface.copy(alpha = 0.06f)) {
+                    Text(lv.labelFor(ep).substringAfter('·'), style = MaterialTheme.typography.labelLarge, maxLines = 1,
+                        color = if (on) colors.onPrimary else colors.onSurface,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp))
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun PendingChip(att: Attachment, onOpen: (com.jack.ai.data.GeneratedFile) -> Unit, onView: () -> Unit, onRemove: () -> Unit) {

@@ -171,7 +171,8 @@ fun UserBubble(msg: ChatMessage, onDelete: () -> Unit, onEdit: (() -> Unit)? = n
                     .animateContentSize(Springs.defaultSpatial())
                     .clip(Radii.bubbleMine)
                     .then(if (tinted && !editing) Modifier else Modifier.hairline(Radii.bubbleMine))
-                    .combinedClickable(onClick = {}, onLongClick = {
+                    // 以前点一下没反应、只能长按：现在点一下也出菜单；折起来的长消息点一下先展开
+                    .combinedClickable(onClick = { if (overflow && !expanded) expanded = true else menu = true }, onLongClick = {
                         haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                         menu = true
                     }),
@@ -467,6 +468,12 @@ fun AssistantMessage(
                                 onClick = { more = false; Speaker.toggle(ctx, msg.id, msg.content) },
                             )
                         }
+                        // 直接发到微信、备忘录这些：系统的分享面板，发的是纯文字，不用先复制再切过去粘贴
+                        if (msg.content.isNotEmpty()) DropdownMenuItem(
+                            text = { Text("分享") },
+                            leadingIcon = { Icon(AppIcons.Share, null) },
+                            onClick = { more = false; shareText(ctx, markdownToPlain(msg.content)) },
+                        )
                         // 复制键复制的是原文（带 Markdown 符号，贴到笔记软件里格式还在）；贴微信、短信用这个
                         if (msg.content.isNotEmpty()) DropdownMenuItem(
                             text = { Text("复制纯文字") },
@@ -502,6 +509,14 @@ fun AssistantMessage(
             }
         }
     }
+}
+
+/** 把一段文字交给系统的分享面板（微信、备忘录、短信…）。 */
+internal fun shareText(ctx: android.content.Context, text: String) {
+    val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain")
+        .putExtra(android.content.Intent.EXTRA_TEXT, text)
+    runCatching { ctx.startActivity(android.content.Intent.createChooser(send, "分享").addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        .onFailure { android.widget.Toast.makeText(ctx, "手机上没有能分享文字的 App", android.widget.Toast.LENGTH_SHORT).show() }
 }
 
 /** 回答下面的小圆按钮：浅灰底，图标灰色。 */

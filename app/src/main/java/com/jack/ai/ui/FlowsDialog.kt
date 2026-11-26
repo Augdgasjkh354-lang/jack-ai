@@ -53,7 +53,6 @@ fun FlowsDialog(vm: ChatViewModel, onDismiss: () -> Unit) {
     val scope = rememberCoroutineScope()
     var flows by remember { mutableStateOf<List<BrowserFlow>>(emptyList()) }
     var editing by remember { mutableStateOf<BrowserFlow?>(null) }
-    var deleting by remember { mutableStateOf<BrowserFlow?>(null) }
     var notes by remember { mutableStateOf<List<com.jack.ai.data.browser.SiteNote>>(emptyList()) }
     LaunchedEffect(Unit) { flows = vm.loadFlows(); notes = vm.loadSiteNotes() }
     fun save(list: List<BrowserFlow>) { flows = list; scope.launch { vm.saveFlows(list) } }
@@ -115,6 +114,8 @@ fun FlowsDialog(vm: ChatViewModel, onDismiss: () -> Unit) {
         val isNew = flows.none { it.id == f.id }
         AlertDialog(
             onDismissRequest = { editing = null },
+            // 写了半天的步骤，点到外面不会一下没了
+            properties = keepIfEdited(name != f.name || site != f.site || whenToUse != f.whenToUse || steps != f.steps),
             title = { Text(if (isNew) "写一个流程" else "编辑流程") },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -134,17 +135,14 @@ fun FlowsDialog(vm: ChatViewModel, onDismiss: () -> Unit) {
             },
             dismissButton = {
                 Row {
-                    if (!isNew) TextButton(onClick = { deleting = f; editing = null }) { Text("删除", color = MaterialTheme.colorScheme.error) }
+                    // 删除就地确认：点一下变成「确定删除」，再点才删，不再另弹一个框
+                    var sure by remember(f.id) { mutableStateOf(false) }
+                    if (!isNew) TextButton(onClick = { if (sure) { save(flows.filterNot { it.id == f.id }); editing = null } else sure = true }) {
+                        Text(if (sure) "确定删除" else "删除", color = MaterialTheme.colorScheme.error)
+                    }
                     TextButton(onClick = { editing = null }) { Text("取消") }
                 }
             },
         )
-    }
-
-    deleting?.let { f ->
-        ConfirmDeleteDialog("删除流程？", "「${f.name}」会被删除。", onDismiss = { deleting = null }) {
-            save(flows.filterNot { it.id == f.id })
-            deleting = null
-        }
     }
 }

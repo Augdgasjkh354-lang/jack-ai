@@ -173,6 +173,8 @@ fun HistoryDrawer(
                             // 是消息里搜到的：打开后直接滚到那条，不用自己往上翻
                             ChatJump.target = searchHitId(c, query)?.let { c.id to it }
                             onSelect(c.id)
+                            // 下次拉开侧边栏是平常的列表，不是上次搜的结果
+                            query = ""
                         }
                     }
                 }

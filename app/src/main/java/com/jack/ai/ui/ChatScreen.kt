@@ -291,7 +291,7 @@ fun ChatScreen(
                             // 开了新对话就是要打字：光标放进输入框、键盘起来
                             CircleIconButton(AppIcons.NewChat, "新对话", Modifier.tourTarget("newchat")) { vm.newChat(state.currentProjectId); focusInput++ }
                             // 文件夹收在「更多」里（做出了文件时，「更多」上标个数），顶栏右边只留两个圆按钮，标题胶囊才居中
-                            if (conv != null && conv.messages.isNotEmpty()) ExportMenu(vm,
+                            if (conv != null && conv.messages.isNotEmpty()) ExportMenu(vm, conv,
                                 made = conv.messages.flatMap { it.files }.distinctBy { it.path }.size,
                                 onFiles = { showFiles = true }, onMemory = { memoryOf = conv },
                                 onTerminal = if (com.jack.ai.Edition.linux) { { onOpenTerminal(com.jack.ai.data.Workspace.key(conv)) } } else null)
@@ -425,8 +425,10 @@ internal fun Modifier.swipeToOpen(open: () -> Unit): Modifier = pointerInput(Uni
 }
 
 @Composable
-private fun ExportMenu(vm: ChatViewModel, made: Int, onFiles: () -> Unit, onMemory: () -> Unit, onTerminal: (() -> Unit)? = null) {
+private fun ExportMenu(vm: ChatViewModel, conv: Conversation, made: Int, onFiles: () -> Unit, onMemory: () -> Unit, onTerminal: (() -> Unit)? = null) {
     var open by remember { mutableStateOf(false) }
+    var renaming by remember { mutableStateOf(false) }
+    if (renaming) RenameDialog(conv.title, onDismiss = { renaming = false }) { vm.rename(conv.id, it); renaming = false }
     val busy by vm.exporting.collectAsState()
     val ctx = LocalContext.current
     Box {
@@ -437,6 +439,9 @@ private fun ExportMenu(vm: ChatViewModel, made: Int, onFiles: () -> Unit, onMemo
         RoundMenu(expanded = open, onDismiss = { open = false }) {
             MenuRow("文件夹", icon = AppIcons.Folder, sub = if (made > 0) "做出了 $made 个文件" else null) { open = false; onFiles() }
             MenuRow("记忆", icon = AppIcons.Moon) { open = false; onMemory() }
+            // 改名、置顶眼前这个对话：以前要打开侧边栏找到它再长按
+            MenuRow("重命名", icon = Icons.Default.Edit) { open = false; renaming = true }
+            MenuRow(if (conv.pinned) "取消置顶" else "置顶", icon = AppIcons.Pin) { open = false; vm.togglePin(conv.id) }
             // 在这个对话的文件夹里开终端（Kavi 跑的命令也在里面能看到）
             onTerminal?.let { t -> MenuRow("终端", glyph = ">_", sub = "在这个对话的文件夹里") { open = false; t() } }
             listOf(

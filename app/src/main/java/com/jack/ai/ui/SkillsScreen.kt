@@ -49,7 +49,6 @@ import com.jack.ai.data.allSkills
 fun SkillsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit) {
     var viewing by remember { mutableStateOf<Skill?>(null) }
     var editing by remember { mutableStateOf<Skill?>(null) }
-    var deleting by remember { mutableStateOf<Skill?>(null) }
     var flows by remember { mutableStateOf(false) }
     val packsUi = remember { PacksUi() }
     val skills = settings.allSkills()
@@ -172,20 +171,20 @@ fun SkillsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit) {
             },
             dismissButton = {
                 Row {
-                    if (!isNew) TextButton(onClick = { deleting = s; editing = null }) {
-                        Text("删除", color = MaterialTheme.colorScheme.error)
+                    // 删除就地确认：点一下变成「确定删除」，再点才删，不再另弹一个框
+                    var sure by remember(s.id) { mutableStateOf(false) }
+                    if (!isNew) TextButton(onClick = {
+                        if (sure) {
+                            vm.updateSettings { st -> st.copy(customSkills = st.customSkills.filterNot { it.id == s.id }) }
+                            editing = null
+                        } else sure = true
+                    }) {
+                        Text(if (sure) "确定删除" else "删除", color = MaterialTheme.colorScheme.error)
                     }
                     TextButton(onClick = { editing = null }) { Text("取消") }
                 }
             },
         )
-    }
-
-    deleting?.let { s ->
-        ConfirmDeleteDialog("删除技能？", "「${s.name}」会被删除。", onDismiss = { deleting = null }) {
-            vm.updateSettings { st -> st.copy(customSkills = st.customSkills.filterNot { it.id == s.id }) }
-            deleting = null
-        }
     }
 }
 

@@ -208,6 +208,8 @@ fun ProxySection(vm: ChatViewModel, s: Settings) {
         var text by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { pasting = false },
+            // 贴好了一长串节点，点到外面不会一下没了
+            properties = keepIfEdited(text.isNotBlank()),
             title = { Text("粘贴订阅或节点") },
             text = {
                 OutlinedTextField(text, { text = it }, placeholder = { Text("https://… 订阅地址，或 ss:// vmess:// 等链接，可以多行") },
