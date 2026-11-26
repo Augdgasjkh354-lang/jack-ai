@@ -132,6 +132,9 @@ fun SettingsScreen(
     var page by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(startPage?.let { n -> SettingsPage.entries.firstOrNull { it.name == n } }
         ?: if (startLook) SettingsPage.LOOK else if (settings.hasAnyKey()) null else SettingsPage.KEY) }
     // 从别处直接跳进某一页的：返回就回原来的地方，不先绕到设置首页
+    var settingsQuery by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
+    // 从搜索点进「连接」时要直接展开的那一行（比如搜「邮箱」）
+    var connectOpen by remember { mutableStateOf<String?>(null) }
     val leave: () -> Unit = { if (page == null || (startPage != null && page?.name == startPage)) onBack() else page = null }
     androidx.activity.compose.BackHandler(enabled = page != null) { leave() }
     val homeScroll = rememberScrollState()
@@ -179,7 +182,18 @@ fun SettingsScreen(
                     scaleX = s; scaleY = s
                     transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f)
                 })
-            if (page == null) SettingsHome(vm, settings, onPick = { page = it }, onOpenSkills = onOpenSkills, onOpenUsage = onOpenUsage)
+            if (page == null) {
+                // 搜设置：打「字体」「备份」「余额」这类词，直接列出在哪一页，不用一页页点进去找
+                SearchField(settingsQuery, { settingsQuery = it }, placeholder = "搜设置，比如：字体、备份、余额")
+                if (settingsQuery.isBlank()) SettingsHome(vm, settings, onPick = { page = it }, onOpenSkills = onOpenSkills, onOpenUsage = onOpenUsage)
+                else SettingsResults(settingsQuery) { hit ->
+                    when (hit.topic.key) {
+                        "SKILLS" -> onOpenSkills()
+                        "USAGE" -> onOpenUsage()
+                        else -> SettingsPage.entries.firstOrNull { it.name == hit.topic.key }?.let { connectOpen = hit.row; page = it }
+                    }
+                }
+            }
             // ---- 个性化 ----
             if (page == SettingsPage.PROFILE) Section {
                 SettingField("怎么称呼你", settings.userName, "例如：Jack") { v ->
@@ -280,7 +294,7 @@ fun SettingsScreen(
             }
 
             if (page == SettingsPage.CONNECT) Section(hint = "点开一项设置；连好之后只显示一行状态。") {
-                ConnectionsSection(vm, settings)
+                ConnectionsSection(vm, settings, startOpen = connectOpen)
             }
 
             if (page == SettingsPage.PHONE) Section(hint = "让 Kavi 替你在别的 App 里点、输入、翻页（比如在微信里找聊天记录、在淘宝里搜东西）。只能操作你勾过的 App。") {
@@ -749,6 +763,39 @@ private fun SettingsHome(
     Text("Kavi v${com.jack.ai.BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.outline, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp))
+}
+
+/** 设置搜索的结果：一张卡片，一行一页，下面灰字写是因为哪个词搜到的；正式版没有的页不列。 */
+@Composable
+private fun SettingsResults(query: String, onOpen: (SettingsHit) -> Unit) {
+    val hidden = setOfNotNull(
+        "PHONE".takeIf { !com.jack.ai.Edition.phoneControl }, "LINUX".takeIf { !com.jack.ai.Edition.linux },
+        "UPDATE".takeIf { !com.jack.ai.Edition.selfUpdate },
+    )
+    val hits = remember(query) { searchSettings(query).filter { it.topic.key !in hidden } }
+    val colors = MaterialTheme.colorScheme
+    if (hits.isEmpty()) {
+        Text("没找到「${query.trim()}」相关的设置。换个说法试试，或者直接问 Kavi：它能帮你改设置。",
+            style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant, modifier = Modifier.padding(horizontal = 8.dp))
+        return
+    }
+    val dark = colors.background.luminance() < 0.5f
+    androidx.compose.material3.Surface(shape = Radii.xl, color = if (dark) colors.surfaceContainerHigh else colors.surfaceContainerLowest,
+        border = androidx.compose.foundation.BorderStroke(0.8.dp, glassEdge()), modifier = Modifier.fillMaxWidth()) {
+        Column {
+            hits.forEachIndexed { i, h ->
+                if (i > 0) androidx.compose.material3.HorizontalDivider(Modifier.padding(start = 20.dp, end = 20.dp), color = colors.outlineVariant.copy(alpha = 0.6f))
+                Row(verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().clickable { onOpen(h) }.heightIn(min = 56.dp).padding(horizontal = 20.dp, vertical = 10.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        Text(h.topic.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        (h.row ?: h.word)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, maxLines = 1) }
+                    }
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, Modifier.size(20.dp), tint = colors.onSurfaceVariant)
+                }
+            }
+        }
+    }
 }
 
 /** 一组入口：灰色粗体小标题，下面一张大圆角卡片，行和行之间一道从文字起头的细线。图标是素色线条，和聊天页一样克制。 */

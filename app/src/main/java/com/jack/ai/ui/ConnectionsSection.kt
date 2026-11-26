@@ -33,8 +33,8 @@ import com.jack.ai.data.tavilyKeys
  * 点哪个展开哪个（一次只开一个），连好之后就不占地方了。
  */
 @Composable
-fun ConnectionsSection(vm: ChatViewModel, s: Settings) {
-    var open by rememberSaveable { mutableStateOf<String?>(null) }
+fun ConnectionsSection(vm: ChatViewModel, s: Settings, /** 一进来就展开的那一行（从设置搜索点进来时）。 */ startOpen: String? = null) {
+    var open by rememberSaveable { mutableStateOf(startOpen) }
     val mails = s.mails.count { it.ready }
     val mcp = s.mcpServers.count { it.enabled }
     val searchKeys = s.exaKeys.size + s.tavilyKeys.size
