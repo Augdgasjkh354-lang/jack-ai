@@ -29,6 +29,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import com.jack.ai.a11y.PhoneCollect
 import com.jack.ai.a11y.ScreenOcr
+import com.jack.ai.a11y.PhoneScreenMaps
 import com.jack.ai.a11y.PhoneWheel
 
 /**
@@ -164,7 +165,7 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
         val quality = PhoneScreenAnalysis.quality(root, size)
         phoneSeen = screen
         screen.texts().forEach { if (it.isNotBlank() && phoneSeenTexts.size < 5000) phoneSeenTexts += it }
-        val note = StringBuilder(if (chooser) "" else flowHint(pkg)).append(ScreenText.format(screen))
+        val note = StringBuilder(if (chooser) "" else flowHint(pkg, screen)).append(ScreenText.format(screen))
         if (chooser) note.append("这是系统在问用哪个 App 打开（或装了两份的 App 问打开哪一个）。只能点用户勾过的 App 或「仅此一次」这类按钮；用户说了用哪个就选哪个，没说就选刚才要打开的那个 App，拿不准就问用户。\n")
         if (diagnosis.state == ScreenState.LOADING) note.append("这一屏还在加载中，先用 wait 等它稳定再继续。\n")
         // 树正常时只给文字；缺块时离线识别截图里的字补上，模型能看图的再附标号截图。
@@ -256,6 +257,14 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
         val (now, screenText) = read()
         val effect = ActionEffect.classify(before?.effectScreen(), now?.effectScreen(), typed)
         before?.let { stat(it.app, if (effect == EffectKind.NO_EFFECT) "no_change" else "ok") }
+        // 屏图：记下这一步从哪页、点了什么、到了哪页（这一轮结束时并进图里）。点的是列表里的内容（会变的字）就不记名字
+        if (before != null && now != null) {
+            val target = if (action == "tap" || action == "long_press")
+                (args["n"].text().toIntOrNull()?.let { before.byNumber(it)?.label } ?: args["text"].text()).trim().takeIf { PhoneScreenMaps.stable(it) }
+            else null
+            phoneMoves += com.wangzan101.mika.core.screen.map.ScreenMove(before.pkg, PhoneScreenMaps.skeleton(before), action, target,
+                now.pkg, PhoneScreenMaps.skeleton(now), effect != EffectKind.NO_EFFECT)
+        }
         val newScreen = if (before == null || now == null) false else {
             val left = before.elements.map { it.role to it.label }.toSet()
             val right = now.elements.map { it.role to it.label }.toSet()
@@ -590,7 +599,13 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
         }
         text to SearchRecord(toolLabel)
     }
-    if (phoneStepOk) rec?.let { phoneTrail += it.toString() }
+    // 录下这一步做完落到的页面（骨架文字）：重放手机流程时拿来核对有没有走对页（屏图）。
+    // open、back 不录：App 常常回到上次停的那页，落到哪页本来就不固定
+    if (phoneStepOk) rec?.let { r ->
+        val landed = phoneSeen?.let(PhoneScreenMaps::skeleton).orEmpty().take(6)
+        phoneTrail += (if (landed.isEmpty() || action !in setOf("tap", "long_press", "enter")) r
+            else JsonObject(r + ("screen" to kotlinx.serialization.json.JsonArray(landed.map { kotlinx.serialization.json.JsonPrimitive(it) })))).toString()
+    }
     // 模型自己一条一条地「点开 → 做 → 返回」：重复三遍时提醒一次改用 each（steps、each 里面的不算）
     if (phoneBatchDepth == 0 && phoneRepeats.feed(action, phoneStepOk)) return out + "\n\n" + PhoneEach.NUDGE
     return out
@@ -654,6 +669,17 @@ private suspend fun ToolSession.runPhoneStepsInner(steps: List<JsonObject>): Ste
             lines += "   " + waited.substringBefore("\n").trim()
             if (!phoneStepOk) { stop = "第 ${i + 1} 步之后没等到，后面的没做"; break }
         }
+        // 屏图核对：录下时这一步落到哪一页，现在落到的是不是同一页。读屏可能没跟上，等一下重读一次，还不对就停下交还
+        val wantScreen = (st["screen"] as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
+        if (wantScreen.isNotEmpty()) phoneSeen?.let { now ->
+            if (PhoneScreenMaps.mismatch(app, wantScreen, now) == null) return@let
+            kotlinx.coroutines.delay(800)
+            last = phone(buildJsonObject { put("action", "read") })
+            val bad = phoneSeen?.let { PhoneScreenMaps.mismatch(app, wantScreen, it) } ?: return@let
+            lines += "   " + bad
+            stop = "第 ${i + 1} 步之后落到的页面不对，后面的没做"
+        }
+        if (stop.isNotEmpty()) break
     }
     return StepsRun(lines, stop, last)
 }
@@ -698,16 +724,19 @@ private fun ToolSession.locked(): Boolean {
 }
 
 /** 首次读到这个 App 时，合并内置使用知识、用户备忘和已存流程（每轮每个 App 只给一次）。 */
-private suspend fun ToolSession.flowHint(pkg: String): String {
+private suspend fun ToolSession.flowHint(pkg: String, screen: com.jack.ai.a11y.Screen? = null): String {
     val site = com.jack.ai.data.browser.BrowserFlows.APP_PREFIX + pkg
     if (site in flowHinted) return ""
+    // 屏图：以前在这个 App 里走过的页面和路，随备忘一起给（每轮每个 App 只给一次）
+    val map = screen?.let { s -> withContext(Dispatchers.IO) { PhoneScreenMaps.hint(app, s) } }.orEmpty()
     val hint = withContext(Dispatchers.IO) {
         val flows = host.store.loadFlows().filter { it.site == site }
         val notes = com.jack.ai.data.browser.BrowserFlows.notesFor(host.store.loadSiteNotes(), site) +
             com.jack.ai.data.browser.BrowserFlows.builtinNotesFor(site)
         com.jack.ai.data.browser.BrowserFlows.hint(flows, notes, app = true)
     }
-    return if (hint.isNotEmpty() && flowHinted.add(site)) "$hint\n" else ""
+    val all = listOf(hint, map.trimEnd()).filter { it.isNotEmpty() }.joinToString("\n")
+    return if (all.isNotEmpty() && flowHinted.add(site)) "$all\n" else ""
 }
 
 /** 读一个手机流程的步骤（记一次使用），或者存 / 更新一个（存的是文字步骤，照着做时发送、付款照样要用户确认）。 */

@@ -97,3 +97,14 @@ Jack AI 适配（2026-11-02）：
 - 参考同一提交的 `core/cap/phone/DoEach.kt`、`core/agent/EachCursor.kt`（ScrollCursor）、`core/agent/EachLoopDetector.kt` 与 `openspec/changes/feat-do-each-loop`。没有复制上游文件，按 Kavi 的手机工具重写在 `app/.../tools/PhoneEach.kt`，文件头注明思路出处。
 - 条目按「类型|文字」认（编号每次读屏会变），body 复用 steps 的动作，"@item" 换成这一条的编号；该问用户的照样问、节奏照样等。翻页到底、做满上限、用户停止、做完一条回不到列表都会停下，只交一份摘要。
 - 模型自己「点开 → 做 → 返回」连续重复三遍时，在结果后提醒一次改用 each（同上游 EachLoopDetector 的识别形状）。
+
+## 屏图移植（2026-11-26）
+
+- 固定来源提交：`148fb782`（Mika，Apache-2.0）；设计见上游 `openspec/changes/feat-screen-map/`。
+- 复制到 `mika/src/main/java/com/wangzan101/mika/core/screen/map/`，保留上游命名空间：`ScreenNode`、`ScreenGraph`、`ScreenMapStore`、`ScreenMapGrower` 未改功能。
+- Jack AI modification：
+  - `ScreenRecognizer`：分数改成「加权召回 × 精确度」的调和平均（权重按稀有度和这一屏出现的频率），第一像和第二像差不到 0.1 当认不出。上游只对命中的锚点求稀有度平均，几页共用底栏时完全对上也到不了阈值。
+  - `ScreenMapBuilder`：原料改成 Kavi 手机工具记下的 `ScreenMove`（动作前后两屏的骨架文字），不依赖上游 RunEvent；没有骨架文字的屏不建；认屏置信度到 0.8 的算同一屏（多个横幅不另建一页）。
+  - `ScreenMapRender`：屏名取出现最多的三个骨架文字，路按走过的次数排、最多 8 条，文案按 Kavi 的手机工具写。
+  - `ScreenMapMergeGate.wrongOwner`：读 `ScreenMove`。
+- Kavi 接线（`app/.../a11y/PhoneScreenMaps.kt`）：骨架文字按上游 `RouteAnchors.texts` 的口径（不要列表里的内容、输入框、数字），每步动作记前后两屏，回答结束时并进 `files/screenmaps/<包名>.json`（原子写，最多 150 页、每页 30 条路）；第一次读到某个 App 时随 App 备忘给地图；录手机流程时每步记下落到的页面，重放时核对，走错页就停下交还「落在哪页 + 从这能去哪」。没做上游的「按路径拼段重放」。

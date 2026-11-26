@@ -103,3 +103,11 @@ core/src/main/kotlin/com/wangzan101/mika/core/uistate/ScreenDiagnosis.kt
 core/src/main/kotlin/com/wangzan101/mika/core/oauth/Pkce.kt
 core/src/main/kotlin/com/wangzan101/mika/core/oauth/LoopbackCallback.kt
 core/src/main/kotlin/com/wangzan101/mika/core/cap/mcp/McpOAuth.kt
+core/src/main/kotlin/com/wangzan101/mika/core/screen/map/ScreenNode.kt
+core/src/main/kotlin/com/wangzan101/mika/core/screen/map/ScreenGraph.kt
+core/src/main/kotlin/com/wangzan101/mika/core/screen/map/ScreenMapStore.kt
+core/src/main/kotlin/com/wangzan101/mika/core/screen/map/ScreenMapGrower.kt
+core/src/main/kotlin/com/wangzan101/mika/core/screen/map/ScreenRecognizer.kt
+core/src/main/kotlin/com/wangzan101/mika/core/screen/map/ScreenMapBuilder.kt
+core/src/main/kotlin/com/wangzan101/mika/core/screen/map/ScreenMapRender.kt
+core/src/main/kotlin/com/wangzan101/mika/core/screen/map/ScreenMapMergeGate.kt

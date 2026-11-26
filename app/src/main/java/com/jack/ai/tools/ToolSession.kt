@@ -202,6 +202,8 @@ class ToolSession(
     @Volatile internal var phoneBatchDepth = 0
     /** 认「一条一条点开 → 做 → 返回」，重复了就提醒用 each（每轮最多提醒一次）。 */
     internal val phoneRepeats = PhoneEach.RepeatDetector()
+    /** 这一轮每一步手机动作的前后两屏（屏图的原料），回答结束时并进图里。 */
+    internal val phoneMoves = java.util.Collections.synchronizedList(mutableListOf<com.wangzan101.mika.core.screen.map.ScreenMove>())
     /** 这一轮做成的手机动作（按字找的写法，JSON），存手机流程时拿来当能重放的路线。 */
     internal val phoneTrail = java.util.Collections.synchronizedList(mutableListOf<String>())
     /** 这一轮读到过的屏幕上的字（手机操作考试核对回答是不是真看到的）。 */
@@ -332,6 +334,9 @@ class ToolSession(
             phoneControl = null
             try { control.close() } finally { com.jack.ai.a11y.PhoneControl.lock.unlock(this@ToolSession) }
         }
+        // 屏图：这一轮走过的页面和路并进图里（出错就算了，不影响回答）
+        val moves = synchronized(phoneMoves) { phoneMoves.toList().also { phoneMoves.clear() } }
+        if (moves.isNotEmpty()) withContext(kotlinx.coroutines.NonCancellable + Dispatchers.IO) { com.jack.ai.a11y.PhoneScreenMaps.grow(app, moves) }
         val summary = listOfNotNull(phoneCloseSummary, current).joinToString("；").ifBlank { null }
         phoneCloseSummary = null
         return summary
