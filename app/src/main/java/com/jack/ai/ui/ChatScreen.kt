@@ -159,6 +159,8 @@ fun ChatScreen(
     onOpenTab: ((KaviTab) -> Unit)? = null,
     /** 打开终端，参数是对话文件夹的 key（Workspace.key）。 */
     onOpenTerminal: (String) -> Unit = {},
+    /** 新手任务页。 */
+    onOpenGuide: () -> Unit = {},
     /** 直接打开设置里的某一页（比如缺搜索 Key 时打开「连接」）。 */
     onOpenSettingsPage: (String) -> Unit = { onOpenSettings() },
 ) {
@@ -356,7 +358,7 @@ fun ChatScreen(
                 if (conv == null || conv.messages.isEmpty()) {
                     // 和记忆页同一片天：右上角一轮跟着钟点变色的光，深色模式下有星星
                     SkyBackdrop(Modifier.fillMaxWidth().height(320.dp), key = conv?.id)
-                    Box(Modifier.padding(padding)) { EmptyState(vm, state, conv, onOpenMemory, onOpenRoutines = { if (onOpenTab != null) onOpenTab(KaviTab.ROUTINES) else onOpenRoutines() }) }
+                    Box(Modifier.padding(padding)) { EmptyState(vm, state, conv, onOpenMemory, onOpenRoutines = { if (onOpenTab != null) onOpenTab(KaviTab.ROUTINES) else onOpenRoutines() }, onOpenGuide = onOpenGuide) }
                 } else {
                     MessageList(vm, conv, state.streamingHere, padding, editingId = editing?.id, onDeleted = ::onDeleted, summaryCollapsed = state.settings.summaryCollapsed,
                         onOpenSettingsPage = onOpenSettingsPage, onEdit = { m ->
@@ -377,7 +379,7 @@ fun ChatScreen(
     // 新手教学：填过 DeepSeek Key 以后问一次（老用户也问一次），看不看都算问过；设置里能重看
     val tourKeyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     val tourFocus = androidx.compose.ui.platform.LocalFocusManager.current
-    fun startTour() { tourKeyboard?.hide(); tourFocus.clearFocus(); scope.launch { drawerState.close() }; Tour.step = 0 }
+    fun startTour() { tourKeyboard?.hide(); tourFocus.clearFocus(); scope.launch { drawerState.close() }; Tour.start(Tour.CHAT) }
     if (state.settings.apiKey.isNotBlank() && !state.settings.tourAsked && Tour.step < 0) TourAsk { yes ->
         vm.updateSettings { it.copy(tourAsked = true) }
         if (yes) startTour()
@@ -390,6 +392,10 @@ fun ChatScreen(
     }
     androidx.activity.compose.BackHandler(enabled = Tour.step >= 0) { Tour.step = -1 }
     TourOverlay(onTry = { text = "你能帮我做什么？"; focusInput++ })
+    // 第一次打开侧边栏：带一遍侧边栏里有什么
+    val tourCtx = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(drawerState.isOpen) { if (drawerState.isOpen) Tour.autoStart(tourCtx, Tour.DRAWER, state.settings.tourAsked) }
+    TourOverlay(Tour.DRAWER)
 }
 
 /**

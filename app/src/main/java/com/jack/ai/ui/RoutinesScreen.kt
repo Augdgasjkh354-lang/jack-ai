@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -117,6 +118,7 @@ fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit, onOpen
                 shape = androidx.compose.foundation.shape.CircleShape,
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.tourTarget("r-add"),
             ) { Icon(Icons.Default.Add, "添加") }
         },
     ) { padding ->
@@ -129,15 +131,15 @@ fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit, onOpen
                 Text("提醒和任务", style = MaterialTheme.typography.headlineMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
                     modifier = Modifier.padding(start = 4.dp, bottom = 4.dp))
             }
-            item { KindFilter(filter) { filter = it } }
-            item { WorkflowsEntry(onOpenWorkflows) }
+            item { Box(Modifier.tourTarget("r-filter")) { KindFilter(filter) { filter = it } } }
+            item { Box(Modifier.tourTarget("r-workflows")) { WorkflowsEntry(onOpenWorkflows) } }
             if (!canNotify && Build.VERSION.SDK_INT >= 33) {
                 item { PermissionRow("还没有通知权限", "提醒和任务结果要靠通知送到", "允许") { permission.launch(Manifest.permission.POST_NOTIFICATIONS) } }
             }
             if (!canCalendar) {
                 item { PermissionRow("日历", "允许后 Kavi 能查和加日程", "允许") { calendarPermission.launch(CalendarTool.PERMISSIONS) } }
             }
-            item { QuietHoursCard(state.settings) { start, end -> vm.updateSettings { it.copy(quietStart = start, quietEnd = end) } } }
+            item { Box(Modifier.tourTarget("r-quiet")) { QuietHoursCard(state.settings) { start, end -> vm.updateSettings { it.copy(quietStart = start, quietEnd = end) } } } }
             if (state.routines.none { it.title == "早安问候" }) {
                 item {
                     OutlinedButton(onClick = {
@@ -171,6 +173,10 @@ fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit, onOpen
         }
     }
 
+    // 第一次打开提醒和任务：带一遍三种、怎么加、免打扰、工作流
+    androidx.compose.runtime.LaunchedEffect(Unit) { Tour.autoStart(ctx, Tour.ROUTINES, state.settings.tourAsked) }
+    androidx.activity.compose.BackHandler(enabled = Tour.step >= 0 && Tour.name == Tour.ROUTINES) { Tour.step = -1 }
+    TourOverlay(Tour.ROUTINES)
     editing?.let { r ->
         RoutineDialog(r, isNew = state.routines.none { it.id == r.id }, onDismiss = { editing = null }, onUpgrade = {
             // 照它的时间和要做的事搭一个工作流，原来的定时任务关掉（不删，想回去还能开）

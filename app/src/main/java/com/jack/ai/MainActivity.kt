@@ -75,6 +75,8 @@ sealed interface Screen {
     data class Page(val rel: String) : Screen
     data object Downloads : Screen
     data object Files : Screen
+    /** 新手任务。 */
+    data object Guide : Screen
     data class ProjectPage(val id: String) : Screen
     /** 终端：folder 是对话文件夹的 key（Workspace.key），空的是终端自己的「主目录」。 */
     data class Terminal(val folder: String = "") : Screen
@@ -400,7 +402,18 @@ class MainActivity : FragmentActivity() {
                             onOpenPage = { stack.add(Screen.Page(it)) },
                             onOpenTab = { openTab(it) },
                             onOpenTerminal = { stack.add(Screen.Terminal(it)) },
+                            onOpenGuide = { stack.add(Screen.Guide) },
                         )
+                        Screen.Guide -> com.jack.ai.ui.GuideScreen(state = state, onBack = back) { a ->
+                            when (a) {
+                                is com.jack.ai.ui.Guide.Action.Try -> { stack.clear(); vm.newChat(); com.jack.ai.ui.ChatFocus.prefill = a.prompt }
+                                com.jack.ai.ui.Guide.Action.ChatTour -> { stack.clear(); com.jack.ai.ui.Tour.replay = true }
+                                com.jack.ai.ui.Guide.Action.Memory -> stack.add(Screen.Memory)
+                                com.jack.ai.ui.Guide.Action.Routines -> stack.add(Screen.Routines)
+                                com.jack.ai.ui.Guide.Action.NewProject -> creatingProject = true
+                                is com.jack.ai.ui.Guide.Action.Settings -> stack.add(Screen.Settings(a.page))
+                            }
+                        }
                         Screen.Routines -> RoutinesScreen(vm = vm, state = state, onBack = back, onOpenWorkflows = { stack.add(Screen.Workflows) },
                             onOpenChat = { id -> vm.select(id); stack.clear() })
                         Screen.Workflows -> com.jack.ai.ui.WorkflowsScreen(onBack = back)
@@ -424,6 +437,7 @@ class MainActivity : FragmentActivity() {
                             onOpenUsage = { stack.add(Screen.Usage) },
                             canLock = ::canLock,
                             onOpenTerminal = { stack.add(Screen.Terminal()) },
+                            onOpenGuide = { stack.add(Screen.Guide) },
                         )
                         is Screen.Terminal -> com.jack.ai.ui.TerminalScreen(folder = screen.folder,
                             title = screen.folder.removePrefix("p_").let { id -> state.project(id)?.name } ?: state.current?.title.orEmpty(), onBack = back)

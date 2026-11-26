@@ -167,6 +167,7 @@ internal fun EmptyState(
     conv: Conversation?,
     onOpenMemory: () -> Unit,
     onOpenRoutines: () -> Unit = {},
+    onOpenGuide: () -> Unit = {},
 ) {
     val project = state.project(state.currentProjectId)
     val colors = MaterialTheme.colorScheme
@@ -199,6 +200,11 @@ internal fun EmptyState(
             modifier = (if (today != null) Modifier.clip(Radii.s).clickable(onClickLabel = "看提醒和任务", onClick = onOpenRoutines) else Modifier)
                 .padding(horizontal = 4.dp, vertical = 2.dp),
         )
+        // 新手任务：做到哪了、下一步做什么，点开看全部阶段（项目里不显示）
+        if (project == null) {
+            Spacer(Modifier.height(16.dp))
+            GuideCard(state, onOpenGuide)
+        }
         Spacer(Modifier.weight(1f))
         // 一大堆建议像弹幕一样从右往左慢慢飘，点哪条就把哪条填进输入框
         if (state.settings.bizStarts) {

@@ -133,7 +133,7 @@ fun ProjectScreen(
                     navigationIcon = { CircleIconButton(Icons.AutoMirrored.Filled.ArrowBack, "返回", Modifier.padding(start = 12.dp, end = 4.dp), onClick = onBack) },
                     actions = {
                         Box(Modifier.padding(end = 12.dp)) {
-                            CircleIconButton(Icons.Default.MoreVert, "项目菜单") { menu = true }
+                            CircleIconButton(Icons.Default.MoreVert, "项目菜单", Modifier.tourTarget("p-menu")) { menu = true }
                             RoundMenu(expanded = menu, onDismiss = { menu = false }) {
                                 MenuRow(if (project.pinned) "取消置顶" else "置顶", icon = AppIcons.Pin) { menu = false; vm.saveProject(project.copy(pinned = !project.pinned)) }
                                 MenuRow("编辑项目", icon = Icons.Default.Edit) { menu = false; editingProject = true }
@@ -144,7 +144,7 @@ fun ProjectScreen(
                     },
                 )
                 // 聊天 / 资料 / 记忆：一条玻璃胶囊，选中的那块底滑着跟过去
-                GlassTabs(ProjectTab.entries.map { it.label }, tab.ordinal, Modifier.padding(horizontal = 16.dp).padding(bottom = 8.dp)) { tab = ProjectTab.entries[it] }
+                GlassTabs(ProjectTab.entries.map { it.label }, tab.ordinal, Modifier.padding(horizontal = 16.dp).padding(bottom = 8.dp).tourTarget("p-tabs")) { tab = ProjectTab.entries[it] }
             }
         },
         bottomBar = {
@@ -153,7 +153,7 @@ fun ProjectScreen(
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 10.dp)
-                        .glass(Radii.xl).padding(start = 18.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+                        .glass(Radii.xl).tourTarget("p-input").padding(start = 18.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
                 ) {
                     androidx.compose.foundation.text.BasicTextField(
                         value = draft, onValueChange = { draft = it }, maxLines = 5,
@@ -229,6 +229,11 @@ fun ProjectScreen(
     }
     }
 
+    // 第一次打开项目：带一遍项目里有什么、指令在哪、怎么在项目里开对话
+    val tourCtx = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(Unit) { Tour.autoStart(tourCtx, Tour.PROJECT, state.settings.tourAsked) }
+    androidx.activity.compose.BackHandler(enabled = Tour.step >= 0 && Tour.name == Tour.PROJECT) { Tour.step = -1 }
+    TourOverlay(Tour.PROJECT)
     memoryOf?.let { c -> ConversationMemoryDialog(vm, c) { memoryOf = null } }
     if (editingProject) {
         ProjectDialog(project, onDismiss = { editingProject = false }) { vm.saveProject(it); editingProject = false }

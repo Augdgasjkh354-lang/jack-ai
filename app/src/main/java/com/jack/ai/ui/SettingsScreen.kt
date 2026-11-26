@@ -108,6 +108,7 @@ fun SettingsScreen(
     /** 直接打开的那一页（SettingsPage 的名字）。 */
     startPage: String? = null,
     onOpenTerminal: () -> Unit = {},
+    onOpenGuide: () -> Unit = {},
 ) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -182,7 +183,7 @@ fun SettingsScreen(
                 })
             if (page == null) {
                 // 搜设置：打「字体」「备份」「余额」这类词，直接列出在哪一页，不用一页页点进去找
-                SearchField(settingsQuery, { settingsQuery = it }, placeholder = "搜设置，比如：字体、备份、余额")
+                SearchField(settingsQuery, { settingsQuery = it }, Modifier.tourTarget("s-search"), placeholder = "搜设置，比如：字体、备份、余额")
                 if (settingsQuery.isBlank()) SettingsHome(vm, settings, onPick = { page = it }, onOpenSkills = onOpenSkills, onOpenUsage = onOpenUsage)
                 else SettingsResults(settingsQuery) { hit ->
                     when (hit.topic.key) {
@@ -528,10 +529,17 @@ fun SettingsScreen(
             }
 
             if (page == SettingsPage.ADVANCED) Section {
-                // 新手教学：回到聊天页再从头看一遍
+                // 新手教学：分阶段的新手任务；聊天页的界面引导也能从头再看
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("新手教学")
+                        Text("分几个阶段学怎么用 Kavi：发图发文件、做文档、记住你、定时做事、替你动手", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    OutlinedButton(onClick = onOpenGuide) { Text("打开") }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("界面引导")
                         Text("回到聊天页，一步一步看常用的地方", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     OutlinedButton(onClick = { Tour.replay = true; onBack() }) { Text("再看一遍") }
@@ -584,6 +592,10 @@ fun SettingsScreen(
             dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("取消") } },
         )
     }
+    // 第一次打开设置首页：带一遍搜索和模型在哪
+    if (page == null) androidx.compose.runtime.LaunchedEffect(Unit) { Tour.autoStart(ctx, Tour.SETTINGS, settings.tourAsked) }
+    androidx.activity.compose.BackHandler(enabled = Tour.step >= 0 && Tour.name == Tour.SETTINGS) { Tour.step = -1 }
+    TourOverlay(Tour.SETTINGS)
 }
 
 @Composable
@@ -724,13 +736,13 @@ private fun SettingsHome(
     SettingsGroup(order = 1, title = "关于你", listOf(
         go(SettingsPage.PROFILE, Icons.Default.Person, settings.userName.ifBlank { "未设置" }),
     ))
-    SettingsGroup(order = 2, title = "模型", listOf(
+    Box(Modifier.tourTarget("s-model")) { SettingsGroup(order = 2, title = "模型", listOf(
         go(SettingsPage.KEY, AppIcons.Key, if (settings.apiKey.isNotBlank()) "已填" else "未填", warn = noKey),
         go(SettingsPage.PROVIDERS, AppIcons.Cloud, if (settings.providers.isEmpty()) "未添加" else "${settings.providers.size} 个"),
         go(SettingsPage.MODEL, AppIcons.Brain, listOfNotNull(model, settings.thinking.labelFor(settings.endpoint())).joinToString(" · ")),
         go(SettingsPage.LOCAL, AppIcons.Chip),
         go(SettingsPage.COMPRESS, AppIcons.Compress, "${settings.compressTokens / 1000}k"),
-    ))
+    )) }
     // 正式版没有的功能不显示入口（见 Edition）
     SettingsGroup(order = 3, title = "Kavi 能用的", listOfNotNull(
         go(SettingsPage.CONNECT, AppIcons.Globe),

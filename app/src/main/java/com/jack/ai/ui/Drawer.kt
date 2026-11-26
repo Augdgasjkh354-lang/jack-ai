@@ -185,7 +185,7 @@ fun HistoryDrawer(
                 item {
                     val now = System.currentTimeMillis()
                     val due = state.cards.count { it.due <= now }
-                    TabArranger(
+                    Box(Modifier.tourTarget("d-pages")) { TabArranger(
                         saved = state.settings.tabBar,
                         badge = { t ->
                             when (t) {
@@ -214,7 +214,7 @@ fun HistoryDrawer(
                         onSave = onSaveTabs,
                         order = state.settings.drawerOrder,
                         onSaveOrder = onSaveOrder,
-                    )
+                    ) }
                 }
                 // 我的页面：放进侧边栏的小工具网页（文件删了的不显示）
                 val pages = state.settings.pinnedPages.filter { com.jack.ai.data.PinnedPages.file(ctx, it) != null }
@@ -226,7 +226,7 @@ fun HistoryDrawer(
                     item { SectionLabel("置顶") }
                     items(pinned, key = { "pin" + it.id }) { c -> chatRow(c)() }
                 }
-                item { SectionLabel("项目", action = "新建", onAction = onNewProject) }
+                item { Box(Modifier.tourTarget("d-projects")) { SectionLabel("项目", action = "新建", onAction = onNewProject) } }
                 // 项目多了只露出最近的 3 个，其余收起来，免得把聊天记录挤到下面去
                 // 置顶的在前，其余按最近改过的
                 val sortedProjects = state.projects.sortedByDescending { it.pinned }
@@ -278,16 +278,16 @@ fun HistoryDrawer(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(horizontal = 16.dp, vertical = 12.dp),
             ) {
-                if (name.isEmpty()) CircleIconButton(Icons.Default.Settings, "设置", onClick = onSettings)
+                if (name.isEmpty()) CircleIconButton(Icons.Default.Settings, "设置", Modifier.tourTarget("d-settings"), onClick = onSettings)
                 else {
                     val settingsPress = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
                     Box(
-                        Modifier.pressScale(settingsPress, 0.9f).size(42.dp).glass(androidx.compose.foundation.shape.CircleShape)
+                        Modifier.tourTarget("d-settings").pressScale(settingsPress, 0.9f).size(42.dp).glass(androidx.compose.foundation.shape.CircleShape)
                             .clickable(interactionSource = settingsPress, indication = androidx.compose.foundation.LocalIndication.current) { haptics.tick(); onSettings() },
                         contentAlignment = Alignment.Center,
                     ) { Text(name.take(1), style = MaterialTheme.typography.titleSmall, color = colors.onSurface) }
                 }
-                SearchField(query, { query = it }, Modifier.weight(1f))
+                SearchField(query, { query = it }, Modifier.weight(1f).tourTarget("d-search"))
                 CircleIconButton(AppIcons.NewChat, "新对话", onClick = onNew)
             }
         }

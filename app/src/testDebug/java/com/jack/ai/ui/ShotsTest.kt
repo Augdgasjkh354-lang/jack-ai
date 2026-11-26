@@ -590,4 +590,26 @@ class ShotsTest {
         }
         save("look-" + dark().name.lowercase())
     }
+
+    @Test
+    fun guide() {
+        val v = vm(listOf(Conversation(messages = listOf(com.jack.ai.data.ChatMessage(role = "user", content = "你好")))))
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            val state by v.state.collectAsState()
+            JackTheme(ThemeMode.LIGHT) { GuideScreen(state, onBack = {}) {} }
+        }
+        save("guide")
+    }
+
+    @Test
+    fun guideCard() {
+        val v = vm(listOf(Conversation(messages = listOf(com.jack.ai.data.ChatMessage(role = "user", content = "你好")))))
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            val state by v.state.collectAsState()
+            JackTheme(ThemeMode.LIGHT) { ChatScreen(v, state, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}) }
+        }
+        save("guide-card")
+    }
 }
