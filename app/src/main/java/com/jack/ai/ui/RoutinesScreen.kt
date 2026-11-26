@@ -472,8 +472,8 @@ private fun RunHistory(routineId: String) {
     fun mark(r: com.jack.ai.data.RunRecord) = when {
         r.interrupted() || r.status == "failed" || r.status == "needs_setup" -> "✗"
         r.status == "running" -> "…"
-        r.status == "not_met" -> "○"
-        r.status == "unknown" || r.status == "partial" -> "△"
+        r.status == "not_met" || r.status == "unchanged" || r.status == "cooldown" -> "○"
+        r.status == "unknown" || r.status == "partial" || r.status == "paused" -> "△"
         else -> "✓"
     }
     val last = runs.first()

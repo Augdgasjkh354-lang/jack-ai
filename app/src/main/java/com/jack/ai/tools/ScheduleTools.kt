@@ -278,6 +278,11 @@ internal fun editedRoutine(old: Routine, args: JsonObject, now: Long): Routine {
         given("every_minutes")?.let { r = r.copy(everyMin = (it.toIntOrNull() ?: throw IllegalArgumentException("every_minutes 要写数字")).coerceIn(15, 24 * 60)) }
         given("until")?.let { r = r.copy(until = parseUntil(it, now, r.everyMin)) }
         args["then"]?.let { r = r.copy(then = it.text().trim()) }
+        args["keep_watching"]?.let { r = r.copy(keep = it.text() == "true") }
+        given("notify")?.let { r = r.copy(notifyEach = it == "each_time_met") }
+        given("cooldown_minutes")?.let { r = r.copy(cooldownMin = (it.toIntOrNull() ?: throw IllegalArgumentException("cooldown_minutes 要写数字")).coerceIn(0, 30 * 24 * 60)) }
+        // 改了要查的东西，上次记下的值就不能拿来比了（同 Mika withConditionHistoryFrom）
+        if (r.prompt != old.prompt || r.notifyEach != old.notifyEach) r = r.copy(lastMet = false, lastValue = "")
         if (r.until <= now) throw IllegalArgumentException("这个监控已经到期了，要接着盯就写一个新的 until")
         return r
     }
@@ -362,13 +367,17 @@ private suspend fun ToolSession.makeWatch(args: JsonObject, name: String): Strin
             kind = "watch", title = name.ifBlank { prompt.take(20) }, prompt = prompt, hour = 0, minute = 0,
             everyMin = every, until = until.coerceAtMost(now + 30 * 86_400_000L),
             then = args["then"].text().trim(),
+            keep = args["keep_watching"].text() == "true",
+            notifyEach = args["notify"].text() == "each_time_met",
+            cooldownMin = (args["cooldown_minutes"].text().toIntOrNull() ?: 0).coerceIn(0, 30 * 24 * 60),
             // 要在网站上看（登录后的页面、要点几下才看得到的）就用浏览器，走 Work
             work = args["work"].text() == "true",
         )
         withContext(Dispatchers.Main) { host.saveRoutine(r) }
         val warn = if (!Routines.canNotify(app)) "（注意：App 还没有通知权限，有结果也弹不出通知，用户需要打开左侧菜单「提醒和任务」页面授权）" else ""
         "已开始监控「${r.title}」：${r.describe()}。" +
-            (if (r.then.isNotBlank()) "满足后会接着做：${r.then.take(60)}，做完再通知用户。" else "有结果会通知用户并自动停止。") + "编号 ${r.id.take(8)}。$warn" + verifySaved(r.id) to
+            (if (r.keep) (if (r.then.isNotBlank()) "满足时会接着做：${r.then.take(60)}，做完通知用户，然后继续盯。" else "满足时通知用户，然后继续盯到截止时间。")
+            else if (r.then.isNotBlank()) "满足后会接着做：${r.then.take(60)}，做完再通知用户。" else "有结果会通知用户并自动停止。") + "编号 ${r.id.take(8)}。$warn" + verifySaved(r.id) to
             SearchRecord("设置监控：${r.title}")
     }
 }

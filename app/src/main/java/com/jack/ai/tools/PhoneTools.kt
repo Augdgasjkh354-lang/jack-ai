@@ -693,7 +693,8 @@ internal fun replayBlanks(json: String): List<String> =
 private fun ToolSession.locked(): Boolean {
     val km = app.getSystemService(android.content.Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
     val pm = app.getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
-    return km.isKeyguardLocked || !pm.isInteractive
+    // 有的系统锁屏界面先退下去（isKeyguardLocked 已经是 false），设备其实还锁着，这时点屏幕不生效：两个都看（Mika #590、#627）
+    return km.isKeyguardLocked || km.isDeviceLocked || !pm.isInteractive
 }
 
 /** 首次读到这个 App 时，合并内置使用知识、用户备忘和已存流程（每轮每个 App 只给一次）。 */

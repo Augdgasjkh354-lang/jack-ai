@@ -228,7 +228,7 @@ suspend fun runBackgroundWork(
                     "花费到了上限，不要再调用工具，直接写出目前的结果，并说明还差什么。"
                 } else if (goalId != null && (com.jack.ai.data.Goals.current(ctx, conv.id)?.let { it.id != goalId || it.status != "active" } != false ||
                         com.jack.ai.data.Goals.pauseForBudget(ctx, conv.id))) "目标已停止，不要再调用工具。"
-                else if (goalId != null && name == "phone" && (ctx.getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager).isKeyguardLocked) {
+                else if (goalId != null && name == "phone" && (ctx.getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager).let { it.isKeyguardLocked || it.isDeviceLocked }) {
                     com.jack.ai.data.Goals.change(ctx, conv.id) { it?.update("blocked", "需要用户解锁手机，请解锁后手动继续。") }
                     "手机已锁定，目标受阻，已通知用户。"
                 } else if (!allow(name, args)) "这个工具这次不能用。"

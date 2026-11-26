@@ -225,8 +225,11 @@ class ToolSession(
         try {
             if (!lock.tryLock(this)) {
                 ui.progress("等另一个手机操作任务结束")
-                if (kotlinx.coroutines.withTimeoutOrNull(120_000) { lock.lock(this); true } != true) {
-                    throw java.io.IOException("另一个任务仍在操作手机，请稍后继续。")
+                // 后台任务（定时任务、目标）没人等着：多等一会儿，别人用完了接着做，不因为手机被占着就算失败（Mika：任务排队不丢）。
+                // 等的时间不算工具执行时间。前台的还是 2 分钟，免得用户干等
+                val waitMs = if (interactive) 120_000L else PHONE_WAIT_BACKGROUND_MS
+                if (ToolTimeout.waiting { kotlinx.coroutines.withTimeoutOrNull(waitMs) { lock.lock(this); true } } != true) {
+                    throw java.io.IOException("另一个任务仍在操作手机" + (if (interactive) "，请稍后继续。" else "（等了 ${waitMs / 60_000} 分钟还没空出来），这次先不做。"))
                 }
             }
             val background = if (settings.phoneBackground && !forceMain) com.jack.ai.a11y.BackgroundPhone.create(app, conv.title) else null
@@ -236,6 +239,9 @@ class ToolSession(
             throw t
         }
     }
+
+    /** 后台任务等手机空出来最多等多久。 */
+    private val PHONE_WAIT_BACKGROUND_MS = 20 * 60_000L
 
     /** 没被同意的次数；和 succeeded 一样，execute 前后比一比就知道这次是不是被拒了。 */
     internal val rejected = java.util.concurrent.atomic.AtomicInteger()
