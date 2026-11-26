@@ -20,9 +20,11 @@ import org.robolectric.annotation.Config
 class TabArrangerTest {
     @get:Rule val rule = createComposeRule()
 
+    private var order: List<String>? = null
+
     private fun run(saved: List<String>, label: String, rows: Float): List<String>? {
         var out: List<String>? = null
-        rule.setContent { JackTheme(com.jack.ai.data.ThemeMode.LIGHT) { TabArranger(saved, onOpen = {}, onSave = { out = it }) } }
+        rule.setContent { JackTheme(com.jack.ai.data.ThemeMode.LIGHT) { TabArranger(saved, onOpen = {}, onSave = { out = it }, onSaveOrder = { order = it }) } }
         val px = with(rule.density) { 48f * density }
         rule.onNodeWithText(label).performTouchInput {
             down(center)
@@ -49,6 +51,16 @@ class TabArrangerTest {
     @Test
     fun dragOutOfTheBar() {
         assertEquals(listOf("routines"), run(listOf("memory", "routines"), "记忆", 2f))
+        // 拖出来的「记忆」落在「其他」的第一个，并且这个顺序记下来了（以前会跳回默认位置）
+        assertEquals("memory", order!!.first())
+    }
+
+    @Test
+    fun reorderInsideOthersIsKept() {
+        // 「其他」里默认是 资料库、浏览器、文件库……把「文件库」往上拖两格到最前
+        run(listOf("memory", "routines"), "文件库", -2f)
+        assertEquals(listOf("files", "library", "browser"), order!!.take(3))
+        assertEquals(listOf("files", "library", "browser"), KaviTab.others(listOf("memory", "routines"), order!!).map { it.id }.take(3))
     }
 
     @Test

@@ -595,6 +595,9 @@ class Store(context: Context) {
             tabBar = prefs.getString("tabBar", null)?.let { raw ->
                 runCatching { json.decodeFromString(ListSerializer(String.serializer()), raw) }.getOrNull()
             },
+            drawerOrder = prefs.getString("drawerOrder", null)?.let { raw ->
+                runCatching { json.decodeFromString(ListSerializer(String.serializer()), raw) }.getOrNull()
+            }.orEmpty(),
             pinnedPages = prefs.getString("pinnedPages", null)?.let { raw ->
                 runCatching { json.decodeFromString(ListSerializer(String.serializer()), raw) }.getOrNull()
             }.orEmpty(),
@@ -713,6 +716,7 @@ class Store(context: Context) {
             .putString("voiceInput", s.voiceInput)
             .apply { if (s.tabBar == null) remove("tabBar") else putString("tabBar", json.encodeToString(ListSerializer(String.serializer()), s.tabBar)) }
             .putString("pinnedPages", json.encodeToString(ListSerializer(String.serializer()), s.pinnedPages))
+            .putString("drawerOrder", json.encodeToString(ListSerializer(String.serializer()), s.drawerOrder))
             .putString("accent", s.accent)
             .putBoolean("bubbleAccent", s.bubbleAccent)
             .putBoolean("appLock", s.appLock)

@@ -406,6 +406,8 @@ data class Settings(
     val fontChoice: String = "",
     /** 底部标签栏除了「聊天」以外放哪些页面、什么顺序（KaviTab 的 id）；null 是默认那几个。 */
     val tabBar: List<String>? = null,
+    /** 侧边栏「其他」那组页面的顺序（KaviTab 的 id），用户拖过才有；空的是默认顺序。 */
+    val drawerOrder: List<String> = emptyList(),
     /** 放进侧边栏「我的页面」的小工具网页（相对对话文件夹根目录的路径，「对话id/名字.html」），按放进去的顺序。 */
     val pinnedPages: List<String> = emptyList(),
     /** 新手教学问过了（不管选的看不看）：不再自动问。 */

@@ -110,6 +110,8 @@ fun HistoryDrawer(
     onCloseDrawer: () -> Unit = {},
     /** 在侧边栏里拖动改了底栏。 */
     onSaveTabs: (List<String>) -> Unit = {},
+    /** 拖动改了「其他」那组的顺序。 */
+    onSaveOrder: (List<String>) -> Unit = {},
 ) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     var renaming by remember { mutableStateOf<Conversation?>(null) }
@@ -206,6 +208,8 @@ fun HistoryDrawer(
                             }
                         },
                         onSave = onSaveTabs,
+                        order = state.settings.drawerOrder,
+                        onSaveOrder = onSaveOrder,
                     )
                 }
                 // 我的页面：放进侧边栏的小工具网页（文件删了的不显示）

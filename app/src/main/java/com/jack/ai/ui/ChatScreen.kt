@@ -258,6 +258,7 @@ fun ChatScreen(
                 onSettings = { scope.launch { drawerState.close() }; onOpenSettings() },
                 onCloseDrawer = { scope.launch { drawerState.close() } },
                 onSaveTabs = { ids -> vm.updateSettings { it.copy(tabBar = ids) } },
+                onSaveOrder = { ids -> vm.updateSettings { it.copy(drawerOrder = ids) } },
             )
         },
     ) {

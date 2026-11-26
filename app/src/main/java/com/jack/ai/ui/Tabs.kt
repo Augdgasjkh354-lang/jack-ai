@@ -87,10 +87,11 @@ enum class KaviTab(val id: String, val label: String, val icon: ImageVector) {
             return (listOf(CHAT) + ids.mapNotNull { of(it) }.filter { it != CHAT && available(it) }.distinct()).take(MAX)
         }
 
-        /** 没放进底栏的。 */
-        fun others(saved: List<String>?): List<KaviTab> {
+        /** 没放进底栏的，按用户在侧边栏里拖好的顺序（[order]）；没排过的跟在后面，按默认顺序。 */
+        fun others(saved: List<String>?, order: List<String> = emptyList()): List<KaviTab> {
             val on = bar(saved).toSet()
-            return entries.filter { it !in on && available(it) }
+            val rest = entries.filter { it !in on && available(it) }
+            return rest.sortedBy { t -> order.indexOf(t.id).let { if (it < 0) order.size + rest.indexOf(t) else it } }
         }
     }
 }
@@ -205,6 +206,9 @@ internal fun TabArranger(
     dot: (KaviTab) -> Boolean = { false },
     onOpen: (KaviTab) -> Unit,
     onSave: (List<String>) -> Unit,
+    /** 「其他」那组的顺序（拖过就记下来，不然每次都回到默认顺序）。 */
+    order: List<String> = emptyList(),
+    onSaveOrder: (List<String>) -> Unit = {},
 ) {
     val colors = MaterialTheme.colorScheme
     val haptics = rememberHaptics()
@@ -213,7 +217,7 @@ internal fun TabArranger(
     val rowPx = with(density) { rowH.toPx() }
     // 一个格子一个位置：底栏的（不含聊天）、分界线、其他的。分界线也占一格，拖过它就换组
     val bar = KaviTab.bar(saved).drop(1)
-    val rest = KaviTab.others(saved)
+    val rest = KaviTab.others(saved, order)
     val slots: List<KaviTab?> = bar + listOf(null) + rest
     var dragging by remember { mutableStateOf<KaviTab?>(null) }
     var dy by remember { mutableFloatStateOf(0f) }
@@ -238,6 +242,7 @@ internal fun TabArranger(
             newRest = newBar.drop(KaviTab.MAX - 1) + newRest
             newBar = newBar.take(KaviTab.MAX - 1)
         }
+        onSaveOrder(newRest.map { it.id })
         onSave(newBar.map { it.id })
     }
 
