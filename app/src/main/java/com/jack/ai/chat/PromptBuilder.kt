@@ -198,7 +198,7 @@ object PromptBuilder {
             if (skills.isNotEmpty()) add(SkillTools.USE_SKILL)
             SkillTools.GOAL_TOOLS.forEach { add(it) } // 思路来自 deepseek-ai/deepseek-harness packages/goal/tool-goal/，MIT。
             add(SkillTools.RUN_CODE) // 思路来自 deepseek-ai/deepseek-harness packages/ptc-runtime/，MIT。
-            add(SkillTools.UPDATE_PLAN); add(SkillTools.DELEGATE_TASKS)
+            add(SkillTools.DELEGATE_TASKS)
             if (web) { add(SkillTools.WEB_SEARCH); add(SkillTools.READ_WEBPAGE) }
             val word = SkillIds.WORD in skillIds
             val pdf = SkillIds.PDF in skillIds
@@ -401,13 +401,6 @@ object PromptBuilder {
             parts += "固定说明" to f("【Ending a conversation】You may end this conversation with end_conversation, but only as a last resort: extreme, sustained abuse aimed at you (slurs, degrading insults, relentless harassment) that continues after you've clearly asked once for it to stop. " +
                 "Never for criticism of you, anger at a situation, swearing in passing, disagreement, dark or difficult topics, or venting. Never when {user} seems to be in crisis or might hurt themselves: then stay and help. " +
                 "Ending is final for this conversation only; a new conversation starts fresh, and you don't hold a grudge.")
-        }
-        if ("update_plan" in names) {
-            parts += "固定说明" to (if (conv.work) "【Task list】Start every task with update_plan: the steps and the acceptance criteria. "
-                else "【Task list】Only a big job with many separate steps (research across many sources, a multi-file report, a long batch of edits) starts with update_plan: the steps and the acceptance criteria. " +
-                    "Questions, quick lookups, casual talk, and a job done with one or two tool calls (a design or a series of designs, one document, one file edit) don't need one: the tools already check their own output. ") +
-                "Check criteria with what you already have (tool results, checks, previews); don't OCR or re-read files you just made only to verify them. " +
-                "Mark a step doing when you start it and done when it's finished; mark a criterion met only after checking the actual results."
         }
         if ("delegate_tasks" in names) {
             parts += "固定说明" to f("【Parallel work】When a task contains several independent pieces of research (e.g. looking into several companies or sources separately), send them out at once with delegate_tasks; it's faster than doing them one by one. Subtasks can research, read and write files in this folder, calculate and create documents. They can't see {user}'s chats, tables, email, calendar or Notion: handle anything private yourself and pass along only what a subtask needs. Coordinate shared filenames; sending email and other external changes stay with you.")

@@ -93,7 +93,6 @@ interface ToolUi {
     /** 能「以后都允许」的确认：不支持的界面（后台、远程、悬浮卡片）照普通确认问。 */
     suspend fun confirmAlways(title: String, body: String, action: String, always: AllowRule): Boolean = confirm(title, body, action)
     /** Work 模式的任务清单（步骤和验收标准）更新了。 */
-    fun plan(items: List<PlanItem>, criteria: List<PlanItem>) {}
     /** 要让用户一眼看到的事（比如 Kavi 改了自己），在回答里显示成一张小卡片。 */
     fun notice(text: String) {}
     /** 问题卡片（ask_user）挂到这条回答下面；返回 false 表示这里显示不了（后台、远程），让模型直接用文字问。 */
@@ -252,16 +251,10 @@ class ToolSession(
     internal val succeeded = java.util.concurrent.atomic.AtomicInteger()
     /** 这次回答一共调了几次工具（收尾关卡用：没动过工具的简单问答不用列清单）。 */
     val calls = java.util.concurrent.atomic.AtomicInteger()
-    /** 最近一次 update_plan 写下的步骤和验收标准。 */
-    @Volatile var steps: List<PlanItem> = emptyList()
-    @Volatile var criteria: List<PlanItem> = emptyList()
     /** 这次回答里各类失败出现了几次（见 [Failures]），同一类再出现时提示说得更重。 */
     val failures = java.util.concurrent.ConcurrentHashMap<Failures.Kind, Int>()
     /** 这次回答里工具结果、调用参数中出现过的链接（来源核对用，见 [Sources]）。 */
     val seenUrls: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
-    /** 开工前确认清单（Work 在聊天里、设置允许时由调用方给）：返回 true 就开始。 */
-    var planConfirm: (suspend (steps: List<PlanItem>, criteria: List<PlanItem>) -> Boolean)? = null
-    internal var planAsked = false
     /** 让模型停下时给它看的话（maxRounds 设成 0 之后，再调工具就回这句）。 */
     @Volatile var stopNote: String? = null
     /** 这次回答里已经在网页上提交过的（网站|按钮），同一个再点就是重复提交，要拦。 */
@@ -478,7 +471,8 @@ class ToolSession(
             name in FILE_TOOLS && FILE_TOOLS[name] in skillIds -> makeFile(name, args)
             name == "create_chart" && SkillIds.CALC in skillIds -> makeChart(args)
             name == "create_diagram" && SkillIds.CALC in skillIds -> makeDiagram(args)
-            name == "update_plan" -> updatePlan(args)
+            // 任务清单停用了（2026-11-26）：旧对话里模型照着历史还可能调，回一句让它接着做
+            name == "update_plan" -> { succeeded.incrementAndGet(); "任务清单功能已经停用，不用列清单，直接接着做。" }
             name == "delegate_tasks" -> delegateTasks(args)
             name in setOf("get_goal", "create_goal", "update_goal") -> goalTool(name, args)
             name == "run_code" -> runCode(args)
@@ -686,42 +680,6 @@ internal suspend fun ToolSession.recordSite(name: String, argsText: String, resu
     val ok = status == ToolStatus.OK && kind == null
     if (!ok && kind == null) return
     withContext(Dispatchers.IO) { runCatching { SiteNotes.record(app, host, if (ok) null else kind) } }
-}
-
-/** 清单有这么多步就算大任务，开工前先给用户确认（设置是 big 时）。 */
-internal const val CONFIRM_STEPS = 6
-
-internal suspend fun ToolSession.updatePlan(args: JsonObject): String {
-    fun list(key: String, ok: Set<String>, max: Int) = (args[key] as? JsonArray).orEmpty().mapNotNull { el ->
-        val o = el as? JsonObject ?: return@mapNotNull null
-        val text = o["text"].text().trim().ifBlank { return@mapNotNull null }
-        PlanItem(text.take(120), o["status"].text().takeIf { it in ok } ?: "pending")
-    }.take(max)
-    val items = list("items", setOf("pending", "doing", "done", "skipped"), 30)
-    if (items.isEmpty()) return "清单是空的"
-    // 验收标准没传就沿用上次的（模型更新步骤时常常只传 items）
-    val crit = if (args["criteria"] is JsonArray) list("criteria", setOf("pending", "met", "failed"), 10) else criteria
-    steps = items
-    criteria = crit
-    ui.plan(items, crit)
-    // 第一次写清单：大任务（或设置成每次）先给用户确认，不同意就停下问要怎么改
-    if (!planAsked) {
-        planAsked = true
-        val ask = planConfirm
-        val mode = settings.workConfirmPlan
-        val big = items.size >= CONFIRM_STEPS || args["confirm"].text() == "true"
-        if (ask != null && (mode == "always" || (mode == "big" && big)) && !ToolTimeout.waiting { ask(items, crit) }) {
-            succeeded.incrementAndGet()
-            maxRounds = 0
-            stopNote = Persona.fill("{User} wants to adjust the plan before you start. Don't call any more tools: show the steps and criteria briefly and ask what to change.", settings)
-            return stopNote!!
-        }
-    }
-    // 不走 runTool，自己记一次成功，工具统计里才不会算成失败
-    succeeded.incrementAndGet()
-    val done = items.count { it.status == "done" || it.status == "skipped" }
-    return "清单已更新（步骤 $done/${items.size} 完成" +
-        (if (crit.isEmpty()) "；还没写验收标准，补上 criteria" else "；验收标准 ${crit.count { it.status != "pending" }}/${crit.size} 已核对") + "）"
 }
 
 /** 浏览器的占用：谁占着（一个 ToolSession），没人占时排队的按先后拿到。 */

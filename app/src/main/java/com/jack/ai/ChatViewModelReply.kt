@@ -105,13 +105,6 @@ internal class ReplyToolUi(
         WorkService.progress(vm.getApplication(), convId, workTitle, label, tasked)
     }
 
-    override fun plan(items: List<com.jack.ai.data.PlanItem>, criteria: List<com.jack.ai.data.PlanItem>) {
-        vm.patchMessage(convId, replyId) { it.copy(plan = items, criteria = criteria) }
-        tasked = items.isNotEmpty()
-        val doing = items.firstOrNull { it.status == "doing" }?.text
-        WorkService.progress(vm.getApplication(), convId, workTitle,
-            "${items.count { it.status == "done" || it.status == "skipped" }}/${items.size}" + (doing?.let { " · $it" } ?: ""), true)
-    }
 
     override fun notice(text: String) = vm.patchMessage(convId, replyId) { it.copy(notices = it.notices + text) }
 

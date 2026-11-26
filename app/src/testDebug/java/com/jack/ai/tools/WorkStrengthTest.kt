@@ -47,78 +47,6 @@ class WorkStrengthTest {
     @Before fun clean() { File(ctx.filesDir, "site_notes.json").delete() }
 
     @Test
-    fun bigPlansAreConfirmedFirst() = runBlocking {
-        val s = session()
-        var shown = 0
-        s.planConfirm = { _, _ -> shown++; true }
-        s.execute("update_plan", plan(3))
-        assertEquals(0, shown)  // 小任务不问
-        val big = session()
-        big.planConfirm = { _, _ -> shown++; false }
-        val out = big.execute("update_plan", plan(6))
-        assertEquals(1, shown)
-        assertEquals(0, big.maxRounds)  // 不同意：停下问要怎么改
-        assertTrue(out.contains("Jack wants to adjust the plan"))
-        // 只在第一次写清单时问
-        big.maxRounds = Int.MAX_VALUE
-        big.execute("update_plan", plan(7))
-        assertEquals(1, shown)
-        // 模型觉得要问（要求含糊、花费大）：步骤少也问
-        val vague = session()
-        vague.planConfirm = { _, _ -> shown++; true }
-        vague.execute("update_plan", plan(2, confirm = true))
-        assertEquals(2, shown)
-        // 设成从不：不问
-        val never = session(Settings(apiKey = "k", workConfirmPlan = "never"))
-        never.planConfirm = { _, _ -> shown++; true }
-        never.execute("update_plan", plan(9))
-        assertEquals(2, shown)
-    }
-
-    @Test
-    fun chatOnlyGatesOnceKaviMakesAPlan() = runBlocking {
-        // Chat 和 Work 合并后：对话里没列清单就是问答或小事，不提醒、不拦收尾；列了清单才按清单收尾
-        val chat = ToolSession(BackgroundToolHost(ctx), Settings(apiKey = "k"), conv.copy(work = false), null, emptyList(), ui)
-        val gate = WorkGate(chat)
-        chat.calls.incrementAndGet()
-        assertEquals("", gate.reminder("web_search"))
-        assertNull(gate.beforeFinish("好的"))
-        chat.execute("update_plan", plan(3))
-        assertTrue(gate.beforeFinish("做完了")!!.contains("plan isn't complete"))
-    }
-
-    @Test
-    fun stallIsNoticedWhenThePlanDoesntMove() = runBlocking {
-        val s = session()
-        val gate = WorkGate(s)
-        s.execute("update_plan", plan(3))
-        gate.reminder("update_plan")
-        val notes = (1..WorkGate.STALL_CALLS).map { gate.reminder("web_search") }
-        assertTrue(notes.dropLast(1).all { it.isEmpty() })
-        assertTrue(notes.last().contains("without the plan moving forward"))
-        // 清单动了就重新计数
-        s.execute("update_plan", """{"items":[{"text":"第 1 步","status":"done"},{"text":"第 2 步","status":"doing"}]}""")
-        assertEquals("", gate.reminder("update_plan"))
-        assertEquals("", gate.reminder("web_search"))
-    }
-
-    @Test
-    fun linksMustHaveBeenSeen() = runBlocking {
-        val s = session()
-        val gate = WorkGate(s)
-        s.execute("update_plan", """{"items":[{"text":"搜","status":"done"}],"criteria":[{"text":"有来源","status":"met"}]}""")
-        s.seenUrls += "https://shop.example.com/item/42?ref=search"
-        // 见过的、对话里本来就有的、只写网站首页的都算有据；编出来的打回去
-        val back = gate.beforeFinish("对比见 https://shop.example.com/item/42?ref=search 、https://known.com/list 、https://shop.example.com ，还有 https://made-up.com/p/1")
-        assertTrue(back!!.contains("https://made-up.com/p/1"))
-        assertFalse(back.contains("known.com"))
-        assertFalse(back.contains("shop.example.com"))
-        assertTrue(notices.any { it.startsWith("来源核对") })
-        // 只核对一次
-        assertNull(gate.beforeFinish("还是 https://made-up.com/p/1"))
-    }
-
-    @Test
     fun siteTroubleIsRememberedForNextTime() = runBlocking {
         SiteNotes.record(ctx, "zhihu.com", Failures.Kind.LOGIN)
         SiteNotes.record(ctx, "zhihu.com", Failures.Kind.LOGIN)
@@ -130,22 +58,12 @@ class WorkStrengthTest {
     }
 
     @Test
-    fun resumedTasksKeepTheirPlan() {
-        val s = session()
-        val call = kotlinx.serialization.json.buildJsonObject {
-            put("role", "assistant")
-            put("tool_calls", kotlinx.serialization.json.buildJsonArray {
-                add(kotlinx.serialization.json.buildJsonObject {
-                    put("id", "c1"); put("type", "function")
-                    put("function", kotlinx.serialization.json.buildJsonObject {
-                        put("name", "update_plan")
-                        put("arguments", """{"items":[{"text":"搜","status":"done"},{"text":"做表","status":"doing"}],"criteria":[{"text":"5 家","status":"pending"}]}""")
-                    })
-                })
-            })
-        }
-        WorkGate.restorePlan(s, listOf(call))
-        assertEquals(listOf("done", "doing"), s.steps.map { it.status })
-        assertEquals("5 家", s.criteria.single().text)
+    fun planToolIsRetiredButOldCallsStillGetAnAnswer() = runBlocking {
+        // 任务清单停用了：旧对话里模型照着历史调 update_plan，回一句让它接着做，不报错
+        val out = session().execute("update_plan", plan(3))
+        assertTrue(out.contains("已经停用"))
+        // 手机上存的旧做事原则里那条「先用 update_plan」去掉，后面的重新编号
+        val old = "Work mode.\n\n1. Always start with update_plan: steps.\n2. Do the work.\n3. Check once."
+        assertEquals("Work mode.\n\n1. Do the work.\n2. Check once.", com.jack.ai.data.Persona.withoutPlanRule(old))
     }
 }

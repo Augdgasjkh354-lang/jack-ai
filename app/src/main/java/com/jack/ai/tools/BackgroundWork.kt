@@ -183,8 +183,6 @@ suspend fun runBackgroundWork(
     onSession(session)
     session.goalRun = goalId != null
     session.unlocked.addAll(conv.skillTools)
-    // 接着断点做：清单和验收标准从断点里找回来
-    if (resumed) WorkGate.restorePlan(session, messages)
     // 接着上次做：上次用 use_skill 打开过的技能，工具要接着带上
     if (resumed) TaskCheckpoint.skillsUsed(messages).forEach { name ->
         findSkill(skills, name)?.id?.takeIf { it in com.jack.ai.data.lazySkills(project, s) }?.let { id ->
@@ -195,10 +193,6 @@ suspend fun runBackgroundWork(
     val thinking = if (ep.reasoning && ep.deepseek) s.workThinking else ThinkLevel.OFF
     val client = DeepSeekClient()
     val agent = Agent({ msgs, t -> client.stream(ep, msgs, thinking, s.temperature, t) }, sendReasoning = ep.deepseek && thinking.effort != null)
-    // 定时的 Work 任务也过收尾关卡；监控、微信这类按固定格式回话的（带 brief）不过
-    val gate = if (brief == null) WorkGate(session, review = if (s.workReview) {
-        WorkGate.reviewer(session, DeepSeekClient(store.usage("交付前复核")), s.backgroundEndpoint() ?: ep, r.prompt.ifBlank { r.title }, startedAt)
-    } else null) else null
     // 思路来自 deepseek-ai/deepseek-harness packages/goal/goal-round-driver/，MIT。只观察本次会话占用的手机端口。
     val goalMonitor = if (goalId != null) kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.currentCoroutineContext()).launch {
         while (true) {
@@ -232,12 +226,11 @@ suspend fun runBackgroundWork(
                     com.jack.ai.data.Goals.change(ctx, conv.id) { it?.update("blocked", "需要用户解锁手机，请解锁后手动继续。") }
                     "手机已锁定，目标受阻，已通知用户。"
                 } else if (!allow(name, args)) "这个工具这次不能用。"
-                else session.perform(name, args).also { log(com.jack.ai.data.RunLog.stepOf(name, it.status, it.text)) }.text + (gate?.reminder(name) ?: "")
+                else session.perform(name, args).also { log(com.jack.ai.data.RunLog.stepOf(name, it.status, it.text)) }.text
             },
             retool = { toolsFor(session.unlocked.toSet()) },
             onTools = { TaskCheckpoint.save(checkpoint, cpKey, messages, spent, run = cpRun) },
             beforeTools = { TaskCheckpoint.save(checkpoint, cpKey, messages, spent, run = cpRun) },
-            beforeFinish = gate?.let { g -> { answer -> g.beforeFinish(answer) } },
             slim = { msgs -> com.jack.ai.chat.ContextSlim.slim(msgs) },
             beforeRequest = { _, _ ->
                 // 思路来自 deepseek-ai/deepseek-harness packages/goal/goal-round-driver/，MIT。每次模型请求前现读状态与月度预算。

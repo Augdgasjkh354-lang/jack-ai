@@ -58,8 +58,20 @@ object Persona {
      * work：后台任务（一开工就列清单）用 Work 的做事原则；对话用 developerPrompt 加 [TASK_RULES]（碰到大任务 Kavi 自己转成做事的做法）。
      * tasks：带不带 [TASK_RULES]（没有清单工具的后台检查不带）。
      */
+    /**
+     * 任务清单（update_plan）停用了：存在手机上的旧做事原则里还写着「先用 update_plan 列清单」那一条，去掉它、后面的重新编号，
+     * 免得模型去调一个已经没有的工具。
+     */
+    internal fun withoutPlanRule(text: String): String {
+        if ("update_plan" !in text) return text
+        var n = 0
+        return text.lines().filterNot { "update_plan" in it }.joinToString("\n") { line ->
+            Regex("^(\\d+)\\. ").find(line)?.let { m -> "${++n}. " + line.substring(m.value.length) } ?: line
+        }
+    }
+
     fun devBlock(s: Settings, work: Boolean, tasks: Boolean = true): String {
-        val principles = (if (work) s.workDeveloperPrompt.trim() else s.developerPrompt.trim() + if (tasks) "\n\n" + TASK_RULES else "")
+        val principles = withoutPlanRule(if (work) s.workDeveloperPrompt.trim() else s.developerPrompt.trim() + if (tasks) "\n\n" + TASK_RULES else "")
         val self = KaviSelf.text() + nameLine(s).let { if (it.isEmpty()) "" else "\n\n$it" }
         return fill(
             listOf(

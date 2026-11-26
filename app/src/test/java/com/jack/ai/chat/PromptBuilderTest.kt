@@ -308,10 +308,10 @@ class PromptBuilderTest {
         assertTrue(c.contains("【Lessons from past tasks】"))
         assertTrue(c.contains("报告用 Word 交"))
         assertTrue(c.contains("- work (lessons from past tasks"))
-        assertTrue("update_plan" in toolNames(chat))
+        // 任务清单（update_plan）停用了：不给工具，也不教列清单
+        assertFalse("update_plan" in toolNames(chat))
+        assertFalse(c.contains("update_plan"))
         assertTrue("delegate_tasks" in toolNames(chat))
-        // 要不要列清单 Kavi 自己判断：对话里是「好几步的任务才列」，带着做任务的原则
-        assertTrue(c.contains("Only a big job with many separate steps"))
         assertTrue(c.contains("switch into task mode"))
         // 隐私项目里不用做事经验
         val sealed = Project(name = "日记本", isolated = true)
@@ -320,7 +320,7 @@ class PromptBuilderTest {
     }
 
     @Test
-    fun backgroundTasksUseTheWorkPromptAndAlwaysPlan() {
+    fun backgroundTasksUseTheWorkPrompt() {
         val s2 = settings.copy(developerPrompt = "CHAT规则", workDeveloperPrompt = "WORK规则")
         val chat = Conversation()
         val bg = Conversation(work = true, ownLife = true)
@@ -328,8 +328,7 @@ class PromptBuilderTest {
         val bgSys = PromptBuilder.systemPrompt(s2, bg, null, tools(bg), memories, s2.activeSkills())
         assertTrue("CHAT规则" in chatSys && "WORK规则" !in chatSys)
         assertTrue("WORK规则" in bgSys && "CHAT规则" !in bgSys)
-        assertTrue("Start every task with update_plan" in bgSys)
-        assertFalse("Start every task with update_plan" in chatSys)
+        assertFalse("update_plan" in bgSys || "update_plan" in chatSys)
     }
 
     @Test

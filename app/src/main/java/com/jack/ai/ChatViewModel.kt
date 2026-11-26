@@ -505,31 +505,20 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     internal fun busy(convId: String) = jobs[convId]?.isActive == true
 
     /** 让 V4.1 Flash 复核最后一条回答，并给出改进版。 */
-    /** Work 的回答是不是被打断了：出错、没写出结论、或清单还有没做完的。 */
+    /** 回答是不是被打断了：出错、没写出结论。 */
     fun canContinue(m: ChatMessage): Boolean =
-        m.role == "assistant" && (m.error != null || m.content.isBlank() || m.plan.any { it.status != "done" })
+        m.role == "assistant" && (m.error != null || m.content.isBlank())
 
     /** Work 一时出错（网络、限流、服务端 5xx）才自动接着做；Key 不对、余额不足这类接了也没用。 */
     internal fun transient(e: Exception): Boolean = e is IOException || (e is ApiException && (e.code == 408 || e.code == 429 || e.code >= 500))
 
-    /** 断点续做：带上清单，让 AI 从没做完的那一步接着做。 */
+    /** 断点续做：让 AI 从没做完的地方接着做（已经做过的事列出来，免得重做）。 */
     fun continueWork(convId: String? = _state.value.currentId) {
         val conv = _state.value.conversations.firstOrNull { it.id == convId } ?: return
         if (busy(conv.id) || tooMany(conv.id)) return
         val last = conv.messages.lastOrNull { it.role == "assistant" } ?: return
-        val planMsg = conv.messages.lastOrNull { it.plan.isNotEmpty() }
-        val plan = planMsg?.plan.orEmpty()
         val extra = buildString {
             append("刚才的任务被打断了，请接着做完。已经做完的不要重做，文件夹里已有的文件先看一眼再决定。")
-            if (plan.isNotEmpty()) {
-                append("\n当时的清单：\n")
-                plan.forEach { append(if (it.status == "done") "- [完成] " else "- [没做完] ").append(it.text).append("\n") }
-                planMsg?.criteria?.takeIf { it.isNotEmpty() }?.let { c ->
-                    append("验收标准：\n")
-                    c.forEach { append(if (it.status == "met") "- [已满足] " else "- [未核对] ").append(it.text).append("\n") }
-                }
-                append("先用 update_plan 写出最新的清单和验收标准，再从没做完的那步开始。")
-            }
             last.error?.let { append("\n上次停下的原因：$it") }
             // 出错的回答不会发回给模型：把它已经发出去的邮件、写过的文件这些列出来，免得接着做时再来一遍
             append(com.jack.ai.chat.DoneSoFar.note(last.trail))
@@ -629,7 +618,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             }
             var filesDropped = false
             // Chat 和 Work 合并了：每个对话都能接长任务（花费到上限先问一声、断了自动接着做、压掉旧的大段工具结果）。
-            // 要不要列清单、复核由 Kavi 自己判断（调了 update_plan 就算在做任务，见 WorkGate）
             val work = true
             val workTitle = conv.title
             // 回答期间开前台服务，切到后台也接着跑
@@ -647,26 +635,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             session.canSee = ep.vision
             session.modelName = com.jack.ai.data.modelLabel(model)
             session.unlocked.addAll(unlockedStart)
-            // 开工前确认清单：只在新任务里问（接着做、复核时不问）
-            if (extraUser == null) session.planConfirm = { steps, criteria ->
-                if (!MainActivity.visible) com.jack.ai.data.Routines.notify(getApplication(), "work-ask-$convId",
-                    "需要你确认：$workTitle", "Kavi 列好了清单，等你点开始", openChat = convId)
-                ask(
-                    "开工前确认清单",
-                    steps.mapIndexed { i, s -> "${i + 1}. ${s.text}" }.joinToString("\n") +
-                        (if (criteria.isEmpty()) "" else "\n\n验收标准：\n" + criteria.joinToString("\n") { "· ${it.text}" }) +
-                        "\n\n不满意就点取消，告诉 Kavi 要怎么改。",
-                    "开始",
-                )
-            }
             val level = thinking
             val agent = Agent({ msgs, t -> client.stream(ep, msgs, level, settings.temperature, t) }, sendReasoning = thinkingOn, splitNotes = true)
-            // Work 的收尾关卡：清单没做完不让收尾；开着「交付前复核」再另起一次请求按验收标准查一遍
-            val gate = com.jack.ai.tools.WorkGate(session, review = if (settings.workReview) {
-                val reviewEp = settings.backgroundEndpoint() ?: ep
-                val request = conv.messages.lastOrNull { it.role == "user" }?.content.orEmpty()
-                com.jack.ai.tools.WorkGate.reviewer(session, DeepSeekClient { e, p, h, c -> core.recordSpend(convId, e, p, h, c, tag = "交付前复核") }, reviewEp, request, reply.createdAt)
-            } else null)
             // 插话队列就是这条活队列本身：上一条回答收尾时还没读到的插话，由这一条接着处理（回答结束时没用上的还会重发成新消息）。
             // 这里不能 clear()：上一条回答在收尾、新回答还没开始跑的窗口里，用户发的话会被 send() 当成插话塞进队列，clear 会把它静默丢掉
             val myInterjections = interjectionsOf(convId)
@@ -724,7 +694,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                             else session.maxRounds = 0
                         }
                         if (session.maxRounds == 0) session.stopNote ?: "用户让你先停下（花费到了上限）。不要再调用工具，直接说明目前做到哪一步、还差什么。"
-                        else session.execute(name, args) + gate.reminder(name)
+                        else session.execute(name, args)
                     },
                     onText = {
                         val now = System.currentTimeMillis()
@@ -761,7 +731,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     images = { session.takeImages() },
                     // use_skill 打开了新技能：下一轮把它的工具加上
                     retool = { PromptBuilder.toolSet(settings, skills, conv, project, session.unlocked.toSet()) },
-                    beforeFinish = { answer -> gate.beforeFinish(answer) },
                     slim = if (work) { msgs -> ContextSlim.slim(msgs) { com.jack.ai.data.Spill.save(wsDir, it) } } else null,
                     recovery = Agent.Recovery { tried ->
                         // 先怀疑图片编号失效（过期或被删）：清掉记录，改回内联图片再试一次

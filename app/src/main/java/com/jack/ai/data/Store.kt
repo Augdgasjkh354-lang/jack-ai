@@ -563,10 +563,8 @@ class Store(context: Context) {
             workCostLimit = prefs.getFloat("workCostLimit5", 5f).toDouble(),
             quotaFiveHours = prefs.getLong("quotaFiveHours", 2_000_000),
             quotaWeek = prefs.getLong("quotaWeek", 20_000_000),
-            workReview = prefs.getBoolean("workReview", true),
             thinkSummary = prefs.getBoolean("thinkSummary", true),
             summaryCollapsed = prefs.getBoolean("summaryCollapsed", false),
-            workConfirmPlan = prefs.getString("workConfirmPlan", "big") ?: "big",
             // 压缩门槛：200k 到 1M（换了个键，以前误拖到 50k 存下的旧值不再读）
             compressTokens = prefs.getInt("compressTokens2", COMPRESS_MIN).coerceIn(COMPRESS_MIN, COMPRESS_MAX),
             memoryEnabled = prefs.getBoolean("memoryEnabled", true),
@@ -690,10 +688,8 @@ class Store(context: Context) {
             .putFloat("workCostLimit5", s.workCostLimit.toFloat())
             .putLong("quotaFiveHours", s.quotaFiveHours)
             .putLong("quotaWeek", s.quotaWeek)
-            .putBoolean("workReview", s.workReview)
             .putBoolean("thinkSummary", s.thinkSummary)
             .putBoolean("summaryCollapsed", s.summaryCollapsed)
-            .putString("workConfirmPlan", s.workConfirmPlan)
             .putInt("compressTokens2", s.compressTokens.coerceIn(COMPRESS_MIN, COMPRESS_MAX))
             .putBoolean("memoryEnabled", s.memoryEnabled)
             .putBoolean("dreamEnabled", s.dreamEnabled)

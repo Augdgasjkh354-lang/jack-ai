@@ -322,10 +322,6 @@ fun AssistantMessage(
     val wasLive = remember(msg.id) { booleanArrayOf(false) }
     if (streaming) wasLive[0] = true
     Column(Modifier.fillMaxWidth()) {
-        if (msg.plan.isNotEmpty()) {
-            PlanCard(msg.plan, msg.cost, msg.criteria)
-            Spacer(Modifier.height(10.dp))
-        }
         // 回答正文出来之前都算「还在忙」：思考框、工具框在这段时间里保持同一个样子，
         // 不随每次工具调用开始/结束来回切换（以前切一次高度就变一次，屏幕跟着一闪一闪）
         val busy = streaming && msg.content.isEmpty()
