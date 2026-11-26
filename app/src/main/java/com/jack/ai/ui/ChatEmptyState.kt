@@ -200,7 +200,7 @@ internal fun EmptyState(
                 .padding(horizontal = 4.dp, vertical = 2.dp),
         )
         Spacer(Modifier.weight(1f))
-        // 一大堆建议像弹幕一样从右往左慢慢飘，点哪条就把哪条发出去；Kavi 用问题卡片把要知道的问清楚
+        // 一大堆建议像弹幕一样从右往左慢慢飘，点哪条就把哪条填进输入框
         if (state.settings.bizStarts) {
             androidx.compose.runtime.key(conv?.id) {
                 Box(Modifier.appear(order = 2).layout { m, c ->
@@ -212,7 +212,8 @@ internal fun EmptyState(
                     // 每次打开空白页都重新随机：固定的那些加上 Kavi 自己想的，打乱了分到几行
                     val ai by com.jack.ai.data.AiStarts.items.collectAsState()
                     val seed = remember(conv?.id) { kotlin.random.Random.nextInt() }
-                    Danmaku(remember(seed, ai) { danmakuLanes(com.jack.ai.data.BizStarts.DRIFT + ai, seed) }) { b -> vm.send(b.prompt) }
+                    // 点了先填进输入框、弹出键盘：改两个字（换成自己的产品、加上要求）再发，不直接替用户发出去
+                    Danmaku(remember(seed, ai) { danmakuLanes(com.jack.ai.data.BizStarts.DRIFT + ai, seed) }) { b -> ChatFocus.prefill = b.prompt }
                 }
             }
         }
