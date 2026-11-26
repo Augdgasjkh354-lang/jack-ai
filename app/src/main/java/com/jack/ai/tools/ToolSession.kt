@@ -198,6 +198,10 @@ class ToolSession(
     @Volatile internal var phoneLimitStop: String? = null
     /** 上一次 phone 调用做成了没有（steps 一串动作靠它决定要不要接着做）。 */
     @Volatile internal var phoneStepOk = false
+    /** 正在 steps / each 里面（里面的单步不算进逐条重复的识别）。 */
+    @Volatile internal var phoneBatchDepth = 0
+    /** 认「一条一条点开 → 做 → 返回」，重复了就提醒用 each（每轮最多提醒一次）。 */
+    internal val phoneRepeats = PhoneEach.RepeatDetector()
     /** 这一轮做成的手机动作（按字找的写法，JSON），存手机流程时拿来当能重放的路线。 */
     internal val phoneTrail = java.util.Collections.synchronizedList(mutableListOf<String>())
     /** 这一轮读到过的屏幕上的字（手机操作考试核对回答是不是真看到的）。 */

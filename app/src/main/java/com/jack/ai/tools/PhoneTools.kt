@@ -52,6 +52,7 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
     // 存流程、读流程不用碰屏幕
     if (action == "flow" || action == "save_flow") return phoneFlow(action, args)
     if (action == "steps") return phoneSteps(args)
+    if (action == "each") return phoneEach(args)
     if (action == "replay") return phoneReplay(args)
     val openWant = if (action == "open") args["app"].text().trim() else ""
     val openPkg = if (action == "open") {
@@ -590,6 +591,8 @@ internal suspend fun ToolSession.phone(args: JsonObject): String {
         text to SearchRecord(toolLabel)
     }
     if (phoneStepOk) rec?.let { phoneTrail += it.toString() }
+    // 模型自己一条一条地「点开 → 做 → 返回」：重复三遍时提醒一次改用 each（steps、each 里面的不算）
+    if (phoneBatchDepth == 0 && phoneRepeats.feed(action, phoneStepOk)) return out + "\n\n" + PhoneEach.NUDGE
     return out
 }
 
@@ -604,9 +607,27 @@ private suspend fun ToolSession.phoneSteps(args: JsonObject, max: Int = 12): Str
     val steps = (args["actions"] as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { it as? JsonObject }
     if (steps.isEmpty()) return "actions 要填动作数组，比如 [{\"action\":\"open\",\"app\":\"微信\",\"expect\":\"通讯录\"},{\"action\":\"tap\",\"text\":\"搜索\"}]"
     if (steps.size > max) return "一次最多 $max 步，分几次做。"
+    stepsProblem(steps)?.let { return "steps 里$it" }
+    val r = runPhoneSteps(steps)
+    val screen = r.last.indexOf("【手机屏幕】").takeIf { it >= 0 }?.let { r.last.substring(it) } ?: phone(buildJsonObject { put("action", "read") })
+    return "连着做了 ${r.lines.count { !it.startsWith("   ") }}/${steps.size} 步" + (if (r.stop.isNotEmpty()) "（${r.stop}）" else "") + "：\n" +
+        r.lines.joinToString("\n") + "\n\n" + screen
+}
+
+internal fun stepsProblem(steps: List<JsonObject>): String? =
     steps.firstOrNull { it["action"].text() !in PHONE_BATCHABLE }?.let {
-        return "steps 里只能用 " + PHONE_BATCHABLE.joinToString("、") + "；「${it["action"].text()}」要单独调用。"
+        "只能用 " + PHONE_BATCHABLE.joinToString("、") + "；「${it["action"].text()}」要单独调用。"
     }
+
+/** 一串动作做下来：每步一行记录、停在哪（空的是全做完了）、最后一次调用的返回（里面带着当前屏幕）。 */
+internal class StepsRun(val lines: List<String>, val stop: String, val last: String) { val ok get() = stop.isEmpty() }
+
+internal suspend fun ToolSession.runPhoneSteps(steps: List<JsonObject>): StepsRun {
+    phoneBatchDepth++
+    try { return runPhoneStepsInner(steps) } finally { phoneBatchDepth-- }
+}
+
+private suspend fun ToolSession.runPhoneStepsInner(steps: List<JsonObject>): StepsRun {
     val lines = mutableListOf<String>()
     var stop = ""
     var last = ""
@@ -634,9 +655,7 @@ private suspend fun ToolSession.phoneSteps(args: JsonObject, max: Int = 12): Str
             if (!phoneStepOk) { stop = "第 ${i + 1} 步之后没等到，后面的没做"; break }
         }
     }
-    val screen = last.indexOf("【手机屏幕】").takeIf { it >= 0 }?.let { last.substring(it) } ?: phone(buildJsonObject { put("action", "read") })
-    return "连着做了 ${lines.count { !it.startsWith("   ") }}/${steps.size} 步" + (if (stop.isNotEmpty()) "（$stop）" else "") + "：\n" +
-        lines.joinToString("\n") + "\n\n" + screen
+    return StepsRun(lines, stop, last)
 }
 
 /**

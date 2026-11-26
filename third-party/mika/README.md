@@ -85,3 +85,15 @@ Jack AI 适配（2026-11-02）：
 - Jack AI modification：BOSS 直聘 `APP.md` 保留 Kavi 加的 `background`、`signed_out` 两项；`AppUsageNotes` 按 `domains` 把网站知识转成内置网站备忘（子域名也算，最具体的优先，每个网站一份），正文提到的 `references/*.md` 直接附在后面，因为 Kavi 没有单独读附件的工具。`index.txt` 自建，用于枚举资源。
 - BOSS 直聘网站知识里提到的 `web_capture` 是 Mika 的工具名；Kavi 里对应的是浏览器读接口（`extract`）。
 
+
+## App 与网站知识更新（2026-11-26）
+
+- 固定来源提交：`148fb782efd7c5de7f84256f56a46737c8afae7a`（Mika，Apache-2.0）。
+- `knowledge/apps/` 到 49 份上游 `APP.md`（新增 Amazon、ChatGPT、Discord、GitHub、Google 日历、Google 地图、Instagram、Netflix、Reddit、Slack、Spotify、TikTok、YouTube；BOSS 直聘补了界面、功能、常用流程和 `references/job-application.md`，微信同步上游），加上 Kavi 自己的剪映共 50 份；`knowledge/sites/` 7 份 `SITE.md` 同步上游。知识正文未改动。
+- Jack AI modification：BOSS 直聘 `APP.md` 继续保留 Kavi 加的 `background`、`signed_out` 两项；`index.txt` 重新生成。
+
+## 逐条做（phone action=each，2026-11-26，参考实现）
+
+- 参考同一提交的 `core/cap/phone/DoEach.kt`、`core/agent/EachCursor.kt`（ScrollCursor）、`core/agent/EachLoopDetector.kt` 与 `openspec/changes/feat-do-each-loop`。没有复制上游文件，按 Kavi 的手机工具重写在 `app/.../tools/PhoneEach.kt`，文件头注明思路出处。
+- 条目按「类型|文字」认（编号每次读屏会变），body 复用 steps 的动作，"@item" 换成这一条的编号；该问用户的照样问、节奏照样等。翻页到底、做满上限、用户停止、做完一条回不到列表都会停下，只交一份摘要。
+- 模型自己「点开 → 做 → 返回」连续重复三遍时，在结果后提醒一次改用 each（同上游 EachLoopDetector 的识别形状）。

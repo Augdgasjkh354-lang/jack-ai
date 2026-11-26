@@ -12,7 +12,7 @@ class AppUsageNotesTest {
         fun resource(path: String) = javaClass.getResourceAsStream("/knowledge/apps/$path")!!
             .bufferedReader(Charsets.UTF_8).use { it.readText() }
         val ids = resource("index.txt").lineSequence().filter { it.isNotBlank() }.toList()
-        assertEquals(37, ids.size)
+        assertEquals(50, ids.size)
         ids.forEach { id ->
             val parts = resource("$id/APP.md").split("---", limit = 3)
             val metadata = Yaml().load<Map<String, Any>>(parts[1])
