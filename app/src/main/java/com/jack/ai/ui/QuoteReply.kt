@@ -44,8 +44,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 
-// 引用 AI 的回答：选一段（或整条）放到输入框上面，发出去时带在消息前面（Markdown 的「> 」引用），
-// Kavi 就知道你说的是哪一句。
+// 引用 AI 的回答：长按回答里的字选一段，弹出的菜单里点「引用」，放到输入框上面；
+// 发出去时带在消息前面（Markdown 的「> 」引用），Kavi 就知道你说的是哪一句。
 
 /** 引用条最多带多少字：整条长回答也能引，但太长的截掉，免得一条消息全是引用。 */
 internal const val QUOTE_MAX = 3000
@@ -66,54 +66,6 @@ internal fun splitQuote(content: String): Pair<String?, String> {
     val quote = lines.take(n).joinToString("\n") { it.removePrefix(">").removePrefix(" ") }.trim()
     val rest = lines.drop(n).joinToString("\n").trim()
     return quote.ifEmpty { null } to rest
-}
-
-/**
- * 选要引用的那一段：全文铺开，长按拖着选，底下「引用选中的」；不选就是「引用整条」。
- * 用只读输入框显示，选中的范围看得见，系统的复制菜单照样能用。
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-internal fun QuotePicker(text: String, onDismiss: () -> Unit, onQuote: (String) -> Unit) {
-    var field by remember { mutableStateOf(TextFieldValue(text)) }
-    val colors = MaterialTheme.colorScheme
-    val sel = field.selection
-    val picked = if (sel.collapsed) "" else text.substring(sel.min.coerceIn(0, text.length), sel.max.coerceIn(0, text.length)).trim()
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = {
-                        Column {
-                            Text("引用", style = MaterialTheme.typography.titleMedium)
-                            Text("长按拖着选一段；不选就引用整条", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
-                        }
-                    },
-                    navigationIcon = { IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, "关闭") } },
-                )
-            },
-            bottomBar = {
-                Surface(color = colors.surfaceContainer) {
-                    Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End), verticalAlignment = Alignment.CenterVertically) {
-                        if (picked.isNotEmpty()) Text("选了 ${picked.length} 字", style = MaterialTheme.typography.labelMedium,
-                            color = colors.onSurfaceVariant, modifier = Modifier.weight(1f))
-                        if (picked.isNotEmpty()) TextButton(onClick = { field = field.copy(selection = TextRange(0)) }) { Text("取消选择") }
-                        Button(onClick = { onQuote(picked.ifEmpty { text.trim() }) }) { Text(if (picked.isNotEmpty()) "引用选中的" else "引用整条") }
-                    }
-                }
-            },
-        ) { padding ->
-            BasicTextField(
-                value = field,
-                // 只读：字不会变，只接选中范围的变化
-                onValueChange = { field = it.copy(text = text) },
-                readOnly = true,
-                textStyle = MaterialTheme.typography.bodyLarge.copy(color = colors.onSurface),
-                modifier = Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-            )
-        }
-    }
 }
 
 /** 输入框上面那条「引用」：左边一道竖线，引的话露两行，右边叉掉。点一下看全文。 */
@@ -142,4 +94,104 @@ internal fun QuoteText(quote: String, color: Color, modifier: Modifier = Modifie
         Spacer(Modifier.width(8.dp))
         Text(quote, style = MaterialTheme.typography.bodySmall, color = color, maxLines = maxLines, overflow = TextOverflow.Ellipsis)
     }
+}
+
+/**
+ * 回答正文的选字区外面套这个：长按选字弹出的菜单是「复制、引用、全选」。
+ * 选中的字从哪来：点「引用」时让选字区照常「复制」，但这次的复制被这里接住交给 [onQuote]，不进系统剪贴板。
+ */
+@Composable
+internal fun QuoteSelection(onQuote: ((String) -> Unit)?, content: @Composable () -> Unit) {
+    if (onQuote == null) { content(); return }
+    val view = androidx.compose.ui.platform.LocalView.current
+    val real = androidx.compose.ui.platform.LocalClipboardManager.current
+    val latest = androidx.compose.runtime.rememberUpdatedState(onQuote)
+    val toolbar = remember(view) { QuoteToolbar(view) }
+    val clipboard = remember(real, toolbar) {
+        object : androidx.compose.ui.platform.ClipboardManager by real {
+            override fun setText(annotatedString: androidx.compose.ui.text.AnnotatedString) {
+                if (toolbar.capturing) {
+                    toolbar.capturing = false
+                    annotatedString.text.trim().takeIf { it.isNotEmpty() }?.let { latest.value(it) }
+                } else real.setText(annotatedString)
+            }
+        }
+    }
+    androidx.compose.runtime.CompositionLocalProvider(
+        androidx.compose.ui.platform.LocalTextToolbar provides toolbar,
+        androidx.compose.ui.platform.LocalClipboardManager provides clipboard,
+        content = content,
+    )
+}
+
+/** 选字时浮在字上面的那排按钮（系统的浮动菜单），比 Compose 自带的多一个「引用」。 */
+internal class QuoteToolbar(private val view: android.view.View) : androidx.compose.ui.platform.TextToolbar {
+    /** 正在为「引用」复制：下一次写剪贴板改成交给引用。 */
+    var capturing = false
+    private var mode: android.view.ActionMode? = null
+    private var rect = androidx.compose.ui.geometry.Rect.Zero
+    private var onCopy: (() -> Unit)? = null
+    private var onSelectAll: (() -> Unit)? = null
+    override var status = androidx.compose.ui.platform.TextToolbarStatus.Hidden
+        private set
+
+    private val callback = object : android.view.ActionMode.Callback2() {
+        override fun onCreateActionMode(m: android.view.ActionMode, menu: android.view.Menu): Boolean { fill(menu); return true }
+        override fun onPrepareActionMode(m: android.view.ActionMode, menu: android.view.Menu): Boolean { menu.clear(); fill(menu); return true }
+        override fun onActionItemClicked(m: android.view.ActionMode, item: android.view.MenuItem): Boolean {
+            when (item.itemId) {
+                COPY -> onCopy?.invoke()
+                QUOTE -> quote()
+                ALL -> { onSelectAll?.invoke(); return true }
+            }
+            m.finish()
+            return true
+        }
+        override fun onDestroyActionMode(m: android.view.ActionMode) {
+            mode = null
+            status = androidx.compose.ui.platform.TextToolbarStatus.Hidden
+        }
+        override fun onGetContentRect(m: android.view.ActionMode, v: android.view.View, out: android.graphics.Rect) {
+            out.set(rect.left.toInt(), rect.top.toInt(), rect.right.toInt(), rect.bottom.toInt())
+        }
+    }
+
+    /** 点了「引用」：让选字区复制一次，这次复制被 [QuoteSelection] 接住。 */
+    internal fun quote() { capturing = true; onCopy?.invoke(); capturing = false }
+
+    private fun fill(menu: android.view.Menu) {
+        if (onCopy != null) {
+            menu.add(0, COPY, 0, "复制").setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_ALWAYS)
+            menu.add(0, QUOTE, 1, "引用").setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_ALWAYS)
+        }
+        if (onSelectAll != null) menu.add(0, ALL, 2, "全选").setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_ALWAYS)
+    }
+
+    override fun showMenu(
+        rect: androidx.compose.ui.geometry.Rect,
+        onCopyRequested: (() -> Unit)?,
+        onPasteRequested: (() -> Unit)?,
+        onCutRequested: (() -> Unit)?,
+        onSelectAllRequested: (() -> Unit)?,
+    ) {
+        this.rect = rect
+        onCopy = onCopyRequested
+        onSelectAll = onSelectAllRequested
+        val m = mode
+        if (m == null) {
+            status = androidx.compose.ui.platform.TextToolbarStatus.Shown
+            mode = view.startActionMode(callback, android.view.ActionMode.TYPE_FLOATING)
+        } else {
+            m.invalidate()
+            m.invalidateContentRect()
+        }
+    }
+
+    override fun hide() {
+        status = androidx.compose.ui.platform.TextToolbarStatus.Hidden
+        mode?.finish()
+        mode = null
+    }
+
+    private companion object { const val COPY = 1; const val QUOTE = 2; const val ALL = 3 }
 }

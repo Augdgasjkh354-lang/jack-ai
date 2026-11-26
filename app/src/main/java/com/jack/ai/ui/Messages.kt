@@ -312,10 +312,6 @@ fun AssistantMessage(
     var pickModel by remember { mutableStateOf(false) }
     var selecting by remember { mutableStateOf(false) }
     if (selecting) TextViewer("选择文字", load = { markdownToPlain(msg.content) to false }, onDismiss = { selecting = false })
-    var quoting by remember { mutableStateOf(false) }
-    if (quoting && onQuote != null) QuotePicker(remember(msg.content) { markdownToPlain(msg.content) }, onDismiss = { quoting = false }) { q ->
-        quoting = false; onQuote(q)
-    }
     var reporting by remember { mutableStateOf(false) }
     if (reporting && onReport != null) {
         var note by remember { mutableStateOf("") }
@@ -371,12 +367,15 @@ fun AssistantMessage(
         // 回答按打字的节奏柔和地放出来（思考框照原速）；按段渲染，写完的段落不再重排
         val shown = rememberRevealedText(msg.id, msg.content, streaming)
         if (shown.isNotEmpty()) {
-            MarkdownBlocks(
-                markdown = shown,
-                color = colors.onSurface,
-                codeBackground = colors.surfaceVariant,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            // 长按选字：弹出的菜单里有「引用」，选的那段放到输入框上面接着问（写完才能引）
+            QuoteSelection(onQuote.takeIf { !streaming }) {
+                MarkdownBlocks(
+                    markdown = shown,
+                    color = colors.onSurface,
+                    codeBackground = colors.surfaceVariant,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         } else if (streaming && msg.reasoning.isEmpty() && msg.searches.isEmpty()) {
             // 只在什么都还没有的最开始亮这颗星；有了工具框，转圈挪到工具框的标题上，不再一会儿出一会儿没
             BreathingStar(size = 22.dp)
@@ -488,12 +487,6 @@ fun AssistantMessage(
                 Box {
                     SmallAction(Icons.Default.MoreVert, "更多") { more = true }
                     DropdownMenu(expanded = more, onDismissRequest = { more = false }) {
-                        // 引用其中一段（或整条）接着问：Kavi 知道你说的是哪句
-                        if (onQuote != null && msg.content.isNotEmpty()) DropdownMenuItem(
-                            text = { Text("引用") },
-                            leadingIcon = { Icon(AppIcons.Quote, null) },
-                            onClick = { more = false; quoting = true },
-                        )
                         if (msg.content.isNotEmpty()) {
                             val speaking = Speaker.speakingId == msg.id
                             DropdownMenuItem(
