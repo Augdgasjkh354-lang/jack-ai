@@ -71,7 +71,6 @@ sealed interface Screen {
     data object Review : Screen
     data object Apps : Screen
     data object Games : Screen
-    data object Poker : Screen
     data object Downloads : Screen
     data object Files : Screen
     data class ProjectPage(val id: String) : Screen
@@ -407,9 +406,7 @@ class MainActivity : FragmentActivity() {
                         Screen.Review -> ReviewScreen(vm = vm, state = state, onBack = back)
                         Screen.Apps -> com.jack.ai.ui.AppsScreen(state = state, onBack = back, onOpenChat = { id -> vm.select(id); stack.clear() })
                         Screen.Downloads -> com.jack.ai.ui.DownloadsScreen(onBack = back)
-                        Screen.Games -> com.jack.ai.ui.GamesScreen(vm = vm, state = state, onBack = back,
-                            onOpenPoker = { stack.add(Screen.Poker) }, onOpenChat = { stack.clear() })
-                        Screen.Poker -> com.jack.ai.ui.PokerScreen(state = state, onBack = back)
+                        Screen.Games -> com.jack.ai.ui.GamesScreen(vm = vm, state = state, onBack = back, onOpenChat = { stack.clear() })
                         Screen.Files -> com.jack.ai.ui.FileLibraryScreen(state = state, onBack = back, onOpenChat = { id -> vm.select(id); stack.clear() })
                         Screen.Memory -> MemoryScreen(vm = vm, state = state, onBack = back)
                         Screen.Skills -> SkillsScreen(vm = vm, settings = state.settings, onBack = back)

@@ -187,6 +187,35 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(currentId = null, draftProjectId = projectId, pending = emptyList()) }
     }
 
+    /**
+     * App 自带的网页游戏（德州扑克）：放在一个专门的对话里，文件就在那个对话的文件夹，Kavi 在那里能直接改它。
+     * 第一次打开时建对话、从安装包里拷出游戏；[reset] 是「恢复原版」，用安装包里的覆盖掉改过的。返回游戏文件。
+     */
+    fun ensureGame(game: com.jack.ai.data.games.BuiltinGame, reset: Boolean = false): java.io.File {
+        val app = getApplication<Application>()
+        val dir = Workspace.dir(app, game.convId)
+        val file = java.io.File(dir, game.title + ".html")
+        if (reset || !file.exists()) {
+            dir.mkdirs()
+            val html = app.assets.open(game.asset).bufferedReader().use { it.readText() }
+            com.jack.ai.data.SafeFile.writeText(file, html)
+            // 记成 create_app 做的小工具：Kavi 用 edit_file 改的就是它
+            Workspace.saveSource(file, "create_app", kotlinx.serialization.json.buildJsonObject {
+                put("title", game.title); put("html", html)
+            })
+            // 恢复原版时把存的进度也清掉（改过的游戏存的格式可能对不上）
+            if (reset) java.io.File(dir, ".appdata/${file.name}.json").delete()
+        }
+        if (_state.value.conversations.none { it.id == game.convId }) {
+            val intro = ChatMessage(role = "assistant", content = game.intro,
+                files = listOf(com.jack.ai.data.GeneratedFile(file.name, file.absolutePath, "text/html", file.length())))
+            val c = Conversation(id = game.convId, title = game.title, messages = listOf(intro))
+            _state.update { it.copy(conversations = it.conversations + c) }
+            persist()
+        }
+        return file
+    }
+
     fun select(id: String) {
         if (id != _state.value.currentId) handoff(_state.value.currentId)
         _state.update { it.copy(currentId = id, pending = emptyList()) }

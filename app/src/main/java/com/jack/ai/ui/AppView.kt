@@ -54,6 +54,9 @@ import com.jack.ai.data.Verify
 import java.io.ByteArrayInputStream
 import java.io.File
 import com.jack.ai.data.backgroundEndpoint
+import com.jack.ai.data.backgroundModelKey
+import com.jack.ai.data.endpoint
+import com.jack.ai.data.modelChoices
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.put
 
@@ -79,9 +82,11 @@ private class AppBridge(
 ) {
     private val main = Handler(Looper.getMainLooper())
     private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
-    /** jack.ask 的上下文：网页里的游戏和 Kavi 来回说的，只往后加（缓存接得上）；system 换了就重来。 */
-    private var mind: com.jack.ai.data.games.GameMind? = null
-    private var mindSystem = ""
+    /**
+     * jack.ask 的上下文：按 seat 分开（牌桌上每个对手一份，互不相通），只往后加（缓存接得上）；
+     * 这个 seat 的 system 或模型换了就重来。
+     */
+    private val minds = HashMap<String, Pair<String, com.jack.ai.data.games.GameMind>>()
     private val inFlight = java.util.concurrent.atomic.AtomicInteger()
 
     /**
@@ -98,13 +103,22 @@ private class AppBridge(
                 val system = o.optString("system").take(4000).ifBlank { "你在一个手机小游戏里陪用户玩。回答简短，照游戏要的格式回。" }
                 val keep = o.optBoolean("keep", true)
                 val max = o.optInt("max", 300).coerceIn(16, 800)
-                val ep = com.jack.ai.data.Store(c).loadSettings().let { it.backgroundEndpoint() }
+                val settings = com.jack.ai.data.Store(c).loadSettings()
+                // 指定了模型（设置里能用的那些）就用它，不带主模型的备用；没指定用后台模型
+                val model = o.optString("model")
+                val ep = (if (model.isNotBlank() && settings.modelChoices().any { it.key == model })
+                    settings.endpoint(model)?.takeIf { it.apiKey.isNotBlank() }?.copy(fallbacks = emptyList()) else null)
+                    ?: settings.backgroundEndpoint()
                     ?: return@launch done(id, false, "还没设置能用的模型")
-                val m = synchronized(this@AppBridge) {
-                    if (!keep) null else mind?.takeIf { mindSystem == system } ?: com.jack.ai.data.games.GameMind(c, ep, system, "游戏 · 小游戏").also { mind = it; mindSystem = system }
+                val label = "游戏 · " + app.nameWithoutExtension
+                val seat = o.optString("seat")
+                val m = if (!keep) null else synchronized(minds) {
+                    val sig = system + "\u0000" + ep.key
+                    minds[seat]?.takeIf { it.first == sig }?.second
+                        ?: com.jack.ai.data.games.GameMind(c, ep, system, label).also { minds[seat] = sig to it }
                 }
                 val text = if (m != null) m.ask(prompt.take(6000), maxTokens = max, json = o.optBoolean("json", false))
-                else com.jack.ai.api.DeepSeekClient(com.jack.ai.data.Store(c).usage("游戏 · 小游戏")).complete(ep,
+                else com.jack.ai.api.DeepSeekClient(com.jack.ai.data.Store(c).usage(label)).complete(ep,
                     listOf(kotlinx.serialization.json.buildJsonObject { put("role", "system"); put("content", system) },
                         kotlinx.serialization.json.buildJsonObject { put("role", "user"); put("content", prompt.take(6000)) }),
                     maxTokens = max, jsonMode = o.optBoolean("json", false))
@@ -115,6 +129,16 @@ private class AppBridge(
                 inFlight.decrementAndGet()
             }
         }
+    }
+
+    /** 网页里的 jack.models()：设置里能用的模型（给游戏挑对手用的模型），def 是后台模型。 */
+    @JavascriptInterface
+    fun models(): String {
+        val c = ctx ?: return "{\"list\":[],\"def\":\"\"}"
+        val s = com.jack.ai.data.Store(c).loadSettings()
+        val list = org.json.JSONArray()
+        s.modelChoices().forEach { m -> list.put(org.json.JSONObject().put("key", m.key).put("label", m.label).put("provider", m.group)) }
+        return org.json.JSONObject().put("list", list).put("def", s.backgroundModelKey().orEmpty()).toString()
     }
 
     private fun done(id: String, ok: Boolean, text: String) {
@@ -142,6 +166,7 @@ private class AppBridge(
 private const val SHIM = """<script>
 window.jack={save:function(o){try{JackBridge.save(JSON.stringify(o))}catch(e){}},load:function(){try{var s=JackBridge.load();return s?JSON.parse(s):null}catch(e){return null}},
 _n:0,_cb:{},ask:function(p,o){return new Promise(function(res,rej){var id='q'+(++jack._n);jack._cb[id]=[res,rej];try{JackBridge.ask(id,String(p),JSON.stringify(o||{}))}catch(e){delete jack._cb[id];rej(e)}})},
+models:function(){try{return JSON.parse(JackBridge.models())}catch(e){return {list:[],def:''}}},
 _done:function(id,ok,t){var c=jack._cb[id];if(!c)return;delete jack._cb[id];if(ok)c[0](t);else c[1](new Error(t))}};
 window.addEventListener('error',function(e){try{JackBridge.error((e.message||'出错了')+(e.lineno?'（第 '+e.lineno+' 行）':''))}catch(_){}});
 (function(){var last=0;function h(){try{var v=Math.ceil(document.documentElement.scrollHeight);if(v!==last){last=v;JackBridge.height(v)}}catch(e){}}

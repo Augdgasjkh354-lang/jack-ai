@@ -1,0 +1,592 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="kavi-kind" content="game">
+<title>德州扑克</title>
+<!--
+  德州扑克（Kavi 自带的网页游戏，可以让 Kavi 改）。
+  结构：
+  - ENGINE：牌局规则（发牌、下注、边池、比牌），纯逻辑，不碰界面；
+  - AI：对手怎么出牌。每个对手用 jack.ask 问自己的模型（seat 不同 = 上下文各自独立），
+        每次只发上次之后桌上新发生的事，回一个很短的 JSON；出错、超时就用规则机器人兜底；
+  - UI：牌桌、座位、按钮。
+  改的时候：规则改 ENGINE，对手的性格和说话改 STYLES / systemFor，样子改 CSS 和 render*。
+-->
+<style>
+  :root {
+    --bg1: #0e1f18; --bg2: #07120d;
+    --felt1: #2b8a57; --felt2: #1b6b42; --felt3: #0f4a2d;
+    --rail1: #4a3424; --rail2: #2a1c12;
+    --gold: #e8c15a; --text: #fff; --dim: rgba(255,255,255,.62); --plate: rgba(0,0,0,.55);
+    --fold: #3b4045; --call: #1e9e5a; --raise: #e0a526; --allin: #d84343; --check: #3d7bd9;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: linear-gradient(var(--bg1), var(--bg2)); color: var(--text);
+    font-family: -apple-system, "PingFang SC", "Noto Sans CJK SC", Roboto, sans-serif; overflow: hidden; user-select: none; }
+  #app { position: fixed; inset: 0; display: flex; flex-direction: column; }
+  .bar { display: flex; align-items: center; padding: 10px 16px 4px; gap: 8px; }
+  .bar .title { font-weight: 700; font-size: 17px; }
+  .bar .sub { font-size: 12px; color: var(--dim); }
+  .bar .grow { flex: 1; }
+  .link { color: var(--dim); font-size: 14px; padding: 6px 4px; }
+
+  /* 牌桌 */
+  .stage { position: relative; flex: 1; margin: 0 10px; min-height: 0; }
+  .table { position: absolute; left: 10%; right: 10%; top: 8%; bottom: 8%; border-radius: 9999px;
+    background: linear-gradient(var(--rail1), var(--rail2)); padding: 11px; box-shadow: 0 14px 40px rgba(0,0,0,.6); }
+  .table .cloth { width: 100%; height: 100%; border-radius: 9999px; border: 1px solid rgba(232,193,90,.35);
+    background: radial-gradient(ellipse at center, var(--felt1), var(--felt2) 55%, var(--felt3)); }
+  .abs { position: absolute; transform: translate(-50%, -50%); }
+  .center { left: 50%; top: 47%; display: flex; flex-direction: column; align-items: center; gap: 10px; width: 64%; }
+  .pill { background: var(--plate); border-radius: 999px; padding: 5px 12px; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+  .board { display: flex; gap: 4px; }
+  .note { font-size: 12px; color: var(--dim); text-align: center; min-height: 32px; }
+  .note.win { color: var(--gold); font-size: 14px; font-weight: 700; }
+
+  /* 牌 */
+  .card { width: var(--w); height: calc(var(--w) * 1.42); border-radius: calc(var(--w) * .14); position: relative;
+    background: linear-gradient(#fff, #f2f2f2); box-shadow: 0 2px 6px rgba(0,0,0,.45); color: #1b1b1f; flex: none; }
+  .card.red { color: #d32f2f; }
+  .card .r { position: absolute; left: 10%; top: 4%; font-weight: 800; font-size: calc(var(--w) * .36); line-height: 1; letter-spacing: -1px; }
+  .card .s1 { position: absolute; left: 12%; top: 30%; font-size: calc(var(--w) * .24); line-height: 1; }
+  .card .s2 { position: absolute; right: 9%; bottom: 3%; font-size: calc(var(--w) * .6); line-height: 1; }
+  .card.small .s1 { display: none; }
+  .card.small .s2 { right: 50%; transform: translateX(50%); font-size: calc(var(--w) * .5); }
+  .card.back { background: #fff; padding: calc(var(--w) * .08); }
+  .card.back::after { content: ""; position: absolute; inset: calc(var(--w) * .08); border-radius: calc(var(--w) * .1);
+    background: repeating-linear-gradient(45deg, rgba(255,255,255,.18) 0 1px, transparent 1px 7px),
+                repeating-linear-gradient(-45deg, rgba(255,255,255,.18) 0 1px, transparent 1px 7px),
+                linear-gradient(135deg, #c62828, #7f1414); }
+  .slot { width: var(--w); height: calc(var(--w) * 1.42); border-radius: calc(var(--w) * .14); border: 1px solid rgba(255,255,255,.16); }
+  .deal { animation: deal .26s ease-out both; }
+  @keyframes deal { from { opacity: 0; transform: translateY(-18px) scaleX(.4); } }
+
+  /* 座位 */
+  .seat { display: flex; flex-direction: column; align-items: center; width: 92px; transition: opacity .2s; }
+  .seat.folded { opacity: .55; } .seat.out { opacity: .35; }
+  .ava-wrap { position: relative; width: 56px; height: 56px; display: grid; place-items: center; }
+  .ring { position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(transparent, var(--gold), #fff3c4, transparent);
+    -webkit-mask: radial-gradient(circle, transparent 25px, #000 26px); mask: radial-gradient(circle, transparent 25px, #000 26px);
+    animation: spin 1.6s linear infinite; }
+  .ring.win { animation: glow .9s ease-in-out infinite alternate; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes glow { from { opacity: .4; } to { opacity: 1; } }
+  .ava { width: 46px; height: 46px; border-radius: 50%; border: 2px solid rgba(255,255,255,.85); display: grid; place-items: center;
+    font-weight: 700; font-size: 19px; box-shadow: 0 3px 8px rgba(0,0,0,.5); position: relative; z-index: 1; }
+  .dealer { position: absolute; right: -2px; bottom: -2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; color: #000;
+    font-size: 10px; font-weight: 900; display: grid; place-items: center; z-index: 2; box-shadow: 0 1px 3px rgba(0,0,0,.5); }
+  .hole { position: absolute; left: 34px; top: -8px; display: flex; z-index: 0; }
+  .hole .card:first-child { transform: rotate(-8deg); } .hole .card:last-child { transform: rotate(8deg); margin-left: -6px; }
+  .plate { margin-top: 3px; background: var(--plate); border: .5px solid rgba(255,255,255,.12); border-radius: 10px; padding: 3px 10px; text-align: center; line-height: 1.25; }
+  .plate .n { font-size: 12px; font-weight: 600; max-width: 80px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .plate .c { font-size: 12px; font-weight: 700; color: var(--gold); }
+  .tag { margin-top: 3px; font-size: 10px; font-weight: 700; border-radius: 999px; padding: 1px 8px; }
+  .model { font-size: 9px; color: rgba(255,255,255,.38); max-width: 86px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-align: center; }
+  .bubble { position: relative; background: #fff; color: #1b1b1f; font-size: 11px; border-radius: 10px; padding: 4px 8px; max-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    margin-bottom: 6px; animation: deal .2s ease-out; }
+  .bubble::after { content: ""; position: absolute; left: 50%; bottom: -5px; transform: translateX(-50%); border: 5px solid transparent; border-top-color: #fff; border-bottom: 0; }
+
+  /* 筹码 */
+  .bet { background: rgba(0,0,0,.35); border-radius: 999px; padding: 2px 8px 2px 3px; display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; }
+  .chip { width: var(--c, 16px); height: var(--c, 16px); border-radius: 50%; background: var(--cc, #c62828);
+    box-shadow: inset 0 0 0 calc(var(--c, 16px) * .16) var(--cc, #c62828), inset 0 0 0 calc(var(--c, 16px) * .3) rgba(255,255,255,.85); }
+
+  /* 你自己 */
+  .me { display: flex; justify-content: center; align-items: flex-end; gap: 12px; padding-top: 2px; min-height: 92px; }
+  .me .cards { display: flex; }
+  .me .cards .card:first-child { transform: rotate(-6deg); } .me .cards .card:last-child { transform: rotate(6deg); margin-left: 2px; }
+
+  /* 按钮 */
+  .actions { padding: 10px 14px calc(12px + env(safe-area-inset-bottom)); min-height: 76px; }
+  .row { display: flex; gap: 10px; }
+  .btn { flex: 1; height: 52px; border: 0; border-radius: 999px; color: #fff; font-size: 16px; font-weight: 700; box-shadow: 0 4px 10px rgba(0,0,0,.4);
+    transition: transform .08s; font-family: inherit; }
+  .btn:active { transform: scale(.96); }
+  .btn.fold { background: linear-gradient(#454b51, #34393e); }
+  .btn.call { background: linear-gradient(#22b066, #198a4e); flex: 1.25; }
+  .btn.raise { background: linear-gradient(#ecb432, #c48e16); color: #1b1300; }
+  .btn:disabled { opacity: .4; }
+  .hint { text-align: center; color: var(--dim); padding: 16px 0; font-size: 14px; }
+  .panel { background: var(--plate); border-radius: 18px; padding: 14px; margin-bottom: 10px; }
+  .panel .amt { color: var(--gold); font-size: 22px; font-weight: 800; margin-left: 8px; }
+  .panel input[type=range] { width: 100%; accent-color: var(--gold); margin: 12px 0; }
+  .presets { display: flex; gap: 6px; }
+  .presets button { flex: 1; border: 0; border-radius: 999px; background: rgba(255,255,255,.1); color: #fff; padding: 7px 0; font-size: 13px; font-family: inherit; }
+
+  /* 开局设置 */
+  .setup { flex: 1; overflow-y: auto; padding: 8px 16px 24px; }
+  .setup p { color: var(--dim); font-size: 14px; line-height: 1.5; margin: 6px 0 14px; }
+  .opp { background: rgba(255,255,255,.06); border-radius: 16px; padding: 12px; margin-bottom: 12px; display: grid; grid-template-columns: 46px 1fr; gap: 10px; align-items: center; }
+  .opp .ava { width: 42px; height: 42px; font-size: 17px; }
+  .opp input, .opp select { width: 100%; background: rgba(0,0,0,.35); color: #fff; border: 1px solid rgba(255,255,255,.14); border-radius: 10px;
+    padding: 8px 10px; font-size: 15px; font-family: inherit; }
+  .opp select { margin-top: 6px; font-size: 13px; }
+  .opp .style { grid-column: 1 / 3; font-size: 12px; color: var(--dim); }
+  .start { width: 100%; margin-top: 6px; }
+  .small-print { font-size: 12px; color: rgba(255,255,255,.4); text-align: center; margin-top: 10px; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+// ENGINE START —— 牌局规则：纯逻辑，测试会单独跑这一段
+const SUITS = ['♠', '♥', '♦', '♣'];
+function rankText(r) { return r === 14 ? 'A' : r === 13 ? 'K' : r === 12 ? 'Q' : r === 11 ? 'J' : String(r); }
+function cardText(c) { return rankText(c.r) + SUITS[c.s]; }
+function newDeck(rnd) {
+  const d = [];
+  for (let s = 0; s < 4; s++) for (let r = 2; r <= 14; r++) d.push({ r, s });
+  for (let i = d.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [d[i], d[j]] = [d[j], d[i]]; }
+  return d;
+}
+const HAND_NAMES = ['高牌', '一对', '两对', '三条', '顺子', '同花', '葫芦', '四条', '同花顺'];
+// 5 张牌的分数：牌型 * 16^5 + 依次比较的点数，越大越好
+function score5(cs) {
+  const ranks = cs.map(c => c.r).sort((a, b) => b - a);
+  const flush = cs.every(c => c.s === cs[0].s);
+  const uniq = [...new Set(ranks)];
+  let top = 0;
+  if (uniq.length === 5 && ranks[0] - ranks[4] === 4) top = ranks[0];
+  else if (uniq.join() === '14,5,4,3,2') top = 5;
+  const cnt = {}; ranks.forEach(r => cnt[r] = (cnt[r] || 0) + 1);
+  const groups = Object.keys(cnt).map(Number).sort((a, b) => cnt[b] - cnt[a] || b - a);
+  const counts = groups.map(g => cnt[g]);
+  const pack = (cat, rs) => { let v = cat; for (let i = 0; i < 5; i++) v = v * 16 + (rs[i] || 0); return v; };
+  if (top && flush) return pack(8, [top]);
+  if (counts[0] === 4) return pack(7, groups);
+  if (counts[0] === 3 && counts[1] === 2) return pack(6, groups);
+  if (flush) return pack(5, ranks);
+  if (top) return pack(4, [top]);
+  if (counts[0] === 3) return pack(3, groups);
+  if (counts[0] === 2 && counts[1] === 2) return pack(2, groups);
+  if (counts[0] === 2) return pack(1, groups);
+  return pack(0, ranks);
+}
+function bestScore(cards) {
+  let best = -1; const n = cards.length;
+  for (let a = 0; a < n; a++) for (let b = a + 1; b < n; b++) for (let c = b + 1; c < n; c++) for (let d = c + 1; d < n; d++) for (let e = d + 1; e < n; e++)
+    best = Math.max(best, score5([cards[a], cards[b], cards[c], cards[d], cards[e]]));
+  return best;
+}
+function handName(score) { return HAND_NAMES[Math.floor(score / Math.pow(16, 5))]; }
+
+// 一桌牌：seats 里每人 {name, human, chips}；动作 {a: 'fold'|'check'|'call'|'raise'|'allin', to}
+function Holdem(players, opts) {
+  opts = opts || {};
+  const g = {
+    small: opts.small || 10, big: opts.big || 20, rnd: opts.rnd || Math.random,
+    seats: players.map((p, i) => ({ id: i, name: p.name, human: !!p.human, chips: p.chips, hole: [], bet: 0, total: 0, folded: false, allIn: false, out: p.chips <= 0, last: '' })),
+    board: [], log: [], dealer: opts.dealer == null ? -1 : opts.dealer, hand: opts.hand || 0, street: 0, toAct: -1, result: null,
+    deck: [], currentBet: 0, minRaise: 0, pending: new Set(),
+  };
+  const live = s => !s.out && !s.folded;
+  g.pot = () => g.seats.reduce((a, s) => a + s.total, 0);
+  g.inPlay = () => g.seats.filter(s => !s.out);
+  g.over = () => g.inPlay().length <= 1 || g.seats.some(s => s.human && s.out);
+  function next(from, ok) {
+    for (let k = 1; k <= g.seats.length; k++) { const s = g.seats[((from + k) % g.seats.length + g.seats.length) % g.seats.length]; if (ok(s)) return s.id; }
+    return -1;
+  }
+  function post(s, amount, what) {
+    const a = Math.min(amount, s.chips);
+    s.chips -= a; s.bet += a; s.total += a;
+    if (s.chips === 0) s.allIn = true;
+    s.last = what + ' ' + a;
+  }
+  g.startHand = function () {
+    g.hand++; g.board = []; g.result = null;
+    g.seats.forEach(s => { if (s.chips <= 0) s.out = true; s.hole = []; s.bet = 0; s.total = 0; s.folded = s.out; s.allIn = false; s.last = ''; });
+    g.deck = newDeck(g.rnd);
+    g.dealer = next(g.dealer < 0 ? g.seats.length - 1 : g.dealer, s => !s.out);
+    const players = g.inPlay();
+    const sb = players.length === 2 ? g.dealer : next(g.dealer, s => !s.out);
+    const bb = next(sb, s => !s.out);
+    players.forEach(s => { s.hole = [g.deck.shift(), g.deck.shift()]; });
+    g.log.push(`—— 第 ${g.hand} 手：庄家 ${g.seats[g.dealer].name}，小盲 ${g.seats[sb].name}，大盲 ${g.seats[bb].name}（${g.small}/${g.big}）`);
+    g.street = 0; g.currentBet = 0;
+    post(g.seats[sb], g.small, '小盲'); post(g.seats[bb], g.big, '大盲');
+    g.currentBet = g.big; g.minRaise = g.big;
+    g.pending = new Set(players.filter(s => !s.allIn).map(s => s.id));
+    g.toAct = next(bb, s => g.pending.has(s.id));
+    settle();
+  };
+  g.legal = function (id) {
+    const s = g.seats[id];
+    const toCall = Math.min(g.currentBet - s.bet, s.chips);
+    const maxTo = s.bet + s.chips;
+    return { toCall, canCheck: toCall === 0, minRaiseTo: Math.min(g.currentBet + g.minRaise, maxTo + 1), maxRaiseTo: maxTo, canRaise: maxTo >= Math.min(g.currentBet + g.minRaise, maxTo + 1) };
+  };
+  // 不合规的动作按最接近的合规动作处理：不能过牌就跟，不够加注就全下
+  g.act = function (act) {
+    const id = g.toAct; if (id < 0) return;
+    const s = g.seats[id], l = g.legal(id);
+    let a = act.a, to = Math.floor(act.to || 0);
+    if (a === 'bet') a = 'raise';
+    if (a === 'check' && !l.canCheck) a = 'call';
+    if (a === 'call' && l.toCall === 0) a = 'check';
+    if (a === 'raise') {
+      if (to >= l.maxRaiseTo) a = 'allin';
+      else if (!l.canRaise) a = l.toCall >= s.chips ? 'allin' : 'call';
+      else if (to < l.minRaiseTo) to = l.minRaiseTo;
+    }
+    if (!['fold', 'check', 'call', 'raise', 'allin'].includes(a)) a = l.canCheck ? 'check' : 'fold';
+    g.pending.delete(id);
+    if (a === 'fold') { s.folded = true; s.last = '弃牌'; g.log.push(`${s.name} 弃牌`); }
+    else if (a === 'check') { s.last = '过牌'; g.log.push(`${s.name} 过牌`); }
+    else if (a === 'call') {
+      const c = l.toCall; s.chips -= c; s.bet += c; s.total += c;
+      if (s.chips === 0) s.allIn = true;
+      s.last = s.allIn ? '全下 ' + s.bet : '跟注 ' + s.bet;
+      g.log.push(`${s.name} ${s.allIn ? '跟注全下' : '跟注'}到 ${s.bet}`);
+    } else {
+      const t = a === 'raise' ? to : l.maxRaiseTo;
+      const opening = g.currentBet === 0;
+      const add = t - s.bet; s.chips -= add; s.bet = t; s.total += add;
+      if (s.chips === 0) s.allIn = true;
+      if (t > g.currentBet) {
+        // 加够一个完整加注才重新打开下注；不够的全下只让大家补齐
+        if (t - g.currentBet >= g.minRaise) g.minRaise = t - g.currentBet;
+        g.currentBet = t;
+        g.pending = new Set(g.seats.filter(o => live(o) && !o.allIn && o.id !== id).map(o => o.id));
+      }
+      s.last = s.allIn ? '全下 ' + t : (opening ? '下注 ' : '加注到 ') + t;
+      g.log.push(s.allIn ? `${s.name} 全下到 ${t}` : opening ? `${s.name} 下注 ${t}` : `${s.name} 加注到 ${t}`);
+    }
+    g.toAct = next(id, o => g.pending.has(o.id));
+    settle();
+  };
+  function settle() {
+    const alive = g.seats.filter(live);
+    if (alive.length === 1) return finish();
+    [...g.pending].forEach(i => { if (g.seats[i].folded || g.seats[i].allIn) g.pending.delete(i); });
+    if (g.pending.size) { if (!g.pending.has(g.toAct)) g.toAct = next(g.toAct, o => g.pending.has(o.id)); return; }
+    g.seats.forEach(s => s.bet = 0);
+    g.currentBet = 0; g.minRaise = g.big;
+    if (g.street === 3) return finish();
+    g.street++;
+    g.deck.shift(); // 烧一张
+    for (let i = 0; i < (g.street === 1 ? 3 : 1); i++) g.board.push(g.deck.shift());
+    g.log.push(['翻牌', '转牌', '河牌'][g.street - 1] + '：' + g.board.map(cardText).join(' '));
+    const canBet = alive.filter(s => !s.allIn);
+    if (canBet.length <= 1) return settle();
+    g.pending = new Set(canBet.map(s => s.id));
+    g.toAct = next(g.dealer, o => g.pending.has(o.id));
+  }
+  function finish() {
+    g.toAct = -1;
+    const alive = g.seats.filter(live);
+    const won = {}, shown = {};
+    const pot = g.pot();
+    if (alive.length === 1) won[alive[0].id] = pot;
+    else {
+      while (g.board.length < 5) g.board.push(g.deck.shift());
+      const sc = {}; alive.forEach(s => { sc[s.id] = bestScore(s.hole.concat(g.board)); shown[s.id] = handName(sc[s.id]); });
+      // 边池：按每人下的总数一层层分，每层只有下够这层的人能赢
+      const levels = [...new Set(alive.map(s => s.total))].sort((a, b) => a - b);
+      let prev = 0;
+      for (const lv of levels) {
+        const layer = g.seats.reduce((a, s) => a + Math.min(s.total, lv) - Math.min(s.total, prev), 0);
+        const elig = alive.filter(s => s.total >= lv);
+        const top = Math.max(...elig.map(s => sc[s.id]));
+        const winners = elig.filter(s => sc[s.id] === top)
+          .sort((a, b) => ((a.id - g.dealer - 1 + 99 * g.seats.length) % g.seats.length) - ((b.id - g.dealer - 1 + 99 * g.seats.length) % g.seats.length));
+        const each = Math.floor(layer / winners.length);
+        winners.forEach((w, i) => { won[w.id] = (won[w.id] || 0) + each + (i === 0 ? layer % winners.length : 0); });
+        prev = lv;
+      }
+      const rest = pot - Object.values(won).reduce((a, b) => a + b, 0);
+      if (rest > 0) { const k = Object.keys(won)[0]; won[k] += rest; }
+    }
+    Object.keys(won).forEach(id => { g.seats[id].chips += won[id]; });
+    const text = Object.keys(won).map(id => `${g.seats[id].name} 赢 ${won[id]}` + (shown[id] ? `（${shown[id]}）` : '')).join('，');
+    if (Object.keys(shown).length) g.log.push('亮牌：' + Object.keys(shown).map(id => `${g.seats[id].name} ${g.seats[id].hole.map(cardText).join(' ')} ${shown[id]}`).join('；'));
+    g.log.push('结果：' + text);
+    g.seats.forEach(s => s.total = 0);
+    g.result = { won, shown, text };
+  }
+  return g;
+}
+
+// 规则机器人：按牌力和要跟的钱粗算，带一点随机；模型出错时也用它兜底
+function botDecide(g, id, rnd) {
+  rnd = rnd || Math.random;
+  const s = g.seats[id], l = g.legal(id);
+  let strength;
+  if (!g.board.length) {
+    const [a, b] = s.hole.slice().sort((x, y) => y.r - x.r);
+    strength = (a.r + b.r - 4) / 24 * 0.6 + (a.r === b.r ? 0.35 + a.r / 14 * 0.15 : 0) + (a.s === b.s ? 0.06 : 0) + (a.r - b.r === 1 ? 0.04 : 0);
+  } else {
+    const cat = Math.floor(bestScore(s.hole.concat(g.board)) / Math.pow(16, 5));
+    const boardCat = g.board.length >= 5 ? Math.floor(bestScore(g.board) / Math.pow(16, 5)) : -1;
+    strength = [0.15, 0.45, 0.65, 0.75, 0.82, 0.86, 0.92, 0.97, 0.99][cat === boardCat ? 0 : cat];
+  }
+  strength = Math.min(1, strength);
+  const price = l.toCall === 0 ? 0 : l.toCall / (g.pot() + l.toCall);
+  const r = rnd();
+  if (strength > 0.8 && l.canRaise && r < 0.7) return { a: 'raise', to: Math.min(l.minRaiseTo + Math.floor(g.pot() / 2), l.maxRaiseTo) };
+  if (strength > 0.55 && l.canRaise && r < 0.25) return { a: 'raise', to: l.minRaiseTo };
+  if (l.canCheck) return r < 0.08 && l.canRaise ? { a: 'raise', to: l.minRaiseTo } : { a: 'check' };
+  if (strength >= price + 0.15 || (strength > 0.35 && price < 0.2) || r < 0.05) return { a: 'call' };
+  return { a: 'fold' };
+}
+// ENGINE END
+
+if (typeof module !== 'undefined') module.exports = { Holdem, botDecide, bestScore, handName, score5 };
+</script>
+<script>
+// AI —— 对手的性格和说话方式。想让某个对手更毒舌、更爱诈唬，改这里。
+const STYLES = ['稳健，只玩好牌', '激进，爱加注施压', '爱诈唬，时不时空手偷池', '冷静计算赔率'];
+const NAMES = ['阿杰', '小美', '老K', 'Kavi'];
+const HUES = ['#5c6bc0', '#ef6c6c', '#26a69a', '#ab47bc', '#ffa726'];
+const START_CHIPS = 1000, SMALL = 10, BIG = 20;
+
+function systemFor(o) {
+  return `你在打一桌无限注德州扑克（现金局，盲注 ${SMALL}/${BIG}），你是「${o.name}」，打法：${o.style}。桌上一共 5 个人，你只知道自己的手牌和公开发生的事。
+每次我会告诉你上次之后桌上发生了什么、你的手牌、底池和你能做什么。照你的打法想清楚，但只回一个 JSON，不要别的字：
+{"a": "fold|check|call|raise|allin", "to": 加注时这一轮总共下到多少（整数，别的动作不写）, "say": "可选，一句很短的牌桌台词，不超过 12 个字，不要透露手牌"}
+不能过牌时别选 check；加注额在给的范围内。台词偶尔说就好，多数时候留空。`;
+}
+
+// 给对手看的：上次之后桌上发生的事（只给公开的和它自己的手牌），再说现在轮到它、能做什么
+function situation(g, id, cursor) {
+  const s = g.seats[id], l = g.legal(id);
+  const news = g.log.slice(cursor[id]); cursor[id] = g.log.length;
+  let t = news.length ? news.join('\n') + '\n' : '';
+  t += '你的手牌：' + s.hole.map(cardText).join(' ');
+  if (g.board.length) t += '；公共牌：' + g.board.map(cardText).join(' ');
+  t += `\n底池 ${g.pot()}，你的筹码 ${s.chips}，` + (l.canCheck ? '可以过牌' : `跟注要 ${l.toCall}`);
+  t += l.canRaise ? `，加注最少到 ${l.minRaiseTo}、最多到 ${l.maxRaiseTo}（全下）` : '，筹码不够加注（只能跟或全下）';
+  t += '。其他人筹码：' + g.seats.filter(o => o.id !== id && !o.out).map(o => `${o.name} ${o.chips}${o.folded ? '（已弃）' : ''}`).join('，');
+  return t + '\n轮到你。';
+}
+
+function parseMove(raw) {
+  try {
+    const o = JSON.parse(String(raw).trim().replace(/^```json|```$/g, '').trim());
+    const a = String(o.a || '').toLowerCase().replace(/[-_ ]/g, '');
+    const say = String(o.say || '').trim().slice(0, 24);
+    if (!['fold', 'check', 'call', 'raise', 'bet', 'allin'].includes(a)) return null;
+    return { a: a === 'bet' ? 'raise' : a, to: Number(o.to) || 0, say };
+  } catch (e) { return null; }
+}
+
+// 问一个对手：有模型就问模型（超过 45 秒算没回），没有或出错就用规则机器人
+async function askSeat(st, id) {
+  const o = st.opps[id - 1];
+  if (!o.model || !window.jack || !jack.ask) return botDecide(st.g, id);
+  const prompt = situation(st.g, id, st.cursor);
+  try {
+    const raw = await Promise.race([
+      jack.ask(prompt, { seat: 'seat' + id, model: o.model, system: systemFor(o), json: true, max: 120 }),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 45000)),
+    ]);
+    const m = parseMove(raw);
+    if (!m) return botDecide(st.g, id);
+    if (m.say) st.says[id] = { text: m.say, at: Date.now() };
+    return m;
+  } catch (e) {
+    return botDecide(st.g, id);
+  }
+}
+</script>
+<script>
+// UI —— 牌桌界面
+const $app = document.getElementById('app');
+const SEAT_POS = [[50, 88], [10, 55], [27, 15], [73, 15], [90, 55]];
+const CENTER = [50, 47];
+let st = null;            // 正在打的这一桌
+let raising = false, raiseTo = 0;
+
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function fmt(n) { return Number(n).toLocaleString('en-US'); }
+function cardHtml(c, w, cls) {
+  const small = w < 34;
+  return `<div class="card ${c.s === 1 || c.s === 2 ? 'red' : ''} ${small ? 'small' : ''} ${cls || ''}" style="--w:${w}px"><span class="r">${rankText(c.r)}</span><span class="s1">${SUITS[c.s]}</span><span class="s2">${SUITS[c.s]}</span></div>`;
+}
+function backHtml(w) { return `<div class="card back" style="--w:${w}px"></div>`; }
+function chipColor(n) { return n >= 500 ? '#7e57c2' : n >= 100 ? '#212121' : n >= 25 ? '#2e7d32' : '#c62828'; }
+
+function load() { try { return window.jack && jack.load ? jack.load() : null; } catch (e) { return null; } }
+function save(extra) { try { if (window.jack && jack.save) jack.save(Object.assign({ opps: st ? st.opps : (saved && saved.opps) }, extra || {})); } catch (e) {} }
+let saved = load();
+// 能选的模型（App 给的）；拿不到就只有规则机器人
+function models() { try { return window.jack && jack.models ? jack.models() : { list: [], def: '' }; } catch (e) { return { list: [], def: '' }; } }
+
+function renderSetup() {
+  const m = models();
+  const opps = (saved && saved.opps) || NAMES.map((n, i) => ({ name: n, style: STYLES[i], model: m.def || '' }));
+  const opt = sel => `<option value="" ${!sel ? 'selected' : ''}>规则机器人（不花钱）</option>` +
+    m.list.map(x => `<option value="${esc(x.key)}" ${x.key === sel ? 'selected' : ''}>${esc(x.label)}${x.provider ? ' · ' + esc(x.provider) : ''}</option>`).join('');
+  $app.innerHTML = `
+    <div class="bar"><div><div class="title">德州扑克</div><div class="sub">你和 4 个对手 · 每人 ${START_CHIPS} · 盲注 ${SMALL}/${BIG}</div></div></div>
+    <div class="setup">
+      <p>4 个对手各用自己的模型、各记各的牌局，谁也看不到别人的手牌。模型出错时按规则机器人的走法出牌，牌局不会卡住。</p>
+      ${opps.map((o, i) => `
+        <div class="opp">
+          <div class="ava" style="background:linear-gradient(135deg, ${HUES[i + 1]}, #0006)">${esc(o.name.slice(0, 1))}</div>
+          <div><input data-i="${i}" data-k="name" value="${esc(o.name)}" maxlength="6"><select data-i="${i}" data-k="model">${opt(o.model)}</select></div>
+          <div class="style">打法：${esc(o.style)}</div>
+        </div>`).join('')}
+      <button class="btn call start" id="go">开局</button>
+      ${saved && saved.chips ? `<button class="btn fold start" id="resume">接着上次（第 ${saved.hand} 手后）</button>` : ''}
+      <div class="small-print">每次轮到对手只把新发生的事发给它，花费很小。想改规则、对手性格、牌桌样子，在这个游戏的对话里跟 Kavi 说。</div>
+    </div>`;
+  $app.querySelectorAll('[data-i]').forEach(el => el.addEventListener('change', () => { opps[el.dataset.i][el.dataset.k] = el.value; }));
+  $app.querySelectorAll('input[data-i]').forEach(el => el.addEventListener('input', () => { opps[el.dataset.i].name = el.value.trim() || '对手'; }));
+  document.getElementById('go').onclick = () => start(opps, null);
+  const r = document.getElementById('resume');
+  if (r) r.onclick = () => start(opps, saved);
+}
+
+function start(opps, from) {
+  const players = [{ name: '你', human: true, chips: from ? from.chips[0] : START_CHIPS }]
+    .concat(opps.map((o, i) => ({ name: o.name, chips: from ? from.chips[i + 1] : START_CHIPS })));
+  st = { opps, g: Holdem(players, { small: SMALL, big: BIG, dealer: from ? from.dealer : -1, hand: from ? from.hand : 0 }), cursor: [0, 0, 0, 0, 0], says: {}, thinking: -1 };
+  save();
+  nextHand();
+}
+
+function nextHand() {
+  if (st.g.over()) return render();
+  st.says = {}; raising = false;
+  st.g.startHand();
+  render(); drive();
+}
+
+let driving = false;
+async function drive() {
+  if (driving) return; driving = true;
+  try {
+    while (st && st.g.toAct >= 0 && !st.g.seats[st.g.toAct].human) {
+      const id = st.g.toAct, t0 = Date.now();
+      st.thinking = id; render();
+      const move = await askSeat(st, id);
+      const wait = 600 - (Date.now() - t0); if (wait > 0) await new Promise(r => setTimeout(r, wait));
+      st.thinking = -1;
+      if (st.g.toAct === id) st.g.act(move);
+      render();
+    }
+  } finally { driving = false; }
+  if (st && st.g.result) save({ chips: st.g.seats.map(s => s.chips), dealer: st.g.dealer, hand: st.g.hand });
+}
+
+function play(move) {
+  const g = st.g, me = g.seats[0];
+  if (g.toAct !== me.id) return;
+  raising = false; g.act(move); render(); drive();
+  if (g.result) save({ chips: g.seats.map(s => s.chips), dealer: g.dealer, hand: g.hand });
+}
+
+function seatHtml(s) {
+  const g = st.g, [x, y] = SEAT_POS[s.id];
+  const acting = g.toAct === s.id || st.thinking === s.id;
+  const won = g.result && g.result.won[s.id];
+  const shown = g.result && g.result.shown[s.id] != null;
+  let tag = null;
+  if (won > 0) tag = ['+' + fmt(won), 'var(--gold)', '#000'];
+  else if (st.thinking === s.id) tag = ['思考中', 'rgba(255,255,255,.3)', '#fff'];
+  else if (s.folded && !s.out) tag = ['弃牌', 'var(--fold)', '#fff'];
+  else if (s.last.startsWith('全下')) tag = ['全下', 'var(--allin)', '#fff'];
+  else if (s.last.startsWith('加注') || s.last.startsWith('下注')) tag = [s.last.slice(0, 2), 'var(--raise)', '#000'];
+  else if (s.last.startsWith('跟注')) tag = ['跟注', 'var(--call)', '#fff'];
+  else if (s.last.startsWith('过牌')) tag = ['过牌', 'var(--check)', '#fff'];
+  const cards = !s.human && s.hole.length && !s.out && !s.folded
+    ? `<div class="hole">${shown ? s.hole.map(c => cardHtml(c, 26)).join('') : backHtml(22) + backHtml(22)}</div>` : '';
+  // 台词说完 5 秒就收起来，免得几个气泡挤在一起
+  const said = st.says[s.id];
+  const say = !s.human && said && Date.now() - said.at < 5000 ? `<div class="bubble">${esc(said.text)}</div>` : '';
+  const model = s.human ? '' : `<div class="model">${esc(modelLabel(st.opps[s.id - 1].model))}</div>`;
+  return `<div class="abs seat ${s.out ? 'out' : s.folded ? 'folded' : ''}" style="left:${x}%;top:${y}%">
+    ${say}
+    <div class="ava-wrap">${cards}${acting || won > 0 ? `<div class="ring ${won > 0 && !acting ? 'win' : ''}"></div>` : ''}
+      <div class="ava" style="background:linear-gradient(135deg, ${HUES[s.id]}, #0006)">${esc(s.name.slice(0, 1))}${g.dealer === s.id ? '<div class="dealer">D</div>' : ''}</div></div>
+    <div class="plate">${s.human ? '' : `<div class="n">${esc(s.name)}</div>`}<div class="c">${s.out ? '出局' : fmt(s.chips)}</div></div>
+    ${tag && !s.human ? `<div class="tag" style="background:${tag[1]};color:${tag[2]}">${tag[0]}</div>` : ''}
+    ${model}
+  </div>`;
+}
+
+let modelNames = null;
+function modelLabel(key) {
+  if (!key) return '规则机器人';
+  if (!modelNames) { modelNames = {}; models().list.forEach(x => modelNames[x.key] = x.label); }
+  return modelNames[key] || key;
+}
+
+let lastBoard = 0, lastHand = 0;
+function render() {
+  const g = st.g, me = g.seats[0];
+  const fresh = i => (g.hand !== lastHand || i >= lastBoard) ? 'deal' : '';
+  const board = [0, 1, 2, 3, 4].map(i => g.board[i] ? cardHtml(g.board[i], 38, fresh(i)) : '<div class="slot" style="--w:38px"></div>').join('');
+  const note = g.result ? `<div class="note win">${esc(g.result.text)}</div>` : `<div class="note">${esc((g.log[g.log.length - 1] || '').replace(/^—— /, ''))}</div>`;
+  const bets = g.seats.filter(s => s.bet > 0).map(s => {
+    const [x, y] = SEAT_POS[s.id];
+    return `<div class="abs bet" style="left:${x + (CENTER[0] - x) * 0.42}%;top:${y + (CENTER[1] - y) * 0.4}%"><span class="chip" style="--cc:${chipColor(s.bet)}"></span>${fmt(s.bet)}</div>`;
+  }).join('');
+  const handName_ = me.hole.length && g.board.length >= 3 && !me.folded ? `<span class="pill" style="color:var(--gold);margin-bottom:10px">${handName(bestScore(me.hole.concat(g.board)))}</span>` : '';
+  const myCards = me.hole.length && !me.out ? `<div class="cards" style="opacity:${me.folded ? .45 : 1}">${me.hole.map((c, i) => cardHtml(c, 58, g.hand !== lastHand ? 'deal' : '')).join('')}</div>` : '';
+  $app.innerHTML = `
+    <div class="bar"><div><div class="title">德州扑克</div><div class="sub">第 ${g.hand} 手 · 盲注 ${g.small}/${g.big}</div></div><div class="grow"></div><span class="link" id="quit">结束牌局</span></div>
+    <div class="stage">
+      <div class="table"><div class="cloth"></div></div>
+      <div class="abs center">
+        <span class="pill"><span class="chip" style="--c:12px;--cc:var(--gold)"></span>${g.result ? '本手结束' : '底池 ' + fmt(g.pot())}</span>
+        <div class="board">${board}</div>${note}
+      </div>
+      ${bets}${g.seats.map(seatHtml).join('')}
+    </div>
+    <div class="me">${myCards}${handName_}</div>
+    <div class="actions">${actionsHtml()}</div>`;
+  lastBoard = g.board.length; lastHand = g.hand;
+  bindActions();
+  document.getElementById('quit').onclick = () => {
+    if (!confirm('结束这局？筹码清零，下次重新摆对手开局。')) return;
+    st = null; saved = { opps: saved && saved.opps }; save(); saved = load(); renderSetup();
+  };
+}
+
+function actionsHtml() {
+  const g = st.g, me = g.seats[0];
+  if (g.over()) return `<div class="hint">${me.out ? '筹码输光了。点「结束牌局」重新开一局' : '整桌都被你赢下来了！点「结束牌局」再来一局'}</div>`;
+  if (g.result) return `<div class="row"><button class="btn call" id="next">下一手</button></div>`;
+  if (g.toAct !== me.id) return `<div class="hint">${st.thinking >= 0 ? esc(g.seats[st.thinking].name) + ' 在想……' : '等别人出牌……'}</div>`;
+  const l = g.legal(me.id);
+  if (!raising) raiseTo = l.minRaiseTo;
+  const pot = g.pot();
+  const presets = [['最小', l.minRaiseTo], ['½ 池', me.bet + l.toCall + Math.floor(pot / 2)], ['1 池', me.bet + l.toCall + pot], ['全下', l.maxRaiseTo]]
+    .map(([n, v]) => `<button data-to="${Math.max(l.minRaiseTo, Math.min(l.maxRaiseTo, v))}">${n}</button>`).join('');
+  const panel = raising && l.canRaise ? `<div class="panel"><span style="color:var(--dim);font-size:13px">加注到</span><span class="amt" id="amt">${fmt(raiseTo)}</span>
+    <input type="range" id="slider" min="${l.minRaiseTo}" max="${l.maxRaiseTo}" step="${g.small}" value="${raiseTo}"><div class="presets">${presets}</div></div>` : '';
+  const callText = l.canCheck ? '过牌' : l.toCall >= me.chips ? '全下 ' + fmt(me.chips) : '跟注 ' + fmt(l.toCall);
+  let third = '';
+  if (raising && l.canRaise) third = `<button class="btn raise" id="confirm">确定</button>`;
+  else if (l.canRaise) third = `<button class="btn raise" id="raise">${l.canCheck ? '下注' : '加注'}</button>`;
+  else if (l.toCall < me.chips) third = `<button class="btn raise" id="allin">全下</button>`;
+  return panel + `<div class="row"><button class="btn fold" id="fold">弃牌</button><button class="btn call" id="call">${callText}</button>${third}</div>`;
+}
+
+function bindActions() {
+  const on = (id, f) => { const el = document.getElementById(id); if (el) el.onclick = f; };
+  const l = st.g.toAct === 0 ? st.g.legal(0) : null;
+  on('next', nextHand);
+  on('fold', () => play({ a: 'fold' }));
+  on('call', () => play({ a: l && l.canCheck ? 'check' : 'call' }));
+  on('raise', () => { raising = true; render(); });
+  on('allin', () => play({ a: 'allin' }));
+  on('confirm', () => play({ a: 'raise', to: raiseTo }));
+  const slider = document.getElementById('slider');
+  if (slider) slider.oninput = () => { raiseTo = Number(slider.value); document.getElementById('amt').textContent = fmt(raiseTo); };
+  document.querySelectorAll('[data-to]').forEach(b => b.onclick = () => {
+    raiseTo = Number(b.dataset.to);
+    if (slider) slider.value = raiseTo;
+    document.getElementById('amt').textContent = fmt(raiseTo);
+  });
+}
+
+setInterval(() => { if (st && Object.values(st.says).some(x => Date.now() - x.at >= 5000 && Date.now() - x.at < 6000)) render(); }, 1000);
+renderSetup();
+</script>
+</body>
+</html>

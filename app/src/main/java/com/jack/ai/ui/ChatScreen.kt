@@ -193,6 +193,7 @@ fun ChatScreen(
     var focusInput by remember { mutableIntStateOf(0) }
     // 从别的页面开了新对话回来（项目页的「新对话」）：同样光标进输入框、键盘起来
     LaunchedEffect(ChatFocus.request) { if (ChatFocus.request) { ChatFocus.request = false; focusInput++ } }
+    LaunchedEffect(ChatFocus.prefill, conv?.id) { ChatFocus.prefill?.let { p -> ChatFocus.prefill = null; text = p; focusInput++ } }
     val snackbar = remember { androidx.compose.material3.SnackbarHostState() }
     // 删了消息：底下出一条「撤销」，不再先弹确认框
     fun onDeleted(n: Int) {
@@ -665,6 +666,8 @@ private fun SummaryDivider(summary: String) {
 /** 回到聊天页时要不要把光标放进输入框、弹出键盘（别的页面开了新对话时设），用一次就清掉。 */
 internal object ChatFocus {
     var request by mutableStateOf(false)
+    /** 回到聊天页时先填进输入框的话（游戏页的「让 Kavi 改」），用一次就清掉。 */
+    var prefill by mutableStateOf<String?>(null)
 }
 
 /** 打开对话后要滚到的那条消息（侧边栏搜索点进来时设），用一次就清掉。 */
