@@ -107,6 +107,8 @@ internal fun QuoteSelection(onQuote: ((String) -> Unit)?, content: @Composable (
     val real = androidx.compose.ui.platform.LocalClipboardManager.current
     val latest = androidx.compose.runtime.rememberUpdatedState(onQuote)
     val toolbar = remember(view) { QuoteToolbar(view) }
+    // 回答滚出屏幕、换了对话：菜单跟着收起，别让「正在选字」一直挂着挡住右滑
+    androidx.compose.runtime.DisposableEffect(toolbar) { onDispose { toolbar.hide() } }
     val clipboard = remember(real, toolbar) {
         object : androidx.compose.ui.platform.ClipboardManager by real {
             override fun setText(annotatedString: androidx.compose.ui.text.AnnotatedString) {
@@ -133,7 +135,7 @@ internal class QuoteToolbar(private val view: android.view.View) : androidx.comp
     private var onCopy: (() -> Unit)? = null
     private var onSelectAll: (() -> Unit)? = null
     override var status = androidx.compose.ui.platform.TextToolbarStatus.Hidden
-        private set
+        private set(v) { field = v; selecting = v == androidx.compose.ui.platform.TextToolbarStatus.Shown }
 
     private val callback = object : android.view.ActionMode.Callback2() {
         override fun onCreateActionMode(m: android.view.ActionMode, menu: android.view.Menu): Boolean { fill(menu); return true }
@@ -193,5 +195,12 @@ internal class QuoteToolbar(private val view: android.view.View) : androidx.comp
         mode = null
     }
 
-    private companion object { const val COPY = 1; const val QUOTE = 2; const val ALL = 3 }
+    companion object {
+        private const val COPY = 1
+        private const val QUOTE = 2
+        private const val ALL = 3
+        /** 有一段字正被选着、菜单开着：聊天页的右滑开侧边栏先不管。 */
+        @Volatile var selecting = false
+            private set
+    }
 }

@@ -427,6 +427,8 @@ internal fun Modifier.swipeToOpen(open: () -> Unit): Modifier = pointerInput(Uni
         val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
         // 这里比网页先收到按下：先清掉上一次可能没清的标记，按在小工具上的话网页马上会再设上
         AppTouch.active = false
+        // 正在选字（菜单开着）：这一划是在调选区，不开侧边栏
+        if (QuoteToolbar.selecting) return@awaitEachGesture
         var dx = 0f
         var dy = 0f
         while (true) {
@@ -438,6 +440,8 @@ internal fun Modifier.swipeToOpen(open: () -> Unit): Modifier = pointerInput(Uni
             if (AppTouch.active) break
             if (abs(dy) > slop && abs(dy) > abs(dx)) break
             if (dx < -slop) break
+            // 按住超过长按的时间还没划开：是长按选字后拖着扩大选区，不是右滑（真右滑一下就划过去了）
+            if (change.uptimeMillis - down.uptimeMillis > viewConfiguration.longPressTimeoutMillis) break
             if (dx > distance && dx > abs(dy) * 2) {
                 change.consume()
                 open()

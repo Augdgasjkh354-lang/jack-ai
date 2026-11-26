@@ -98,4 +98,32 @@ class SwipeTest {
         rule.waitForIdle(); rule.mainClock.advanceTimeBy(1000)
         assertTrue("往左划没关上：${state().currentValue}", !state().isOpen)
     }
+
+    /** 长按选字后按着往右拖（扩大选区）：不是右滑，侧边栏不能出来。 */
+    @Test
+    fun longPressThenDragDoesNotOpen() {
+        val state = setUp(plain = true)
+        rule.onNodeWithTag("chat").performTouchInput {
+            val y = height * 0.3f
+            down(androidx.compose.ui.geometry.Offset(width * 0.3f, y))
+            advanceEventTime(800)
+            repeat(10) { k -> moveTo(androidx.compose.ui.geometry.Offset(width * (0.3f + 0.05f * (k + 1)), y)); advanceEventTime(30) }
+            up()
+        }
+        rule.waitForIdle(); rule.mainClock.advanceTimeBy(1000)
+        assertTrue("长按后拖动把侧边栏拉出来了", !state().isOpen)
+    }
+
+    /** 选着字、菜单开着时右滑：在调选区，不开侧边栏。 */
+    @Test
+    fun noOpenWhileSelecting() {
+        val state = setUp(plain = true)
+        val f = QuoteToolbar::class.java.declaredFields.first { it.name == "selecting" }.apply { isAccessible = true }
+        f.setBoolean(null, true)
+        try {
+            rule.onNodeWithTag("chat").performTouchInput { swipeRight(startX = width * 0.3f, endX = width * 0.8f, durationMillis = 300) }
+            rule.waitForIdle(); rule.mainClock.advanceTimeBy(1000)
+            assertTrue("选字时右滑开了侧边栏", !state().isOpen)
+        } finally { f.setBoolean(null, false) }
+    }
 }
