@@ -83,15 +83,27 @@ internal suspend fun ToolSession.createDocument(args: JsonObject): String {
     return makeFile(tool, JsonObject(args - "format"))
 }
 
-internal fun ToolSession.wsFile(name: String, exact: Boolean = false): File =
-    (if (exact) Workspace.findExact(wsDir, name) else Workspace.find(wsDir, name)) ?: throw TextEdit.EditException(
-    "对话文件夹里没有「$name」。" + Workspace.files(wsDir).let { l ->
-        if (l.isEmpty()) "文件夹是空的。" else "现有文件：" + l.joinToString("、") { it.name }
-    })
+internal fun ToolSession.wsFile(name: String, exact: Boolean = false): File {
+    val games = com.jack.ai.data.games.GameFiles
+    // 「游戏/名字.html」：任何对话里的游戏都能读、能改（删不行：exact 是删除、发附件这类收不回的操作用的）
+    if (name.trim().startsWith(games.PREFIX)) {
+        if (exact) throw TextEdit.EditException("别的对话里的游戏不能在这里删，只能读和改")
+        return games.find(app, name) ?: throw TextEdit.EditException("没有叫「${name.trim().removePrefix(games.PREFIX)}」的游戏。" +
+            games.note(app).ifEmpty { "现在一个游戏都没有。" })
+    }
+    return (if (exact) Workspace.findExact(wsDir, name) else Workspace.find(wsDir, name))
+        // 这个对话里没有、但正好是某个游戏的名字（「德州扑克.html」）：就是它
+        ?: (if (!exact && name.trim().endsWith(".html", true)) games.find(app, name) else null)
+        ?: throw TextEdit.EditException(
+            "对话文件夹里没有「$name」。" + Workspace.files(wsDir).let { l ->
+                if (l.isEmpty()) "文件夹是空的。" else "现有文件：" + l.joinToString("、") { it.name }
+            } + games.note(app).let { if (it.isEmpty()) "" else "\n$it" })
+}
 
 internal suspend fun ToolSession.listFiles() = runTool("查看文件夹") {
     val list = withContext(Dispatchers.IO) { Workspace.files(wsDir).map { "${it.name}｜${ToolSession.sizeText(it.length())}｜${Workspace.editKind(it)}" } }
-    (if (list.isEmpty()) "对话文件夹是空的。" else list.joinToString("\n")) to SearchRecord("查看文件夹")
+    val games = withContext(Dispatchers.IO) { com.jack.ai.data.games.GameFiles.note(app, except = wsDir) }
+    ((if (list.isEmpty()) "对话文件夹是空的。" else list.joinToString("\n")) + if (games.isEmpty()) "" else "\n\n$games") to SearchRecord("查看文件夹")
 }
 
 internal suspend fun ToolSession.readFile(args: JsonObject): String {

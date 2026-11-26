@@ -75,9 +75,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 /** 小工具网页里写了 <meta name="kavi-kind" content="game"> 的算游戏（Kavi 做游戏时会写上）。 */
-internal fun isGameHtml(head: String): Boolean =
-    Regex("""<meta[^>]+name=["']kavi-kind["'][^>]+content=["']game["']""", RegexOption.IGNORE_CASE).containsMatchIn(head) ||
-        Regex("""<meta[^>]+content=["']game["'][^>]+name=["']kavi-kind["']""", RegexOption.IGNORE_CASE).containsMatchIn(head)
+internal fun isGameHtml(head: String): Boolean = com.jack.ai.data.games.GameFiles.isGame(head)
 
 /** 侧边栏的「游戏」：和 Kavi 一起玩的牌桌，加上 Kavi 做过的小游戏；也能让 Kavi 现做一个。 */
 @OptIn(ExperimentalMaterial3Api::class)
