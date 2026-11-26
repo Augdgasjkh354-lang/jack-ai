@@ -209,6 +209,7 @@ object PromptBuilder {
             // 一直带着、选项写全：工具说明不随对话变，缓存才能跨对话命中；眼下搜不了的地方由工具自己回话
             add(SkillTools.SEARCH_MY_DATA)
             add(SkillTools.FACTS)
+            add(SkillTools.SETTINGS)
             // 和人聊的对话里才有：极端辱骂时结束对话（收件箱里没人对话）
             if (conv.id != com.jack.ai.data.Retired.FREE_TIME_CONV && conv.id != com.jack.ai.data.INBOX_ID) add(SkillTools.END_CONVERSATION)
             // 问题卡片：所有和人聊的对话都带着（后台没人点时工具自己回话让它改用文字）

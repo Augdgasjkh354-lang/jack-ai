@@ -30,7 +30,8 @@ class TourAskTest {
     private fun vm(key: String, asked: Boolean = false): ChatViewModel {
         val app = RuntimeEnvironment.getApplication() as Application
         runCatching { androidx.work.WorkManager.initialize(app, androidx.work.Configuration.Builder().build()) }
-        Store(app).saveSettings(Store(app).loadSettings().copy(apiKey = key, tourAsked = asked))
+        // 空白页的建议弹幕一直在飘，界面永远「不空闲」，测试等不到；这里关掉
+        Store(app).saveSettings(Store(app).loadSettings().copy(apiKey = key, tourAsked = asked, bizStarts = false))
         return ChatViewModel(app).also { m ->
             rule.setContent {
                 val state by m.state.collectAsState()

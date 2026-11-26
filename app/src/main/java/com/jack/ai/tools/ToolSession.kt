@@ -476,6 +476,7 @@ class ToolSession(
             name == "delete_file" -> deleteFiles(args)
             name == "search_my_data" -> searchMyData(args)
             name == "knowledge_base" && SkillIds.LIBRARY in skillIds -> knowledgeBase(args)
+            name == "settings" -> settingsTool(args)
             name == "facts" -> if (args["action"].text() == "save") saveFact(args) else recallFacts(args)
             name == "end_conversation" && interactive -> endConversation(args)
             name == "ask_user" -> askUser(args)
