@@ -247,8 +247,11 @@ private fun Danmaku(lanes: List<List<com.jack.ai.data.BizStarts.Start>>, onPick:
                 awaitEachGesture {
                     awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                     held = true
+                    // 按在弹幕上：左右划是在拖弹幕，别让聊天页当成「往右划开侧边栏」（外层先清掉标记，这里再设上）
+                    AppTouch.active = true
                     do { val e = awaitPointerEvent(PointerEventPass.Initial) } while (e.changes.any { it.pressed })
                     held = false
+                    AppTouch.active = false
                 }
             },
         verticalArrangement = Arrangement.spacedBy(12.dp),

@@ -199,22 +199,39 @@ fun PokerScreen(state: UiState, onBack: () -> Unit) {
     var confirmEnd by remember { mutableStateOf(false) }
     // 标题上的「第几手」跟着牌桌变
     table?.tick?.collectAsState()?.value
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(table?.let { "德州扑克 · 第 ${it.game.hand} 手" } ?: "德州扑克") },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") } },
-                actions = { if (table != null) TextButton(onClick = { confirmEnd = true }) { Text("结束牌局") } },
-            )
-        },
-    ) { padding ->
-        val t = table
-        if (t == null) PokerSetup(state, Modifier.padding(padding)) { opps ->
-            val nt = PokerTable(ctx.applicationContext, state.settings, opps)
-            PokerTable.current = nt
-            table = nt
-            nt.startHand()
-        } else PokerBoard(t, Modifier.padding(padding))
+    // 牌桌一律是深色的桌布配色（设置也一样），不跟主题走
+    MaterialTheme(colorScheme = androidx.compose.material3.darkColorScheme(
+        primary = Felt.Gold, onPrimary = Color(0xFF1B1300), secondaryContainer = Color(0xFF2B3A33), onSecondaryContainer = Color.White,
+        surface = Color(0xFF12201A), surfaceContainerLow = Color(0xFF16261F), surfaceContainerHigh = Color(0xFF1C2E26),
+        onSurface = Color.White, onSurfaceVariant = Felt.Dim, outline = Color.White.copy(alpha = 0.4f), outlineVariant = Color.White.copy(alpha = 0.16f),
+    )) {
+        Box(Modifier.fillMaxSize().background(Felt.Backdrop)) {
+            Scaffold(
+                containerColor = Color.Transparent,
+                topBar = {
+                    TopAppBar(
+                        colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent,
+                            titleContentColor = Color.White, navigationIconContentColor = Color.White, actionIconContentColor = Color.White),
+                        title = {
+                            Column {
+                                Text("德州扑克", style = MaterialTheme.typography.titleMedium)
+                                table?.let { Text("第 ${it.game.hand} 手 · 盲注 ${it.game.small}/${it.game.big}", style = MaterialTheme.typography.labelSmall, color = Felt.Dim) }
+                            }
+                        },
+                        navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") } },
+                        actions = { if (table != null) TextButton(onClick = { confirmEnd = true }) { Text("结束牌局", color = Felt.Dim) } },
+                    )
+                },
+            ) { padding ->
+                val t = table
+                if (t == null) PokerSetup(state, Modifier.padding(padding)) { opps ->
+                    val nt = PokerTable(ctx.applicationContext, state.settings, opps)
+                    PokerTable.current = nt
+                    table = nt
+                    nt.startHand()
+                } else PokerBoard(t, Modifier.padding(padding))
+            }
+        }
     }
     if (confirmEnd) AlertDialog(
         onDismissRequest = { confirmEnd = false },
@@ -259,158 +276,6 @@ private fun PokerSetup(state: UiState, modifier: Modifier, onStart: (List<Oppone
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
         Button(onClick = { onStart(opps.map { it.copy(name = it.name.trim().ifBlank { "对手" }) }) }, modifier = Modifier.fillMaxWidth()) { Text("开局") }
     }
-}
-
-@Composable
-private fun PokerBoard(t: PokerTable, modifier: Modifier) {
-    val tick by t.tick.collectAsState()
-    tick.hashCode()
-    val g = t.game
-    val me = g.seats.first { it.human }
-    val colors = MaterialTheme.colorScheme
-    Column(modifier.fillMaxSize().padding(horizontal = 12.dp)) {
-        // 四个对手：两行两列
-        g.seats.filter { !it.human }.chunked(2).forEach { row ->
-            Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                row.forEach { s -> SeatCard(t, s.id, Modifier.weight(1f)) }
-            }
-        }
-        // 中间：公共牌和底池
-        Column(Modifier.fillMaxWidth().weight(1f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                (0 until 5).forEach { i -> g.board.getOrNull(i)?.let { CardFace(it, big = true) } ?: CardSlot() }
-            }
-            Spacer(Modifier.height(10.dp))
-            Text(if (g.result == null) "底池 ${g.pot}" else g.result!!.text, style = MaterialTheme.typography.titleSmall,
-                textAlign = TextAlign.Center, color = if (g.result != null) colors.primary else colors.onSurface)
-            Spacer(Modifier.height(6.dp))
-            // 最近几件事
-            g.log.takeLast(3).forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-        }
-        // 你自己
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            me.hole.forEach { CardFace(it, big = true); Spacer(Modifier.width(6.dp)) }
-            Spacer(Modifier.width(6.dp))
-            Column(Modifier.weight(1f)) {
-                Text("你" + if (g.dealer == me.id) " · 庄" else "", style = MaterialTheme.typography.titleSmall)
-                Text("筹码 ${me.chips}" + if (me.bet > 0) " · 本轮已下 ${me.bet}" else "", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
-                if (me.hole.isNotEmpty() && g.board.size >= 3) Text(HandEval.name(HandEval.best(me.hole + g.board)), style = MaterialTheme.typography.bodySmall, color = colors.primary)
-            }
-        }
-        Spacer(Modifier.height(10.dp))
-        Box(Modifier.navigationBarsPadding().padding(bottom = 10.dp)) {
-            when {
-                g.over -> Text(if (me.out) "你的筹码输光了。点「结束牌局」重新开一局。" else "你赢下了整桌！点「结束牌局」再来一局。",
-                    style = MaterialTheme.typography.bodyMedium, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
-                g.result != null -> Button(onClick = { t.startHand() }, modifier = Modifier.fillMaxWidth()) { Text("下一手") }
-                g.toAct == me.id -> ActionBar(t)
-                else -> Text(if (t.thinking >= 0) "${g.seats[t.thinking].name} 在想……" else "等别人出牌……",
-                    style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant, modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), textAlign = TextAlign.Center)
-            }
-        }
-    }
-}
-
-@Composable
-private fun ActionBar(t: PokerTable) {
-    val g = t.game
-    val me = g.seats.first { it.human }
-    val l = g.legal(me.id)
-    var raising by remember(g.hand, g.street, g.log.size) { mutableStateOf(false) }
-    var to by remember(g.hand, g.street, g.log.size) { mutableStateOf(l.minRaiseTo.toFloat()) }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (raising && l.canRaise) {
-            Text("加注到 ${to.toInt()}", style = MaterialTheme.typography.titleSmall)
-            Slider(value = to, onValueChange = { to = it }, valueRange = l.minRaiseTo.toFloat()..l.maxRaiseTo.toFloat())
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                // 常用的几档：半池、一池
-                listOf("½ 池" to g.pot / 2, "1 池" to g.pot).forEach { (label, add) ->
-                    val v = (g.legal(me.id).toCall + me.bet + add).coerceIn(l.minRaiseTo, l.maxRaiseTo)
-                    OutlinedButton(onClick = { to = v.toFloat() }) { Text(label) }
-                }
-                Spacer(Modifier.weight(1f))
-                Button(onClick = { t.play(Act.Raise(to.toInt())) }) { Text("确定") }
-            }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { t.play(Act.Fold) }, modifier = Modifier.weight(1f)) { Text("弃牌") }
-            Button(onClick = { t.play(if (l.canCheck) Act.Check else Act.Call) }, modifier = Modifier.weight(1.2f)) {
-                Text(if (l.canCheck) "过牌" else if (l.toCall >= me.chips) "全下 ${me.chips}" else "跟 ${l.toCall}")
-            }
-            if (l.canRaise) FilledTonalButton(onClick = { raising = !raising }, modifier = Modifier.weight(1f)) { Text(if (raising) "收起" else "加注") }
-            else if (l.toCall < me.chips) FilledTonalButton(onClick = { t.play(Act.AllIn) }, modifier = Modifier.weight(1f)) { Text("全下") }
-        }
-    }
-}
-
-@Composable
-private fun SeatCard(t: PokerTable, id: Int, modifier: Modifier) {
-    val g = t.game
-    val s = g.seats[id]
-    val colors = MaterialTheme.colorScheme
-    val acting = g.toAct == id || t.thinking == id
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(14.dp),
-        color = if (acting) colors.primaryContainer else colors.surfaceContainerLow,
-        border = if (acting) BorderStroke(1.dp, colors.primary) else null,
-    ) {
-        Column(Modifier.padding(10.dp).let { if (s.out || s.folded) it.then(Modifier) else it }) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(s.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                if (g.dealer == id) {
-                    Spacer(Modifier.width(4.dp))
-                    Text("庄", style = MaterialTheme.typography.labelSmall, color = colors.onPrimary,
-                        modifier = Modifier.background(colors.primary, CircleShape).padding(horizontal = 5.dp))
-                }
-            }
-            Text(t.modelName(id), style = MaterialTheme.typography.labelSmall, color = colors.outline, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(if (s.out) "出局" else "筹码 ${s.chips}", style = MaterialTheme.typography.bodySmall)
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-                val shown = g.result?.shown?.containsKey(id) == true
-                if (s.hole.isNotEmpty() && !s.out && !s.folded) s.hole.forEach { c -> if (shown) CardFace(c) else CardBack(); Spacer(Modifier.width(3.dp)) }
-                Spacer(Modifier.width(4.dp))
-                Text(
-                    when {
-                        t.thinking == id -> "想……"
-                        s.folded && !s.out -> "弃牌"
-                        else -> s.last
-                    },
-                    style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                )
-            }
-            t.says[id]?.let { say ->
-                Text("「$say」", style = MaterialTheme.typography.labelSmall, color = colors.primary, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 4.dp))
-            }
-        }
-    }
-}
-
-@Composable
-private fun CardFace(c: PlayingCard, big: Boolean = false) {
-    val w = if (big) 44.dp else 24.dp
-    val h = if (big) 62.dp else 34.dp
-    val red = Color(0xFFD32F2F)
-    Column(
-        Modifier.size(w, h).background(Color.White, RoundedCornerShape(if (big) 7.dp else 4.dp))
-            .border(0.5.dp, Color(0x33000000), RoundedCornerShape(if (big) 7.dp else 4.dp)),
-        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
-    ) {
-        val tint = if (c.red) red else Color(0xFF1B1B1F)
-        Text(c.rankText, color = tint, fontWeight = FontWeight.Bold, fontSize = if (big) 18.sp else 11.sp, lineHeight = if (big) 20.sp else 12.sp)
-        Text(c.suitText, color = tint, fontSize = if (big) 16.sp else 10.sp, lineHeight = if (big) 18.sp else 11.sp)
-    }
-}
-
-@Composable
-private fun CardBack() {
-    Box(Modifier.size(24.dp, 34.dp).background(Color(0xFF3949AB), RoundedCornerShape(4.dp)).border(2.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(4.dp)))
-}
-
-@Composable
-private fun CardSlot() {
-    Box(Modifier.size(44.dp, 62.dp).border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(7.dp)))
 }
 
 @Composable

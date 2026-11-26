@@ -214,14 +214,16 @@ class Holdem(
                 val add = to - s.bet
                 s.chips -= add; s.bet = to; s.total += add
                 if (s.chips == 0) s.allIn = true
+                // 这条街还没人下过注：叫「下注」，有人下过才叫「加注」
+                val verb = if (currentBet == 0) "下注" else "加注"
                 if (to > currentBet) {
                     // 加够了一个完整加注才重新打开下注；全下不够的只让大家补齐
                     if (to - currentBet >= minRaise) minRaise = to - currentBet
                     currentBet = to
                     pending.clear(); pending += seats.filter { it.live && !it.allIn && it.id != id }.map { it.id }
                 }
-                s.last = if (s.allIn) "全下 $to" else "加注到 $to"
-                log += "${s.name} ${if (s.allIn) "全下" else "加注"}到 $to"
+                s.last = if (s.allIn) "全下 $to" else if (verb == "下注") "下注 $to" else "加注到 $to"
+                log += if (s.allIn) "${s.name} 全下到 $to" else if (verb == "下注") "${s.name} 下注 $to" else "${s.name} 加注到 $to"
             }
         }
         toAct = next(id) { it.id in pending }
