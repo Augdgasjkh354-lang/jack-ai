@@ -15,6 +15,15 @@ class BackgroundModelTest {
         assertNull(base.subagentEndpoint())
     }
 
+    @Test fun autoPrefersGpt6Luna() {
+        val luna = gpt.copy(models = gpt.models + ProviderModel("gpt-6-luna"))
+        val s = base.copy(providers = listOf(luna), fallbackModels = listOf(MODEL_FLASH))
+        val ep = s.subagentEndpoint()!!
+        assertEquals("gpt-6-luna", ep.model)
+        // 主模型的备用（DeepSeek）不带给子 agent
+        assertEquals(emptyList<Endpoint>(), ep.fallbacks)
+    }
+
     @Test fun chosenModelsAreUsed() {
         val s = base.copy(backgroundModel = customModelKey("g", "luna"), subagentModel = customModelKey("g", "sol"))
         assertEquals("luna", s.backgroundEndpoint()!!.model)
@@ -25,7 +34,7 @@ class BackgroundModelTest {
     @Test fun aGoneChoiceFallsBackToTheMainModelNotDeepSeek() {
         val s = base.copy(backgroundModel = customModelKey("gone", "x"), subagentModel = customModelKey("gone", "x"))
         assertEquals("sol", s.backgroundEndpoint()!!.model)
-        assertNull(s.subagentEndpoint())
+        assertEquals("sol", s.subagentEndpoint()!!.model)
     }
 
     @Test fun visionStandInPrefersTheBackgroundModel() {

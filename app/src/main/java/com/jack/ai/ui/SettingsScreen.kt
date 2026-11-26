@@ -355,7 +355,7 @@ fun SettingsScreen(
                 ) { k -> vm.updateSettings { it.copy(backgroundModel = k) } }
                 ModelPick(
                     title = "子 agent 模型",
-                    hint = "分头做事时每个分身用它。自动：先用免费模型池，没有就用后台模型",
+                    hint = "分头做事时每个分身用它，出错也不换别的模型。自动：有 GPT-6 Luna 就用它，没有先用免费模型池，再用后台模型",
                     auto = "自动", current = settings.subagentModel, choices = settings.modelChoices(),
                 ) { k -> vm.updateSettings { it.copy(subagentModel = k) } }
                 // 思考摘要：思考时一行行小标题；回答出来后展开还是折叠

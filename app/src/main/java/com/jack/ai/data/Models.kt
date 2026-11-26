@@ -642,8 +642,22 @@ fun Settings.backgroundEndpoint(): Endpoint? {
     return if (apiKey.isNotBlank()) endpoint(MODEL_FLASH) else usable(model)
 }
 
-/** 子 agent 用的模型：用户选了就用它，没选返回 null（先走免费池，再用后台模型）。 */
-fun Settings.subagentEndpoint(): Endpoint? = subagentModel.takeIf { it.isNotBlank() }?.let { usable(it) }
+/**
+ * 子 agent 用的模型：用户选了就用它（选的用不了退回主模型，不悄悄换成 DeepSeek）；
+ * 没选时有 GPT-6 Luna 就用它；都没有返回 null（先走免费池，再用后台模型）。
+ * 不带主模型的备用：备用里常有 DeepSeek，出错时会被悄悄换过去。
+ */
+fun Settings.subagentEndpoint(): Endpoint? {
+    val ep = if (subagentModel.isNotBlank()) usable(subagentModel) ?: usable(model)
+    else lunaModelKey()?.let { usable(it) }
+    return ep?.copy(fallbacks = emptyList())
+}
+
+/** 配好的 GPT-6 Luna：ChatGPT 账号登录的排前面（套餐里不另收钱）。没有返回 null。 */
+fun Settings.lunaModelKey(): String? = providers.sortedBy { if (it.isChatGpt) 0 else 1 }.firstNotNullOfOrNull { p ->
+    if (p.apiKey.isBlank() && !p.isChatGpt) return@firstNotNullOfOrNull null
+    p.models.firstOrNull { m -> m.id.lowercase().let { "gpt-6" in it && "luna" in it } }?.let { customModelKey(p.id, it.id) }
+}
 
 /** 后台模型的名字：选了的那个；没选就是自动挑的。 */
 fun Settings.backgroundModelKey(): String? = backgroundEndpoint()?.key
