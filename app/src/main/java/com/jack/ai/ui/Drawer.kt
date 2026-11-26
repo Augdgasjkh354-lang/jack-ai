@@ -722,6 +722,22 @@ internal fun doneAction(ok: Boolean, submit: () -> Unit) = androidx.compose.foun
 internal val SearchKeyboard = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search)
 internal val DoneKeyboard = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done)
 
+/**
+ * 密钥框右边：还空着时是「粘贴」（刚从网页复制了 Key 回来点一下就好，不用长按输入框再点粘贴），填了以后换成「显示 / 隐藏」。
+ */
+@Composable
+internal fun pasteOrEye(value: String, eye: @Composable () -> Unit, onPaste: (String) -> Unit): @Composable () -> Unit {
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    return {
+        if (value.isEmpty()) androidx.compose.material3.TextButton(onClick = {
+            val clip = clipboard.getText()?.text?.trim().orEmpty()
+            if (clip.isEmpty()) android.widget.Toast.makeText(ctx, "剪贴板里没有文字", android.widget.Toast.LENGTH_SHORT).show()
+            else onPaste(clip)
+        }) { Text("粘贴") } else eye()
+    }
+}
+
 /** 密钥框：默认打点，右边「显示 / 隐藏」，贴进去能看一眼有没有贴对。用法：`val (mask, eye) = secretBits()`。 */
 @Composable
 internal fun secretBits(): Pair<androidx.compose.ui.text.input.VisualTransformation, @Composable () -> Unit> {

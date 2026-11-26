@@ -52,6 +52,9 @@ private fun KeyList(name: String, hint: String, keys: List<String>, onChange: (L
     var input by remember { mutableStateOf("") }
     val (keyMask, keyEye) = secretBits()
     val results = remember { mutableStateMapOf<String, String>() }
+    // 「删除」和「测试」挨着，容易点错：删了下面出「撤销」，放回原来的位置
+    var removed by remember { mutableStateOf<Pair<String, Int>?>(null) }
+    androidx.compose.runtime.LaunchedEffect(removed) { if (removed != null) { kotlinx.coroutines.delay(8000); removed = null } }
     Column(Modifier.fillMaxWidth().padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text("$name（${keys.size} 个）", style = MaterialTheme.typography.labelLarge)
         Text(hint, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
@@ -69,18 +72,26 @@ private fun KeyList(name: String, hint: String, keys: List<String>, onChange: (L
                         results[k] = runCatching { test(k) }.fold({ "✓ 能用" }, { e -> "不通：" + (e.message ?: "出错了") })
                     }
                 }) { Text("测试") }
-                TextButton(onClick = { onChange(keys - k) }) { Text("删除", color = colors.error) }
+                TextButton(onClick = { onChange(keys - k); removed = k to i }) { Text("删除", color = colors.error) }
+            }
+        }
+        removed?.let { (k, at) ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("删了 ${k.take(4)}…${k.takeLast(4)}", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                TextButton(onClick = { if (k !in keys) onChange(keys.toMutableList().apply { add(at.coerceIn(0, size), k) }); removed = null }) { Text("撤销") }
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
                 value = input, onValueChange = { input = it.trim() },
                 placeholder = { Text("再加一个 $name Key") }, singleLine = true,
-                visualTransformation = keyMask, trailingIcon = keyEye,
+                // 贴进来的就是一个新 Key：直接加上，不用再点「添加」
+                visualTransformation = keyMask, trailingIcon = pasteOrEye(input, keyEye) { k -> if (k.length >= 8 && k !in keys) onChange(keys + k) else input = k },
                 keyboardOptions = DoneKeyboard, keyboardActions = doneAction(input.length >= 8 && input !in keys) { onChange(keys + input); input = "" },
                 modifier = Modifier.weight(1f),
             )
-            TextButton(enabled = input.length >= 8 && input !in keys, onClick = { onChange(keys + input); input = "" }) { Text("添加") }
+            TextButton(enabled = input.length >= 8 && input !in keys, whyDisabled = if (input in keys) "这个 Key 已经加过了" else "Key 太短，看看是不是没贴全",
+                onClick = { onChange(keys + input); input = "" }) { Text("添加") }
         }
     }
 }

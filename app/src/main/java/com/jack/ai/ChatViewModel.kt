@@ -169,6 +169,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun consumeToast() = _state.update { it.copy(toast = null) }
+    fun consumeToastGo() = _state.update { it.copy(toastGo = null) }
 
     /** 用户在确认弹窗里点了确认或取消。 */
     fun answerConfirm(id: String, ok: Boolean) = core.answerConfirm(id, ok)
@@ -372,14 +373,14 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         if ((trimmed.isEmpty() && atts.isEmpty()) || (here != null && busy(here)) || _state.value.importing) return false
         if (tooMany(here)) return false
         com.jack.ai.data.Quota.blocked(getApplication(), _state.value.settings)?.let { w ->
-            _state.update { it.copy(toast = com.jack.ai.data.Quota.message(w) + "。在「设置 → 统计」里能看用量、改额度") }
+            _state.update { it.copy(toastGo = com.jack.ai.data.Quota.message(w) + "。点「去看看」看用量、改额度" to "USAGE") }
             return false
         }
         // 带图但当前模型看不了：这一条临时换一个能看图的来答，不用自己去换模型再回来
         var visionModel: String? = null
         if (atts.any { it.kind == "image" } && _state.value.settings.endpoint()?.vision == false) {
             visionModel = _state.value.settings.visionModelKey() ?: run {
-                _state.update { it.copy(toast = "当前模型看不了图片，也没有别的能看图的模型。去「设置 → 其他模型服务」加一个") }
+                _state.update { it.copy(toastGo = "当前模型看不了图片，也没有别的能看图的模型，加一个能看图的服务" to "PROVIDERS") }
                 return false
             }
             _state.update { it.copy(toast = "当前模型看不了图片，这一条换成 ${com.jack.ai.data.modelLabel(visionModel!!)} 来看") }

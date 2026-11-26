@@ -723,7 +723,7 @@ private fun ChatGptCalibrateDialog(current: List<Double?>, onOpenUsage: () -> Un
             }
         },
         confirmButton = {
-            TextButton(enabled = parse(five) != null || parse(week) != null, onClick = { onSave(listOf(parse(five), parse(week))) }) { Text("保存") }
+            TextButton(enabled = parse(five) != null || parse(week) != null, whyDisabled = "填一个 0 到 100 的百分比", onClick = { onSave(listOf(parse(five), parse(week))) }) { Text("保存") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
     )

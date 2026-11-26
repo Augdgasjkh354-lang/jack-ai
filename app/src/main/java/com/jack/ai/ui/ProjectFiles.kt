@@ -131,30 +131,36 @@ internal fun ProjectFiles(project: Project, bars: PaddingValues, onTerminal: (St
         )
     }
     naming?.let { n ->
-        var name by remember(n) { mutableStateOf(n.rename?.name.orEmpty()) }
+        // 改名时先选中「.」前面那段：直接打新名字，扩展名不用重打
+        val initial = n.rename?.name.orEmpty()
+        var field by remember(n) { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(initial,
+            androidx.compose.ui.text.TextRange(0, initial.lastIndexOf('.').takeIf { it > 0 } ?: initial.length))) }
+        val name = field.text
+        fun submit() {
+            val made = if (n.rename != null) ProjectTree.rename(n.rename, name) else ProjectTree.create(n.parent, name, n.folder)
+            if (made == null) android.widget.Toast.makeText(ctx, "已经有叫「$name」的了", android.widget.Toast.LENGTH_SHORT).show()
+            else {
+                naming = null
+                // 在哪建的就把哪展开；新建的文件直接打开编辑
+                val rel = n.parent.relativeTo(root).path
+                if (rel.isNotEmpty()) open = open + rel
+                if (n.rename == null && !n.folder && Editable.ok(made)) editing = made
+                rev++
+            }
+        }
         AlertDialog(
             onDismissRequest = { naming = null },
             title = { Text(if (n.rename != null) "改名" else if (n.folder) "新建文件夹" else "新建文件") },
             text = {
                 Column {
-                    OutlinedTextField(name, { name = it }, singleLine = true, placeholder = { Text(if (n.folder) "例如：src" else "例如：main.py") })
+                    OutlinedTextField(field, { field = it }, singleLine = true, placeholder = { Text(if (n.folder) "例如：src" else "例如：main.py") },
+                        modifier = Modifier.focusOnShow(), keyboardOptions = DoneKeyboard, keyboardActions = doneAction(ProjectTree.okName(name)) { submit() })
                     if (name.isNotBlank() && !ProjectTree.okName(name)) Text("名字里不能有 / \\ : * ? \" < > |，也不能以点开头",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                 }
             },
             confirmButton = {
-                TextButton(enabled = ProjectTree.okName(name), onClick = {
-                    val made = if (n.rename != null) ProjectTree.rename(n.rename, name) else ProjectTree.create(n.parent, name, n.folder)
-                    if (made == null) android.widget.Toast.makeText(ctx, "已经有叫「$name」的了", android.widget.Toast.LENGTH_SHORT).show()
-                    else {
-                        naming = null
-                        // 在哪建的就把哪展开；新建的文件直接打开编辑
-                        val rel = n.parent.relativeTo(root).path
-                        if (rel.isNotEmpty()) open = open + rel
-                        if (n.rename == null && !n.folder && Editable.ok(made)) editing = made
-                        rev++
-                    }
-                }) { Text("好") }
+                TextButton(enabled = ProjectTree.okName(name), onClick = { submit() }) { Text("好") }
             },
             dismissButton = { TextButton(onClick = { naming = null }) { Text("取消") } },
         )

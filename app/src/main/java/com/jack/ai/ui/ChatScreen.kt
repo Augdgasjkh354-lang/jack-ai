@@ -207,6 +207,14 @@ fun ChatScreen(
             }
         }
     }
+    // 发不出去、要去设置里补一样东西（额度用完、没有能看图的模型）：底下一条提示，点「去看看」直接到那页
+    LaunchedEffect(state.toastGo) {
+        val (msg, page) = state.toastGo ?: return@LaunchedEffect
+        vm.consumeToastGo()
+        snackbar.currentSnackbarData?.dismiss()
+        val r = snackbar.showSnackbar(msg, actionLabel = "去看看", duration = androidx.compose.material3.SnackbarDuration.Long)
+        if (r == androidx.compose.material3.SnackbarResult.ActionPerformed) onOpenSettingsPage(page)
+    }
     // 从顶栏「更多」删掉眼前的对话：回到空白页，底下出「撤销」，撤销了再切回来
     fun deleteChat(c: Conversation) {
         vm.delete(c.id)

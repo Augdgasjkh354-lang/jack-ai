@@ -361,9 +361,10 @@ private fun ProjectSources(vm: ChatViewModel, state: UiState, project: Project, 
             title = { Text("添加文字") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(name, { name = it }, label = { Text("标题") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(name, { name = it }, label = { Text("标题（可不填）") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    // 标题可以不填（取正文第一行）：光标直接放在正文里
                     OutlinedTextField(text, { text = it }, placeholder = { Text("贴进来一段资料、设定或参考文字") },
-                        minLines = 6, maxLines = 12, modifier = Modifier.fillMaxWidth())
+                        minLines = 6, maxLines = 12, modifier = Modifier.fillMaxWidth().focusOnShow())
                 }
             },
             confirmButton = {
@@ -450,6 +451,8 @@ fun ProjectDialog(initial: Project?, onDismiss: () -> Unit, onSave: (Project) ->
     var picking by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
+        // 填了名字、改了设置：点到外面不一下子没了
+        properties = keepIfEdited(name != initial?.name.orEmpty() || isolated != (initial?.isolated ?: false)),
         title = { Text(if (initial == null) "新建项目" else "编辑项目") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {

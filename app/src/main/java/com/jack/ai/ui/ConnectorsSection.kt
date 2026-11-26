@@ -90,7 +90,8 @@ private fun ConnectorDialog(vm: ChatViewModel, server: McpServer, isNew: Boolean
         title = { Text(if (isNew) "添加连接器" else "修改连接器") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(name, { name = it; autoName = null }, label = { Text("名字") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(name, { name = it; autoName = null }, label = { Text("名字") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth().then(if (isNew) Modifier.focusOnShow() else Modifier))
                 // 名字没自己填过：跟着网址自动起一个（mcp.notion.com → Notion），只贴网址就能保存
                 OutlinedTextField(url, { v ->
                     url = v.trim()
@@ -101,7 +102,7 @@ private fun ConnectorDialog(vm: ChatViewModel, server: McpServer, isNew: Boolean
                     Text("已用账号登录", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
                     TextButton(onClick = { oauth = "" }) { Text("退出登录") }
                 } else OutlinedTextField(key, { key = it }, label = { Text("Key（没有就空着）") }, singleLine = true,
-                    visualTransformation = keyMask, trailingIcon = keyEye, modifier = Modifier.fillMaxWidth())
+                    visualTransformation = keyMask, trailingIcon = pasteOrEye(key, keyEye) { key = it }, modifier = Modifier.fillMaxWidth())
                 // 支持账号登录的服务（Notion 这类）：不用找 Key，浏览器里点同意就行
                 if (oauth.isBlank()) OutlinedButton(
                     enabled = !busy && name.isNotBlank() && url.startsWith("https"),

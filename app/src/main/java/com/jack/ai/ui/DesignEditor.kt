@@ -755,7 +755,7 @@ private fun DesignEditorScreen(src: File, onClose: () -> Unit) {
             AlertDialog(
                 onDismissRequest = { sheet = null },
                 title = { Text("改字") },
-                text = { OutlinedTextField(value, { value = it }, Modifier.fillMaxWidth(), minLines = 2, maxLines = 6) },
+                text = { OutlinedTextField(value, { value = it }, Modifier.fillMaxWidth().focusOnShow(), minLines = 2, maxLines = 6) },
                 confirmButton = { TextButton(onClick = { cmd("text", "value" to value); sheet = null }) { Text("好") } },
                 dismissButton = { TextButton(onClick = { sheet = null }) { Text("取消") } },
             )

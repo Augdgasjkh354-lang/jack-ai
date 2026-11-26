@@ -148,7 +148,7 @@ fun SkillsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit) {
                     OutlinedTextField(name, { name = it }, label = { Text("名字") }, singleLine = true,
                         modifier = if (isNew) Modifier.focusOnShow() else Modifier,
                         placeholder = { Text("比如：写周报") })
-                    OutlinedTextField(desc, { desc = it }, label = { Text("简介") },
+                    OutlinedTextField(desc, { desc = it }, label = { Text("简介（可不填）") },
                         placeholder = { Text("比如：把用户这周做的事整理成周报") }, minLines = 2, maxLines = 3)
                     OutlinedTextField(ins, { ins = it }, label = { Text("详细做法") },
                         placeholder = { Text("一步一步写清楚怎么做、格式是什么、要注意什么") }, minLines = 6, maxLines = 14)
@@ -156,9 +156,12 @@ fun SkillsScreen(vm: ChatViewModel, settings: Settings, onBack: () -> Unit) {
             },
             confirmButton = {
                 TextButton(
-                    enabled = name.isNotBlank() && desc.isNotBlank() && ins.isNotBlank(),
+                    // 简介不填：拿做法的第一句（Kavi 靠简介判断什么时候用，总得有一句）
+                    enabled = name.isNotBlank() && ins.isNotBlank(),
+                    whyDisabled = if (name.isBlank()) "先起个名字" else "写一下详细做法",
                     onClick = {
-                        val updated = s.copy(name = name.trim(), description = desc.trim(), instructions = ins.trim())
+                        val about = desc.trim().ifEmpty { skillBlurb(ins) }
+                        val updated = s.copy(name = name.trim(), description = about, instructions = ins.trim())
                         vm.updateSettings { st ->
                             st.copy(customSkills = if (isNew) st.customSkills + updated
                                 else st.customSkills.map { if (it.id == s.id) updated else it })
@@ -224,4 +227,11 @@ private fun SkillCard(s: Skill, settings: Settings, onOpen: () -> Unit, onToggle
             Switch(s.enabled, onToggle)
         }
     }
+}
+
+/** 技能没写简介时用的一句：做法里第一行像样的字（去掉 Markdown 的「#」「-」），最多 40 个字。 */
+internal fun skillBlurb(instructions: String): String {
+    val line = instructions.lineSequence().map { it.trim().trimStart('#', '-', '*', '>', ' ').trim() }.firstOrNull { it.isNotEmpty() }.orEmpty()
+    val first = line.split('。', '！', '？').first().trim()
+    return if (first.length > 40) first.take(40) + "…" else first
 }

@@ -52,6 +52,7 @@ import com.jack.ai.data.KbRepo
 import com.jack.ai.data.KnowledgeBase
 import com.jack.ai.data.LibraryDoc
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -64,7 +65,24 @@ fun LibraryScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
     // 导入到哪：空的是「我的资料」，否则是某个知识库
     var importTo by remember { mutableStateOf("") }
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { vm.addLibraryFiles(it, importTo) }
-    var deleting by remember { mutableStateOf<LibraryDoc?>(null) }
+    // 删文档不再先确认：先从列表里拿掉，底下出「撤销」；提示条收起（或离开这页）才真删
+    var trashed by remember { mutableStateOf<LibraryDoc?>(null) }
+    val undoBar = remember { androidx.compose.material3.SnackbarHostState() }
+    val undoScope = androidx.compose.runtime.rememberCoroutineScope()
+    fun commitTrash() { trashed?.let { vm.deleteLibraryDoc(it.id) }; trashed = null }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { commitTrash() } }
+    fun trash(d: LibraryDoc) {
+        commitTrash()
+        trashed = d
+        undoScope.launch {
+            undoBar.currentSnackbarData?.dismiss()
+            val r = undoBar.showSnackbar("删了「${d.name.take(14)}」" + if (d.path.isNotEmpty()) "（下次更新知识库还会下回来）" else "",
+                actionLabel = "撤销", duration = androidx.compose.material3.SnackbarDuration.Short)
+            if (r == androidx.compose.material3.SnackbarResult.ActionPerformed) { if (trashed?.id == d.id) trashed = null }
+            else if (trashed?.id == d.id) commitTrash()
+        }
+    }
+    val library = state.library.filter { it.id != trashed?.id }
     var deletingKb by remember { mutableStateOf<KnowledgeBase?>(null) }
     var openKb by remember { mutableStateOf<String?>(null) }
     var catalog by remember { mutableStateOf(false) }
@@ -80,6 +98,7 @@ fun LibraryScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
         coverage = withContext(Dispatchers.IO) { runCatching { vm.libraryCoverage() }.getOrNull() }
     }
     Scaffold(
+        snackbarHost = { KaviSnackbarHost(undoBar) },
         topBar = {
             TopAppBar(
                 title = { Text("资料库") },
@@ -117,14 +136,14 @@ fun LibraryScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                 }
             }
             items(state.kbs.sortedByDescending { it.addedAt }, key = { "kb-" + it.id }) { kb ->
-                val docs = state.library.filter { it.kb == kb.id }
+                val docs = library.filter { it.kb == kb.id }
                 KbCard(kb, docs, open = openKb == kb.id, fmt = fmt,
                     onOpen = { openKb = if (openKb == kb.id) null else kb.id },
                     onToggle = { vm.toggleKb(kb.id, it) },
                     onImport = { importTo = kb.id; pick.launch(arrayOf("*/*")) },
                     onSync = { vm.syncKbs() },
                     onDelete = { deletingKb = kb },
-                    onDeleteDoc = { deleting = it },
+                    onDeleteDoc = { trash(it) },
                     onReadDoc = { reading = it })
             }
             item {
@@ -135,13 +154,13 @@ fun LibraryScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                 }
                 if (state.importing) BusyRow("正在读取…")
             }
-            val mine = state.library.filter { it.kb.isEmpty() || state.kbs.none { k -> k.id == it.kb } }
+            val mine = library.filter { it.kb.isEmpty() || state.kbs.none { k -> k.id == it.kb } }
             if (mine.isEmpty()) {
                 item { EmptyNote(AppIcons.File, "还没有自己的资料", "导入文档后，Kavi 回答时会先在这里面找。", Modifier.padding(top = 0.dp)) }
             }
             if (mine.size > 8 || docQuery.isNotEmpty()) item { SearchField(docQuery, { docQuery = it }, placeholder = "搜我的资料") }
             items(mine.filter { docQuery.isBlank() || it.name.contains(docQuery.trim(), true) }.sortedByDescending { it.addedAt }, key = { it.id }) { d ->
-                DocRow(d, fmt, onOpen = { reading = d }) { deleting = d }
+                DocRow(d, fmt, onOpen = { reading = d }) { trash(d) }
             }
             coverage?.let { (have, all) ->
                 if (all > 0) item {
@@ -150,10 +169,6 @@ fun LibraryScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                 }
             }
         }
-    }
-    deleting?.let { d ->
-        ConfirmDeleteDialog("从资料库删除？", "「${d.name}」会从资料库移除。" + if (d.path.isNotEmpty()) "（从 GitHub 来的，下次更新时还会下回来；不想要就关掉或删掉整个知识库）" else "",
-            onDismiss = { deleting = null }) { vm.deleteLibraryDoc(d.id); deleting = null }
     }
     deletingKb?.let { kb ->
         ConfirmDeleteDialog("删掉知识库？", "「${kb.name}」和里面的 ${state.library.count { it.kb == kb.id }} 份文档都会删掉。", onDismiss = { deletingKb = null }) {
@@ -275,7 +290,7 @@ private fun CatalogDialog(vm: ChatViewModel, state: UiState, onDismiss: () -> Un
         text = {
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(repo, { repo = it }, modifier = Modifier.weight(1f), singleLine = true,
+                    OutlinedTextField(repo, { repo = it }, modifier = Modifier.weight(1f).focusOnShow(), singleLine = true,
                         label = { Text("GitHub 项目") }, placeholder = { Text("作者/项目名 或 网址") },
                         // 填完按键盘上的「前往」就读，不用再去点旁边的「读取」
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Go),

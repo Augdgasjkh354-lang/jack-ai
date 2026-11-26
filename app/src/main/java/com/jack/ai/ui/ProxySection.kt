@@ -204,7 +204,9 @@ fun ProxySection(vm: ChatViewModel, s: Settings) {
     status?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = if ("失败" in it || "不通" in it || "没" in it) colors.error else colors.onSurfaceVariant) }
 
     if (pasting) {
-        var text by remember { mutableStateOf("") }
+        // 剪贴板里正好是订阅地址或节点链接（刚从别处复制来）：直接填好，点「导入」就行
+        val clip = androidx.compose.ui.platform.LocalClipboardManager.current
+        var text by remember { mutableStateOf(clip.getText()?.text?.trim().orEmpty().takeIf { looksLikeProxy(it) }.orEmpty()) }
         AlertDialog(
             onDismissRequest = { pasting = false },
             // 贴好了一长串节点，点到外面不会一下没了
@@ -212,10 +214,17 @@ fun ProxySection(vm: ChatViewModel, s: Settings) {
             title = { Text("粘贴订阅或节点") },
             text = {
                 OutlinedTextField(text, { text = it }, placeholder = { Text("https://… 订阅地址，或 ss:// vmess:// 等链接，可以多行") },
-                    minLines = 3, maxLines = 6, modifier = Modifier.fillMaxWidth())
+                    minLines = 3, maxLines = 6, modifier = Modifier.fillMaxWidth().focusOnShow())
             },
             confirmButton = { TextButton(enabled = text.isNotBlank(), onClick = { pasting = false; import(text) }) { Text("导入") } },
             dismissButton = { TextButton(onClick = { pasting = false }) { Text("取消") } },
         )
     }
+}
+
+/** 看着像订阅地址或节点链接：http(s) 地址，或 ss:// vmess:// 这类开头。 */
+internal fun looksLikeProxy(t: String): Boolean {
+    val first = t.lineSequence().firstOrNull()?.trim()?.lowercase() ?: return false
+    return listOf("http://", "https://", "ss://", "ssr://", "vmess://", "vless://", "trojan://", "hysteria://", "hysteria2://", "hy2://", "tuic://")
+        .any { first.startsWith(it) }
 }

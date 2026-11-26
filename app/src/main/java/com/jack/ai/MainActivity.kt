@@ -386,7 +386,7 @@ class MainActivity : FragmentActivity() {
                             vm = vm,
                             state = state,
                             onOpenSettings = { stack.add(Screen.Settings()) },
-                            onOpenSettingsPage = { stack.add(Screen.Settings(it)) },
+                            onOpenSettingsPage = { if (it == "USAGE") stack.add(Screen.Usage) else stack.add(Screen.Settings(it)) },
                             onOpenProject = { stack.add(Screen.ProjectPage(it)) },
                             onNewProject = { creatingProject = true },
                             onOpenMemory = { stack.add(Screen.Memory) },

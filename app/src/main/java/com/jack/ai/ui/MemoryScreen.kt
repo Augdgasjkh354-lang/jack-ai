@@ -489,7 +489,8 @@ internal fun SpaceBar(vm: ChatViewModel, settings: com.jack.ai.data.Settings, se
                     naming = null
                 }) },
             confirmButton = {
-                TextButton(enabled = name.isNotBlank() && name.trim() != com.jack.ai.data.DEFAULT_SPACE_NAME, onClick = {
+                TextButton(enabled = name.isNotBlank() && name.trim() != com.jack.ai.data.DEFAULT_SPACE_NAME,
+                    whyDisabled = if (name.isBlank()) "先起个名字" else "「${com.jack.ai.data.DEFAULT_SPACE_NAME}」已经有了，换个名字", onClick = {
                     if (id.isEmpty()) onSelect(vm.addSpace(name)) else vm.renameSpace(id, name)
                     naming = null
                 }) { Text("好") }

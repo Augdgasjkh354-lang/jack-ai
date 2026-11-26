@@ -90,7 +90,7 @@ fun ProxyAppsSection(vm: ChatViewModel, s: Settings) {
                 },
             )
         }
-        OutlinedButton(onClick = { picking = true }, enabled = TProxyService.available, modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(onClick = { picking = true }, enabled = TProxyService.available, whyDisabled = "这一版没带上分流组件（或系统低于 Android 10），暂时用不了", modifier = Modifier.fillMaxWidth()) {
             Text(if (s.proxyApps.isEmpty()) "选 App" else "选 App（${s.proxyApps.size} 个）")
         }
         Text("开着时状态栏会有钥匙图标；同一时间只能开一个 VPN。没选的 App（比如抖音）照常用手机网络。",

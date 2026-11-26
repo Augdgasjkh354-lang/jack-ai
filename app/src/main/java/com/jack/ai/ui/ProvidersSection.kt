@@ -226,7 +226,7 @@ private fun ProviderDialog(vm: ChatViewModel, initial: Provider, onDismiss: () -
                     placeholder = { Text("https://…/v1") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(
                     value = key, onValueChange = { key = it.trim() }, label = { Text("API Key") },
-                    singleLine = true, visualTransformation = keyMask, trailingIcon = keyEye,
+                    singleLine = true, visualTransformation = keyMask, trailingIcon = pasteOrEye(key, keyEye) { key = it },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     modifier = Modifier.fillMaxWidth(),
                 )

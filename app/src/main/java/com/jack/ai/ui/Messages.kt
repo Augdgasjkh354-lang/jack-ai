@@ -303,6 +303,7 @@ fun AssistantMessage(
             },
             confirmButton = {
                 TextButton(enabled = edited.isNotBlank() && edited.trim() != msg.content.trim(),
+                    whyDisabled = if (edited.isBlank()) "改的版本是空的" else "还没改，先在上面改成你想要的说法",
                     onClick = { onRestyle(edited.trim()); restyling = false }) { Text("交给 Kavi") }
             },
             dismissButton = { TextButton(onClick = { restyling = false }) { Text("取消") } },

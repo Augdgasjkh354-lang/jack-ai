@@ -117,7 +117,8 @@ fun FlowsDialog(vm: ChatViewModel, onDismiss: () -> Unit) {
             title = { Text(if (isNew) "写一个流程" else "编辑流程") },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(name, { name = it }, label = { Text("名字") }, singleLine = true, placeholder = { Text("比如：1688 比价") })
+                    OutlinedTextField(name, { name = it }, label = { Text("名字") }, singleLine = true, placeholder = { Text("比如：1688 比价") },
+                        modifier = if (isNew) Modifier.focusOnShow() else Modifier)
                     OutlinedTextField(site, { site = it }, label = { Text("网站") }, singleLine = true, placeholder = { Text("比如：1688.com") })
                     OutlinedTextField(whenToUse, { whenToUse = it }, label = { Text("什么时候用") }, placeholder = { Text("比如：要在 1688 上找货比价时") }, maxLines = 3)
                     OutlinedTextField(steps, { steps = it }, label = { Text("步骤") }, minLines = 6, maxLines = 16,
@@ -125,7 +126,9 @@ fun FlowsDialog(vm: ChatViewModel, onDismiss: () -> Unit) {
                 }
             },
             confirmButton = {
-                TextButton(enabled = name.isNotBlank() && BrowserFlows.siteOf(site).isNotEmpty() && steps.isNotBlank(), onClick = {
+                TextButton(enabled = name.isNotBlank() && BrowserFlows.siteOf(site).isNotEmpty() && steps.isNotBlank(),
+                    whyDisabled = when { name.isBlank() -> "先起个名字"; BrowserFlows.siteOf(site).isEmpty() -> "网站填个域名，比如 1688.com"; else -> "写一下步骤" },
+                    onClick = {
                     val updated = f.copy(name = name.trim(), site = BrowserFlows.siteOf(site), whenToUse = whenToUse.trim(), steps = steps.trim())
                     save(if (isNew) flows + updated else flows.map { if (it.id == f.id) updated else it })
                     editing = null

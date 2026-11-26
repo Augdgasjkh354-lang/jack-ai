@@ -84,6 +84,8 @@ data class UiState(
     val pending: List<Attachment> = emptyList(),
     val importing: Boolean = false,
     val toast: String? = null,
+    /** 带「去设置」的提示：(说什么, 去哪一页——SettingsPage 的名字，USAGE 是统计页)。聊天页用底部提示条显示。 */
+    val toastGo: Pair<String, String>? = null,
     val compressingId: String? = null,
     val memories: List<MemoryItem> = emptyList(),
     val dreams: List<DreamEntry> = emptyList(),

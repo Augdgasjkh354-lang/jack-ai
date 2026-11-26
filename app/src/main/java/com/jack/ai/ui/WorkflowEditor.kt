@@ -157,12 +157,12 @@ fun WorkflowEditor(initial: Workflow?, preview: Map<String, List<WfStepLog>> = e
                     CircleIconButton(Icons.AutoMirrored.Filled.ArrowBack, "返回", onClick = ::back)
                     Spacer(Modifier.width(12.dp))
                     Text(if (initial == null) "新工作流" else "编辑工作流", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                    OutlinedButton(onClick = ::tryRun, enabled = !trying && draft.steps.isNotEmpty()) {
+                    OutlinedButton(onClick = ::tryRun, enabled = !trying && draft.steps.isNotEmpty(), whyDisabled = if (trying) "正在跑" else "先加一步，或者让 Kavi 搭") {
                         if (trying) { CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp); Spacer(Modifier.width(6.dp)) }
                         Text(if (trying) "在跑" else "试跑")
                     }
                     Spacer(Modifier.width(8.dp))
-                    Button(onClick = ::save, shape = CircleShape, enabled = draft.steps.isNotEmpty()) { Text("保存") }
+                    Button(onClick = ::save, shape = CircleShape, enabled = draft.steps.isNotEmpty(), whyDisabled = "先加一步，或者让 Kavi 搭") { Text("保存") }
                 }
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     KaviBuild(draft.steps.isEmpty(), building) { req ->

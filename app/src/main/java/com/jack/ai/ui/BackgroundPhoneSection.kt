@@ -151,7 +151,8 @@ fun BackgroundPhoneSection(vm: ChatViewModel, settings: Settings) {
             OutlinedTextField(code, { code = it }, label = { Text("六位配对码") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
             OutlinedTextField(port, { port = it }, label = { Text("配对端口（可留空）") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
         }
-    }, confirmButton = { TextButton(enabled = PairingCode.normalize(code) != null && (port.isBlank() || PairingCode.port(port) != null), onClick = {
+    }, confirmButton = { TextButton(enabled = PairingCode.normalize(code) != null && (port.isBlank() || PairingCode.port(port) != null),
+        whyDisabled = if (PairingCode.normalize(code) == null) "配对码是 6 位数字" else "端口是一串数字，比如 37099", onClick = {
         val value = code; val number = PairingCode.port(port)
         manual = false; code = ""; manager.start()
         scope.launch { engine.startPairing(value, number) }

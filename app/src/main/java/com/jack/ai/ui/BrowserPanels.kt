@@ -165,10 +165,10 @@ internal fun BrowserActivity.TabsPanel() {
                 IconButton(onClick = { showTabs = false }) { Icon(Icons.Default.Close, "收起") }
                 Text("标签页（${b.tabs.size}）", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
                 if (b.incognitoSupported()) {
-                    TextButton(enabled = !full, onClick = { accountPick = true }) { Text("分身") }
-                    TextButton(enabled = !full, onClick = { showTabs = false; openInNewTab(null, incognito = true) }) { Text("隐身") }
+                    TextButton(enabled = !full, whyDisabled = "最多开 ${JackBrowser.MAX_TABS} 个标签页，先关掉几个", onClick = { accountPick = true }) { Text("分身") }
+                    TextButton(enabled = !full, whyDisabled = "最多开 ${JackBrowser.MAX_TABS} 个标签页，先关掉几个", onClick = { showTabs = false; openInNewTab(null, incognito = true) }) { Text("隐身") }
                 }
-                TextButton(enabled = !full, onClick = { showTabs = false; openInNewTab(null) }) { Text("新标签页") }
+                TextButton(enabled = !full, whyDisabled = "最多开 ${JackBrowser.MAX_TABS} 个标签页，先关掉几个", onClick = { showTabs = false; openInNewTab(null) }) { Text("新标签页") }
             }
             // 分组：点一下只看这组（这时新开的标签页也进这组），长按改名、关掉整组
             androidx.compose.foundation.lazy.LazyRow(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 4.dp),
@@ -236,7 +236,7 @@ internal fun BrowserActivity.TabsPanel() {
             text = { Column {
                 if (from.isEmpty() && t == null) Text("当前这个标签页会放进新分组。", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                 OutlinedTextField(name, { name = it.take(20) }, singleLine = true, placeholder = { Text("比如：工作、购物") },
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp).focusOnShow())
             } },
             confirmButton = { TextButton(enabled = name.isNotBlank(), onClick = {
                 groupName = null
@@ -550,7 +550,7 @@ internal fun BrowserActivity.ScriptsPanel() {
             onDismissRequest = { ask = null }, title = { Text("让 Kavi 写一个网页脚本") },
             text = { Column {
                 Text(if (site.isEmpty()) "想让网页自动做什么？" else "想让 $site 自动做什么？", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
-                OutlinedTextField(want, { want = it }, Modifier.fillMaxWidth().padding(top = 8.dp), placeholder = { Text("比如：自动展开全文，去掉底部的「打开 App」") }, minLines = 2)
+                OutlinedTextField(want, { want = it }, Modifier.fillMaxWidth().padding(top = 8.dp).focusOnShow(), placeholder = { Text("比如：自动展开全文，去掉底部的「打开 App」") }, minLines = 2)
             } },
             confirmButton = { TextButton(enabled = want.isNotBlank(), onClick = {
                 ask = null; showScripts = false
