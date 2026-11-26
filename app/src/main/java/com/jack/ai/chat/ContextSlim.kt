@@ -27,13 +27,37 @@ object ContextSlim {
     /** 压成只剩开头时留多少字。 */
     private const val STUB_HEAD = 200
 
+    /** 手机工具结果里屏幕清单的开头（见 ScreenText.format）。 */
+    const val SCREEN = "【手机屏幕】"
+    const val SCREEN_GONE = "【An earlier phone screen, omitted: the screen has changed since. Go by the latest screen.】"
+    /** 最近几屏原样留着。 */
+    const val KEEP_SCREENS = 2
+    /** 旧屏攒到这么多再一起省掉（锯齿式：一次省一批，前面就不再变，缓存照样命中）。 */
+    const val FOLD_SCREENS_EVERY = 8
+
+    /**
+     * 操作手机时每一步都带一整屏清单（几十到几百行），后面的步骤一做，前面那些屏就过时了，却每轮都重发。
+     * 屏幕多了就把较早的屏幕清单省掉，只留那一步做了什么（清单前面的那几行）；最近 [KEEP_SCREENS] 屏不动。
+     * 思路同 Mika 的按轮数折叠历史（foldEvery），Apache-2.0。返回省了几条。
+     */
+    fun foldScreens(messages: MutableList<JsonObject>): Int {
+        val live = messages.indices.filter { (messages[it]["role"] as? JsonPrimitive)?.content == "tool" && SCREEN in text(messages[it]) }
+        if (live.size <= KEEP_SCREENS + FOLD_SCREENS_EVERY) return 0
+        live.dropLast(KEEP_SCREENS).forEach { i ->
+            val c = text(messages[i])
+            messages[i] = JsonObject(messages[i] + ("content" to JsonPrimitive(c.substringBefore(SCREEN).trimEnd() + "\n" + SCREEN_GONE)))
+        }
+        return live.size - KEEP_SCREENS
+    }
+
     /** 返回压了几条。 */
     fun slim(messages: MutableList<JsonObject>, spill: ((String) -> String?)? = null): Int {
+        val folded = foldScreens(messages)
         val tools = messages.indices.filter { (messages[it]["role"] as? JsonPrimitive)?.content == "tool" }
-        if (tools.sumOf { text(messages[it]).length } <= BUDGET) return 0
+        if (tools.sumOf { text(messages[it]).length } <= BUDGET) return folded
         // 最近的留着，但至少留一条：原来 dropLast(KEEP_RECENT) 在工具消息 ≤6 条时返回空，永远压不到
         val keep = minOf(KEEP_RECENT, (tools.size - 1).coerceAtLeast(1))
-        var n = 0
+        var n = folded
         tools.dropLast(keep).forEach { i ->
             val c = text(messages[i])
             if (c.length <= MIN_LEN || c.startsWith(MARK) || c.startsWith(STUB)) return@forEach
