@@ -724,6 +724,14 @@ internal fun doneAction(ok: Boolean, submit: () -> Unit) = androidx.compose.foun
 internal val SearchKeyboard = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search)
 internal val DoneKeyboard = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done)
 
+/** 密钥框：默认打点，右边「显示 / 隐藏」，贴进去能看一眼有没有贴对。用法：`val (mask, eye) = secretBits()`。 */
+@Composable
+internal fun secretBits(): Pair<androidx.compose.ui.text.input.VisualTransformation, @Composable () -> Unit> {
+    var show by remember { mutableStateOf(false) }
+    val mask = if (show) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation()
+    return mask to { androidx.compose.material3.TextButton(onClick = { show = !show }) { Text(if (show) "隐藏" else "显示") } }
+}
+
 @Composable
 fun ConfirmDeleteDialog(title: String, body: String, onDismiss: () -> Unit, onConfirm: () -> Unit) {
     AlertDialog(

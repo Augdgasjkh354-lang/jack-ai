@@ -153,7 +153,12 @@ fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit, onOpen
             }
             val shown = state.routines.filter { filter == "all" || it.kind == filter }
             if (state.routines.isNotEmpty() && shown.isEmpty()) {
-                item { Text("这一类还没有。", color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(top = 12.dp, start = 4.dp)) }
+                item {
+                    Row(Modifier.padding(top = 4.dp, start = 4.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        Text("这一类还没有。", color = MaterialTheme.colorScheme.outline)
+                        TextButton(onClick = { filter = "all" }) { Text("看全部 ${state.routines.size} 个") }
+                    }
+                }
             }
             items(shown.sortedBy { it.nextAt() ?: Long.MAX_VALUE }, key = { it.id }) { r ->
                 // 监控在聊天里让 AI 设，这里只能开关和删除

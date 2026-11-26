@@ -79,7 +79,8 @@ fun FileLibraryScreen(state: UiState, onBack: () -> Unit, onOpenChat: (String) -
                     FilterChip(kind == null, { kind = null }, label = { Text("全部") })
                     FileLibrary.Kind.entries.forEach { k ->
                         val n = list?.count { it.kind == k } ?: 0
-                        if (n > 0) FilterChip(kind == k.name, { kind = k.name }, label = { Text("${k.label} $n") })
+                        // 再点一下选中的那个回到「全部」
+                        if (n > 0) FilterChip(kind == k.name, { kind = if (kind == k.name) null else k.name }, label = { Text("${k.label} $n") })
                     }
                 }
             }
@@ -90,8 +91,11 @@ fun FileLibraryScreen(state: UiState, onBack: () -> Unit, onOpenChat: (String) -
             val shown = FileLibrary.filter(list, kind?.let { FileLibrary.Kind.valueOf(it) }, query)
             if (none) item { EmptyNote(AppIcons.Folder, "还没有文件", "发给 Kavi 的附件、它做出来的文件都会出现在这里。") }
             else if (shown.isEmpty()) item {
-                Text(if (list.isEmpty()) "还没有文件。发给 Kavi 的附件、它做出来的文件都会出现在这里。" else "没有符合的文件。",
-                    color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(top = 24.dp))
+                Column(Modifier.padding(top = 24.dp)) {
+                    Text("没有符合的文件。", color = MaterialTheme.colorScheme.outline)
+                    // 搜不到时一下清掉搜索词和类型，不用分别去删
+                    TextButton(onClick = { query = ""; kind = null }) { Text("清掉搜索和筛选") }
+                }
             }
             items(shown, key = { it.file.absolutePath }) { e ->
                 Column {

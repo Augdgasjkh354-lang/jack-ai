@@ -89,6 +89,8 @@ fun DownloadsScreen(onBack: () -> Unit) {
     val shown = list.filter { query.isBlank() || it.first.name.contains(query.trim(), true) || it.first.url.contains(query.trim(), true) }
 
     fun redo(r: DownloadRecord) {
+        // 正在重下时再点不重复下一份
+        if (message?.startsWith("正在重下") == true) return
         message = "正在重下「${r.name}」…"
         scope.launch {
             message = try {
@@ -164,7 +166,7 @@ fun DownloadsScreen(onBack: () -> Unit) {
                         }
                         Row(horizontalArrangement = Arrangement.End) {
                             if (ok) IconButton(onClick = { share(ctx, r) }) { Icon(Icons.Default.Share, "分享") }
-                            if (r.url.isNotBlank()) IconButton(onClick = { redo(r) }) { Icon(Icons.Default.Refresh, "重下") }
+                            if (r.url.isNotBlank()) IconButton(onClick = { redo(r) }, enabled = message?.startsWith("正在重下") != true) { Icon(Icons.Default.Refresh, "重下") }
                             IconButton(onClick = { if (ok) deleting = r else forget(listOf(r)) }) { Icon(Icons.Default.Delete, "删除") }
                         }
                     }

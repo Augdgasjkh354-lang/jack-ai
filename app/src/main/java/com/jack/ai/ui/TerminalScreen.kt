@@ -129,6 +129,7 @@ fun TerminalScreen(folder: String, title: String, onBack: () -> Unit) {
                         menu = false
                         val text = ctx.getSystemService(ClipboardManager::class.java)?.primaryClip?.getItemAt(0)?.coerceToText(ctx)?.toString().orEmpty()
                         if (text.isNotEmpty()) handle.value?.js("kvPaste('${Base64.encodeToString(text.toByteArray(), Base64.NO_WRAP)}')")
+                        else android.widget.Toast.makeText(ctx, "剪贴板是空的", android.widget.Toast.LENGTH_SHORT).show()
                     }
                     MenuRow("字大一点", glyph = "A+", sub = "现在 $font") { setFont((font + 1).coerceAtMost(22)) }
                     MenuRow("字小一点", glyph = "A−") { setFont((font - 1).coerceAtLeast(9)) }

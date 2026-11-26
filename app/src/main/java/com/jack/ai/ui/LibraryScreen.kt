@@ -73,6 +73,8 @@ fun LibraryScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
     var creating by remember { mutableStateOf(false) }
     // 点一份文档看它的正文（Kavi 检索时读的就是这份）
     var reading by remember { mutableStateOf<LibraryDoc?>(null) }
+    // 「我的资料」多了找一份要一直翻：多于 8 份出搜索框
+    var docQuery by remember { mutableStateOf("") }
     val fmt = remember { SimpleDateFormat("M月d日", Locale.CHINA) }
     // 按意思搜备好了多少段（向量在后台慢慢补）
     var coverage by remember { mutableStateOf<Pair<Int, Int>?>(null) }
@@ -139,7 +141,10 @@ fun LibraryScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
             if (mine.isEmpty()) {
                 item { EmptyNote(AppIcons.File, "还没有自己的资料", "导入文档后，Kavi 回答时会先在这里面找。", Modifier.padding(top = 0.dp)) }
             }
-            items(mine.sortedByDescending { it.addedAt }, key = { it.id }) { d -> DocRow(d, fmt, onOpen = { reading = d }) { deleting = d } }
+            if (mine.size > 8 || docQuery.isNotEmpty()) item { SearchField(docQuery, { docQuery = it }, placeholder = "搜我的资料") }
+            items(mine.filter { docQuery.isBlank() || it.name.contains(docQuery.trim(), true) }.sortedByDescending { it.addedAt }, key = { it.id }) { d ->
+                DocRow(d, fmt, onOpen = { reading = d }) { deleting = d }
+            }
             coverage?.let { (have, all) ->
                 if (all > 0) item {
                     Text(if (have >= all) "按意思搜：全部 $all 段都备好了" else "按意思搜：已备好 $have / $all 段，其余在后台慢慢算（没备好的照样能按关键词搜到）",

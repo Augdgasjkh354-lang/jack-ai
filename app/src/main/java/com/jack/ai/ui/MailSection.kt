@@ -17,7 +17,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.jack.ai.ChatViewModel
 import com.jack.ai.data.MailAccount
@@ -68,6 +67,7 @@ private fun MailEditor(vm: ChatViewModel, initial: MailAccount, onSave: (MailAcc
     var showServers by remember { mutableStateOf(initial.address.isNotBlank() && mailPresetFor(initial.address) == null) }
     var result by remember { mutableStateOf<String?>(null) }
     fun change(a: MailAccount) { acc = a; result = null }
+    val (codeMask, codeEye) = secretBits()
     OutlinedTextField(
         value = acc.address,
         onValueChange = { v ->
@@ -87,7 +87,7 @@ private fun MailEditor(vm: ChatViewModel, initial: MailAccount, onSave: (MailAcc
         label = { Text("授权码") },
         placeholder = { Text("不是登录密码") },
         singleLine = true,
-        visualTransformation = PasswordVisualTransformation(),
+        visualTransformation = codeMask, trailingIcon = codeEye,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
         modifier = Modifier.fillMaxWidth(),
     )

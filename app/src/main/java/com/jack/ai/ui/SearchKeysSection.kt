@@ -18,7 +18,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.jack.ai.ChatViewModel
 import com.jack.ai.api.ExaClient
@@ -52,6 +51,7 @@ private fun KeyList(name: String, hint: String, keys: List<String>, onChange: (L
     val colors = MaterialTheme.colorScheme
     val scope = rememberCoroutineScope()
     var input by remember { mutableStateOf("") }
+    val (keyMask, keyEye) = secretBits()
     val results = remember { mutableStateMapOf<String, String>() }
     Column(Modifier.fillMaxWidth().padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text("$name（${keys.size} 个）", style = MaterialTheme.typography.labelLarge)
@@ -77,7 +77,8 @@ private fun KeyList(name: String, hint: String, keys: List<String>, onChange: (L
             OutlinedTextField(
                 value = input, onValueChange = { input = it.trim() },
                 placeholder = { Text("再加一个 $name Key") }, singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
+                visualTransformation = keyMask, trailingIcon = keyEye,
+                keyboardOptions = DoneKeyboard, keyboardActions = doneAction(input.length >= 8 && input !in keys) { onChange(keys + input); input = "" },
                 modifier = Modifier.weight(1f),
             )
             TextButton(enabled = input.length >= 8 && input !in keys, onClick = { onChange(keys + input); input = "" }) { Text("添加") }

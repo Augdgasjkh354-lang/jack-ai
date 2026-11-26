@@ -19,7 +19,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jack.ai.ChatViewModel
@@ -76,6 +75,7 @@ private fun ConnectorDialog(vm: ChatViewModel, server: McpServer, isNew: Boolean
     var name by remember { mutableStateOf(server.name) }
     var url by remember { mutableStateOf(server.url) }
     var key by remember { mutableStateOf(server.key) }
+    val (keyMask, keyEye) = secretBits()
     var askFirst by remember { mutableStateOf(server.askFirst) }
     var route by remember { mutableStateOf(server.route) }
     var oauth by remember { mutableStateOf(server.oauth) }
@@ -102,7 +102,7 @@ private fun ConnectorDialog(vm: ChatViewModel, server: McpServer, isNew: Boolean
                     Text("已用账号登录", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
                     TextButton(onClick = { oauth = "" }) { Text("退出登录") }
                 } else OutlinedTextField(key, { key = it }, label = { Text("Key（没有就空着）") }, singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+                    visualTransformation = keyMask, trailingIcon = keyEye, modifier = Modifier.fillMaxWidth())
                 // 支持账号登录的服务（Notion 这类）：不用找 Key，浏览器里点同意就行
                 if (oauth.isBlank()) OutlinedButton(
                     enabled = !busy && name.isNotBlank() && url.startsWith("https"),

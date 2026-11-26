@@ -111,7 +111,7 @@ fun ReviewScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                 }
             }
             if (state.cards.isEmpty()) {
-                item { Text("还没有卡片。", color = MaterialTheme.colorScheme.outline) }
+                item { Text("还没有卡片。在聊天里说「把这段做成记忆卡片」，Kavi 会做好放到这里，按遗忘曲线提醒你复习。", color = MaterialTheme.colorScheme.outline) }
             }
             items(state.cards.groupBy { it.deck }.toList(), key = { it.first }) { (name, cards) ->
                 val dueCount = cards.count { it.due <= now }
@@ -126,7 +126,7 @@ fun ReviewScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit) {
                             Text(name, style = MaterialTheme.typography.titleSmall)
                             Text(
                                 "${cards.size} 张 · " + if (dueCount > 0) "$dueCount 张该复习了" else "下次复习：" +
-                                    SimpleDateFormat("M月d日", Locale.CHINA).format(Date(cards.minOf { it.due })) + " · 点一下提前复习",
+                                    friendlyDay(SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(cards.minOf { it.due }))) + " · 点一下提前复习",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = if (dueCount > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             )

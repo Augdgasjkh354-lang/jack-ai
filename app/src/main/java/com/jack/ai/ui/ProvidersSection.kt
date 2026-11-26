@@ -39,7 +39,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jack.ai.ChatViewModel
@@ -164,6 +163,7 @@ private fun ProviderDialog(vm: ChatViewModel, initial: Provider, onDismiss: () -
     var error by remember { mutableStateOf<String?>(null) }
     var filter by remember { mutableStateOf("") }
     var manual by remember { mutableStateOf("") }
+    val (keyMask, keyEye) = secretBits()
     // 名字没自己填过：跟着接口地址自动起一个（api.deepseek.com → Deepseek）
     var autoName by remember { mutableStateOf(initial.name.takeIf { it.isEmpty() }) }
 
@@ -227,7 +227,7 @@ private fun ProviderDialog(vm: ChatViewModel, initial: Provider, onDismiss: () -
                     placeholder = { Text("https://…/v1") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(
                     value = key, onValueChange = { key = it.trim() }, label = { Text("API Key") },
-                    singleLine = true, visualTransformation = PasswordVisualTransformation(),
+                    singleLine = true, visualTransformation = keyMask, trailingIcon = keyEye,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -253,13 +253,16 @@ private fun ProviderDialog(vm: ChatViewModel, initial: Provider, onDismiss: () -
                     style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                 // 有的服务不提供模型列表，可以手动填模型名
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(value = manual, onValueChange = { manual = it.trim() }, placeholder = { Text("手动填模型名") },
-                        singleLine = true, modifier = Modifier.weight(1f))
-                    TextButton(enabled = manual.isNotEmpty(), onClick = {
+                    fun addManual() {
                         if (manual !in available) available = listOf(manual) + available
                         if (chosen.none { it.id == manual }) chosen.add(vm.guessModel(manual))
                         manual = ""
-                    }) { Text("添加") }
+                    }
+                    // 键盘上的「完成」就添加，连着填几个不用每次去点按钮
+                    OutlinedTextField(value = manual, onValueChange = { manual = it.trim() }, placeholder = { Text("手动填模型名") },
+                        singleLine = true, modifier = Modifier.weight(1f), keyboardOptions = DoneKeyboard,
+                        keyboardActions = doneAction(manual.isNotEmpty()) { addManual() })
+                    TextButton(enabled = manual.isNotEmpty(), onClick = { addManual() }) { Text("添加") }
                 }
                 if (available.isNotEmpty()) {
                     Text(
