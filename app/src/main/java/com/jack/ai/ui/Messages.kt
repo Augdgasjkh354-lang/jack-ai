@@ -46,6 +46,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Refresh
@@ -175,14 +176,18 @@ fun UserBubble(msg: ChatMessage, onDelete: () -> Unit, onEdit: (() -> Unit)? = n
                         menu = true
                     }),
             ) {
+                // 开头引用了 Kavi 的话：引用单独一块、淡一点显示在上面，下面才是自己写的
+                val (quoted, body) = remember(msg.content) { splitQuote(msg.content) }
                 Box {
-                    Text(
-                        msg.content,
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                    Column(Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
+                    if (quoted != null) QuoteText(quoted, LocalContentColor.current.copy(alpha = 0.75f), Modifier.padding(bottom = if (body.isEmpty()) 0.dp else 8.dp), maxLines = 3)
+                    if (body.isNotEmpty() || quoted == null) Text(
+                        if (quoted != null) body else msg.content,
                         style = MaterialTheme.typography.bodyLarge,
                         maxLines = if (expanded) Int.MAX_VALUE else LONG_LINES,
                         onTextLayout = { if (!expanded) overflow = it.hasVisualOverflow },
                     )
+                    }
                     if (overflow && !expanded) Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(40.dp)
                         .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(bubble.copy(alpha = 0f), bubble))))
                 }
@@ -276,6 +281,8 @@ fun AssistantMessage(
     /** 「换个模型重答」能选的模型（key, 名字）；空的就不显示。 */
     models: List<Pair<String, String>> = emptyList(),
     onRegenerateWith: (String) -> Unit = {},
+    /** 「引用」：选好的一段放到输入框上面，接着问。 */
+    onQuote: ((String) -> Unit)? = null,
 ) {
     var restyling by remember { mutableStateOf(false) }
     if (restyling && onRestyle != null) {
@@ -305,6 +312,10 @@ fun AssistantMessage(
     var pickModel by remember { mutableStateOf(false) }
     var selecting by remember { mutableStateOf(false) }
     if (selecting) TextViewer("选择文字", load = { markdownToPlain(msg.content) to false }, onDismiss = { selecting = false })
+    var quoting by remember { mutableStateOf(false) }
+    if (quoting && onQuote != null) QuotePicker(remember(msg.content) { markdownToPlain(msg.content) }, onDismiss = { quoting = false }) { q ->
+        quoting = false; onQuote(q)
+    }
     var reporting by remember { mutableStateOf(false) }
     if (reporting && onReport != null) {
         var note by remember { mutableStateOf("") }
@@ -477,6 +488,12 @@ fun AssistantMessage(
                 Box {
                     SmallAction(Icons.Default.MoreVert, "更多") { more = true }
                     DropdownMenu(expanded = more, onDismissRequest = { more = false }) {
+                        // 引用其中一段（或整条）接着问：Kavi 知道你说的是哪句
+                        if (onQuote != null && msg.content.isNotEmpty()) DropdownMenuItem(
+                            text = { Text("引用") },
+                            leadingIcon = { Icon(AppIcons.Quote, null) },
+                            onClick = { more = false; quoting = true },
+                        )
                         if (msg.content.isNotEmpty()) {
                             val speaking = Speaker.speakingId == msg.id
                             DropdownMenuItem(

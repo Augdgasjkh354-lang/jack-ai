@@ -225,6 +225,9 @@ internal fun InputBar(
     onCancelEdit: () -> Unit = {},
     onSubmitEdit: () -> Unit = {},
     tabs: (@Composable () -> Unit)? = null,
+    /** 引用的 Kavi 的一段话：显示在输入框里面最上面，发的时候带在前面。 */
+    quote: String? = null,
+    onClearQuote: () -> Unit = {},
 ) {
     var attachMenu by remember { mutableStateOf(false) }
     // 「@技能」「@邮箱」选择框：null 不显示
@@ -372,12 +375,19 @@ internal fun InputBar(
         if (uris.isEmpty()) Toast.makeText(ctx, "没读到剪贴板里的图片", Toast.LENGTH_SHORT).show() else vm.addImages(uris)
     }
     val showClip = clipShown != null && editing == null
+    // 发出去的字：有引用就带在前面；发出去了引用条跟着收起
+    fun sendNow(): Boolean {
+        val q = quote.takeIf { editing == null }
+        val ok = vm.send(withQuote(q, text))
+        if (ok) { onTextChange(""); if (q != null) onClearQuote() }
+        return ok
+    }
     // 附件还在读就点了发送：先记下，读完自动发出去，不用盯着等它亮了再点一次
     var sendWhenReady by remember { mutableStateOf(false) }
     LaunchedEffect(state.importing, sendWhenReady) {
         if (sendWhenReady && !state.importing) {
             sendWhenReady = false
-            if (editing == null && vm.send(text)) onTextChange("")
+            if (editing == null) sendNow()
         }
     }
     if (editing != null && sendWhenReady) sendWhenReady = false
@@ -447,6 +457,7 @@ internal fun InputBar(
         ) {
             // 加了附件、打字换行时胶囊平滑地长高，不是一下子跳上去
             Column(Modifier.animateContentSize(androidx.compose.animation.core.spring(stiffness = 700f)).padding(6.dp)) {
+                if (quote != null && editing == null) QuoteBar(quote, onClearQuote)
                 if (state.pending.isNotEmpty() || state.importing || showClip) {
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -588,7 +599,7 @@ internal fun InputBar(
                         exit = androidx.compose.animation.scaleOut(androidx.compose.animation.core.tween(120), targetScale = 0.5f) + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(120)),
                     ) {
                         val press = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-                        Surface(onClick = { if (vm.send(text)) { haptics.tick(); onTextChange("") } }, shape = CircleShape, color = colors.primary,
+                        Surface(onClick = { if (sendNow()) haptics.tick() }, shape = CircleShape, color = colors.primary,
                             modifier = Modifier.size(42.dp).pressScale(press, 0.88f), interactionSource = press) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(AppIcons.ArrowUp, "插话", Modifier.size(20.dp), tint = colors.onPrimary)
@@ -600,7 +611,7 @@ internal fun InputBar(
                         VoiceInput.on -> SendAction.VOICE
                         editing != null -> SendAction.EDIT
                         state.streamingHere -> SendAction.STOP
-                        text.isBlank() && state.pending.isEmpty() -> SendAction.MIC
+                        text.isBlank() && state.pending.isEmpty() && quote == null -> SendAction.MIC
                         else -> SendAction.SEND
                     }
                     androidx.compose.animation.AnimatedContent(
@@ -639,7 +650,7 @@ internal fun InputBar(
                             else -> {
                                 val edit = a == SendAction.EDIT
                                 val canSend = if (edit) text.isNotBlank() || editing?.attachments?.isNotEmpty() == true
-                                    else (text.isNotBlank() || state.pending.isNotEmpty() || state.importing) && !sendWhenReady
+                                    else (text.isNotBlank() || quote != null || state.pending.isNotEmpty() || state.importing) && !sendWhenReady
                                 // 能发 / 不能发之间颜色渐变（附件读完、打了字时亮起来），不是一下跳
                                 val fill by androidx.compose.animation.animateColorAsState(
                                     if (canSend) colors.primary else colors.onSurface.copy(alpha = 0.08f), Springs.defaultEffects(), label = "sendFill")
@@ -648,7 +659,7 @@ internal fun InputBar(
                                 Surface(
                                     onClick = {
                                         haptics.tick()
-                                        if (edit) onSubmitEdit() else if (state.importing) sendWhenReady = true else if (vm.send(text)) onTextChange("")
+                                        if (edit) onSubmitEdit() else if (state.importing) sendWhenReady = true else sendNow()
                                     },
                                     enabled = canSend,
                                     shape = CircleShape,

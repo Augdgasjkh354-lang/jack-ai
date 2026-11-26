@@ -38,6 +38,8 @@ object AppIcons {
         "M16,1H4C2.9,1 2,1.9 2,3v14h2V3h12V1zM19,5H8C6.9,5 6,5.9 6,7v14c0,1.1 0.9,2 2,2h11c1.1,0 2,-0.9 2,-2V7C21,5.9 20.1,5 19,5zM19,21H8V7h11V21z",
     )
     val Stop = icon("Stop", "M6,6h12v12H6z")
+    /** 引号：引用。 */
+    val Quote = icon("FormatQuote", "M6,17h3l2,-4V7H5v6h3zM14,17h3l2,-4V7h-6v6h3z")
     /** 雷达：监控。 */
     val Radar = icon(
         "TrackChanges",

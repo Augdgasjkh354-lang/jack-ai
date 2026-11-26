@@ -216,6 +216,8 @@ fun ChatScreen(
             if (r == androidx.compose.material3.SnackbarResult.ActionPerformed && vm.undoDeleteConversation()) vm.select(c.id)
         }
     }
+    // 引用的 Kavi 的一段话：放在输入框上面，发出去时带在前面；换了对话就不带了
+    var quote by remember(conv?.id) { mutableStateOf<String?>(null) }
     var showFiles by remember { mutableStateOf(false) }
     var memoryOf by remember { mutableStateOf<Conversation?>(null) }
     val bg = MaterialTheme.colorScheme.background
@@ -331,6 +333,8 @@ fun ChatScreen(
                     focusRequest = focusInput,
                     editing = editing,
                     onCancelEdit = { stopEditing() },
+                    quote = quote,
+                    onClearQuote = { quote = null },
                     onSubmitEdit = { editing?.let { m -> vm.editMessage(m.id, text) }; stopEditing() },
                     onNeedTavily = {
                         // 直接打开「连接」那页，不用自己从设置首页找
@@ -373,7 +377,8 @@ fun ChatScreen(
                     Box(Modifier.padding(padding)) { EmptyState(vm, state, conv, onOpenMemory, onOpenRoutines = { if (onOpenTab != null) onOpenTab(KaviTab.ROUTINES) else onOpenRoutines() }, onOpenGuide = onOpenGuide) }
                 } else {
                     MessageList(vm, conv, state.streamingHere, padding, editingId = editing?.id, onDeleted = ::onDeleted, summaryCollapsed = state.settings.summaryCollapsed,
-                        onOpenSettingsPage = onOpenSettingsPage, settings = state.settings, onEdit = { m ->
+                        onOpenSettingsPage = onOpenSettingsPage, settings = state.settings,
+                        onQuote = { q -> quote = q; focusInput++ }, onEdit = { m ->
                         if (editing == null) editBackup = text
                         editing = m
                         text = m.content
@@ -560,7 +565,8 @@ private fun ModelPicker(title: String, settings: Settings, projectName: String?,
 @Composable
 private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolean, bars: PaddingValues,
                         editingId: String?, onDeleted: (Int) -> Unit, onEdit: (com.jack.ai.data.ChatMessage) -> Unit,
-                        summaryCollapsed: Boolean = false, onOpenSettingsPage: (String) -> Unit = {}, settings: Settings? = null) {
+                        summaryCollapsed: Boolean = false, onOpenSettingsPage: (String) -> Unit = {}, settings: Settings? = null,
+                        onQuote: ((String) -> Unit)? = null) {
     // 一打开就停在最后一条附近，不先闪一下最顶上
     val ctx = LocalContext.current
     val listState = remember(conv.id) { androidx.compose.foundation.lazy.LazyListState(firstVisibleItemIndex = (conv.messages.size - 1).coerceAtLeast(0)) }
@@ -632,6 +638,7 @@ private fun MessageList(vm: ChatViewModel, conv: Conversation, streaming: Boolea
                                 // 换个模型重答：选好就换上并重新回答，不用先去顶上换模型再回来点重答
                                 models = if (isLast && models.size > 1) models.filter { it.key != settings?.model }.map { it.key to it.label } else emptyList(),
                                 onRegenerateWith = { key -> vm.updateSettings { it.copy(model = key) }; vm.regenerate() },
+                                onQuote = onQuote,
                                 onDelete = { vm.deleteFrom(msg.id).let { if (it > 0) onDeleted(it) } },
                                 onReview = vm::reviewLast,
                                 onContinue = if (isLast && !msg.truncated && vm.canContinue(msg)) ({ vm.continueWork() }) else null,
