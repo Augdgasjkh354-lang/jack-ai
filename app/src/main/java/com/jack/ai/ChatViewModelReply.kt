@@ -229,10 +229,16 @@ internal fun ChatViewModel.replyFollowUps(
         me?.join()
         resendLeftover(convId, leftover.joinToString("\n"))
     }
+    // 排队的消息：这一轮（做完、停下、出错都算）结束后发最前面那条；它答完再轮到下一条。插话要先发，排队的等下一轮
+    val queuedNext = if (leftover.isEmpty()) takeQueued(convId) else null
+    if (queuedNext != null) viewModelScope.launch {
+        me?.join()
+        resendLeftover(convId, queuedNext)
+    }
     // Work 一时出错停下（网络断了、服务忙）：等一会儿自动接着做，连着最多 AUTO_RESUME_MAX 次；用户停下、花费到上限、复核的不接
     if (failure == null) autoResumes.remove(convId)
     val resumes = autoResumes[convId] ?: 0
-    if (work && goalOf(convId) == null && leftover.isEmpty() && extraUser != ChatViewModel.REVIEW_PROMPT && !toolsStopped && underLimit &&
+    if (work && goalOf(convId) == null && leftover.isEmpty() && queuedNext == null && _state.value.queued[convId].isNullOrEmpty() && extraUser != ChatViewModel.REVIEW_PROMPT && !toolsStopped && underLimit &&
         failure?.let(::transient) == true && resumes < ChatViewModel.AUTO_RESUME_MAX) {
         autoResumes[convId] = resumes + 1
         val wait = ChatViewModel.AUTO_RESUME_DELAY_S * (resumes + 1)

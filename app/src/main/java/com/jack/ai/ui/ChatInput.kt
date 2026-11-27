@@ -1,5 +1,8 @@
 package com.jack.ai.ui
 
+import com.jack.ai.queue
+import com.jack.ai.queuedToSteer
+import com.jack.ai.unqueue
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.WindowInsets
 import com.jack.ai.api.webReady
@@ -449,6 +452,13 @@ internal fun InputBar(
                 TextButton(onClick = onCancelEdit) { Text("取消") }
             }
         }
+        // 排着队的消息：这一轮做完一条一条发；能改成插话，或撤回到输入框改了再发
+        state.currentId?.let { here ->
+            val queued = state.queued[here].orEmpty()
+            if (queued.isNotEmpty() && editing == null) QueuedList(queued,
+                onSteer = { i -> vm.queuedToSteer(here, i) },
+                onUndo = { i -> vm.unqueue(here, i)?.let { t -> onTextChange(if (text.isBlank()) t else text.trimEnd() + "\n" + t) } })
+        }
         Surface(
             shape = Radii.xl,
             // 浮在消息上面的一个毛玻璃大胶囊：左边加号，中间打字，右边一个圆按钮（话筒 / 发送 / 停止）
@@ -599,10 +609,28 @@ internal fun InputBar(
                         exit = androidx.compose.animation.scaleOut(androidx.compose.animation.core.tween(120), targetScale = 0.5f) + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(120)),
                     ) {
                         val press = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-                        Surface(onClick = { if (sendNow()) haptics.tick() }, shape = CircleShape, color = colors.primary,
-                            modifier = Modifier.size(42.dp).pressScale(press, 0.88f), interactionSource = press) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(AppIcons.ArrowUp, "插话", Modifier.size(20.dp), tint = colors.onPrimary)
+                        // 点一下是插话；长按选「排队」：不打扰这一轮，做完再发
+                        var sendMenu by remember { mutableStateOf(false) }
+                        Box {
+                            Surface(shape = CircleShape, color = colors.primary,
+                                modifier = Modifier.size(42.dp).pressScale(press, 0.88f).clip(CircleShape)
+                                    .combinedClickable(interactionSource = press, indication = androidx.compose.foundation.LocalIndication.current,
+                                        onClickLabel = "插话", onLongClickLabel = "选发送方式",
+                                        onLongClick = { haptics.tick(); sendMenu = true },
+                                        onClick = { if (sendNow()) haptics.tick() })) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(AppIcons.ArrowUp, "插话（长按可排队）", Modifier.size(20.dp), tint = colors.onPrimary)
+                                }
+                            }
+                            RoundMenu(sendMenu, { sendMenu = false }) {
+                                MenuRow("插话", icon = AppIcons.ArrowUp, sub = "马上插进这一轮，Kavi 带上重想") {
+                                    sendMenu = false; if (sendNow()) haptics.tick()
+                                }
+                                MenuRow("排队", glyph = "⏳", sub = "不打扰这一轮，做完再发") {
+                                    sendMenu = false
+                                    if (vm.queue(withQuote(quote, text))) { haptics.tick(); onTextChange(""); if (quote != null) onClearQuote() }
+                                    else if (sendNow()) haptics.tick()
+                                }
                             }
                         }
                     }
@@ -804,6 +832,25 @@ private fun VoiceBar(modifier: Modifier) {
             BreathingStar(size = 16.dp)
             Spacer(Modifier.width(8.dp))
             Text("正在转文字…", style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
+        }
+    }
+}
+
+/** 输入框上面的排队消息：一行一条，左边灰字写「排队中」和内容，右边「改为插话」「撤回」。 */
+@Composable
+private fun QueuedList(items: List<String>, onSteer: (Int) -> Unit, onUndo: (Int) -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    // 垫一层和输入框一样的毛玻璃：消息从底下翻过去时字不叠在一起
+    Column(Modifier.fillMaxWidth().padding(bottom = 6.dp).glass(Radii.l).padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp)) {
+        items.forEachIndexed { i, t ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(if (i == 0) "排队中 · 这一轮做完就发" else "排队中 · 第 ${i + 1} 条", style = MaterialTheme.typography.labelSmall, color = colors.outline)
+                    Text(t, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                TextButton(onClick = { onSteer(i) }) { Text("改为插话") }
+                TextButton(onClick = { onUndo(i) }) { Text("撤回", color = colors.onSurfaceVariant) }
+            }
         }
     }
 }

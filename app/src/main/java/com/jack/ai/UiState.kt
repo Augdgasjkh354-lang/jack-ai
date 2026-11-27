@@ -111,6 +111,8 @@ data class UiState(
     val confirm: ConfirmRequest? = null,
     /** 正在回答的对话（可以好几个同时答）。切去看别的对话不会打断它们。 */
     val streamingIds: Set<String> = emptySet(),
+    /** 排队的消息（按对话分开）：回答进行中发的、不插进这一轮，等这一轮做完一条一条当新消息发。只在内存里，App 关了就没了。 */
+    val queued: Map<String, List<String>> = emptyMap(),
 ) {
     /** 有回答正在进行（不管是哪个对话）。 */
     val streaming: Boolean get() = streamingIds.isNotEmpty()
