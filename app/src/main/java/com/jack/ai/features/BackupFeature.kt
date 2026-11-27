@@ -22,13 +22,13 @@ class BackupFeature(core: AppCore, private val knowledge: KnowledgeFeature) : Fe
     val exporting = MutableStateFlow(false)
 
     /** 把当前对话导出成文件，准备好后交给界面分享。 */
-    fun exportChat(format: ChatExport.Format, onReady: (File) -> Unit) {
+    fun exportChat(format: ChatExport.Format, image: ChatExport.ImageOptions = ChatExport.ImageOptions(), onReady: (File) -> Unit) {
         val conv = state.value.current?.takeIf { it.messages.isNotEmpty() } ?: return
         if (exporting.value) return
         exporting.value = true
         scope.launch {
             try {
-                val file = withContext(Dispatchers.IO) { ChatExport.export(app, conv, format) }
+                val file = withContext(Dispatchers.IO) { ChatExport.export(app, conv, format, image) }
                 onReady(file)
             } catch (e: CancellationException) {
                 throw e

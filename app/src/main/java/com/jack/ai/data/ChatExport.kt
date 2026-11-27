@@ -60,8 +60,8 @@ object ChatExport {
         }
     }.trimEnd() + "\n"
 
-    /** 生成导出文件，放在缓存目录里（每次导出前清掉旧的）。 */
-    fun export(ctx: Context, conv: Conversation, format: Format): File {
+    /** 生成导出文件，放在缓存目录里（每次导出前清掉旧的）。[image] 是长图的样式和内容选项。 */
+    fun export(ctx: Context, conv: Conversation, format: Format, image: ImageOptions = ImageOptions()): File {
         val dir = File(ctx.cacheDir, "exports").apply { mkdirs(); listFiles()?.forEach { it.delete() } }
         val base = conv.title.replace(Regex("""[\\/:*?"<>|\n\r\t]"""), "_").trim().take(40).ifBlank { "对话" }
         val file = File(dir, "$base.${format.ext}")
@@ -69,7 +69,7 @@ object ChatExport {
             when (format) {
                 Format.MARKDOWN -> out.write(markdown(conv).toByteArray())
                 Format.PDF -> PdfWriter.write(markdown(conv), out)
-                Format.IMAGE -> renderImage(ctx, conv).let { bmp ->
+                Format.IMAGE -> renderImage(ctx, conv, image).let { bmp ->
                     bmp.compress(Bitmap.CompressFormat.PNG, 100, out)
                     bmp.recycle()
                 }
@@ -80,24 +80,57 @@ object ChatExport {
 
     // ---------- 长图 ----------
 
+    /** 长图的样子。思路参考 DSH Go 的分享图（只借思路）。 */
+    enum class Look(val label: String) { LIGHT("浅色"), DARK("深色"), PAPER("纸张"), CARD("卡片") }
+
+    /**
+     * 长图的选项：[lastTurn] 只要最后一问一答；[questions] 带上自己问的话；[model] 回答上写是哪个模型。
+     */
+    data class ImageOptions(
+        val look: Look = Look.LIGHT,
+        val lastTurn: Boolean = false,
+        val questions: Boolean = true,
+        val model: Boolean = true,
+    )
+
+    /** 一种样子的颜色。卡片款的内容画在白卡片上，外面另垫一层淡彩渐变。 */
+    private class Palette(val bg: Int, val ink: Int, val muted: Int, val bubble: Int, val code: Int, val rule: Int, val serif: Boolean = false)
+
+    private fun palette(look: Look) = when (look) {
+        Look.LIGHT, Look.CARD -> Palette(0xFFFFFFFF.toInt(), 0xFF0A0A0A.toInt(), 0xFF6B6B6B.toInt(), 0xFFF1F1F1.toInt(), 0xFFF2F2F2.toInt(), 0xFFE8E8E8.toInt())
+        Look.DARK -> Palette(0xFF111113.toInt(), 0xFFF2F2F4.toInt(), 0xFF9A9AA0.toInt(), 0xFF2A2A2E.toInt(), 0xFF1F1F22.toInt(), 0xFF2C2C2E.toInt())
+        Look.PAPER -> Palette(0xFFF6F1E7.toInt(), 0xFF2B2620.toInt(), 0xFF857B6C.toInt(), 0xFFEAE2D2.toInt(), 0xFFECE5D8.toInt(), 0xFFDDD3C1.toInt(), serif = true)
+    }
+
     private const val W = 1080
     private const val PAD = 56
     private const val MAX_H = 24_000 // 再长手机内存吃不消，只保留最近的部分
-    // 和 App 的浅色主题一致：纯白底、黑字、灰阶
-    private const val BG = 0xFFFFFFFF.toInt()
-    private const val INK = 0xFF0A0A0A.toInt()
-    private const val MUTED = 0xFF6B6B6B.toInt()
-    private const val ACCENT = 0xFF0A0A0A.toInt()
-    private const val BUBBLE = 0xFFF1F1F1.toInt()
-    private const val CODE_BG = 0xFFF2F2F2.toInt()
+    /** 卡片款：卡片四周留的边和圆角。 */
+    private const val CARD_MARGIN = 56
+    private const val CARD_RADIUS = 48f
 
     /** 一块内容：高度 + 画法（画在 y=0 开始的位置）。 */
     private class Block(val height: Int, val draw: (Canvas) -> Unit)
 
-    private fun paint(size: Float, color: Int, bold: Boolean = false) = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-        textSize = size
-        this.color = color
-        if (bold) typeface = Typeface.DEFAULT_BOLD
+    /** 画一张图时用的东西：宽度、颜色、Markdown 排版器。 */
+    private class Page(ctx: Context, val pal: Palette, val width: Int) {
+        val mw: Markwon = Markwon.builder(ctx)
+            .usePlugin(TablePlugin.create(ctx))
+            .usePlugin(StrikethroughPlugin.create())
+            .usePlugin(object : AbstractMarkwonPlugin() {
+                override fun configureTheme(builder: MarkwonTheme.Builder) {
+                    builder.codeBackgroundColor(pal.code).codeBlockBackgroundColor(pal.code)
+                        .codeTextColor(pal.ink).codeBlockTextColor(pal.ink)
+                }
+            })
+            .build()
+
+        fun paint(size: Float, color: Int, bold: Boolean = false) = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            textSize = size
+            this.color = color
+            val face = if (pal.serif) Typeface.SERIF else Typeface.DEFAULT
+            typeface = if (bold) Typeface.create(face, Typeface.BOLD) else face
+        }
     }
 
     private fun layout(text: CharSequence, p: TextPaint, width: Int): StaticLayout =
@@ -105,17 +138,6 @@ object ChatExport {
             .setLineSpacing(0f, 1.3f)
             .setIncludePad(false)
             .build()
-
-    private fun markwon(ctx: Context): Markwon = Markwon.builder(ctx)
-        .usePlugin(TablePlugin.create(ctx))
-        .usePlugin(StrikethroughPlugin.create())
-        .usePlugin(object : AbstractMarkwonPlugin() {
-            override fun configureTheme(builder: MarkwonTheme.Builder) {
-                builder.codeBackgroundColor(CODE_BG).codeBlockBackgroundColor(CODE_BG)
-                    .codeTextColor(INK).codeBlockTextColor(INK)
-            }
-        })
-        .build()
 
     /**
      * Markdown 排版。表格的行高要画过一次才知道，所以先在小画布上画一遍，再重新排版。
@@ -144,47 +166,49 @@ object ChatExport {
         else Bitmap.createScaledBitmap(bmp, maxW, bmp.height * maxW / bmp.width, true).also { if (it != bmp) bmp.recycle() }
     }.getOrNull()
 
-    private fun imageBlock(bmp: Bitmap, right: Boolean, gap: Int): Block = Block(bmp.height + gap) { c ->
-        val x = if (right) (W - PAD - bmp.width).toFloat() else PAD.toFloat()
+    private fun imageBlock(pg: Page, bmp: Bitmap, right: Boolean, gap: Int): Block = Block(bmp.height + gap) { c ->
+        val x = if (right) (pg.width - PAD - bmp.width).toFloat() else PAD.toFloat()
         c.drawBitmap(bmp, x, 0f, Paint(Paint.FILTER_BITMAP_FLAG))
     }
 
-    private fun messageBlocks(ctx: Context, mw: Markwon, m: ChatMessage): List<Block> {
+    private fun messageBlocks(pg: Page, m: ChatMessage, showModel: Boolean): List<Block> {
         val blocks = mutableListOf<Block>()
-        val body = paint(40f, INK)
-        val small = paint(30f, MUTED)
+        val pal = pg.pal
+        val w = pg.width
+        val body = pg.paint(40f, pal.ink)
+        val small = pg.paint(30f, pal.muted)
         if (m.role == "user") {
             m.attachments.filter { it.kind == "image" }.take(4).forEach { a ->
-                loadImage(a.path, 520)?.let { blocks += imageBlock(it, right = true, gap = 16) }
+                loadImage(a.path, 520)?.let { blocks += imageBlock(pg, it, right = true, gap = 16) }
             }
             val files = m.attachments.filter { it.kind == "file" }
             val text = (if (files.isNotEmpty()) "📎 " + files.joinToString("、") { it.name } + "\n" else "") + m.content.trim()
             if (text.isNotBlank()) {
-                val maxW = (W - PAD * 2) * 4 / 5
+                val maxW = (w - PAD * 2) * 4 / 5
                 val l = layout(text.trim(), body, maxW)
                 val textW = (0 until l.lineCount).maxOf { l.getLineWidth(it) }.toInt().coerceAtMost(maxW)
                 val bw = textW + 64
                 val bh = l.height + 44
                 blocks += Block(bh) { c ->
-                    val left = (W - PAD - bw).toFloat()
-                    c.drawRoundRect(RectF(left, 0f, (W - PAD).toFloat(), bh.toFloat()), 40f, 40f,
-                        Paint(Paint.ANTI_ALIAS_FLAG).apply { color = BUBBLE })
+                    val left = (w - PAD - bw).toFloat()
+                    c.drawRoundRect(RectF(left, 0f, (w - PAD).toFloat(), bh.toFloat()), 40f, 40f,
+                        Paint(Paint.ANTI_ALIAS_FLAG).apply { color = pal.bubble })
                     c.save(); c.translate(left + 32f, 22f); l.draw(c); c.restore()
                 }
             }
         } else {
-            val label = layout("Kavi" + if (m.model.isNotEmpty()) " · " + modelLabel(m.model) else "", paint(30f, ACCENT, bold = true), W - PAD * 2)
+            val label = layout("Kavi" + if (showModel && m.model.isNotEmpty()) " · " + modelLabel(m.model) else "", pg.paint(30f, pal.ink, bold = true), w - PAD * 2)
             blocks += Block(label.height + 14) { c -> c.save(); c.translate(PAD.toFloat(), 0f); label.draw(c); c.restore() }
             val md = m.content.trim().ifEmpty { m.error?.let { "（出错：$it）" } ?: "" }
             if (md.isNotEmpty()) {
-                val l = markdownLayout(mw, md, body, W - PAD * 2)
+                val l = markdownLayout(pg.mw, md, body, w - PAD * 2)
                 blocks += Block(l.height) { c -> c.save(); c.translate(PAD.toFloat(), 0f); l.draw(c); c.restore() }
             }
             m.files.forEach { f ->
                 if (f.mime.startsWith("image/")) {
-                    loadImage(f.path, W - PAD * 2)?.let { blocks += Block(16) {}; blocks += imageBlock(it, right = false, gap = 0) }
+                    loadImage(f.path, w - PAD * 2)?.let { blocks += Block(16) {}; blocks += imageBlock(pg, it, right = false, gap = 0) }
                 } else {
-                    val l = layout("📄 " + f.name, small, W - PAD * 2)
+                    val l = layout("📄 " + f.name, small, w - PAD * 2)
                     blocks += Block(l.height + 8) { c -> c.save(); c.translate(PAD.toFloat(), 8f); l.draw(c); c.restore() }
                 }
             }
@@ -192,42 +216,82 @@ object ChatExport {
         return blocks
     }
 
-    fun renderImage(ctx: Context, conv: Conversation): Bitmap {
-        val mw = markwon(ctx)
+    /** 按选项挑要画的消息：只要最后一轮时从最后一句提问起；不带提问就去掉自己说的话。 */
+    internal fun pickMessages(messages: List<ChatMessage>, opts: ImageOptions): List<ChatMessage> {
+        var list = messages
+        if (opts.lastTurn) {
+            val from = list.indexOfLast { it.role == "user" }
+            list = if (from >= 0) list.drop(from) else list.takeLast(1)
+        }
+        if (!opts.questions) list = list.filter { it.role != "user" }
+        return list
+    }
+
+    fun renderImage(ctx: Context, conv: Conversation, opts: ImageOptions = ImageOptions()): Bitmap {
+        val card = opts.look == Look.CARD
+        val pg = Page(ctx, palette(opts.look), if (card) W - CARD_MARGIN * 2 else W)
+        val page = renderPage(pg, conv, opts, if (card) MAX_H / 2 else MAX_H)
+        if (!card) return page
+        // 卡片款：淡彩渐变的底上放一张圆角白卡片，带一点阴影
+        val out = Bitmap.createBitmap(W, page.height + CARD_MARGIN * 2, Bitmap.Config.ARGB_8888)
+        val c = Canvas(out)
+        c.drawRect(0f, 0f, W.toFloat(), out.height.toFloat(), Paint().apply {
+            shader = android.graphics.LinearGradient(0f, 0f, W.toFloat(), out.height.toFloat(),
+                0xFFE6EBF7.toInt(), 0xFFF6ECEF.toInt(), android.graphics.Shader.TileMode.CLAMP)
+        })
+        val rect = RectF(CARD_MARGIN.toFloat(), CARD_MARGIN.toFloat(), (W - CARD_MARGIN).toFloat(), (CARD_MARGIN + page.height).toFloat())
+        c.drawRoundRect(rect, CARD_RADIUS, CARD_RADIUS, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = pg.pal.bg; setShadowLayer(36f, 0f, 10f, 0x22000000)
+        })
+        c.save(); c.translate(rect.left, rect.top)
+        c.drawRoundRect(RectF(0f, 0f, rect.width(), rect.height()), CARD_RADIUS, CARD_RADIUS, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            shader = android.graphics.BitmapShader(page, android.graphics.Shader.TileMode.CLAMP, android.graphics.Shader.TileMode.CLAMP)
+        })
+        c.restore()
+        page.recycle()
+        return out
+    }
+
+    private fun renderPage(pg: Page, conv: Conversation, opts: ImageOptions, maxH: Int): Bitmap {
+        val pal = pg.pal
+        val w = pg.width
         val gap = 48
+        val chosen = pickMessages(conv.messages, opts)
         // 从最新的消息往前排，超过最大高度就停
         val perMsg = mutableListOf<List<Block>>()
         var total = 0
         val headerReserve = 260
-        for (m in conv.messages.asReversed()) {
+        var shown = 0
+        for (m in chosen.asReversed()) {
             if (m.role != "user" && m.content.isBlank() && m.error == null && m.files.isEmpty()) continue
-            val b = messageBlocks(ctx, mw, m)
+            val b = messageBlocks(pg, m, opts.model)
             val h = b.sumOf { it.height } + gap
-            if (perMsg.isNotEmpty() && total + h + headerReserve > MAX_H) break
+            if (perMsg.isNotEmpty() && total + h + headerReserve > maxH) break
             perMsg += b
             total += h
+            shown++
         }
         perMsg.reverse()
-        val skipped = conv.messages.count { it.role == "user" || it.content.isNotBlank() } - perMsg.size
+        val skipped = chosen.count { it.role == "user" || it.content.isNotBlank() } - shown
 
-        val title = layout(conv.title, paint(54f, INK, bold = true), W - PAD * 2)
+        val title = layout(conv.title, pg.paint(54f, pal.ink, bold = true), w - PAD * 2)
         val sub = layout(
-            "导出于 " + TIME.format(Date()) + if (skipped > 0) " · 只包含最近 ${perMsg.size} 条消息" else "",
-            paint(30f, MUTED), W - PAD * 2,
+            TIME.format(Date()) + if (skipped > 0) " · 只包含最近 $shown 条消息" else "",
+            pg.paint(30f, pal.muted), w - PAD * 2,
         )
-        val footer = layout("由 Kavi 导出", paint(28f, MUTED), W - PAD * 2)
+        val footer = layout("由 Kavi 导出", pg.paint(28f, pal.muted), w - PAD * 2)
         val headerH = PAD + title.height + 12 + sub.height + 40
-        val height = (headerH + total + 24 + footer.height + PAD).coerceAtMost(MAX_H + 400)
+        val height = (headerH + total + 24 + footer.height + PAD).coerceAtMost(maxH + 400)
 
-        val bmp = Bitmap.createBitmap(W, height, Bitmap.Config.ARGB_8888)
+        val bmp = Bitmap.createBitmap(w, height, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
-        c.drawColor(BG)
+        c.drawColor(pal.bg)
         var y = PAD.toFloat()
         c.save(); c.translate(PAD.toFloat(), y); title.draw(c); c.restore()
         y += title.height + 12
         c.save(); c.translate(PAD.toFloat(), y); sub.draw(c); c.restore()
         y += sub.height + 20
-        c.drawRect(PAD.toFloat(), y, (W - PAD).toFloat(), y + 2, Paint().apply { color = 0xFFE5DFD7.toInt() })
+        c.drawRect(PAD.toFloat(), y, (w - PAD).toFloat(), y + 2, Paint().apply { color = pal.rule })
         y += 20
         for (blocks in perMsg) {
             for (b in blocks) {

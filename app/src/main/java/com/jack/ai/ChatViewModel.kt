@@ -1002,7 +1002,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     // 导出、备份
     val exporting get() = backup.exporting
-    fun exportChat(format: ChatExport.Format, onReady: (File) -> Unit) = backup.exportChat(format, onReady)
+    fun exportChat(format: ChatExport.Format, image: ChatExport.ImageOptions = ChatExport.ImageOptions(), onReady: (File) -> Unit) =
+        backup.exportChat(format, image, onReady)
     fun reportIssue(msgId: String, note: String) { _state.value.current?.let { feedback.report(it.id, msgId, note) } }
     suspend fun feedbackCount() = feedback.count()
     fun exportFeedback(onReady: (File) -> Unit) = feedback.export(onReady)

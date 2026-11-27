@@ -465,7 +465,9 @@ private fun ExportMenu(vm: ChatViewModel, conv: Conversation, made: Int, onFiles
     var renaming by remember { mutableStateOf(false) }
     if (renaming) RenameDialog(conv.title, onDismiss = { renaming = false }) { vm.rename(conv.id, it); renaming = false }
     val busy by vm.exporting.collectAsState()
+    var sharingImage by remember { mutableStateOf(false) }
     val ctx = LocalContext.current
+    if (sharingImage) ShareImageSheet(vm, conv, onShare = { f -> shareExport(ctx, f, ChatExport.Format.IMAGE.mime) }) { sharingImage = false }
     Box {
         if (busy) Box(Modifier.size(42.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) }
         else if (made > 0) androidx.compose.material3.BadgedBox(badge = { androidx.compose.material3.Badge { Text("$made") } }) {
@@ -479,8 +481,9 @@ private fun ExportMenu(vm: ChatViewModel, conv: Conversation, made: Int, onFiles
             MenuRow(if (conv.pinned) "取消置顶" else "置顶", icon = AppIcons.Pin) { open = false; vm.togglePin(conv.id) }
             // 在这个对话的文件夹里开终端（Kavi 跑的命令也在里面能看到）
             onTerminal?.let { t -> MenuRow("终端", glyph = ">_", sub = "在这个对话的文件夹里") { open = false; t() } }
+            // 长图先开选样子的面板（浅色、深色、纸张、卡片），看着预览再分享
+            MenuRow("分享为图片", icon = AppIcons.Image, sub = "能选样子，先看预览") { open = false; sharingImage = true }
             listOf(
-                ChatExport.Format.IMAGE to "分享为长图",
                 ChatExport.Format.PDF to "导出为 PDF",
                 ChatExport.Format.MARKDOWN to "导出为 Markdown",
             ).forEach { (fmt, label) ->
