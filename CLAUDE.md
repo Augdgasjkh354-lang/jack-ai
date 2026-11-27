@@ -39,6 +39,7 @@
 - 注释、界面文字都是中文，跟周围代码的风格保持一致。
 - 按钮用 `ui/SmartButtons.kt` 和 `Design.kt` 里同名的 `Button`、`TextButton`、`IconButton`、`OutlinedButton`、`Switch`（按下缩、震一下，支持 `busy`、`whyDisabled`）。ui 包里别 import material3 的这几个，否则会盖掉；`ui/photo` 这类子包要显式 import `com.jack.ai.ui.*` 里的。等结果的按钮用 `ActionButton`。
 - 单测在 `app/src/test`（纯逻辑和 Robolectric），界面测试在 `app/src/testDebug`。
+- 发版开了 R8（只删不改名，`app/proguard-rules.pro`）：新写的代码要是按名字找类或方法（反射、`Class.forName`、底层库回调、`app_process` 启动的入口），在那个文件里加一条 keep，不然正式包里会被删掉，只有在手机上才崩。聊天页新加的大文件加进 `app/src/main/baseline-prof.txt`。
 - 根目录只放工程文件。方案和说明放 `docs/`，给其他模型的提示词放 `docs/建议/`，审计、修复这类过程记录放 `docs/records/`。
 
 ## 本地编译（云端容器）

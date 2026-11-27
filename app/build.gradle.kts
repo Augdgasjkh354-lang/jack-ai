@@ -59,7 +59,10 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // R8 只删用不到的代码和资源、不改名（规则和原因见 proguard-rules.pro）：安装包小一截，启动也快一点
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             if (keystore != null) signingConfig = signingConfigs.getByName("release")
         }
     }

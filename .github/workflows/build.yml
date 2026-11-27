@@ -109,6 +109,8 @@ jobs:
             exit 1
           }
           cp app/build/outputs/apk/dev/release/app-dev-release.apk Kavi-v${{ env.VERSION }}.apk
+          # R8 的行号对照表：类名、方法名没改，但内联过的地方行号要靠它还原（修闪退时用）
+          gzip -c app/build/outputs/mapping/devRelease/mapping.txt > Kavi-v${{ env.VERSION }}-mapping.txt.gz
 
       - name: Check Office files
         run: |
@@ -156,3 +158,4 @@ jobs:
           files: |
             Kavi-*.apk
             Kavi-*-gpl-sources.tar.gz
+            Kavi-*-mapping.txt.gz
