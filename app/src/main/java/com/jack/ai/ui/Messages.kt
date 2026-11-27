@@ -540,14 +540,35 @@ fun AssistantMessage(
                         )
                     }
                 }
-                if (msg.model.isNotEmpty()) {
+                // 回答底下一行总账：哪个模型、用了多久、多少 token（还在写的时候只显示模型）
+                val tally = replyTally(msg.model.takeIf { it.isNotEmpty() }?.let { modelLabel(it) }, msg.durationMs, msg.tokens)
+                if (tally.isNotEmpty()) {
                     Spacer(Modifier.weight(1f))
-                    Text(modelLabel(msg.model), style = MaterialTheme.typography.labelSmall, color = colors.outline.copy(alpha = 0.8f),
-                        modifier = Modifier.padding(end = 4.dp))
+                    Text(tally, style = MaterialTheme.typography.labelSmall.tabular, color = colors.outline.copy(alpha = 0.8f),
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 8.dp, end = 4.dp))
                 }
             }
         }
     }
+}
+
+/**
+ * 回答底下那行总账：「V4 Flash · 23 秒 · 3.4 万 tokens」。旧消息没记耗时和用量，只剩模型名。
+ * 思路参考 DSH Go（只借思路）。
+ */
+internal fun replyTally(model: String?, durationMs: Long, tokens: Long): String {
+    val parts = mutableListOf<String>()
+    model?.let { parts += it }
+    if (durationMs >= 1000) {
+        val sec = durationMs / 1000
+        parts += if (sec < 60) "$sec 秒" else if (sec < 3600) "${sec / 60} 分 ${sec % 60} 秒" else "${sec / 3600} 小时 ${sec % 3600 / 60} 分"
+    }
+    if (tokens > 0) parts += when {
+        tokens < 10_000 -> "%,d tokens".format(tokens)
+        tokens < 100_000_000 -> "%.1f 万 tokens".format(tokens / 10_000.0).replace(".0 万", " 万")
+        else -> "%.1f 亿 tokens".format(tokens / 100_000_000.0).replace(".0 亿", " 亿")
+    }
+    return parts.joinToString(" · ")
 }
 
 /** 把一段文字交给系统的分享面板（微信、备忘录、短信…）。 */

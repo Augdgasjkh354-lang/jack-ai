@@ -704,6 +704,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     onUsage = { ev ->
                         val total = ev.promptTokens + ev.completionTokens
                         updateConvQuiet(convId) { it.copy(lastPromptTokens = total) }
+                        patchMessage(convId, reply.id) { it.copy(tokens = it.tokens + total) }
                         val used = ev.endpoint ?: ep
                         core.recordSpend(convId, used, ev.promptTokens, ev.cacheHit, ev.completionTokens, ev.prefix, exact = ev.exactCost)
                         if (work) {
@@ -788,8 +789,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 stopping.remove(convId)
                 summarizer?.cancel()
                 // 停止或出错时，把还在“搜索中”的标记清掉
+                // 顺便记下这条回答用了多久（回答底下那行总账用）
+                val ended = System.currentTimeMillis()
                 patchMessage(convId, reply.id) { m ->
-                    m.copy(content = m.content.trimEnd(), searches = m.searches.map { if (it.pending) it.copy(pending = false) else it })
+                    m.copy(content = m.content.trimEnd(), searches = m.searches.map { if (it.pending) it.copy(pending = false) else it },
+                        durationMs = (ended - m.createdAt).coerceAtLeast(0))
                 }
                 running.remove(convId, reply.id)
                 if (before != null) {

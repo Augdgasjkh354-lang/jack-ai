@@ -76,6 +76,10 @@ data class ChatMessage(
     val delivered: List<Delivered> = emptyList(),
     /** Work 模式下这条回答花了多少元（当场按价格算）。 */
     val cost: Double = 0.0,
+    /** 这条回答一共用了多少 token（每次请求的输入 + 输出加起来；旧消息是 0，不显示）。 */
+    val tokens: Long = 0,
+    /** 这条回答从开始到收尾用了多久（毫秒；旧消息是 0，不显示）。 */
+    val durationMs: Long = 0,
     /** 写到长度上限被截断了，可以“接着写”。 */
     val truncated: Boolean = false,
     /** 写这条回答时 App 的版本号（旧消息是 0）。App 更新后旧对话据此提醒模型：工具可能变了。 */
