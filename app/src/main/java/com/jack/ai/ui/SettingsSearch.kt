@@ -33,6 +33,7 @@ internal val SETTINGS_TOPICS = listOf(
     SettingsTopic("PHONEDATA", "手机数据", listOf("手机数据", "通知", "联系人", "位置", "定位", "使用时长")),
     SettingsTopic("FOLDERS", "手机文件夹", listOf("文件夹", "手机文件", "存储", "授权文件夹")),
     SettingsTopic("LOOK", "外观", listOf("外观", "主题", "深色", "浅色", "暗色", "夜间", "跟随系统", "主题色", "气泡", "字体", "字号", "桌面图标", "图标", "链接", "浏览器打开")),
+    SettingsTopic("BACKGROUND", "后台运行", listOf("后台运行", "后台", "省电", "电池", "耗电", "自启动", "被杀", "保活", "定时任务不执行", "锁屏")),
     SettingsTopic("USAGE", "统计", listOf("统计", "用量", "花费", "花了多少", "预算", "额度", "账单")),
     SettingsTopic("PRIVACY", "隐私和数据", listOf("隐私", "应用锁", "指纹", "密码", "完全授权", "以后都允许", "重置记忆", "备份", "恢复", "导出")),
     SettingsTopic("UPDATE", "版本更新", listOf("更新", "版本", "新版本", "升级")),

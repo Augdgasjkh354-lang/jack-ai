@@ -16,6 +16,8 @@ class SettingsSearchTest {
         assertEquals(listOf("LOOK"), keys("字体"))
         assertTrue("PRIVACY" in keys("备份"))
         assertTrue("KEY" in keys("余额"))
+        assertEquals("BACKGROUND", keys("省电").first())
+        assertEquals("BACKGROUND", keys("自启动").first())
     }
 
     @Test fun sentenceContainingKeywordStillMatches() {

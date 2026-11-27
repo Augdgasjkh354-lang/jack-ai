@@ -119,6 +119,8 @@ fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit, onOpen
         onPauseOrDispose { }
     }
 
+    val bgOk = rememberBackgroundUnrestricted()
+
     // 按种类筛：全部 / 提醒 / 定时任务 / 监控
     var filter by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("all") }
     Scaffold(
@@ -156,6 +158,9 @@ fun RoutinesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit, onOpen
             }
             if (!canCalendar) {
                 item { PermissionRow("日历", "允许后 Kavi 能查和加日程", "允许") { askedAt = android.os.SystemClock.elapsedRealtime(); calendarPermission.launch(CalendarTool.PERMISSIONS) } }
+            }
+            if (!bgOk && state.routines.isNotEmpty()) {
+                item { PermissionRow("可能被省电限制停掉", "锁屏久了定时任务可能不执行；放行后，再到设置 → 后台运行打开自启动", "放行") { com.jack.ai.data.phone.BackgroundRun.askUnrestricted(ctx) } }
             }
             item { Box(Modifier.tourTarget("r-quiet")) { QuietHoursCard(state.settings) { start, end -> vm.updateSettings { it.copy(quietStart = start, quietEnd = end) } } } }
             if (state.routines.none { it.title == "早安问候" }) {

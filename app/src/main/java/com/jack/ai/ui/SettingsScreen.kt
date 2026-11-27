@@ -531,6 +531,10 @@ fun SettingsScreen(
                 LegalSection()
             }
 
+            if (page == SettingsPage.BACKGROUND) Section(hint = "定时任务、后台操作手机、远程连接都要 Kavi 在后台一直活着。国产手机省电管得严，两项都放行才稳；放行后耗电不会明显变多，Kavi 没事做时不占电。") {
+                BackgroundRunSection()
+            }
+
             if (page == SettingsPage.UPDATE) Section {
                 UpdateSection(vm, settings)
             }
@@ -706,7 +710,7 @@ private fun FullAuthRow(vm: ChatViewModel, settings: Settings) {
 private enum class SettingsPage(val title: String) {
     PROFILE("个性化"), KEY("DeepSeek API Key"), PROVIDERS("其他模型服务"), MODEL("模型和思考"), LOCAL("本地模型"),
     COMPRESS("长对话自动压缩"), CONNECT("连接"), REMOTE("远程连接"), PHONE("操作其他 App"), ASK("问这一屏"),
-    PHONEDATA("手机数据"), FOLDERS("手机文件夹"), LOOK("外观"), PRIVACY("隐私和数据"), UPDATE("版本更新"), ADVANCED("高级"),
+    PHONEDATA("手机数据"), FOLDERS("手机文件夹"), LOOK("外观"), BACKGROUND("后台运行"), PRIVACY("隐私和数据"), UPDATE("版本更新"), ADVANCED("高级"),
     LINUX("Linux 沙箱"), LEGAL("用户协议和隐私政策"),
 }
 
@@ -763,6 +767,7 @@ private fun SettingsHome(
     ))
     SettingsGroup(order = 5, title = "应用", listOfNotNull(
         go(SettingsPage.LOOK, AppIcons.Moon, settings.themeMode.label),
+        rememberBackgroundUnrestricted().let { ok -> go(SettingsPage.BACKGROUND, AppIcons.Battery, if (ok) "已放行" else "会被限制", warn = !ok) },
         // 花费和额度已经在最上面的用量卡里了，这一行不再重复
         SettingsEntry(AppIcons.Chart, "统计", onClick = onOpenUsage),
         go(SettingsPage.PRIVACY, Icons.Default.Lock, when {
