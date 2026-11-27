@@ -1,7 +1,5 @@
 package com.jack.ai.ui
 
-import android.util.Log
-
 /**
  * 边写边读的分句器：喂进来越来越长的回答全文，吐出「已经完整、还没读过」的句子。
  *
@@ -23,7 +21,6 @@ class SpeechChunker {
         val old = emitted + buffer
         val common = commonPrefix(old, plain)
         if (common < old.length) {
-            Log.i(TAG, "回答被改写，从第 $common 字起续读")
             // 改写吃进了已经读过的部分：只能从对不上的地方接着读，已经读过的不重读
             if (common < emitted.length) emitted = plain.substring(0, common)
         }
@@ -141,7 +138,6 @@ class SpeechChunker {
     }
 
     companion object {
-        private const val TAG = "SpeechChunker"
         /** 不到这么多个字先攒着，和下一句拼。 */
         private const val SHORT = 6
         /** 没标点超过这么多个字，在逗号处切。 */

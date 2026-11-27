@@ -45,6 +45,8 @@ object Speaker {
     private var queuePhoneLast = -1
     /** 手机朗读还没初始化时攒着的句子，初始化好按顺序读。 */
     private val queuePhonePending = mutableListOf<String>()
+    /** 攒着的句子是哪条消息的（排队任务可能已经收完句子结束了，引擎这时才建好）。 */
+    private var queuePhonePendingId: String? = null
 
     /** 正在朗读哪条消息。 */
     var speakingId by mutableStateOf<String?>(null)
@@ -117,11 +119,12 @@ object Speaker {
         val st = withContext(Dispatchers.IO) { runCatching { Store(app).loadSettings() }.getOrNull() }
         try {
             if (st != null && st.dsVoice && st.apiKey.isNotBlank()) {
-                speakDsQueued(app, st.apiKey, st.dsVoiceId, Store(app), channel, id)
+                // 联网合成、往 AudioTrack 写都会卡住线程，不能在主线程上跑
+                withContext(Dispatchers.IO) { speakDsQueued(app, st.apiKey, st.dsVoiceId, Store(app), channel, id) }
             } else {
                 for (sentence in channel) speakPhoneQueued(app, id, sentence)
-                // 手机朗读：最后一句读完由监听收尾；读完才收到的 finish 在这里收尾
-                queuePhoneLast = queuePhoneIndex - 1
+                // 手机朗读：最后一句读完由监听收尾；读完才收到的 finish 在这里收尾（引擎还没建好时攒着的也算）
+                queuePhoneLast = queuePhoneIndex + queuePhonePending.size - 1
                 if (speakingId == id && queuePhoneDone >= queuePhoneLast) speakingId = null
             }
         } finally {
@@ -130,7 +133,7 @@ object Speaker {
     }
 
     /** DeepSeek TTS（排队读）：建一次 AudioTrack，句子一个个合成、接着往里写。 */
-    private suspend fun speakDsQueued(app: Context, key: String, voice: String, store: Store, channel: Channel<String>, id: String) {
+    private suspend fun speakDsQueued(app: Context, key: String, voice: String, store: Store, channel: Channel<String>, id: String) = kotlinx.coroutines.coroutineScope {
         val rate = DeepSeekTools.TTS_RATE
         val min = android.media.AudioTrack.getMinBufferSize(rate, android.media.AudioFormat.CHANNEL_OUT_MONO, android.media.AudioFormat.ENCODING_PCM_16BIT)
         val t = android.media.AudioTrack.Builder()
@@ -148,7 +151,8 @@ object Speaker {
             t.play()
             var written = 0L
             for (sentence in channel) {
-                if (failed) { speakPhoneQueued(app, id, sentence); continue }
+                // 手机朗读的引擎和攒着的句子都只在主线程上碰
+                if (failed) { withContext(Dispatchers.Main) { speakPhoneQueued(app, id, sentence) }; continue }
                 try {
                     for (chunk in DeepSeekTools.ttsChunks(sentence)) {
                         if (!isActive) break
@@ -169,8 +173,10 @@ object Speaker {
                 } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
                     if (!isActive) break
                     failed = true
-                    Toast.makeText(app, (e.message ?: "DeepSeek 朗读失败") + "，改用手机自带的朗读", Toast.LENGTH_LONG).show()
-                    speakPhoneQueued(app, id, sentence)
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(app, (e.message ?: "DeepSeek 朗读失败") + "，改用手机自带的朗读", Toast.LENGTH_LONG).show()
+                        speakPhoneQueued(app, id, sentence)
+                    }
                 }
             }
             // 等缓冲里的声音放完再结束；已经改用手机朗读的，收尾交给手机朗读的监听
@@ -178,9 +184,9 @@ object Speaker {
                 val frames = (written / 2).toInt()
                 while (isActive && t.playbackHeadPosition < frames && t.playState == android.media.AudioTrack.PLAYSTATE_PLAYING) kotlinx.coroutines.delay(100)
             }
-            if (failed) {
-                // 改用手机朗读后：手机那边的最后一句就是最后交给引擎的那句
-                queuePhoneLast = queuePhoneIndex - 1
+            if (failed) withContext(Dispatchers.Main) {
+                // 改用手机朗读后：手机那边的最后一句就是最后交给引擎的那句（引擎还没建好时攒着的也算）
+                queuePhoneLast = queuePhoneIndex + queuePhonePending.size - 1
                 if (speakingId == id && queuePhoneDone >= queuePhoneLast) speakingId = null
             }
         } finally {
@@ -194,6 +200,7 @@ object Speaker {
     /** 手机朗读（排队读）：一句一个编号，QUEUE_ADD 接着读；没初始化好先攒着。 */
     private fun speakPhoneQueued(app: Context, id: String, sentence: String) {
         if (!ready) {
+            queuePhonePendingId = id
             queuePhonePending += sentence
             ensureTts(app)
             return
@@ -276,12 +283,12 @@ object Speaker {
                 })
                 pending?.invoke()
                 pending = null
-                val id = queueId
-                if (id != null) {
-                    val waiting = queuePhonePending.toList()
-                    queuePhonePending.clear()
-                    waiting.forEach { speakPhoneQueued(app, id, it) }
-                }
+                val id = queuePhonePendingId
+                queuePhonePendingId = null
+                val waiting = queuePhonePending.toList()
+                queuePhonePending.clear()
+                // 没被 stop 掉的才读（stop 会把它们清空）
+                if (id != null && speakingId == id) waiting.forEach { speakPhoneQueued(app, id, it) }
             } else {
                 tts = null
                 speakingId = null
@@ -322,6 +329,7 @@ object Speaker {
         queuePhoneDone = -1
         queuePhoneLast = -1
         queuePhonePending.clear()
+        queuePhonePendingId = null
     }
 
     /** 去掉 Markdown 符号，代码和公式不读。 */
