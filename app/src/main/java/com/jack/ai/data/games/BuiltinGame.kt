@@ -10,7 +10,7 @@ enum class BuiltinGame(val convId: String, val title: String, val asset: String,
         convId = "game_holdem",
         title = "德州扑克",
         asset = "games/texas-holdem.html",
-        version = "holdem-2",
+        version = "holdem-3",
         blurb = "6 人桌，你和 5 个对手；带训练营和复盘，对手也能接模型",
         intro = "这是德州扑克，点上面的卡片「全屏」就能开打：6 人桌，你和 5 个风格不同的对手，四个场次按职业晋级解锁。\n\n" +
             "对手默认是规则 AI（快、不花钱）；大厅里「对手用什么想」能把任何一个换成模型，各想各的，还能让它们说台词。" +
