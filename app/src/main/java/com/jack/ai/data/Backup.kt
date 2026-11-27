@@ -10,13 +10,35 @@ import java.util.zip.ZipOutputStream
 
 /** 把聊天、项目、记忆、梦、用量、设置、图片和生成的文件打包成一个 zip，换手机时再导入。 */
 object Backup {
-    private val JSONS = listOf("conversations.json", "projects.json", "memories.json", "dreams.json", "usage.json", "routines.json", "library.json", "flashcards.json", "kavi_self.json", "browser_flows.json", "browser_site_notes.json", "browser_history.json", "price_log.json", "free_state.json", "own_memories.json", "dream_originals.json", "reading_log.json", "autobiography.json", "checkups.json", "deep_memories.json", "memories_archive.json", "timeline_state.json", "threads.json",
-        // 后来加的：我的模板、Work 的网站备忘、发过信的地址（发信核对用）、各种统计和记录
-        "style_templates.json", "site_notes.json", "recipients.json", "runlogs.json", "tool_stats.json", "tool_errors.json",
-        "feedback.json", "injection_log.json", "downloads.json", "nudges.json", "usage_recent.json", "browser_stats.json", "knowledge_bases.json")
-    private val TEXTS = listOf("timeline.jsonl")
-    // facts：Kavi 的事实库；memories_versions：记忆改动前存的版本（出了问题能找回）
-    private val DIRS = listOf("images", "outputs", "library", "tables", "facts", "memories_versions")
+    /**
+     * 整个数据目录都备份，只排除下面这些（以前是手写清单，后来加的手机流程、技能资料、稍后读这些没人记得补，换手机就悄悄丢了）：
+     * - 能重新生成或下载的：向量、下载的设计字体、Python 运行时、Linux 沙箱；
+     * - 只在这台手机上有意义的：做到一半的断点、闪退记录、待发送的附件、上次恢复留的反悔副本；
+     * - 工具包：代码和数据都不带（它的登记表连同 Key 不在备份里，带过去也用不了）；
+     * - 对话：手机上一个对话一个文件，备份里另外拼成一整个 conversations.json（新旧版本通用），拆开的和旧的副本不再带。
+     * Key、密码在 shared_prefs 和 noBackupFilesDir 里，不在这个目录，本来就不会进来。
+     */
+    private val SKIP_TOP = setOf(
+        "sandbox", "chaquopy", "staging", "checkpoints", "crash_reports", "crash.txt", "last-restore-rollback",
+        "library_vectors", "design-fonts", "packs", "pack_data", "pack_store", "test_pack",
+        Store.CONV_DIR, "${Store.LEGACY_CONVS}.migrated",
+    )
+    private val VECTORS = Regex(".*_vectors(-.*)?\\.bin")
+
+    /** 这个相对路径（用 / 分隔）进不进备份。导出、导入用同一条规矩（纯函数，单测）。 */
+    internal fun included(relative: String): Boolean {
+        if (relative.isEmpty() || '\\' in relative) return false
+        val parts = relative.split('/')
+        if (parts.any { it.isEmpty() || it == "." || it == ".." } || parts.size > 12) return false
+        val top = parts[0]
+        if (top in SKIP_TOP) return false
+        if (parts.size == 1 && VECTORS.matches(top)) return false
+        // 对话文件夹里的图片缩略图缓存
+        if (top == "workspaces" && ".cache" in parts) return false
+        val name = parts.last()
+        // 写到一半的临时文件、存储层自己留的旧副本和坏文件
+        return !(name.startsWith(".tmp-") || name.endsWith(".tmp") || name.endsWith(".prev") || ".corrupt-" in name)
+    }
 
     fun export(ctx: Context, out: OutputStream) {
         val dir = ctx.filesDir
@@ -38,20 +60,17 @@ object Backup {
             zip.putNextEntry(ZipEntry(Store.LEGACY_CONVS))
             store.exportConversations(zip)
             zip.closeEntry()
-            (JSONS + TEXTS).forEach { n -> File(dir, n).takeIf { it.exists() }?.let { put(n, it) } }
-            DIRS.forEach { d ->
-                File(dir, d).listFiles()?.filter { it.isFile }?.forEach { f -> put("$d/${f.name}", f) }
-            }
-            // 对话文件夹：每个对话一个子目录，底稿在 .src 里；图片缓存不备份
-            File(dir, "workspaces").listFiles()?.filter { it.isDirectory }?.forEach { ws ->
-                ws.walkTopDown().filter { it.isFile && !it.name.startsWith(".tmp-") && "/.cache/" !in it.path }.forEach { f ->
-                    put("workspaces/" + f.relativeTo(File(dir, "workspaces")).invariantSeparatorsPath, f)
+            dir.walkTopDown().onEnter { d -> d == dir || included(d.relativeTo(dir).invariantSeparatorsPath) }
+                .filter { it.isFile }
+                .forEach { f ->
+                    val rel = f.relativeTo(dir).invariantSeparatorsPath
+                    // 上面已经单独写过的两个
+                    if (rel != Store.LEGACY_CONVS && rel != "prefs.json" && included(rel)) put(rel, f)
                 }
-            }
         }
     }
 
-    /** 返回导入的条目数。不认识的内容一律跳过。 */
+    /** 返回导入的条目数。不该在备份里的（见 [included]）一律跳过。 */
     fun import(ctx: Context, input: InputStream): Int {
         val dir = ctx.filesDir
         val staging = File(ctx.cacheDir, "restore-${System.nanoTime()}").apply { mkdirs() }
@@ -66,11 +85,7 @@ object Backup {
                 while (true) {
                     val e = zip.nextEntry ?: break
                     val name = e.name
-                    val ok = !e.isDirectory && !name.contains("..") && !name.contains('\\') && (
-                        name == "prefs.json" || name in JSONS || name in TEXTS ||
-                            DIRS.any { d -> name.startsWith("$d/") && name.count { it == '/' } == 1 } ||
-                            (name.startsWith("workspaces/") && name.count { it == '/' } in 2..3)
-                        )
+                    val ok = !e.isDirectory && (name == "prefs.json" || name == Store.LEGACY_CONVS || included(name))
                     if (ok) {
                         val f = File(staging, name)
                         f.parentFile?.mkdirs()
@@ -87,11 +102,11 @@ object Backup {
                                 out.write(buf, 0, n)
                             }
                         }
-                        // 先检查所有 JSON 都能读，再动手机上的数据
-                        if (name in JSONS || name == "prefs.json") {
+                        // 先检查最外层的 JSON（Kavi 自己的数据）都能读，再动手机上的数据；对话文件夹里用户自己的文件不管
+                        if ('/' !in name && name.endsWith(".json")) {
                             kotlinx.serialization.json.Json.parseToJsonElement(f.readText())
+                            sawData = true
                         }
-                        if (name in JSONS || name == "prefs.json") sawData = true
                         count++
                     }
                     zip.closeEntry()
