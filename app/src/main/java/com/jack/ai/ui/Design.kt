@@ -98,6 +98,18 @@ val isDarkSurface: Boolean
     @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surface.luminance() < 0.5f
 
 /**
+ * 简约列表（设置这类页面，学 Mika）：浅灰的页面上放纯白分组，灰底够深，分组不用描边也不投影就分得开；
+ * 深色下页面纯黑、分组深灰。
+ */
+val plainListBg: Color
+    @Composable @ReadOnlyComposable get() = if (isDarkSurface) MaterialTheme.colorScheme.background else Color(0xFFF2F2F4)
+
+/** 简约列表里分组卡片的底。 */
+val plainCard: Color
+    @Composable @ReadOnlyComposable get() =
+        if (isDarkSurface) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surfaceContainerLowest
+
+/**
  * 分类用的颜色（工具图标、设置分组、状态点）：浅色模式用深一点的，深色模式用亮一点的，
  * 在两种底上都看得清。和强调色无关，换主题色时它们不变。
  */

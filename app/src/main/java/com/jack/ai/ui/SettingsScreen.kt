@@ -147,7 +147,7 @@ fun SettingsScreen(
     androidx.compose.runtime.CompositionLocalProvider(LocalGlass provides glass) {
     Scaffold(
         // 浅灰的底，上面一张张白卡片
-        containerColor = if (dark) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.surfaceContainerLow,
+        containerColor = plainListBg,
         topBar = {
             androidx.compose.material3.CenterAlignedTopAppBar(
                 // 小标题：往下翻、大标题滑到顶栏后面时才淡出来（iOS 的大标题那样）
@@ -630,12 +630,10 @@ private fun SettingField(
 @Composable
 private fun Section(hint: String? = null, content: @Composable () -> Unit) {
     val colors = MaterialTheme.colorScheme
-    val dark = colors.background.luminance() < 0.5f
     Column(Modifier.fillMaxWidth()) {
         androidx.compose.material3.Surface(
             shape = Radii.l,
-            color = if (dark) colors.surfaceContainerHigh else colors.surfaceContainerLowest,
-            border = androidx.compose.foundation.BorderStroke(0.8.dp, glassEdge()),
+            color = plainCard,
             modifier = Modifier.fillMaxWidth(),
         ) {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -796,14 +794,12 @@ private fun SettingsResults(query: String, onOpen: (SettingsHit) -> Unit) {
             style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant, modifier = Modifier.padding(horizontal = 8.dp))
         return
     }
-    val dark = colors.background.luminance() < 0.5f
-    androidx.compose.material3.Surface(shape = Radii.xl, color = if (dark) colors.surfaceContainerHigh else colors.surfaceContainerLowest,
-        border = androidx.compose.foundation.BorderStroke(0.8.dp, glassEdge()), modifier = Modifier.fillMaxWidth()) {
+    androidx.compose.material3.Surface(shape = Radii.l, color = plainCard, modifier = Modifier.fillMaxWidth()) {
         Column {
             hits.forEachIndexed { i, h ->
-                if (i > 0) androidx.compose.material3.HorizontalDivider(Modifier.padding(start = 20.dp, end = 20.dp), color = colors.outlineVariant.copy(alpha = 0.6f))
+                if (i > 0) androidx.compose.material3.HorizontalDivider(Modifier.padding(start = 16.dp), thickness = 0.5.dp, color = colors.outlineVariant)
                 Row(verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().clickable { onOpen(h) }.heightIn(min = 56.dp).padding(horizontal = 20.dp, vertical = 10.dp)) {
+                    modifier = Modifier.fillMaxWidth().clickable { onOpen(h) }.heightIn(min = 52.dp).padding(horizontal = 16.dp, vertical = 10.dp)) {
                     Column(Modifier.weight(1f)) {
                         Text(h.topic.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         (h.row ?: h.word)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, maxLines = 1) }
@@ -815,36 +811,38 @@ private fun SettingsResults(query: String, onOpen: (SettingsHit) -> Unit) {
     }
 }
 
-/** 一组入口：灰色粗体小标题，下面一张大圆角卡片，行和行之间一道从文字起头的细线。图标是素色线条，和聊天页一样克制。 */
+/**
+ * 一组入口（学 Mika 的简约列表）：灰色小标题，下面一张白卡片，不描边；行和行之间一道从文字起头的细线。
+ * 图标是素色线条；右边的当前状态最多占一行的四成多，再长只省略状态，名字不被挤没。
+ */
 @Composable
 private fun SettingsGroup(order: Int = 0, title: String, entries: List<SettingsEntry>) {
     val colors = MaterialTheme.colorScheme
-    val dark = colors.background.luminance() < 0.5f
     // 设置首页的几组一组接一组浮上来
     Column(Modifier.fillMaxWidth().appear(order, rise = 8)) {
-        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-            color = colors.onSurfaceVariant, modifier = Modifier.padding(start = 10.dp, bottom = 8.dp))
-        androidx.compose.material3.Surface(
-            shape = Radii.xl,
-            color = if (dark) colors.surfaceContainerHigh else colors.surfaceContainerLowest,
-            border = androidx.compose.foundation.BorderStroke(0.8.dp, glassEdge()),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Column {
-                entries.forEachIndexed { i, e ->
-                    if (i > 0) androidx.compose.material3.HorizontalDivider(Modifier.padding(start = 58.dp, end = 20.dp), color = colors.outlineVariant.copy(alpha = 0.6f))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth().clickable(onClick = e.onClick).heightIn(min = 56.dp).padding(horizontal = 20.dp, vertical = 12.dp),
-                    ) {
-                        Icon(e.icon, null, Modifier.size(24.dp), tint = colors.onSurface)
-                        Spacer(Modifier.size(14.dp))
-                        Text(e.title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        e.value?.takeIf { it.isNotBlank() }?.let {
-                            Text(it, style = MaterialTheme.typography.bodyMedium, color = if (e.warn) colors.error else colors.onSurfaceVariant,
-                                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 12.dp).widthIn(max = 170.dp))
+        Text(title, style = MaterialTheme.typography.labelLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+            color = colors.onSurfaceVariant, modifier = Modifier.padding(start = 16.dp, bottom = 8.dp))
+        androidx.compose.material3.Surface(shape = Radii.l, color = plainCard, modifier = Modifier.fillMaxWidth()) {
+            androidx.compose.foundation.layout.BoxWithConstraints {
+                val valueMax = maxWidth * 0.42f
+                Column {
+                    entries.forEachIndexed { i, e ->
+                        // 细线从文字起头：左边距 16 + 图标 22 + 间距 14
+                        if (i > 0) androidx.compose.material3.HorizontalDivider(Modifier.padding(start = 52.dp), thickness = 0.5.dp,
+                            color = colors.outlineVariant)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().clickable(onClick = e.onClick).heightIn(min = 52.dp).padding(horizontal = 16.dp, vertical = 11.dp),
+                        ) {
+                            Icon(e.icon, null, Modifier.size(22.dp), tint = colors.onSurface)
+                            Spacer(Modifier.size(14.dp))
+                            Text(e.title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            e.value?.takeIf { it.isNotBlank() }?.let {
+                                Text(it, style = MaterialTheme.typography.bodyMedium, color = if (e.warn) colors.error else colors.onSurfaceVariant,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 12.dp).widthIn(max = valueMax))
+                            }
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, Modifier.padding(start = 4.dp).size(18.dp), tint = colors.outline)
                         }
-                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, Modifier.padding(start = 4.dp).size(20.dp), tint = colors.onSurfaceVariant)
                     }
                 }
             }
@@ -1052,13 +1050,12 @@ private fun CheckList(labels: List<String>, selected: Int, onPick: (Int) -> Unit
     val colors = MaterialTheme.colorScheme
     androidx.compose.material3.Surface(
         shape = Radii.l,
-        color = if (isDarkSurface) colors.surfaceContainerHigh else colors.surfaceContainerLowest,
-        border = androidx.compose.foundation.BorderStroke(0.8.dp, glassEdge()),
+        color = plainCard,
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column {
             labels.forEachIndexed { i, label ->
-                if (i > 0) androidx.compose.material3.HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = colors.outlineVariant.copy(alpha = 0.6f))
+                if (i > 0) androidx.compose.material3.HorizontalDivider(Modifier.padding(start = 16.dp), thickness = 0.5.dp, color = colors.outlineVariant)
                 Row(
                     Modifier.fillMaxWidth().clickable { if (i != selected) onPick(i) }.heightIn(min = 52.dp).padding(horizontal = 16.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -1160,14 +1157,12 @@ private fun FontPicker(vm: ChatViewModel, current: String) {
 private fun UsageSummaryCard(settings: Settings, monthSpent: Double?, onOpenUsage: () -> Unit) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val colors = MaterialTheme.colorScheme
-    val dark = colors.background.luminance() < 0.5f
     val now = System.currentTimeMillis()
     val windows = remember(settings) { com.jack.ai.data.Quota.windows(ctx, settings).filter { it.limit > 0 } }
     androidx.compose.material3.Surface(
         onClick = onOpenUsage,
-        shape = Radii.xl,
-        color = if (dark) colors.surfaceContainerHigh else colors.surfaceContainerLowest,
-        border = androidx.compose.foundation.BorderStroke(0.8.dp, glassEdge()),
+        shape = Radii.l,
+        color = plainCard,
         modifier = Modifier.fillMaxWidth().appear(0, rise = 8),
     ) {
         Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
