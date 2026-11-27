@@ -43,6 +43,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
@@ -71,6 +72,9 @@ object VoiceChat {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var job: Job? = null
+    /** 打断按钮按下了：正在喂句子的循环看到就停掉朗读、丢掉还没读的。 */
+    @Volatile
+    private var interruptRequested = false
 
     val on get() = phase != Phase.OFF
 
@@ -92,7 +96,12 @@ object VoiceChat {
     fun stop() { job?.cancel() }
 
     /** 正在读回答时：不读了，马上听下一句。 */
-    fun interrupt() { if (phase == Phase.SPEAKING) Speaker.stop() }
+    fun interrupt() {
+        if (phase == Phase.SPEAKING) {
+            interruptRequested = true
+            Speaker.stop()
+        }
+    }
 
     private suspend fun loop(app: Context, vm: ChatViewModel, engine: Transcriber.Engine) {
         val store = Store(app)
@@ -118,15 +127,45 @@ object VoiceChat {
             if (!vm.send(text)) { toast(app, "现在发不出去（可能正在回答别的），语音对话先停了"); return }
             val convId = vm.state.value.currentId ?: return
             VoiceMode.convId = convId
-            // 等回答开始、写完
+            // 等回答开始
             withTimeoutOrNull(15_000) { vm.state.first { convId in it.streamingIds } }
-            vm.state.first { convId !in it.streamingIds }
-            val reply = vm.state.value.conversations.firstOrNull { it.id == convId }?.messages?.lastOrNull()
-                ?.takeIf { it.role == "assistant" && it.content.isNotBlank() } ?: continue
-            phase = Phase.SPEAKING
-            Speaker.toggle(app, reply.id, reply.content)
-            withTimeoutOrNull(8_000) { snapshotFlow { Speaker.speakingId }.first { it == reply.id } }
-            snapshotFlow { Speaker.speakingId }.first { it != reply.id }
+            // 这轮回答的消息在 send 时已经建好，盯着它的 content，写出一句就读一句
+            val replyId = vm.state.value.conversations.firstOrNull { it.id == convId }
+                ?.messages?.lastOrNull { it.role == "assistant" }?.id ?: continue
+            val chunker = SpeechChunker()
+            interruptRequested = false
+            var enqueued = false
+            while (kotlin.coroutines.coroutineContext.isActive && !interruptRequested) {
+                val reply = vm.state.value.conversations.firstOrNull { it.id == convId }
+                    ?.messages?.firstOrNull { it.id == replyId }
+                if (reply != null) {
+                    for (sentence in chunker.feed(reply.content)) {
+                        if (interruptRequested) break
+                        phase = Phase.SPEAKING
+                        Speaker.enqueue(app, replyId, sentence)
+                        enqueued = true
+                    }
+                }
+                if (convId !in vm.state.value.streamingIds) break
+                delay(80)
+            }
+            if (interruptRequested) continue
+            // 回答写完了：把剩下的吐出来排队，finish
+            val reply = vm.state.value.conversations.firstOrNull { it.id == convId }
+                ?.messages?.firstOrNull { it.id == replyId }
+            if (reply != null) {
+                for (sentence in chunker.feed(reply.content) + chunker.finish()) {
+                    if (interruptRequested) break
+                    phase = Phase.SPEAKING
+                    Speaker.enqueue(app, replyId, sentence)
+                    enqueued = true
+                }
+            }
+            if (interruptRequested) continue
+            Speaker.finish(replyId)
+            if (!enqueued) continue
+            withTimeoutOrNull(8_000) { snapshotFlow { Speaker.speakingId }.first { it == replyId } }
+            snapshotFlow { Speaker.speakingId }.first { it != replyId }
         }
     }
 
