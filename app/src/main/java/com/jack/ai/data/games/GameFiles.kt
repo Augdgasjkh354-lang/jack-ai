@@ -39,6 +39,20 @@ object GameFiles {
             ?: list.firstOrNull { it.nameWithoutExtension.equals(n.removeSuffix(".html"), true) }
     }
 
+    private val BUILTIN = Regex("""<meta[^>]+name=["']kavi-builtin["'][^>]+content=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+
+    /**
+     * 自带的游戏出了新版（[version] 对不上）：手机上那份改名成「名字（旧版）.html」留着（Kavi 改过的规则、样子都在里面，还能接着玩），
+     * 腾出位置放新版。已经有「（旧版）」就往后编号，不覆盖。返回留下的旧文件；不用换时返回 null。
+     */
+    fun keepOutdated(file: File, version: String): File? {
+        if (!file.exists() || BUILTIN.find(head(file))?.groupValues?.get(1) == version) return null
+        val dir = file.parentFile ?: return null
+        val base = file.nameWithoutExtension + "（旧版）"
+        val target = generateSequence(1) { it + 1 }.map { File(dir, if (it == 1) "$base.html" else "$base $it.html") }.first { !it.exists() }
+        return target.takeIf { file.renameTo(it) }
+    }
+
     /** 给 Kavi 看的一行：有哪些游戏、怎么写名字。没有游戏返回空。 */
     fun note(ctx: Context, except: File? = null): String {
         val names = all(ctx).filter { except == null || it.parentFile?.canonicalPath != except.canonicalPath }.map { PREFIX + it.name }.distinct()

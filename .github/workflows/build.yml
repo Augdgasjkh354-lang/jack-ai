@@ -120,6 +120,10 @@ jobs:
           python scripts/check_office.py app/build/office-samples
           python scripts/check_sandbox.py
 
+      # 自带的德州扑克（单个网页）：规则、发牌、AI、存档、接模型的测试，用 node 直接跑
+      - name: Hold'em tests
+        run: for t in scripts/holdem-tests/*.cjs; do echo "== $t"; node "$t" || exit 1; done
+
       - uses: actions/upload-artifact@v4
         with:
           name: office-samples

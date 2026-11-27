@@ -81,9 +81,10 @@ fun GamesScreen(vm: ChatViewModel, state: UiState, onBack: () -> Unit, onOpenCha
     var refresh by remember { mutableIntStateOf(0) }
     val games by produceState(emptyList<File>(), refresh) {
         value = withContext(Dispatchers.IO) {
-            val builtin = com.jack.ai.data.games.BuiltinGame.entries.map { it.convId }.toSet()
-            Workspace.root(ctx).listFiles().orEmpty().filter { it.isDirectory && it.name !in builtin }
-                .flatMap { dir -> Workspace.files(dir).filter { it.extension.equals("html", true) } }
+            // 自带游戏本身在上面单列；它文件夹里别的游戏（换新版时留下的「（旧版）」）照常列在下面
+            val builtin = com.jack.ai.data.games.BuiltinGame.entries.associate { it.convId to it.title + ".html" }
+            Workspace.root(ctx).listFiles().orEmpty().filter { it.isDirectory }
+                .flatMap { dir -> Workspace.files(dir).filter { it.extension.equals("html", true) && it.name != builtin[dir.name] } }
                 .filter { f -> runCatching { f.bufferedReader().use { r -> CharArray(4096).let { b -> String(b, 0, r.read(b).coerceAtLeast(0)) } } }.getOrDefault("").let(::isGameHtml) }
                 .sortedByDescending { it.lastModified() }
         }

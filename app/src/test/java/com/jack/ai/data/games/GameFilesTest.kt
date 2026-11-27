@@ -37,4 +37,16 @@ class GameFilesTest {
         // 在做它的那个对话里列文件时不重复提
         assertEquals("", GameFiles.note(app, except = Workspace.dir(app, "conv1")))
     }
+
+    @Test fun outdatedBuiltinIsKeptAsOldVersion() {
+        val v1 = put("game_holdem", "德州扑克.html", game.replace("<title>", "<meta name=\"kavi-builtin\" content=\"holdem-1\"><title>"))
+        // 版本对得上：不动
+        assertNull(GameFiles.keepOutdated(v1, "holdem-1"))
+        val kept = GameFiles.keepOutdated(v1, "holdem-2")
+        assertEquals("德州扑克（旧版）.html", kept?.name)
+        assertTrue(!v1.exists())
+        // 再换一版：已有的旧版不覆盖，往后编号（没写版本的老文件也算旧）
+        put("game_holdem", "德州扑克.html", game)
+        assertEquals("德州扑克（旧版） 2.html", GameFiles.keepOutdated(v1, "holdem-3")?.name)
+    }
 }

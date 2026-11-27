@@ -196,6 +196,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val app = getApplication<Application>()
         val dir = Workspace.dir(app, game.convId)
         val file = java.io.File(dir, game.title + ".html")
+        com.jack.ai.data.games.GameFiles.keepOutdated(file, game.version)
         if (reset || !file.exists()) {
             dir.mkdirs()
             val html = app.assets.open(game.asset).bufferedReader().use { it.readText() }

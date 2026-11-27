@@ -146,7 +146,8 @@ private class AppBridge(
 
     @JavascriptInterface
     fun save(json: String) {
-        if (json.length > 1_000_000) return
+        // 德州扑克这类存了手牌记录、训练记录的游戏，存档能到一两 MB
+        if (json.length > 8_000_000) return
         runCatching { SafeFile.writeText(dataFile(app), json) }
     }
 
