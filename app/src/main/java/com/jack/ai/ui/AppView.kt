@@ -298,7 +298,16 @@ fun AppCard(f: GeneratedFile, onFix: ((String) -> Unit)?) {
 @Composable
 fun AppViewer(file: File, onDismiss: () -> Unit) {
     val ctx = LocalContext.current
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    // 对话框窗口默认按内容定高、自己躲系统栏：新版安卓上网页会比看得见的区域高一截，底部（游戏的操作栏）被挡住。
+    // 改成整屏铺满、系统栏的留白交给 Scaffold 算，和放到桌面打开的那个页面一样
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+        val dialogView = androidx.compose.ui.platform.LocalView.current
+        androidx.compose.runtime.SideEffect {
+            (dialogView.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window?.let { w ->
+                w.setLayout(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT)
+                androidx.core.view.WindowCompat.setDecorFitsSystemWindows(w, false)
+            }
+        }
         Scaffold(
             topBar = {
                 TopAppBar(
