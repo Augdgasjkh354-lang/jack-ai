@@ -91,6 +91,13 @@ await check('model seats learn: Hero is named, shown cards and long-term reads r
   assert.ok(run('mindSystem(1)').length>500,'a long fixed system prompt so providers can cache it');
   assert.equal(run('mindSystem(1)'),run('mindSystem(1)'));
 });
+await check('model seats see the rule AI advice, and fall back to that same move',async()=>{
+  setupTurn();run("brains.seats={1:'m1'};brains.banter=false;aiEquityCache={key:equityKey(1),value:.73};var realDecide=decideAI;decideAI=()=>({type:'raise',target:45000});");
+  nextAnswer=()=>Promise.resolve('{"a":"call"}');await turn();
+  const prompt=asked[asked.length-1][0];assert.match(prompt,/建议：加注到 45000/);assert.match(prompt,/估算胜率（对还在牌里的人）约 \d+%/);assert.match(prompt,/跟注至少要 \d+% 的胜率/);
+  setupTurn();run("brains.seats={1:'m1'};");nextAnswer=()=>Promise.reject(new Error('超时'));await turn();
+  assert.deepEqual(JSON.parse(run('JSON.stringify(moves)')),[[1,'raise',45000]]);run('decideAI=realDecide');
+});
 await check('the review story tells the hand without hidden cards of folded players',()=>{
   const story=run("handStory({handNo:3,sb:5000,bb:10000,positions:['BTN'],heroHole:[{r:14,s:'♥'},{r:14,s:'♦'}],startStacks:[100,100,100,100,100,100],events:[{kind:'action',who:'你',text:'加注到 30000',analysis:{hand:'一对 A',equity:.82,toCall:0,recLabel:'加注',verdict:'正确'}},{kind:'street',who:'系统',text:'翻牌：2♣ 7♦ 9♠'}],reveals:{},result:'你赢得 45000'})");
   assert.match(story,/A♥ A♦/);assert.match(story,/教练建议 加注/);assert.match(story,/翻牌：2♣ 7♦ 9♠/);assert.match(story,/你赢得 45000/);

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="kavi-kind" content="game">
-  <meta name="kavi-builtin" content="holdem-8">
+  <meta name="kavi-builtin" content="holdem-9">
   <title>德州扑克</title>
   <!--
     德州扑克（Kavi 自带的网页游戏，可以让 Kavi 改）。底子是 GPT 做的 Poker Table（6 人桌 + Poker Lab 训练），Kavi 接进来时：
@@ -1370,6 +1370,7 @@
 【你知道什么】公开的动作、桌上的话、摊牌时亮出来的牌，和你自己的两张底牌。别人的底牌没亮就不知道。
 【怎么想】先看位置和有效筹码；再估自己这手牌对对手可能范围的胜率，和底池赔率比（要跟的钱 ÷ 跟完后的总底池）；胜率够就跟，明显领先就下注拿价值，落后又有听牌可以半诈唬，什么都没有就放弃。下注大小一般是底池的 1/3 到 1，全押要有理由。
 【学对手】每手开头会给你一份长期统计：入池率高的人范围宽、爱跟，对他少诈唬多拿价值；被下注时弃牌多的人，可以多偷；下重注后摊牌真有牌比例低的人，爱诈唬，可以多抓。亮牌是最真的信息，记住谁拿什么牌怎么打的。Hero 是真人玩家，会变，盯紧他最近的打法。
+【本能建议】每次轮到你，会附上你本能（规则 AI）的走法和算出来的胜率。胜率是硬数据，可信；走法只按统计算，不懂桌上的话和最近的亮牌。大多数时候照它走不会错，你掌握了它不知道的东西时再改。
 【桌上的话】可能是真的，也可能是在演、在骗你，要和他下注的动作对照着看，别被一句话吓跑或套住；你也可以用话虚张声势、装弱、套话。
 【回答格式】轮到你行动时只回一个 JSON：{"a":"fold|check|call|raise","to":加注后你这一轮的下注总额（只有 raise 要填）,"say":"一句台词，可以空"}。不是轮到你、只让你说话时，只回台词本身。台词口语、15 字以内、合你的性格，别直接报出底牌，不用每次都说。`;
   function mindSystem(i){const p=players[i];return`你在一桌六人无限注德州扑克里扮演「${p.name}」，牌风：${p.ai?.name||'紧凶'}，照这个牌风打；性格：${personaOf(i)}。翻牌前由你的本能（规则）自动打，你从翻牌开始做决定。\n\n`+MIND_GUIDE}
@@ -1394,10 +1395,16 @@
   function mindRecap(i){const r=readsSummary(i);return [r?'你对各人的了解（长期统计）：'+r:'',recentShowdowns.length?'最近的亮牌：\n'+recentShowdowns.slice(-4).join('\n'):'','之前的手里谁说过什么、谁骗过人，你大致记得，继续按自己的判断打。'].filter(Boolean).join('\n')}
   // i 号模型座位上次之后桌上发生的事（动作和台词），取了就算看过
   function takeNews(i){const from=Math.max(mindCursor[i]??0,mindBase),news=mindFeed.slice(from-mindBase).slice(-40);mindCursor[i]=mindBase+mindFeed.length;return news}
-  async function askModelMove(i,legal){
+  function moveText(m){return !m?'':m.type==='fold'?'弃牌':m.type==='check'?'过牌':m.type==='call'?'跟注':`加注到 ${m.target}`}
+  // 规则 AI 替模型座位算的参考：它的走法、估算胜率、跟注要的胜率
+  function ruleAdvice(i,legal,rule){
+    if(!rule)return '';const eq=aiEquityCache?.key===equityKey(i)?aiEquityCache.value:null;
+    const odds=legal.toCall>0?legal.callAmount/Math.max(1,game.pot+legal.callAmount):null;
+    return `【你的本能（规则 AI，按牌风和对各人的统计算的）】建议：${moveText(rule)}`+(eq!=null?`；估算胜率（对还在牌里的人）约 ${pct(eq)}`:'')+(odds!=null?`；跟注至少要 ${pct(odds)} 的胜率才划算`:'')+`。可以照做，也可以按你对桌上的判断（话、亮过的牌、谁在演）改。\n`}
+  async function askModelMove(i,legal,rule=null){
     const p=players[i],news=takeNews(i);
     const can=[legal.canFold?'fold':'',legal.canCheck?'check':'',legal.toCall>0?`call（跟 ${legal.callAmount}）`:'',legal.canRaise?`raise（to 在 ${legal.minTarget} 到 ${legal.maxTarget} 之间，${legal.maxTarget} 就是全押）`:''].filter(Boolean).join('、');
-    const prompt=handIntro(i)+(news.length?'上次之后桌上：\n'+news.join('\n')+'\n\n':'')+`轮到你。第 ${game.handNo} 手，${STREET_CN[game.street]}，你在 ${tablePositionName(i)} 位，底牌 ${cardsText(p.hole)}，公共牌 ${game.board.length?cardsText(game.board):'还没发'}。底池 ${game.pot}，你还剩 ${p.stack}，这一轮你已下 ${p.roundBet}，最高的是 ${game.currentBet}，大盲 ${BIG_BLIND}。能做：${can}。`;
+    const prompt=handIntro(i)+(news.length?'上次之后桌上：\n'+news.join('\n')+'\n\n':'')+`轮到你。第 ${game.handNo} 手，${STREET_CN[game.street]}，你在 ${tablePositionName(i)} 位，底牌 ${cardsText(p.hole)}，公共牌 ${game.board.length?cardsText(game.board):'还没发'}。底池 ${game.pot}，你还剩 ${p.stack}，这一轮你已下 ${p.roundBet}，最高的是 ${game.currentBet}，大盲 ${BIG_BLIND}。能做：${can}。\n`+ruleAdvice(i,legal,rule);
     const raw=await Promise.race([KJ.ask(prompt,{seat:'p'+i,model:brains.seats[i],json:true,max:120,system:mindSystem(i),recap:mindRecap(i)}),new Promise((_,no)=>setTimeout(()=>no(new Error('超时')),45000))]);
     return parseModelMove(raw,legal);
   }
@@ -1457,7 +1464,7 @@
   }
   function takeAiTurn(){
     if(game.handOver||game.actorIndex===null||players[game.actorIndex].isHero||game.thinking)return;game.thinking=true;updateUI();const token=game.handToken,index=game.actorIndex;
-    setTimeout(async()=>{if(token!==game.handToken||game.handOver||game.actorIndex!==index)return;if(game.street>0){const value=await requestEquity(equitySnapshot(index,Math.round(220*aiDifficulty().samples)));if(token!==game.handToken||game.handOver||game.actorIndex!==index)return;aiEquityCache={key:equityKey(index),value}}let move=null;if(!practice.active&&seatModel(index)&&game.street>0){try{move=await askModelMove(index,getLegal(index))}catch(e){}if(token!==game.handToken||game.handOver||game.actorIndex!==index){game.thinking=false;return}}game.thinking=false;if(!move)move=practice.active?decidePracticeAI(index):decideAI(index);if(move.say)speak(index,move.say);else maybeBanter(index,move);applyAction(index,move.type,move.target)},360+Math.random()*280)
+    setTimeout(async()=>{if(token!==game.handToken||game.handOver||game.actorIndex!==index)return;if(game.street>0){const value=await requestEquity(equitySnapshot(index,Math.round(220*aiDifficulty().samples)));if(token!==game.handToken||game.handOver||game.actorIndex!==index)return;aiEquityCache={key:equityKey(index),value}}let move=null,rule=null;if(!practice.active&&seatModel(index)&&game.street>0){rule=decideAI(index);try{move=await askModelMove(index,getLegal(index),rule)}catch(e){}if(token!==game.handToken||game.handOver||game.actorIndex!==index){game.thinking=false;return}}game.thinking=false;if(!move)move=rule||(practice.active?decidePracticeAI(index):decideAI(index));if(move.say)speak(index,move.say);else maybeBanter(index,move);applyAction(index,move.type,move.target)},360+Math.random()*280)
   }
 
   function seatCardsHTML(p,showdownOrder=0){
