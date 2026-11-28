@@ -44,8 +44,8 @@ class TabArrangerTest {
 
     @Test
     fun dragFromOthersIntoTheBar() {
-        // 「资料库」是「其他」的第一个（第 4 格），往上拖两格落在记忆后面
-        assertEquals(listOf("memory", "library", "routines"), run(listOf("memory", "routines"), "资料库", -2f))
+        // 「资料」是「其他」的第一个（第 4 格），往上拖两格落在记忆后面
+        assertEquals(listOf("memory", "data", "routines"), run(listOf("memory", "routines"), "资料", -2f))
     }
 
     @Test
@@ -57,24 +57,36 @@ class TabArrangerTest {
 
     @Test
     fun reorderInsideOthersIsKept() {
-        // 「其他」里默认是 资料库、浏览器、文件库……把「文件库」往上拖两格到最前
-        run(listOf("memory", "routines"), "文件库", -2f)
-        assertEquals(listOf("files", "library", "browser"), order!!.take(3))
-        assertEquals(listOf("files", "library", "browser"), KaviTab.others(listOf("memory", "routines"), order!!).map { it.id }.take(3))
+        // 「其他」里默认是 资料、浏览器、工具箱，把「工具箱」往上拖两格到最前
+        run(listOf("memory", "routines"), "工具箱", -2f)
+        assertEquals(listOf("tools", "data", "browser"), order!!.take(3))
+        assertEquals(listOf("tools", "data", "browser"), KaviTab.others(listOf("memory", "routines"), order!!).map { it.id }.take(3))
     }
 
     @Test
     fun fullBarPushesTheLastOneOut() {
-        assertEquals(listOf("files", "library", "memory", "browser"),
-            run(listOf("library", "memory", "browser", "routines"), "文件库", -6f))
+        assertEquals(listOf("tools", "data", "memory", "browser"),
+            run(listOf("data", "memory", "browser", "routines"), "工具箱", -5f))
     }
 
     @Test
     fun tapStillOpens() {
         var opened: KaviTab? = null
         rule.setContent { JackTheme(com.jack.ai.data.ThemeMode.LIGHT) { TabArranger(null, onOpen = { opened = it }, onSave = {}) } }
-        rule.onNodeWithText("技能").performClick()
-        assertEquals(KaviTab.SKILLS, opened)
+        rule.onNodeWithText("工具箱").performClick()
+        assertEquals(KaviTab.TOOLS, opened)
+    }
+
+    @Test
+    fun oldPerPageIdsLandInTheirGroups() {
+        // 以前底栏能放「文件库」「资料库」「游戏」这些单页：现在认成分组，重复的只留一个
+        assertEquals(listOf(KaviTab.CHAT, KaviTab.DATA, KaviTab.TOOLS, KaviTab.MEMORY), KaviTab.bar(listOf("files", "library", "games", "review")))
+        // 「其他」那组以前拖好的顺序（旧 id）也照样认
+        assertEquals(listOf(KaviTab.TOOLS, KaviTab.DATA, KaviTab.BROWSER), KaviTab.others(listOf("memory", "routines"), listOf("games", "skills", "files")))
+        assertEquals(listOf(SubPage.LIBRARY, SubPage.FILES, SubPage.TABLES, SubPage.DOWNLOADS), KaviTab.DATA.pages)
+        assertEquals(SubPage.LIBRARY, SubPage.lastOf(KaviTab.DATA))
+        SubPage.remember(SubPage.TABLES)
+        assertEquals(SubPage.TABLES, SubPage.lastOf(KaviTab.DATA))
     }
 }
 

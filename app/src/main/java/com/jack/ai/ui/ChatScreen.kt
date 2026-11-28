@@ -357,17 +357,19 @@ fun ChatScreen(
                             TabItem(t.icon, t.label, selected = t == KaviTab.CHAT) {
                                 if (t != KaviTab.CHAT && onOpenTab != null) onOpenTab(t) else when (t) {
                                     KaviTab.CHAT -> focusInput++
-                                    KaviTab.LIBRARY -> onOpenLibrary()
-                                    KaviTab.MEMORY -> onOpenMemory()
                                     KaviTab.BROWSER -> BrowserTabActivity.open(ctx)
                                     KaviTab.ROUTINES -> onOpenRoutines()
-                                    KaviTab.FILES -> onOpenFiles()
-                                    KaviTab.SKILLS -> onOpenSkills()
-                                    KaviTab.APPS -> onOpenApps()
-                                    KaviTab.GAMES -> onOpenGames()
-                                    KaviTab.REVIEW -> onOpenReview()
-                                    KaviTab.TABLES -> onOpenTables()
-                                    KaviTab.DOWNLOADS -> onOpenDownloads()
+                                    else -> when (SubPage.lastOf(t)) {
+                                        SubPage.LIBRARY, null -> onOpenLibrary()
+                                        SubPage.FILES -> onOpenFiles()
+                                        SubPage.TABLES -> onOpenTables()
+                                        SubPage.DOWNLOADS -> onOpenDownloads()
+                                        SubPage.MEMORY -> onOpenMemory()
+                                        SubPage.REVIEW -> onOpenReview()
+                                        SubPage.SKILLS -> onOpenSkills()
+                                        SubPage.APPS -> onOpenApps()
+                                        SubPage.GAMES -> onOpenGames()
+                                    }
                                 }
                             }
                         }, selected = 0, tourKey = "tabs")

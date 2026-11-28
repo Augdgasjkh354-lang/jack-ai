@@ -20,11 +20,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -57,31 +55,36 @@ import kotlinx.coroutines.launch
  * 底部标签栏能放的页面。chat 一直在第一个、拿不掉；其余的在侧边栏里长按拖进「底栏」或拖出去。
  * id 存在设置里（Settings.tabBar），所以别改名。
  */
+/**
+ * 侧边栏和底栏的入口：6 个分组。资料、记忆、工具箱里各有几页（[SubPage]），进去后底下一排子标签切换。
+ * 以前每页一个入口（资料库、文件库、表格……），存着的旧 id 在 [of] 里认到它所在的分组。
+ */
 enum class KaviTab(val id: String, val label: String, val icon: ImageVector) {
     CHAT("chat", "聊天", AppIcons.Chat),
-    LIBRARY("library", "资料库", AppIcons.Folder),
+    DATA("data", "资料", AppIcons.Folder),
     MEMORY("memory", "记忆", AppIcons.Moon),
     BROWSER("browser", "浏览器", AppIcons.Globe),
     ROUTINES("routines", "提醒和任务", Icons.Default.Notifications),
-    FILES("files", "文件库", AppIcons.File),
-    SKILLS("skills", "技能", Icons.Default.Build),
-    APPS("apps", "小工具", AppIcons.Code),
-    GAMES("games", "游戏", AppIcons.Game),
-    REVIEW("review", "复习卡片", Icons.Default.Star),
-    TABLES("tables", "表格", Icons.AutoMirrored.Filled.List),
-    DOWNLOADS("downloads", "下载", AppIcons.Download);
+    TOOLS("tools", "工具箱", Icons.Default.Build);
+
+    /** 这个分组里有哪几页；只有一页（或者不是页面，比如浏览器）的是空的。 */
+    val pages: List<SubPage> get() = SubPage.entries.filter { it.group == this }
 
     companion object {
         /** 底栏最多几格（含聊天）：再多手机上就挤了。 */
         const val MAX = 5
-        val DEFAULT = listOf("library", "memory", "browser", "routines")
+        val DEFAULT = listOf("data", "memory", "browser", "routines")
 
-        fun of(id: String) = entries.firstOrNull { it.id == id }
+        /** 旧版每页一个入口时存下的 id → 现在的分组。 */
+        private val OLD = mapOf("library" to DATA, "files" to DATA, "tables" to DATA, "downloads" to DATA,
+            "review" to MEMORY, "skills" to TOOLS, "apps" to TOOLS, "games" to TOOLS)
+
+        fun of(id: String) = entries.firstOrNull { it.id == id } ?: OLD[id]
 
         /** 这个版本有的（正式版没有浏览器）。 */
         fun available(t: KaviTab) = t != BROWSER || com.jack.ai.Edition.browser
 
-        /** 底栏上的：聊天在前，后面是设置里存的（空的就用默认），去重、去掉这个版本没有的，最多 [MAX] 格。 */
+        /** 底栏上的：聊天在前，后面是设置里存的（空的就用默认），旧 id 认成分组、去重、去掉这个版本没有的，最多 [MAX] 格。 */
         fun bar(saved: List<String>?): List<KaviTab> {
             val ids = saved ?: DEFAULT
             return (listOf(CHAT) + ids.mapNotNull { of(it) }.filter { it != CHAT && available(it) }.distinct()).take(MAX)
@@ -91,8 +94,29 @@ enum class KaviTab(val id: String, val label: String, val icon: ImageVector) {
         fun others(saved: List<String>?, order: List<String> = emptyList()): List<KaviTab> {
             val on = bar(saved).toSet()
             val rest = entries.filter { it !in on && available(it) }
-            return rest.sortedBy { t -> order.indexOf(t.id).let { if (it < 0) order.size + rest.indexOf(t) else it } }
+            val ord = order.mapNotNull { of(it)?.id }.distinct()
+            return rest.sortedBy { t -> ord.indexOf(t.id).let { if (it < 0) ord.size + rest.indexOf(t) else it } }
         }
+    }
+}
+
+/** 分组里的一页。id 和以前单独做入口时一样（通知、快捷方式、Kavi 的设置工具还认这些 id）。 */
+enum class SubPage(val id: String, val label: String, val group: KaviTab) {
+    LIBRARY("library", "资料库", KaviTab.DATA),
+    FILES("files", "文件", KaviTab.DATA),
+    TABLES("tables", "表格", KaviTab.DATA),
+    DOWNLOADS("downloads", "下载", KaviTab.DATA),
+    MEMORY("memory", "记忆", KaviTab.MEMORY),
+    REVIEW("review", "复习卡片", KaviTab.MEMORY),
+    SKILLS("skills", "技能", KaviTab.TOOLS),
+    APPS("apps", "小工具", KaviTab.TOOLS),
+    GAMES("games", "游戏", KaviTab.TOOLS);
+
+    companion object {
+        /** 每个分组上次看的是哪一页：再点这个分组回到那一页。只记在这次运行里。 */
+        private val last = HashMap<KaviTab, SubPage>()
+        fun lastOf(g: KaviTab): SubPage? = last[g] ?: g.pages.firstOrNull()
+        fun remember(p: SubPage) { last[p.group] = p }
     }
 }
 
@@ -316,5 +340,39 @@ private fun TabRow(t: KaviTab, badge: String?, dot: Boolean, modifier: Modifier,
             dot -> Box(Modifier.size(8.dp).clip(CircleShape).background(colors.primary))
         }
         if (lifted) Icon(Icons.Default.Menu, null, Modifier.padding(start = 8.dp).size(18.dp), tint = colors.onSurfaceVariant)
+    }
+}
+
+/**
+ * 分组页底下的一排子标签（资料库 · 文件 · 表格 · 下载）：点一下换到那一页。
+ * 放在底栏上面、拇指够得着的地方；分组只有一页时不显示。
+ */
+@Composable
+internal fun SubPageBar(current: SubPage, badge: (SubPage) -> String? = { null }, onPick: (SubPage) -> Unit) {
+    val pages = current.group.pages
+    if (pages.size < 2) return
+    val colors = MaterialTheme.colorScheme
+    val haptics = rememberHaptics()
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).clip(CircleShape).background(colors.surfaceContainerHigh).padding(3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        pages.forEach { p ->
+            val on = p == current
+            val bg by androidx.compose.animation.animateColorAsState(if (on) colors.primary else Color.Transparent, label = "sub")
+            Row(
+                Modifier.weight(1f).height(36.dp).clip(CircleShape).background(bg)
+                    .clickable { if (!on) { haptics.tick(); onPick(p) } },
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(p.label, maxLines = 1, style = MaterialTheme.typography.labelLarge, color = if (on) colors.onPrimary else colors.onSurfaceVariant,
+                    fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
+                badge(p)?.let { b ->
+                    Text(b, Modifier.padding(start = 4.dp).clip(CircleShape).background(if (on) colors.onPrimary else colors.primary).padding(horizontal = 6.dp),
+                        style = MaterialTheme.typography.labelSmall, color = if (on) colors.primary else colors.onPrimary)
+                }
+            }
+        }
     }
 }

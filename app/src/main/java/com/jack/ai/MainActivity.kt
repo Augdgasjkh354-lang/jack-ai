@@ -82,34 +82,44 @@ sealed interface Screen {
     data class Terminal(val folder: String = "") : Screen
 }
 
-/** 这一页是底栏上的哪一个（聊天是 null 那页）；不是底栏能放的页面返回 null。 */
-internal fun tabOf(s: Screen?): com.jack.ai.ui.KaviTab? = when (s) {
-    null -> com.jack.ai.ui.KaviTab.CHAT
-    Screen.Library -> com.jack.ai.ui.KaviTab.LIBRARY
-    Screen.Memory -> com.jack.ai.ui.KaviTab.MEMORY
-    Screen.Routines -> com.jack.ai.ui.KaviTab.ROUTINES
-    Screen.Files -> com.jack.ai.ui.KaviTab.FILES
-    Screen.Skills -> com.jack.ai.ui.KaviTab.SKILLS
-    Screen.Apps -> com.jack.ai.ui.KaviTab.APPS
-    Screen.Games -> com.jack.ai.ui.KaviTab.GAMES
-    Screen.Review -> com.jack.ai.ui.KaviTab.REVIEW
-    Screen.Tables -> com.jack.ai.ui.KaviTab.TABLES
-    Screen.Downloads -> com.jack.ai.ui.KaviTab.DOWNLOADS
+/** 这一页是分组里的哪一页（资料库、文件……）；不是分组页的返回 null。 */
+internal fun subOf(s: Screen?): com.jack.ai.ui.SubPage? = when (s) {
+    Screen.Library -> com.jack.ai.ui.SubPage.LIBRARY
+    Screen.Files -> com.jack.ai.ui.SubPage.FILES
+    Screen.Tables -> com.jack.ai.ui.SubPage.TABLES
+    Screen.Downloads -> com.jack.ai.ui.SubPage.DOWNLOADS
+    Screen.Memory -> com.jack.ai.ui.SubPage.MEMORY
+    Screen.Review -> com.jack.ai.ui.SubPage.REVIEW
+    Screen.Skills -> com.jack.ai.ui.SubPage.SKILLS
+    Screen.Apps -> com.jack.ai.ui.SubPage.APPS
+    Screen.Games -> com.jack.ai.ui.SubPage.GAMES
     else -> null
 }
 
+internal fun screenOf(p: com.jack.ai.ui.SubPage): Screen = when (p) {
+    com.jack.ai.ui.SubPage.LIBRARY -> Screen.Library
+    com.jack.ai.ui.SubPage.FILES -> Screen.Files
+    com.jack.ai.ui.SubPage.TABLES -> Screen.Tables
+    com.jack.ai.ui.SubPage.DOWNLOADS -> Screen.Downloads
+    com.jack.ai.ui.SubPage.MEMORY -> Screen.Memory
+    com.jack.ai.ui.SubPage.REVIEW -> Screen.Review
+    com.jack.ai.ui.SubPage.SKILLS -> Screen.Skills
+    com.jack.ai.ui.SubPage.APPS -> Screen.Apps
+    com.jack.ai.ui.SubPage.GAMES -> Screen.Games
+}
+
+/** 这一页是底栏上的哪一个分组（聊天是 null 那页）；不是分组里的页面返回 null。 */
+internal fun tabOf(s: Screen?): com.jack.ai.ui.KaviTab? = when (s) {
+    null -> com.jack.ai.ui.KaviTab.CHAT
+    Screen.Routines -> com.jack.ai.ui.KaviTab.ROUTINES
+    else -> subOf(s)?.group
+}
+
+/** 点了一个分组打开哪一页：上次在这个分组里看的那页，没看过就是第一页。 */
 internal fun screenOf(t: com.jack.ai.ui.KaviTab): Screen? = when (t) {
-    com.jack.ai.ui.KaviTab.LIBRARY -> Screen.Library
-    com.jack.ai.ui.KaviTab.MEMORY -> Screen.Memory
     com.jack.ai.ui.KaviTab.ROUTINES -> Screen.Routines
-    com.jack.ai.ui.KaviTab.FILES -> Screen.Files
-    com.jack.ai.ui.KaviTab.SKILLS -> Screen.Skills
-    com.jack.ai.ui.KaviTab.APPS -> Screen.Apps
-    com.jack.ai.ui.KaviTab.GAMES -> Screen.Games
-    com.jack.ai.ui.KaviTab.REVIEW -> Screen.Review
-    com.jack.ai.ui.KaviTab.TABLES -> Screen.Tables
-    com.jack.ai.ui.KaviTab.DOWNLOADS -> Screen.Downloads
     com.jack.ai.ui.KaviTab.CHAT, com.jack.ai.ui.KaviTab.BROWSER -> null
+    else -> com.jack.ai.ui.SubPage.lastOf(t)?.let { screenOf(it) }
 }
 
 class MainActivity : FragmentActivity() {
@@ -217,9 +227,12 @@ class MainActivity : FragmentActivity() {
             ACTION_CAMERA -> { stack.clear(); vm.newChat(); vm.requestCamera() }
             ACTION_DOWNLOADS -> { stack.clear(); stack.add(Screen.Downloads) }
             // 在浏览器底下的底栏点了别的格子：换到那一页
-            ACTION_OPEN_TAB -> com.jack.ai.ui.KaviTab.of(intent.getStringExtra("tab").orEmpty())?.let { t ->
+            ACTION_OPEN_TAB -> intent.getStringExtra("tab").orEmpty().let { id ->
+                // 分组的 id（data、tools……）回到那组上次看的页；旧的单页 id（files、games……）直接开那一页
+                val sub = if (com.jack.ai.ui.KaviTab.entries.any { it.id == id }) null else com.jack.ai.ui.SubPage.entries.firstOrNull { it.id == id }
+                val t = com.jack.ai.ui.KaviTab.of(id) ?: return@let
                 tabJump[0] = true
-                stack.clear(); screenOf(t)?.let { stack.add(it) }
+                stack.clear(); (sub?.let { screenOf(it) } ?: screenOf(t))?.let { stack.add(it) }
             }
             ACTION_OPEN_CHAT -> { stack.clear(); vm.mergeInbox(intent.getStringExtra("convId")) }
             // 工作流的通知：直接打开那个工作流，看是哪一步出的事
@@ -365,6 +378,7 @@ class MainActivity : FragmentActivity() {
                 val top = stack.lastOrNull()
                 val lastDepth = remember { intArrayOf(stack.size) }
                 val back: () -> Unit = { if (stack.isNotEmpty()) stack.removeAt(stack.lastIndex) }
+                androidx.compose.runtime.SideEffect { subOf(top)?.let { com.jack.ai.ui.SubPage.remember(it) } }
                 if (top != null) BackHandler(onBack = back)
                 // 进一页：新页从右边滑进来；返回：往右滑出去。底下垫一层背景色，交替的那一下不透出窗口的白底
                 val forward = stack.size >= lastDepth[0]
@@ -463,11 +477,19 @@ class MainActivity : FragmentActivity() {
                 ) { screen ->
                     // 底栏里放了的页面（资料库、记忆……）：底栏常驻在下面，点一下直接换，不用先返回聊天
                     val tab = tabOf(screen)
-                    if (screen != null && tab != null && tab in tabs && tabs.size > 1) androidx.compose.foundation.layout.Column(Modifier.fillMaxSize()) {
+                    val sub = subOf(screen)
+                    val withBar = screen != null && tab != null && tab in tabs && tabs.size > 1
+                    if (withBar || sub != null) androidx.compose.foundation.layout.Column(Modifier.fillMaxSize()) {
                         androidx.compose.foundation.layout.Box(Modifier.weight(1f).consumeWindowInsets(androidx.compose.foundation.layout.WindowInsets.navigationBars)) { page(screen) }
-                        androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)
-                            .navigationBarsPadding().padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 8.dp)) {
-                            com.jack.ai.ui.LiquidTabBar(tabs.map { t -> com.jack.ai.ui.TabItem(t.icon, t.label, selected = t == tab) { openTab(t) } }, tabs.indexOf(tab))
+                        androidx.compose.foundation.layout.Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)
+                            .navigationBarsPadding().padding(top = 4.dp, bottom = if (withBar) 0.dp else 6.dp)) {
+                            // 资料、记忆、工具箱里的几页：底下一排子标签换页（换页不算「进一页」，淡入淡出）
+                            if (sub != null) com.jack.ai.ui.SubPageBar(sub, badge = { p ->
+                                if (p == com.jack.ai.ui.SubPage.REVIEW) state.cards.count { it.due <= System.currentTimeMillis() }.takeIf { it > 0 }?.toString() else null
+                            }) { p -> tabJump[0] = true; stack[stack.lastIndex] = screenOf(p) }
+                            if (withBar) androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 8.dp)) {
+                                com.jack.ai.ui.LiquidTabBar(tabs.map { t -> com.jack.ai.ui.TabItem(t.icon, t.label, selected = t == tab) { openTab(t) } }, tabs.indexOf(tab))
+                            }
                         }
                     } else page(screen)
                 }

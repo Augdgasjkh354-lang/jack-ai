@@ -46,8 +46,11 @@ object SettingsKnobs {
     private fun modelName(s: Settings, key: String) = if (key.isBlank()) "自动" else s.modelChoices().firstOrNull { it.key == key }?.label ?: key
 
     private val ACCENTS = linkedMapOf("mono" to "黑白", "ocean" to "蓝", "pine" to "绿", "plum" to "紫", "clay" to "橙", "rose" to "红", "pink" to "粉", "cocoa" to "可可")
-    private val TABS = linkedMapOf("library" to "资料库", "memory" to "记忆", "browser" to "浏览器", "routines" to "提醒和任务", "files" to "文件库",
-        "skills" to "技能", "apps" to "小工具", "games" to "游戏", "review" to "复习卡片", "tables" to "表格", "downloads" to "下载")
+    private val TABS = linkedMapOf("data" to "资料", "memory" to "记忆", "browser" to "浏览器", "routines" to "提醒和任务", "tools" to "工具箱")
+    /** 以前每页单独一格，现在归进分组：说旧名字也认（「游戏」就是工具箱那格）。 */
+    private val OLD_TABS = mapOf("library" to "data", "资料库" to "data", "files" to "data", "文件库" to "data", "文件" to "data", "tables" to "data", "表格" to "data",
+        "downloads" to "data", "下载" to "data", "review" to "memory", "复习卡片" to "memory", "skills" to "tools", "技能" to "tools",
+        "apps" to "tools", "小工具" to "tools", "games" to "tools", "游戏" to "tools")
     private val THINK = linkedMapOf("OFF" to "不思考", "LOW" to "思考·低", "HIGH" to "思考·高", "MAX" to "思考·最高")
 
     val ALL: List<Knob> = listOf(
@@ -62,10 +65,10 @@ object SettingsKnobs {
             get = { "%.2f".format(it.fontScale) }, set = { s, v -> s.copy(fontScale = num(v, 0.85..1.3).toFloat()) }),
         Knob("bubble_accent", "自己的消息气泡用主题色", "true / false",
             get = { it.bubbleAccent.toString() }, set = { s, v -> s.copy(bubbleAccent = bool(v)) }),
-        Knob("tab_bar", "底栏放哪几页（聊天固定在第一个）", "最多 4 个，逗号隔开：" + TABS.entries.joinToString("、") { "${it.key}（${it.value}）" },
-            get = { (it.tabBar ?: listOf("library", "memory", "browser", "routines")).joinToString(",") },
+        Knob("tab_bar", "底栏放哪几格（聊天固定在第一个；资料里有资料库、文件、表格、下载，记忆里有复习卡片，工具箱里有技能、小工具、游戏）", "最多 4 个，逗号隔开：" + TABS.entries.joinToString("、") { "${it.key}（${it.value}）" },
+            get = { (it.tabBar ?: listOf("data", "memory", "browser", "routines")).map { id -> OLD_TABS[id] ?: id }.distinct().joinToString(",") },
             set = { s, v ->
-                val ids = v.split(',', '，', '、', ' ').map { it.trim() }.filter { it.isNotEmpty() }.map { pick(it, TABS) }.distinct()
+                val ids = v.split(',', '，', '、', ' ').map { it.trim() }.filter { it.isNotEmpty() }.map { pick(OLD_TABS[it.lowercase()] ?: OLD_TABS[it] ?: it, TABS) }.distinct()
                 if (ids.size > 4) throw IllegalArgumentException("最多 4 个")
                 s.copy(tabBar = ids)
             }),

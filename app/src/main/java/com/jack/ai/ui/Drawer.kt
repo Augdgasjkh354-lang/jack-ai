@@ -190,7 +190,7 @@ fun HistoryDrawer(
                         badge = { t ->
                             when (t) {
                                 KaviTab.ROUTINES -> state.routines.count { it.enabled }.takeIf { it > 0 }?.toString()
-                                KaviTab.REVIEW -> due.takeIf { it > 0 }?.toString()
+                                KaviTab.MEMORY -> due.takeIf { it > 0 }?.toString()
                                 else -> null
                             }
                         },
@@ -198,17 +198,19 @@ fun HistoryDrawer(
                         onOpen = { t ->
                             when (t) {
                                 KaviTab.CHAT -> onCloseDrawer()
-                                KaviTab.LIBRARY -> onOpenLibrary()
-                                KaviTab.MEMORY -> onOpenMemory()
                                 KaviTab.BROWSER -> BrowserTabActivity.open(ctx)
                                 KaviTab.ROUTINES -> onOpenRoutines()
-                                KaviTab.FILES -> onOpenFiles()
-                                KaviTab.SKILLS -> onOpenSkills()
-                                KaviTab.APPS -> onOpenApps()
-                                KaviTab.GAMES -> onOpenGames()
-                                KaviTab.REVIEW -> onOpenReview()
-                                KaviTab.TABLES -> onOpenTables()
-                                KaviTab.DOWNLOADS -> onOpenDownloads()
+                                else -> when (SubPage.lastOf(t)) {
+                                    SubPage.LIBRARY, null -> onOpenLibrary()
+                                    SubPage.FILES -> onOpenFiles()
+                                    SubPage.TABLES -> onOpenTables()
+                                    SubPage.DOWNLOADS -> onOpenDownloads()
+                                    SubPage.MEMORY -> onOpenMemory()
+                                    SubPage.REVIEW -> onOpenReview()
+                                    SubPage.SKILLS -> onOpenSkills()
+                                    SubPage.APPS -> onOpenApps()
+                                    SubPage.GAMES -> onOpenGames()
+                                }
                             }
                         },
                         onSave = onSaveTabs,

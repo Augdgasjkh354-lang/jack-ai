@@ -44,7 +44,8 @@ class SettingsToolTest {
         val now = Store(ctx).loadSettings()
         assertEquals(ThemeMode.DARK, now.themeMode)
         assertEquals(1.2f, now.fontScale, 0.001f)
-        assertEquals(listOf("games", "memory"), now.tabBar)
+        // 旧的单页名字认成它所在的分组：游戏在工具箱里
+        assertEquals(listOf("tools", "memory"), now.tabBar)
         assertEquals("", now.apiKey)
         assertTrue(r, "「apiKey」不能改" in r)
         assertEquals(0, asked)
