@@ -70,6 +70,13 @@ await check('you can talk to the table and the named opponent answers',async()=>
   assert.equal(run('players[0].say'),'mika 你是不是在偷鸡');assert.equal(run('players[4].say'),'你算老几');
   run("tutorial.active=true;heroSay('喂')");assert.equal(asked.length,n+1);run('tutorial.active=false');
 });
+await check('table talk reaches model seats, and a model seat talks with its own cards',async()=>{
+  setupTurn();run("brains.seats={1:'m1'};brains.banter=true;tableChat=[];banterBusy=false;lastTalkAt=0;");
+  nextAnswer=()=>Promise.resolve('我牌可大了');run("heroSay('Nova 我这把有坚果')");for(let k=0;k<5;k++)await new Promise(r=>setImmediate(r));
+  let [prompt,opts]=asked[asked.length-1];assert.equal(opts.seat,'p1');assert.equal(opts.model,'m1');assert.match(prompt,/A♠ K♠/);assert.match(opts.system,/演、在骗你/);
+  run("speak(3,'我弃了我弃了')");nextAnswer=()=>Promise.resolve('{"a":"call"}');await turn();
+  prompt=asked[asked.length-1][0];assert.match(prompt,/Atlas 说：「我弃了我弃了」/);assert.doesNotMatch(prompt,/Hero 说：「Nova 我这把有坚果」/,'already heard it when it answered');
+});
 await check('the review story tells the hand without hidden cards of folded players',()=>{
   const story=run("handStory({handNo:3,sb:5000,bb:10000,positions:['BTN'],heroHole:[{r:14,s:'♥'},{r:14,s:'♦'}],startStacks:[100,100,100,100,100,100],events:[{kind:'action',who:'你',text:'加注到 30000',analysis:{hand:'一对 A',equity:.82,toCall:0,recLabel:'加注',verdict:'正确'}},{kind:'street',who:'系统',text:'翻牌：2♣ 7♦ 9♠'}],reveals:{},result:'你赢得 45000'})");
   assert.match(story,/A♥ A♦/);assert.match(story,/教练建议 加注/);assert.match(story,/翻牌：2♣ 7♦ 9♠/);assert.match(story,/你赢得 45000/);
