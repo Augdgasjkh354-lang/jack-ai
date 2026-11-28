@@ -111,6 +111,16 @@ await check('a model seat that loses a big showdown writes a lesson it sees from
   assert.match(asked[asked.length-1][0],/你的小本子[\s\S]*1\. Mika 转牌过牌加注多半是真牌/);assert.match(asked[asked.length-1][1].recap,/小本子/);
   run("resetHeroRead()");assert.equal(run('JSON.stringify(brains.notes)'),'{}');
 });
+await check('a full notebook is tidied by the seat itself instead of dropping old lessons',async()=>{
+  run("brains.seats={1:'m1'};lessonBusy=false;brains.notes={1:Array.from({length:20},(_,k)=>'旧教训 '+k)};");
+  let step=0;nextAnswer=()=>Promise.resolve(step++===0?'新教训':'1. 合并一\n- 合并二\n合并三\n合并四');
+  run("handEndLesson([4],[1,4],400000)");for(let k=0;k<10;k++)await new Promise(r=>setImmediate(r));
+  const [prompt,opts]=asked[asked.length-1];assert.match(prompt,/旧教训 0[\s\S]*新教训/);assert.equal(opts.keep,false);
+  assert.deepEqual(JSON.parse(run('JSON.stringify(brains.notes[1])')),['合并一','合并二','合并三','合并四']);
+  run("brains.notes={1:Array.from({length:20},(_,k)=>'旧教训 '+k)};lessonBusy=false;");step=0;nextAnswer=()=>step++===0?Promise.resolve('又一条'):Promise.reject(new Error('断网'));
+  run("handEndLesson([4],[1,4],400000)");for(let k=0;k<10;k++)await new Promise(r=>setImmediate(r));
+  assert.equal(run('brains.notes[1].length'),20);assert.equal(run('brains.notes[1][19]'),'又一条');
+});
 await check('the review story tells the hand without hidden cards of folded players',()=>{
   const story=run("handStory({handNo:3,sb:5000,bb:10000,positions:['BTN'],heroHole:[{r:14,s:'♥'},{r:14,s:'♦'}],startStacks:[100,100,100,100,100,100],events:[{kind:'action',who:'你',text:'加注到 30000',analysis:{hand:'一对 A',equity:.82,toCall:0,recLabel:'加注',verdict:'正确'}},{kind:'street',who:'系统',text:'翻牌：2♣ 7♦ 9♠'}],reveals:{},result:'你赢得 45000'})");
   assert.match(story,/A♥ A♦/);assert.match(story,/教练建议 加注/);assert.match(story,/翻牌：2♣ 7♦ 9♠/);assert.match(story,/你赢得 45000/);

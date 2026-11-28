@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="kavi-kind" content="game">
-  <meta name="kavi-builtin" content="holdem-10">
+  <meta name="kavi-builtin" content="holdem-11">
   <title>德州扑克</title>
   <!--
     德州扑克（Kavi 自带的网页游戏，可以让 Kavi 改）。底子是 GPT 做的 Poker Table（6 人桌 + Poker Lab 训练），Kavi 接进来时：
@@ -1392,7 +1392,16 @@
   function readsSummary(i){
     return players.filter(t=>t.seat!==i).map(t=>{const r=botReadFor(i,t.seat);if(r.hands<4)return '';
       return `${t.isHero?'Hero':t.name}（${Math.round(r.hands)} 手）：入池 ${pct(r.vpip)}，翻前加注 ${pct(r.pfr)}，被下注时弃牌 ${pct(r.foldToBet)}，翻后主动下注 ${pct(r.aggression)}，下重注后摊牌真有牌 ${pct(r.credibility)}`}).filter(Boolean).join('；')}
-  function notesOf(i){const n=brains.notes?.[i];return Array.isArray(n)?n.slice(-8):[]}
+  const NOTES_MAX=20,NOTES_KEEP=12;
+  function notesOf(i){const n=brains.notes?.[i];return Array.isArray(n)?n.slice(-NOTES_MAX):[]}
+  // 小本子满了不删老的：让它自己整理——合并重复的、去掉过时或和新教训矛盾的，压到 NOTES_KEEP 条以内。整理失败先留最近 NOTES_MAX 条，下次再整理。
+  function tidyNotes(i,list){
+    return KJ.ask(`这是你的小本子（以前吃亏后总结的教训，越往后越新）：\n${list.map((x,k)=>`${k+1}. ${x}`).join('\n')}\n\n把它整理成不超过 ${NOTES_KEEP} 条：说的是同一件事的合并成一条；和后面的教训矛盾的、明显过时的删掉；具体到人和情况的优先留。每条 30 字以内，一行一条，不要编号，不要别的话。`,
+      {keep:false,model:brains.seats[i],max:700,system:mindSystem(i)})
+      .then(t=>{const out=String(t||'').split('\n').map(x=>x.replace(/^\s*(\d+[.、)]|[-·•*])\s*/,'').replace(/^["“「]+|["”」]+$/g,'').trim()).filter(x=>x&&x.length<=80).slice(0,NOTES_KEEP);
+        return out.length>=3?out:list.slice(-NOTES_MAX)})
+      .catch(()=>list.slice(-NOTES_MAX));
+  }
   function notesText(i){const n=notesOf(i);return n.length?`【你的小本子（以前吃亏后自己总结的教训）】\n${n.map((x,k)=>`${k+1}. ${x}`).join('\n')}\n`:''}
   function handIntro(i){if(mindHand[i]===game.handNo)return '';mindHand[i]=game.handNo;const r=readsSummary(i),n=notesText(i);return (r?`【第 ${game.handNo} 手 · 你对各人的了解（长期统计，含以前的牌局，样本少的不准）】${r}\n`:'')+n+(r||n?'\n':'')}
   function mindRecap(i){const r=readsSummary(i);return [r?'你对各人的了解（长期统计）：'+r:'',notesText(i),recentShowdowns.length?'最近的亮牌：\n'+recentShowdowns.slice(-4).join('\n'):'','之前的手里谁说过什么、谁骗过人，你大致记得，继续按自己的判断打。'].filter(Boolean).join('\n')}
@@ -1453,7 +1462,7 @@
     KJ.ask(`${news.length?'上次之后桌上：\n'+news.join('\n')+'\n\n':''}这手你摊牌输了 ${pot} 的底池，赢家是 ${winners.map(w=>players[w].isHero?'Hero':players[w].name).join('、')}。回头看这一手，写一条以后用得上的教训：具体到谁、什么情况、下次怎么做（例如「Hero 河牌超池下注时多半是诈唬，可以多抓」）。30 字以内。只是运气不好、没什么可学的，就回「无」。只回这一条。`,
       {seat:'p'+i,model:brains.seats[i],max:80,system:mindSystem(i),recap:mindRecap(i)})
       .then(t=>{const n=String(t||'').replace(/^["“「]+|["”」]+$/g,'').replace(/^\d+[.、]\s*/,'').trim().slice(0,60);if(!n||/^无[。.]?$/.test(n))return;
-        const list=notesOf(i);list.push(n);brains.notes[i]=list.slice(-8);saveBrains();renderBrains()})
+        const list=notesOf(i);list.push(n);if(list.length<=NOTES_MAX){brains.notes[i]=list;saveBrains();renderBrains();return}return tidyNotes(i,list).then(out=>{brains.notes[i]=out;saveBrains();renderBrains()})})
       .catch(()=>{}).finally(()=>{lessonBusy=false});
   }
   // 一手结束：赢了大底池的人得意一句，摊牌输了的人可能嘴硬一句
