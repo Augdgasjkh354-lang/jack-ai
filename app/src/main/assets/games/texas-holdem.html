@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="kavi-kind" content="game">
-  <meta name="kavi-builtin" content="holdem-4">
+  <meta name="kavi-builtin" content="holdem-5">
   <title>德州扑克</title>
   <!--
     德州扑克（Kavi 自带的网页游戏，可以让 Kavi 改）。底子是 GPT 做的 Poker Table（6 人桌 + Poker Lab 训练），Kavi 接进来时：
@@ -85,7 +85,8 @@
     .model-tag{margin-left:4px;padding:1px 5px;border-radius:6px;background:#2b2350;color:#cfc4ff;font-size:9px;font-weight:800}
     .brain-panel{display:grid;gap:8px;padding:12px 12px 14px}.brain-row{display:flex;align-items:center;gap:8px}.brain-row b{min-width:76px;font-size:13px}.brain-row small{color:var(--muted);font-size:11px;display:block;font-weight:600}
     .brain-row select{flex:1;min-width:0;padding:8px;border-radius:10px;border:1px solid #355248;background:#081914;color:inherit;font-size:13px}
-    .brain-note{color:var(--muted);font-size:12px;line-height:1.5}.brain-persona{width:100%;margin:-2px 0 8px;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:#0a1715;color:var(--ink);font-size:12px}.brain-banter{display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:1.45}
+    .brain-note{color:var(--muted);font-size:12px;line-height:1.5}.chat-toggle{position:absolute;top:10px;right:12px;min-width:38px;min-height:34px;border:1px solid #527364;border-radius:8px;background:#193329;color:#dcebdc;font-size:15px;cursor:pointer}.chat-row{display:flex;gap:6px;margin:4px 0 6px}.chat-row.hidden{display:none}.chat-row input{flex:1;min-width:0;min-height:38px;padding:7px 10px;border:1px solid var(--line);border-radius:9px;background:#0a1715;color:var(--ink);font-size:14px}.chat-row button{min-height:38px;padding:0 12px;border:0;border-radius:9px;background:var(--lime);color:#142116;font-weight:800}
+    .brain-persona{width:100%;margin:-2px 0 8px;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:#0a1715;color:var(--ink);font-size:12px}.brain-banter{display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:1.45}
     .kavi-review{margin-top:10px;padding:12px;border:1px solid #4b3f86;border-radius:12px;background:#151230;color:#e6e1ff;font-size:13px;line-height:1.65;white-space:pre-wrap}
     .ask-kavi{margin-top:10px;width:100%;padding:10px;border-radius:11px;border:1px solid #5b4fa0;background:#1d1840;color:#d9d2ff;font-weight:800}
   
@@ -100,6 +101,9 @@
       .stack-unit{display:none}.seat-line{max-width:none}.name{gap:3px}
       .table{min-height:clamp(380px,calc(100dvh - 250px),560px)}.seat.pos3{top:15%}.seat.pos2,.seat.pos4{top:29%}
       .status-pill{font-size:12px!important;padding:5px 9px}
+      .chat-toggle{right:100px}.mobile-hand{padding-right:146px!important}
+    }
+    @media(min-width:621px){.turn-box{position:relative}
     }
   </style>
 </head>
@@ -252,6 +256,8 @@
       <div class="turn-box">
         <div class="mobile-hand" id="mobileHand"></div>
         <button class="quick-lobby" id="quickLobby" type="button">返回大厅</button>
+        <button class="chat-toggle hidden" id="chatToggle" type="button" aria-expanded="false" title="跟牌桌说话">💬</button>
+        <form class="chat-row hidden" id="chatRow" autocomplete="off"><input id="chatInput" maxlength="40" enterkeyhint="send" placeholder="跟牌桌说句话…（点名谁就谁回）"><button type="submit">发送</button></form>
         <div class="to-call"><div><span>需要跟注</span><strong id="toCall">0</strong></div><div style="text-align:right"><span>本轮投入</span><strong id="heroBet">0</strong></div></div>
         <div class="actions">
           <button class="action danger" id="foldBtn">弃牌</button>
@@ -1374,11 +1380,21 @@
   }
   function canTalk(){return KJ&&brains.banter&&!banterBusy&&!isTraining()&&Date.now()-lastTalkAt>2500}
   // 让 i 号座位按自己的性格说一句。what 是刚发生的事（从他的角度说）。
-  function talk(i,what){
-    if(!canTalk())return;const p=players[i];if(!p||p.isHero)return;banterBusy=true;lastTalkAt=Date.now();
+  function talk(i,what,force=false){
+    if(force?(!KJ||isTraining()):!canTalk())return Promise.resolve();const p=players[i];if(!p||p.isHero)return Promise.resolve();banterBusy=true;lastTalkAt=Date.now();
     const chat=tableChat.length?`桌上刚才的对话：\n${tableChat.slice(-4).join('\n')}\n`:'';
-    KJ.ask(`${chat}${what}（底池 ${game.pot||game.lastPot}，大盲 ${BIG_BLIND}）。说一句 15 字以内的口语台词；可以接别人的话、损人、自嘲。别说出底牌。只回台词本身。`,{keep:false,max:40,system:`你是德州扑克牌桌上的「${p.name}」。性格：${personaOf(i)}。说话要有这个人的味道，每次说法别重样。`})
+    return KJ.ask(`${chat}${what}（底池 ${game.pot||game.lastPot}，大盲 ${BIG_BLIND}）。说一句 15 字以内的口语台词；可以接别人的话、损人、自嘲。别说出底牌。只回台词本身。`,{keep:false,max:40,system:`你是德州扑克牌桌上的「${p.name}」。性格：${personaOf(i)}。说话要有这个人的味道，每次说法别重样。`})
       .then(t=>speak(i,t)).catch(()=>{}).finally(()=>{banterBusy=false;lastTalkAt=Date.now()});
+  }
+  // 你在牌桌上打字：气泡出在你的座位上，点了名的人回你；没点名就挑一个（偶尔两个）还在桌上的人回
+  function heroSay(text){
+    const t=String(text||'').trim().slice(0,40);if(!t||!KJ||isTraining())return;speak(0,t);
+    const low=t.toLowerCase(),named=players.filter(p=>!p.isHero&&low.includes(p.name.toLowerCase()));
+    const pool=players.filter(p=>!p.isHero&&p.stack+p.totalBet>0),inHand=pool.filter(p=>!p.folded&&p.hole.length===2);
+    const pick=a=>a[Math.floor(Math.random()*a.length)];
+    const first=named[0]||pick(inHand.length?inHand:pool);if(!first)return;
+    const second=named[1]||(!named.length&&Math.random()<.35?pick(pool.filter(p=>p!==first)):null);
+    talk(first.seat,`Hero 对${named.length?'你':'大家'}说：「${t}」。回他一句。`,true).then(()=>{if(second)setTimeout(()=>talk(second.seat,`Hero 刚说：「${t}」，${first.name}也回了。你也插一句。`,true),600)});
   }
   function maybeBanter(i,move){
     if(!canTalk())return;const legal=getLegal(i),allin=move.type==='raise'&&move.target>=legal.maxTarget,big=move.type==='raise'||(move.type==='fold'&&legal.toCall>=BIG_BLIND*3);if(!big||Math.random()>(allin?.85:.45))return;
@@ -1469,7 +1485,7 @@
     $('handCount').textContent=game.handNo;$('aliveCount').textContent=activeSeats().length;$('handTitle').textContent=`第 ${Math.max(1,game.handNo)} 手`;$('street').textContent=STREET_NAMES[game.street]||STREET_NAMES[0];renderSeats();renderBoard();updatePotDisplay();$('table').classList.toggle('dealing',!!game.dealing);
     const hero=players[0],legal=getLegal(0);$('mobileHand').innerHTML=hero.hole.map(c=>cardHTML(c)).join('')+`<span>${STREET_CN[game.street]} · 底池 ${grp(game.pot)}</span>`;$('toCall').textContent=grp(legal.toCall);$('heroBet').textContent=grp(hero.roundBet);
     let status;if(game.handOver)status=game.statusText||'本手结束';else if(game.runningOut)status='全押 · 逐街揭牌';else if(game.dealing)status='发牌中…';else if(game.thinking&&game.actorIndex!==null)status=`${players[game.actorIndex].name} 正在思考…`;else if(game.actorIndex===0)status=legal.toCall>0?`轮到你 · 跟注 ${legal.callAmount}`:'轮到你 · 可以过牌';else status=game.actorIndex!==null?`轮到 ${players[game.actorIndex].name}`:'等待行动';
-    $('status').textContent=grp(status);$('status').className=`status-pill ${game.handOver?game.resultClass:''}`;
+    $('status').textContent=grp(status);{const off=!KJ||isTraining();$('chatToggle').classList.toggle('hidden',off);if(off)$('chatRow').classList.add('hidden')}$('status').className=`status-pill ${game.handOver?game.resultClass:''}`;
     const heroTurn=!game.handOver&&game.actorIndex===0&&!game.thinking&&!hero.folded&&!hero.allIn;$('foldBtn').disabled=!heroTurn||legal.toCall===0;$('checkCallBtn').disabled=!heroTurn;$('checkCallBtn').textContent=legal.toCall===0?'过牌':(legal.callAmount<legal.toCall?`全押 ${grp(legal.callAmount)}`:`跟注 ${grp(legal.callAmount)}`);
     $('actionHint').textContent=game.handOver?(hero.stack<=0?(game.mode==='cash'?'本桌筹码已用完，请返回大厅选择场次。':'你已出局，可以重新开赛。'):game.matchOver?(game.mode==='tournament'?'锦标赛结束。':'本桌结束。'):'本手结束，可以继续下一手。'):(heroTurn?'选择你的行动。':hero.folded?'你已弃牌，等待本手结束。':'等待其他玩家行动。');
     const showRaise=heroTurn&&legal.canRaise;$('raiseBox').className=`raise-box ${showRaise?'show':''}`;
@@ -1545,6 +1561,8 @@
   $('checkCallBtn').addEventListener('click',()=>applyAction(0,getLegal(0).toCall===0?'check':'call'));
   $('raiseSlider').addEventListener('input',()=>{const legal=getLegal(0);$('raiseValue').textContent=grp($('raiseSlider').value);const all=Number($('raiseSlider').value)===legal.maxTarget&&legal.maxTarget===players[0].roundBet+players[0].stack;$('raiseBtn').textContent=all?`全押到 ${grp($('raiseSlider').value)}`:`${game.currentBet===0?'下注':'加注到'} ${grp($('raiseSlider').value)}`});
   $('raiseBtn').addEventListener('click',()=>{const t=Number($('raiseSlider').value),allin=t>=getLegal(0).maxTarget,pot=game.pot;applyAction(0,'raise',t);heroBanter(t,allin,pot)});
+  $('chatToggle').addEventListener('click',()=>{const row=$('chatRow'),open=row.classList.contains('hidden');row.classList.toggle('hidden',!open);$('chatToggle').setAttribute('aria-expanded',String(open));if(open)$('chatInput').focus()});
+  $('chatRow').addEventListener('submit',e=>{e.preventDefault();const v=$('chatInput').value;$('chatInput').value='';heroSay(v)});
   $('raiseOptionsToggle').addEventListener('click',()=>{const options=$('raiseOptions'),open=!options.classList.contains('open');options.classList.toggle('open',open);$('raiseOptionsToggle').setAttribute('aria-expanded',String(open))});
   document.querySelectorAll('[data-size]').forEach(btn=>btn.addEventListener('click',()=>{const legal=getLegal(0);if(!legal.canRaise)return;const v=chooseRaiseTarget(0,legal,btn.dataset.size);$('raiseSlider').value=v;$('raiseSlider').dispatchEvent(new Event('input'))}));
   $('nextHand').addEventListener('click',()=>{if(practice.active)newPracticeScene();else if(!tutorial.active&&players[0].stack<=0)openLobby(null,true);else newHand()});

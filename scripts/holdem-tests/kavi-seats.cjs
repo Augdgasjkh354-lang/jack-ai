@@ -61,6 +61,15 @@ await check('opponents talk in their own persona and hear the table chat',async(
   run("lastTalkAt=0;brains.banter=false;talk(4,'x')");assert.equal(asked.length,n);
   run("brains.persona={}");assert.match(run('personaOf(5)'),/毒舌老赌棍/);
 });
+await check('you can talk to the table and the named opponent answers',async()=>{
+  run("brains.banter=false;tableChat=[];banterBusy=false;players.forEach(p=>{p.folded=false;p.stack=100000});");
+  nextAnswer=()=>Promise.resolve('你算老几');const n=asked.length;
+  run("heroSay('mika 你是不是在偷鸡')");for(let k=0;k<5;k++)await new Promise(r=>setImmediate(r));
+  assert.equal(asked.length,n+1);const [prompt,opts]=asked[asked.length-1];
+  assert.match(opts.system,/Mika/);assert.match(prompt,/Hero：mika 你是不是在偷鸡/);
+  assert.equal(run('players[0].say'),'mika 你是不是在偷鸡');assert.equal(run('players[4].say'),'你算老几');
+  run("tutorial.active=true;heroSay('喂')");assert.equal(asked.length,n+1);run('tutorial.active=false');
+});
 await check('the review story tells the hand without hidden cards of folded players',()=>{
   const story=run("handStory({handNo:3,sb:5000,bb:10000,positions:['BTN'],heroHole:[{r:14,s:'♥'},{r:14,s:'♦'}],startStacks:[100,100,100,100,100,100],events:[{kind:'action',who:'你',text:'加注到 30000',analysis:{hand:'一对 A',equity:.82,toCall:0,recLabel:'加注',verdict:'正确'}},{kind:'street',who:'系统',text:'翻牌：2♣ 7♦ 9♠'}],reveals:{},result:'你赢得 45000'})");
   assert.match(story,/A♥ A♦/);assert.match(story,/教练建议 加注/);assert.match(story,/翻牌：2♣ 7♦ 9♠/);assert.match(story,/你赢得 45000/);
