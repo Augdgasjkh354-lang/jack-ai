@@ -57,3 +57,8 @@
 
 # Chaquopy：Python 一侧按名字访问 Java
 -keep class com.chaquo.python.** { *; }
+
+# ONNX Runtime（本地向量、语音转文字、抠图、本地小模型）：底层 C++ 用 JNI 按名字建 Java 对象（TensorInfo、OnnxTensor、OnnxMap……）、
+# 调构造函数和字段，Java 这边没人直接调用的会被 R8 删掉，一推理就 JniAbort 闪退。它的 AAR 只保留了遥测那几个类
+-keep class ai.onnxruntime.** { *; }
+-dontwarn ai.onnxruntime.**
