@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="kavi-kind" content="game">
-  <meta name="kavi-builtin" content="holdem-9">
+  <meta name="kavi-builtin" content="holdem-10">
   <title>德州扑克</title>
   <!--
     德州扑克（Kavi 自带的网页游戏，可以让 Kavi 改）。底子是 GPT 做的 Poker Table（6 人桌 + Poker Lab 训练），Kavi 接进来时：
@@ -88,6 +88,7 @@
     .brain-panel{display:grid;gap:8px;padding:12px 12px 14px}.brain-row{display:flex;align-items:center;gap:8px}.brain-row b{min-width:76px;font-size:13px}.brain-row small{color:var(--muted);font-size:11px;display:block;font-weight:600}
     .brain-row select{flex:1;min-width:0;padding:8px;border-radius:10px;border:1px solid #355248;background:#081914;color:inherit;font-size:13px}
     .brain-note{color:var(--muted);font-size:12px;line-height:1.5}.chat-toggle{position:absolute;top:10px;right:12px;min-width:38px;min-height:34px;border:1px solid #527364;border-radius:8px;background:#193329;color:#dcebdc;font-size:15px;cursor:pointer}.chat-row{display:flex;gap:6px;margin:4px 0 6px}.chat-row.hidden{display:none}.chat-row input{flex:1;min-width:0;min-height:38px;padding:7px 10px;border:1px solid var(--line);border-radius:9px;background:#0a1715;color:var(--ink);font-size:14px}.chat-row button{min-height:38px;padding:0 12px;border:0;border-radius:9px;background:var(--lime);color:#142116;font-weight:800}
+    .brain-notes{margin:-4px 0 10px;padding:7px 9px;border-left:2px solid #c9f36a55;color:#a9bfb5;font-size:12px;line-height:1.5}.brain-notes b{display:block;color:#cfe0d6;font-size:11px;margin-bottom:2px}
     .brain-persona{width:100%;margin:-2px 0 8px;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:#0a1715;color:var(--ink);font-size:12px}.brain-banter{display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:1.45}
     .kavi-review{margin-top:10px;padding:12px;border:1px solid #4b3f86;border-radius:12px;background:#151230;color:#e6e1ff;font-size:13px;line-height:1.65;white-space:pre-wrap}
     .ask-kavi{margin-top:10px;width:100%;padding:10px;border-radius:11px;border:1px solid #5b4fa0;background:#1d1840;color:#d9d2ff;font-weight:800}
@@ -754,7 +755,7 @@
   function loadProfile(){try{const raw=kv.getItem(PROFILE_KEY)||kv.getItem('poker6max_hero_read_v1')||'{}';return{...PROFILE_DEFAULT,...JSON.parse(raw)}}catch(e){return{...PROFILE_DEFAULT}}}
   let heroProfile=loadProfile();
   function saveProfile(){try{kv.setItem(PROFILE_KEY,JSON.stringify(heroProfile))}catch(e){}}
-  function resetHeroRead(){heroProfile={...PROFILE_DEFAULT};botReads=emptyBotReads();game.heroReadCache=new Map();game.heroRangeCache=new Map();saveProfile();saveBotReads();updateUI()}
+  function resetHeroRead(){heroProfile={...PROFILE_DEFAULT};try{brains.notes={};saveBrains();renderBrains()}catch(e){}botReads=emptyBotReads();game.heroReadCache=new Map();game.heroRangeCache=new Map();saveProfile();saveBotReads();updateUI()}
   const BOT_READS_KEY='poker6max_bot_reads_v1';
   function emptyBotRead(){return{hands:0,vpip:0,pfr:0,faced:0,folds:0,calls:0,raises:0,postAgg:0,postChecks:0,showdowns:0,aggShowdowns:0,strongAggShowdowns:0}}
   function emptyBotReads(){return Array.from({length:6},(_,observer)=>Array.from({length:6},(_,target)=>observer&&observer!==target?emptyBotRead():null))}
@@ -816,7 +817,7 @@
     }
     return{street:game.street,pos,hand:handLabel,equity,odds,pot:potBefore,toCall:legal.callAmount,recommended,recLabel,detail,confidence:game.street===0?'range':Math.abs(equity-odds)<.06&&legal.toCall>0?'borderline':'heuristic',raisesBefore:game.preflopRaises};
   }
-  function finalizeHandHistory(result,resultClass,lastPot,winnerSeats=[],showdownSeats=[]){if(!practice.active&&!tutorial.active)setTimeout(()=>handEndBanter(winnerSeats,showdownSeats,lastPot),700);if(practice.active){finishPractice();currentHistory=null;return}if(!currentHistory)return;recordBotCompletedHand(showdownSeats);currentHistory.result=result;currentHistory.resultClass=resultClass;currentHistory.lastPot=lastPot;currentHistory.heroNet=players[0].stack-(currentHistory.startStacks?.[0]||players[0].stack);currentHistory.winners=winnerSeats.slice();for(const seat of showdownSeats){currentHistory.reveals[seat]=players[seat].hole.map(cloneCard)}recordHistoryEvent('result','系统',result,{winners:winnerSeats.slice(),showdown:true});handHistory.unshift(currentHistory);handHistory=handHistory.slice(0,HISTORY_LIMIT);if(!(typeof tutorial!=='undefined'&&tutorial.active))labIngestCompletedHand(currentHistory);currentHistory=null;saveHistory();updateHistoryButton();checkpoint()}
+  function finalizeHandHistory(result,resultClass,lastPot,winnerSeats=[],showdownSeats=[]){if(!practice.active&&!tutorial.active){setTimeout(()=>handEndBanter(winnerSeats,showdownSeats,lastPot),700);setTimeout(()=>handEndLesson(winnerSeats,showdownSeats,lastPot),1200)}if(practice.active){finishPractice();currentHistory=null;return}if(!currentHistory)return;recordBotCompletedHand(showdownSeats);currentHistory.result=result;currentHistory.resultClass=resultClass;currentHistory.lastPot=lastPot;currentHistory.heroNet=players[0].stack-(currentHistory.startStacks?.[0]||players[0].stack);currentHistory.winners=winnerSeats.slice();for(const seat of showdownSeats){currentHistory.reveals[seat]=players[seat].hole.map(cloneCard)}recordHistoryEvent('result','系统',result,{winners:winnerSeats.slice(),showdown:true});handHistory.unshift(currentHistory);handHistory=handHistory.slice(0,HISTORY_LIMIT);if(!(typeof tutorial!=='undefined'&&tutorial.active))labIngestCompletedHand(currentHistory);currentHistory=null;saveHistory();updateHistoryButton();checkpoint()}
   function updateHistoryButton(){const b=$('openHistory');if(b)b.disabled=handHistory.length===0}
   function smoothRate(wins,total,priorRate,priorWeight=12){return (wins+priorRate*priorWeight)/(total+priorWeight)}
   function heroRead(){
@@ -1339,7 +1340,7 @@
   // 模型出错、超时、回了不合规的动作，这一步就由规则 AI 代打。台词另开：规则 AI 出牌时也能让模型配一句。教程和专项练习一律用规则 AI。
   var mindFeed=[],mindBase=0,mindCursor={},mindHand={},recentShowdowns=[],banterBusy=false,lastTalkAt=0,tableChat=[],reviewCache={};
   const BRAINS_KEY='poker6max_brains_v1',KJ=window.jack&&window.jack.ask?window.jack:null;
-  let brains=(()=>{let b;try{b={seats:{},banter:true,persona:{},...JSON.parse(kv.getItem(BRAINS_KEY)||'{}')}}catch(e){b={seats:{},banter:true,persona:{}}}if(!b.persona)b.persona={};if(b.talkV!==2){b.banter=true;b.talkV=2}return b})();
+  let brains=(()=>{let b;try{b={seats:{},banter:true,persona:{},...JSON.parse(kv.getItem(BRAINS_KEY)||'{}')}}catch(e){b={seats:{},banter:true,persona:{}}}if(!b.persona)b.persona={};if(!b.notes||typeof b.notes!=='object')b.notes={};if(b.talkV!==2){b.banter=true;b.talkV=2}return b})();
   // 每个对手的性格（说话的样子）。牌风还是规则 AI 那套，性格只管台词；在「对手用什么想」里能改。
   const PERSONAS={
     bot1:'冷静的职业玩家，话少，爱把概率和赔率挂在嘴边，偶尔冷冷地嘲讽一句',
@@ -1359,7 +1360,7 @@
     if(!KJ||!m.list.length){box.classList.add('hidden');return}box.classList.remove('hidden');
     const opts=sel=>`<option value="">规则 AI（快、不花钱）</option>`+m.list.map(x=>`<option value="${escHtml(x.key)}" ${x.key===sel?'selected':''}>${escHtml(x.label)}</option>`).join('');
     panel.innerHTML=`<div class="brain-note">选模型的对手各想各的，只看得到公开的动作和自己的底牌；每步花一点钱，回得慢或出错时这一步由规则 AI 代打。</div>`+
-      players.filter(p=>!p.isHero).map(p=>`<div class="brain-row"><b>${p.name}<small>${p.ai?.name||''}</small></b><select data-brain="${p.seat}">${opts(brains.seats[p.seat]||'')}</select></div><input class="brain-persona" data-persona="${p.seat}" maxlength="120" placeholder="性格：${escHtml(PERSONAS[p.id]||'')}" value="${escHtml(brains.persona?.[p.seat]||'')}">`).join('')+
+      players.filter(p=>!p.isHero).map(p=>`<div class="brain-row"><b>${p.name}<small>${p.ai?.name||''}</small></b><select data-brain="${p.seat}">${opts(brains.seats[p.seat]||'')}</select></div><input class="brain-persona" data-persona="${p.seat}" maxlength="120" placeholder="性格：${escHtml(PERSONAS[p.id]||'')}" value="${escHtml(brains.persona?.[p.seat]||'')}">${notesOf(p.seat).length?`<div class="brain-notes"><b>${p.name} 的小本子</b>${notesOf(p.seat).map(n=>`<div>· ${escHtml(n)}</div>`).join('')}</div>`:''}`).join('')+
       `<label class="brain-banter"><input type="checkbox" id="brainBanter" ${brains.banter?'checked':''}><span>对手会说话：按各自的性格，加注、全押、赢了输了、你下重注时冒一句，彼此还会接话（用默认模型，花一点钱）</span></label>`;
     panel.querySelectorAll('[data-brain]').forEach(s=>s.onchange=()=>{const i=Number(s.dataset.brain);if(s.value)brains.seats[i]=s.value;else delete brains.seats[i];saveBrains();updateUI()});
     panel.querySelectorAll('[data-persona]').forEach(t=>t.onchange=()=>{const i=Number(t.dataset.persona),v=t.value.trim();if(v)brains.persona[i]=v;else delete brains.persona[i];saveBrains()});
@@ -1369,7 +1370,7 @@
   const MIND_GUIDE=`【牌桌】六人无限注德州扑克现金局，位置顺序 UTG、HJ、CO、BTN（庄）、SB、BB。下注额都是筹码数，大盲见每次的提示。
 【你知道什么】公开的动作、桌上的话、摊牌时亮出来的牌，和你自己的两张底牌。别人的底牌没亮就不知道。
 【怎么想】先看位置和有效筹码；再估自己这手牌对对手可能范围的胜率，和底池赔率比（要跟的钱 ÷ 跟完后的总底池）；胜率够就跟，明显领先就下注拿价值，落后又有听牌可以半诈唬，什么都没有就放弃。下注大小一般是底池的 1/3 到 1，全押要有理由。
-【学对手】每手开头会给你一份长期统计：入池率高的人范围宽、爱跟，对他少诈唬多拿价值；被下注时弃牌多的人，可以多偷；下重注后摊牌真有牌比例低的人，爱诈唬，可以多抓。亮牌是最真的信息，记住谁拿什么牌怎么打的。Hero 是真人玩家，会变，盯紧他最近的打法。
+【学对手】每手开头会给你一份长期统计：入池率高的人范围宽、爱跟，对他少诈唬多拿价值；被下注时弃牌多的人，可以多偷；下重注后摊牌真有牌比例低的人，爱诈唬，可以多抓。亮牌是最真的信息，记住谁拿什么牌怎么打的。Hero 是真人玩家，会变，盯紧他最近的打法。你还有一个小本子，记着以前吃亏后自己总结的教训，每手开头会给你看。
 【本能建议】每次轮到你，会附上你本能（规则 AI）的走法和算出来的胜率。胜率是硬数据，可信；走法只按统计算，不懂桌上的话和最近的亮牌。大多数时候照它走不会错，你掌握了它不知道的东西时再改。
 【桌上的话】可能是真的，也可能是在演、在骗你，要和他下注的动作对照着看，别被一句话吓跑或套住；你也可以用话虚张声势、装弱、套话。
 【回答格式】轮到你行动时只回一个 JSON：{"a":"fold|check|call|raise","to":加注后你这一轮的下注总额（只有 raise 要填）,"say":"一句台词，可以空"}。不是轮到你、只让你说话时，只回台词本身。台词口语、15 字以内、合你的性格，别直接报出底牌，不用每次都说。`;
@@ -1391,8 +1392,10 @@
   function readsSummary(i){
     return players.filter(t=>t.seat!==i).map(t=>{const r=botReadFor(i,t.seat);if(r.hands<4)return '';
       return `${t.isHero?'Hero':t.name}（${Math.round(r.hands)} 手）：入池 ${pct(r.vpip)}，翻前加注 ${pct(r.pfr)}，被下注时弃牌 ${pct(r.foldToBet)}，翻后主动下注 ${pct(r.aggression)}，下重注后摊牌真有牌 ${pct(r.credibility)}`}).filter(Boolean).join('；')}
-  function handIntro(i){if(mindHand[i]===game.handNo)return '';mindHand[i]=game.handNo;const r=readsSummary(i);return r?`【第 ${game.handNo} 手 · 你对各人的了解（长期统计，含以前的牌局，样本少的不准）】${r}\n\n`:''}
-  function mindRecap(i){const r=readsSummary(i);return [r?'你对各人的了解（长期统计）：'+r:'',recentShowdowns.length?'最近的亮牌：\n'+recentShowdowns.slice(-4).join('\n'):'','之前的手里谁说过什么、谁骗过人，你大致记得，继续按自己的判断打。'].filter(Boolean).join('\n')}
+  function notesOf(i){const n=brains.notes?.[i];return Array.isArray(n)?n.slice(-8):[]}
+  function notesText(i){const n=notesOf(i);return n.length?`【你的小本子（以前吃亏后自己总结的教训）】\n${n.map((x,k)=>`${k+1}. ${x}`).join('\n')}\n`:''}
+  function handIntro(i){if(mindHand[i]===game.handNo)return '';mindHand[i]=game.handNo;const r=readsSummary(i),n=notesText(i);return (r?`【第 ${game.handNo} 手 · 你对各人的了解（长期统计，含以前的牌局，样本少的不准）】${r}\n`:'')+n+(r||n?'\n':'')}
+  function mindRecap(i){const r=readsSummary(i);return [r?'你对各人的了解（长期统计）：'+r:'',notesText(i),recentShowdowns.length?'最近的亮牌：\n'+recentShowdowns.slice(-4).join('\n'):'','之前的手里谁说过什么、谁骗过人，你大致记得，继续按自己的判断打。'].filter(Boolean).join('\n')}
   // i 号模型座位上次之后桌上发生的事（动作和台词），取了就算看过
   function takeNews(i){const from=Math.max(mindCursor[i]??0,mindBase),news=mindFeed.slice(from-mindBase).slice(-40);mindCursor[i]=mindBase+mindFeed.length;return news}
   function moveText(m){return !m?'':m.type==='fold'?'弃牌':m.type==='check'?'过牌':m.type==='call'?'跟注':`加注到 ${m.target}`}
@@ -1440,6 +1443,18 @@
     if(!canTalk())return;if(!allin&&target<Math.max(potBefore*.6,BIG_BLIND*4))return;if(Math.random()>(allin?.8:.4))return;
     const left=players.filter(p=>!p.isHero&&!p.folded&&p.hole.length===2);if(!left.length)return;const p=left[Math.floor(Math.random()*left.length)];
     setTimeout(()=>talk(p.seat,`Hero 刚刚${allin?'全押了':'加注到 '+target}，你还在这手里。`),300);
+  }
+  // 一手结束：接了模型的对手摊牌输了大底池，让它用自己的上下文（这手的经过都在里面）写一句教训进小本子。一手最多写一条。
+  var lessonBusy=false;
+  function handEndLesson(winners,showdown,pot){
+    if(!KJ||isTraining()||lessonBusy||pot<BIG_BLIND*15)return;
+    const losers=showdown.filter(i=>!winners.includes(i)&&!players[i].isHero&&seatModel(i));if(!losers.length)return;
+    const i=losers.sort((a,b)=>players[b].totalBet-players[a].totalBet)[0],news=takeNews(i);lessonBusy=true;
+    KJ.ask(`${news.length?'上次之后桌上：\n'+news.join('\n')+'\n\n':''}这手你摊牌输了 ${pot} 的底池，赢家是 ${winners.map(w=>players[w].isHero?'Hero':players[w].name).join('、')}。回头看这一手，写一条以后用得上的教训：具体到谁、什么情况、下次怎么做（例如「Hero 河牌超池下注时多半是诈唬，可以多抓」）。30 字以内。只是运气不好、没什么可学的，就回「无」。只回这一条。`,
+      {seat:'p'+i,model:brains.seats[i],max:80,system:mindSystem(i),recap:mindRecap(i)})
+      .then(t=>{const n=String(t||'').replace(/^["“「]+|["”」]+$/g,'').replace(/^\d+[.、]\s*/,'').trim().slice(0,60);if(!n||/^无[。.]?$/.test(n))return;
+        const list=notesOf(i);list.push(n);brains.notes[i]=list.slice(-8);saveBrains();renderBrains()})
+      .catch(()=>{}).finally(()=>{lessonBusy=false});
   }
   // 一手结束：赢了大底池的人得意一句，摊牌输了的人可能嘴硬一句
   function handEndBanter(winners,showdown,pot){
