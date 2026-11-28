@@ -9,8 +9,8 @@ eval(harness+String.raw`
 const run=s=>vm.runInContext(s,c);
 let checks=0;function check(name,fn){return Promise.resolve(fn()).then(()=>{checks++;console.log('PASS',name)})}
 run("updateUI=()=>{};playSound=()=>{};renderLog=()=>{};updateHistoryButton=()=>{};tutorial.active=false;practice.active=false;var moves=[];applyAction=(i,t,x)=>{moves.push([i,t,x])};");
-function setupTurn(){run("players.forEach(p=>{p.hole=[{r:14,s:'♠'},{r:13,s:'♠'}];p.folded=false;p.allIn=false;p.stack=100000;p.roundBet=0});game.handOver=false;game.street=0;game.board=[];game.pot=15000;game.currentBet=BIG_BLIND;game.minRaise=BIG_BLIND;game.actorIndex=1;game.thinking=false;game.actedSinceFullRaise=new Set();game.lastActedBet={};moves=[];");}
-async function turn(){run('takeAiTurn()');await timers.pop()();}
+function setupTurn(){run("players.forEach(p=>{p.hole=[{r:14,s:'♠'},{r:13,s:'♠'}];p.folded=false;p.allIn=false;p.stack=100000;p.roundBet=0});game.handOver=false;game.street=1;game.board=[{r:2,s:'♣'},{r:7,s:'♦'},{r:9,s:'♠'}];game.pot=15000;game.currentBet=BIG_BLIND;game.minRaise=BIG_BLIND;game.actorIndex=1;game.thinking=false;game.actedSinceFullRaise=new Set();game.lastActedBet={};moves=[];");}
+async function turn(){run('takeAiTurn()');await timers.pop()();for(let k=0;k<5;k++)await new Promise(r=>setImmediate(r));}
 (async()=>{
 await check('model answers become legal moves',()=>{
   const legal="({canFold:true,canCheck:false,toCall:200,callAmount:200,canRaise:true,minTarget:400,maxTarget:5000})";
@@ -44,6 +44,22 @@ await check('a failing model hands the move to the rule AI',async()=>{
 await check('rule seats and training never ask a model',async()=>{
   setupTurn();run("brains.seats={};brains.banter=false;");const n=asked.length;await turn();assert.equal(asked.length,n);
   setupTurn();run("brains.seats={1:'m1'};tutorial.active=true;");await turn();assert.equal(asked.length,n);run('tutorial.active=false');
+});
+await check('preflop is played by the rule AI, the model only from the flop',async()=>{
+  setupTurn();run("brains.seats={1:'m1'};brains.banter=false;game.street=0;game.board=[];addLog('Mika','加注到 30000');");const n=asked.length;
+  await turn();assert.equal(asked.length,n);assert.equal(run('moves.length'),1);
+  setupTurn();run("brains.seats={1:'m1'};");nextAnswer=()=>Promise.resolve('{"a":"check"}');await turn();
+  assert.equal(asked.length,n+1);assert.match(asked[asked.length-1][0],/Mika：加注到 30000/);
+});
+await check('opponents talk in their own persona and hear the table chat',async()=>{
+  run("brains.banter=true;brains.persona={5:'说话像海盗'};tableChat=[];lastTalkAt=0;banterBusy=false;game.pot=50000;");
+  nextAnswer=()=>Promise.resolve('「哈哈，跟不跟？」');run("speak(1,'我先说一句')");run("talk(5,'你刚刚全押了。')");
+  for(let k=0;k<5;k++)await new Promise(r=>setImmediate(r));
+  const [prompt,opts]=asked[asked.length-1];assert.match(opts.system,/Echo/);assert.match(opts.system,/海盗/);assert.match(prompt,/Nova：我先说一句/);
+  assert.equal(run('players[5].say'),'哈哈，跟不跟？');
+  const n=asked.length;run("talk(4,'再说一句')");assert.equal(asked.length,n,'cooldown keeps talk from piling up');
+  run("lastTalkAt=0;brains.banter=false;talk(4,'x')");assert.equal(asked.length,n);
+  run("brains.persona={}");assert.match(run('personaOf(5)'),/毒舌老赌棍/);
 });
 await check('the review story tells the hand without hidden cards of folded players',()=>{
   const story=run("handStory({handNo:3,sb:5000,bb:10000,positions:['BTN'],heroHole:[{r:14,s:'♥'},{r:14,s:'♦'}],startStacks:[100,100,100,100,100,100],events:[{kind:'action',who:'你',text:'加注到 30000',analysis:{hand:'一对 A',equity:.82,toCall:0,recLabel:'加注',verdict:'正确'}},{kind:'street',who:'系统',text:'翻牌：2♣ 7♦ 9♠'}],reveals:{},result:'你赢得 45000'})");

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="kavi-kind" content="game">
-  <meta name="kavi-builtin" content="holdem-3">
+  <meta name="kavi-builtin" content="holdem-4">
   <title>德州扑克</title>
   <!--
     德州扑克（Kavi 自带的网页游戏，可以让 Kavi 改）。底子是 GPT 做的 Poker Table（6 人桌 + Poker Lab 训练），Kavi 接进来时：
@@ -85,7 +85,7 @@
     .model-tag{margin-left:4px;padding:1px 5px;border-radius:6px;background:#2b2350;color:#cfc4ff;font-size:9px;font-weight:800}
     .brain-panel{display:grid;gap:8px;padding:12px 12px 14px}.brain-row{display:flex;align-items:center;gap:8px}.brain-row b{min-width:76px;font-size:13px}.brain-row small{color:var(--muted);font-size:11px;display:block;font-weight:600}
     .brain-row select{flex:1;min-width:0;padding:8px;border-radius:10px;border:1px solid #355248;background:#081914;color:inherit;font-size:13px}
-    .brain-note{color:var(--muted);font-size:12px;line-height:1.5}.brain-banter{display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:1.45}
+    .brain-note{color:var(--muted);font-size:12px;line-height:1.5}.brain-persona{width:100%;margin:-2px 0 8px;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:#0a1715;color:var(--ink);font-size:12px}.brain-banter{display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:1.45}
     .kavi-review{margin-top:10px;padding:12px;border:1px solid #4b3f86;border-radius:12px;background:#151230;color:#e6e1ff;font-size:13px;line-height:1.65;white-space:pre-wrap}
     .ask-kavi{margin-top:10px;width:100%;padding:10px;border-radius:11px;border:1px solid #5b4fa0;background:#1d1840;color:#d9d2ff;font-weight:800}
   
@@ -804,7 +804,7 @@
     }
     return{street:game.street,pos,hand:handLabel,equity,odds,pot:potBefore,toCall:legal.callAmount,recommended,recLabel,detail,confidence:game.street===0?'range':Math.abs(equity-odds)<.06&&legal.toCall>0?'borderline':'heuristic',raisesBefore:game.preflopRaises};
   }
-  function finalizeHandHistory(result,resultClass,lastPot,winnerSeats=[],showdownSeats=[]){if(practice.active){finishPractice();currentHistory=null;return}if(!currentHistory)return;recordBotCompletedHand(showdownSeats);currentHistory.result=result;currentHistory.resultClass=resultClass;currentHistory.lastPot=lastPot;currentHistory.heroNet=players[0].stack-(currentHistory.startStacks?.[0]||players[0].stack);currentHistory.winners=winnerSeats.slice();for(const seat of showdownSeats){currentHistory.reveals[seat]=players[seat].hole.map(cloneCard)}recordHistoryEvent('result','系统',result,{winners:winnerSeats.slice(),showdown:true});handHistory.unshift(currentHistory);handHistory=handHistory.slice(0,HISTORY_LIMIT);if(!(typeof tutorial!=='undefined'&&tutorial.active))labIngestCompletedHand(currentHistory);currentHistory=null;saveHistory();updateHistoryButton();checkpoint()}
+  function finalizeHandHistory(result,resultClass,lastPot,winnerSeats=[],showdownSeats=[]){if(!practice.active&&!tutorial.active)setTimeout(()=>handEndBanter(winnerSeats,showdownSeats,lastPot),700);if(practice.active){finishPractice();currentHistory=null;return}if(!currentHistory)return;recordBotCompletedHand(showdownSeats);currentHistory.result=result;currentHistory.resultClass=resultClass;currentHistory.lastPot=lastPot;currentHistory.heroNet=players[0].stack-(currentHistory.startStacks?.[0]||players[0].stack);currentHistory.winners=winnerSeats.slice();for(const seat of showdownSeats){currentHistory.reveals[seat]=players[seat].hole.map(cloneCard)}recordHistoryEvent('result','系统',result,{winners:winnerSeats.slice(),showdown:true});handHistory.unshift(currentHistory);handHistory=handHistory.slice(0,HISTORY_LIMIT);if(!(typeof tutorial!=='undefined'&&tutorial.active))labIngestCompletedHand(currentHistory);currentHistory=null;saveHistory();updateHistoryButton();checkpoint()}
   function updateHistoryButton(){const b=$('openHistory');if(b)b.disabled=handHistory.length===0}
   function smoothRate(wins,total,priorRate,priorWeight=12){return (wins+priorRate*priorWeight)/(total+priorWeight)}
   function heroRead(){
@@ -1322,9 +1322,18 @@
   // —— Kavi：对手可以接模型 ——
   // 每个对手座位二选一：规则 AI（上面这套，快、不花钱）或 Kavi 设置里的某个模型（各自一份上下文，只知道公开的动作和自己的两张底牌）。
   // 模型出错、超时、回了不合规的动作，这一步就由规则 AI 代打。台词另开：规则 AI 出牌时也能让模型配一句。教程和专项练习一律用规则 AI。
-  var mindFeed=[],mindBase=0,mindCursor={},banterBusy=false,reviewCache={};
+  var mindFeed=[],mindBase=0,mindCursor={},banterBusy=false,lastTalkAt=0,tableChat=[],reviewCache={};
   const BRAINS_KEY='poker6max_brains_v1',KJ=window.jack&&window.jack.ask?window.jack:null;
-  let brains=(()=>{try{return{seats:{},banter:false,...JSON.parse(kv.getItem(BRAINS_KEY)||'{}')}}catch(e){return{seats:{},banter:false}}})();
+  let brains=(()=>{let b;try{b={seats:{},banter:true,persona:{},...JSON.parse(kv.getItem(BRAINS_KEY)||'{}')}}catch(e){b={seats:{},banter:true,persona:{}}}if(!b.persona)b.persona={};if(b.talkV!==2){b.banter=true;b.talkV=2}return b})();
+  // 每个对手的性格（说话的样子）。牌风还是规则 AI 那套，性格只管台词；在「对手用什么想」里能改。
+  const PERSONAS={
+    bot1:'冷静的职业玩家，话少，爱把概率和赔率挂在嘴边，偶尔冷冷地嘲讽一句',
+    bot2:'乐呵呵的退休大叔，什么牌都想看看，爱碎碎念「来都来了」，输了也不生气',
+    bot3:'谨小慎微的会计，老抱怨自己牌差，一出手就紧张兮兮地解释自己是真有牌',
+    bot4:'自信爱挑衅的年轻人，嘴上不饶人，喜欢逗对手、开玩笑',
+    bot5:'毒舌老赌棍，嗓门大、爱吹牛、输了不服，满嘴江湖话'
+  };
+  function personaOf(i){const p=players[i];return String(brains.persona?.[i]||PERSONAS[p.id]||p.ai?.name||'').slice(0,120)}
   function saveBrains(){try{kv.setItem(BRAINS_KEY,JSON.stringify(brains))}catch(e){}}
   function modelList(){try{return KJ&&KJ.models?KJ.models():{list:[],def:''}}catch(e){return{list:[],def:''}}}
   function seatModel(i){return KJ&&!isTraining()?brains.seats[i]||'':''}
@@ -1335,14 +1344,15 @@
     if(!KJ||!m.list.length){box.classList.add('hidden');return}box.classList.remove('hidden');
     const opts=sel=>`<option value="">规则 AI（快、不花钱）</option>`+m.list.map(x=>`<option value="${escHtml(x.key)}" ${x.key===sel?'selected':''}>${escHtml(x.label)}</option>`).join('');
     panel.innerHTML=`<div class="brain-note">选模型的对手各想各的，只看得到公开的动作和自己的底牌；每步花一点钱，回得慢或出错时这一步由规则 AI 代打。</div>`+
-      players.filter(p=>!p.isHero).map(p=>`<div class="brain-row"><b>${p.name}<small>${p.ai?.name||''}</small></b><select data-brain="${p.seat}">${opts(brains.seats[p.seat]||'')}</select></div>`).join('')+
-      `<label class="brain-banter"><input type="checkbox" id="brainBanter" ${brains.banter?'checked':''}><span>规则 AI 的对手也会说话：加注、全押这些时候让模型配一句台词（花一点钱）</span></label>`;
+      players.filter(p=>!p.isHero).map(p=>`<div class="brain-row"><b>${p.name}<small>${p.ai?.name||''}</small></b><select data-brain="${p.seat}">${opts(brains.seats[p.seat]||'')}</select></div><input class="brain-persona" data-persona="${p.seat}" maxlength="120" placeholder="性格：${escHtml(PERSONAS[p.id]||'')}" value="${escHtml(brains.persona?.[p.seat]||'')}">`).join('')+
+      `<label class="brain-banter"><input type="checkbox" id="brainBanter" ${brains.banter?'checked':''}><span>对手会说话：按各自的性格，加注、全押、赢了输了、你下重注时冒一句，彼此还会接话（用默认模型，花一点钱）</span></label>`;
     panel.querySelectorAll('[data-brain]').forEach(s=>s.onchange=()=>{const i=Number(s.dataset.brain);if(s.value)brains.seats[i]=s.value;else delete brains.seats[i];saveBrains();updateUI()});
+    panel.querySelectorAll('[data-persona]').forEach(t=>t.onchange=()=>{const i=Number(t.dataset.persona),v=t.value.trim();if(v)brains.persona[i]=v;else delete brains.persona[i];saveBrains()});
     $('brainBanter').onchange=e=>{brains.banter=e.target.checked;saveBrains()};
   }
-  function speak(i,text){const t=String(text||'').replace(/^["“「]+|["”」]+$/g,'').trim().slice(0,40);if(!t)return;const p=players[i];p.say=t;p.sayAt=Date.now();updateUI();setTimeout(()=>{if(p.sayAt&&Date.now()-p.sayAt>=5000)updateUI()},5100)}
-  function mindSystem(i){const p=players[i];return`你在一桌六人无限注德州扑克里扮演「${p.name}」，牌风：${p.ai?.name||'紧凶'}，照这个牌风打。你只知道公开的动作和你自己的两张底牌。`+
-    `轮到你时只回一个 JSON：{"a":"fold|check|call|raise","to":加注后你这一轮的下注总额（只有 raise 要填）,"say":"一句台词，可以空"}。台词口语、15 字以内、合你的牌风，别说出你的底牌。`}
+  function speak(i,text){const t=String(text||'').replace(/^["“「]+|["”」]+$/g,'').trim().slice(0,40);if(!t)return;const p=players[i];tableChat.push(`${p.name}：${t}`);if(tableChat.length>6)tableChat.shift();p.say=t;p.sayAt=Date.now();updateUI();setTimeout(()=>{if(p.sayAt&&Date.now()-p.sayAt>=5000)updateUI()},5100)}
+  function mindSystem(i){const p=players[i];return`你在一桌六人无限注德州扑克里扮演「${p.name}」，牌风：${p.ai?.name||'紧凶'}，照这个牌风打；性格：${personaOf(i)}。你只知道公开的动作和你自己的两张底牌。翻牌前由你的本能（规则）自动打，你从翻牌开始做决定。`+
+    `轮到你时只回一个 JSON：{"a":"fold|check|call|raise","to":加注后你这一轮的下注总额（只有 raise 要填）,"say":"一句台词，可以空"}。台词口语、15 字以内、合你的性格，别说出你的底牌，不用每次都说。`}
   function parseModelMove(raw,legal){
     let o;try{const s=String(raw);o=JSON.parse(s.slice(s.indexOf('{'),s.lastIndexOf('}')+1))}catch(e){return null}
     const a=String(o.a||o.action||'').toLowerCase(),say=String(o.say||'');
@@ -1362,11 +1372,31 @@
     const raw=await Promise.race([KJ.ask(prompt,{seat:'p'+i,model:brains.seats[i],json:true,max:120,system:mindSystem(i)}),new Promise((_,no)=>setTimeout(()=>no(new Error('超时')),45000))]);
     return parseModelMove(raw,legal);
   }
+  function canTalk(){return KJ&&brains.banter&&!banterBusy&&!isTraining()&&Date.now()-lastTalkAt>2500}
+  // 让 i 号座位按自己的性格说一句。what 是刚发生的事（从他的角度说）。
+  function talk(i,what){
+    if(!canTalk())return;const p=players[i];if(!p||p.isHero)return;banterBusy=true;lastTalkAt=Date.now();
+    const chat=tableChat.length?`桌上刚才的对话：\n${tableChat.slice(-4).join('\n')}\n`:'';
+    KJ.ask(`${chat}${what}（底池 ${game.pot||game.lastPot}，大盲 ${BIG_BLIND}）。说一句 15 字以内的口语台词；可以接别人的话、损人、自嘲。别说出底牌。只回台词本身。`,{keep:false,max:40,system:`你是德州扑克牌桌上的「${p.name}」。性格：${personaOf(i)}。说话要有这个人的味道，每次说法别重样。`})
+      .then(t=>speak(i,t)).catch(()=>{}).finally(()=>{banterBusy=false;lastTalkAt=Date.now()});
+  }
   function maybeBanter(i,move){
-    if(!KJ||!brains.banter||banterBusy||isTraining())return;const legal=getLegal(i),big=move.type==='raise'||(move.type==='fold'&&legal.toCall>=BIG_BLIND*3);if(!big||Math.random()>.45)return;
-    const p=players[i],what=move.type==='raise'?(move.target>=legal.maxTarget?'全押了':'加注到 '+move.target):'弃牌了';banterBusy=true;
-    KJ.ask(`你是德州扑克牌桌上的「${p.name}」，牌风${p.ai?.name||''}。你刚刚${what}，底池 ${game.pot}。说一句 15 字以内的口语台词，别说出底牌。只回台词本身。`,{keep:false,max:40})
-      .then(t=>speak(i,t)).catch(()=>{}).finally(()=>{banterBusy=false});
+    if(!canTalk())return;const legal=getLegal(i),allin=move.type==='raise'&&move.target>=legal.maxTarget,big=move.type==='raise'||(move.type==='fold'&&legal.toCall>=BIG_BLIND*3);if(!big||Math.random()>(allin?.85:.45))return;
+    talk(i,`你刚刚${move.type==='raise'?(allin?'全押了':'加注到 '+move.target):'弃牌了（对面下得太大）'}。`);
+  }
+  // 你（Hero）下重注、全押时，场上还没弃牌的对手里挑一个回嘴
+  function heroBanter(target,allin,potBefore){
+    if(!canTalk())return;if(!allin&&target<Math.max(potBefore*.6,BIG_BLIND*4))return;if(Math.random()>(allin?.8:.4))return;
+    const left=players.filter(p=>!p.isHero&&!p.folded&&p.hole.length===2);if(!left.length)return;const p=left[Math.floor(Math.random()*left.length)];
+    setTimeout(()=>talk(p.seat,`Hero 刚刚${allin?'全押了':'加注到 '+target}，你还在这手里。`),300);
+  }
+  // 一手结束：赢了大底池的人得意一句，摊牌输了的人可能嘴硬一句
+  function handEndBanter(winners,showdown,pot){
+    if(!canTalk()||pot<BIG_BLIND*8)return;const ws=winners.filter(i=>!players[i].isHero),ls=showdown.filter(i=>!winners.includes(i)&&!players[i].isHero);
+    const heroWon=winners.includes(0);
+    if(ws.length&&Math.random()<.6)talk(ws[0],`你刚${showdown.length>1?'摊牌':'不用摊牌'}赢下了 ${pot} 的底池${showdown.includes(0)&&!heroWon?'，赢的是 Hero':''}。`);
+    else if(ls.length&&Math.random()<.5)talk(ls[0],`你刚摊牌输了 ${pot} 的底池，赢家是 ${winners.map(i=>players[i].isHero?'Hero':players[i].name).join('、')}。`);
+    else if(heroWon){const left=players.filter(p=>!p.isHero&&p.totalBet>0);if(left.length&&Math.random()<.5)talk(left[Math.floor(Math.random()*left.length)].seat,`Hero 刚赢了 ${pot} 的底池，你在这手里输了筹码。`)}
   }
   function handStory(h){
     const lines=[`第 ${h.handNo} 手，盲注 ${h.sb}/${h.bb}，六人桌，我（Hero）在 ${h.positions?.[0]||'?'} 位，底牌 ${cardsText(h.heroHole)}。各家开局筹码：${(h.startStacks||[]).map((s,k)=>(k?players[k]?.name:'我')+' '+s).join('，')}。`];
@@ -1383,7 +1413,7 @@
   }
   function takeAiTurn(){
     if(game.handOver||game.actorIndex===null||players[game.actorIndex].isHero||game.thinking)return;game.thinking=true;updateUI();const token=game.handToken,index=game.actorIndex;
-    setTimeout(async()=>{if(token!==game.handToken||game.handOver||game.actorIndex!==index)return;if(game.street>0){const value=await requestEquity(equitySnapshot(index,Math.round(220*aiDifficulty().samples)));if(token!==game.handToken||game.handOver||game.actorIndex!==index)return;aiEquityCache={key:equityKey(index),value}}let move=null;if(!practice.active&&seatModel(index)){try{move=await askModelMove(index,getLegal(index))}catch(e){}if(token!==game.handToken||game.handOver||game.actorIndex!==index){game.thinking=false;return}}game.thinking=false;if(!move)move=practice.active?decidePracticeAI(index):decideAI(index);if(move.say)speak(index,move.say);else maybeBanter(index,move);applyAction(index,move.type,move.target)},360+Math.random()*280)
+    setTimeout(async()=>{if(token!==game.handToken||game.handOver||game.actorIndex!==index)return;if(game.street>0){const value=await requestEquity(equitySnapshot(index,Math.round(220*aiDifficulty().samples)));if(token!==game.handToken||game.handOver||game.actorIndex!==index)return;aiEquityCache={key:equityKey(index),value}}let move=null;if(!practice.active&&seatModel(index)&&game.street>0){try{move=await askModelMove(index,getLegal(index))}catch(e){}if(token!==game.handToken||game.handOver||game.actorIndex!==index){game.thinking=false;return}}game.thinking=false;if(!move)move=practice.active?decidePracticeAI(index):decideAI(index);if(move.say)speak(index,move.say);else maybeBanter(index,move);applyAction(index,move.type,move.target)},360+Math.random()*280)
   }
 
   function seatCardsHTML(p,showdownOrder=0){
@@ -1513,8 +1543,8 @@
 
   $('foldBtn').addEventListener('click',()=>applyAction(0,'fold'));
   $('checkCallBtn').addEventListener('click',()=>applyAction(0,getLegal(0).toCall===0?'check':'call'));
-  $('raiseSlider').addEventListener('input',()=>{const legal=getLegal(0);$('raiseValue').textContent=grp($('raiseSlider').value);const all=Number($('raiseSlider').value)===legal.maxTarget&&legal.maxTarget===players[0].roundBet+players[0].stack;$('raiseBtn').textContent=all?`全押到 ${$('raiseSlider').value}`:`${game.currentBet===0?'下注':'加注到'} ${$('raiseSlider').value}`});
-  $('raiseBtn').addEventListener('click',()=>applyAction(0,'raise',Number($('raiseSlider').value)));
+  $('raiseSlider').addEventListener('input',()=>{const legal=getLegal(0);$('raiseValue').textContent=grp($('raiseSlider').value);const all=Number($('raiseSlider').value)===legal.maxTarget&&legal.maxTarget===players[0].roundBet+players[0].stack;$('raiseBtn').textContent=all?`全押到 ${grp($('raiseSlider').value)}`:`${game.currentBet===0?'下注':'加注到'} ${grp($('raiseSlider').value)}`});
+  $('raiseBtn').addEventListener('click',()=>{const t=Number($('raiseSlider').value),allin=t>=getLegal(0).maxTarget,pot=game.pot;applyAction(0,'raise',t);heroBanter(t,allin,pot)});
   $('raiseOptionsToggle').addEventListener('click',()=>{const options=$('raiseOptions'),open=!options.classList.contains('open');options.classList.toggle('open',open);$('raiseOptionsToggle').setAttribute('aria-expanded',String(open))});
   document.querySelectorAll('[data-size]').forEach(btn=>btn.addEventListener('click',()=>{const legal=getLegal(0);if(!legal.canRaise)return;const v=chooseRaiseTarget(0,legal,btn.dataset.size);$('raiseSlider').value=v;$('raiseSlider').dispatchEvent(new Event('input'))}));
   $('nextHand').addEventListener('click',()=>{if(practice.active)newPracticeScene();else if(!tutorial.active&&players[0].stack<=0)openLobby(null,true);else newHand()});
