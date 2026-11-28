@@ -385,6 +385,9 @@ class DeepSeekClient(
             // 推理模型大多不接受自定义 temperature；百炼 Qwen3、Kimi 的温度有固定要求，也不发
             if ((!ep.reasoning || ep.deepseek) && dialect == ThinkDialect.Kind.NONE) put("temperature", 0.7)
             if (jsonMode) put("response_format", buildJsonObject { put("type", "json_object") })
+            // OpenAI 官方：同一个开头（system）的请求带同一个键，路由到同一批机器，前缀缓存才稳定命中（游戏里每个对手一份上下文）
+            if (runCatching { java.net.URI(ep.baseUrl).host }.getOrNull()?.endsWith("openai.com") == true)
+                messages.firstOrNull()?.get("content")?.str()?.takeIf { it.isNotBlank() }?.let { put("prompt_cache_key", "k" + Integer.toHexString(it.hashCode())) }
             put("messages", JsonArray(messages.map(ResponsesApi::strip)))
         }.toString()
         val request = Request.Builder()

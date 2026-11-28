@@ -77,6 +77,20 @@ await check('table talk reaches model seats, and a model seat talks with its own
   run("speak(3,'我弃了我弃了')");nextAnswer=()=>Promise.resolve('{"a":"call"}');await turn();
   prompt=asked[asked.length-1][0];assert.match(prompt,/Atlas 说：「我弃了我弃了」/);assert.doesNotMatch(prompt,/Hero 说：「Nova 我这把有坚果」/,'already heard it when it answered');
 });
+await check('model seats learn: Hero is named, shown cards and long-term reads reach them',async()=>{
+  setupTurn();run("brains.seats={1:'m1'};brains.banter=false;game.handNo=7;mindHand={};addLog('你','加注到 30000');addLog('系统','你 赢得 50000 筹码');");
+  run("feedLine('第 6 手亮牌（公共牌 2♣ 7♦ 9♠）：Hero 7♠ 2♥（两对）')");
+  run("botReads[1][0]={hands:30,vpip:15,pfr:9,faced:10,folds:2,calls:6,raises:2,postAgg:8,postChecks:4,showdowns:5,aggShowdowns:4,strongAggShowdowns:1}");
+  nextAnswer=()=>Promise.resolve('{"a":"call"}');await turn();
+  let [prompt,opts]=asked[asked.length-1];
+  assert.match(prompt,/Hero：加注到 30000/);assert.match(prompt,/Hero 赢得 50000/);assert.doesNotMatch(prompt,/你：加注/);
+  assert.match(prompt,/Hero 7♠ 2♥/);assert.match(prompt,/你对各人的了解/);assert.match(prompt,/Hero（30 手）：入池/);
+  assert.match(opts.recap,/Hero（30 手）/);
+  setupTurn();run("brains.seats={1:'m1'};game.handNo=7;");await turn();
+  assert.doesNotMatch(asked[asked.length-1][0],/你对各人的了解/,'reads only once per hand');
+  assert.ok(run('mindSystem(1)').length>500,'a long fixed system prompt so providers can cache it');
+  assert.equal(run('mindSystem(1)'),run('mindSystem(1)'));
+});
 await check('the review story tells the hand without hidden cards of folded players',()=>{
   const story=run("handStory({handNo:3,sb:5000,bb:10000,positions:['BTN'],heroHole:[{r:14,s:'♥'},{r:14,s:'♦'}],startStacks:[100,100,100,100,100,100],events:[{kind:'action',who:'你',text:'加注到 30000',analysis:{hand:'一对 A',equity:.82,toCall:0,recLabel:'加注',verdict:'正确'}},{kind:'street',who:'系统',text:'翻牌：2♣ 7♦ 9♠'}],reveals:{},result:'你赢得 45000'})");
   assert.match(story,/A♥ A♦/);assert.match(story,/教练建议 加注/);assert.match(story,/翻牌：2♣ 7♦ 9♠/);assert.match(story,/你赢得 45000/);

@@ -113,9 +113,11 @@ private class AppBridge(
                 val m = if (!keep) null else synchronized(minds) {
                     val sig = system + "\u0000" + ep.key
                     minds[seat]?.takeIf { it.first == sig }?.second
-                        ?: com.jack.ai.data.games.GameMind(c, ep, system, label).also { minds[seat] = sig to it }
+                        ?: com.jack.ai.data.games.GameMind(c, ep, system, label, maxTurns = 60).also { minds[seat] = sig to it }
                 }
-                val text = if (m != null) m.ask(prompt.take(6000), maxTokens = max, json = o.optBoolean("json", false))
+                // 上下文太长要整段换新时，游戏给的前情（对各人的了解、最近的亮牌），换新后接着用，不至于全忘
+                val recap = o.optString("recap").take(3000)
+                val text = if (m != null) m.ask(prompt.take(6000), maxTokens = max, json = o.optBoolean("json", false), recap = { recap })
                 else com.jack.ai.api.DeepSeekClient(com.jack.ai.data.Store(c).usage(label)).complete(ep,
                     listOf(kotlinx.serialization.json.buildJsonObject { put("role", "system"); put("content", system) },
                         kotlinx.serialization.json.buildJsonObject { put("role", "user"); put("content", prompt.take(6000)) }),
